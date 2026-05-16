@@ -61,7 +61,7 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
         const retryBatchId = batchCache.remember(executionCtx.batchId!, subset);
 
         let retryAborted = false;
-        let results: import('@zhixuan92/multi-model-agent-core').RunResult[] = [];
+        let results: import('@zhixuan92/multi-model-agent-core').RuntimeRunResult[] = [];
         try {
           const result = await executeTask(toolConfig, executionCtx, input);
           results = Array.isArray(result.results) ? result.results : [];

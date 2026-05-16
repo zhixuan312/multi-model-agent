@@ -21,11 +21,10 @@ import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { ProjectRegistry } from '../../project-registry.js';
-import type { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
+import { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
 
 export interface ContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;
-  routeDispatcher: LifecycleDispatcher;
   maxContextBlockBytes: number;
   maxContextBlocksPerProject: number;
 }
@@ -97,7 +96,8 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
     }
 
     // ── 5. Dispatch to lifecycle ───────────────────────────────────────────
-    const output = await deps.routeDispatcher.dispatch({
+    const dispatcher = new LifecycleDispatcher();
+    const output = await dispatcher.dispatch({
       route: 'register-context-block',
       toolCategory: 'assist',
       rawRequest: parsed.data,

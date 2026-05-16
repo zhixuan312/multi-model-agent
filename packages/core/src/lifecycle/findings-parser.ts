@@ -3,11 +3,13 @@
 // parser converts them into StructuredReport.findings[] entries.
 
 export interface Finding {
+  id?: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   category: string;
   claim: string;
   evidence?: string;
   suggestion?: string;
+  source?: 'implementer' | 'reviewer';
 }
 
 const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
@@ -30,9 +32,15 @@ export function parseFindings(text: string, criterionId: string): Finding[] {
 
   const findings: Finding[] = [];
   for (const block of blocks) {
-    const headingMatch = block.match(/^## Finding \d+:\s*(.+)$/m);
-    if (!headingMatch) continue;
-    const claim = headingMatch[1].trim();
+    // Extract the claim from the "- Claim:" bullet line within the block.
+    // Note: the ## Finding N: heading line has no inline text (just the
+    // heading + colon + newline); the actual claim lives in the bullet.
+    // Claim can come from a `- Claim:` bullet (reviewer format) OR the inline
+    // text on the `## Finding N: <text>` heading (legacy worker format).
+    let claim = block.match(/^- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
+    if (!claim) {
+      claim = block.match(/^## Finding \d+:\s*(.+)$/m)?.[1]?.trim() ?? '';
+    }
     if (claim.startsWith('[N/A]')) continue;
 
     const sevRaw = block.match(/^- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();

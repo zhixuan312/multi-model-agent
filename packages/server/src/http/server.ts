@@ -75,10 +75,7 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder,
-    specLintTemplate, qualityLintTemplate,
-    qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
-  } =
+  const { buildToolSurfaceRegistry, createHttpServerLog } =
     await import('@zhixuan92/multi-model-agent-core');
 
   const surface = buildToolSurfaceRegistry();
@@ -116,32 +113,16 @@ async function registerToolHandlers(
   // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
   let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
   try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-  // v4 bus: three sinks per spec (horizontal_design.md:332). LocalLogSink
-  // gates on diagnostics.log (writer no-ops when disabled). VerboseLogChannel
-  // is wired only when diagnostics.verbose=true so we don't pay the format
-  // + stdout cost in production. TelemetrySink is always present; it no-ops
-  // if telemetry isn't initialized.
-  const sinks = [
-    new LocalLogSink(writer),
-    new TelemetrySink(recorderForBus),
-    new RunningHeadlineSink(batchRegistry),
-    ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
-  ];
+  // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
+  // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
+  const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
+  if (multiModelConfig.diagnostics?.log) {
+    sinks.push(new LocalLogSink(writer));
+  }
+  sinks.push(new TelemetrySink(recorderForBus));
+  sinks.push(new RunningHeadlineSink(batchRegistry));
+  sinks.push(new VerboseLogChannel());
   const bus = new EventEmitter(sinks);
-
-  const routeDispatcher = new LifecycleDispatcher();
-
-  const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-    { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
-    {
-      delegate: qualityLintTemplate,
-      'execute-plan': qualityLintTemplate,
-      audit: qualityAuditTemplate,
-      review: qualityReviewTemplate,
-      debug: qualityDebugTemplate,
-      investigate: qualityInvestigateTemplate,
-    },
-  ));
 
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
@@ -149,8 +130,6 @@ async function registerToolHandlers(
     bus,
     projectRegistry,
     batchRegistry,
-    routeDispatcher,
-    reviewerEngine,
   };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
@@ -213,28 +192,16 @@ async function registerControlHandlers(
     const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
     let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
     try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-    const bus = new EventEmitter([
-      new LocalLogSink(writer),
-      new TelemetrySink(recorderForBus),
-      new RunningHeadlineSink(batchRegistry),
-      ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
-    ]);
-    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder,
-      specLintTemplate, qualityLintTemplate,
-      qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
-    } = await import('@zhixuan92/multi-model-agent-core');
-    const routeDispatcher = new LifecycleDispatcher();
-    const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-      { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
-      {
-        delegate: qualityLintTemplate,
-        'execute-plan': qualityLintTemplate,
-        audit: qualityAuditTemplate,
-        review: qualityReviewTemplate,
-        debug: qualityDebugTemplate,
-        investigate: qualityInvestigateTemplate,
-      },
-    ));
+    // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
+    // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
+    const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
+    if (multiModelConfig.diagnostics?.log) {
+      sinks.push(new LocalLogSink(writer));
+    }
+    sinks.push(new TelemetrySink(recorderForBus));
+    sinks.push(new RunningHeadlineSink(batchRegistry));
+    sinks.push(new VerboseLogChannel());
+    const bus = new EventEmitter(sinks);
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -244,14 +211,11 @@ async function registerControlHandlers(
       bus,
       projectRegistry,
       batchRegistry,
-      routeDispatcher,
-      reviewerEngine,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
       projectRegistry,
-      routeDispatcher,
       maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
       maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
     }));

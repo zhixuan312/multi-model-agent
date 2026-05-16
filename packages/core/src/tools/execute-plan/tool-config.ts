@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
-import {
-  specLintTemplate,
-  qualityLintTemplate,
-} from '../../review/reviewer-engine.js';
+import { specLintTemplate } from '../../review/templates/spec-review.js';
+import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { toolExecutePlanBriefSlot, type ToolExecutePlanBrief } from '../../intake/brief-compiler-slots/execute-plan.js';
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';
@@ -124,6 +122,7 @@ function buildExecutePlanPrompt(
 export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> = {
   name: 'execute_plan',
   category: 'artifact_producing',
+  serializeSameRepo: true,
   agentType: 'standard',
   briefSlot: toolExecutePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({

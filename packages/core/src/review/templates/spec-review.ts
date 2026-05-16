@@ -1,5 +1,40 @@
 import type { ReviewTemplate } from './shared.js';
 
+export const OUTPUT_FORMAT = `
+## Verdict
+<approved | changes_required>
+
+## Deviations
+List each gap on its own line as "- <plan step>: <what is wrong>". Write "(none)" if the diff fully satisfies the plan.
+
+## Findings
+Emit zero or more findings using EXACTLY this block format. Each finding is its own block.
+
+## Finding N:
+Severity: <critical|high|medium|low>
+Category: <one word — e.g. missing-step, wrong-file, broken-contract>
+Claim: <one sentence — what is wrong>
+Evidence: <verbatim excerpt from source, ≥20 chars — or empty if inferable>
+Suggestion: <one sentence — how to fix it>
+
+## Finding N+1:
+...
+
+If no findings, write "## Findings\n(none)" and stop.
+`.trim();
+
+export function specReviewPrompt(ctx: { brief: string; workerSummary: string; filesChanged: string[] }): string {
+  return `You are the spec reviewer for this task.
+
+Brief: ${ctx.brief}
+
+Worker said: ${ctx.workerSummary}
+
+Files changed: ${ctx.filesChanged.join(', ') || '(none)'}
+
+${OUTPUT_FORMAT}`;
+}
+
 export const specLintTemplate: ReviewTemplate = {
   systemPrompt: [
     'You are the SPEC reviewer for a plan-execution task. You are LINT-ONLY — do NOT edit files.',
@@ -8,18 +43,13 @@ export const specLintTemplate: ReviewTemplate = {
     '',
     'Output format (mandatory):',
     '',
-    '## Verdict',
-    'approved | changes_required',
-    '',
-    '## Deviations',
-    '- <one short line per gap, naming the file and what is missing/wrong>',
-    '- ...',
+    OUTPUT_FORMAT,
     '',
     'Rules:',
     '- "approved" means the diff fully implements the plan section. Trivial wording differences are OK.',
     '- "changes_required" when any plan step is missing, partial, or wrong on disk.',
-    '- Each deviation must be specific enough that a rework worker can act on it without re-deriving.',
-    '- If approved, write "## Deviations\\n(none)".',
+    '- Each finding must be specific enough that a rework worker can act on it without re-deriving.',
+    '- If no findings, write "## Findings\\n(none)".',
     '- Do NOT use editor tools. Read-only investigation only. Editing is the rework stage\'s job.',
   ].join('\n'),
 

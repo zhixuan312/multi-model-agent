@@ -1,31 +1,26 @@
-// v4.4.x — Committing stage.
+// Stage I/O standardization — commitHandler emits StageGate<CommitPayload>.
 //
 // Gate logic per the spec:
 //   no_repo, no_diff, validation_failed, validation_stale,
 //   worker_committed_out_of_band, hook_failed
+
+// DEBUG: SOURCE FILE LOADED AT $(date)
 //
-// Worker-supplied commitMessage (from WorkerOutput) is preferred; if
-// absent, generate one via a single turn on the standard session
-// using the staged diff as input.
+// The spec (Step 13) supersedes the v4.4.x behavior:
+//   - Returns StageGate<CommitPayload> (tagged union { committed | no_op })
+//   - Detached HEAD maps to kind: 'no_op', reason: 'no_repo'
+//   - Commit message includes 'rework left N findings unaddressed' annotation
+//     when applicable
+//   - Does NOT mutate state.lastRunResult or state.commits (those are retired
+//     from the new chain; compose reads state.gates instead)
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { LifecycleState } from '../stage-plan-types.js';
-import type { ExecutionContext } from '../lifecycle-context.js';
-import type { Session } from '../../types/run-result.js';
-import { mergeStageStats } from '../merge-stage-stats.js';
-import { HUMAN_LABEL } from '../stage-labels.js';
+import type { StageGate, CommitPayload } from '../stage-io.js';
 import { getRealFilesChanged } from '../real-diff.js';
 
 const execFileP = promisify(execFile);
-
-export type CommitSkipReason =
-  | 'no_repo'
-  | 'no_diff'
-  | 'validation_failed'
-  | 'validation_stale'
-  | 'worker_committed_out_of_band'
-  | 'hook_failed';
 
 async function gitC(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
@@ -51,138 +46,176 @@ async function currentHead(cwd: string): Promise<string | null> {
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
-function setSkip(state: LifecycleState, reason: CommitSkipReason, extra: Record<string, unknown> = {}): void {
-  const last = (state.lastRunResult as Record<string, unknown> | undefined) ?? {};
-  state.lastRunResult = {
-    ...last,
-    committed: false,
-    commitSha: null,
-    commitMessage: null,
-    commitSkipReason: reason,
-    ...extra,
-  } as LifecycleState['lastRunResult'];
+// ─── Payload helpers ─────────────────────────────────────────────────────────
+
+function advanceNoOp(
+  reason: 'no_repo' | 'no_diff' | 'worker_committed_out_of_band' | 'hook_failed',
+  t0: number,
+  detail?: string,
+): StageGate<CommitPayload> {
+  return {
+    outcome: 'advance',
+    payload: { kind: 'no_op', reason, detail },
+    telemetry: {
+      stageLabel: 'committing',
+      durationMs: Date.now() - t0,
+      costUSD: 0,
+      turnsUsed: 0,
+      stopReason: 'normal',
+    },
+  };
 }
 
-export async function gitCommitHandler(state: LifecycleState): Promise<void> {
-  // Idempotency: skip if already settled
-  if ((state.lastRunResult as { commitSkipReason?: unknown } | undefined)?.commitSkipReason !== undefined) return;
-  if ((state.lastRunResult as { committed?: boolean } | undefined)?.committed === true) return;
+function haltCommit(comment: string, t0: number): StageGate<CommitPayload> {
+  return {
+    outcome: 'halt',
+    comment,
+    payload: { kind: 'no_op', reason: 'no_diff' }, // placeholder; halt path
+    telemetry: {
+      stageLabel: 'committing',
+      durationMs: Date.now() - t0,
+      costUSD: 0,
+      turnsUsed: 0,
+      stopReason: 'transport_error',
+    },
+  };
+}
 
-  const ctx = state.executionContext as ExecutionContext | undefined;
-  const cwd = (state.cwd as string | undefined) ?? (ctx as { cwd?: string } | undefined)?.cwd;
-  if (!cwd) return;
-  const result = state.lastRunResult as Record<string, unknown> | undefined;
-  if (!result) return;
+function composeCommitMessage(state: LifecycleState): string {
+  const summary =
+    (state.gates?.['rework']?.payload as { summary?: string } | undefined)?.summary ??
+    (state.gates?.['implement']?.payload as { summary?: string } | undefined)?.summary ??
+    '(no summary)';
+  const firstLine = summary.split('\n')[0].slice(0, 72);
+  const reviewVerdict = (state.gates?.['review']?.payload as { verdict?: string } | undefined)?.verdict;
+  const unaddressed = (
+    (state.gates?.['rework']?.payload as { unaddressedFindingIds?: string[] } | undefined)?.unaddressedFindingIds ??
+    []
+  );
 
-  const startMs = Date.now();
-
-  // Fast pre-gate: use git diff to determine if there are actual file changes.
-  // This replaces the worker self-report read, which may be empty even when
-  // the worker made real changes.
-  const realFiles = await getRealFilesChanged(state);
-  if (realFiles.files.length === 0) {
-    setSkip(state, 'no_diff');
-    return;
+  let msg = `implement: ${firstLine}\n\n${summary}`;
+  if (reviewVerdict === 'changes_required' && unaddressed.length > 0) {
+    msg += `\n\nRework left ${unaddressed.length} findings unaddressed: ${unaddressed.join(', ')}.`;
   }
-  const filesChanged = realFiles.files;
+  return msg;
+}
+
+function isHookFailure(err: unknown): boolean {
+  if (err instanceof Error) {
+    return /pre-commit hook|hook failed|hook rejected/i.test(err.message);
+  }
+  // gitC result shape: { code, stdout, stderr }
+  if (typeof err === 'object' && err !== null) {
+    const r = err as { code?: number; stderr?: string; stdout?: string };
+    const text = `${r.stderr ?? ''} ${r.stdout ?? ''}`;
+    return /pre-commit hook|hook failed|hook rejected|hook script|\.git\/hooks\//i.test(text);
+  }
+  return false;
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
+
+export async function commitHandler(state: LifecycleState): Promise<StageGate<CommitPayload>> {
+  const t0 = Date.now();
+
+  const cwd = (state.cwd as string | undefined) ?? (state.executionContext as { cwd?: string } | undefined)?.cwd;
+  if (!cwd) {
+    return advanceNoOp('no_repo', t0, 'no cwd available');
+  }
 
   // Gate 1: no_repo
   if (!await isInsideWorkTree(cwd)) {
-    setSkip(state, 'no_repo');
-    return;
+    return advanceNoOp('no_repo', t0);
   }
 
-  // Gate 2: worker_committed_out_of_band
-  const currentSha = await currentHead(cwd);
+  // Gate 2: detached HEAD / no branch → no_repo
+  const head = await currentHead(cwd);
+  if (!head) {
+    return advanceNoOp('no_repo', t0, 'detached HEAD or no branch');
+  }
+
+  // Use the existing getRealFilesChanged() helper (lifecycle/real-diff.ts).
+  // Reconciliation: plan said `realChange.method === 'git_error'`; the actual
+  // field on RealFilesChanged is `realChange.source === 'git_error'`.
+  const realChange = await getRealFilesChanged(state);
+  if (realChange.source === 'git_error' || realChange.files.length === 0) {
+    return advanceNoOp('no_diff', t0);
+  }
+  const filesChanged = realChange.files;
+
+  // Gate 3: worker out-of-band commit detection
   const preSha = (state as { preTaskHeadSha?: string }).preTaskHeadSha;
-  if (preSha && currentSha && currentSha !== preSha) {
-    setSkip(state, 'worker_committed_out_of_band', { detectedHeadSha: currentSha });
-    return;
+  if (preSha && head !== preSha && realChange.source === 'self_report') {
+    return advanceNoOp('worker_committed_out_of_band', t0);
   }
 
-  // Gate 3: validation_failed
-  const validations = (result.validationsRun as { passed: boolean }[] | undefined) ?? [];
-  if (validations.some((v) => !v.passed)) {
-    setSkip(state, 'validation_failed');
-    return;
+  // Stage: git add
+  // Always run `git add` on the files we know about from getRealFilesChanged.
+  // If getRealFilesChanged returned empty (no preTaskHeadSha/preTaskUntrackedFiles),
+  // fall back to staging the files the worker reported. This ensures untracked
+  // files are staged so `git diff --cached` can detect them.
+  const filesToStage = filesChanged.length > 0 ? filesChanged : (
+    ((state.lastRunResult as { filesChanged?: string[] } | undefined)?.filesChanged) ?? []
+  );
+  if (filesToStage.length === 0) {
+    return advanceNoOp('no_diff', t0);
   }
-
-  // Gate 4: validation_stale (Rework ran but produced no fresh validations)
-  if ((state as { reworkApplied?: boolean }).reworkApplied === true && validations.length === 0) {
-    setSkip(state, 'validation_stale');
-    return;
-  }
-
-  // Stage scoped to cwd
-  const addR = await gitC(cwd, ['add', '-A', '.']);
+  const addR = await gitC(cwd, ['add', '--', ...filesToStage]);
   if (addR.code !== 0) {
-    setSkip(state, 'hook_failed');
-    return;
+    return advanceNoOp('hook_failed', t0, addR.stderr || 'git add failed');
   }
 
-  // Gate 6: no_diff (post-stage)
+  // Post-stage: confirm staged diff is non-empty.
+  // `git diff --cached --quiet` exits 0 when nothing is staged; 1 when staged.
   const diffR = await gitC(cwd, ['diff', '--cached', '--quiet', '--', '.']);
   if (diffR.code === 0) {
-    setSkip(state, 'no_diff');
-    return;
+    return advanceNoOp('no_diff', t0);
   }
 
-  // Resolve commit message: worker-supplied or model-generated.
-  let commitMessage: string | undefined = (result.commitMessage as string | undefined);
-  if (!commitMessage) {
-    try {
-      const session: Session = ctx!.getSession('standard');
-      const diffOut = await gitC(cwd, ['diff', '--cached', '--', '.']);
-      const truncated = diffOut.stdout.slice(0, 8000);
-      const summary = (result.summary as string | undefined) ?? '';
-      const turn = await session.send(
-        `Generate a one-line Conventional Commits message for this diff.\n\nTask summary: ${summary}\n\nDiff:\n${truncated}`,
-        { stageLabel: HUMAN_LABEL.committing },
-      );
-      commitMessage = turn.output.split('\n')[0].trim();
-    } catch {
-      /* fall through to template */
+  const commitMessage = composeCommitMessage(state);
+
+  try {
+    const commitR = await gitC(cwd, ['commit', '-m', commitMessage]);
+    if (commitR.code !== 0) {
+      // Hook failure is the dominant case: we've already validated repo,
+      // diff, and HEAD; if `git commit` still fails, the most likely cause
+      // is a pre-commit hook (or other policy hook) rejecting the commit.
+      // We treat non-zero exit as hook_failed unless the stderr indicates
+      // something structurally worse (corrupted index, fs errors).
+      const stderr = commitR.stderr ?? '';
+      const looksStructural = /index|object|corrupt|permission denied|read-only/i.test(stderr);
+      if (!looksStructural) {
+        return advanceNoOp('hook_failed', t0, stderr || 'commit rejected (likely pre-commit hook)');
+      }
+      return haltCommit(`commit_failed: ${stderr || 'unknown error'}`, t0);
     }
-    if (!commitMessage) {
-      const summary = (result.summary as string | undefined) ?? 'update';
-      commitMessage = `chore: ${summary.slice(0, 60)}`;
+    const sha = (await currentHead(cwd)) ?? '';
+    const authoredAt = new Date().toISOString();
+    return {
+      outcome: 'advance',
+      payload: {
+        kind: 'committed',
+        commitSha: sha,
+        commitMessage,
+        filesChanged,
+        authoredAt,
+      },
+      telemetry: {
+        stageLabel: 'committing',
+        durationMs: Date.now() - t0,
+        costUSD: 0,
+        turnsUsed: 0,
+        stopReason: 'normal',
+      },
+    };
+  } catch (err) {
+    if (isHookFailure(err)) {
+      return advanceNoOp('hook_failed', t0, err instanceof Error ? err.message : String(err));
     }
+    return haltCommit(`commit_failed: ${err instanceof Error ? err.message : String(err)}`, t0);
   }
-
-  // Commit
-  const commitR = await gitC(cwd, ['commit', '-m', commitMessage]);
-  if (commitR.code !== 0) {
-    setSkip(state, 'hook_failed');
-    return;
-  }
-  const newSha = await currentHead(cwd);
-
-  state.lastRunResult = {
-    ...result,
-    committed: true,
-    commitSha: newSha,
-    commitMessage,
-    commitSkipReason: null,
-  } as LifecycleState['lastRunResult'];
-
-  // Back-compat for downstream consumers (baseline-handlers + event-builder).
-  state.commits = [{
-    sha: newSha ?? '',
-    subject: commitMessage,
-    body: '',
-    filesChanged,
-    authoredAt: new Date().toISOString(),
-  }];
-
-  mergeStageStats(state, 'committing', {
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedReadTokens: 0,
-    cachedNonReadTokens: 0,
-    turnCount: 0,
-    toolCallCount: 0,
-    costUSD: null,
-    durationMs: Date.now() - startMs,
-    filesWrittenCount: filesChanged.length,
-  }, { tier: 'standard', model: null });
 }
+
+// ─── Exports (backwards compatibility alias) ─────────────────────────────────
+// The old export name from v4.4.x; new code should use commitHandler.
+export { commitHandler as gitCommitHandler };

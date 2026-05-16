@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { RunResult } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 
 describe('Executor surfaces structured runner_crash code', () => {
   it('accepts runner_crash as a valid structuredError code at the type level', () => {
-    const r: RunResult = {
+    const r: RuntimeRunResult = {
       output: '',
       status: 'error',
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },

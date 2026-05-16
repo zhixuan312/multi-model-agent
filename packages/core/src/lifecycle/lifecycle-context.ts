@@ -104,12 +104,42 @@ export interface ExecutionContext {
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
 
+  /**
+   * Number of repo-groups the current batch was split into by
+   * groupTasksByRepo. Set by task-executor immediately after grouping,
+   * BEFORE any dispatchOne fires. Consumed by task-runner.ts to gate
+   * PARALLEL_SAFETY_SUFFIX (suffix is only appended when this value > 1,
+   * because within a single group tasks run serially and full builds are
+   * safe).
+   */
+  batchGroupCount?: number;
+
+  /**
+   * Server-supplied callback that records the per-batch grouping snapshot
+   * onto the BatchRegistry entry. Optional (CLI/local clients don't have
+   * a BatchRegistry — same pattern as recordHeartbeat). Called once per
+   * batch by task-executor immediately after groupTasksByRepo resolves.
+   */
+  attachBatchGroups?: (groups: Array<{ key: string; taskIndices: number[] }>) => void;
+
+  /**
+   * Server-supplied callback that records grouping telemetry to be
+   * attached to the eventual batch_completed event. Optional — same
+   * pattern as recordHeartbeat / attachBatchGroups. Called once per
+   * batch by task-executor immediately after grouping resolves.
+   */
+  setBatchGroupingTelemetry?: (info: {
+    groupCount: number;
+    groupSizes: number[];
+    serializationApplied: boolean;
+  }) => void;
+
   /** Telemetry recorder — server-only, used at terminal to record task.completed. */
   recorder?: {
     recordTaskCompleted: (params: {
       route: string;
       taskSpec: TaskSpec;
-      runResult: import('../types.js').RunResult;
+      runResult: import('../types.js').RuntimeRunResult;
       realFilesChanged: string[];
       client: string;
       mainModel: string | null;
@@ -121,10 +151,7 @@ export interface ExecutionContext {
   // ── Output target tracking ──
   outputTargets: string[];
 
-  // ── v4 review engines ──
-  /** Quality + spec + diff reviewer engine. Optional until B2-B4 wire it into chain handlers. */
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
-
+  
   // ── Pre-v4 executor compatibility (Phase B/E will consume these) ──
   /** Per-project runtime state — used by executor-layer consumers (delegate, etc.). */
   projectContext?: ProjectContext;

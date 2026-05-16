@@ -37,7 +37,7 @@ describe('qualityLintTemplate.buildWarmFollowup', () => {
     const out = qualityLintTemplate.buildWarmFollowup!(ctx);
     expect(out).toContain('safety');
     expect(out).toContain('## Verdict');
-    expect(out).toContain('## Deviations');
+    expect(out).toContain('## Finding');
   });
 });
 

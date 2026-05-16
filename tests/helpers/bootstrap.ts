@@ -2,7 +2,6 @@ import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle
 import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
-import { DeriveTerminalStatusHandler } from '../../packages/core/src/lifecycle/handlers/derive-terminal-status.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
 import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
 import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
@@ -147,7 +146,6 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
   const executor = new TaskExecutor(emitter);
   const deriver = new TerminalStatusDeriver();
   const coord = new ShutdownCoordinator();
-  const terminalHandler = new DeriveTerminalStatusHandler(deriver, coord);
   const noop: StageHandler = () => undefined;
 
   // v4.4 test bridge: handlers that have migrated to session.send() read
@@ -206,7 +204,7 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
     run_verify_command: noop,
     git_commit: noop,
     compose_response: (state: LifecycleState): void => {
-      terminalHandler.handler.bind(terminalHandler)(state);
+      // v4.4.x: terminalStatus derived via shutdown coordinator + deriver
       const lastResult = state.lastRunResult as { finalAssistantText?: string; toolCalls?: unknown[]; workerStatus?: string; errorCode?: string } | undefined;
       const workerOutput = lastResult?.finalAssistantText ?? '';
       let structuredReport: unknown = null;

@@ -6,7 +6,8 @@ import { delegateHeadlineTemplate } from '../../reporting/headline-templates/del
 import { delegateReportSchema } from '../../reporting/report-parser-slots/delegate-report.js';
 import { compileDelegatePrompt } from '../../intake/brief-compiler-slots/delegate.js';
 import type { ReviewPolicy } from '../../intake/brief-compiler-slots/delegate.js';
-import { specLintTemplate, qualityLintTemplate } from '../../review/reviewer-engine.js';
+import { specLintTemplate } from '../../review/templates/spec-review.js';
+import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 export function registerDelegate(registry: ToolSurfaceRegistry): void {
@@ -37,6 +38,7 @@ export interface DelegateBrief {
 export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   name: 'delegate',
   category: 'artifact_producing',
+  serializeSameRepo: true,
   agentType: 'standard',
   briefSlot: (input) =>
     input.tasks.map((t) => ({

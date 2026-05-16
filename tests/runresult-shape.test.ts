@@ -1,12 +1,12 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
-import type { RunResult, RawStageStats } from '../packages/core/src/types.js';
+import type { RuntimeRunResult, RawStageStats } from '../packages/core/src/types.js';
 
-describe('RunResult shape (Phase 0 contract)', () => {
+describe('RuntimeRunResult shape (Phase 0 contract)', () => {
   it('exposes stageStats keyed by every stage name the telemetry schema reads', () => {
     type StageName =
       | 'implementing' | 'annotating' | 'review' | 'rework'
       | 'review' | 'rework' | 'review' | 'committing';
-    expectTypeOf<keyof NonNullable<RunResult['stageStats']>>().toEqualTypeOf<StageName>();
+    expectTypeOf<keyof NonNullable<RuntimeRunResult['stageStats']>>().toEqualTypeOf<StageName>();
   });
 
   it('RawStageStats carries raw cost / duration / agent / model fields', () => {
@@ -20,8 +20,8 @@ describe('RunResult shape (Phase 0 contract)', () => {
     }>();
   });
 
-  it('every field the event-builder reads is present on a real RunResult', () => {
-    const sample: RunResult = {
+  it('every field the event-builder reads is present on a real RuntimeRunResult', () => {
+    const sample: RuntimeRunResult = {
       output: '',
       status: 'done' as const,
       usage: { input: 0, output: 0, costUSD: 0 },
@@ -52,7 +52,7 @@ describe('RunResult shape (Phase 0 contract)', () => {
       'usage','stageStats',
     ];
     for (const key of required) {
-      expect(sample, `field ${key} must exist on RunResult`).toHaveProperty(key);
+      expect(sample, `field ${key} must exist on RuntimeRunResult`).toHaveProperty(key);
     }
   });
 });

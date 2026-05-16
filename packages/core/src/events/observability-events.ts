@@ -167,6 +167,11 @@ export const BatchCompletedEvent = BatchBase.extend({
   tool: z.string(),
   durationMs: z.number().int().min(0),
   taskCount: z.number().int().min(0),
+  // 4.6.0+: sequential-same-repo dispatch metadata. All three are optional
+  // (absent on read-only routes that don't opt into serializeSameRepo).
+  groupCount: z.number().int().min(1).optional(),
+  groupSizes: z.array(z.number().int().min(1)).optional(),
+  serializationApplied: z.boolean().optional(),
 }).strict();
 
 export const BatchFailedEvent = BatchBase.extend({

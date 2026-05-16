@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/task-runner';
-import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 
 const defaultConfig: MultiModelConfig = {
   defaults: { timeoutMs: 600000, tools: 'full' },
@@ -121,8 +121,8 @@ describe('runTasks', () => {
     expect(results[0].status).toBeDefined();
   });
 
-  it('RunResult carries review statuses and per-phase subreports', () => {
-    const result: RunResult = {
+  it('RuntimeRunResult carries review statuses and per-phase subreports', () => {
+    const result: RuntimeRunResult = {
       output: 'done',
       status: 'ok',
       usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },

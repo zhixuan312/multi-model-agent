@@ -1,0 +1,282 @@
+// Extracted executor closure from task-runner.ts.
+// This function orchestrates the implementation stage: read-route sequential
+// criteria loop or write-route single worker turn, populates state.lastRunResult.
+
+import type { TaskSpec, RuntimeRunResult, Provider } from '../types.js';
+import type { LifecycleState } from './stage-plan-types.js';
+import type { ExecutionContext } from './lifecycle-context.js';
+import { pickEscalation } from '../escalation/policy.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
+import { parseStructuredReport } from '../reporting/structured-report.js';
+import { mergeStageStats } from './merge-stage-stats.js';
+import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
+import { HUMAN_LABEL } from './stage-labels.js';
+import { readFile as fsReadFile } from 'fs/promises';
+
+export async function performImplementation(state: LifecycleState): Promise<void> {
+  const task = state.task as TaskSpec | undefined;
+  const ctx = state.executionContext as ExecutionContext | undefined;
+  if (!task || !ctx) {
+    throw new Error(`performImplementation: state.task / state.executionContext not set for route '${state.route}'`);
+  }
+  const baseTier = ctx.assignedTier;
+  const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
+  const provider = ctx.providers[decision.impl] as Provider | undefined;
+  if (!provider) {
+    state.lastRunResult = {
+      output: '',
+      status: 'error',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      error: `no provider configured for tier '${decision.impl}'`,
+      errorCode: 'all_tiers_unavailable',
+      workerStatus: 'failed',
+    } as unknown as RuntimeRunResult;
+    state.terminal = true;
+    return undefined;
+  }
+  // Read-only routes (audit / review / debug / investigate / research)
+  // run the sequential criteria loop on one complex session. The
+  // (route, subtype) pair resolves to a per-subtype spec from the
+  // tool's SUBTYPES map; the dispatcher uses that to build the cached
+  // prefix + per-criterion suffix.
+  const route = state.route ?? 'delegate';
+  if (state.toolCategory === 'read_only' && isReadOnlyRoute(route)) {
+    try {
+      const taskWithSubtype = task as TaskSpec & { subtype?: string };
+      const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
+      const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
+      const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
+      const preReadFiles: Record<string, string> = {};
+      for (const fp of filePaths) {
+        try {
+          preReadFiles[fp] = await fsReadFile(fp, 'utf8');
+        } catch {
+          // tolerated — sub-worker can read on demand via tools
+        }
+      }
+      // Target content for the cached prefix. Preference order:
+      //   1. parallelTarget — pure user question/work/problem, no
+      //      legacy format spec (set by the route's buildTaskSpec).
+      //   2. document — inlined doc (audit's primary input shape).
+      //   3. task.prompt — last-resort fallback. AVOID: it embeds the
+      //      legacy monolithic format spec (## Summary / ## Citations
+      //      for investigate, etc.), which competes with our `## Finding
+      //      N:` shape and confuses the worker about output format.
+      const taskWithTarget = task as TaskSpec & { parallelTarget?: string; document?: string };
+      const targetContent =
+        (taskWithTarget.parallelTarget && taskWithTarget.parallelTarget.trim().length > 0)
+          ? taskWithTarget.parallelTarget
+          : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
+            ? taskWithTarget.document
+            : task.prompt;
+      const cachedPrefix = routeSpec.buildPrefix({
+        document: targetContent,
+        preReadFiles,
+        filePaths,
+      });
+      // v4.4.x: single complex session per task, sequential for-loop over
+      // criteria. Earlier criteria's tool results stay in the session
+      // context so later criteria don't re-discover the same files.
+      const session = ctx.getSession(decision.impl);
+      const dispatchResult = await runReadRouteImplementer({
+        session,
+        cachedPrefix,
+        criteria: routeSpec.criteria,
+        buildSuffix: routeSpec.buildSuffix,
+      });
+
+      const totalCriteria = routeSpec.criteria.length;
+      const failedCount = dispatchResult.criteriaErrors.length;
+      const succeededCount = totalCriteria - failedCount;
+      const majorityThreshold = Math.ceil(totalCriteria / 2);
+      const status = succeededCount === 0
+        ? 'error'
+        : succeededCount >= majorityThreshold ? 'ok' : 'incomplete';
+      const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
+        ? ('missing_sections' as const)
+        : undefined;
+
+      const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
+        ? 'error'
+        : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
+      const terminationReason = {
+        cause: terminationCause,
+        turnsUsed: dispatchResult.turns,
+        hasFileArtifacts: false,
+        usedShell: false,
+        workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
+        wasPromoted: false,
+      };
+      state.lastRunResult = {
+        output: dispatchResult.synthesizedOutput,
+        status,
+        usage: dispatchResult.usage,
+        turns: dispatchResult.turns,
+        filesRead: filePaths,
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        workerStatus: succeededCount === 0 ? 'failed' : 'done',
+        terminationReason,
+        findings: dispatchResult.findings,
+        criteriaErrors: dispatchResult.criteriaErrors,
+        ...(incompleteReason && { incompleteReason }),
+      } as unknown as RuntimeRunResult;
+
+      mergeStageStats(state, 'implementing', {
+        inputTokens: dispatchResult.usage.inputTokens,
+        outputTokens: dispatchResult.usage.outputTokens,
+        cachedReadTokens: dispatchResult.usage.cachedReadTokens,
+        cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
+        turnCount: dispatchResult.turns,
+        toolCallCount: 0,
+        costUSD: dispatchResult.costUSD,
+        durationMs: dispatchResult.durationMs,
+      }, {
+        tier: ctx.assignedTier,
+        model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+      });
+      if (status !== 'ok') state.terminal = true;
+      return undefined;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      state.lastRunResult = {
+        output: '',
+        status: 'error',
+        usage: { inputTokens: 0, outputTokens: 0 },
+        turns: 0,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: true,
+        escalationLog: [],
+        error: message,
+        errorCode: 'runner_crash',
+        workerStatus: 'failed',
+      } as unknown as RuntimeRunResult;
+      state.terminal = true;
+      return undefined;
+    }
+  }
+
+  // Build the watchdog config once, just before the delegateWithEscalation call:
+  const wdConfig = {
+    enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
+    thrashTurns: ctx.config?.defaults?.thrashTurns ?? 25,
+    thrashWallClockMs: ctx.config?.defaults?.thrashWallClockMs ?? 1_200_000,
+    thrashSoftWallClockMs: ctx.config?.defaults?.thrashWallClockMs
+      ? Math.floor((ctx.config.defaults.thrashWallClockMs ?? 1_200_000) / 2)
+      : 600_000,
+  };
+  // state2 carries the timer's "fired" bit so recordPostHocSignals knows whether
+  // the abort came from the watchdog vs. some other cancellation.
+  const wdState2 = { fired: false };
+
+  // Wire the watchdog. ctx.stall.controller is the existing AbortController
+  // passed to delegateWithEscalation as options.abortSignal — when the watchdog
+  // fires, the controller's abort propagates into the session.
+  const disposeWatchdog = startProgressWatchdog({
+    state,
+    controller: ctx.stall.controller,
+    emit: (event) => ctx.bus?.emit(event as any),
+    config: wdConfig,
+    taskIndex: ctx.taskIndex,
+    batchId: ctx.batchId,
+    state2: wdState2,
+  });
+
+  try {
+    const result = await delegateWithEscalation(
+      {
+        prompt: task.prompt,
+        cwd: ctx.cwd,
+        agentType: decision.impl,
+        briefQualityPolicy: 'off',
+        timeoutMs: ctx.timing.timeoutMs,
+        ...(task.tools !== undefined && { tools: task.tools }),
+      },
+      [provider],
+      {
+        explicitlyPinned: false,
+        taskDeadlineMs: ctx.timing.deadlineMs,
+        abortSignal: ctx.stall.controller.signal,
+        assignedTier: decision.impl,
+        stageLabel: HUMAN_LABEL.implementing,
+        ...(ctx.bus && { bus: ctx.bus }),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        taskIndex: ctx.taskIndex,
+      },
+    );
+    const enrichedResult: RuntimeRunResult = {
+      ...result,
+      ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
+    } as unknown as RuntimeRunResult;
+    state.lastRunResult = enrichedResult;
+
+    // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
+    // adds new signals state for sub-project B's annotator).
+    await recordPostHocSignals(
+      state,
+      enrichedResult.turns ?? 0,
+      wdConfig,
+      (event) => ctx.bus?.emit(event as any),
+      ctx.taskIndex,
+      ctx.batchId,
+    );
+    // Record the implementer's per-stage cost so emit_task_terminal +
+    // wire task.completed include it in the totals + per-stage breakdown.
+    // Cost field lookup matches the canonical-then-legacy fallback used
+    // in delegate-with-escalation: `cost.costUSD` was the original field
+    // before assembleRunResult moved the value to top-level
+    // `actualCostUSD` (the current source of truth from claude/codex
+    // turns). Without the actualCostUSD fallback every claude-tier
+    // implementing stage records cost=null and telemetry under-reports.
+    mergeStageStats(state, 'implementing', {
+      inputTokens: result.usage.inputTokens ?? 0,
+      outputTokens: result.usage.outputTokens ?? 0,
+      cachedReadTokens: result.usage.cachedReadTokens ?? 0,
+      cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
+      turnCount: result.turns ?? 0,
+      toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+      costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
+      durationMs: result.durationMs ?? null,
+      filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
+      filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
+    }, {
+      tier: ctx.assignedTier,
+      model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+    });
+    if (result.status !== 'ok') {
+      state.terminal = true;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    state.lastRunResult = {
+      output: '',
+      status: 'error',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      error: message,
+      errorCode: 'runner_crash',
+      workerStatus: 'failed',
+    } as unknown as RuntimeRunResult;
+    state.terminal = true;
+  } finally {
+    disposeWatchdog();
+  }
+  return undefined;
+}

@@ -1,7 +1,7 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
-import { qualityDebugTemplate } from '../../review/reviewer-engine.js';
+import { qualityDebugTemplate } from '../../review/templates/quality-review-debug.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from '../../intake/brief-compiler-slots/debug.js';

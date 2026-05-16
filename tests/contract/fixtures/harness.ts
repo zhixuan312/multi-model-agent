@@ -106,6 +106,9 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
       tools: 'full',
       sandboxPolicy: 'cwd-only',
     },
+    diagnostics: {
+      log: true,
+    },
     server: {
       bind: '127.0.0.1',
       port: 0,

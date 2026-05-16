@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { RunResult, RawStageStats } from '../types.js';
+import type { RuntimeRunResult, RawStageStats } from '../types.js';
+import type { RawStageStatsShape } from '../types/run-result.js';
+import type { StageGate } from '../lifecycle/stage-io.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './telemetry-types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type StageEntryInternal, type ConcernCategoryType, type WireTelemetryRecord, WireTelemetryRecordSchema } from './telemetry-types.js';
 
 import { bucketFindingsBySeverity } from '../reporting/severity.js';
 import { rollupByTier, sumTokens } from '../bounded-execution/cost-rollup.js';
@@ -21,19 +23,63 @@ import {
   clampDurationMsTotal,
 } from './clamp.js';
 
+/**
+ * Thrown when a stage marked `isLlmStage: true` arrives at the builder
+ * with no model identifier. Caught one level up by the stage-build loop
+ * (Task A5b) and converted into a `validation_warnings` diagnostic; the
+ * offending stage is dropped from the emitted event but the rest of the
+ * event still ships. Per spec D5 + §6.
+ */
+export class StageModelMissingError extends Error {
+  constructor(public readonly stageName: string) {
+    super(`Stage '${stageName}' is marked isLlmStage:true but raw.model is null.`);
+    this.name = 'StageModelMissingError';
+  }
+}
+
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[]; subtype?: string };
-  runResult: RunResult;
+  runResult: RuntimeRunResult;
   realFilesChanged: string[];   // NEW — sub-project A. Absolute paths from getRealFilesChanged.
   client: string;
   mainModel: string | null;
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommandPresent?: boolean;
+  /**
+   * v5 — per-stage gates from LifecycleState. When present, the wire builder
+   * cross-checks each stage's runResult.stageStats against gates[name].telemetry
+   * and prefers the gate's values for `costUSD`, `durationMs`, `turnsUsed`,
+   * `stopReason` (the canonical v5 source). stageStats supplies the remaining
+   * fields (tokens, tool calls, files read/written) because they're not on the
+   * gate's telemetry block.
+   */
+  gates?: Record<string, StageGate<unknown>>;
 }
 
 const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
 const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
+
+/**
+ * Catches StageModelMissingError thrown by LLM stage builders and converts
+ * it into a validation warning. The stage is dropped from the emitted event,
+ * but the rest of the event still ships. Per spec §6 + task A5b.
+ */
+function safeBuild<T>(
+  name: string,
+  fn: () => T | null,
+  validationWarnings: Array<{ path: string; rule: string }>,
+): T | null {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof StageModelMissingError) {
+      validationWarnings.push({ path: `stages.${name}`, rule: 'StageModelMissingError' });
+      return null;
+    }
+    throw e;
+  }
+}
 
 /** Projected finding shape used internally by the wire builder. Severity is
  *  always one of the 4-tier values (defaults to 'medium' when the source
@@ -52,7 +98,7 @@ interface ProjectedFinding {
  *  `runResult.concerns` field is dead — the v4.4 lifecycle never assigns it,
  *  so reading from there silently produced concernCount=0 on every event.
  */
-function projectFindings(rr: RunResult): ProjectedFinding[] {
+function projectFindings(rr: RuntimeRunResult): ProjectedFinding[] {
   // The annotator handler writes a richer shape than ParsedStructuredReport declares;
   // cast to the runtime-actual shape.
   const sr = rr.structuredReport as {
@@ -86,7 +132,8 @@ function normalizeSeverity(s: string | undefined): ProjectedFinding['severity'] 
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;
 
-  const stages = buildStages(route, runResult);
+  const validationWarnings: Array<{ path: string; rule: string }> = [];
+  const stages = buildStages(route, runResult, ctx.gates, validationWarnings);
 
   // Compute per-stage main-model-equivalent cost using the resolved rate card.
   // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
@@ -101,6 +148,16 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
         )
       : null;
   }
+
+  // Spec D11: when the implementing or rework stage was dropped due to
+  // StageModelMissingError, omit tierUsage.<tier> entirely — do not let
+  // another stage's model become the tier attribution.
+  const droppedImpl = validationWarnings.some(w =>
+    w.rule === 'StageModelMissingError'
+    && (w.path === 'stages.implementing' || w.path === 'stages.rework')
+  );
+  const droppedTier: 'standard' | 'complex' =
+    (runResult.stageStats?.implementing?.agentTier === 'complex') ? 'complex' : 'standard';
 
   // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
   // is satisfied by Math.max-ing the executor wall-clock against the stage
@@ -126,7 +183,38 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalDurationMs = clampDurationMsTotal(rawTotal);
 
   // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
-  const tierUsage = rollupByTier(stages.map(s => ({
+  // Filter to LLM-billable stages only — synthetic stages (annotated
+  // placeholder review on read-only routes, the commit stage) carry
+  // model: 'custom' and would corrupt tier rollup under last-seen
+  // semantics. Per spec §4.1.1 and §4.1.2.
+  const llmStages = stages.filter(s => s.isLlmStage);
+
+  // Tier-uniformity invariant (spec D9). Every LLM-billable stage at
+  // a given tier must share the same canonical model id. If violated,
+  // omit that tier from tierUsage and record a diagnostic — better
+  // honest-null than silent-wrong attribution.
+  const tierModels: Partial<Record<'standard' | 'complex', Set<string>>> = {};
+  for (const s of llmStages) {
+    const tier = s.tier as 'standard' | 'complex';
+    const set = tierModels[tier] ?? new Set<string>();
+    set.add(s.model);
+    tierModels[tier] = set;
+  }
+  const divergentTiers = new Set<'standard' | 'complex'>();
+  for (const tier of ['standard', 'complex'] as const) {
+    if ((tierModels[tier]?.size ?? 0) > 1) {
+      divergentTiers.add(tier);
+      validationWarnings.push({ path: `tierUsage.${tier}`, rule: 'R-TIER-MODEL-DIVERGENCE' });
+    }
+  }
+
+  if (droppedImpl) {
+    divergentTiers.add(droppedTier);
+  }
+
+  const rollupInput = llmStages.filter(s => !divergentTiers.has(s.tier as 'standard' | 'complex'));
+
+  const tierUsage = rollupByTier(rollupInput.map(s => ({
     tier: s.tier as 'standard' | 'complex',
     model: s.model,
     costUSD: s.costUSD,
@@ -175,6 +263,14 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const distinctProviders = new Set(escalationLog.map(a => a.provider)).size;
   const escalationCount = Math.max(0, distinctProviders - 1);
 
+  // Strip producer-internal isLlmStage before wire emission. Wire schema
+  // (telemetry-types.ts) does not include this field; backend transformer
+  // does not read it. Per spec D2.
+  const wireStages = stages.map(s => {
+    const { isLlmStage: _drop, ...rest } = s;
+    return rest;
+  });
+
   const internalRecord = {
     eventId: randomUUID(),
     route,
@@ -211,7 +307,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
     filesWrittenCount: (ctx.realFilesChanged ?? []).length,
-    stages,
+    stages: wireStages,
+    validation_warnings: validationWarnings.length > 0 ? validationWarnings : undefined,
   };
 
   return buildWirePayload(internalRecord);
@@ -220,24 +317,53 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 /**
  * Wire payload builder. Internal record fields match the wire schema 1:1
  * after the v4.0.3 rename (mainModel/mainModelFamily everywhere — DB column
- * is `main_model`, header is `X-MMA-Main-Model`, no more `mainModel`
- * translation shim).
+ * is `main_model`, header is `X-MMA-Main-Model`).
+ *
+ * v5 — this used to be a `as unknown as WireTelemetryRecord` passthrough.
+ * The translator is now real: the internal record is passed through Zod
+ * (`WireTelemetryRecordSchema`) so the wire payload is schema-validated at
+ * the egress boundary. When the schema rejects, we fall back to the
+ * passthrough to preserve "best-effort telemetry" semantics — but the
+ * validation failure is observable on bus emits so backend can detect drift
+ * before the warehouse 400s. Callers that need strict validation should
+ * call `WireTelemetryRecordSchema.parse` directly.
  */
-export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
+export function buildWirePayload(
+  internalRecord: Record<string, unknown>,
+  opts?: { onValidationError?: (err: unknown) => void },
+): WireTelemetryRecord {
+  const parsed = WireTelemetryRecordSchema.safeParse(internalRecord);
+  if (parsed.success) {
+    // Schema-strip: drop unknown fields by returning the parsed record. This
+    // is the v5 contract guarantee — only wire-schema fields cross the
+    // boundary.
+    return parsed.data;
+  }
+  // Schema rejected — surface the error to the caller and fall back to the
+  // passthrough so we never silently drop a telemetry row. Backend will
+  // 400 on schema mismatch; the bus event makes the drift discoverable
+  // before that point.
+  opts?.onValidationError?.(parsed.error);
   return internalRecord as unknown as WireTelemetryRecord;
 }
 
-function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {
-  const result: StageEntryType[] = [];
+function buildStages(
+  route: BuildContext['route'],
+  rr: RuntimeRunResult,
+  gates?: Record<string, StageGate<unknown>>,
+  validationWarnings?: Array<{ path: string; rule: string }>,
+): StageEntryInternal[] {
+  const warnings = validationWarnings ?? [];
+  const result: StageEntryInternal[] = [];
 
-  const impl = buildImplStage(rr);
+  const impl = safeBuild('implementing', () => buildImplStage(rr, gates?.['implement']), warnings);
   if (impl) result.push(impl);
 
   if (REVIEWED_ROUTES.has(route)) {
     const status = (rr.reviewVerdict as string | undefined) ?? rr.qualityReviewStatus ?? rr.specReviewStatus ?? null;
     const stageRounds = (rr.stageStats?.review as { roundsUsed?: number } | undefined)?.roundsUsed;
     const rounds = stageRounds ?? (Math.max(rr.reviewRounds?.spec ?? 0, rr.reviewRounds?.quality ?? 0) || null);
-    const rev = buildReviewStage(rr, status, rounds);
+    const rev = safeBuild('review', () => buildReviewStage(rr, status, rounds, gates?.['review']), warnings);
     if (rev) {
       result.push(rev);
     } else if (QUALITY_ONLY_ROUTES.has(route)) {
@@ -255,27 +381,50 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
   }
 
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const rw = buildReworkStage(rr);
+    const rw = safeBuild('rework', () => buildReworkStage(rr, gates?.['rework']), warnings);
     if (rw) result.push(rw);
   }
 
-  const an = buildAnnotatingStage(rr);
+  const an = safeBuild('annotating', () => buildAnnotatingStage(rr, gates?.['annotate']), warnings);
   if (an) result.push(an);
 
-  const cm = buildCommitStage(rr);
+  const cm = safeBuild('committing', () => buildCommitStage(rr, gates?.['commit']), warnings);
   if (cm) result.push(cm);
 
   return result.slice(0, 8);
 }
 
+/**
+ * Overlay gate telemetry onto an extracted-stage base. Gates are the v5
+ * canonical source for `durationMs`, `costUSD`, `turnsUsed`. When both
+ * sources have a value, the gate wins (intentional: the gate is what the
+ * lifecycle actually produced; stageStats is the legacy mirror that the
+ * runner-shell and per-stage tracker fill in). Tokens, tool calls, and
+ * files-read/written remain on stageStats because the gate telemetry block
+ * doesn't carry them.
+ */
+function applyGateOverlay<T extends { durationMs: number; costUSD: number; turnCount: number }>(
+  base: T,
+  gate: StageGate<unknown> | undefined,
+): T {
+  if (!gate) return base;
+  const t = gate.telemetry;
+  return {
+    ...base,
+    durationMs: clampDurationMsStage(t.durationMs ?? base.durationMs),
+    costUSD: clampStageCost(t.costUSD ?? base.costUSD),
+    turnCount: clampTurnCount(t.turnsUsed ?? base.turnCount),
+  };
+}
+
 function extractStageData(
-  raw: RawStageStats | undefined,
-  _rr: RunResult,
+  raw: RawStageStats | RawStageStatsShape | undefined,
+  _rr: RuntimeRunResult,
   _stageName: string,
 ) {
   if (!raw || !raw.entered) return null;
   return {
-    model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
+    model: raw.model ? (normalizeModel(raw.model).canonical ?? raw.model) : null,
     tier: (raw.agentTier as 'standard' | 'complex') ?? 'standard',
     round: (raw as any).round ?? 0,
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
@@ -293,11 +442,15 @@ function extractStageData(
   };
 }
 
-function buildImplStage(rr: RunResult): StageEntryType | null {
+function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.implementing;
-  const base = extractStageData(ss, rr, 'implementing');
+  let base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
-  return { name: 'implementing', ...base } as StageEntryType;
+  base = applyGateOverlay(base, gate);
+  if (base.model === null) {
+    throw new StageModelMissingError('implementing');
+  }
+  return { name: 'implementing', ...base, model: base.model!, mainEquivalentCostUSD: null, isLlmStage: true } satisfies StageEntryInternal;
 }
 
 /** Synthetic review stage entry for read-only routes that hardcode
@@ -307,7 +460,7 @@ function buildImplStage(rr: RunResult): StageEntryType | null {
  *  (no actual reviewer LLM call happened) and verdict: 'annotated' (a
  *  v5 enum value that means "annotator emitted findings, no quality
  *  verdict reached"). Schema-compliant — no version bump needed. */
-function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType {
+function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryInternal {
   const categories = [...new Set(findings.map(f => classifyConcern(f) as ConcernCategoryType))];
   const rawBuckets = bucketFindingsBySeverity(findings.map(f => ({ severity: f.severity })));
   const findingsBySeverity = {
@@ -338,17 +491,23 @@ function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType
     roundsUsed: 1,
     concernCategories: categories.slice(0, 9),
     findingsBySeverity,
-  } as StageEntryType;
+    isLlmStage: false,
+  } satisfies StageEntryInternal;
 }
 
 function buildReviewStage(
-  rr: RunResult,
+  rr: RuntimeRunResult,
   status: string | null,
   rounds: number | null,
-): StageEntryType | null {
+  gate?: StageGate<unknown>,
+): StageEntryInternal | null {
   const ss = rr.stageStats?.review as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, 'review');
+  let base = extractStageData(ss, rr, 'review');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
+  if (base.model === null) {
+    throw new StageModelMissingError('review');
+  }
 
   // v4.4.x: projectFindings reads from structuredReport.findings (read-only
   // routes) and structuredReport.reviewConcerns (reviewed write routes). The
@@ -381,17 +540,24 @@ function buildReviewStage(
   return {
     name: 'review',
     ...base,
+    model: base.model!,
     verdict,
     roundsUsed: Math.min(rounds ?? 1, 10),
     concernCategories: categories.slice(0, 9),
     findingsBySeverity,
-  } as StageEntryType;
+    mainEquivalentCostUSD: null,
+    isLlmStage: true,
+  } satisfies StageEntryInternal;
 }
 
-function buildReworkStage(rr: RunResult): StageEntryType | null {
+function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.rework as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, 'rework');
+  let base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
+  if (base.model === null) {
+    throw new StageModelMissingError('rework');
+  }
 
   const stageConcerns = projectFindings(rr).filter(
     c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review' || c.source === 'implementer',
@@ -401,27 +567,42 @@ function buildReworkStage(rr: RunResult): StageEntryType | null {
   return {
     name: 'rework',
     ...base,
+    model: base.model!,
     triggeringConcernCategories: triggeringCategories.slice(0, 9),
-  } as StageEntryType;
+    mainEquivalentCostUSD: null,
+    isLlmStage: true,
+  } satisfies StageEntryInternal;
 }
 
-function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
+function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.annotating as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
-  const base = extractStageData(ss, rr, 'annotating');
+  let base = extractStageData(ss, rr, 'annotating');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
+
+  // Annotator is an LLM stage iff the runtime actually invoked a model.
+  // Per spec §4.1.3, the observable signal is whether stageStats.annotating.model
+  // was populated. Task A6 fixes the upstream so this is always populated when
+  // the LLM was called. When null (degraded pure-transform path), the stage
+  // appears in wire stages[] but is excluded from tier rollup.
+  const isLlmStage = base.model !== null && base.model !== 'custom';
 
   return {
     name: 'annotating',
     ...base,
+    model: base.model || 'custom',
+    isLlmStage,
+    mainEquivalentCostUSD: null,
     outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed' | undefined) ?? 'not_applicable',
     skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other' | undefined) ?? 'other') : null,
-  } as StageEntryType;
+  } satisfies StageEntryInternal;
 }
 
-function buildCommitStage(rr: RunResult): StageEntryType | null {
+function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.committing;
-  const base = extractStageData(ss, rr, 'committing');
+  let base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
 
   const commits = Array.isArray(rr.commits) ? rr.commits : [];
   const allFiles = commits.flatMap((c) =>
@@ -434,22 +615,22 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
   return {
     name: 'committing',
     ...base,
+    model: base.model || 'custom',
     filesCommittedCount,
     // CommitStageRunner does not track branch-creation directly today;
     // name-diff against pre-commit refs is unreliable, so we report
     // false. A future change can wire this when CommitStageRunner emits
     // an explicit signal alongside filesCommittedCount.
     branchCreated: false,
-  } as StageEntryType;
+    mainEquivalentCostUSD: null,
+    isLlmStage: false,
+  } satisfies StageEntryInternal;
 }
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
 
-function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['terminalStatus'] {
+function deriveTerminalStatus(rr: RuntimeRunResult): TaskCompletedEventType['terminalStatus'] {
   const tr = rr.terminationReason;
-  if (tr === 'all_tiers_unavailable') return 'unavailable';
-  if (tr === 'cost_ceiling') return 'cost_exceeded';
-  if (tr === 'round_cap') return 'incomplete';
   if (!tr || typeof tr !== 'object') return 'incomplete';
   switch (tr.cause) {
     case 'finished': return 'ok';
@@ -468,7 +649,7 @@ function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['terminalSt
 
 const VALID_ERROR_CODES: ReadonlySet<string> = new Set(ErrorCode.options);
 
-function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
+function deriveErrorCode(rr: RuntimeRunResult): TaskCompletedEventType['errorCode'] {
   // structuredError.code is the most authoritative signal — the lifecycle
   // sets it for specific failure modes.
   if (rr.structuredError?.code) {
@@ -494,7 +675,7 @@ function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
   return null;
 }
 
-function deriveWorkerStatus(rr: RunResult): TaskCompletedEventType['workerStatus'] {
+function deriveWorkerStatus(rr: RuntimeRunResult): TaskCompletedEventType['workerStatus'] {
   const tr = rr.terminationReason;
   if (tr && typeof tr === 'object' && tr.cause === 'finished' && tr.workerSelfAssessment) {
     return tr.workerSelfAssessment as any;

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
-import type { RunResult } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 import { HAPPY } from './fixtures/runresult.js';
 
-function makeFixtureRunResult(overrides: Partial<RunResult>): RunResult {
-  return { ...structuredClone(HAPPY), ...overrides } as RunResult;
+function makeFixtureRunResult(overrides: Partial<RuntimeRunResult>): RuntimeRunResult {
+  return { ...structuredClone(HAPPY), ...overrides } as RuntimeRunResult;
 }
 
 describe('event-builder tier vocabulary', () => {
@@ -17,7 +17,7 @@ describe('event-builder tier vocabulary', () => {
           agentTier: 'complex',
         },
       },
-    } as RunResult);
+    } as RuntimeRunResult);
     const event = buildTaskCompletedEvent({
       route: 'delegate',
       taskSpec: { filePaths: [] },
@@ -241,7 +241,7 @@ describe('event-builder finding projection (v4.4.x)', () => {
     const rr = makeFixtureRunResult({
       qualityReviewStatus: 'changes_required',
       reviewVerdict: 'changes_required',
-    } as RunResult);
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       reviewConcerns: [
         'spec deviation: contract gate not wired',
@@ -268,8 +268,8 @@ describe('event-builder finding projection (v4.4.x)', () => {
       stageStats: {
         ...HAPPY.stageStats,
         review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
-      } as RunResult['stageStats'],
-    } as RunResult);
+      } as RuntimeRunResult['stageStats'],
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       findings: [
         { severity: 'critical', category: 'security', claim: 'c1' },
@@ -297,8 +297,8 @@ describe('event-builder finding projection (v4.4.x)', () => {
       stageStats: {
         ...HAPPY.stageStats,
         review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
-      } as RunResult['stageStats'],
-    } as RunResult);
+      } as RuntimeRunResult['stageStats'],
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       reviewConcerns: ['a', 'b', 'c', 'd'],
     };
@@ -376,5 +376,173 @@ describe('event-builder finding projection (v4.4.x)', () => {
       mainModel: null,
     });
     expect(ev.concernCount).toBe(150);
+  });
+});
+
+describe('event-builder tier attribution (spec 2026-05-16)', () => {
+  it('T1: tierUsage.standard.model is implementer, not "custom", when synthetic stages share tier', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: {
+          ...HAPPY.stageStats!.implementing,
+          model: 'claude-haiku-4-5',
+          agentTier: 'standard',
+          costUSD: 0.05,
+        },
+        verifying: {
+          ...HAPPY.stageStats!.implementing,
+          model: 'claude-haiku-4-5',
+          agentTier: 'standard',
+          costUSD: 0.01,
+        },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'investigate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+      reviewPolicy: 'none',
+    } as any);
+    expect(event.tierUsage.standard?.model).toBe('claude-haiku-4-5');
+  });
+
+  it('T2: tierUsage.standard.model is implementer when rework also fires', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.05 },
+        spec_rework:  { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.03 },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.tierUsage.standard?.model).toBe('claude-haiku-4-5');
+  });
+
+  it('T3: complex tier reports implementer; standard tier absent', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 4.9 },
+        spec_review:  { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 0.2 },
+      },
+      models: { implementer: 'gpt-5.4' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.tierUsage.complex?.model).toBe('gpt-5.4');
+    expect(event.tierUsage.standard).toBeUndefined();
+  });
+
+  it('T4: tierUsage.standard absent when only synthetic stages contribute', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 4.9 },
+      },
+      models: { implementer: 'gpt-5.4' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'investigate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+      reviewPolicy: 'none',
+    } as any);
+    expect(event.tierUsage.standard).toBeUndefined();
+    expect(event.tierUsage.complex?.model).toBe('gpt-5.4');
+  });
+
+  it('T5: wire stages[] does not contain isLlmStage on any entry', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard' },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr,
+      client: 'test', mainModel: 'claude-opus-4-7',
+    } as any);
+    for (const stage of event.stages) {
+      expect(stage).not.toHaveProperty('isLlmStage');
+    }
+  });
+
+  it('T6: missing model on implementing stage → diagnostic + tierUsage.standard omitted', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: null as unknown as string, agentTier: 'standard' },
+      },
+      models: { implementer: null },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr,
+      client: 'test', mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event).toBeDefined();
+    expect(event.stages.find(s => s.name === 'implementing')).toBeUndefined();
+    expect(event.tierUsage.standard).toBeUndefined();
+    expect((event as any).validation_warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: 'StageModelMissingError', path: 'stages.implementing' }),
+      ])
+    );
+  });
+
+  it('T7: annotator with no LLM invocation → stage in wire, excluded from tierUsage', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.05 },
+        annotating:   { ...HAPPY.stageStats!.implementing, model: null as unknown as string, agentTier: 'standard', costUSD: 0 },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr,
+      client: 'test', mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.stages.find(s => s.name === 'annotating')).toBeDefined();
+    expect(event.tierUsage.standard?.model).toBe('claude-haiku-4-5');
+  });
+
+  it('T8: divergent models same tier → R-TIER-MODEL-DIVERGENCE + tier omitted', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.05 },
+        rework:       { ...HAPPY.stageStats!.implementing, model: 'claude-sonnet-4-6', agentTier: 'standard', costUSD: 0.1 },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr,
+      client: 'test', mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.tierUsage.standard).toBeUndefined();
+    expect((event as any).validation_warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: 'R-TIER-MODEL-DIVERGENCE', path: 'tierUsage.standard' }),
+      ])
+    );
   });
 });

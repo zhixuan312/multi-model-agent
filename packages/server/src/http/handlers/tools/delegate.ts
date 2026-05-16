@@ -51,17 +51,7 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
       deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
-        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
-        if (deps.routeDispatcher) {
-          const result = await deps.routeDispatcher.dispatch({
-            route: 'delegate',
-            toolCategory: 'artifact_producing',
-            rawRequest: input,
-            executor: () => callExecutor(),
-          });
-          return result.body;
-        }
-        return callExecutor();
+        return executeTask(toolConfig, executionCtx, input);
       },
     });
 

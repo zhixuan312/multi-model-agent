@@ -15,7 +15,7 @@ import { getClaudeOAuth } from '../identity/auth-token-store.js';
 export function makeClaudeProvider(cfg: ClaudeProviderConfig): Provider {
   return {
     name: `claude:${cfg.model}`,
-    config: cfg as unknown as ProviderConfig,
+    config: cfg,
     openSession(opts: SessionOpts) {
       let oauthAccessToken: string | undefined;
       if (cfg.apiKey) {

@@ -1,203 +1,53 @@
-// RunResult — the per-run shape every worker returns. Matches spec
-// architecture.md `types/run-result.ts` slot.
-import type {
-  AttemptRecord,
-  CostBreakdown,
-  RunOptions,
-  RunStatus,
-  TerminationReason,
-  TokenUsage,
-} from '../providers/runner-types.js';
-export type { TokenUsage } from '../providers/runner-types.js';
-import type { VerifyStageResult, VerifyStepStatus } from '../lifecycle/handlers/verify-stage.js';
-import type { AgentType } from './task-spec.js';
-import type { ProviderConfig, FallbackOverride } from './config.js';
-import type { StageStatsMap } from './stage-stats.js';
+// Full type definitions for the codebase's actual run-time result shapes.
+//
+// ── PLAN TASK 2 — RunResult IS ComposePayload ─────────────────────────────
+// Per the stage-io-standardization plan, `RunResult` is the v5 wire envelope
+// (= ComposePayload from stage-io.ts). The internal lifecycle data flow
+// (what runners produce, what `state.lastRunResult` holds, what the
+// recorder/event-builder reads) uses a separate type — `RuntimeRunResult`
+// (declared below) — kept distinct from the wire envelope.
+//
+// Consumer rule:
+//   - Anywhere code is reading the BATCH/WIRE-side result → `RunResult`
+//     (= ComposePayload — 8 fields).
+//   - Anywhere code is reading the RUNTIME mirror (workerStatus, stageStats,
+//     usage, terminationReason, …) → `RuntimeRunResult`.
+//
+// Drift detector lives at `tests/types/run-result.test.ts`.
+// ──────────────────────────────────────────────────────────────────────────
 
-export interface Commit {
-  sha: string
-  subject: string
-  body: string
-  filesChanged: string[]
-  authoredAt: string
+export type { ComposePayload as RunResult } from '../lifecycle/stage-io.js';
+
+// ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
+// `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
+// public type name is the wire envelope; the runtime mirror keeps the
+// fields handlers/recorder/runners actually populate.
+
+// Session / TurnResult — the internal provider-runner contract (SDK ↔ mma)
+
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedNonReadTokens: number;
 }
 
-export interface RunResult {
-  output: string
-  status: RunStatus
-  usage: TokenUsage
-  /**
-   * Existing per-task cost surface — `{ costUSD, costDeltaVsMainUSD }`.
-   * Kept for back-compat. New readers should prefer `actualCostUSD`
-   * which is populated by composeResponse from `sumStageCosts` and
-   * matches the batch roll-up's per-task contribution.
-   */
-  cost?: CostBreakdown
-  /**
-   * A11.2 (4.2.3+): canonical per-task total cost on the public envelope,
-   * computed as the sum of `stageStats[*].costUSD` across entered stages
-   * (same logic as the batch-level `costSummary.totalActualCostUSD`).
-   * Equal to `cost.costUSD` for runs where stage-level pricing is
-   * registered; null when no stage carried a finite cost (e.g. mock
-   * provider runs). Populated by composeResponse — workers and runners
-   * may leave this undefined.
-   */
-  actualCostUSD?: number | null
-  // ── v4.4.x envelope fields ───────────────────────────────────────────
-  /** Spec lint-reviewer raw report. */
-  specReviewerNotes?: string
-  /** Quality lint-reviewer raw report. */
-  qualityReviewerNotes?: string
-  /** Combined review verdict from both reviewers. */
-  reviewVerdict?: 'approved' | 'changes_required'
-  /** Merged deviations from both reviewers. */
-  reviewFindings?: Array<{ source: 'spec' | 'quality'; text: string }>
-  /** Rework worker free-text summary (set when rework stage fired). */
-  reworkOutput?: string
-  /** True if rework stage applied edits; false if reviewers approved so it skipped; undefined if stage didn't fire. */
-  reworkApplied?: boolean
-  /** Stage 4 deterministic verify-command result (run inside annotate handler). */
-  verifyResult?: {
-    ran: boolean;
-    passed: boolean | null;
-    exitCode: number | null;
-    command: string[];
-    tailOutput: string | null;
-  }
-  turns: number
-  filesRead: string[]
-  filesWritten: string[]
-  /** A4b §2a (4.2.2+): worker write attempts that failed the path-validity
-   *  filter — shell heredoc commands, absolute paths, paths containing
-   *  shell metacharacters. NOT real, verifiable disk artifacts. The
-   *  lifecycle layer drains this into LifecycleContext.diagnostics for the
-   *  `writes_unverifiable` daemon-log message; not surfaced on the public
-   *  HTTP envelope. Optional so legacy consumers / mocks compile without
-   *  setting the field. */
-  filesWrittenRejected?: string[]
-  /** A4b §2b (4.2.2+): post-§2a paths that didn't pass `stat()` against
-   *  taskSpec.cwd at terminal time — the worker reported a path but no
-   *  artifact actually landed there. Surfaced on the public envelope so
-   *  callers can see "you said you wrote X but I can't find it." */
-  filesWrittenMissing?: string[]
-  toolCalls: string[]
-  outputIsDiagnostic: boolean
-  escalationLog: AttemptRecord[]
-  durationMs?: number
-  directoriesListed?: string[]
-  error?: string
-  errorCode?: string
-  retryable?: boolean
-  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
-  reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
-  structuredError?: { code: 'validator_verify_command_failed' | 'validator_commit_metadata_invalid' | 'validator_commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'review_diff_rejected' | 'runner_crash' | 'provider_rate_limited' | 'provider_api_error' | 'provider_transport_failure' | 'provider_timeout' | 'provider_api_aborted' | 'validator_silent_incomplete' | 'config_main_agent_pricing_unresolvable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
-  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed'
-  specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
-  specReviewReason?: string
-  filePathsSkipped?: boolean
-  fileArtifactsMissing?: boolean
-  commits?: Commit[]
-  commitError?: string
-  incompleteReason?: 'turn_cap' | 'cost_cap' | 'timeout' | 'missing_sections'
-  /** True when the orchestrator's stall watchdog fired and force-aborted
-   *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
-   *  signals "no progress" rather than "budget exhausted". */
-  stallTriggered?: boolean
-  /** Number of times the stall watchdog fired across this task's lifecycle.
-   *  Multiple stalls in a single task are possible when the watchdog resets
-   *  across stage transitions. */
-  stallCount?: number
-  /** Per-stage token allocation (optional — populated when runner tracks per-stage).
-   *  Keyed by stage name; stages that didn't run have no entry. */
-  perStageTokens?: Partial<Record<string, { input: number; output: number; cached: number; reasoning: number }>>
-  /** Per-stage turn count (optional — populated when orchestration tags turns). */
-  turnsByStage?: Partial<Record<string, number>>
-  /** Per-stage sandbox violation count. */
-  sandboxViolationCount?: number
-  /** Longest silent gap between LLM/tool/text activity events seen anywhere
-   *  in the lifecycle (across all stages). Use to retro-tune stallTimeoutMs. */
-  taskMaxIdleMs?: number | null
-  workerError?: Error
-  /** Per-stage raw stats. Bucketing happens in the telemetry event-builder. */
-  stageStats?: StageStatsMap
-  // Always populated by the verify stage when an artifact-producing task
-  // runs through the lifecycle. Optional in the type so non-artifact paths
-  // and direct provider calls compile without per-site defaults. The spec
-  // says "always present" — that invariant holds at the lifecycle boundary;
-  // here the type stays permissive to keep migration mechanical.
-  verification?: VerifyStageResult
-  qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
-  qualityReviewReason?: string
-  diffReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
-  structuredReport?: import('../reporting/structured-report.js').ParsedStructuredReport
-  agents?: {
-    implementer: 'standard' | 'complex' | 'not_run'
-    implementerHistory?: AgentType[]
-    implementerToolMode?: 'none' | 'readonly' | 'no-shell' | 'full'
-    specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
-    specReviewerHistory?: (AgentType | 'skipped')[]
-    qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
-    qualityReviewerHistory?: (AgentType | 'skipped')[]
-    fallbackOverrides?: FallbackOverride[]
-  }
-  models?: { implementer: string; specReviewer: string | null; qualityReviewer: string | null }
-  implementationReport?: import('../reporting/structured-report.js').ParsedStructuredReport
-  specReviewReport?: import('../reporting/structured-report.js').ParsedStructuredReport
-  qualityReviewReport?: import('../reporting/structured-report.js').ParsedStructuredReport
-  /** Per-criterion narratives from parallel-criteria fan-out. Read-only
-   *  routes populate this; artifact-producing routes leave it undefined.
-   *  The merge annotator reads this to produce the unified
-   *  annotatedFindings array. */
-  workerOutputs?: Array<{ criterionId: string; criterionTitle: string; narrative: string }>
-  /** IDs of criteria whose sub-workers succeeded. Read-only routes only. */
-  partialCriteriaCovered?: string[]
-  /** Failed criteria with reason. Read-only routes only. */
-  partialCriteriaFailed?: Array<{ id: string; title: string; reason: 'timeout' | 'transport' | 'parse' | 'other'; lastError: string }>
-}
+/** Cause values for the TerminationReason object (inline to break circularity). */
+export type _TerminationCause =
+  | 'finished'
+  | 'incomplete'
+  | 'timeout'
+  | 'cost_exceeded'
+  | 'time_ceiling'
+  | 'degenerate_exhausted'
+  | 'api_error'
+  | 'provider_transport_failure'
+  | 'api_aborted'
+  | 'brief_too_vague'
+  | 'error';
 
-export interface ReviewPromptParts {
-  systemPrefix: string;
-  userBody: string;
-}
-
-export interface CacheHints {
-  cacheableSystemPrompt?: boolean;
-}
-
-export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
-
-// v4.4 — Session-based provider boundary. `openSession` is the single
-// entry point; every call lasts one Session, which represents a thread
-// the underlying SDK can resume across turns.
-export interface Provider {
-  name: string;
-  config: ProviderConfig;
-  openSession(opts: SessionOpts): Session;
-}
-
-/** Stage-tagging payload for a single session.send() call. */
-export interface TurnOpts {
-  /** e.g. 'implementing', 'review', 'rework', 'annotating', 'committing'. */
-  stageLabel: string;
-}
-
-export interface SessionOpts {
-  cwd: string;
-  allowedHosts?: ReadonlySet<string>;
-  /** Hard wall-clock deadline (epoch ms). External guard aborts at this time. */
-  wallClockDeadline: number;
-  /** Idle threshold (ms): no SDK event for this long → abort. */
-  idleStallTimeoutMs: number;
-  /** Advisory only. Authoritative enforcement = mma-side CostMeter (task-wide). */
-  maxCostUSD?: number;
-  /** Wired through to the SDK's own cancellation parameter. */
-  abortSignal: AbortSignal;
-  /** Telemetry sink. Optional. Untyped to avoid a circular import with
-   *  channels/event-bus; concrete shape verified at the bind site. */
-  bus?: unknown;
-  /** Initial stage label so telemetry has one before the first TurnOpts lands. */
-  initialStageLabel?: string;
-}
+/** Used inside TurnResult (internal); exported for runner-types.ts alignment. */
+export type TurnTerminationReason = _TerminationCause;
 
 export interface TurnResult {
   output: string;
@@ -207,28 +57,170 @@ export interface TurnResult {
   toolCallsByName: Record<string, number>;
   turns: number;
   durationMs: number;
-  /** USD cost when known (>= 0). `null` means cost couldn't be determined
-   *  (e.g. mock providers, missing rate-card entry). Distinct from `0`,
-   *  which means a real zero charge — important for downstream telemetry
-   *  that treats null as "no data". */
-  costUSD: number | null;
-  terminationReason: 'ok' | 'cost_exceeded' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted' | 'error';
+  costUSD: number;
+  /** Raw termination reason from the SDK; may include provider-specific values
+   *  beyond the standard _TerminationCause set. assembleRunResult normalizes
+   *  via mapStatus/mapTermination before writing to RunResult.terminationReason. */
+  terminationReason: string;
+  workerSelfAssessment?: string;
+  outputIsDiagnostic?: boolean;
   errorCode?: string;
   errorMessage?: string;
-  /** Worker's self-assessment as written into its structured report.
-   *  Optional — populated by adapters that parse the SDK output (or by
-   *  test mocks). assembleRunResult prefers this over its termination-
-   *  reason-derived default so the "incomplete + worker self-assessed
-   *  done" promotion path can fire. */
-  workerSelfAssessment?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped';
-  /** True when the assistantText is a diagnostic shell (e.g.
-   *  "Sub-agent error: …" or scratchpad-only fallback) rather than real
-   *  worker content. Lets delegateWithEscalation's selection prefer any
-   *  real-content attempt over a longer diagnostic-only attempt. */
-  outputIsDiagnostic?: boolean;
+  model?: string;
 }
 
+export interface SessionOpts {
+  cwd?: string;
+  wallClockDeadline: number;
+  idleStallTimeoutMs?: number;
+  abortSignal: AbortSignal;
+  bus?: object;
+}
+
+export interface TurnOpts {
+  stageLabel?: string;
+}
+
+/** Interface implemented by ClaudeSession and CodexCliSession. */
 export interface Session {
   send(instruction: string, opts?: TurnOpts): Promise<TurnResult>;
   close(): Promise<void>;
+}
+
+// Provider — factory-created handle that openSession returns
+
+export interface Provider {
+  name: string;
+  /** Provider config — shape varies by runtime (ClaudeProviderConfig | CodexProviderConfig).
+   *  Consumers access .type and .model via unsafe downcasts; the full type lives
+   *  in types/config.ts to avoid circular deps. */
+  config: any;     // v5: ClaudeProviderConfig | CodexProviderConfig (lives in types/config.ts; broadened to avoid circular dep)
+  openSession(opts: SessionOpts): Session;
+}
+
+// RunResult — what lifecycle handlers and delegate-with-escalation consume
+// Fields are derived from live usage across event-builder, delegate-with-escalation,
+// task-runner, task-executor, task-completion-summary, review-verdict-mapping,
+// fallback-helpers, and assemble-run-result.
+
+export interface RuntimeRunResult {
+  output: string;
+  status: string;
+  usage: TokenUsage;
+  actualCostUSD: number;
+  turns: number;
+  filesRead: string[];
+  filesWritten: string[];
+  toolCalls: string[];
+  outputIsDiagnostic: boolean;
+  directoriesListed: string[];
+  workerStatus?: 'done' | 'failed' | 'blocked';
+  terminationReason?: { cause: _TerminationCause; turnsUsed: number; hasFileArtifacts: boolean; usedShell: boolean; workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped' | null; wasPromoted: boolean; wallClockMs?: number };
+  errorCode?: string;
+  error?: string;
+  retryable?: boolean;
+  incompleteReason?: string;
+  escalationLog: EscalationRecord[];
+  // ── event-builder.ts ─────────────────────────────────────────────────────
+  durationMs?: number;
+  models?: {
+    implementer?: string;
+    reviewer?: string;
+    [key: string]: string | undefined;
+  };
+  agents?: {
+    implementer?: string;
+    implementerToolMode?: string;
+    fallbackOverrides?: Array<{ role: string; assigned: string }>;
+    [key: string]: unknown;
+  };
+  stageStats?: StageStatsShape;
+  reviewVerdict?: string;
+  qualityReviewStatus?: string;
+  specReviewStatus?: string;
+  reviewRounds?: { spec: number; quality: number };
+  structuredReport?: {
+    findings?: Array<{ severity?: string; category?: string; claim?: string }>;
+    reviewConcerns?: string[];
+  };
+  implementationReport?: unknown;
+  commits?: Array<{ filesChanged?: string[] }>;
+  stallCount?: number;
+  stallTriggered?: boolean;
+  taskMaxIdleMs?: number;
+  structuredError?: { code: string; message: string; where?: string };
+  // ── review-verdict-mapping.ts ────────────────────────────────────────────
+  verifyResult?: unknown;
+  // ── task-executor.ts ─────────────────────────────────────────────────────
+  cost?: { costUSD: number | null; costDeltaVsMainUSD: number | null };
+  // ── delegate-with-escalation.ts ─────────────────────────────────────────
+}
+
+export interface EscalationRecord {
+  provider: string;
+  status: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUSD: number | null;
+  initialPromptLengthChars: number;
+  initialPromptHash: string;
+  reason?: string;
+}
+
+// Supporting types re-exported through types.ts barrel
+
+export interface Commit {
+  sha: string;
+  message: string;
+  files: string[];
+  authoredAt: string;
+}
+
+export interface ReviewPromptParts {
+  specPortion?: string;
+  codePortion?: string;
+  rubricPortion?: string;
+}
+
+export interface CacheHints {
+  cacheableSystemPrompt?: boolean;
+}
+
+export interface ReviewRunOptions {
+  mode?: 'standard' | 'review';
+  instructionsSuffix?: string;
+  cacheHints?: CacheHints;
+  abortSignal?: AbortSignal;
+}
+
+/** Minimal shape for stageStats — enough for event-builder.ts to access
+ *  stageStats.implementing, stageStats.review, etc. without TS errors.
+ *  The full StageStatsMap lives in types/stage-stats.ts. */
+export interface StageStatsShape {
+  implementing?: RawStageStatsShape;
+  review?: RawStageStatsShape & { roundsUsed?: number };
+  rework?: RawStageStatsShape;
+  annotating?: RawStageStatsShape & { outcome?: string; skipReason?: string };
+  committing?: RawStageStatsShape;
+}
+
+export interface RawStageStatsShape {
+  entered?: boolean;
+  durationMs?: number | null;
+  costUSD?: number | null;
+  agentTier?: string | null;
+  modelFamily?: string | null;
+  model?: string | null;
+  maxIdleMs?: number | null;
+  totalIdleMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cachedReadTokens?: number | null;
+  cachedNonReadTokens?: number | null;
+  turnCount?: number | null;
+  toolCallCount?: number | null;
+  filesReadCount?: number | null;
+  filesWrittenCount?: number | null;
+  activityEvents?: number | null;
 }

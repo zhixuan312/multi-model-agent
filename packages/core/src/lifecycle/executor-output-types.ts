@@ -1,4 +1,4 @@
-import type { RunResult, ReviewVerdict } from '../types.js';
+import type { RuntimeRunResult, ReviewVerdict } from '../types.js';
 import type { NotApplicable } from '../reporting/not-applicable.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
@@ -35,7 +35,7 @@ export interface BatchAggregateCost {
  */
 export interface ExecutorOutput {
   headline: string;
-  results: RunResult[] | NotApplicable;
+  results: RuntimeRunResult[] | NotApplicable;
   batchTimings: BatchTimings | NotApplicable;
   costSummary: BatchAggregateCost | NotApplicable;
   structuredReport: Record<string, unknown> | NotApplicable;

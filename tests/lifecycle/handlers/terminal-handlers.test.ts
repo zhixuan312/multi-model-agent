@@ -9,7 +9,7 @@ import {
 } from '../../../packages/core/src/lifecycle/handlers/terminal-handlers.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { ExecutionContext } from '../../../packages/core/src/lifecycle/lifecycle-context.js';
-import type { RunResult, TaskSpec } from '../../../packages/core/src/types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../../packages/core/src/types.js';
 
 function makeState(overrides: Partial<LifecycleState> = {}): LifecycleState {
   return {
@@ -51,7 +51,7 @@ function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
   };
 }
 
-const fakeRunResult: RunResult = {
+const fakeRunResult: RuntimeRunResult = {
   output: 'hello',
   status: 'ok',
   usage: { inputTokens: 0, outputTokens: 0 },
@@ -63,7 +63,7 @@ const fakeRunResult: RunResult = {
   escalationLog: [],
   parsedFindings: null,
   workerStatus: 'done',
-} as RunResult;
+} as RuntimeRunResult;
 
 describe('registerTerminalBlockHandler', () => {
   it('idempotency: skips when terminalBlockId already set', () => {
@@ -245,11 +245,11 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
   }
 
   // The runner_crash construction (task-runner.ts line ~344, task-executor.ts
-  // lines ~110-180) builds a RunResult without stageStats.implementing AND
+  // lines ~110-180) builds a RuntimeRunResult without stageStats.implementing AND
   // without rr.models — pre-fix, the synthesizer hardcoded model: null which
   // event-builder converted to the literal 'custom'. After fix the synthesizer
   // pulls the configured model from ctx.implementerProvider.config.
-  const runnerCrashRunResult: RunResult = {
+  const runnerCrashRunResult: RuntimeRunResult = {
     output: '',
     status: 'error',
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -263,7 +263,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     error: 'simulated',
     errorCode: 'runner_crash',
     workerStatus: 'failed',
-  } as unknown as RunResult;
+  } as unknown as RuntimeRunResult;
 
   it('stamps the configured model on the synthesized implementing stage when runner crashes', async () => {
     const { ctx, calls } = makeRecordingCtx('deepseek-v4-pro', 'standard');
@@ -275,7 +275,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     await recordTaskCompletedHandler(state);
 
     expect(calls).toHaveLength(1);
-    const rr = calls[0]!.runResult as RunResult;
+    const rr = calls[0]!.runResult as RuntimeRunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown; modelFamily?: unknown; agentTier?: unknown } } | undefined)?.implementing;
     expect(stage?.model).toBe('deepseek-v4-pro');
     expect(stage?.modelFamily).toBe('deepseek');
@@ -294,7 +294,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     });
     await recordTaskCompletedHandler(state);
 
-    const rr = calls[0]!.runResult as RunResult;
+    const rr = calls[0]!.runResult as RuntimeRunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown; modelFamily?: unknown; agentTier?: unknown } } | undefined)?.implementing;
     expect(stage?.model).toBe('gpt-5');
     expect(stage?.modelFamily).toBe('openai');
@@ -316,11 +316,11 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
           agentTier: 'complex',
         },
       },
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx, lastRunResult });
     await recordTaskCompletedHandler(state);
 
-    const rr = calls[0]!.runResult as RunResult;
+    const rr = calls[0]!.runResult as RuntimeRunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;
     expect(stage?.model).toBe('gpt-5');
   });
@@ -338,7 +338,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     });
     await recordTaskCompletedHandler(state);
 
-    const rr = calls[0]!.runResult as RunResult;
+    const rr = calls[0]!.runResult as RuntimeRunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;
     expect(stage?.model).toBeNull();
     expect(rr.models).toBeUndefined();

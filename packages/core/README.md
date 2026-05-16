@@ -228,9 +228,14 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.5.4
+## What's new in 4.6.0
 
-- **`buildSyntheticReviewStage(findings)` emits `costUSD: 0`, not `null`.** The 4.5.3 implementation used `null` to mean "no LLM call backs this stage" — but `task-completion-summary.ts` sums stage costs via `sumFinite`, which propagates `null` to top-level `totalCostUSD: null`. The backend wire schema rejects that as a Zod parse failure, so every 4.5.3 daemon's read-only-route upload was 400'd and silently dropped. `null` is now reserved for honest measurement failures (e.g. real LLM call whose provider didn't return cost info); synthetic stages use `0` ("no call happened").
+- **`isLlmStage: boolean` on the internal `StageEntryInternal` shape** (required, no default — compile-time enforced). `rollupByTier` filters out non-LLM stages (synthetic review, commit) before computing tier rollup, so synthetic placeholders no longer corrupt `tierUsage.<tier>.model` under last-seen semantics.
+- **`StageModelMissingError` + `safeBuild` wrapper** around stage builders. Missing-model errors drop the offending stage with a `validation_warnings` diagnostic; the rest of the event ships.
+- **Tier-uniformity invariant.** Two LLM stages on the same tier with different models trigger an `R-TIER-MODEL-DIVERGENCE` diagnostic and the tier is omitted from `tierUsage`.
+- **`RunAnnotatorResult` and `RunReviewerResult` carry full token attribution** (`inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedNonReadTokens`) plus `model` — read from `turn.usage` and `turn.model` on the `Session.send` return.
+- **Cross-tier reviewer policy** via `invertedReviewerTier()` helper exported from `review/run-reviewer.ts`. Single-tier deployments fall back to the implementer tier.
+- **`buildSyntheticReviewStage(findings)`** continues to emit `costUSD: 0` and `model: 'custom'` with `isLlmStage: false`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

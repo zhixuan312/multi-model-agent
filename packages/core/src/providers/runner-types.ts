@@ -51,7 +51,7 @@ export interface TokenUsage {
 }
 
 /** Cost fields kept separate from TokenUsage. These are NOT token counts;
- *  they live on RunResult alongside usage. */
+ *  they live on RuntimeRunResult alongside usage. */
 export interface CostBreakdown {
   costUSD: number | null
   /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */

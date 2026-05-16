@@ -15,7 +15,7 @@ import { CodexCliSession } from './codex-cli-session.js';
 export function makeCodexProvider(cfg: CodexProviderConfig): Provider {
   return {
     name: `codex:${cfg.model}`,
-    config: cfg as unknown as ProviderConfig,
+    config: cfg,
     openSession(opts: SessionOpts) {
       return new CodexCliSession({
         cfg: {

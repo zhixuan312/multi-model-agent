@@ -1,4 +1,4 @@
-import type { RunResult } from '../types.js';
+import type { RuntimeRunResult } from '../types.js';
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
 
 /**
@@ -9,7 +9,7 @@ import type { ContextBlockStore } from '../stores/context-block-tool.js';
  * executors share a single implementation.
  */
 export function autoRegisterContextBlock(
-  results: RunResult[],
+  results: RuntimeRunResult[],
   store: ContextBlockStore | undefined,
 ): string | undefined {
   if (!store) return undefined;

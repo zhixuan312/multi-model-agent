@@ -1,5 +1,7 @@
-// review/index.ts — public surface barrel; per architecture.md:262-275.
-
-export * from './reviewer-engine.js';
-export * from './reviewer-prompt-builder.js';
-export * from './reviewer-output-parser.js';
+// review/index.ts — public surface barrel.
+// Templates live in review/templates/ — import from there directly.
+// Other remaining modules are exported individually below.
+export * from './review-types.js';
+export * from './parse-review-report.js';
+export * from './review-verdict-mapping.js';
+export * from './skipped-result.js';

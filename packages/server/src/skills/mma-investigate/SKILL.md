@@ -117,43 +117,70 @@ Each task carries an `investigation` field on its per-task report:
 }
 ```
 
-`workerStatus` is one of `done`, `done_with_concerns`, `needs_context`, `blocked`. When `done_with_concerns`, the per-task report carries `incompleteReason` (`turn_cap`, `cost_cap`, `timeout`, or `missing_sections`). When `needs_context`, the worker flagged a `[needs_context]` bullet under `## Unresolved` — re-dispatch with extra context (anchor paths or a context block).
+The authoritative success signals are `completed`, `message`, and `findings`. See "v5 wire shape" above for the full envelope.
 
-## Reading the findings (3.10.5+)
+## v5 wire shape (read route)
 
-The terminal envelope's `results[N].annotatedFindings` is a list of structured
-findings the reviewer extracted and scored from the implementer's narrative.
-Every finding has the same shape:
+Every task result is a `ComposePayload` — seven main-agent fields plus a telemetry block.
+The main-agent fields are authoritative; the telemetry block is diagnostics.
 
-| Field | Type | Notes |
+```json
+{
+  "completed": true,
+  "message": "Investigation complete; 3 files analysed.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "category": "correctness",
+      "claim": "The refresh handler reads bearer from Authorization header unconditionally.",
+      "evidence": "src/auth/refresh.ts:45-72 — verbatim substring from worker output.",
+      "suggestion": "Add a guard to handle missing Authorization header gracefully.",
+      "source": "implementer"
+    }
+  ],
+  "summary": "...",
+  "filesChanged": [],
+  "commitSha": null,
+  "blockId": null,
+  "telemetry": {
+    "totalDurationMs": 1234,
+    "totalCostUSD": 0.08,
+    "workerSelfAssessment": "done",
+    "reviewVerdict": null,
+    "commitOutcome": "not_applicable",
+    "stopReason": "normal",
+    "haltedStage": null,
+    "stages": [...]
+  }
+}
+```
+
+### Key fields
+
+| Field | When populated | Notes |
 |---|---|---|
-| `id` | string | Reviewer-assigned, e.g. `F1`, `F2`. |
-| `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
-| `claim` | string | One-sentence summary. |
-| `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
-| `suggestion?` | string | Optional fix recommendation. |
-| `annotatorConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
-| `evidenceGrounded` | boolean | True when `evidence` is a verbatim substring of worker output. |
+| `completed` | always | `true` when at least one criterion succeeded; `false` on annotator transport failure OR unmet annotate preconditions (e.g. non-`done` worker self-assessment on a read route) |
+| `message` | always | human-readable summary; names blocking gates or finding IDs on failure |
+| `findings` | always | `source: 'implementer'` for investigate; findings are the deliverable on read routes |
+| `workerSelfAssessment` | always | `'done'` or `'failed'` — never `done_with_concerns` |
+| `blockId` | always `null` | investigate is a task route, not register-context-block |
 
-### Verdict states (`qualityReviewVerdict`)
+### No second review
 
-- `'annotated'` — every finding is structured. May be reviewer-emitted (with
-  numeric `annotatorConfidence`) or deterministic-fallback (with
-  `annotatorConfidence: null`). The route ALWAYS reaches `'annotated'` unless
-  the reviewer call itself fails transport.
-- `'error'` — only when the reviewer call fails transport (network / 5xx).
+The LLM-judge stage (`annotate`) runs once, after the worker's output. Its preconditions for read-route `completed: true`:
 
-### Recommended rendering by the main agent
+```
+gates.implement.outcome === 'advance'
+&& gates.implement.payload.workerSelfAssessment === 'done'
+&& (criteriaSucceeded.length > 0 || criteriaErrors.length === 0)
+```
 
-1. Show ALL findings — never silently drop. Confidence and grounding are
-   soft signals, not gates.
-2. Default sort: severity (critical → low) then `annotatorConfidence` desc
-   (nulls last).
-3. `severity` is the reviewer's authoritative final value — use it directly.
-4. Mark findings with `evidenceGrounded: false` or
-   `annotatorConfidence < 70` as "lower-trust" (collapsed section, lighter
-   color, or `(low confidence)` annotation). User decides what to do.
-5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
+Findings are the deliverable — a task that surfaces 5 issues is `completed: true`. Finding nothing wrong is also a valid completion.
+
+### `completed: false` — what it means
+
+Only on annotator transport failure. The `message` names the blocking gate. Re-dispatch with tighter `filePaths` if the worker's citations were unusable.
 
 ## Best practices
 
@@ -170,15 +197,12 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you find yourself readi
 
 The investigator can't write — `tools: 'readonly'`. **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
 
-❌ **Treating `done_with_concerns` as failure**
-The worker still produced citations and a confidence level. Read them — partial coverage with `incompleteReason: 'turn_cap'` often answers the question well enough. Re-dispatch with a tighter scope only if the citations are unusable.
-
 ❌ **Inline-reading instead of delegating**
 About to `Read` 3+ files just to answer one question? That's the wrong tradeoff — the worker reads on its cheap budget; you read its synthesis on yours.
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report (headline, investigation synthesis, citations, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, investigation synthesis, citations, and annotated findings). The `blockId` is returned in each task result under the shared `blockId` field (not a separate `terminalBlockId` field). This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 **Use cases:**
 - Pass investigation results to a downstream planning step

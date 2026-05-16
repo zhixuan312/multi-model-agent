@@ -1,4 +1,4 @@
-import type { RunResult } from '../types.js';
+import type { RuntimeRunResult } from '../types.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import fs from 'fs/promises';
@@ -23,7 +23,7 @@ export async function readImplementerFileContents(
   return contents;
 }
 
-export function buildFallbackImplReport(result: RunResult): ParsedStructuredReport {
+export function buildFallbackImplReport(result: RuntimeRunResult): ParsedStructuredReport {
   const parsed = parseStructuredReport(result.output);
   if (parsed.summary) {
     return parsed;

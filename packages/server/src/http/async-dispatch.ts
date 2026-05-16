@@ -108,14 +108,12 @@ export function asyncDispatch<TResult>(
             fallback,
           });
         }
-        // Verbose-stderr breadcrumb so operators tailing the daemon see the
-        // executor lifecycle past request_received without grepping the
-        // JSONL log. Cheap; gated on diagnostics.verbose.
-        if (deps.config.diagnostics?.verbose) {
-          process.stdout.write(
-            `[mmagent verbose] event=executor_started ts=${new Date().toISOString()} batch=${batchId} route=${tool}\n`,
-          );
-        }
+        // 4.6.0+: always-on verbose breadcrumb so operators tailing the daemon
+        // see the executor lifecycle past request_received without grepping the
+        // JSONL log.
+        process.stderr.write(
+          `[mmagent verbose] event=executor_started ts=${new Date().toISOString()} batch=${batchId} route=${tool}\n`,
+        );
         const result = await opts.executor(ctx, batchId);
         const resultObj = result as Record<string, unknown> | undefined;
 
@@ -135,18 +133,27 @@ export function asyncDispatch<TResult>(
         const failure = detectFailure(resultObj);
         if (failure) {
           deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: failure.code, errorMessage: failure.message } as any);
-          if (deps.config.diagnostics?.verbose) {
-            process.stdout.write(
-              `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
-            );
-          }
+          process.stderr.write(
+            `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
+          );
         } else {
-          deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
-          if (deps.config.diagnostics?.verbose) {
-            process.stdout.write(
-              `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
-            );
-          }
+          const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
+          deps.bus.emit({
+            event: 'batch_completed',
+            ts: new Date().toISOString(),
+            batchId,
+            tool,
+            durationMs,
+            taskCount,
+            ...(groupingInfo ? {
+              groupCount: groupingInfo.groupCount,
+              groupSizes: groupingInfo.groupSizes,
+              serializationApplied: groupingInfo.serializationApplied,
+            } : {}),
+          } as any);
+          process.stderr.write(
+            `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
+          );
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -158,11 +165,9 @@ export function asyncDispatch<TResult>(
         });
         const durationMs = Date.now() - startedAtMs;
         deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: 'runner_crash', errorMessage: message } as any);
-        if (deps.config.diagnostics?.verbose) {
-          process.stdout.write(
-            `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
-          );
-        }
+        process.stderr.write(
+          `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
+        );
       }
     })();
   });

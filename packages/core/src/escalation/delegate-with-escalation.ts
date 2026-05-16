@@ -4,7 +4,7 @@
 // lifecycle review-chain handlers. This function only handles transient
 // retries (api_error / network_error).
 
-import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
+import type { TaskSpec, RuntimeRunResult, Provider, AgentType } from '../types.js';
 import type {
   AttemptRecord,
   InternalRunnerEvent,
@@ -23,7 +23,7 @@ function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['
   if (status === 'ok') return 'finished';
   if (status === 'incomplete') return 'incomplete';
   if (status === 'unavailable') return 'error';
-  return status;
+  return status as TerminationReason['cause'];
 }
 
 export interface DelegateOptions {
@@ -93,7 +93,7 @@ export async function delegateWithEscalation(
   task: TaskSpec,
   chain: Provider[],
   options: DelegateOptions = {},
-): Promise<RunResult> {
+): Promise<RuntimeRunResult> {
   if (chain.length === 0) {
     throw new Error('delegateWithEscalation called with empty chain');
   }
@@ -107,7 +107,7 @@ export async function delegateWithEscalation(
       }
     : undefined;
 
-  const attempts: { result: RunResult; record: AttemptRecord }[] = [];
+  const attempts: { result: RuntimeRunResult; record: AttemptRecord }[] = [];
 
   for (let i = 0; i < chain.length; i++) {
     const provider = chain[i];
@@ -125,7 +125,7 @@ export async function delegateWithEscalation(
     const initialPromptLengthChars = 0;
     const initialPromptHash = '';
 
-    let result: RunResult;
+    let result: RuntimeRunResult;
     let cumulativeCostUSD = 0;
 
     for (let attempt = 0; ; attempt++) {
@@ -141,12 +141,13 @@ export async function delegateWithEscalation(
       }
 
       // v4.4: ProviderConfig.type is one of: 'claude' | 'codex'.
-      const cfgType = provider.config.type;
+      const cfg = provider.config as { type?: string; model?: string };
+      const cfgType = cfg.type ?? 'codex';
       const providerTypeName: 'claude' | 'codex' =
         cfgType === 'claude' ? 'claude' : 'codex';
       safeSink?.({
         kind: 'worker_start',
-        model: provider.config.model,
+        model: cfg.model ?? 'unknown',
         providerType: providerTypeName,
         tier: options.assignedTier ?? 'standard',
       });
@@ -186,13 +187,13 @@ export async function delegateWithEscalation(
       if (options.abortSignal?.aborted) break;
 
       const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
-      safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status, delayMs });
+      safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status as RunStatus, delayMs });
       await sleep(delayMs);
     }
 
     const record: AttemptRecord = {
       provider: provider.name,
-      status: result.status,
+      status: result.status as RunStatus,
       turns: result.turns,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
@@ -248,29 +249,19 @@ export async function delegateWithEscalation(
     }
   }
 
-  const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
+  // v5: escalation no longer gates on workerSelfAssessment. Annotate is the
+  // single point of truth for `completed` (spec §5.7 + §9 M1/M3 fixes).
+  // Escalation only records attempts and selects the best one; status flows
+  // through unchanged to annotate which makes the final verdict.
+  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
 
-  // C2: Promote incomplete → ok when agent self-assessed as done AND produced work artifacts
-  // OR verified with shell (ran tests/builds) even without writing files
-  const outputIsSubstantive =
-    best.output.trim().length > 0 && !best.outputIsDiagnostic;
-  const hasShellVerification = best.toolCalls.some(tc => extractToolName(tc) === 'runShell');
-  const finalStatus =
-    baseStatus === 'incomplete' &&
-    best.workerStatus === 'done' &&
-    outputIsSubstantive &&
-    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification || task.skipCompletionHeuristic === true)
-      ? 'ok'
-      : baseStatus;
-
-  const wasPromoted = finalStatus === 'ok' && baseStatus === 'incomplete';
   const terminationReason: TerminationReason = {
-    cause: deriveCause(finalStatus, best.errorCode),
+    cause: deriveCause(finalStatus as RunStatus, best.errorCode),
     turnsUsed: best.turns,
     hasFileArtifacts: best.filesWritten.length > 0,
     usedShell: best.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
-    workerSelfAssessment: best.workerStatus ?? null,
-    wasPromoted,
+    workerSelfAssessment: best.workerStatus ?? null,   // truthful read; NOT stamped (M3 fix)
+    wasPromoted: false,
   };
 
   return {

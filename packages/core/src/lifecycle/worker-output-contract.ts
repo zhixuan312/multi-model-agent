@@ -1,4 +1,4 @@
-// v4.4.x — intermediate contract between the worker (Implementing /
+// v4.5 — intermediate contract between the worker (Implementing /
 // Rework) and Annotating. Workers emit a JSON-fenced markdown block at
 // the end of their final assistant text; parseWorkerOutput extracts the
 // LAST block, parses it, and returns a normalized WorkerOutput.
@@ -8,19 +8,17 @@
 
 import { z } from 'zod';
 
-export const ValidationRunSchema = z.object({
-  name: z.string(),
-  passed: z.boolean(),
-  output: z.string(),
-});
-
 export const WorkerOutputSchema = z.object({
+  workerSelfAssessment: z.enum(['done', 'failed']),
   summary: z.string(),
-  workerStatus: z.enum(['done', 'done_with_concerns', 'blocked', 'failed']),
+  // write-route fields (optional; default empty)
   filesChanged: z.array(z.string()).default([]),
-  validationsRun: z.array(ValidationRunSchema).default([]),
-  unresolved: z.array(z.string()).default([]),
-  commitMessage: z.string().optional(),
+  // read-route fields (optional; default empty)
+  findings: z.array(z.unknown()).default([]),
+  citations: z.array(z.unknown()).default([]),
+  criteriaSucceeded: z.array(z.string()).default([]),
+  criteriaErrors: z.array(z.object({ criterion: z.string(), error: z.string() })).default([]),
+  sourcesUsed: z.array(z.string()).default([]),
 });
 
 export type WorkerOutput = z.infer<typeof WorkerOutputSchema>;
@@ -33,51 +31,66 @@ function findLastJsonBlock(text: string): string | null {
   return last;
 }
 
-function synthesizeFailed(summary: string, reason: string): WorkerOutput {
-  return { summary, workerStatus: 'failed', filesChanged: [], validationsRun: [], unresolved: [reason] };
-}
-
 export function parseWorkerOutput(workerText: string): WorkerOutput {
   const block = findLastJsonBlock(workerText);
   if (!block) {
-    const preview = workerText.trim().slice(0, 200) || '[empty]';
-    return synthesizeFailed(preview, 'no structured output emitted');
+    const preview = workerText.trim().slice(0, 2000) || '[empty]';
+    return {
+      workerSelfAssessment: 'failed' as const,
+      summary: preview,
+      filesChanged: [],
+      findings: [],
+      citations: [],
+      criteriaSucceeded: [],
+      criteriaErrors: [],
+      sourcesUsed: [],
+    };
   }
   let raw: unknown;
   try {
     raw = JSON.parse(block);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return synthesizeFailed(workerText.trim().slice(0, 200) || '[empty]', `structured output not valid JSON: ${msg}`);
+    return {
+      workerSelfAssessment: 'failed' as const,
+      summary: workerText.trim().slice(0, 2000) || '[empty]',
+      filesChanged: [],
+      findings: [],
+      citations: [],
+      criteriaSucceeded: [],
+      criteriaErrors: [],
+      sourcesUsed: [],
+    };
   }
   const parsed = WorkerOutputSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
 
-  // Schema-invalid: salvage what we can.
+  // Schema-invalid but has summary: return failed with salvaged fields.
   const obj = (typeof raw === 'object' && raw !== null) ? (raw as Record<string, unknown>) : {};
   const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
-  const summaryStr = typeof obj.summary === 'string' && obj.summary.length > 0 ? obj.summary : '[empty]';
-  const hasSummary = summaryStr !== '[empty]' && summaryStr.trim().length > 0;
+  const summaryStr = typeof obj.summary === 'string' && obj.summary.length > 0 ? obj.summary : workerText.trim().slice(0, 2000) || '[empty]';
 
   return {
+    workerSelfAssessment: 'failed' as const,
     summary: summaryStr,
-    workerStatus: hasSummary ? 'done_with_concerns' : 'failed',
     filesChanged: Array.isArray(obj.filesChanged)
       ? obj.filesChanged.filter((x): x is string => typeof x === 'string')
       : [],
-    validationsRun: Array.isArray(obj.validationsRun)
-      ? obj.validationsRun.filter(
-          (v): v is { name: string; passed: boolean; output: string } =>
+    findings: Array.isArray(obj.findings) ? obj.findings : [],
+    citations: Array.isArray(obj.citations) ? obj.citations : [],
+    criteriaSucceeded: Array.isArray(obj.criteriaSucceeded)
+      ? obj.criteriaSucceeded.filter((x): x is string => typeof x === 'string')
+      : [],
+    criteriaErrors: Array.isArray(obj.criteriaErrors)
+      ? obj.criteriaErrors.filter(
+          (v): v is { criterion: string; error: string } =>
             v !== null && typeof v === 'object'
-            && typeof (v as { name: unknown }).name === 'string'
-            && typeof (v as { passed: unknown }).passed === 'boolean'
-            && typeof (v as { output: unknown }).output === 'string',
+            && typeof (v as { criterion: unknown }).criterion === 'string'
+            && typeof (v as { error: unknown }).error === 'string',
         )
       : [],
-    unresolved: [
-      ...(Array.isArray(obj.unresolved) ? obj.unresolved.filter((x): x is string => typeof x === 'string') : []),
-      `schema validation failed: ${issues.join('; ')}`,
-    ],
-    ...(typeof obj.commitMessage === 'string' && { commitMessage: obj.commitMessage }),
+    sourcesUsed: Array.isArray(obj.sourcesUsed)
+      ? obj.sourcesUsed.filter((x): x is string => typeof x === 'string')
+      : [],
   };
 }

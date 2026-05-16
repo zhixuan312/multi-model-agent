@@ -50,7 +50,7 @@ describe('observability contract — exhaustive', () => {
     const seen = new Set(captured.map(e => e.event));
     expect(seen.has('task_started'), 'task_started never emitted').toBe(true);
     // batch_failed only fires from async-dispatch when the executor throws
-    // (not from provider-level errors that surface as RunResult.status). The
+    // (not from provider-level errors that surface as RuntimeRunResult.status). The
     // fixture covers that contract by ensuring the manifest entry exists; an
     // emission-side fixture is added when an executor-throwing path lands.
     const batchFailedEntry = manifest.events.find(e => e.name === 'batch_failed');
@@ -78,14 +78,14 @@ describe('observability contract — exhaustive', () => {
 });
 
 describe('golden does not drift', () => {
-  it('manifest covers all 48 events', () => {
+  it('manifest covers all 50 events', () => {
     // 26 base + 9 parallel-criteria/stall + 2 angle cap + 2 warmer cap + 2 annotator cap
     // + 7 progress-watchdog events:
     //   progress_watchdog_armed, progress_watchdog_skipped_disabled,
     //   progress_watchdog_skipped_non_git, progress_watchdog_warn,
     //   progress_watchdog_fired_thrash, progress_watchdog_disarmed,
     //   progress_watchdog_scope_violation
-    expect(manifest.events).toHaveLength(48);
+    expect(manifest.events).toHaveLength(50);   // +2 in v5: stage_gate_recorded, stage_halt
   });
 
   it('every event has a unique name', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BatchCache } from '../../packages/core/src/stores/batch-cache.js';
-import type { TaskSpec, RunResult } from '../../packages/core/src/types.js';
+import type { TaskSpec, RuntimeRunResult } from '../../packages/core/src/types.js';
 
 const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   prompt: `task ${i}`,
@@ -16,7 +16,7 @@ const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   autoCommit: true,
 } as TaskSpec));
 
-const result = (status: RunResult['status'] = 'ok'): RunResult => ({
+const result = (status: RuntimeRunResult['status'] = 'ok'): RuntimeRunResult => ({
   status,
   output: 'x',
   filesWritten: [],

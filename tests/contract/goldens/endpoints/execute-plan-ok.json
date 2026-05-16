@@ -1,9 +1,9 @@
 {
-  "headline": "[incomplete] execute-plan: mocked ok",
+  "headline": "[ok] execute-plan: mocked ok",
   "results": [
     {
       "output": "mocked ok",
-      "status": "incomplete",
+      "status": "ok",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
@@ -32,11 +32,11 @@
       "directoriesListed": [],
       "workerStatus": "done",
       "terminationReason": {
-        "cause": "incomplete",
+        "cause": "finished",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done_with_concerns",
+        "workerSelfAssessment": "done",
         "wasPromoted": false
       },
       "implementationReport": {
@@ -72,10 +72,10 @@
           "stage": "review",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
           "modelFamily": null,
-          "model": "mock-model",
+          "model": null,
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
@@ -87,7 +87,7 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0,
-          "verdict": "changes_required",
+          "verdict": null,
           "roundsUsed": 1,
           "concernCategories": [],
           "findingsBySeverity": {
@@ -102,42 +102,42 @@
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
           "costUSD": 0,
-          "agentTier": null,
+          "agentTier": "standard",
           "modelFamily": null,
           "model": null,
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
+          "inputTokens": 10,
+          "outputTokens": 20,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 0,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0,
           "outcome": "transformed"
         }
       },
-      "specReviewStatus": "changes_required",
-      "qualityReviewStatus": "changes_required",
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "skipped",
       "commits": [],
       "agents": {
         "implementer": "standard",
         "implementerToolMode": "full",
-        "specReviewer": "complex",
-        "qualityReviewer": "complex"
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
       },
       "fileArtifactsMissing": false,
-      "specReviewReason": "",
-      "qualityReviewReason": "",
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "structuredReport": {
         "summary": "mocked ok",
         "workerStatus": "done",
         "unresolved": [],
         "filesChanged": [],
-        "reviewVerdict": "changes_required",
+        "reviewVerdict": null,
         "reviewConcerns": [],
         "reworkApplied": false,
         "validationsRun": [],
@@ -149,15 +149,9 @@
       },
       "models": {
         "implementer": "mock-model",
-        "specReviewer": "mock-model",
-        "qualityReviewer": "mock-model"
-      },
-      "specReviewerNotes": "mocked ok",
-      "qualityReviewerNotes": "mocked ok",
-      "reviewVerdict": "changes_required",
-      "reviewFindings": [],
-      "reworkApplied": false,
-      "errorCode": "review_rejected"
+        "specReviewer": null,
+        "qualityReviewer": null
+      }
     }
   ],
   "batchTimings": {
@@ -174,7 +168,7 @@
     "workerStatus": "done",
     "unresolved": [],
     "filesChanged": [],
-    "reviewVerdict": "changes_required",
+    "reviewVerdict": null,
     "reviewConcerns": [],
     "reworkApplied": false,
     "validationsRun": [],
@@ -191,8 +185,8 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
-  "specReviewVerdict": "changes_required",
-  "qualityReviewVerdict": "changes_required",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
   "roundsUsed": 1,
   "contextBlockId": "<DETERMINISTIC>"
 }

@@ -1,4 +1,4 @@
-import type { Provider, ProviderConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { Provider, ProviderConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 
 export interface MockRunnerOptions {
   policy: 'obey-prompt-scope';
@@ -22,7 +22,7 @@ export class MockRunner implements Provider {
     } as ProviderConfig;
   }
 
-  async run(prompt: string): Promise<RunResult> {
+  async run(prompt: string): Promise<RuntimeRunResult> {
     this.capturedPrompts.push(prompt);
 
     const hasScopeClause =
@@ -66,6 +66,6 @@ export class MockRunner implements Provider {
       outputIsDiagnostic: false,
       escalationLog: [],
       durationMs: 0,
-    } as RunResult;
+    } as RuntimeRunResult;
   }
 }

@@ -34,16 +34,15 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
 
     // Resolve original batch's toolCategory for dispatcher budget selection.
     let originalToolCategory: 'artifact_producing' | 'read_only' | undefined;
-    if (deps.routeDispatcher) {
-      const original = deps.batchRegistry.get(input.batchId);
-      if (
-        original
-        && original.toolCategory
-        && (original.toolCategory as string) !== 'assist'
-      ) {
-        originalToolCategory = original.toolCategory as typeof originalToolCategory;
-      }
+    const original = deps.batchRegistry.get(input.batchId);
+    if (
+      original
+      && original.toolCategory
+      && (original.toolCategory as string) !== 'assist'
+    ) {
+      originalToolCategory = original.toolCategory as typeof originalToolCategory;
     }
+    void originalToolCategory;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
@@ -85,7 +84,7 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
           const retryBatchId = batchCache.remember(executionCtx.batchId, subset);
 
           let retryAborted = false;
-          let results: import('@zhixuan92/multi-model-agent-core').RunResult[] = [];
+          let results: import('@zhixuan92/multi-model-agent-core').RuntimeRunResult[] = [];
           try {
             const result = await executeTask(toolConfig, executionCtx, input);
             results = Array.isArray(result.results) ? result.results : [];
@@ -102,15 +101,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
           }
         };
 
-        if (deps.routeDispatcher && originalToolCategory) {
-          const result = await deps.routeDispatcher.dispatch({
-            route: 'retry',
-            toolCategory: originalToolCategory,
-            rawRequest: { batchId: input.batchId, retryableFor: input.taskIndices, cwd },
-            executor: () => callExecutor(),
-          });
-          return result.body;
-        }
         return callExecutor();
       },
     });

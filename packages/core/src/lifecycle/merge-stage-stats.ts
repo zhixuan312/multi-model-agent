@@ -2,7 +2,7 @@
 //
 // Helper that mutates state.lastRunResult.stageStats[<stage>] to record
 // per-stage execution costs as each stage handler completes. Without this,
-// only the implementer's RunResult.usage is visible at terminal — the
+// only the implementer's RuntimeRunResult.usage is visible at terminal — the
 // reviewer / annotator / rework / diff / verify costs are dropped on the
 // floor. Affected events:
 //   - local `task_completed` (top-level inputTokens / outputTokens / cost)
@@ -13,7 +13,7 @@
 // reflecting the total number of rounds executed.
 
 import type { LifecycleState } from './stage-plan-types.js';
-import type { RunResult } from '../types.js';
+import type { RuntimeRunResult } from '../types.js';
 
 export type StageName =
   | 'implementing'
@@ -55,7 +55,7 @@ export function mergeStageStats(
   delta: StageDelta,
   options: StageOptions,
 ): void {
-  const rr = state.lastRunResult as RunResult | undefined;
+  const rr = state.lastRunResult as RuntimeRunResult | undefined;
   if (!rr) return;
   const existing = ((rr.stageStats ?? {}) as Record<string, Record<string, unknown> | undefined>)[stage];
 
@@ -107,7 +107,7 @@ function combineCost(a: number | null | undefined, b: number | null): number | n
  * lastRunResult.
  *
  * Tool sweep #6 fix: the spec-chain and quality-chain handlers both
- * replaced `state.lastRunResult` with the rework's RunResult, only
+ * replaced `state.lastRunResult` with the rework's RuntimeRunResult, only
  * keeping `stageStats`. Implementing-stage file writes were thereby
  * lost when a spec-rework round produced no writes:
  *   implementer:   filesWritten=['/x.ts']  ← real edit applied
@@ -128,9 +128,9 @@ function combineCost(a: number | null | undefined, b: number | null): number | n
  */
 export function replaceLastRunResultPreservingTrackers(
   state: LifecycleState,
-  newResult: RunResult,
+  newResult: RuntimeRunResult,
 ): void {
-  const prior = state.lastRunResult as RunResult | undefined;
+  const prior = state.lastRunResult as RuntimeRunResult | undefined;
   if (!prior) {
     state.lastRunResult = newResult;
     return;

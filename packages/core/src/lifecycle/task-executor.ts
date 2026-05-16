@@ -2,16 +2,74 @@ import { randomUUID } from 'node:crypto';
 import type { ToolConfig } from './tool-config-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { ExecutorOutput } from './executor-output-types.js';
-import type { TaskSpec, RunResult } from '../types.js';
+import type { TaskSpec, RuntimeRunResult } from '../types.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { runTaskViaDispatcher } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
-import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
+import { groupTasksByRepo, type TaskGroup } from './task-grouping.js';
+import { buildCancelledResult } from './build-cancelled-result.js';
+import { getDirtyFiles, formatHygieneAdvisory } from './repo-hygiene.js';
+
+/**
+ * Inner loop for grouped dispatch. Runs each group in parallel; within
+ * each group runs tasks sequentially in caller input order. Aborted
+ * not-yet-started tasks receive a cancelled-result envelope.
+ * Failures within a group are caught by dispatchOne (RuntimeRunResult
+ * with workerStatus='failed') and DO NOT halt subsequent group members.
+ *
+ * Returns results indexed by original task order.
+ */
+export async function dispatchGroupedWithPrecomputedGroups(
+  tasks: TaskSpec[],
+  groups: TaskGroup[],
+  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
+  opts: { abortSignal?: AbortSignal },
+): Promise<RuntimeRunResult[]> {
+  const results: RuntimeRunResult[] = new Array(tasks.length);
+  await Promise.all(
+    groups.map(async (group) => {
+      const isGitRepo = !group.key.startsWith('/') || true; // group.key is always either a toplevel or realpath
+      let isFirstInGroup = true;
+      for (const { task, originalIndex } of group.tasks) {
+        if (opts.abortSignal?.aborted) {
+          results[originalIndex] = buildCancelledResult();
+          continue;
+        }
+        let effectiveTask = task;
+        if (!isFirstInGroup && group.tasks.length > 1) {
+          const dirty = await getDirtyFiles(group.key);
+          if (dirty.length > 0) {
+            const advisory = formatHygieneAdvisory(dirty);
+            effectiveTask = { ...task, prompt: advisory + task.prompt };
+          }
+        }
+        results[originalIndex] = await dispatchOne(effectiveTask, originalIndex);
+        isFirstInGroup = false;
+      }
+    }),
+  );
+  return results;
+}
+
+/**
+ * Convenience wrapper that resolves the grouping internally. Used by
+ * tests; production callers use the precomputed-groups variant so they
+ * can also set ctx.batchGroupCount and call ctx.attachBatchGroups before
+ * dispatch begins.
+ */
+export async function dispatchGrouped(
+  tasks: TaskSpec[],
+  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
+  opts: { abortSignal?: AbortSignal },
+): Promise<RuntimeRunResult[]> {
+  const groups = await groupTasksByRepo(tasks);
+  return dispatchGroupedWithPrecomputedGroups(tasks, groups, dispatchOne, opts);
+}
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
@@ -85,7 +143,7 @@ export async function executeTask<Input, Brief, Report>(
   const mainModel = ctx.mainModel;
   const startMs = Date.now();
 
-  const buildCrashResult = (msg: string): RunResult => ({
+  const buildCrashResult = (msg: string): RuntimeRunResult => ({
     output: '',
     status: 'error' as const,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -101,9 +159,11 @@ export async function executeTask<Input, Brief, Report>(
     durationMs: Date.now() - startMs,
     structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
     workerStatus: 'failed' as const,
+    actualCostUSD: 0,
+    directoriesListed: [],
   });
 
-  const buildAgentNotConfiguredResult = (msg: string): RunResult => ({
+  const buildAgentNotConfiguredResult = (msg: string): RuntimeRunResult => ({
     output: '',
     status: 'error' as const,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -118,9 +178,11 @@ export async function executeTask<Input, Brief, Report>(
     retryable: false,
     durationMs: Date.now() - startMs,
     workerStatus: 'failed' as const,
+    actualCostUSD: 0,
+    directoriesListed: [],
   });
 
-  const dispatchOne = async (task: TaskSpec, i: number): Promise<RunResult> => {
+  const dispatchOne = async (task: TaskSpec, i: number): Promise<RuntimeRunResult> => {
     const r = resolvedPerTask[i]!;
     if ('error' in r) {
       return buildAgentNotConfiguredResult(r.error);
@@ -142,7 +204,7 @@ export async function executeTask<Input, Brief, Report>(
         mainModel: ctx.mainModel,
         bus: ctx.bus,
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
-        reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
+        ...((ctx as any).reviewerEngine !== undefined && { reviewerEngine: (ctx as any).reviewerEngine }),
       });
     } catch (e) {
       // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,
@@ -153,10 +215,37 @@ export async function executeTask<Input, Brief, Report>(
     }
   };
 
-  const results: RunResult[] =
-    tasks.length === 1
-      ? [await dispatchOne(tasks[0]!, 0)]
-      : await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
+  let results: RuntimeRunResult[];
+  if (config.serializeSameRepo && tasks.length > 1) {
+    // Compute groups once so we can both:
+    //   - set ctx.batchGroupCount BEFORE dispatch (task-runner reads this
+    //     to gate PARALLEL_SAFETY_SUFFIX), and
+    //   - call ctx.attachBatchGroups so the 202 headline composer can
+    //     describe active groups.
+    const groups = await groupTasksByRepo(tasks);
+    (ctx as { batchGroupCount?: number }).batchGroupCount = groups.length;
+    ctx.attachBatchGroups?.(
+      groups.map((g) => ({
+        key: g.key,
+        taskIndices: g.tasks.map((t) => t.originalIndex),
+      })),
+    );
+    ctx.setBatchGroupingTelemetry?.({
+      groupCount: groups.length,
+      groupSizes: groups.map((g) => g.tasks.length),
+      serializationApplied: groups.some((g) => g.tasks.length > 1),
+    });
+    results = await dispatchGroupedWithPrecomputedGroups(
+      tasks,
+      groups,
+      (task, i) => dispatchOne(task, i),
+      { abortSignal: ctx.stall.controller.signal },
+    );
+  } else if (tasks.length === 1) {
+    results = [await dispatchOne(tasks[0]!, 0)];
+  } else {
+    results = await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
+  }
   const wallClockMs = Date.now() - startMs;
 
   // Gap 3 fix (4.0.3+): surface the executor's wall-clock as

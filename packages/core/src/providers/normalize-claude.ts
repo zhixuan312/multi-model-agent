@@ -18,6 +18,8 @@ export function normalizeClaudeTurn(
     costUSD: number;
     /** When set, overrides any SDK-reported terminal reason. */
     guardTerminationReason?: TurnResult['terminationReason'];
+    /** Model ID for this turn. */
+    model?: string;
   },
 ): TurnResult {
   let outputText = '';
@@ -86,5 +88,6 @@ export function normalizeClaudeTurn(
     terminationReason: finalTermination,
     ...(errorCode && { errorCode }),
     ...(errorMessage && { errorMessage }),
+    ...(args.model && { model: args.model }),
   };
 }

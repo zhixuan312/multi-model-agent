@@ -93,6 +93,12 @@ export class CodexCliSession implements Session {
         cwd: this.args.opts.cwd,
         env: launch.env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        // detached: true puts codex (and any helpers it spawns) into its
+        // own process group, so killGracefully can signal the whole tree
+        // via process.kill(-pid, ...). Without this, codex grandchildren
+        // survived SIGTERM to the leader — see 2026-05-16 leak (155 net
+        // orphans across the day, peak ~91 simultaneous at 02:00 UTC).
+        detached: true,
       });
     } catch (err) {
       const e = err as { code?: string; message?: string };
@@ -117,7 +123,7 @@ export class CodexCliSession implements Session {
     const cleanupGuards = this.armGuards(proc, tracker);
     const stderrBufRef = { value: '' };
     try {
-      await this.consumeStream(proc, tracker, stderrBufRef);
+      await consumeStream(proc, tracker, stderrBufRef);
     } finally {
       cleanupGuards();
     }
@@ -157,6 +163,7 @@ export class CodexCliSession implements Session {
       terminationReason: tracker.terminationReason,
       ...(tracker.errorCode && { errorCode: tracker.errorCode }),
       ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
+      model: this.args.cfg.model,
     };
   }
 
@@ -201,43 +208,6 @@ export class CodexCliSession implements Session {
     };
   }
 
-  private consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { value: string }): Promise<void> {
-    let stdoutBuf = '';
-    proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', (chunk: string) => {
-      stdoutBuf += chunk;
-      let nl: number;
-      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
-        const line = stdoutBuf.slice(0, nl);
-        stdoutBuf = stdoutBuf.slice(nl + 1);
-        const ev = parseCodexCliEvent(line);
-        if (ev) tracker.consume(ev);
-      }
-    });
-    proc.stderr?.setEncoding('utf8');
-    proc.stderr?.on('data', (chunk: string) => {
-      stderrRef.value += chunk;
-      if (stderrRef.value.length > 8000) stderrRef.value = stderrRef.value.slice(-4000);
-    });
-    return new Promise<void>((resolve) => {
-      const onClose = () => {
-        if (stdoutBuf) {
-          const ev = parseCodexCliEvent(stdoutBuf);
-          if (ev) tracker.consume(ev);
-        }
-        resolve();
-      };
-      proc.on('close', onClose);
-      proc.on('error', (err: NodeJS.ErrnoException) => {
-        if (tracker.terminationReason === 'ok') {
-          tracker.terminationReason = 'error';
-          tracker.errorCode = err.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed';
-          tracker.errorMessage = err.message;
-        }
-        resolve();
-      });
-    });
-  }
 
   private finalizeError(tracker: TurnTracker, startMs: number, code: string, message: string): TurnResult {
     tracker.terminationReason = 'error';
@@ -267,12 +237,69 @@ async function readOutputFile(path: string): Promise<string> {
   }
 }
 
+function consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { value: string }): Promise<void> {
+  let stdoutBuf = '';
+  proc.stdout?.setEncoding('utf8');
+  proc.stdout?.on('data', (chunk: string) => {
+    stdoutBuf += chunk;
+    let nl: number;
+    while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
+      const line = stdoutBuf.slice(0, nl);
+      stdoutBuf = stdoutBuf.slice(nl + 1);
+      const ev = parseCodexCliEvent(line);
+      if (ev) tracker.consume(ev);
+    }
+  });
+  proc.stderr?.setEncoding('utf8');
+  proc.stderr?.on('data', (chunk: string) => {
+    stderrRef.value += chunk;
+    if (stderrRef.value.length > 8000) stderrRef.value = stderrRef.value.slice(-4000);
+  });
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      if (stdoutBuf) {
+        const ev = parseCodexCliEvent(stdoutBuf);
+        if (ev) tracker.consume(ev);
+      }
+      resolve();
+    };
+    // 'exit' fires when the child process itself terminates, independent
+    // of whether stdio pipes have drained. Grandchildren that inherit
+    // the pipes can keep 'close' pending indefinitely — see 2026-05-16
+    // log leak (341 codex_subprocess_starting vs 186 codex_subprocess_exited).
+    proc.on('exit', settle);
+    proc.on('close', settle);
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+      if (tracker.terminationReason === 'ok') {
+        tracker.terminationReason = 'error';
+        tracker.errorCode = err.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed';
+        tracker.errorMessage = err.message;
+      }
+      settle();
+    });
+  });
+}
+
 function killGracefully(proc: ChildProcess): void {
   if (proc.exitCode !== null || proc.killed) return;
-  try { proc.kill('SIGTERM'); } catch { /* ignore */ }
+  const pid = proc.pid;
+  // Signal the whole process group (negative pid). Codex spawns helpers
+  // that share the leader's stdio; killing the leader alone leaks them.
+  // Fall back to leader-only kill when pid is unavailable (e.g. spawn
+  // failed before a pid was assigned).
+  try {
+    if (typeof pid === 'number') process.kill(-pid, 'SIGTERM');
+    else proc.kill('SIGTERM');
+  } catch { /* group may already be gone */ }
   const t = setTimeout(() => {
     if (proc.exitCode === null) {
-      try { proc.kill('SIGKILL'); } catch { /* ignore */ }
+      try {
+        if (typeof pid === 'number') process.kill(-pid, 'SIGKILL');
+        else proc.kill('SIGKILL');
+      } catch { /* group may already be gone */ }
     }
   }, SIGKILL_GRACE_MS);
   t.unref();
@@ -416,7 +443,7 @@ class TurnTracker {
 
 // Re-export the tracker for tests that want to unit-test consume() in
 // isolation. Not part of the public API.
-export const __test = { TurnTracker, killGracefully };
+export const __test = { TurnTracker, killGracefully, consumeStream };
 
 /** Helper for tests/probes: write a JSON-schema object to a temp file
  *  and return its path. Used when callers want `--output-schema`. The

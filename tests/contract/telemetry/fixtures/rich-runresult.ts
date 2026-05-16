@@ -1,8 +1,8 @@
-import type { RunResult } from '../../../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../../../packages/core/src/types.js';
 
-/** A RunResult with non-zero data on every channel — every stage entered,
+/** A RuntimeRunResult with non-zero data on every channel — every stage entered,
  *  every counter > 0, every list non-empty. Used by completeness tests. */
-export function richRunResult(): RunResult {
+export function richRunResult(): RuntimeRunResult {
   return {
     output: 'rich worker output',
     status: 'ok',
@@ -48,5 +48,5 @@ export function richRunResult(): RunResult {
     taskMaxIdleMs: 1000,
     stallCount: 1,
     sandboxViolationCount: 1,
-  } as RunResult;
+  } as RuntimeRunResult;
 }

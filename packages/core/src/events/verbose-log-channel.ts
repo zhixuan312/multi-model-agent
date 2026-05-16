@@ -1,11 +1,11 @@
 /**
  * VerboseLogChannel — bus sink that streams every event to the daemon's
- * stdout in the `[mmagent verbose] event=...` snake_case format consistent
- * with the existing HTTP-handler breadcrumbs.
+ * stderr in the `[mmagent verbose] event=...` snake_case format.
  *
- * Wired only when `diagnostics.verbose=true`. Independent of LocalLogSink,
- * which writes the JSONL file when `diagnostics.log=true`. The two flags
- * are deliberately orthogonal: file = `log`, console = `verbose`.
+ * Always registered (4.6.0+): verbose streaming is compulsory. The only
+ * remaining diagnostics toggle is `diagnostics.log`, which controls
+ * file persistence via `LocalLogSink`. File = `log`; verbose = always on,
+ * stderr.
  *
  * Per v4 spec (horizontal_design.md:332): "writes every event verbatim
  * (no filter, no transform, no privacy filter — local audience, full
@@ -41,7 +41,7 @@ export function formatVerboseLine(event: Record<string, unknown>): string {
 export class VerboseLogChannel {
   readonly name = 'verbose-log';
   constructor(
-    private readonly stdout: { write: (s: string) => boolean } = process.stdout,
+    private readonly stream: { write: (s: string) => boolean } = process.stderr,
   ) {}
 
   emit(event: Record<string, unknown>): void {
@@ -52,9 +52,9 @@ export class VerboseLogChannel {
       line = `[mmagent verbose] _serializeError`;
     }
     try {
-      this.stdout.write(line + '\n');
+      this.stream.write(line + '\n');
     } catch {
-      // stdout write failed — drop the line; this is best-effort observability.
+      // stream write failed — drop the line; this is best-effort observability.
     }
   }
 }

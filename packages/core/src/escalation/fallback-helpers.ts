@@ -1,4 +1,4 @@
-import type { Provider, AgentType, RunResult } from '../types.js';
+import type { Provider, AgentType, RuntimeRunResult } from '../types.js';
 
 /** Two providers are "identical" iff they resolve to the same effective backend
  *  (type + model + baseUrl + apiKey wiring). When an operator points both tiers
@@ -9,16 +9,16 @@ export function providersIdentical(a: Provider, b: Provider): boolean {
   return JSON.stringify(a.config) === JSON.stringify(b.config);
 }
 
-/** Lifecycle helper: builds the synthetic RunResult expected when both tiers are
+/** Lifecycle helper: builds the synthetic RuntimeRunResult expected when both tiers are
  *  unavailable. Status is the new 'unavailable' value (NOT 'api_error') so
  *  re-passing the synthetic into runWithFallback's isTransportFailure cannot
  *  retrigger fallback.
  *
- *  IMPORTANT: This shape MUST satisfy `RunResult` (see types.ts). Confirmed
+ *  IMPORTANT: This shape MUST satisfy `RuntimeRunResult` (see types.ts). Confirmed
  *  required fields: output, status, usage, turns, filesRead, filesWritten,
- *  toolCalls, outputIsDiagnostic, escalationLog. All other RunResult fields
+ *  toolCalls, outputIsDiagnostic, escalationLog. All other RuntimeRunResult fields
  *  are optional. */
-export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): RunResult {
+export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): RuntimeRunResult {
   return {
     status: 'unavailable',
     output: '',
@@ -32,6 +32,8 @@ export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): 
     filesWritten: [],
     toolCalls: [],
     escalationLog: [],
+    actualCostUSD: 0,
+    directoriesListed: [],
   };
 }
 

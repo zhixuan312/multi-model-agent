@@ -2,13 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
-  RunResult,
+  RuntimeRunResult,
   Provider,
 } from '../packages/core/src/types.js';
 import type { Session, SessionOpts, TurnResult } from '../packages/core/src/types/run-result.js';
 
 function makeTurn(
-  status: RunResult['status'],
+  status: RuntimeRunResult['status'],
   output = '',
   costUSD: number | null = 0,
 ): TurnResult {
@@ -68,8 +68,8 @@ describe('delegateWithEscalation retry', () => {
 
   it('retries provider_transport_failure up to 2 times (3 total attempts)', async () => {
     const provider = sequenceProvider([
-      makeTurn('provider_transport_failure' as RunResult['status'], 'net fail 1'),
-      makeTurn('provider_transport_failure' as RunResult['status'], 'net fail 2'),
+      makeTurn('provider_transport_failure' as RuntimeRunResult['status'], 'net fail 1'),
+      makeTurn('provider_transport_failure' as RuntimeRunResult['status'], 'net fail 2'),
       makeTurn('ok', 'success'),
     ]);
     const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
@@ -92,7 +92,7 @@ describe('delegateWithEscalation retry', () => {
 
   it('retries timeout only once', async () => {
     const provider = sequenceProvider([
-      makeTurn('timeout' as RunResult['status'], 'slow 1'),
+      makeTurn('timeout' as RuntimeRunResult['status'], 'slow 1'),
       makeTurn('ok', 'success'),
     ]);
     const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);

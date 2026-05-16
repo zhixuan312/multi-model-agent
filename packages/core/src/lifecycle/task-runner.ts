@@ -1,11 +1,11 @@
 import type {
   TaskSpec,
-  RunResult,
+  RuntimeRunResult,
   MultiModelConfig,
   Provider,
   AgentType,
 } from '../types.js';
-import type { ProgressEvent, RunTasksRuntime, RunStatus } from '../providers/runner-types.js';
+import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
 import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
@@ -14,22 +14,12 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
-import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
-import { pickEscalation } from '../escalation/policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
-import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
-import { parseStructuredReport } from '../reporting/structured-report.js';
-import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
-import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
-import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
-import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
-import { HUMAN_LABEL } from './stage-labels.js';
-import { readFile as fsReadFile } from 'fs/promises';
-export function errorResult(error: string): RunResult {
+export function errorResult(error: string): RuntimeRunResult {
   return {
     output: `Sub-agent error: ${error}`,
     status: 'error',
@@ -41,7 +31,34 @@ export function errorResult(error: string): RunResult {
     outputIsDiagnostic: true,
     escalationLog: [],
     error,
+    actualCostUSD: 0,
+    directoriesListed: [],
   };
+}
+
+const PARALLEL_SAFETY_SUFFIX =
+  '\n\nYou are running in parallel with other tasks. ' +
+  'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
+  'Only run task-specific test commands if provided.';
+
+/**
+ * Conditionally appends PARALLEL_SAFETY_SUFFIX to each task's prompt.
+ * Suffix is appended ONLY when ctx.batchGroupCount > 1, i.e., the batch
+ * spans multiple repos. Within a single group, tasks run serially and
+ * full builds are safe.
+ *
+ * Pure function — returns shallow-cloned tasks; original array unchanged.
+ */
+export function applyParallelSafetySuffixIfNeeded<T extends { prompt: string; testCommand?: string }>(
+  tasks: T[],
+  ctx: { batchGroupCount?: number },
+): T[] {
+  if (!ctx.batchGroupCount || ctx.batchGroupCount <= 1) return tasks.slice();
+  return tasks.map((t) => ({
+    ...t,
+    prompt: t.prompt + PARALLEL_SAFETY_SUFFIX +
+      (t.testCommand ? `\nTo verify your work, run: \`${t.testCommand}\`` : ''),
+  }));
 }
 
 export type ResolvedTask =
@@ -65,7 +82,7 @@ export interface RunTasksOptions {
     recordTaskCompleted: (ctx: {
       route: string;
       taskSpec: TaskSpec;
-      runResult: RunResult;
+      runResult: RuntimeRunResult;
       client: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
@@ -76,14 +93,14 @@ export interface RunTasksOptions {
   client?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
+  batchGroupCount?: number;
 }
 
 export async function runTasks(
   tasks: TaskSpec[],
   config: MultiModelConfig,
   options: RunTasksOptions = {},
-): Promise<RunResult[]> {
+): Promise<RuntimeRunResult[]> {
   if (tasks.length === 0) return [];
 
   const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
@@ -112,24 +129,19 @@ export async function runTasks(
     }
   });
 
-  if (resolved.length > 1) {
-    const PARALLEL_SAFETY_SUFFIX =
-      '\n\nYou are running in parallel with other tasks. ' +
-      'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
-      'Only run task-specific test commands if provided.';
-
-    for (const r of resolved) {
-      if ('error' in r) continue;
-      r.task = {
-        ...r.task,
-        prompt: r.task.prompt + PARALLEL_SAFETY_SUFFIX +
-          (r.task.testCommand ? `\nTo verify your work, run: \`${r.task.testCommand}\`` : ''),
-      };
-    }
+  const tasksWithSuffix = applyParallelSafetySuffixIfNeeded(
+    resolved.filter((r): r is Exclude<typeof r, { error: string }> => !('error' in r)).map((r) => r.task),
+    { batchGroupCount: options.batchGroupCount },
+  );
+  // Reattach mutated tasks back to resolved entries.
+  let suffixIdx = 0;
+  for (const r of resolved) {
+    if ('error' in r) continue;
+    r.task = tasksWithSuffix[suffixIdx++]!;
   }
 
   return Promise.all(
-    resolved.map((r, index): Promise<RunResult> => {
+    resolved.map((r, index): Promise<RuntimeRunResult> => {
       if ('error' in r) {
         return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
@@ -142,14 +154,13 @@ export async function runTasks(
         ...(options.batchId !== undefined && { batchId: options.batchId }),
         ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
         ...(options.logger && { logger: options.logger }),
-        verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
+        verbose: true,
         ...(options.verboseStream && { verboseStream: options.verboseStream }),
         ...(options.recorder && { recorder: options.recorder }),
         ...(options.route !== undefined && { route: options.route }),
         ...(options.client !== undefined && { client: options.client }),
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
-        ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
       });
     }),
   );
@@ -180,7 +191,6 @@ export interface DispatchTaskInput {
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -273,18 +283,17 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     heartbeat: undefined,
     logger: input.logger,
     verboseStream: input.verboseStream ?? ((line: string) => { process.stderr.write(line); }),
-    verbose: input.verbose ?? false,
+    verbose: true,
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: [],
-    reviewerEngine: input.reviewerEngine ?? createDefaultReviewerEngine(),
   };
 }
 
 export async function runTaskViaDispatcher(
   input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
-): Promise<RunResult> {
+): Promise<RuntimeRunResult> {
   // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
   // so the SAME expanded task object reaches BOTH state.task AND
   // executionContext.task (single source of truth — no two references).
@@ -315,275 +324,11 @@ export async function runTaskViaDispatcher(
   let out;
   try {
     out = await dispatcher.dispatch({
-    route,
-    toolCategory,
-    rawRequest: { tasks: [expandedTask] },
-    context: { task: expandedTask, executionContext },
-    executor: async (_rawRequest: unknown, state: LifecycleState): Promise<undefined> => {
-      const task = state.task as TaskSpec | undefined;
-      const ctx = state.executionContext as ExecutionContext | undefined;
-      if (!task || !ctx) {
-        throw new Error(`runTaskViaDispatcher: state.task / state.executionContext not set for route '${route}'`);
-      }
-      const baseTier: AgentType = ctx.assignedTier;
-      const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
-      const provider = ctx.providers[decision.impl] as Provider | undefined;
-      if (!provider) {
-        state.lastRunResult = {
-          output: '',
-          status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [],
-                error: `no provider configured for tier '${decision.impl}'`,
-          errorCode: 'all_tiers_unavailable',
-          workerStatus: 'failed',
-        } as unknown as RunResult;
-        state.terminal = true;
-        return undefined;
-      }
-      // Read-only routes (audit / review / debug / investigate / research)
-      // run the sequential criteria loop on one complex session. The
-      // (route, subtype) pair resolves to a per-subtype spec from the
-      // tool's SUBTYPES map; the dispatcher uses that to build the cached
-      // prefix + per-criterion suffix.
-      if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
-        try {
-          const taskWithSubtype = task as TaskSpec & { subtype?: string };
-          const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
-          const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
-          const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
-          const preReadFiles: Record<string, string> = {};
-          for (const fp of filePaths) {
-            try {
-              preReadFiles[fp] = await fsReadFile(fp, 'utf8');
-            } catch {
-              // tolerated — sub-worker can read on demand via tools
-            }
-          }
-          // Target content for the cached prefix. Preference order:
-          //   1. parallelTarget — pure user question/work/problem, no
-          //      legacy format spec (set by the route's buildTaskSpec).
-          //   2. document — inlined doc (audit's primary input shape).
-          //   3. task.prompt — last-resort fallback. AVOID: it embeds the
-          //      legacy monolithic format spec (## Summary / ## Citations
-          //      for investigate, etc.), which competes with our `## Finding
-          //      N:` shape and confuses the worker about output format.
-          const taskWithTarget = task as TaskSpec & { parallelTarget?: string; document?: string };
-          const targetContent =
-            (taskWithTarget.parallelTarget && taskWithTarget.parallelTarget.trim().length > 0)
-              ? taskWithTarget.parallelTarget
-              : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
-                ? taskWithTarget.document
-                : task.prompt;
-          const cachedPrefix = routeSpec.buildPrefix({
-            document: targetContent,
-            preReadFiles,
-            filePaths,
-          });
-          // v4.4.x: single complex session per task, sequential for-loop over
-          // criteria. Earlier criteria's tool results stay in the session
-          // context so later criteria don't re-discover the same files.
-          const session = ctx.getSession(decision.impl);
-          const dispatchResult = await runReadRouteImplementer({
-            session,
-            cachedPrefix,
-            criteria: routeSpec.criteria,
-            buildSuffix: routeSpec.buildSuffix,
-          });
-
-          const totalCriteria = routeSpec.criteria.length;
-          const failedCount = dispatchResult.criteriaErrors.length;
-          const succeededCount = totalCriteria - failedCount;
-          const majorityThreshold = Math.ceil(totalCriteria / 2);
-          const status: RunStatus = succeededCount === 0
-            ? 'error'
-            : succeededCount >= majorityThreshold ? 'ok' : 'incomplete';
-          const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
-            ? ('missing_sections' as const)
-            : undefined;
-
-          const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
-            ? 'error'
-            : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
-          const terminationReason = {
-            cause: terminationCause,
-            turnsUsed: dispatchResult.turns,
-            hasFileArtifacts: false,
-            usedShell: false,
-            workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
-            wasPromoted: false,
-          };
-          state.lastRunResult = {
-            output: dispatchResult.synthesizedOutput,
-            status,
-            usage: dispatchResult.usage,
-            turns: dispatchResult.turns,
-            filesRead: filePaths,
-            filesWritten: [],
-            toolCalls: [],
-            outputIsDiagnostic: false,
-            escalationLog: [],
-                    workerStatus: succeededCount === 0 ? 'failed' : 'done',
-            terminationReason,
-            findings: dispatchResult.findings,
-            criteriaErrors: dispatchResult.criteriaErrors,
-            ...(incompleteReason && { incompleteReason }),
-          } as unknown as RunResult;
-
-          mergeStageStats(state, 'implementing', {
-            inputTokens: dispatchResult.usage.inputTokens,
-            outputTokens: dispatchResult.usage.outputTokens,
-            cachedReadTokens: dispatchResult.usage.cachedReadTokens,
-            cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
-            turnCount: dispatchResult.turns,
-            toolCallCount: 0,
-            costUSD: dispatchResult.costUSD,
-            durationMs: dispatchResult.durationMs,
-          }, {
-            tier: ctx.assignedTier,
-            model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
-          });
-          if (status !== 'ok') state.terminal = true;
-          return undefined;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          state.lastRunResult = {
-            output: '',
-            status: 'error',
-            usage: { inputTokens: 0, outputTokens: 0 },
-            turns: 0,
-            filesRead: [],
-            filesWritten: [],
-            toolCalls: [],
-            outputIsDiagnostic: true,
-            escalationLog: [],
-                    error: message,
-            errorCode: 'runner_crash',
-            workerStatus: 'failed',
-          } as unknown as RunResult;
-          state.terminal = true;
-          return undefined;
-        }
-      }
-
-      // Build the watchdog config once, just before the delegateWithEscalation call:
-      const wdConfig = {
-        enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
-        thrashTurns: ctx.config?.defaults?.thrashTurns ?? 25,
-        thrashWallClockMs: ctx.config?.defaults?.thrashWallClockMs ?? 1_200_000,
-        thrashSoftWallClockMs: ctx.config?.defaults?.thrashWallClockMs
-          ? Math.floor((ctx.config.defaults.thrashWallClockMs ?? 1_200_000) / 2)
-          : 600_000,
-      };
-      // state2 carries the timer's "fired" bit so recordPostHocSignals knows whether
-      // the abort came from the watchdog vs. some other cancellation.
-      const wdState2 = { fired: false };
-
-      // Wire the watchdog. ctx.stall.controller is the existing AbortController
-      // passed to delegateWithEscalation as options.abortSignal — when the watchdog
-      // fires, the controller's abort propagates into the session.
-      const disposeWatchdog = startProgressWatchdog({
-        state,
-        controller: ctx.stall.controller,
-        emit: (event) => ctx.bus?.emit(event as any),
-        config: wdConfig,
-        taskIndex: ctx.taskIndex,
-        batchId: ctx.batchId,
-        state2: wdState2,
-      });
-
-      try {
-        const result = await delegateWithEscalation(
-          {
-            prompt: task.prompt,
-            cwd: ctx.cwd,
-            agentType: decision.impl,
-            briefQualityPolicy: 'off',
-            timeoutMs: ctx.timing.timeoutMs,
-            ...(task.tools !== undefined && { tools: task.tools }),
-          },
-          [provider],
-          {
-            explicitlyPinned: false,
-            taskDeadlineMs: ctx.timing.deadlineMs,
-            abortSignal: ctx.stall.controller.signal,
-            assignedTier: decision.impl,
-            stageLabel: HUMAN_LABEL.implementing,
-            ...(ctx.bus && { bus: ctx.bus }),
-            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-            taskIndex: ctx.taskIndex,
-          },
-        );
-        const enrichedResult: RunResult = {
-          ...result,
-          ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
-        } as unknown as RunResult;
-        state.lastRunResult = enrichedResult;
-
-        // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
-        // adds new signals state for sub-project B's annotator).
-        await recordPostHocSignals(
-          state,
-          enrichedResult.turns ?? 0,
-          wdConfig,
-          (event) => ctx.bus?.emit(event as any),
-          ctx.taskIndex,
-          ctx.batchId,
-        );
-        // Record the implementer's per-stage cost so emit_task_terminal +
-        // wire task.completed include it in the totals + per-stage breakdown.
-        // Cost field lookup matches the canonical-then-legacy fallback used
-        // in delegate-with-escalation: `cost.costUSD` was the original field
-        // before assembleRunResult moved the value to top-level
-        // `actualCostUSD` (the current source of truth from claude/codex
-        // turns). Without the actualCostUSD fallback every claude-tier
-        // implementing stage records cost=null and telemetry under-reports.
-        mergeStageStats(state, 'implementing', {
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-          cachedReadTokens: result.usage.cachedReadTokens ?? 0,
-          cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
-          turnCount: result.turns ?? 0,
-          toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-          costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
-          durationMs: result.durationMs ?? null,
-          filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
-          filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
-        }, {
-          tier: ctx.assignedTier,
-          model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
-        });
-        if (result.status !== 'ok') {
-          state.terminal = true;
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        state.lastRunResult = {
-          output: '',
-          status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [],
-                error: message,
-          errorCode: 'runner_crash',
-          workerStatus: 'failed',
-        } as unknown as RunResult;
-        state.terminal = true;
-      } finally {
-        disposeWatchdog();
-      }
-      return undefined;
-    },
-  });
+      route,
+      toolCategory,
+      rawRequest: { tasks: [expandedTask] },
+      context: { task: expandedTask, executionContext },
+    });
   } finally {
     stopWatchdog();
     // v4.4 session reuse: ExecutionContext owns the per-tier Session
@@ -594,9 +339,19 @@ export async function runTaskViaDispatcher(
     await executionContext.closeSessions().catch(() => { /* idempotent */ });
   }
 
+  // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
+  // LifecycleState as `finalState`. The runtime mirror (RuntimeRunResult
+  // with workerStatus / stageStats / usage etc.) lives on
+  // finalState.lastRunResult — populated by performImplementation.
+  // Downstream consumers (executeTask, recorder, headline composer) still
+  // expect the runtime mirror, so return it directly.
+  const last = out.finalState?.lastRunResult as RuntimeRunResult | undefined;
+  if (last && typeof last === 'object' && 'output' in last) {
+    return last;
+  }
   const body = out.body;
   if (body && typeof body === 'object' && 'output' in body) {
-    return body as RunResult;
+    return body as RuntimeRunResult;
   }
   return {
     output: '',
@@ -608,8 +363,8 @@ export async function runTaskViaDispatcher(
     toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [],
-    error: 'dispatcher produced no RunResult',
+    error: 'dispatcher produced no RuntimeRunResult',
     errorCode: 'runner_crash',
     workerStatus: 'failed',
-  } as unknown as RunResult;
+  } as unknown as RuntimeRunResult;
 }

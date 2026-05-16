@@ -1,9 +1,9 @@
 // Deterministic mock providers for contract tests.
 //
-// Provider / RunResult shapes inspected from packages/core/src/types.ts on
+// Provider / RuntimeRunResult shapes inspected from packages/core/src/types.ts on
 // 2026-04-24:
-//   - Provider has: name, config, run(prompt, options?) => Promise<RunResult>
-//   - RunResult required fields: output, status, usage, turns, filesRead,
+//   - Provider has: name, config, run(prompt, options?) => Promise<RuntimeRunResult>
+//   - RuntimeRunResult required fields: output, status, usage, turns, filesRead,
 //     filesWritten, toolCalls, outputIsDiagnostic, escalationLog
 //   - Stage-specific optional fields: terminationReason, specReviewStatus,
 //     qualityReviewStatus, workerStatus, etc.
@@ -12,7 +12,7 @@
 import type {
   Provider,
   ProviderConfig,
-  RunResult,
+  RuntimeRunResult,
   RunStatus,
   TokenUsage,
   AttemptRecord,
@@ -21,11 +21,11 @@ import type {
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
 import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
 
-/** v4.4: build a Session whose `send()` invokes the same RunResult-producing
+/** v4.4: build a Session whose `send()` invokes the same RuntimeRunResult-producing
  *  runner the legacy `provider.run()` path uses. Lets every mock provider
  *  satisfy both APIs from a single source of truth — until Task 24 drops
  *  the legacy run shim entirely. */
-function runResultToTurnResult(rr: RunResult): TurnResult {
+function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
   // Each session.send() represents one model session whose internal turn
   // count (claude-agent-sdk reports num_turns, codex CLI reports turns)
   // is what TurnResult.turns carries. The mock simply forwards rr.turns.
@@ -55,8 +55,8 @@ function runResultToTurnResult(rr: RunResult): TurnResult {
 }
 
 function statusToTermination(
-  status: RunResult['status'],
-  incompleteReason?: RunResult['incompleteReason'],
+  status: RuntimeRunResult['status'],
+  incompleteReason?: RuntimeRunResult['incompleteReason'],
 ): TurnResult['terminationReason'] {
   switch (status) {
     case 'ok': return 'ok';
@@ -74,7 +74,7 @@ function statusToTermination(
   }
 }
 
-function makeSessionFactory(runner: (prompt: string) => Promise<RunResult>): (opts: SessionOpts) => Session {
+function makeSessionFactory(runner: (prompt: string) => Promise<RuntimeRunResult>): (opts: SessionOpts) => Session {
   return (_opts: SessionOpts): Session => ({
     async send(instruction: string): Promise<TurnResult> {
       const rr = await runner(instruction);
@@ -133,7 +133,7 @@ function attempt(status: RunStatus, turns: number, cost: number | null): Attempt
   };
 }
 
-function buildOk(opts: MockProviderOptions): RunResult {
+function buildOk(opts: MockProviderOptions): RuntimeRunResult {
   const cost = opts.cost ?? 0.001;
   return {
     output: opts.output ?? 'mocked ok',
@@ -159,7 +159,7 @@ function buildOk(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildIncomplete(opts: MockProviderOptions): RunResult {
+function buildIncomplete(opts: MockProviderOptions): RuntimeRunResult {
   return {
     output: opts.output ?? 'mock incomplete',
     status: 'incomplete',
@@ -183,7 +183,7 @@ function buildIncomplete(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildMaxTurns(opts: MockProviderOptions): RunResult {
+function buildMaxTurns(opts: MockProviderOptions): RuntimeRunResult {
   return {
     output: opts.output ?? 'mock max turns',
     status: 'incomplete',
@@ -207,7 +207,7 @@ function buildMaxTurns(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildReviewRework(opts: MockProviderOptions): RunResult {
+function buildReviewRework(opts: MockProviderOptions): RuntimeRunResult {
   return {
     output: opts.output ?? 'needs rework per review',
     status: 'ok',
@@ -234,7 +234,7 @@ function buildReviewRework(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): RunResult {
+function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): RuntimeRunResult {
   return {
     output: opts.output ?? 'mocked slow ok',
     status: 'ok',
@@ -259,7 +259,7 @@ function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): 
   };
 }
 
-function buildFromSequenceItem(item: SequenceItem): RunResult {
+function buildFromSequenceItem(item: SequenceItem): RuntimeRunResult {
   const cost = 0.001;
   return {
     output: item.output ?? 'mocked sequence item',
@@ -290,7 +290,7 @@ function buildFromSequenceItem(item: SequenceItem): RunResult {
 export function mockProvider(opts: MockProviderOptions): Provider {
   let seqIdx = 0;
 
-  const runner = (): RunResult => {
+  const runner = (): RuntimeRunResult => {
     const stage = opts.stage ?? 'ok';
     switch (stage) {
       case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
@@ -300,7 +300,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
     }
   };
-  const runOnce = async (prompt: string): Promise<RunResult> => {
+  const runOnce = async (prompt: string): Promise<RuntimeRunResult> => {
     opts.onPrompt?.(prompt);
     if (opts.delayMs) {
       await new Promise((resolve) => setTimeout(resolve, opts.delayMs));
@@ -321,7 +321,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
 }
 
 export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
-  const run = async (): Promise<RunResult> => {
+  const run = async (): Promise<RuntimeRunResult> => {
     const output = opts.partialOutput ?? 'mock cap output';
     if (opts.kind === 'cost') {
       return {
@@ -367,7 +367,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
 }
 
 export function throwingProvider(err: Error): Provider {
-  const run = async (): Promise<RunResult> => { throw err; };
+  const run = async (): Promise<RuntimeRunResult> => { throw err; };
   return {
     name: 'mock-throw',
     config: STUB_CONFIG,
@@ -390,7 +390,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     : messageOrOpts;
   if (opts.status && opts.status !== 'ok') {
     const statusFinal: RunStatus = opts.status;
-    const run = async (): Promise<RunResult> => ({
+    const run = async (): Promise<RuntimeRunResult> => ({
       output: `failure: ${opts.errorCode ?? statusFinal}`,
       status: statusFinal,
       usage: usage(null),
@@ -421,7 +421,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     };
   }
   const err = new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
-  const run = async (): Promise<RunResult> => { throw err; };
+  const run = async (): Promise<RuntimeRunResult> => { throw err; };
   return {
     name: 'mock-throw',
     config: STUB_CONFIG,
