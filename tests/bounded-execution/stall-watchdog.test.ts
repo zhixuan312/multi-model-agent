@@ -30,9 +30,11 @@ describe('startStallWatchdog', () => {
     };
     const dispose = startStallWatchdog(ctx);
 
+    // Use a real RESET_EVENT (codex_turn_started) — the previous
+    // `runner_turn_*` placeholders are no longer in RESET_EVENTS.
     for (let i = 0; i < 5; i++) {
       await vi.advanceTimersByTimeAsync(500);
-      bus.emit({ event: 'runner_turn_started', ts: new Date().toISOString() });
+      bus.emit({ event: 'codex_turn_started', ts: new Date().toISOString() });
     }
     expect(ctx.stall.controller.signal.aborted).toBe(false);
     dispose();

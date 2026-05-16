@@ -248,6 +248,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
       idleStallTimeoutMs: stallTimeoutMs,
       abortSignal: stallController.signal,
       ...(input.bus && { bus: input.bus as unknown as object }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
     });
     sessions.set(tier, session);
     return session;

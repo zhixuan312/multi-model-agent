@@ -75,6 +75,12 @@ export interface SessionOpts {
   idleStallTimeoutMs?: number;
   abortSignal: AbortSignal;
   bus?: object;
+  /** Task identity — required for per-task event tagging so the stall watchdog
+   *  can filter the shared bus. Optional only because some unit tests construct
+   *  sessions directly without a task context. */
+  batchId?: string;
+  /** Index within batch. */
+  taskIndex?: number;
 }
 
 export interface TurnOpts {

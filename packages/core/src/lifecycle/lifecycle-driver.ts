@@ -7,6 +7,17 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 import { GuardError } from '../bounded-execution/wall-clock-guard.js';
 
+/** Returns a promise that rejects when the signal aborts. Lets stage-handler
+ *  awaits unwind on watchdog abort even when the handler itself does not
+ *  observe the signal directly. Stays pending forever if no signal. */
+function abortAsRejection(signal: AbortSignal | undefined, message: string): Promise<never> {
+  if (!signal) return new Promise(() => { /* never resolves */ });
+  return new Promise((_, reject) => {
+    if (signal.aborted) { reject(new Error(message)); return; }
+    signal.addEventListener('abort', () => reject(new Error(message)), { once: true });
+  });
+}
+
 /**
  * Walk `plan` in order. For each stage:
  *   1. If halted and not `runOnHalt`, silently skip (no gate recorded).
@@ -84,7 +95,11 @@ export async function runStagePlan(
 
     const t0 = Date.now();
     try {
-      const gate = await stage.handler(state);
+      const stallSignal = (state.executionContext as ExecutionContext | undefined)?.stall?.controller?.signal;
+      const gate = await Promise.race([
+        stage.handler(state),
+        abortAsRejection(stallSignal, `stage ${stage.name} aborted by stall watchdog`),
+      ]);
       state.gates![stage.name] = gate;
       emitGateRecorded(state.executionContext, stage.name, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
       if (gate.outcome === 'halt') {

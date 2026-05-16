@@ -18,10 +18,22 @@ import type { EventEmitter } from '../events/event-emitter.js';
  * so the timer is cleared on the success path too.
  */
 
+// RESET_EVENTS: any event that proves a task is making real progress.
+// MUST be names actually emitted by the providers (see codex-cli-session.ts
+// + claude-session.ts). The previous values (runner_turn_*) were aspirational
+// — never wired anywhere — so the watchdog was acting as a dumb deadline
+// timer regardless of stage progress.
 const RESET_EVENTS = new Set<string>([
-  'runner_turn_started',
-  'runner_response_received',
-  'runner_turn_completed',
+  // codex CLI
+  'codex_turn_started',
+  'codex_turn_completed',
+  'codex_agent_message',
+  'codex_command_completed',
+  // claude SDK
+  'claude_turn_started',
+  'claude_turn_completed',
+  'claude_text_emission',
+  'claude_tool_call',
 ]);
 
 export interface StallWatchdogContext {
@@ -43,9 +55,13 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
 
   const busHandler = (event: Record<string, unknown>) => {
     const eventName = typeof event.event === 'string' ? event.event : '';
-    if (RESET_EVENTS.has(eventName)) {
-      ctx.stall.lastEventAtMs = Date.now();
-    }
+    if (!RESET_EVENTS.has(eventName)) return;
+    // Filter by task identity — the bus is process-wide and shared across all
+    // in-flight tasks. Without this filter, every task's progress events reset
+    // every other task's idle timer, and the watchdog never fires under load.
+    if (ctx.batchId !== undefined && event['batchId'] !== ctx.batchId) return;
+    if (ctx.taskIndex !== undefined && event['taskIndex'] !== ctx.taskIndex) return;
+    ctx.stall.lastEventAtMs = Date.now();
   };
   ctx.bus?.on(busHandler);
 

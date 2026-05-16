@@ -41,7 +41,17 @@ export class ClaudeSession implements Session {
       ts: new Date().toISOString(),
       model: args.model,
       cwd: args.opts.cwd,
+      ...this.taskTag(),
     });
+  }
+
+  /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
+   *  Required so the stall watchdog can filter the shared bus by task. */
+  private taskTag(): { batchId?: string; taskIndex?: number } {
+    return {
+      ...(this.args.opts.batchId !== undefined && { batchId: this.args.opts.batchId }),
+      ...(this.args.opts.taskIndex !== undefined && { taskIndex: this.args.opts.taskIndex }),
+    };
   }
 
   async send(instruction: string, _opts?: TurnOpts): Promise<TurnResult> {
@@ -55,6 +65,7 @@ export class ClaudeSession implements Session {
       turn: turnIndex,
       resume: Boolean(this.sessionId),
       ...(this.sessionId && { sessionId: this.sessionId }),
+      ...this.taskTag(),
     });
 
     // Single-shot prompt iterable. The SDK iterates this once to pull the
@@ -107,6 +118,7 @@ export class ClaudeSession implements Session {
         ts: new Date().toISOString(),
         name: e.name ?? 'unknown',
         message: e.message ?? String(err),
+        ...this.taskTag(),
       });
       try { q.close(); } catch { /* ignore */ }
       throw err;
@@ -133,6 +145,7 @@ export class ClaudeSession implements Session {
       filesRead: norm.filesRead.length,
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),
+      ...this.taskTag(),
     });
 
     return norm;
@@ -160,6 +173,7 @@ export class ClaudeSession implements Session {
           turn: this.turns,
           chars: b.text.length,
           preview: b.text.slice(0, 200),
+          ...this.taskTag(),
         });
       } else if (b.type === 'tool_use' && typeof b.name === 'string') {
         const inputPreview = typeof b.input === 'object' && b.input !== null
@@ -171,6 +185,7 @@ export class ClaudeSession implements Session {
           turn: this.turns,
           tool: b.name,
           input: inputPreview,
+          ...this.taskTag(),
         });
       }
     }
@@ -179,6 +194,6 @@ export class ClaudeSession implements Session {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.bus?.emit({ event: 'claude_session_closed', ts: new Date().toISOString() });
+    this.bus?.emit({ event: 'claude_session_closed', ts: new Date().toISOString(), ...this.taskTag() });
   }
 }
