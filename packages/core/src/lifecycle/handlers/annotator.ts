@@ -152,6 +152,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   let llmDurationMs = 0;
   let llmTurnsUsed = 0;
   let llmTransportFailed = false;
+  let llmModel: string | null = null;
   if (fallbackMode) {
     // Fallback findings: only gate-sourced findings flow through (gates.review,
     // gates.implement). lastRunResult.findings are dropped as part of tier-3
@@ -198,6 +199,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
       const tres = await runAnnotatorTurn({ prompt, ctx: ctx as unknown as Parameters<typeof runAnnotatorTurn>[0]['ctx'], tier: 'standard' });
       if (tres.kind === 'ok') {
         llmCostUSD = tres.costUSD ?? 0;
+        llmModel = tres.model;
         llmDurationMs = tres.ms;
         llmTurnsUsed = tres.turnsUsed;
         const parsed = extractAnnotateJson(tres.text);
@@ -237,7 +239,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     durationMs: Date.now() - t0,
     filesReadCount: 0,
     filesWrittenCount: 0,
-  }, { tier: llmTurnsUsed > 0 ? 'standard' : null, model: null });
+  }, { tier: llmTurnsUsed > 0 ? 'standard' : null, model: llmModel });
   // suppress unused-variable warning while keeping the durationMs field for
   // diagnostics callers; mergeStageStats already captured the value above.
   void llmDurationMs;
