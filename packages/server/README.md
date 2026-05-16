@@ -76,7 +76,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
+That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
 ### 4. Start the daemon + verify
 
@@ -196,7 +196,6 @@ Every `defaults` knob has a built-in. Override only when you need to.
 |---|---|---|
 | `defaults.timeoutMs` | `3600000` (60 min) | Hard task-level wall-clock cap (bumped from 30 min in 3.9.0) |
 | `defaults.stallTimeoutMs` | `1200000` (20 min) | Aborts in-flight runs idle for this long (bumped from 10 min in 3.9.0) |
-| `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling; returns `cost_exceeded` when hit |
 | `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full` |
 | `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd` |
 
