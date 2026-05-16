@@ -11,6 +11,53 @@ import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
+import { groupTasksByRepo, type TaskGroup } from './task-grouping.js';
+import { buildCancelledResult } from './build-cancelled-result.js';
+
+/**
+ * Inner loop for grouped dispatch. Runs each group in parallel; within
+ * each group runs tasks sequentially in caller input order. Aborted
+ * not-yet-started tasks receive a cancelled-result envelope.
+ * Failures within a group are caught by dispatchOne (RuntimeRunResult
+ * with workerStatus='failed') and DO NOT halt subsequent group members.
+ *
+ * Returns results indexed by original task order.
+ */
+export async function dispatchGroupedWithPrecomputedGroups(
+  tasks: TaskSpec[],
+  groups: TaskGroup[],
+  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
+  opts: { abortSignal?: AbortSignal },
+): Promise<RuntimeRunResult[]> {
+  const results: RuntimeRunResult[] = new Array(tasks.length);
+  await Promise.all(
+    groups.map(async (group) => {
+      for (const { task, originalIndex } of group.tasks) {
+        if (opts.abortSignal?.aborted) {
+          results[originalIndex] = buildCancelledResult();
+          continue;
+        }
+        results[originalIndex] = await dispatchOne(task, originalIndex);
+      }
+    }),
+  );
+  return results;
+}
+
+/**
+ * Convenience wrapper that resolves the grouping internally. Used by
+ * tests; production callers use the precomputed-groups variant so they
+ * can also set ctx.batchGroupCount and call ctx.attachBatchGroups before
+ * dispatch begins.
+ */
+export async function dispatchGrouped(
+  tasks: TaskSpec[],
+  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
+  opts: { abortSignal?: AbortSignal },
+): Promise<RuntimeRunResult[]> {
+  const groups = await groupTasksByRepo(tasks);
+  return dispatchGroupedWithPrecomputedGroups(tasks, groups, dispatchOne, opts);
+}
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
