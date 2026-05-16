@@ -60,6 +60,27 @@ export interface BuildContext {
 const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
 const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
 
+/**
+ * Catches StageModelMissingError thrown by LLM stage builders and converts
+ * it into a validation warning. The stage is dropped from the emitted event,
+ * but the rest of the event still ships. Per spec §6 + task A5b.
+ */
+function safeBuild<T>(
+  name: string,
+  fn: () => T | null,
+  validationWarnings: Array<{ path: string; rule: string }>,
+): T | null {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof StageModelMissingError) {
+      validationWarnings.push({ path: `stages.${name}`, rule: 'StageModelMissingError' });
+      return null;
+    }
+    throw e;
+  }
+}
+
 /** Projected finding shape used internally by the wire builder. Severity is
  *  always one of the 4-tier values (defaults to 'medium' when the source
  *  field lacked one, matching the wire's pre-existing default-medium policy). */
@@ -111,8 +132,8 @@ function normalizeSeverity(s: string | undefined): ProjectedFinding['severity'] 
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;
 
-  const stages = buildStages(route, runResult, ctx.gates);
   const validationWarnings: Array<{ path: string; rule: string }> = [];
+  const stages = buildStages(route, runResult, ctx.gates, validationWarnings);
 
   // Compute per-stage main-model-equivalent cost using the resolved rate card.
   // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
@@ -316,17 +337,19 @@ function buildStages(
   route: BuildContext['route'],
   rr: RuntimeRunResult,
   gates?: Record<string, StageGate<unknown>>,
+  validationWarnings?: Array<{ path: string; rule: string }>,
 ): StageEntryInternal[] {
+  const warnings = validationWarnings ?? [];
   const result: StageEntryInternal[] = [];
 
-  const impl = buildImplStage(rr, gates?.['implement']);
+  const impl = safeBuild('implementing', () => buildImplStage(rr, gates?.['implement']), warnings);
   if (impl) result.push(impl);
 
   if (REVIEWED_ROUTES.has(route)) {
     const status = (rr.reviewVerdict as string | undefined) ?? rr.qualityReviewStatus ?? rr.specReviewStatus ?? null;
     const stageRounds = (rr.stageStats?.review as { roundsUsed?: number } | undefined)?.roundsUsed;
     const rounds = stageRounds ?? (Math.max(rr.reviewRounds?.spec ?? 0, rr.reviewRounds?.quality ?? 0) || null);
-    const rev = buildReviewStage(rr, status, rounds, gates?.['review']);
+    const rev = safeBuild('review', () => buildReviewStage(rr, status, rounds, gates?.['review']), warnings);
     if (rev) {
       result.push(rev);
     } else if (QUALITY_ONLY_ROUTES.has(route)) {
@@ -344,14 +367,14 @@ function buildStages(
   }
 
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const rw = buildReworkStage(rr, gates?.['rework']);
+    const rw = safeBuild('rework', () => buildReworkStage(rr, gates?.['rework']), warnings);
     if (rw) result.push(rw);
   }
 
-  const an = buildAnnotatingStage(rr, gates?.['annotate']);
+  const an = safeBuild('annotating', () => buildAnnotatingStage(rr, gates?.['annotate']), warnings);
   if (an) result.push(an);
 
-  const cm = buildCommitStage(rr, gates?.['commit']);
+  const cm = safeBuild('committing', () => buildCommitStage(rr, gates?.['commit']), warnings);
   if (cm) result.push(cm);
 
   return result.slice(0, 8);
@@ -410,7 +433,10 @@ function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageE
   let base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
-  return { name: 'implementing', ...base, mainEquivalentCostUSD: null, isLlmStage: true } satisfies StageEntryInternal;
+  if (base.model === null) {
+    throw new StageModelMissingError('implementing');
+  }
+  return { name: 'implementing', ...base, model: base.model!, mainEquivalentCostUSD: null, isLlmStage: true } satisfies StageEntryInternal;
 }
 
 /** Synthetic review stage entry for read-only routes that hardcode
@@ -465,6 +491,9 @@ function buildReviewStage(
   let base = extractStageData(ss, rr, 'review');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
+  if (base.model === null) {
+    throw new StageModelMissingError('review');
+  }
 
   // v4.4.x: projectFindings reads from structuredReport.findings (read-only
   // routes) and structuredReport.reviewConcerns (reviewed write routes). The
@@ -497,6 +526,7 @@ function buildReviewStage(
   return {
     name: 'review',
     ...base,
+    model: base.model!,
     verdict,
     roundsUsed: Math.min(rounds ?? 1, 10),
     concernCategories: categories.slice(0, 9),
@@ -511,6 +541,9 @@ function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
   let base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
+  if (base.model === null) {
+    throw new StageModelMissingError('rework');
+  }
 
   const stageConcerns = projectFindings(rr).filter(
     c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review' || c.source === 'implementer',
@@ -520,6 +553,7 @@ function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
   return {
     name: 'rework',
     ...base,
+    model: base.model!,
     triggeringConcernCategories: triggeringCategories.slice(0, 9),
     mainEquivalentCostUSD: null,
     isLlmStage: true,
@@ -542,6 +576,7 @@ function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): 
   return {
     name: 'annotating',
     ...base,
+    model: base.model || 'custom',
     isLlmStage,
     mainEquivalentCostUSD: null,
     outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed' | undefined) ?? 'not_applicable',
@@ -566,6 +601,7 @@ function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
   return {
     name: 'committing',
     ...base,
+    model: base.model || 'custom',
     filesCommittedCount,
     // CommitStageRunner does not track branch-creation directly today;
     // name-diff against pre-commit refs is unreliable, so we report
