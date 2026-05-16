@@ -9,6 +9,7 @@ import { parseWorkerOutput } from '../worker-output-contract.js';
 import type { Finding, Citation } from '../stage-io.js';
 import { runWorkerTurn } from '../../providers/run-worker-turn.js';
 import { performImplementation } from '../perform-implementation.js';
+import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.js';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -140,11 +141,38 @@ export async function implementHandler(
     // Transform lastRunResult into ImplementPayload for the stage gate.
     // Note: parseWorkerOutput extracts filesChanged from the structured output JSON.
     const parsed = parseWorkerOutput(result.output ?? '');
+    const findings: Finding[] = [...(result.findings ?? [])];
+    const outputTargets = (ctx as { outputTargets?: string[] }).outputTargets ?? [];
+    if (outputTargets.length > 0) {
+      let nextId = findings.length + 1;
+      try {
+        const missing = checkOutputTargets(outputTargets);
+        if (missing.length > 0) {
+          findings.push({
+            id: `F${nextId++}`,
+            severity: 'high',
+            category: 'missing_output_targets',
+            claim: `Task declared ${missing.length} output target(s) that were not produced`,
+            evidence: `Missing paths: ${missing.join(', ')}`,
+            source: 'implementer',
+          });
+        }
+      } catch (e) {
+        findings.push({
+          id: `F${nextId++}`,
+          severity: 'medium',
+          category: 'output_targets_check_failed',
+          claim: 'Output-target existence check raised an error',
+          evidence: e instanceof Error ? e.message : String(e),
+          source: 'implementer',
+        });
+      }
+    }
     const payload: ImplementPayload = {
       workerSelfAssessment: result.workerStatus ?? 'failed',
       summary: parsed.summary ?? result.summary ?? '',
       filesChanged: parsed.filesChanged ?? result.filesWritten ?? result.filesChanged ?? [],
-      findings: result.findings ?? [],
+      findings,
       citations: (result.citations ?? parsed.citations ?? []) as Citation[],
       criteriaSucceeded: result.criteriaSucceeded ?? parsed.criteriaSucceeded ?? [],
       criteriaErrors: result.criteriaErrors ?? parsed.criteriaErrors ?? [],
