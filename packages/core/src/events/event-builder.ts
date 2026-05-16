@@ -98,6 +98,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const { route, runResult, client, mainModel } = ctx;
 
   const stages = buildStages(route, runResult, ctx.gates);
+  const validationWarnings: Array<{ path: string; rule: string }> = [];
 
   // Compute per-stage main-model-equivalent cost using the resolved rate card.
   // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
@@ -137,7 +138,34 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalDurationMs = clampDurationMsTotal(rawTotal);
 
   // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
-  const tierUsage = rollupByTier(stages.map(s => ({
+  // Filter to LLM-billable stages only — synthetic stages (annotated
+  // placeholder review on read-only routes, the commit stage) carry
+  // model: 'custom' and would corrupt tier rollup under last-seen
+  // semantics. Per spec §4.1.1 and §4.1.2.
+  const llmStages = stages.filter(s => s.isLlmStage);
+
+  // Tier-uniformity invariant (spec D9). Every LLM-billable stage at
+  // a given tier must share the same canonical model id. If violated,
+  // omit that tier from tierUsage and record a diagnostic — better
+  // honest-null than silent-wrong attribution.
+  const tierModels: Partial<Record<'standard' | 'complex', Set<string>>> = {};
+  for (const s of llmStages) {
+    const tier = s.tier as 'standard' | 'complex';
+    const set = tierModels[tier] ?? new Set<string>();
+    set.add(s.model);
+    tierModels[tier] = set;
+  }
+  const divergentTiers = new Set<'standard' | 'complex'>();
+  for (const tier of ['standard', 'complex'] as const) {
+    if ((tierModels[tier]?.size ?? 0) > 1) {
+      divergentTiers.add(tier);
+      validationWarnings.push({ path: `tierUsage.${tier}`, rule: 'R-TIER-MODEL-DIVERGENCE' });
+    }
+  }
+
+  const rollupInput = llmStages.filter(s => !divergentTiers.has(s.tier as 'standard' | 'complex'));
+
+  const tierUsage = rollupByTier(rollupInput.map(s => ({
     tier: s.tier as 'standard' | 'complex',
     model: s.model,
     costUSD: s.costUSD,
@@ -186,6 +214,13 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const distinctProviders = new Set(escalationLog.map(a => a.provider)).size;
   const escalationCount = Math.max(0, distinctProviders - 1);
 
+  // Strip isLlmStage (producer-internal) before wire emission — per spec D2,
+  // isLlmStage is NOT emitted on the wire.
+  const stagesForWire = stages.map(s => {
+    const { isLlmStage, ...rest } = s;
+    return rest as StageEntryType;
+  });
+
   const internalRecord = {
     eventId: randomUUID(),
     route,
@@ -222,7 +257,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
     filesWrittenCount: (ctx.realFilesChanged ?? []).length,
-    stages,
+    stages: stagesForWire,
+    validation_warnings: validationWarnings.length > 0 ? validationWarnings : undefined,
   };
 
   return buildWirePayload(internalRecord);
@@ -265,8 +301,8 @@ function buildStages(
   route: BuildContext['route'],
   rr: RuntimeRunResult,
   gates?: Record<string, StageGate<unknown>>,
-): StageEntryType[] {
-  const result: StageEntryType[] = [];
+): StageEntryInternal[] {
+  const result: StageEntryInternal[] = [];
 
   const impl = buildImplStage(rr, gates?.['implement']);
   if (impl) result.push(impl);
@@ -359,7 +395,7 @@ function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageE
   let base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
-  return { name: 'implementing', ...base, isLlmStage: true } satisfies StageEntryInternal;
+  return { name: 'implementing', ...base, mainEquivalentCostUSD: null, isLlmStage: true } satisfies StageEntryInternal;
 }
 
 /** Synthetic review stage entry for read-only routes that hardcode
@@ -450,6 +486,7 @@ function buildReviewStage(
     roundsUsed: Math.min(rounds ?? 1, 10),
     concernCategories: categories.slice(0, 9),
     findingsBySeverity,
+    mainEquivalentCostUSD: null,
     isLlmStage: true,
   } satisfies StageEntryInternal;
 }
@@ -469,6 +506,7 @@ function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
     name: 'rework',
     ...base,
     triggeringConcernCategories: triggeringCategories.slice(0, 9),
+    mainEquivalentCostUSD: null,
     isLlmStage: true,
   } satisfies StageEntryInternal;
 }
