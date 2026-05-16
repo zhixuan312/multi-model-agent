@@ -203,10 +203,32 @@ export async function executeTask<Input, Brief, Report>(
     }
   };
 
-  const results: RuntimeRunResult[] =
-    tasks.length === 1
-      ? [await dispatchOne(tasks[0]!, 0)]
-      : await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
+  let results: RuntimeRunResult[];
+  if (config.serializeSameRepo && tasks.length > 1) {
+    // Compute groups once so we can both:
+    //   - set ctx.batchGroupCount BEFORE dispatch (task-runner reads this
+    //     to gate PARALLEL_SAFETY_SUFFIX), and
+    //   - call ctx.attachBatchGroups so the 202 headline composer can
+    //     describe active groups.
+    const groups = await groupTasksByRepo(tasks);
+    (ctx as { batchGroupCount?: number }).batchGroupCount = groups.length;
+    ctx.attachBatchGroups?.(
+      groups.map((g) => ({
+        key: g.key,
+        taskIndices: g.tasks.map((t) => t.originalIndex),
+      })),
+    );
+    results = await dispatchGroupedWithPrecomputedGroups(
+      tasks,
+      groups,
+      (task, i) => dispatchOne(task, i),
+      { abortSignal: ctx.stall.controller.signal },
+    );
+  } else if (tasks.length === 1) {
+    results = [await dispatchOne(tasks[0]!, 0)];
+  } else {
+    results = await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
+  }
   const wallClockMs = Date.now() - startMs;
 
   // Gap 3 fix (4.0.3+): surface the executor's wall-clock as
