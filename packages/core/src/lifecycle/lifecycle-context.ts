@@ -57,6 +57,11 @@ export interface ExecutionContext {
    */
   getSession(tier: AgentType): Session;
   closeSessions(): Promise<void>;
+  /** Returns OS pids of every currently-open session's CLI subprocess (if any).
+   *  Used by shutdown drain to SIGKILL stragglers when closeSessions() exceeds
+   *  its grace window. Empty array when no sessions are open OR the providers
+   *  do not spawn subprocesses (e.g. in-process SDK clients). */
+  getActivePids(): number[];
 
   // ── Per-task budgets ──
   timing: {
@@ -159,4 +164,8 @@ export interface ExecutionContext {
   contextBlockStore?: ContextBlockStore;
   /** BatchId owning this execution — threaded so ActivityTracker can tag ticks. */
   batchId?: string;
+  /** Optional BatchRegistry — when set, task-runner attaches this ctx onto
+   *  the entry so shutdown drain can close sessions across all in-flight
+   *  tasks. Server callers pass this through HandlerDeps; CLI callers omit. */
+  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
 }

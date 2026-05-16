@@ -193,6 +193,10 @@ export interface DispatchTaskInput {
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  /** Registry to attach/detach the per-task ExecutionContext on. When provided,
+   *  shutdown drain in serve.ts can walk the registry and call closeSessions()
+   *  on every in-flight task before the daemon exits. */
+  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -259,6 +263,14 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     sessions.clear();
     await Promise.allSettled(entries.map(([, s]) => s.close()));
   };
+  const getActivePids = (): number[] => {
+    const pids: number[] = [];
+    for (const sess of sessions.values()) {
+      const pid = sess.getPid?.();
+      if (typeof pid === 'number' && pid > 0) pids.push(pid);
+    }
+    return pids;
+  };
 
   const heartbeat = input.recordHeartbeat
     ? new ActivityTracker(
@@ -296,6 +308,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     implementerIdentity: undefined,
     getSession,
     closeSessions,
+    getActivePids,
     timing: { startMs: startMsAt, timeoutMs, deadlineMs: deadlineAt, stallTimeoutMs },
     budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
     wallClockGuard: new WallClockGuard(timeoutMs),
@@ -332,6 +345,13 @@ export async function runTaskViaDispatcher(
 
   void ATTEMPT_BUDGETS[toolCategory];
 
+  // Register this task's ExecutionContext on the BatchRegistry so shutdown
+  // drain (serve.ts cleanupSignal) can find every in-flight task and call
+  // closeSessions() on it before the daemon exits. Detached in finally{}.
+  if (input.batchRegistry && input.batchId !== undefined) {
+    input.batchRegistry.attachExecutionContext(input.batchId, input.taskIndex, executionContext);
+  }
+
   // Arm the orchestrator stall watchdog. Spec §4.7: the AbortController on
   // ctx.stall has been declared since v3.x but never armed; this wires the
   // timer that fires .abort() after stallTimeoutMs of no runner events.
@@ -363,6 +383,11 @@ export async function runTaskViaDispatcher(
       // query handles release. Errors swallowed so disposal can't mask
       // the task's real result.
       await executionContext.closeSessions().catch(() => { /* idempotent */ });
+      // Detach from BatchRegistry — closeSessions already ran, so shutdown
+      // drain shouldn't re-close.
+      if (input.batchRegistry && input.batchId !== undefined) {
+        input.batchRegistry.detachExecutionContext(input.batchId, input.taskIndex);
+      }
     }
 
     // v5: dispatcher.dispatch returns ComposePayload as `body` and the full

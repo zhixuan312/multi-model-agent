@@ -66,6 +66,9 @@ export function buildExecutionContext(
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,
+    // Thread the BatchRegistry so task-runner can attach this ctx for
+    // shutdown-drain visibility into in-flight tasks.
+    batchRegistry: deps.batchRegistry,
     task: { prompt: '' },
     taskIndex: 0,
     cwd: pc.cwd,

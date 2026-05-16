@@ -204,6 +204,7 @@ export async function executeTask<Input, Brief, Report>(
         mainModel: ctx.mainModel,
         bus: ctx.bus,
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
+        ...(ctx.batchRegistry && { batchRegistry: ctx.batchRegistry }),
         ...((ctx as any).reviewerEngine !== undefined && { reviewerEngine: (ctx as any).reviewerEngine }),
       });
     } catch (e) {
