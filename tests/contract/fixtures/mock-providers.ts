@@ -60,7 +60,6 @@ function statusToTermination(
 ): TurnResult['terminationReason'] {
   switch (status) {
     case 'ok': return 'ok';
-    case 'cost_exceeded': return 'cost_exceeded';
     case 'timeout': return 'time_exceeded';
     case 'incomplete':
       if (incompleteReason === 'stall') return 'stalled';
@@ -366,21 +365,6 @@ export function mockProvider(opts: MockProviderOptions): Provider {
 export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
   const run = async (): Promise<RuntimeRunResult> => {
     const output = opts.partialOutput ?? 'mock cap output';
-    if (opts.kind === 'cost') {
-      return {
-        ...buildIncomplete({ stage: 'incomplete', output }),
-        status: 'cost_exceeded',
-        incompleteReason: 'cost_cap',
-        terminationReason: {
-          cause: 'cost_exceeded',
-          turnsUsed: 1,
-          hasFileArtifacts: false,
-          usedShell: false,
-          workerSelfAssessment: null,
-          wasPromoted: false,
-        },
-      };
-    }
     if (opts.kind === 'wall_clock') {
       return {
         ...buildIncomplete({ stage: 'incomplete', output }),
