@@ -18,11 +18,7 @@ describe('TerminalStatusDeriver truth table', () => {
     expect(d.derive({ ...base, shutdownInProgress: true }).terminalStatus).toBe('unavailable');
   });
 
-  it('row 2: guard_cost_ceiling -> cost_exceeded', () => {
-    expect(d.derive({ ...base, guardFires: ['guard_cost_ceiling'] }).terminalStatus).toBe('cost_exceeded');
-  });
-
-  it('row 3a: guard_time_ceiling -> timeout', () => {
+  it('row 2a: guard_time_ceiling -> timeout', () => {
     expect(d.derive({ ...base, guardFires: ['guard_time_ceiling'] }).terminalStatus).toBe('timeout');
   });
 
@@ -86,9 +82,5 @@ describe('TerminalStatusDeriver truth table', () => {
 
   it('row 10 fallback: workerStatus=failed -> incomplete', () => {
     expect(d.derive({ ...base, workerStatus: 'failed' }).terminalStatus).toBe('incomplete');
-  });
-
-  it('precedence: shutdown beats guard fires', () => {
-    expect(d.derive({ ...base, shutdownInProgress: true, guardFires: ['guard_cost_ceiling'] }).terminalStatus).toBe('unavailable');
   });
 });

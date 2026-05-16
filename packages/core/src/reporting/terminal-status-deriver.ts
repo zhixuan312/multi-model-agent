@@ -23,9 +23,7 @@ export class TerminalStatusDeriver {
   derive(inputs: TerminalInputs): TerminalDecision {
     // 1. shutdown
     if (inputs.shutdownInProgress) return { terminalStatus: 'unavailable', errorCode: inputs.errorCode };
-    // 2. cost ceiling
-    if (inputs.guardFires.includes('guard_cost_ceiling')) return { terminalStatus: 'cost_exceeded', errorCode: inputs.errorCode };
-    // 3. time / idle
+    // 2. time / idle
     if (inputs.guardFires.includes('guard_time_ceiling') || inputs.guardFires.includes('guard_idle_timeout')) {
       return { terminalStatus: 'timeout', errorCode: inputs.errorCode };
     }
