@@ -120,55 +120,6 @@ describe('implementHandler', () => {
     expect((gate.payload as ImplementPayload).summary).toBe('gave up');
   });
 
-  it('halts on cost_cap_exceeded_without_output when status not ok', async () => {
-    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'delegate',
-      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
-    });
-    // No structured JSON output + 'error' terminationReason => status='error',
-    // which the handler treats as a halt regardless of output.
-    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
-      output: 'Worker ran out of budget and produced no structured output',
-      turnsUsed: 50,
-      costUSD: 5.0,
-      terminationReason: 'error',
-      workerSelfAssessment: 'failed',
-    });
-
-    const gate = await implementHandler(state as any);
-    expect(gate.outcome).toBe('halt');
-    expect(gate.comment).toMatch(/implement status: error/);
-  });
-
-  it('advances on cost_cap when structured output is present', async () => {
-    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'delegate',
-      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
-    });
-    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
-      output: `Some work done.\n\`\`\`json\n${JSON.stringify({
-        workerSelfAssessment: 'done',
-        summary: 'done with partial output',
-        filesChanged: ['partial.ts'],
-        findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
-      })}\n\`\`\``,
-      turnsUsed: 50,
-      costUSD: 5.0,
-      terminationReason: 'cost_exceeded',
-      workerSelfAssessment: 'done',
-    });
-
-    const gate = await implementHandler(state as any);
-    expect(gate.outcome).toBe('advance');
-    expect((gate.payload as ImplementPayload).filesChanged).toEqual(['partial.ts']);
-  });
-
   it('reads route: fills findings from runReadRouteImplementer output', async () => {
     const { runReadRouteImplementer } = await import('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');

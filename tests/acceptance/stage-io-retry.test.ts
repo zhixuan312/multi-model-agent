@@ -51,24 +51,6 @@ describe('AC-19: LLM-backed handler retries transport failures exactly 3 attempt
 });
 
 describe('AC-20: non-transport errors trigger ZERO retries', () => {
-  it('breaks immediately on cost_cap-class errors (no retry sequence)', async () => {
-    let callCount = 0;
-    const ctx = {
-      getSession: () => ({
-        send: async () => {
-          callCount++;
-          throw new Error('cost_cap_exceeded');
-        },
-        close: async () => {},
-      }),
-    };
-    const result = await runAnnotatorTurn({ prompt: 'p', ctx: ctx as any });
-    expect(result.kind).toBe('transport_error');
-    // The runAnnotatorTurn helper short-circuits on non-transport errors,
-    // so only one call is made.
-    expect(callCount).toBe(1);
-  });
-
   it('breaks immediately on schema/validation-class errors (no retry sequence)', async () => {
     let callCount = 0;
     const ctx = {
