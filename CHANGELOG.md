@@ -10,12 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Dispatch behavior for write routes**: `/delegate` and `/execute-plan` now serialize tasks that share a git repository (or share a cwd when not in a git repo), running them in caller input order. Tasks in different repositories still run in parallel. This eliminates a class of silent data loss where two parallel tasks could race on file edits or have one task's commit accidentally include another's mid-flight changes. See `docs/superpowers/specs/2026-05-16-sequential-same-repo-dispatch-design.md`.
+- **Reviewer cross-tier inversion (core).** The reviewer stage previously hardcoded `getSession('standard')` regardless of the implementer's tier — the same haiku that wrote the code reviewed it, defeating the "different perspective" intent of code review. Reviewer now runs on the opposite tier: `implementer=standard → reviewer=complex` (capable second-opinion of cheap work) and `implementer=complex → reviewer=standard` (cheap sanity-check of expensive work). Single-tier deployments fall back to the implementer tier. Cost note: standard-tier delegate runs that previously cost ~$0.04 (impl) + $0.02 (review) will now cost ~$0.04 (impl) + ~$0.40 (gpt-5.4 review) — the price of the second opinion.
+- **Rework matches implementer tier (core).** Previously hardcoded `'standard'`; now reads implementer tier from `executionContext.assignedTier` (defensive fallback to implementing-stage gate payload, then `'standard'`, then any available provider). Rework's job is to fix the implementer's work, so it needs the same capability.
+- **Annotator stage records the canonical model id (core).** Previously emitted `model: null` to `mergeStageStats`, which fell back to the `'custom'` literal at `extractStageData`. The chain `runAnnotatorTurn` → `annotator.ts:240` now passes the real model from `turn.model` through to the stage stats. Visible in telemetry as `stages[annotating].model = 'claude-haiku-4-5'` instead of `'custom'`.
 
 ### Added
 
 - Pending-batch headlines now indicate sequential and group status for affected batches (e.g., `(sequential)`, `(group 1/2, sequential)`).
 - A `[REPO HYGIENE]` advisory is prepended to a serial task's prompt when the previous task in its group left uncommitted edits.
 - `batch_completed` telemetry events gain three additive fields: `groupCount`, `groupSizes`, `serializationApplied`.
+- **Cross-tier producer fix for `tierUsage.<tier>.model` (core).** Introduced producer-internal `isLlmStage: boolean` on every stage builder (required field, compile-time enforced). `rollupByTier` now filters out non-LLM stages (synthetic review, commit) before computing tier rollup, so synthetic placeholders no longer corrupt `tierUsage.<tier>.model` under last-seen semantics. Added a tier-uniformity invariant: if two LLM stages share a tier with different models, the tier is omitted from `tierUsage` and an `R-TIER-MODEL-DIVERGENCE` diagnostic is recorded in `validation_warnings`. Added `StageModelMissingError` defense: a `safeBuild` wrapper around each stage builder catches missing-model errors, drops the stage from `stages[]`, and emits a `StageModelMissingError` diagnostic; the rest of the event still ships. The wire schema is unchanged (`isLlmStage` is stripped before emission).
+- **Full per-stage token attribution for annotator and reviewer stages (core).** `RunAnnotatorResult` and `RunReviewerResult` now carry `inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedNonReadTokens` (read from `turn.usage` on the Session.send result). The annotator handler propagates these through `mergeStageStats` (previously hardcoded to zeros). The review handler newly calls `mergeStageStats('review', ...)` aggregated across spec + quality reviewers — previously the call was missing entirely, leaving `stageStats.review` undefined and `buildReviewStage` returning `null`. The review stage entry was silently invisible in telemetry on every `reviewPolicy: 'full'` delegate / execute-plan run.
+
+### Fixed
+
+- **`stages[*].model` for non-implementer LLM stages no longer reads `'custom'` (core).** Annotator and reviewer were emitting the literal `'custom'` sentinel because their respective turn helpers threw away the model id returned by `Session.send`. Fixed in `run-annotator-turn.ts` and `run-reviewer.ts`.
+- **Codex subprocess: spawn detached and kill via process group (core).** Prevents zombie codex processes when the parent task is cancelled mid-run.
+- **Codex stream: settle `consumeStream` on `exit`, not just `close` (core).** Earlier behavior could hang waiting for stream close after the subprocess had already exited.
+- **`repo-hygiene.ts` `getDirtyFiles`: correct status-prefix strip + handle quoted paths (core).** Old regex `^.{2,3}\s+` allowed variable-width status chars and could swallow leading spaces in paths. Quoted paths (git wraps paths with spaces / non-ASCII in `"..."`) were returned with quotes intact, breaking downstream comparisons. Now uses `substring(3)` for exact-width strip and JSON-parses quoted paths.
+
+### Backend (separate repo `multi-model-agent-telemetry-backend`)
+
+- **Migration 031**: backfill historical `events_raw` rows where the producer wrote the literal `'custom'` into `standard_model` / `complex_model`. Source of truth: `event->'stages'` JSONB with a `costUSD > 0` LLM-billable stage at the target tier, falling back to `event->>'implementerModel'` when `implementerTier` matches the target column's tier. Includes a `tier_attribution_backfill_diagnostics` table that flags rows where multiple distinct non-`'custom'` models share a tier (pre-fix corruption edge case) — those rows are left unchanged for operator review.
+- **Migration 032**: two-pass sweep that supersedes 031 for residual state. Pass A re-runs 031's repair to catch rows ingested between 031 deployment and the producer release. Pass B NULLs out the remaining `'custom'` rows where no real model can be derived (legitimate "no LLM stage at this tier" rows under the new producer logic).
+- **`tier-attribution-alerts` cron job + `/healthz` integration**: counts (a) regression rows showing `standard_model = 'custom'` with a real `implementerModel` and (b) `validation_warnings` rules `StageModelMissingError` / `R-TIER-MODEL-DIVERGENCE`. Non-zero counts cause `/healthz` to return 503 with a `tierAttribution` detail block.
 
 ## [4.5.4] - 2026-05-14
 
@@ -229,7 +247,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...HEAD
+[4.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...v4.6.0
 [4.5.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...v4.5.4
 [4.5.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...v4.5.2
