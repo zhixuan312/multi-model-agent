@@ -120,7 +120,7 @@ export const ResearchAdapterEnum = z.enum([
 
 // ── §12 Diagnostics ───────────────────────────────────────────────────────
 
-export const IncompleteReasonEnum = z.enum(['turn_cap', 'cost_cap', 'timeout', 'missing_sections']);
+export const IncompleteReasonEnum = z.enum(['turn_cap', 'timeout', 'missing_sections']);
 
 /**
  * Forward-declared per spec enums.md §12. Consumed when the debug-report

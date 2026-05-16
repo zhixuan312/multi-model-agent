@@ -22,7 +22,7 @@ export interface InvestigateHeadlineInput {
   citationCount: number;
   confidenceLevel: 'high' | 'medium' | 'low' | null;
   unresolvedCount: number;
-  incompleteReason?: 'turn_cap' | 'cost_cap' | 'timeout' | 'missing_sections';
+  incompleteReason?: 'turn_cap' | 'timeout' | 'missing_sections';
 }
 
 export function composeInvestigateTerminalHeadline(input: InvestigateHeadlineInput): string {

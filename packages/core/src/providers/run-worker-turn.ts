@@ -15,7 +15,7 @@ export type WorkerTurnInput = {
 };
 
 export type WorkerTurnResult =
-  | { kind: 'ok'; text: string; costUSD: number; turnsUsed: number; stopReason: 'normal' | 'turn_cap' | 'cost_cap' | 'timeout' }
+  | { kind: 'ok'; text: string; costUSD: number; turnsUsed: number; stopReason: 'normal' | 'turn_cap' | 'timeout' }
   | { kind: 'transport_error'; message: string }
   | { kind: 'sandbox_violation'; path: string };
 
@@ -68,7 +68,7 @@ export async function runWorkerTurn(input: WorkerTurnInput): Promise<WorkerTurnR
   }
 }
 
-function mapStopReason(r?: string): 'normal' | 'turn_cap' | 'cost_cap' | 'timeout' {
+function mapStopReason(r?: string): 'normal' | 'turn_cap' | 'timeout' {
   switch (r) {
     case 'ok': return 'normal';
     case 'cap_exhausted': return 'turn_cap';
