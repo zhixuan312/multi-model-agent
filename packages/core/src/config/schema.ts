@@ -17,18 +17,6 @@ export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
  * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
 export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
 
-/** Per-task cost cap in USD. Negative is rejected; zero allows free-agent
- * runs (both input/output price rates set to 0). */
-export const DEFAULT_MAX_COST_USD = 10;
-
-/** Pre-stop threshold ratio for cost — the runtime warns and may refuse
- * new turns when cost reaches DEFAULT_MAX_COST_USD × this ratio ($8).
- * A turn already in flight is allowed to complete, so the worst-case
- * total is DEFAULT_MAX_COST_USD / MAX_COST_PRESTOP_RATIO ($12.50).
- * This is NOT an 80%-overshoot allowance; it is an 80%-of-cap pre-stop.
- * See §3.8 for the rationale. */
-export const MAX_COST_PRESTOP_RATIO = 0.80;
-
 /** Clock counterpart of MAX_COST_PRESTOP_RATIO — same pre-stop semantics
  * applied to wall-clock time: the runtime warns at
  * DEFAULT_TASK_TIMEOUT_MS × this ratio (48 min), with a worst-case
@@ -151,13 +139,6 @@ const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // is allowed (free agents can set both rates to 0 to get a deterministic
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
-
-export const pricingSchema = z.object({
-  inputUSDPerMillion: z.number().nonnegative().finite(),
-  outputUSDPerMillion: z.number().nonnegative().finite(),
-  cachedReadUSDPerMillion: z.number().nonnegative().finite(),
-  cachedNonReadUSDPerMillion: z.number().nonnegative().finite(),
-}).strict();
 
 const baseAgentFields = {
   model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
