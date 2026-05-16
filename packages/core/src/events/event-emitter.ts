@@ -36,6 +36,11 @@ export class EventEmitter {
     this.listeners.push(l);
   }
 
+  off(l: EventListener): void {
+    const i = this.listeners.indexOf(l);
+    if (i !== -1) this.listeners.splice(i, 1);
+  }
+
   addSink(sink: EventSink): void {
     this.sinks.push(sink);
   }
