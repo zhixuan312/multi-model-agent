@@ -310,7 +310,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     closeSessions,
     getActivePids,
     timing: { startMs: startMsAt, timeoutMs, deadlineMs: deadlineAt, stallTimeoutMs },
-    budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
     wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
