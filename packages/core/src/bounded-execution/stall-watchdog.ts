@@ -41,12 +41,13 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
     stallTimeoutMs: ctx.timing.stallTimeoutMs,
   });
 
-  ctx.bus?.on((event) => {
+  const busHandler = (event: Record<string, unknown>) => {
     const eventName = typeof event.event === 'string' ? event.event : '';
     if (RESET_EVENTS.has(eventName)) {
       ctx.stall.lastEventAtMs = Date.now();
     }
-  });
+  };
+  ctx.bus?.on(busHandler);
 
   // Poll interval: fine enough to fire promptly, coarse enough to avoid
   // burning CPU on idle batches. Clamped to [1s, 5s].
@@ -78,9 +79,6 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
 
   return () => {
     clearInterval(interval);
-    // EventEmitter has no off() in v4. The captured `ctx` becomes garbage
-    // after the orchestrator returns and the listener is no longer
-    // reachable in a way that matters. Adding off() is a follow-up if
-    // listener accumulation shows up in profiling.
+    ctx.bus?.off(busHandler);
   };
 }
