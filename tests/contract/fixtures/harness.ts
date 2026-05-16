@@ -106,7 +106,6 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
     defaults: {
       timeoutMs: 1_800_000,
-      maxCostUSD: 10,
       tools: 'full',
       sandboxPolicy: 'cwd-only',
     },

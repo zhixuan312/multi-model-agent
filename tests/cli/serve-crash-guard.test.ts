@@ -14,7 +14,6 @@ function minimalConfig(tokenFile: string) {
       tools: 'full' as const,
       timeoutMs: 60_000,
       stallTimeoutMs: 30_000,
-      maxCostUSD: 10,
       sandboxPolicy: 'cwd-only' as const,
     },
     server: {

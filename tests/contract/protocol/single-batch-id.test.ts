@@ -19,7 +19,7 @@ describe('single batchId namespace (T4)', () => {
         standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
         complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
       },
-      defaults: { tools: 'none', timeoutMs: 30_000, maxCostUSD: 1, sandboxPolicy: 'cwd-only' },
+      defaults: { tools: 'none', timeoutMs: 30_000, sandboxPolicy: 'cwd-only' },
     } as never);
   });
   afterAll(async () => { await server.stop(); });
