@@ -70,9 +70,6 @@ export interface ExecutionContext {
     deadlineMs: number;
     stallTimeoutMs: number;
   };
-  budgets: {
-    maxCostUSD: number | undefined;
-  };
 
   /** Wall-clock budget guard. Throws GuardError once budgetMs since task start
    *  is exceeded. Stage entries + tool-call boundaries call checkOrThrow(). */
