@@ -260,8 +260,13 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
 
   const heartbeat = input.recordHeartbeat
     ? new ActivityTracker(
-        // onProgress: forward heartbeat events to the bus if present
-        (e) => { input.bus?.emit(e as unknown as Record<string, unknown>); },
+        // onProgress: internal-only tick hook. The recordHeartbeat callback
+        // (passed via options) is the canonical channel for headline updates.
+        // We deliberately do NOT forward ticks to the observability bus —
+        // the tick shape (kind: 'heartbeat') does not conform to the bus
+        // event schema (event: 'heartbeat') and is not part of the JSONL
+        // contract consumed by telemetry/observability sinks.
+        () => { /* no-op */ },
         {
           provider: resolved.provider.name,
           ...(input.mainModel && { mainModel: input.mainModel }),
