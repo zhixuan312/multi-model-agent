@@ -267,16 +267,18 @@ const serverLimitsSchema = z.object({
   shutdownDrainMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.shutdownDrainMs),
 }).default(() => DEFAULT_SERVER_LIMITS);
 
+const serverBlockSchema = z.object({
+  bind: z.string().default(DEFAULT_SERVER.bind),
+  port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
+  auth: z.object({
+    tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
+  }).default(() => DEFAULT_SERVER_AUTH),
+  limits: serverLimitsSchema,
+  autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
+}).default(() => DEFAULT_SERVER);
+
 export const serverConfigSchema = z.object({
-  server: z.object({
-    bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
-    auth: z.object({
-      tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
-    }).default(() => DEFAULT_SERVER_AUTH),
-    limits: serverLimitsSchema,
-    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
-  }).default(() => DEFAULT_SERVER),
+  server: serverBlockSchema,
 }).strict();
 
 export const multiModelConfigSchema = z.object({
@@ -290,15 +292,7 @@ export const multiModelConfigSchema = z.object({
     logDir: z.string().min(1).optional(),
     verbose: z.boolean().default(false),
   }).optional(),
-  server: z.object({
-    bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
-    auth: z.object({
-      tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
-    }).default(() => DEFAULT_SERVER_AUTH),
-    limits: serverLimitsSchema,
-    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
-  }).default(() => DEFAULT_SERVER),
+  server: serverBlockSchema,
   // Per spec §7.1: opt-in telemetry. The recorder reads this independently;
   // we only need to allow the key here so the strict() validation doesn't
   // reject configs that have it.
