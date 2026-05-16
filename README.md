@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.4",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.6.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -293,7 +293,15 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new in 4.6.0
 
-`/delegate` and `/execute-plan` now serialize tasks that share a git repo so parallel workers can no longer race on commits or file edits. Tasks in different repos still run in parallel. See [CHANGELOG](./CHANGELOG.md) for full details.
+Two big behavior changes plus a wave of telemetry-correctness fixes:
+
+- **Reviewer cross-tier inversion.** The reviewer now runs on the *opposite* tier of the implementer (standard implementer → complex reviewer; complex → standard). Catches what the implementer's own model class would miss. Cost note: standard-tier delegate runs become more expensive because the reviewer is now a complex model.
+- **`/delegate` and `/execute-plan`** now serialize tasks that share a git repo so parallel workers can no longer race on commits or file edits. Tasks in different repos still run in parallel.
+- **Tier-model attribution fixed end-to-end.** Producer-side `tierUsage.<tier>.model` and per-stage `stages[*].model` now report the real canonical model id (previously emitted `'custom'` for annotator and reviewer). Companion backend migrations `031` + `032` repair historical `events_raw` rows. Companion `/healthz` alert detects regressions.
+- **Full per-stage telemetry for every LLM-invoking stage.** Annotator, reviewer, and rework now record real `inputTokens` / `outputTokens` / `cachedReadTokens` / `cachedNonReadTokens` instead of zeros. The reviewer stage entry, previously missing entirely on `reviewPolicy: 'full'` runs, now appears with full attribution.
+- **Rework matches implementer tier** (was hardcoded to standard).
+
+See [CHANGELOG](./CHANGELOG.md) for full details.
 
 ## License
 
