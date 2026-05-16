@@ -32,7 +32,6 @@ export interface DelegateBrief {
   reviewPolicy: ReviewPolicy;
   contextBlockIds?: string[];
   verifyCommand?: string[];
-  maxCostUSD?: number;
 }
 
 export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
