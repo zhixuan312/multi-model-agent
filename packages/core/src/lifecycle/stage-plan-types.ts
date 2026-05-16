@@ -1,4 +1,4 @@
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from './rework-budget.js';
 import type { ProjectContext } from '../stores/project-context-registry.js';
 
 // `StagePlan` / `StageRow` deleted in v5 — the canonical plan is the flat
@@ -81,13 +81,9 @@ export interface LifecycleState {
   specChainAttemptIndex?: number;
   qualityChainAttemptIndex?: number;
 
-  // Per-loop sticky unavailable maps (UnavailableMap) — shared by all
-  // runWithFallback calls within a chain so a tier marked unavailable in
-  // round 1 stays unavailable for round 2/3. Populated by review-round
-  // handlers.
-  specUnavailable?: import('../escalation/fallback.js').UnavailableMap;
-  qualityUnavailable?: import('../escalation/fallback.js').UnavailableMap;
-  diffUnavailable?: import('../escalation/fallback.js').UnavailableMap;
+  // (UnavailableMap fields removed — they were declared but no code path
+  // reads or writes them; tier-fallback machinery is being deleted along
+  // with the escalation/ directory.)
 
   // Dispatcher / executor wiring (consumed by compose_response):
   executorResult?: unknown;

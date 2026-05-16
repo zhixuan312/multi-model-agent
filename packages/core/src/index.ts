@@ -34,11 +34,8 @@ export type {
   BatchProgress,
   BatchAggregateCost,
 } from './lifecycle/executor-output-types.js';
-export type {
-  EligibilityFailureCheck,
-  EligibilityFailure,
-  ProviderEligibility,
-} from './escalation/types.js';
+// (EligibilityFailure / ProviderEligibility re-exports removed —
+//  escalation/types.js is being deleted along with the rest of escalation/.)
 export type {
   BriefQualityPolicy,
 } from './intake/types.js';
@@ -107,8 +104,8 @@ export type {
 } from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
-export { resolveAgent } from './escalation/agent-resolver.js';
-export type { ResolvedAgent } from './escalation/agent-resolver.js';
+export { resolveAgent } from './providers/agent-resolver.js';
+export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 export { otherTier } from './config/tier-policy-registry.js';
 

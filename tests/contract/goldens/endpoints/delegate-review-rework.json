@@ -16,18 +16,7 @@
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": false,
-      "escalationLog": [
-        {
-          "provider": "mock",
-          "status": "ok",
-          "turns": 1,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": ""
-        }
-      ],
+      "escalationLog": [],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
       "workerStatus": "done",

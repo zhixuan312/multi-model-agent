@@ -2,7 +2,6 @@
   "folders": [
     "bounded-execution",
     "config",
-    "escalation",
     "events",
     "identity",
     "intake",

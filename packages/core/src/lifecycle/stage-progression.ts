@@ -11,7 +11,7 @@
  * when applicable so the bracket advances when rework runs.
  */
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from './rework-budget.js';
 import { STAGE_PLAN } from './stage-plan-builder.js';
 import type { StageDefinition, RouteName } from './stage-io.js';
 import { HUMAN_LABEL } from './stage-labels.js';

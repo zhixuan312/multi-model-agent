@@ -85,6 +85,9 @@ export interface SessionOpts {
 
 export interface TurnOpts {
   stageLabel?: string;
+  /** Cooperative cancellation — pass the per-task stall abort signal so
+   *  send() can be unwound by the stuck-detection watchdog. */
+  signal?: AbortSignal;
 }
 
 /** Interface implemented by ClaudeSession and CodexCliSession. */

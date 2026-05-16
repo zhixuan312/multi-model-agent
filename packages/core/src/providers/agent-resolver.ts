@@ -1,5 +1,5 @@
 import type { AgentType, MultiModelConfig, Provider } from '../types.js';
-import { createProvider } from '../providers/provider-factory.js';
+import { createProvider } from './provider-factory.js';
 
 export interface ResolvedAgent {
   slot: AgentType;

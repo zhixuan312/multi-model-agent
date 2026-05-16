@@ -1,4 +1,4 @@
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from '../lifecycle/rework-budget.js';
 
 export type BatchState = 'pending' | 'complete' | 'failed' | 'expired';
 

@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/task-executor.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';
-import type { RuntimeRunResult } from '../../../packages/core/src/types.js';
+import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 
-vi.mock('../../../packages/core/src/escalation/delegate-with-escalation.js');
+// v0.5: the implement stage now calls ctx.getSession(tier).send(prompt, opts)
+// directly — no delegateWithEscalation wrapper. The lifecycle-state fixture
+// already plumbs ctx.getSession through __mockSessionResponse / __llmAlwaysFails,
+// so tests just set those on the state instead of mocking the deleted module.
 vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js');
 vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
 vi.mock('../../../packages/core/src/lifecycle/parallel-criteria-routes.js', async (importOriginal) => {
@@ -22,22 +25,24 @@ vi.mock('../../../packages/core/src/lifecycle/parallel-criteria-routes.js', asyn
 
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
-function makeMockResult(turn: {
-  kind: 'ok'; output: string; costUSD: number; turnsUsed: number; terminationReason: string;
-}): RuntimeRunResult {
+function makeMockTurn(opts: {
+  output: string;
+  turnsUsed: number;
+  costUSD: number;
+  workerSelfAssessment?: 'done' | 'failed';
+  terminationReason?: string;
+}): TurnResult {
   return {
-    output: turn.output,
-    status: 'ok',
+    output: opts.output,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    turns: turn.turnsUsed,
     filesRead: [],
     filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [],
-    cost: { costUSD: turn.costUSD },
+    toolCallsByName: {},
+    turns: opts.turnsUsed,
     durationMs: 100,
-    workerStatus: 'done',
+    costUSD: opts.costUSD,
+    terminationReason: opts.terminationReason ?? 'ok',
+    ...(opts.workerSelfAssessment && { workerSelfAssessment: opts.workerSelfAssessment }),
   };
 }
 
@@ -47,26 +52,23 @@ describe('implementHandler', () => {
   });
 
   it('returns a StageGate<ImplementPayload> on advance', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
-    vi.mocked(delegateWithEscalation).mockResolvedValueOnce(makeMockResult({
-      kind: 'ok',
+    const state = mockState({
+      route: 'delegate',
+      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
       output: `Worker prose here.\n\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'done',
         summary: 'did the thing',
         filesChanged: ['x.ts'],
         findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
       })}\n\`\`\``,
-      costUSD: 0.01,
       turnsUsed: 1,
-      terminationReason: 'ok',
-    }));
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'delegate',
-      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+      costUSD: 0.01,
+      workerSelfAssessment: 'done',
     });
 
     const gate = await implementHandler(state as any);
@@ -78,16 +80,14 @@ describe('implementHandler', () => {
   });
 
   it('halts on provider transport failure', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-
-    vi.mocked(delegateWithEscalation).mockRejectedValueOnce(new Error('5xx error after 3 retries'));
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
       task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
     });
+    (state.executionContext as any).__llmAlwaysFails = true;
 
     const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('halt');
@@ -95,28 +95,23 @@ describe('implementHandler', () => {
   });
 
   it('advances with workerSelfAssessment=failed when worker emits failed', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
-    const result = makeMockResult({
-      kind: 'ok',
+    const state = mockState({
+      route: 'delegate',
+      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
       output: `\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'failed',
         summary: 'gave up',
         filesChanged: [],
         findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
       })}\n\`\`\``,
-      costUSD: 0.01,
       turnsUsed: 1,
-      terminationReason: 'ok',
-    });
-    result.workerStatus = 'failed';
-    vi.mocked(delegateWithEscalation).mockResolvedValueOnce(result);
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'delegate',
-      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+      costUSD: 0.01,
+      workerSelfAssessment: 'failed',
     });
 
     const gate = await implementHandler(state as any);
@@ -126,28 +121,21 @@ describe('implementHandler', () => {
   });
 
   it('halts on cost_cap_exceeded_without_output when status not ok', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-
-    vi.mocked(delegateWithEscalation).mockResolvedValueOnce({
-      output: 'Worker ran out of budget and produced no structured output',
-      status: 'error',
-      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      turns: 50,
-      filesRead: [],
-      filesWritten: [],
-      toolCalls: [],
-      outputIsDiagnostic: true,
-      escalationLog: [],
-      cost: { costUSD: 5.0 },
-      durationMs: 100,
-      workerStatus: 'failed',
-    });
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
       task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    // No structured JSON output + 'error' terminationReason => status='error',
+    // which the handler treats as a halt regardless of output.
+    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
+      output: 'Worker ran out of budget and produced no structured output',
+      turnsUsed: 50,
+      costUSD: 5.0,
+      terminationReason: 'error',
+      workerSelfAssessment: 'failed',
     });
 
     const gate = await implementHandler(state as any);
@@ -156,26 +144,24 @@ describe('implementHandler', () => {
   });
 
   it('advances on cost_cap when structured output is present', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
-    vi.mocked(delegateWithEscalation).mockResolvedValueOnce(makeMockResult({
-      kind: 'ok',
+    const state = mockState({
+      route: 'delegate',
+      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
       output: `Some work done.\n\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'done',
         summary: 'done with partial output',
         filesChanged: ['partial.ts'],
         findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
       })}\n\`\`\``,
-      costUSD: 5.0,
       turnsUsed: 50,
-      terminationReason: 'cap_exhausted',
-    }));
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'delegate',
-      task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+      costUSD: 5.0,
+      terminationReason: 'cost_exceeded',
+      workerSelfAssessment: 'done',
     });
 
     const gate = await implementHandler(state as any);
@@ -217,15 +203,16 @@ describe('implementHandler', () => {
   });
 
   it('halts when session throws a sandbox violation', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-
-    vi.mocked(delegateWithEscalation).mockRejectedValueOnce(new Error('sandbox policy violation: attempted to write outside cwd'));
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
       task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    (state.executionContext as any).getSession = () => ({
+      send: async () => { throw new Error('sandbox policy violation: attempted to write outside cwd'); },
+      close: async () => {},
     });
 
     const gate = await implementHandler(state as any);
@@ -234,23 +221,18 @@ describe('implementHandler', () => {
   });
 
   it('fills all ImplementPayload fields with defaults when JSON block missing', async () => {
-    const { delegateWithEscalation } = await import('../../../packages/core/src/escalation/delegate-with-escalation.js');
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-
-    const result = makeMockResult({
-      kind: 'ok',
-      output: 'No structured output — plain text response',
-      costUSD: 0.01,
-      turnsUsed: 1,
-      terminationReason: 'ok',
-    });
-    result.workerStatus = 'failed'; // no structured output means worker failed to produce output
-    vi.mocked(delegateWithEscalation).mockResolvedValueOnce(result);
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
       task: { id: 't1', prompt: 'do work', brief: { title: 'T', body: 'B' } } as any,
+    });
+    (state.executionContext as any).__mockSessionResponse = makeMockTurn({
+      output: 'No structured output — plain text response',
+      turnsUsed: 1,
+      costUSD: 0.01,
+      workerSelfAssessment: 'failed',
     });
 
     const gate = await implementHandler(state as any);
@@ -265,3 +247,6 @@ describe('implementHandler', () => {
     expect(payload.sourcesUsed).toEqual([]);
   });
 });
+
+// Unused-but-imported reference to satisfy linters.
+void READ_ROUTES;

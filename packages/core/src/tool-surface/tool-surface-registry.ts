@@ -1,5 +1,5 @@
 import type { ZodSchema } from 'zod';
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from '../lifecycle/rework-budget.js';
 
 export interface SurfaceEntry {
   routeName: string;

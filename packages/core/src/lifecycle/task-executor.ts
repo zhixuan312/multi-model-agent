@@ -3,7 +3,7 @@ import type { ToolConfig } from './tool-config-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { ExecutorOutput } from './executor-output-types.js';
 import type { TaskSpec, RuntimeRunResult } from '../types.js';
-import { resolveAgent } from '../escalation/agent-resolver.js';
+import { resolveAgent } from '../providers/agent-resolver.js';
 import { runTaskViaDispatcher } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
