@@ -149,6 +149,16 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
       : null;
   }
 
+  // Spec D11: when the implementing or rework stage was dropped due to
+  // StageModelMissingError, omit tierUsage.<tier> entirely — do not let
+  // another stage's model become the tier attribution.
+  const droppedImpl = validationWarnings.some(w =>
+    w.rule === 'StageModelMissingError'
+    && (w.path === 'stages.implementing' || w.path === 'stages.rework')
+  );
+  const droppedTier: 'standard' | 'complex' =
+    (runResult.stageStats?.implementing?.agentTier === 'complex') ? 'complex' : 'standard';
+
   // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
   // is satisfied by Math.max-ing the executor wall-clock against the stage
   // sum. Pre-fix, runResult.durationMs only covered the implementer's
@@ -196,6 +206,10 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
       divergentTiers.add(tier);
       validationWarnings.push({ path: `tierUsage.${tier}`, rule: 'R-TIER-MODEL-DIVERGENCE' });
     }
+  }
+
+  if (droppedImpl) {
+    divergentTiers.add(droppedTier);
   }
 
   const rollupInput = llmStages.filter(s => !divergentTiers.has(s.tier as 'standard' | 'complex'));
