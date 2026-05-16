@@ -19,7 +19,7 @@ describe('No JSONL on disk when diagnostics.log is false (A3)', () => {
 
     // Send a request (any tool route; will not actually invoke a provider but
     // exercises the request handler enough to fire bus events).
-    await fetch(`${handle.url}/delegate?cwd=${encodeURIComponent(logDir)}`, {
+    const response = await fetch(`${handle.url}/delegate?cwd=${encodeURIComponent(logDir)}`, {
       method: 'POST',
       headers: {
         'X-MMA-Client': 'claude-code',
@@ -29,9 +29,35 @@ describe('No JSONL on disk when diagnostics.log is false (A3)', () => {
       },
       body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
     });
+    expect(response.ok).toBe(true);
 
-    // Give the async-dispatch path a moment to fire bus events.
-    await new Promise((r) => setTimeout(r, 200));
+    // Poll until directory state stabilizes (no new files for 200ms or max timeout).
+    const maxWaitTime = 5000;
+    const pollInterval = 50;
+    const stabilizationMs = 200;
+    let lastCheckTime = Date.now();
+    let lastFileCount = 0;
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitTime) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+
+      const currentEntries = readdirSync(logDir).filter(
+        (n) => n.startsWith('mmagent-') && n.endsWith('.jsonl'),
+      );
+
+      if (currentEntries.length === lastFileCount) {
+        // No new files since last check
+        if (Date.now() - lastCheckTime >= stabilizationMs) {
+          // Stable for long enough, async work is complete
+          break;
+        }
+      } else {
+        // File count changed, reset stabilization timer
+        lastFileCount = currentEntries.length;
+        lastCheckTime = Date.now();
+      }
+    }
 
     const entries = readdirSync(logDir).filter(
       (n) => n.startsWith('mmagent-') && n.endsWith('.jsonl'),
