@@ -221,3 +221,49 @@ describe('codex consumeStream — settles on exit even if close never fires', ()
     await expect(promise).resolves.toBeUndefined();
   });
 });
+
+describe('codex killGracefully — signals the whole process group', () => {
+  it('sends SIGTERM to the negative PID, not just the leader', () => {
+    const fakeProc: any = {
+      pid: 12345,
+      exitCode: null,
+      killed: false,
+      kill: vi.fn(),
+    };
+    const origKill = process.kill;
+    const killCalls: Array<[number, NodeJS.Signals | number]> = [];
+    (process as any).kill = (pid: number, sig: NodeJS.Signals | number) => {
+      killCalls.push([pid, sig]);
+    };
+    try {
+      (__test as any).killGracefully(fakeProc);
+    } finally {
+      (process as any).kill = origKill;
+    }
+    expect(killCalls.some(([pid, sig]) => pid === -12345 && sig === 'SIGTERM')).toBe(true);
+  });
+
+  it('escalates to SIGKILL on the negative PID after the grace period if the child has not exited', async () => {
+    vi.useFakeTimers();
+    const fakeProc: any = {
+      pid: 54321,
+      exitCode: null,
+      killed: false,
+      kill: vi.fn(),
+    };
+    const origKill = process.kill;
+    const killCalls: Array<[number, NodeJS.Signals | number]> = [];
+    (process as any).kill = (pid: number, sig: NodeJS.Signals | number) => {
+      killCalls.push([pid, sig]);
+    };
+    try {
+      (__test as any).killGracefully(fakeProc);
+      // Advance past SIGKILL_GRACE_MS (3000ms in current code).
+      vi.advanceTimersByTime(5000);
+    } finally {
+      (process as any).kill = origKill;
+      vi.useRealTimers();
+    }
+    expect(killCalls.some(([pid, sig]) => pid === -54321 && sig === 'SIGKILL')).toBe(true);
+  });
+});
