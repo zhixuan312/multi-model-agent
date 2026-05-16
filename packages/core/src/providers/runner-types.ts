@@ -106,7 +106,6 @@ export interface RunOptions {
    *  canonical orchestrator-side initial brief. */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
   mainModel?: string
-  maxCostUSD?: number
   formatConstraints?: FormatConstraints
   /** External abort signal — when fired, the runner force-salvages and
    *  returns a `timeout` result via the same path as the per-call timeout.

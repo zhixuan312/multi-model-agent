@@ -26,7 +26,6 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  maxCostUSD?: number
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
   mainModel?: string
