@@ -73,6 +73,14 @@ export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
    *  so the polling endpoint can render one line per task instead of letting
    *  the latest event overwrite the previous task's progress. */
   perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
+  /**
+   * Per-batch grouping snapshot from groupTasksByRepo. Set via
+   * attachGroups() by task-executor immediately after grouping.
+   * Consumed by the 202 pending-headline composer to describe active
+   * groups without recomputing repo grouping. Absent for read-only routes
+   * and for batches that did not use serializeSameRepo.
+   */
+  groups?: Array<{ key: string; taskIndices: number[] }>;
   /** taskIndex -> terminal context blockId; lazily created on first record */
   terminalBlockIds?: Map<number, string>;
 }
@@ -145,6 +153,12 @@ export class BatchRegistry {
     if (isTerminal(entry.state)) return;
     if (!entry.perTaskHeadlineSnapshots) entry.perTaskHeadlineSnapshots = new Map();
     entry.perTaskHeadlineSnapshots.set(taskIndex, snapshot);
+  }
+
+  attachGroups(batchId: string, groups: Array<{ key: string; taskIndices: number[] }>): void {
+    const entry = this.map.get(batchId);
+    if (!entry) return;
+    entry.groups = groups;
   }
 
   delete(batchId: string): boolean {
