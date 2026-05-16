@@ -17,8 +17,7 @@ export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
  * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
 export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
 
-/** Clock counterpart of MAX_COST_PRESTOP_RATIO — same pre-stop semantics
- * applied to wall-clock time: the runtime warns at
+/** Wall-clock pre-stop ratio — the runtime warns at
  * DEFAULT_TASK_TIMEOUT_MS × this ratio (48 min), with a worst-case
  * total of DEFAULT_TASK_TIMEOUT_MS / MAX_TIME_PRESTOP_RATIO (1.25 h). */
 export const MAX_TIME_PRESTOP_RATIO = 0.80;
