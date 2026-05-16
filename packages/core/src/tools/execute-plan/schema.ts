@@ -8,6 +8,8 @@ const taskSchema = z.object({
   task: z.string().trim().min(1, 'Task descriptor must be non-empty'),
   reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']).optional().default('full')
     .describe('Review lifecycle policy for this task. Default: full.'),
+  outputTargets: z.array(z.string().min(1)).optional()
+    .describe('Output files this plan-task is expected to produce. Validated post-task. Object task form only — string task form does not support outputTargets.'),
 }).strict();
 
 const taskInputSchema = z.union([
