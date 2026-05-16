@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-05-16
+
+### Changed
+
+- **Dispatch behavior for write routes**: `/delegate` and `/execute-plan` now serialize tasks that share a git repository (or share a cwd when not in a git repo), running them in caller input order. Tasks in different repositories still run in parallel. This eliminates a class of silent data loss where two parallel tasks could race on file edits or have one task's commit accidentally include another's mid-flight changes. See `docs/superpowers/specs/2026-05-16-sequential-same-repo-dispatch-design.md`.
+
+### Added
+
+- Pending-batch headlines now indicate sequential and group status for affected batches (e.g., `(sequential)`, `(group 1/2, sequential)`).
+- A `[REPO HYGIENE]` advisory is prepended to a serial task's prompt when the previous task in its group left uncommitted edits.
+- `batch_completed` telemetry events gain three additive fields: `groupCount`, `groupSizes`, `serializationApplied`.
+
 ## [4.5.4] - 2026-05-14
 
 Patch release. Unbreaks telemetry uploads from 4.5.3 daemons — without this fix, the entire 4.5.3 telemetry pipeline is silently dropped at the backend wire boundary.

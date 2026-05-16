@@ -161,6 +161,8 @@ Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` i
 4. **Review** — `reviewed-lifecycle.ts` runs spec review, quality review, and (when applicable) diff review per the task's `reviewPolicy`, looping rework until approved, plateaued, or capped.
 5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), telemetry events emitted via the observability bus, and the result stored in `BatchRegistry` for retrieval via `GET /batch/:id`.
 
+**Same-repo dispatch serialization (4.6.0+):** Write routes (`/delegate`, `/execute-plan`) opt into `serializeSameRepo` on their `ToolConfig`. Tasks that share a git toplevel (or raw cwd when not in a git repo) run sequentially in caller input order; tasks in different repos run in parallel across groups. This eliminates commit-stage and implement-stage races within a single repo. Read-only routes (`audit`, `review`, `debug`, `investigate`, `explore`) keep full `Promise.all` fan-out.
+
 ## Testing layers
 
 | Layer | Location | Purpose |

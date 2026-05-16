@@ -291,14 +291,9 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.4
+## What's new in 4.6.0
 
-Patch release. Unbreaks telemetry uploads from 4.5.3 daemons — without this fix, the entire 4.5.3 telemetry pipeline is silently dropped at the backend wire boundary:
-
-- **Synthetic review stage emits `costUSD: 0`, not `null`.** The 4.5.3 synthetic stage's null cost propagated through `sumFinite` to `totalCostUSD: null`, which the backend wire schema rejects (Zod parse failure → `400 {}`). The flusher's existing 400-handling discards the record without retry, so every 4.5.3 audit/review/debug/investigate upload was silently dropped. A synthetic stage represents "no LLM call happened" = `0`, not "unknown".
-- **Flusher logs upload failures to stderr.** Previously the daemon was blind to backend rejections — that silence is why the 4.5.3 drift took two version cycles to surface. Now any 400/413 prints `[mmagent] telemetry upload dropped: status=<code> records=<n> body=<...>` once per flush cycle.
-
-Full history: [CHANGELOG](./CHANGELOG.md).
+`/delegate` and `/execute-plan` now serialize tasks that share a git repo so parallel workers can no longer race on commits or file edits. Tasks in different repos still run in parallel. See [CHANGELOG](./CHANGELOG.md) for full details.
 
 ## License
 
