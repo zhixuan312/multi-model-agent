@@ -93,6 +93,12 @@ export class CodexCliSession implements Session {
         cwd: this.args.opts.cwd,
         env: launch.env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        // detached: true puts codex (and any helpers it spawns) into its
+        // own process group, so killGracefully can signal the whole tree
+        // via process.kill(-pid, ...). Without this, codex grandchildren
+        // survived SIGTERM to the leader — see 2026-05-16 leak (155 net
+        // orphans across the day, peak ~91 simultaneous at 02:00 UTC).
+        detached: true,
       });
     } catch (err) {
       const e = err as { code?: string; message?: string };
@@ -278,10 +284,21 @@ function consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { va
 
 function killGracefully(proc: ChildProcess): void {
   if (proc.exitCode !== null || proc.killed) return;
-  try { proc.kill('SIGTERM'); } catch { /* ignore */ }
+  const pid = proc.pid;
+  // Signal the whole process group (negative pid). Codex spawns helpers
+  // that share the leader's stdio; killing the leader alone leaks them.
+  // Fall back to leader-only kill when pid is unavailable (e.g. spawn
+  // failed before a pid was assigned).
+  try {
+    if (typeof pid === 'number') process.kill(-pid, 'SIGTERM');
+    else proc.kill('SIGTERM');
+  } catch { /* group may already be gone */ }
   const t = setTimeout(() => {
     if (proc.exitCode === null) {
-      try { proc.kill('SIGKILL'); } catch { /* ignore */ }
+      try {
+        if (typeof pid === 'number') process.kill(-pid, 'SIGKILL');
+        else proc.kill('SIGKILL');
+      } catch { /* group may already be gone */ }
     }
   }, SIGKILL_GRACE_MS);
   t.unref();
