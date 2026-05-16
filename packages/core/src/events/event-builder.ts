@@ -214,11 +214,12 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const distinctProviders = new Set(escalationLog.map(a => a.provider)).size;
   const escalationCount = Math.max(0, distinctProviders - 1);
 
-  // Strip isLlmStage (producer-internal) before wire emission — per spec D2,
-  // isLlmStage is NOT emitted on the wire.
-  const stagesForWire = stages.map(s => {
-    const { isLlmStage, ...rest } = s;
-    return rest as StageEntryType;
+  // Strip producer-internal isLlmStage before wire emission. Wire schema
+  // (telemetry-types.ts) does not include this field; backend transformer
+  // does not read it. Per spec D2.
+  const wireStages = stages.map(s => {
+    const { isLlmStage: _drop, ...rest } = s;
+    return rest;
   });
 
   const internalRecord = {
@@ -257,7 +258,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
     filesWrittenCount: (ctx.realFilesChanged ?? []).length,
-    stages: stagesForWire,
+    stages: wireStages,
     validation_warnings: validationWarnings.length > 0 ? validationWarnings : undefined,
   };
 
