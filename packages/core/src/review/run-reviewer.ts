@@ -11,7 +11,18 @@ export type RunReviewerInput = {
 };
 
 export type RunReviewerResult =
-  | { kind: 'ok'; text: string; costUSD: number | null; turnsUsed: number; ms: number }
+  | {
+      kind: 'ok';
+      text: string;
+      costUSD: number | null;
+      turnsUsed: number;
+      ms: number;
+      model: string | null;
+      inputTokens: number;
+      outputTokens: number;
+      cachedReadTokens: number;
+      cachedNonReadTokens: number;
+    }
   | { kind: 'transport_error'; message: string; ms: number };
 
 export async function runReviewerTurn(input: RunReviewerInput): Promise<RunReviewerResult> {
@@ -29,6 +40,13 @@ export async function runReviewerTurn(input: RunReviewerInput): Promise<RunRevie
         costUSD: r.costUSD ?? null,
         turnsUsed: r.turns ?? 1,
         ms: Date.now() - t0,
+        model: typeof (r as { model?: string }).model === 'string'
+          ? (r as { model?: string }).model!
+          : null,
+        inputTokens: r.usage?.inputTokens ?? 0,
+        outputTokens: r.usage?.outputTokens ?? 0,
+        cachedReadTokens: r.usage?.cachedReadTokens ?? 0,
+        cachedNonReadTokens: r.usage?.cachedNonReadTokens ?? 0,
       };
     } catch (err) {
       lastErr = err instanceof Error ? err.message : String(err);

@@ -153,6 +153,10 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   let llmTurnsUsed = 0;
   let llmTransportFailed = false;
   let llmModel: string | null = null;
+  let llmInputTokens = 0;
+  let llmOutputTokens = 0;
+  let llmCachedReadTokens = 0;
+  let llmCachedNonReadTokens = 0;
   if (fallbackMode) {
     // Fallback findings: only gate-sourced findings flow through (gates.review,
     // gates.implement). lastRunResult.findings are dropped as part of tier-3
@@ -202,6 +206,10 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
         llmModel = tres.model;
         llmDurationMs = tres.ms;
         llmTurnsUsed = tres.turnsUsed;
+        llmInputTokens = tres.inputTokens;
+        llmOutputTokens = tres.outputTokens;
+        llmCachedReadTokens = tres.cachedReadTokens;
+        llmCachedNonReadTokens = tres.cachedNonReadTokens;
         const parsed = extractAnnotateJson(tres.text);
         if (parsed) {
           // Authoritative fields come from upstream gates (mechanicalFilesChanged,
@@ -229,10 +237,10 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   (state as { annotatePayload?: AnnotatePayload }).annotatePayload = annotated;
 
   mergeStageStats(state, 'annotating', {
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedReadTokens: 0,
-    cachedNonReadTokens: 0,
+    inputTokens: llmInputTokens,
+    outputTokens: llmOutputTokens,
+    cachedReadTokens: llmCachedReadTokens,
+    cachedNonReadTokens: llmCachedNonReadTokens,
     turnCount: llmTurnsUsed,
     toolCallCount: 0,
     costUSD: llmCostUSD,

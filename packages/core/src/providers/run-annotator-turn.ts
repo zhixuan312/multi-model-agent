@@ -15,7 +15,18 @@ export type RunAnnotatorInput = {
 };
 
 export type RunAnnotatorResult =
-  | { kind: 'ok'; text: string; costUSD: number | null; turnsUsed: number; ms: number; model: string | null }
+  | {
+      kind: 'ok';
+      text: string;
+      costUSD: number | null;
+      turnsUsed: number;
+      ms: number;
+      model: string | null;
+      inputTokens: number;
+      outputTokens: number;
+      cachedReadTokens: number;
+      cachedNonReadTokens: number;
+    }
   | { kind: 'transport_error'; message: string; ms: number };
 
 const TRANSPORT_RETRY_RE = /transport|network|5\d\d|timeout|ECONNREFUSED|ECONNRESET|EAI_AGAIN|ETIMEDOUT|fetch failed/i;
@@ -36,6 +47,10 @@ export async function runAnnotatorTurn(input: RunAnnotatorInput): Promise<RunAnn
         turnsUsed: turn.turns ?? 1,
         ms: Date.now() - t0,
         model: typeof turn.model === 'string' ? turn.model : null,
+        inputTokens: turn.usage?.inputTokens ?? 0,
+        outputTokens: turn.usage?.outputTokens ?? 0,
+        cachedReadTokens: turn.usage?.cachedReadTokens ?? 0,
+        cachedNonReadTokens: turn.usage?.cachedNonReadTokens ?? 0,
       };
     } catch (err) {
       lastErr = err instanceof Error ? err.message : String(err);

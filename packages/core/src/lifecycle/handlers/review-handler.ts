@@ -4,6 +4,7 @@ import { specReviewPrompt }    from '../../review/templates/spec-review.js';
 import { qualityReviewPrompt } from '../../review/templates/quality-review.js';
 import { parseReviewReport }   from '../../review/parse-review-report.js';
 import { runReviewerTurn }     from '../../review/run-reviewer.js';
+import { mergeStageStats }     from '../merge-stage-stats.js';
 
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
@@ -25,15 +26,39 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     filesChanged: impl.filesChanged ?? [],
   };
 
-  const subResults: Array<{ name: 'spec' | 'quality'; result: any; cost: number | null; ms: number }> = [];
+  type SubResult = {
+    name: 'spec' | 'quality';
+    result: any;
+    cost: number | null;
+    ms: number;
+    model: string | null;
+    inputTokens: number;
+    outputTokens: number;
+    cachedReadTokens: number;
+    cachedNonReadTokens: number;
+    turnsUsed: number;
+  };
+  const subResults: SubResult[] = [];
 
   if (runSpec) {
     const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec');
-    subResults.push({ name: 'spec', result: r.parsed, cost: r.costUSD, ms: r.ms });
+    subResults.push({
+      name: 'spec', result: r.parsed, cost: r.costUSD, ms: r.ms,
+      model: r.model,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+      cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
+      turnsUsed: r.turnsUsed,
+    });
   }
   if (runQuality) {
     const r = await runReviewerWithRetries(state, qualityReviewPrompt(context), 'quality');
-    subResults.push({ name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms });
+    subResults.push({
+      name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
+      model: r.model,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+      cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
+      turnsUsed: r.turnsUsed,
+    });
   }
 
   const succeeded = subResults.filter(s => s.result.verdict).map(s => s.name);
@@ -78,6 +103,32 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
 
   const totalCost = subResults.reduce((s, x) => s + (x.cost ?? 0), 0);
   const totalMs = subResults.reduce((s, x) => s + x.ms, 0);
+  const totalInput = subResults.reduce((s, x) => s + x.inputTokens, 0);
+  const totalOutput = subResults.reduce((s, x) => s + x.outputTokens, 0);
+  const totalCachedRead = subResults.reduce((s, x) => s + x.cachedReadTokens, 0);
+  const totalCachedNonRead = subResults.reduce((s, x) => s + x.cachedNonReadTokens, 0);
+  const totalTurns = subResults.reduce((s, x) => s + x.turnsUsed, 0);
+  // Both reviewers run on the standard tier through the same Session — same
+  // canonical model in practice. Pick the first non-null.
+  const reviewerModel = subResults.find(s => s.model !== null)?.model ?? null;
+
+  // Write reviewer stage stats so event-builder.buildReviewStage(rr.stageStats?.review)
+  // produces a real stage entry instead of returning null. Without this, the
+  // review stage was silently invisible in telemetry for reviewPolicy=full runs.
+  if (subResults.length > 0) {
+    mergeStageStats(state, 'review', {
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      cachedReadTokens: totalCachedRead,
+      cachedNonReadTokens: totalCachedNonRead,
+      turnCount: totalTurns,
+      toolCallCount: 0,
+      costUSD: totalCost,
+      durationMs: Math.max(totalMs, Date.now() - t0),
+      filesReadCount: 0,
+      filesWrittenCount: 0,
+    }, { tier: 'standard', model: reviewerModel });
+  }
 
   return {
     outcome: 'advance',
@@ -96,7 +147,17 @@ async function runReviewerWithRetries(
   state: LifecycleState,
   prompt: string,
   name: 'spec' | 'quality',
-): Promise<{ parsed: ReturnType<typeof parseReviewReport>; costUSD: number | null; ms: number }> {
+): Promise<{
+  parsed: ReturnType<typeof parseReviewReport>;
+  costUSD: number | null;
+  ms: number;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedNonReadTokens: number;
+  turnsUsed: number;
+}> {
   const turn = await runReviewerTurn({ prompt, ctx: state.executionContext as any, reviewer: name });
   if (turn.kind === 'transport_error') {
     // Final failure surfaces as a parse-failure shape so the aggregator treats
@@ -105,8 +166,24 @@ async function runReviewerWithRetries(
       parsed: { verdict: undefined, findings: [], parseError: turn.message } as any,
       costUSD: null,
       ms: turn.ms,
+      model: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedReadTokens: 0,
+      cachedNonReadTokens: 0,
+      turnsUsed: 0,
     };
   }
   const parsed = parseReviewReport(turn.text);
-  return { parsed, costUSD: turn.costUSD, ms: turn.ms };
+  return {
+    parsed,
+    costUSD: turn.costUSD,
+    ms: turn.ms,
+    model: turn.model,
+    inputTokens: turn.inputTokens,
+    outputTokens: turn.outputTokens,
+    cachedReadTokens: turn.cachedReadTokens,
+    cachedNonReadTokens: turn.cachedNonReadTokens,
+    turnsUsed: turn.turnsUsed,
+  };
 }
