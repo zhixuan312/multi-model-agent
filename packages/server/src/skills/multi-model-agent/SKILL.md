@@ -144,7 +144,7 @@ Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token ro
 Only `mma-delegate` accepts `agentType: "standard" | "complex"` per task — default `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
-- A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"cost_cap"` / `"timeout"`.
+- A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"timeout"`.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
 Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
