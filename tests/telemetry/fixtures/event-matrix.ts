@@ -27,7 +27,6 @@ const factories: Record<string, EventFactory> = {
   'read_only_review.terminal': () => ({ event: 'read_only_review.terminal', ts: TS, batchId: BATCH_ID, taskIndex: 0, route: 'delegate', roundsUsed: 2, finalQualityVerdict: 'approved', costUSD: 0.005, durationMs: 8000 }),
   stall_abort: () => ({ event: 'stall_abort', ts: TS, batchId: BATCH_ID, taskIndex: 0, idle_ms: 60000, threshold_ms: 30000 }),
   time_check: () => ({ event: 'time_check', ts: TS, batchId: BATCH_ID, taskIndex: 0, stage: 'rework', tripped: true, wallClockMs: 50_000, timeoutMs: 60_000 }),
-  cost_check: () => ({ event: 'cost_check', ts: TS, batchId: BATCH_ID, taskIndex: 0, stage: 'rework', tripped: true, cost_used_usd: 8.5, cost_cap_usd: 10, cost_available: true }),
   task_completed: () => ({ event: 'task_completed', ts: TS, batchId: BATCH_ID, taskIndex: 0, status: 'ok', workerStatus: 'done', turns: 3, durationMs: 25000, filesRead: 5, filesWritten: 2, toolCalls: 7, inputTokens: 500, outputTokens: 250, cachedReadTokens: 80, cachedNonReadTokens: 70, costUSD: 0.005, taskMaxIdleMs: 5000, stallTriggered: false, stages: JSON.stringify({}) }),
   batch_completed: () => ({ event: 'batch_completed', ts: TS, batchId: BATCH_ID, tool: 'delegate', durationMs: 30000, taskCount: 3 }),
   batch_failed: () => ({ event: 'batch_failed', ts: TS, batchId: BATCH_ID, tool: 'delegate', durationMs: 5000, errorCode: 'all_tasks_failed', errorMessage: 'All 3 tasks failed with api_error' }),

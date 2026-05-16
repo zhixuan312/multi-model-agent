@@ -432,7 +432,6 @@ export const Event = z.discriminatedUnion('event', [
   ReadOnlyReviewTerminalEvent,
   StallAbortEvent,
   TimeCheckEvent,
-  CostCheckEvent,
   BatchCompletedEvent,
   BatchFailedEvent,
   TaskCompletedLocalEvent,

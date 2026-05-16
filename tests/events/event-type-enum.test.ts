@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EventTypeEnum } from '../../packages/core/src/types/enums.js';
 
 const ALL = [
-  'batch_completed','batch_failed','cost_check','escalation','escalation_unavailable',
+  'batch_completed','batch_failed','escalation','escalation_unavailable',
   'fallback','fallback_unavailable',
   'heartbeat','read_only_review.quality','read_only_review.terminal','review_decision',
   'stage_change','stall_abort','task_completed','task_started','text_emission',
