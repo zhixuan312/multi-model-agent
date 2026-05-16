@@ -89,7 +89,8 @@ export type Stage =
   | 'incomplete'
   | 'max-turns'
   | 'review-rework'
-  | 'slow';
+  | 'slow'
+  | 'hang';   // never-resolves send() — for shutdown-drain test
 
 export interface SequenceItem {
   status?: RunStatus;
@@ -107,6 +108,10 @@ export interface MockProviderOptions {
   onPrompt?: (prompt: string) => void;
   sequence?: SequenceItem[];
   delayMs?: number;
+  /** Called once whenever the mock provider's openSession() is invoked. */
+  onOpen?: () => void;
+  /** Called once whenever the returned Session's close() is invoked. */
+  onClose?: () => void;
 }
 
 const STUB_CONFIG: ProviderConfig = {
@@ -316,7 +321,45 @@ export function mockProvider(opts: MockProviderOptions): Provider {
     name: 'mock',
     config: STUB_CONFIG,
     run: runOnce,
-    openSession: makeSessionFactory(runOnce),
+    openSession(sessionOpts: SessionOpts) {
+      opts.onOpen?.();
+      const stage = opts.stage ?? 'ok';
+      if (stage === 'hang') {
+        const inner = {
+          async send(): Promise<TurnResult> {
+            return new Promise<TurnResult>((_, reject) => {
+              if (sessionOpts?.abortSignal) {
+                sessionOpts.abortSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+              }
+            });
+          },
+          async close(): Promise<void> { /* no-op */ },
+        };
+        const origClose = inner.close.bind(inner);
+        return {
+          send: inner.send.bind(inner),
+          async close() {
+            try {
+              await origClose();
+            } finally {
+              opts.onClose?.();
+            }
+          },
+        };
+      }
+      const inner = makeSessionFactory(runOnce)(sessionOpts);
+      const origClose = inner.close.bind(inner);
+      return {
+        send: inner.send.bind(inner),
+        async close() {
+          try {
+            await origClose();
+          } finally {
+            opts.onClose?.();
+          }
+        },
+      };
+    },
   };
 }
 

@@ -1,8 +1,11 @@
 import { boot, type HarnessHandle } from './harness.js';
 import { mockProvider } from './mock-providers.js';
+import type { Provider } from '@zhixuan92/multi-model-agent-core';
 
 export interface StartTestServerOptions {
   cwd: string;
+  /** Override the default mockProvider({ stage: 'ok' }) used by boot(). */
+  provider?: Provider;
 }
 
 export type TestServerHandle = HarnessHandle;
@@ -52,7 +55,7 @@ function installHandlerContractFetchAdapter(): void {
 
 export async function startTestServer(opts: StartTestServerOptions): Promise<TestServerHandle> {
   installHandlerContractFetchAdapter();
-  const server = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: opts.cwd });
+  const server = await boot({ provider: opts.provider ?? mockProvider({ stage: 'ok' }), cwd: opts.cwd });
   allowedCwdsByOrigin.set(server.baseUrl, opts.cwd);
   return {
     ...server,
