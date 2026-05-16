@@ -15,6 +15,7 @@ import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
+import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
@@ -256,6 +257,20 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     await Promise.allSettled(entries.map(([, s]) => s.close()));
   };
 
+  const heartbeat = input.recordHeartbeat
+    ? new ActivityTracker(
+        // onProgress: forward heartbeat events to the bus if present
+        (e) => { input.bus?.emit(e as unknown as Record<string, unknown>); },
+        {
+          provider: resolved.provider.name,
+          ...(input.mainModel && { mainModel: input.mainModel }),
+          intervalMs: 5000,
+          recordHeartbeat: input.recordHeartbeat,
+          ...(input.batchId !== undefined && { batchId: input.batchId }),
+        },
+      )
+    : undefined;
+
   return {
     task,
     taskIndex: input.taskIndex,
@@ -280,7 +295,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
-    heartbeat: undefined,
+    heartbeat,
     logger: input.logger,
     verboseStream: input.verboseStream ?? ((line: string) => { process.stderr.write(line); }),
     verbose: true,
@@ -321,50 +336,56 @@ export async function runTaskViaDispatcher(
     ...(executionContext.taskIndex !== undefined && { taskIndex: executionContext.taskIndex }),
   });
 
+  executionContext.heartbeat?.start(1);
+
   let out;
   try {
-    out = await dispatcher.dispatch({
-      route,
-      toolCategory,
-      rawRequest: { tasks: [expandedTask] },
-      context: { task: expandedTask, executionContext },
-    });
-  } finally {
-    stopWatchdog();
-    // v4.4 session reuse: ExecutionContext owns the per-tier Session
-    // cache that handlers populate via ctx.getSession(tier). Close them
-    // here at task end so codex CLI subprocesses + claude-agent-sdk
-    // query handles release. Errors swallowed so disposal can't mask
-    // the task's real result.
-    await executionContext.closeSessions().catch(() => { /* idempotent */ });
-  }
+    try {
+      out = await dispatcher.dispatch({
+        route,
+        toolCategory,
+        rawRequest: { tasks: [expandedTask] },
+        context: { task: expandedTask, executionContext },
+      });
+    } finally {
+      stopWatchdog();
+      // v4.4 session reuse: ExecutionContext owns the per-tier Session
+      // cache that handlers populate via ctx.getSession(tier). Close them
+      // here at task end so codex CLI subprocesses + claude-agent-sdk
+      // query handles release. Errors swallowed so disposal can't mask
+      // the task's real result.
+      await executionContext.closeSessions().catch(() => { /* idempotent */ });
+    }
 
-  // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
-  // LifecycleState as `finalState`. The runtime mirror (RuntimeRunResult
-  // with workerStatus / stageStats / usage etc.) lives on
-  // finalState.lastRunResult — populated by performImplementation.
-  // Downstream consumers (executeTask, recorder, headline composer) still
-  // expect the runtime mirror, so return it directly.
-  const last = out.finalState?.lastRunResult as RuntimeRunResult | undefined;
-  if (last && typeof last === 'object' && 'output' in last) {
-    return last;
+    // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
+    // LifecycleState as `finalState`. The runtime mirror (RuntimeRunResult
+    // with workerStatus / stageStats / usage etc.) lives on
+    // finalState.lastRunResult — populated by performImplementation.
+    // Downstream consumers (executeTask, recorder, headline composer) still
+    // expect the runtime mirror, so return it directly.
+    const last = out.finalState?.lastRunResult as RuntimeRunResult | undefined;
+    if (last && typeof last === 'object' && 'output' in last) {
+      return last;
+    }
+    const body = out.body;
+    if (body && typeof body === 'object' && 'output' in body) {
+      return body as RuntimeRunResult;
+    }
+    return {
+      output: '',
+      status: 'error',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      error: 'dispatcher produced no RuntimeRunResult',
+      errorCode: 'runner_crash',
+      workerStatus: 'failed',
+    } as unknown as RuntimeRunResult;
+  } finally {
+    executionContext.heartbeat?.stop();
   }
-  const body = out.body;
-  if (body && typeof body === 'object' && 'output' in body) {
-    return body as RuntimeRunResult;
-  }
-  return {
-    output: '',
-    status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0 },
-    turns: 0,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: true,
-    escalationLog: [],
-    error: 'dispatcher produced no RuntimeRunResult',
-    errorCode: 'runner_crash',
-    workerStatus: 'failed',
-  } as unknown as RuntimeRunResult;
 }
