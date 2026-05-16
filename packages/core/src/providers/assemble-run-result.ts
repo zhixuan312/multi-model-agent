@@ -72,7 +72,6 @@ export function assembleRunResult(
 function mapStatus(r: string, errorCode?: string): RuntimeRunResult['status'] {
   switch (r) {
     case 'ok': return 'ok';
-    case 'cost_exceeded': return 'cost_exceeded';
     case 'time_exceeded': return 'timeout';
     case 'cap_exhausted': return 'incomplete';
     case 'stalled': return 'incomplete';
@@ -101,7 +100,6 @@ function mapIncompleteReason(r: string): RuntimeRunResult['incompleteReason'] | 
 function mapTermination(r: string): string | undefined {
   switch (r) {
     case 'time_exceeded': return 'time_ceiling';
-    case 'cost_exceeded': return 'cost_ceiling';
     case 'aborted': return 'all_tiers_unavailable';
     case 'error': return 'all_tiers_unavailable';
     default: return undefined;
