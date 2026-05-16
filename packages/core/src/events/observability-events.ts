@@ -153,15 +153,6 @@ export const TimeCheckEvent = TaskBase.extend({
   timeoutMs: z.number().int().min(0),
 }).strict();
 
-export const CostCheckEvent = TaskBase.extend({
-  event: z.literal('cost_check'),
-  stage: z.string(),
-  tripped: z.boolean(),
-  cost_used_usd: z.number().min(0),
-  cost_cap_usd: z.number().min(0),
-  cost_available: z.boolean(),
-}).strict();
-
 export const BatchCompletedEvent = BatchBase.extend({
   event: z.literal('batch_completed'),
   tool: z.string(),
@@ -496,7 +487,6 @@ export const EventSchemas: Record<string, z.ZodType> = {
   'read_only_review.terminal': ReadOnlyReviewTerminalEvent,
   stall_abort:                StallAbortEvent,
   time_check:                 TimeCheckEvent,
-  cost_check:                 CostCheckEvent,
   task_completed:             TaskCompletedLocalEvent,
   batch_completed:            BatchCompletedEvent,
   batch_failed:               BatchFailedEvent,
