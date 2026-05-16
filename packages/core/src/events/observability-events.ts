@@ -201,7 +201,7 @@ const EscalationFiredItemSchema = z.object({
 export const TaskTerminationEvent = TaskBase.extend({
   event: z.literal('task_termination'),
   cause: z.string(),
-  terminal_status: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
+  terminal_status: z.enum(['ok', 'incomplete', 'timeout', 'error', 'brief_too_vague', 'unavailable']),
   turns: z.number().int().min(0),
   duration_ms: z.number().int().min(0),
   supervision_state: z.object({

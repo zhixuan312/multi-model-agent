@@ -19,7 +19,6 @@ export type RunStatus =
   | 'provider_transport_failure'
   | 'error'
   | 'brief_too_vague'
-  | 'cost_exceeded'
   | 'unavailable';
 
 /** Canonical 4-field token-count shape. reasoningTokens are summed into
@@ -61,7 +60,7 @@ export interface CostBreakdown {
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'time_ceiling' | 'degenerate_exhausted'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'time_ceiling' | 'degenerate_exhausted'
        | 'api_error' | 'provider_transport_failure' | 'api_aborted' | 'brief_too_vague' | 'error'
   turnsUsed: number
   hasFileArtifacts: boolean

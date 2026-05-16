@@ -37,7 +37,6 @@ export type _TerminationCause =
   | 'finished'
   | 'incomplete'
   | 'timeout'
-  | 'cost_exceeded'
   | 'time_ceiling'
   | 'degenerate_exhausted'
   | 'api_error'

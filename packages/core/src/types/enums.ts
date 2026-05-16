@@ -47,7 +47,7 @@ export const ProviderTypeEnum = z.enum(['claude', 'codex']);
 
 export const InternalRunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
-  'provider_transport_failure', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
+  'provider_transport_failure', 'error', 'brief_too_vague', 'unavailable',
 ]);
 
 export const ReviewVerdictEnum = z.enum([

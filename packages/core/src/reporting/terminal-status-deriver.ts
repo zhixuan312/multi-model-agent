@@ -2,7 +2,7 @@ import type { WorkerStatus, VerifyOutcome } from '../types.js';
 export type { WorkerStatus, VerifyOutcome };
 export type OverallReviewVerdict = 'approved' | 'concerns' | 'annotated' | 'not_applicable';
 export type ArtifactsCheck = 'pass' | 'fail' | 'not_applicable';
-export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'cost_exceeded' | 'brief_too_vague' | 'unavailable';
+export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'brief_too_vague' | 'unavailable';
 
 export interface TerminalInputs {
   shutdownInProgress: boolean;
