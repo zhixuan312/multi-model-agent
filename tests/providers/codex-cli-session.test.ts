@@ -17,6 +17,8 @@
 // `docs/superpowers/specs/...` for the full investigation.
 
 import { describe, it, expect } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { __test } from '../../packages/core/src/providers/codex-cli-session.js';
 import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
 import type { CodexCliEvent } from '../../packages/core/src/providers/codex-cli-event.js';
@@ -152,5 +154,70 @@ describe('codex TurnTracker — cost-equivalence demonstration', () => {
     expect(delta.inputTokens).toBe(645_928);
     expect(delta.cachedReadTokens).toBe(6_661_888);
     expect(delta.outputTokens).toBe(110_824);
+  });
+});
+
+describe('codex consumeStream — settles on exit even if close never fires', () => {
+  it('resolves the promise when proc emits exit, without waiting for close', async () => {
+    // Simulates the 2026-05-16 leak: codex grandchildren inherit the
+    // stdio pipes, so 'close' waits forever after the leader has exited.
+    const fakeProc = new EventEmitter() as any;
+    fakeProc.stdout = new PassThrough();
+    fakeProc.stderr = new PassThrough();
+    fakeProc.exitCode = null;
+
+    const tracker = new (__test as any).TurnTracker(
+      { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      undefined,
+    );
+    const stderrRef = { value: '' };
+    const promise = (__test as any).consumeStream(fakeProc, tracker, stderrRef);
+
+    // Leader terminates; pipes remain open (no 'close' will be emitted).
+    fakeProc.exitCode = 0;
+    fakeProc.emit('exit', 0, null);
+
+    const timeoutToken = Symbol('timeout');
+    const race = await Promise.race([
+      promise.then(() => 'resolved' as const),
+      new Promise((resolve) => setTimeout(() => resolve(timeoutToken), 500)),
+    ]);
+    expect(race).toBe('resolved');
+  });
+
+  it('still settles on close when exit never fires (e.g., spawn failure path)', async () => {
+    const fakeProc = new EventEmitter() as any;
+    fakeProc.stdout = new PassThrough();
+    fakeProc.stderr = new PassThrough();
+    fakeProc.exitCode = null;
+
+    const tracker = new (__test as any).TurnTracker(
+      { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      undefined,
+    );
+    const promise = (__test as any).consumeStream(fakeProc, tracker, { value: '' });
+
+    fakeProc.emit('close');
+    await expect(promise).resolves.toBeUndefined();
+  });
+
+  it('does not double-resolve when both exit and close fire', async () => {
+    // Both fire in rapid succession on a healthy child — the parsed-buffer
+    // side-effect (parseCodexCliEvent on residual stdoutBuf) must run once,
+    // not twice.
+    const fakeProc = new EventEmitter() as any;
+    fakeProc.stdout = new PassThrough();
+    fakeProc.stderr = new PassThrough();
+    fakeProc.exitCode = 0;
+
+    const tracker = new (__test as any).TurnTracker(
+      { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      undefined,
+    );
+    const promise = (__test as any).consumeStream(fakeProc, tracker, { value: '' });
+
+    fakeProc.emit('exit', 0, null);
+    fakeProc.emit('close');
+    await expect(promise).resolves.toBeUndefined();
   });
 });
