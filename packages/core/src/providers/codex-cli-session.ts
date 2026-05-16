@@ -249,21 +249,29 @@ function consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { va
     if (stderrRef.value.length > 8000) stderrRef.value = stderrRef.value.slice(-4000);
   });
   return new Promise<void>((resolve) => {
-    const onClose = () => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
       if (stdoutBuf) {
         const ev = parseCodexCliEvent(stdoutBuf);
         if (ev) tracker.consume(ev);
       }
       resolve();
     };
-    proc.on('close', onClose);
+    // 'exit' fires when the child process itself terminates, independent
+    // of whether stdio pipes have drained. Grandchildren that inherit
+    // the pipes can keep 'close' pending indefinitely — see 2026-05-16
+    // log leak (341 codex_subprocess_starting vs 186 codex_subprocess_exited).
+    proc.on('exit', settle);
+    proc.on('close', settle);
     proc.on('error', (err: NodeJS.ErrnoException) => {
       if (tracker.terminationReason === 'ok') {
         tracker.terminationReason = 'error';
         tracker.errorCode = err.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed';
         tracker.errorMessage = err.message;
       }
-      resolve();
+      settle();
     });
   });
 }
