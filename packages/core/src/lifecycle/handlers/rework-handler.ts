@@ -67,7 +67,19 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
   }
 
-  const reworkTier: AgentType = 'standard';
+  // Rework matches the implementer's tier — rework's job is to FIX the
+  // implementer's work, so it needs the same capability. Read implementer
+  // tier from executionContext.assignedTier; fall back to the implementing
+  // stage's gate payload, then 'standard' as a defensive last resort.
+  // Final fallback: if the matched tier has no provider configured, use
+  // whichever tier does (parity with reviewer's fallback behavior).
+  const desiredReworkTier: AgentType =
+    (ctx as { assignedTier?: AgentType }).assignedTier
+    ?? ((state.gates?.['implement']?.payload as { agentTier?: AgentType } | null)?.agentTier)
+    ?? 'standard';
+  const reworkTier: AgentType = ctx.providers[desiredReworkTier]
+    ? desiredReworkTier
+    : (ctx.providers['standard'] ? 'standard' : 'complex');
   const provider = ctx.providers[reworkTier] as Provider | undefined;
   if (!provider) {
     state.reworkError = `no provider available for tier ${reworkTier}`;
