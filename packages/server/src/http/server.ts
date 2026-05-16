@@ -113,11 +113,6 @@ async function registerToolHandlers(
   // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
   let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
   try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-  // v4 bus: three sinks per spec (horizontal_design.md:332). LocalLogSink
-  // gates on diagnostics.log (writer no-ops when disabled). VerboseLogChannel
-  // is wired only when diagnostics.verbose=true so we don't pay the format
-  // + stdout cost in production. TelemetrySink is always present; it no-ops
-  // if telemetry isn't initialized.
   // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
   // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
   const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
