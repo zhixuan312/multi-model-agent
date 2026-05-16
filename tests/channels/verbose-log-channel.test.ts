@@ -60,4 +60,22 @@ describe('VerboseLogChannel', () => {
     const c = new VerboseLogChannel(fakeStdout);
     expect(() => c.emit({ event: 'x', ts: '2026-05-07T13:00:00.000Z' })).not.toThrow();
   });
+
+  it('defaults to process.stderr (not stdout)', () => {
+    const stderrCalls: string[] = [];
+    const stdoutCalls: string[] = [];
+    const originalStderr = process.stderr.write.bind(process.stderr);
+    const originalStdout = process.stdout.write.bind(process.stdout);
+    (process.stderr.write as any) = (s: string) => { stderrCalls.push(s); return true; };
+    (process.stdout.write as any) = (s: string) => { stdoutCalls.push(s); return true; };
+    try {
+      const channel = new VerboseLogChannel();
+      channel.emit({ event: 'task_started', ts: '2026-05-16T00:00:00Z' });
+    } finally {
+      (process.stderr.write as any) = originalStderr;
+      (process.stdout.write as any) = originalStdout;
+    }
+    expect(stderrCalls.join('')).toMatch(/^\[mmagent verbose\] event=task_started /);
+    expect(stdoutCalls.join('')).toBe('');
+  });
 });
