@@ -332,6 +332,18 @@ export const WireTelemetryRecordSchema = z.object({
 
 export type BatchWrapper = z.infer<typeof BatchWrapperSchema>;
 export type StageEntryType = z.infer<typeof StageEntrySchema>;
+
+/**
+ * Producer-internal stage entry shape. Adds `isLlmStage` which is REQUIRED
+ * with no default — any new stage builder that fails to set it is a
+ * TypeScript compile error (per spec D8). This field is producer-internal
+ * and MUST be stripped before wire emission (handled in event-builder.ts
+ * via a toWire projection — see Task A4).
+ */
+export type StageEntryInternal = StageEntryType & {
+  isLlmStage: boolean;
+};
+
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
 export type UploadBatchType = z.infer<typeof UploadBatchSchema>;
 export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
