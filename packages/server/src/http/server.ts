@@ -118,12 +118,15 @@ async function registerToolHandlers(
   // is wired only when diagnostics.verbose=true so we don't pay the format
   // + stdout cost in production. TelemetrySink is always present; it no-ops
   // if telemetry isn't initialized.
-  const sinks = [
-    new LocalLogSink(writer),
-    new TelemetrySink(recorderForBus),
-    new RunningHeadlineSink(batchRegistry),
-    ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
-  ];
+  // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
+  // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
+  const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
+  if (multiModelConfig.diagnostics?.log) {
+    sinks.push(new LocalLogSink(writer));
+  }
+  sinks.push(new TelemetrySink(recorderForBus));
+  sinks.push(new RunningHeadlineSink(batchRegistry));
+  sinks.push(new VerboseLogChannel());
   const bus = new EventEmitter(sinks);
 
   const deps: import('./handler-deps.js').HandlerDeps = {
@@ -194,12 +197,16 @@ async function registerControlHandlers(
     const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
     let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
     try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-    const bus = new EventEmitter([
-      new LocalLogSink(writer),
-      new TelemetrySink(recorderForBus),
-      new RunningHeadlineSink(batchRegistry),
-      ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
-    ]);
+    // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
+    // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
+    const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
+    if (multiModelConfig.diagnostics?.log) {
+      sinks.push(new LocalLogSink(writer));
+    }
+    sinks.push(new TelemetrySink(recorderForBus));
+    sinks.push(new RunningHeadlineSink(batchRegistry));
+    sinks.push(new VerboseLogChannel());
+    const bus = new EventEmitter(sinks);
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
