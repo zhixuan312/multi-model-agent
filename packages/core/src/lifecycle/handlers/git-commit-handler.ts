@@ -18,7 +18,12 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, CommitPayload } from '../stage-io.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
 import { getRealFilesChanged } from '../real-diff.js';
+
+function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
+  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
+}
 
 const execFileP = promisify(execFile);
 
@@ -117,6 +122,14 @@ function isHookFailure(err: unknown): boolean {
 
 export async function commitHandler(state: LifecycleState): Promise<StageGate<CommitPayload>> {
   const t0 = Date.now();
+
+  const commitCtx = state.executionContext as ExecutionContext | undefined;
+  if (commitCtx) {
+    safeTracker(() => commitCtx.heartbeat?.transition({
+      stage: 'committing',
+      stageIndex: ((state as { stageIndex?: number }).stageIndex ?? 1),
+    }), commitCtx);
+  }
 
   const cwd = (state.cwd as string | undefined) ?? (state.executionContext as { cwd?: string } | undefined)?.cwd;
   if (!cwd) {
