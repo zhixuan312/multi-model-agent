@@ -23,6 +23,20 @@ import {
   clampDurationMsTotal,
 } from './clamp.js';
 
+/**
+ * Thrown when a stage marked `isLlmStage: true` arrives at the builder
+ * with no model identifier. Caught one level up by the stage-build loop
+ * (Task A5b) and converted into a `validation_warnings` diagnostic; the
+ * offending stage is dropped from the emitted event but the rest of the
+ * event still ships. Per spec D5 + §6.
+ */
+export class StageModelMissingError extends Error {
+  constructor(public readonly stageName: string) {
+    super(`Stage '${stageName}' is marked isLlmStage:true but raw.model is null.`);
+    this.name = 'StageModelMissingError';
+  }
+}
+
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[]; subtype?: string };
@@ -373,7 +387,7 @@ function extractStageData(
 ) {
   if (!raw || !raw.entered) return null;
   return {
-    model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
+    model: raw.model ? (normalizeModel(raw.model).canonical ?? raw.model) : null,
     tier: (raw.agentTier as 'standard' | 'complex') ?? 'standard',
     round: (raw as any).round ?? 0,
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
