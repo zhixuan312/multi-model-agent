@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
 import { withTempGitRepo } from './with-temp-git-repo.js';
 
 // Use a tiny harness that mimics the executor's dispatch shape without
@@ -115,6 +117,41 @@ describe('task-executor grouped dispatch', () => {
       expect((results[1] as any).errorCode).toBe('cancelled');
       expect((results[2] as any).errorCode).toBe('cancelled');
       expect(invocations).toBe(1); // only task 0 invoked dispatchOne
+    });
+  });
+});
+
+describe('REPO HYGIENE advisory injection', () => {
+  it('prepends advisory to task N+1 when task N left dirty files', async () => {
+    await withTempGitRepo(async (repo) => {
+      const captured: string[] = [];
+      const dispatchOne = async (task: any, i: number) => {
+        captured[i] = task.prompt;
+        if (i === 0) {
+          // Simulate task 0 leaving an untracked file.
+          await fs.writeFile(join(repo, 'leak.txt'), 'oops');
+        }
+        return makeOk(i);
+      };
+      const tasks = [0, 1].map((i) => ({ prompt: `t${i}`, cwd: repo } as TaskSpec));
+      await dispatchGrouped(tasks, dispatchOne, {});
+      expect(captured[0]).not.toContain('[REPO HYGIENE]');
+      expect(captured[1]).toContain('[REPO HYGIENE]');
+      expect(captured[1]).toContain('leak.txt');
+    });
+  });
+
+  it('does NOT prepend advisory when previous task left a clean tree', async () => {
+    await withTempGitRepo(async (repo) => {
+      const captured: string[] = [];
+      const dispatchOne = async (task: any, i: number) => {
+        captured[i] = task.prompt;
+        return makeOk(i);
+      };
+      const tasks = [0, 1].map((i) => ({ prompt: `t${i}`, cwd: repo } as TaskSpec));
+      await dispatchGrouped(tasks, dispatchOne, {});
+      expect(captured[0]).not.toContain('[REPO HYGIENE]');
+      expect(captured[1]).not.toContain('[REPO HYGIENE]');
     });
   });
 });

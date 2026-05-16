@@ -13,6 +13,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { groupTasksByRepo, type TaskGroup } from './task-grouping.js';
 import { buildCancelledResult } from './build-cancelled-result.js';
+import { getDirtyFiles, formatHygieneAdvisory } from './repo-hygiene.js';
 
 /**
  * Inner loop for grouped dispatch. Runs each group in parallel; within
@@ -32,12 +33,23 @@ export async function dispatchGroupedWithPrecomputedGroups(
   const results: RuntimeRunResult[] = new Array(tasks.length);
   await Promise.all(
     groups.map(async (group) => {
+      const isGitRepo = !group.key.startsWith('/') || true; // group.key is always either a toplevel or realpath
+      let isFirstInGroup = true;
       for (const { task, originalIndex } of group.tasks) {
         if (opts.abortSignal?.aborted) {
           results[originalIndex] = buildCancelledResult();
           continue;
         }
-        results[originalIndex] = await dispatchOne(task, originalIndex);
+        let effectiveTask = task;
+        if (!isFirstInGroup && group.tasks.length > 1) {
+          const dirty = await getDirtyFiles(group.key);
+          if (dirty.length > 0) {
+            const advisory = formatHygieneAdvisory(dirty);
+            effectiveTask = { ...task, prompt: advisory + task.prompt };
+          }
+        }
+        results[originalIndex] = await dispatchOne(effectiveTask, originalIndex);
+        isFirstInGroup = false;
       }
     }),
   );
