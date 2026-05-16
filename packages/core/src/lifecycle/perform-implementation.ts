@@ -249,7 +249,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
     // `actualCostUSD` (the current source of truth from claude/codex
     // turns). Without the actualCostUSD fallback every claude-tier
     // implementing stage records cost=null and telemetry under-reports.
-    const costUSD = result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? 0;
+    const costUSDForStage = result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null;
     mergeStageStats(state, 'implementing', {
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
@@ -257,7 +257,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
       turnCount: result.turns ?? 0,
       toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-      costUSD,
+      costUSD: costUSDForStage,
       durationMs: result.durationMs ?? null,
       filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
       filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
@@ -265,7 +265,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       tier: ctx.assignedTier,
       model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
     });
-    safeTracker(() => ctx.heartbeat?.applyCost({ costUSD, costDeltaVsMainUSD: 0 }), ctx);
+    safeTracker(() => ctx.heartbeat?.applyCost({ costUSD: costUSDForStage ?? 0, costDeltaVsMainUSD: 0 }), ctx);
     if (result.status !== 'ok') {
       state.terminal = true;
     }
