@@ -38,26 +38,21 @@ describe('partitionFilePaths', () => {
 });
 
 describe('checkOutputTargets', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('returns false when all targets exist', () => {
+  it('returns empty array when all targets exist', () => {
     (existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
     const missing = checkOutputTargets(['/project/src/new-file.ts']);
-    expect(missing).toBe(false);
+    expect(missing).toEqual([]);
   });
 
-  it('returns true when any target is missing', () => {
+  it('returns the missing paths when some are absent', () => {
     (existsSync as ReturnType<typeof vi.fn>)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(false);
     const missing = checkOutputTargets(['/project/src/a.ts', '/project/src/b.ts']);
-    expect(missing).toBe(true);
+    expect(missing).toEqual(['/project/src/b.ts']);
   });
 
-  it('returns false for empty targets list', () => {
-    const missing = checkOutputTargets([]);
-    expect(missing).toBe(false);
+  it('returns empty array on empty input', () => {
+    expect(checkOutputTargets([])).toEqual([]);
   });
 });

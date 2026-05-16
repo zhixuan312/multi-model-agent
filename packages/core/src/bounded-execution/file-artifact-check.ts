@@ -26,10 +26,10 @@ export function partitionFilePaths(
 }
 
 /**
- * Check whether any output targets are still missing on disk.
- * Returns true if any target does not exist.
+ * Returns the subset of `outputTargets` that do NOT exist on disk.
+ * Empty array means all targets exist. Caller decides whether non-empty
+ * is a failure (typically yes — surface as a structured finding).
  */
-export function checkOutputTargets(outputTargets: string[]): boolean {
-  if (outputTargets.length === 0) return false;
-  return outputTargets.some(t => !existsSync(t));
+export function checkOutputTargets(outputTargets: string[]): string[] {
+  return outputTargets.filter((p) => !existsSync(p));
 }
