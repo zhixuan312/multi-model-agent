@@ -183,7 +183,6 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 const defaultsSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_TASK_TIMEOUT_MS),
   stallTimeoutMs: z.number().int().positive().default(DEFAULT_STALL_TIMEOUT_MS),
-  maxCostUSD: z.number().nonnegative().default(DEFAULT_MAX_COST_USD),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
@@ -198,7 +197,6 @@ const defaultsSchema = z.object({
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
-  maxCostUSD: DEFAULT_MAX_COST_USD,
   tools: 'full' as const,
   sandboxPolicy: 'cwd-only' as const,
 }));
