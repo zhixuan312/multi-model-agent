@@ -91,6 +91,10 @@ export interface TurnOpts {
 export interface Session {
   send(instruction: string, opts?: TurnOpts): Promise<TurnResult>;
   close(): Promise<void>;
+  /** Returns the OS pid of the active CLI subprocess if one exists. Undefined
+   *  between turns or for providers that do not spawn a child (e.g. in-process
+   *  SDK clients). Used by shutdown drain to SIGKILL stragglers. */
+  getPid?(): number | undefined;
 }
 
 // Provider — factory-created handle that openSession returns

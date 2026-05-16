@@ -33,6 +33,10 @@ import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js'
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
 
 const SIGKILL_GRACE_MS = 3000;
+/** Grace window during session.close() between SIGTERM and SIGKILL. Keeps
+ *  task teardown bounded so the spec invariant "task done → children die"
+ *  holds within 2s for normal teardown. */
+const CLOSE_GRACE_MS = 2000;
 
 interface BusLike { emit(event: Record<string, unknown>): void }
 
@@ -45,6 +49,10 @@ export class CodexCliSession implements Session {
   private threadId?: string;
   private closed = false;
   private tempDir?: string;
+  /** Active codex CLI subprocess for the currently-running turn. Captured so
+   *  close() can synchronously kill the child (SIGTERM then SIGKILL after
+   *  CLOSE_GRACE_MS). Undefined between turns. */
+  private activeProc?: ChildProcess;
   private readonly cumulativeUsage: TokenUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -131,6 +139,7 @@ export class CodexCliSession implements Session {
       ...tag,
     });
 
+    this.activeProc = proc;
     proc.stdin?.write(instruction);
     proc.stdin?.end();
 
@@ -140,6 +149,7 @@ export class CodexCliSession implements Session {
       await consumeStream(proc, tracker, stderrBufRef);
     } finally {
       cleanupGuards();
+      this.activeProc = undefined;
     }
 
     if (tracker.threadId) this.threadId = tracker.threadId;
@@ -186,11 +196,39 @@ export class CodexCliSession implements Session {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    const proc = this.activeProc;
+    this.activeProc = undefined;
+    // Synchronous child termination guarantee: SIGTERM, then SIGKILL after
+    // CLOSE_GRACE_MS if still alive. Without this, close() leaked codex
+    // children — see 2026-05-16 leak post-mortem.
+    if (proc && proc.exitCode === null && !proc.killed) {
+      try { killGracefully(proc); } catch { /* ignore */ }
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const settle = () => { if (!settled) { settled = true; clearTimeout(t); resolve(); } };
+        proc.once('exit', settle);
+        const t = setTimeout(() => {
+          if (settled) return;
+          try {
+            // SIGKILL the whole process group (proc was spawned detached).
+            if (typeof proc.pid === 'number') process.kill(-proc.pid, 'SIGKILL');
+          } catch { /* ignore */ }
+          settle();
+        }, CLOSE_GRACE_MS);
+        t.unref();
+      });
+    }
     if (this.tempDir) {
       const dir = this.tempDir;
       this.tempDir = undefined;
       await rm(dir, { recursive: true, force: true }).catch(() => { /* swallow */ });
     }
+  }
+
+  /** OS pid of the currently-active codex CLI subprocess, if any. Undefined
+   *  between turns. Used by shutdown drain to SIGKILL stragglers. */
+  getPid(): number | undefined {
+    return this.activeProc?.pid;
   }
 
   private armGuards(proc: ChildProcess, tracker: TurnTracker): () => void {

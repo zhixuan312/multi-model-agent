@@ -12,7 +12,10 @@ async function bootAndCapture(
   const cwd = mkdtempSync(join(tmpdir(), 'mma-fixture-'));
   const logDir = mkdtempSync(join(tmpdir(), 'mma-logs-'));
   process.env.MMAGENT_LOG_DIR = logDir;
-  const handle = await boot({ provider, cwd });
+  // Opt-in to JSONL persistence — the harness defaults to log:false so contract
+  // tests don't pollute the user's global log; the observability fixture is the
+  // one exception that needs to read events back from disk.
+  const handle = await boot({ provider, cwd, diagnosticsLog: true });
   try {
     await scenario(handle, cwd, logDir);
   } finally {

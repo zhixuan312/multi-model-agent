@@ -32,6 +32,10 @@ export class ClaudeSession implements Session {
   private turns = 0;
   private sessionId?: string;
   private readonly bus: BusLike | undefined;
+  /** Active SDK query handle for the in-flight turn. Captured so close() can
+   *  force-shut the query (releases the underlying SDK worker / network
+   *  resources). Undefined between turns. */
+  private activeQuery?: { close?: () => unknown };
 
   constructor(private readonly args: { model: string; opts: SessionOpts; oauthAccessToken?: string }) {
     if (args.oauthAccessToken) process.env.ANTHROPIC_AUTH_TOKEN = args.oauthAccessToken;
@@ -83,6 +87,7 @@ export class ClaudeSession implements Session {
     const q = query({
       prompt: promptIterable(),
       options: {
+        // (lifecycle: capture this handle so close() can force-shut)
         model: this.args.model,
         // v4.4: mma operates headlessly — never prompt the user for
         // tool permission. bypassPermissions tells the SDK to run every
@@ -96,6 +101,7 @@ export class ClaudeSession implements Session {
         ...(this.sessionId && { resume: this.sessionId }),
       } as Parameters<typeof query>[0]['options'],
     });
+    this.activeQuery = q as unknown as { close?: () => unknown };
 
     const events: SDKMessage[] = [];
     try {
@@ -121,9 +127,11 @@ export class ClaudeSession implements Session {
         ...this.taskTag(),
       });
       try { q.close(); } catch { /* ignore */ }
+      this.activeQuery = undefined;
       throw err;
     }
     try { q.close(); } catch { /* ignore */ }
+    this.activeQuery = undefined;
 
     const rateCard = resolveRateCard(this.args.model);
     const norm = normalizeClaudeTurn(events, {
@@ -194,6 +202,19 @@ export class ClaudeSession implements Session {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    const q = this.activeQuery;
+    this.activeQuery = undefined;
+    if (q && typeof q.close === 'function') {
+      try { q.close(); } catch { /* ignore */ }
+    }
     this.bus?.emit({ event: 'claude_session_closed', ts: new Date().toISOString(), ...this.taskTag() });
+  }
+
+  /** ClaudeSession runs entirely in-process via the SDK; there's no separate
+   *  CLI subprocess to expose a pid for. Returning undefined tells the
+   *  shutdown drain there is nothing to SIGKILL externally — close() handles
+   *  it via the SDK query handle. */
+  getPid(): number | undefined {
+    return undefined;
   }
 }
