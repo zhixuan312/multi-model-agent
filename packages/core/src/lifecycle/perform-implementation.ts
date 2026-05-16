@@ -15,6 +15,10 @@ import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
 
+function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
+  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
+}
+
 export async function performImplementation(state: LifecycleState): Promise<void> {
   const task = state.task as TaskSpec | undefined;
   const ctx = state.executionContext as ExecutionContext | undefined;
@@ -169,6 +173,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
   }
 
   // Build the watchdog config once, just before the delegateWithEscalation call:
+  safeTracker(() => ctx.heartbeat?.transition({ stage: 'implementing', stageIndex: 1 }), ctx);
   const wdConfig = {
     enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
     thrashTurns: ctx.config?.defaults?.thrashTurns ?? 50,
@@ -220,6 +225,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
       ...result,
       ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
     } as unknown as RuntimeRunResult;
+    const filesRead = Array.isArray(result.filesRead) ? result.filesRead.length : 0;
+    const filesWritten = Array.isArray(result.filesWritten) ? result.filesWritten.length : 0;
+    const toolCalls = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+    safeTracker(() => ctx.heartbeat?.updateProgress(filesRead, filesWritten, toolCalls), ctx);
     state.lastRunResult = enrichedResult;
 
     // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
@@ -240,6 +249,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
     // `actualCostUSD` (the current source of truth from claude/codex
     // turns). Without the actualCostUSD fallback every claude-tier
     // implementing stage records cost=null and telemetry under-reports.
+    const costUSD = result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? 0;
     mergeStageStats(state, 'implementing', {
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
@@ -247,7 +257,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
       turnCount: result.turns ?? 0,
       toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-      costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
+      costUSD,
       durationMs: result.durationMs ?? null,
       filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
       filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
@@ -255,6 +265,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       tier: ctx.assignedTier,
       model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
     });
+    safeTracker(() => ctx.heartbeat?.applyCost({ costUSD, costDeltaVsMainUSD: 0 }), ctx);
     if (result.status !== 'ok') {
       state.terminal = true;
     }
