@@ -369,7 +369,7 @@ function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageE
  *  (no actual reviewer LLM call happened) and verdict: 'annotated' (a
  *  v5 enum value that means "annotator emitted findings, no quality
  *  verdict reached"). Schema-compliant — no version bump needed. */
-function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType {
+function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryInternal {
   const categories = [...new Set(findings.map(f => classifyConcern(f) as ConcernCategoryType))];
   const rawBuckets = bucketFindingsBySeverity(findings.map(f => ({ severity: f.severity })));
   const findingsBySeverity = {
@@ -400,7 +400,8 @@ function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType
     roundsUsed: 1,
     concernCategories: categories.slice(0, 9),
     findingsBySeverity,
-  } as StageEntryType;
+    isLlmStage: false,
+  } satisfies StageEntryInternal;
 }
 
 function buildReviewStage(
@@ -472,21 +473,30 @@ function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
   } satisfies StageEntryInternal;
 }
 
-function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
+function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.annotating as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
   let base = extractStageData(ss, rr, 'annotating');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
 
+  // Annotator is an LLM stage iff the runtime actually invoked a model.
+  // Per spec §4.1.3, the observable signal is whether stageStats.annotating.model
+  // was populated. Task A6 fixes the upstream so this is always populated when
+  // the LLM was called. When null (degraded pure-transform path), the stage
+  // appears in wire stages[] but is excluded from tier rollup.
+  const isLlmStage = base.model !== null && base.model !== 'custom';
+
   return {
     name: 'annotating',
     ...base,
+    isLlmStage,
+    mainEquivalentCostUSD: null,
     outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed' | undefined) ?? 'not_applicable',
     skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other' | undefined) ?? 'other') : null,
-  } as StageEntryType;
+  } satisfies StageEntryInternal;
 }
 
-function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
+function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.committing;
   let base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
@@ -509,7 +519,9 @@ function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
     // false. A future change can wire this when CommitStageRunner emits
     // an explicit signal alongside filesCommittedCount.
     branchCreated: false,
-  } as StageEntryType;
+    mainEquivalentCostUSD: null,
+    isLlmStage: false,
+  } satisfies StageEntryInternal;
 }
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
