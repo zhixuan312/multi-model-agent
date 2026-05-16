@@ -57,7 +57,7 @@ function configFor(provider: Provider): MultiModelConfig {
       standard: { type: 'codex', model: 'std', baseUrl: 'https://ex.invalid/v1' },
       complex: { type: 'codex', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
     },
-    defaults: { tools: 'readonly', timeoutMs: 60_000, maxCostUSD: 1, sandboxPolicy: 'cwd-only' },
+    defaults: { tools: 'readonly', timeoutMs: 60_000, sandboxPolicy: 'cwd-only' },
     server: {} as any,
   };
 }

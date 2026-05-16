@@ -7,7 +7,6 @@ const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   agentType: 'standard',
   tools: 'full',
   timeoutMs: 60_000,
-  maxCostUSD: 1,
   sandboxPolicy: 'cwd-only',
   cwd: '/tmp',
   reviewPolicy: 'full',

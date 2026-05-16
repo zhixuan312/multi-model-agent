@@ -26,7 +26,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
     },
     defaults: {
       timeoutMs: 30_000,
-      maxCostUSD: 1,
       tools: 'full',
       sandboxPolicy: 'cwd-only',
     },
