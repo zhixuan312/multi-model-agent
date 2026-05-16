@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { reworkHandler } from '../../../packages/core/src/lifecycle/handlers/rework-handler.js';
+import { reworkHandler } from '../../../packages/core/src/lifecycle/handlers/rework-stage.js';
 import { WARM_FOLLOWUP_PREAMBLE } from '../../../packages/core/src/lifecycle/warm-followup.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 

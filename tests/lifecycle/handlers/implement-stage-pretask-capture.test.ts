@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 // Import whichever task-executor helper captures preTask state. Path may differ;
 // check the actual export name during implementation.
-import { capturePreTaskState } from '../../../packages/core/src/lifecycle/handlers/task-executor.js';
+import { capturePreTaskState } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 
 describe('task-executor preTask capture', () => {
   let cwd: string;

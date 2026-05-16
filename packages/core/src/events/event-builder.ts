@@ -94,7 +94,7 @@ interface ProjectedFinding {
  *   - structuredReport.findings  → read-only routes (audit/review/debug/investigate/research/explore)
  *   - structuredReport.reviewConcerns → reviewed write routes (delegate/execute-plan)
  *
- *  Both fields are populated by lifecycle/handlers/annotator.ts. The pre-v4.4
+ *  Both fields are populated by lifecycle/handlers/annotate-stage.ts. The pre-v4.4
  *  `runResult.concerns` field is dead — the v4.4 lifecycle never assigns it,
  *  so reading from there silently produced concernCount=0 on every event.
  */

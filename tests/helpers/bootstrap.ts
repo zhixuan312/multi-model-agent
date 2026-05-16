@@ -1,7 +1,7 @@
 import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
 import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
-import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
+import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
 import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 import type { RunnerAdapter } from '../../packages/core/src/providers/runner-adapter.js';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { annotator } from '../../../packages/core/src/lifecycle/handlers/annotator.js';
+import { annotator } from '../../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 
 describe('annotator (unified)', () => {
   it('produces uniform report for write tasks', async () => {

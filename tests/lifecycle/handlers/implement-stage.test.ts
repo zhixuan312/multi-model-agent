@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/task-executor.js';
+import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
