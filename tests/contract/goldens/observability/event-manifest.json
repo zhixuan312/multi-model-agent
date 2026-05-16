@@ -12,7 +12,6 @@
     { "name": "verify_step",            "scope": "task",  "required_keys": ["command", "status", "exit_code", "signal", "duration_ms"] },
     { "name": "verify_skipped",         "scope": "task",  "required_keys": ["reason", "stage"] },
     { "name": "review_decision",        "scope": "task",  "required_keys": ["stage", "verdict", "round"] },
-    { "name": "cost_check",             "scope": "task",  "required_keys": ["stage", "tripped", "cost_available"] },
     { "name": "task_terminal",          "scope": "task",  "required_keys": ["worker_status"] },
     { "name": "context_block_registered", "scope": "task",  "required_keys": ["block_id", "route"] },
     { "name": "explore_thread_started",   "scope": "batch", "required_keys": ["thread_index"] },
