@@ -75,7 +75,7 @@
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
           "costUSD": 0,
-          "agentTier": "standard",
+          "agentTier": "complex",
           "modelFamily": null,
           "model": null,
           "maxIdleMs": "<DETERMINISTIC>",

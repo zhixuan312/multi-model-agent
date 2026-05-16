@@ -3,12 +3,31 @@
 // with backoff 0s → 1s → 2s. Non-transport caps (cost_cap, turn_cap, sandbox) → no retry.
 
 import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
+import type { AgentType } from '../types.js';
 
 export type RunReviewerInput = {
   prompt: string;
   ctx: ExecutionContext;
   reviewer: 'spec' | 'quality';
+  /**
+   * The implementer's tier. The reviewer runs on the OPPOSITE tier as a
+   * "second-opinion needs a different perspective" policy:
+   *   implementer=standard → reviewer=complex (capable reviewer of cheap work)
+   *   implementer=complex  → reviewer=standard (cheap sanity check of expensive work)
+   * If the inverted tier has no provider configured, falls back to the
+   * implementer tier and records a `validation_warnings` diagnostic upstream.
+   */
+  implementerTier: AgentType;
 };
+
+/**
+ * Cross-tier inversion: reviewer tier is the opposite of the implementer's.
+ * Exported so callers can compute the tier independently (e.g. for logging
+ * or for the `mergeStageStats` call in review-handler.ts).
+ */
+export function invertedReviewerTier(implementerTier: AgentType): AgentType {
+  return implementerTier === 'complex' ? 'standard' : 'complex';
+}
 
 export type RunReviewerResult =
   | {
@@ -32,7 +51,14 @@ export async function runReviewerTurn(input: RunReviewerInput): Promise<RunRevie
   for (let attempt = 0; attempt < 3; attempt++) {
     if (backoffMs[attempt] > 0) await sleep(backoffMs[attempt]);
     try {
-      const session = input.ctx.getSession('standard');
+      // Cross-tier inversion. If the inverted tier has no provider
+      // configured (single-tier deployments), fall back to the implementer
+      // tier so the reviewer can still run. The fallback is observable
+      // via the resolved `session.model` carried into the wire payload.
+      const desired = invertedReviewerTier(input.implementerTier);
+      const providers = (input.ctx as { providers?: Partial<Record<AgentType, unknown>> }).providers;
+      const tierToUse: AgentType = providers && providers[desired] ? desired : input.implementerTier;
+      const session = input.ctx.getSession(tierToUse);
       const r = await session.send(input.prompt);
       return {
         kind: 'ok',

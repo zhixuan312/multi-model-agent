@@ -3,8 +3,9 @@ import type { StageGate, ReviewPayload, Finding } from '../stage-io.js';
 import { specReviewPrompt }    from '../../review/templates/spec-review.js';
 import { qualityReviewPrompt } from '../../review/templates/quality-review.js';
 import { parseReviewReport }   from '../../review/parse-review-report.js';
-import { runReviewerTurn }     from '../../review/run-reviewer.js';
+import { runReviewerTurn, invertedReviewerTier } from '../../review/run-reviewer.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
+import type { AgentType } from '../../types.js';
 
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
@@ -40,8 +41,18 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
   };
   const subResults: SubResult[] = [];
 
+  // Cross-tier inversion (per design): reviewer runs on the opposite tier of
+  // the implementer. Read implementer tier from the executionContext; fall
+  // back to inferring from the implementing stage's gate payload, then
+  // 'standard' if neither is known (defensive — matches legacy default).
+  const implementerTier: AgentType =
+    (state.executionContext as { assignedTier?: AgentType } | undefined)?.assignedTier
+    ?? ((state.gates?.['implement']?.payload as { agentTier?: AgentType } | null)?.agentTier)
+    ?? 'standard';
+  const resolvedReviewerTier: AgentType = invertedReviewerTier(implementerTier);
+
   if (runSpec) {
-    const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec');
+    const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec', implementerTier);
     subResults.push({
       name: 'spec', result: r.parsed, cost: r.costUSD, ms: r.ms,
       model: r.model,
@@ -51,7 +62,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     });
   }
   if (runQuality) {
-    const r = await runReviewerWithRetries(state, qualityReviewPrompt(context), 'quality');
+    const r = await runReviewerWithRetries(state, qualityReviewPrompt(context), 'quality', implementerTier);
     subResults.push({
       name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
       model: r.model,
@@ -127,7 +138,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       durationMs: Math.max(totalMs, Date.now() - t0),
       filesReadCount: 0,
       filesWrittenCount: 0,
-    }, { tier: 'standard', model: reviewerModel });
+    }, { tier: resolvedReviewerTier, model: reviewerModel });
   }
 
   return {
@@ -147,6 +158,7 @@ async function runReviewerWithRetries(
   state: LifecycleState,
   prompt: string,
   name: 'spec' | 'quality',
+  implementerTier: AgentType,
 ): Promise<{
   parsed: ReturnType<typeof parseReviewReport>;
   costUSD: number | null;
@@ -158,7 +170,12 @@ async function runReviewerWithRetries(
   cachedNonReadTokens: number;
   turnsUsed: number;
 }> {
-  const turn = await runReviewerTurn({ prompt, ctx: state.executionContext as any, reviewer: name });
+  const turn = await runReviewerTurn({
+    prompt,
+    ctx: state.executionContext as any,
+    reviewer: name,
+    implementerTier,
+  });
   if (turn.kind === 'transport_error') {
     // Final failure surfaces as a parse-failure shape so the aggregator treats
     // this reviewer as errored — same downstream effect as an unparseable response.
