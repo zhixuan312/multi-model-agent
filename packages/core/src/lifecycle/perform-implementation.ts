@@ -171,7 +171,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
   // Build the watchdog config once, just before the delegateWithEscalation call:
   const wdConfig = {
     enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
-    thrashTurns: ctx.config?.defaults?.thrashTurns ?? 25,
+    thrashTurns: ctx.config?.defaults?.thrashTurns ?? 50,
     thrashWallClockMs: ctx.config?.defaults?.thrashWallClockMs ?? 1_200_000,
     thrashSoftWallClockMs: ctx.config?.defaults?.thrashWallClockMs
       ? Math.floor((ctx.config.defaults.thrashWallClockMs ?? 1_200_000) / 2)
