@@ -4,7 +4,7 @@ import type { RawStageStatsShape } from '../types/run-result.js';
 import type { StageGate } from '../lifecycle/stage-io.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord, WireTelemetryRecordSchema } from './telemetry-types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type StageEntryInternal, type ConcernCategoryType, type WireTelemetryRecord, WireTelemetryRecordSchema } from './telemetry-types.js';
 
 import { bucketFindingsBySeverity } from '../reporting/severity.js';
 import { rollupByTier, sumTokens } from '../bounded-execution/cost-rollup.js';
@@ -354,12 +354,12 @@ function extractStageData(
   };
 }
 
-function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
+function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.implementing;
   let base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
   base = applyGateOverlay(base, gate);
-  return { name: 'implementing', ...base } as StageEntryType;
+  return { name: 'implementing', ...base, isLlmStage: true } satisfies StageEntryInternal;
 }
 
 /** Synthetic review stage entry for read-only routes that hardcode
@@ -408,7 +408,7 @@ function buildReviewStage(
   status: string | null,
   rounds: number | null,
   gate?: StageGate<unknown>,
-): StageEntryType | null {
+): StageEntryInternal | null {
   const ss = rr.stageStats?.review as RawStageStats | undefined;
   let base = extractStageData(ss, rr, 'review');
   if (!base) return null;
@@ -449,10 +449,11 @@ function buildReviewStage(
     roundsUsed: Math.min(rounds ?? 1, 10),
     concernCategories: categories.slice(0, 9),
     findingsBySeverity,
-  } as StageEntryType;
+    isLlmStage: true,
+  } satisfies StageEntryInternal;
 }
 
-function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
+function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryInternal | null {
   const ss = rr.stageStats?.rework as RawStageStats | undefined;
   let base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
@@ -467,7 +468,8 @@ function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): Stag
     name: 'rework',
     ...base,
     triggeringConcernCategories: triggeringCategories.slice(0, 9),
-  } as StageEntryType;
+    isLlmStage: true,
+  } satisfies StageEntryInternal;
 }
 
 function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
