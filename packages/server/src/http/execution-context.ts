@@ -32,6 +32,10 @@ export function buildExecutionContext(
     }
   };
 
+  const attachBatchGroups: ExecutionContext['attachBatchGroups'] = (groups) => {
+    deps.batchRegistry.attachGroups(batchId, groups);
+  };
+
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
     recorder = getRecorder() as unknown as ExecutionContext['recorder'];
@@ -53,6 +57,7 @@ export function buildExecutionContext(
     client: caller?.client ?? 'other',
     batchId,
     recordHeartbeat,
+    attachBatchGroups,
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,
