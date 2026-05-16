@@ -1,6 +1,6 @@
 // Thin wrapper that runs one reviewer-tier LLM turn with 3-attempt transport-retry policy.
 // Spec §4.6: transport failures (network, 5xx, model gateway, timeout) → 3 total attempts
-// with backoff 0s → 1s → 2s. Non-transport caps (cost_cap, turn_cap, sandbox) → no retry.
+// with backoff 0s → 1s → 2s. Non-transport caps (turn_cap, sandbox) → no retry.
 
 import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
 import type { AgentType } from '../types.js';
@@ -76,7 +76,7 @@ export async function runReviewerTurn(input: RunReviewerInput): Promise<RunRevie
       };
     } catch (err) {
       lastErr = err instanceof Error ? err.message : String(err);
-      // Only retry on transport-class errors; cost_cap / turn_cap / sandbox are non-retryable.
+      // Only retry on transport-class errors; turn_cap / sandbox are non-retryable.
       if (!/transport|network|5\d\d|timeout/i.test(lastErr)) break;
     }
   }

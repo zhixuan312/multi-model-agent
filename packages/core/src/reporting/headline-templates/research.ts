@@ -3,7 +3,6 @@ import type { HeadlineTemplate } from '../headline-composer.js';
 import type { ResearchReport } from '../report-parser-slots/research-report.js';
 
 const REASON_TEXT: Record<string, string> = {
-  cost_cap: 'cost cap reached',
   timeout: 'timed out',
   turn_cap: 'turn cap reached',
 };

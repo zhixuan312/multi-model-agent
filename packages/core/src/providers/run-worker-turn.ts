@@ -72,7 +72,6 @@ function mapStopReason(r?: string): 'normal' | 'turn_cap' | 'timeout' {
   switch (r) {
     case 'ok': return 'normal';
     case 'cap_exhausted': return 'turn_cap';
-    case 'cost_exceeded': return 'cost_cap';
     case 'time_exceeded': return 'timeout';
     default: return 'normal';
   }
