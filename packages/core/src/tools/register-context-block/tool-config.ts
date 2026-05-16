@@ -29,7 +29,6 @@ export const toolConfig: ToolConfig<RegisterContextBlockInput> = {
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     tools: ctx.config.defaults?.tools ?? 'full',
     timeoutMs: ctx.config.defaults?.timeoutMs,
-    maxCostUSD: ctx.config.defaults?.maxCostUSD,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
   }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },

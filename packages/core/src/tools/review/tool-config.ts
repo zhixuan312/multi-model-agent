@@ -170,7 +170,6 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       done: resolveReviewDoneCondition(brief.focus, brief.hasContextBlocks),
       tools: ctx.config.defaults?.tools ?? 'full',
       timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-      maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,

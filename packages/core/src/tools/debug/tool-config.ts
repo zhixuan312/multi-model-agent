@@ -112,7 +112,6 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       done: 'Identify the root cause with evidence (file, line, mechanism) and PROPOSE a fix. Do NOT apply the fix — debug is a read-only diagnostic; the caller decides whether to apply.',
       tools: ctx.config.defaults?.tools ?? 'full',
       timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-      maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,

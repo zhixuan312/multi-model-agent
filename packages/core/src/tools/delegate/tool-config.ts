@@ -49,7 +49,6 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
       reviewPolicy: t.reviewPolicy ?? 'full',
       contextBlockIds: t.contextBlockIds,
       verifyCommand: t.verifyCommand,
-      maxCostUSD: t.maxCostUSD,
     })),
   buildTaskSpec: (brief, ctx) => ({
     prompt: brief.prompt,
@@ -59,7 +58,6 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
     verifyCommand: brief.verifyCommand,
-    maxCostUSD: brief.maxCostUSD,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     tools: ctx.config.defaults?.tools ?? 'full',
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
