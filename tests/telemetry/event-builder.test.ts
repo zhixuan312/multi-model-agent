@@ -378,3 +378,94 @@ describe('event-builder finding projection (v4.4.x)', () => {
     expect(ev.concernCount).toBe(150);
   });
 });
+
+describe('event-builder tier attribution (spec 2026-05-16)', () => {
+  it('T1: tierUsage.standard.model is implementer, not "custom", when synthetic stages share tier', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: {
+          ...HAPPY.stageStats!.implementing,
+          model: 'claude-haiku-4-5',
+          agentTier: 'standard',
+          costUSD: 0.05,
+        },
+        verifying: {
+          ...HAPPY.stageStats!.implementing,
+          model: 'claude-haiku-4-5',
+          agentTier: 'standard',
+          costUSD: 0.01,
+        },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'investigate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+      reviewPolicy: 'none',
+    } as any);
+    expect(event.tierUsage.standard?.model).toBe('claude-haiku-4-5');
+  });
+
+  it('T2: tierUsage.standard.model is implementer when rework also fires', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.05 },
+        spec_rework:  { ...HAPPY.stageStats!.implementing, model: 'claude-haiku-4-5', agentTier: 'standard', costUSD: 0.03 },
+      },
+      models: { implementer: 'claude-haiku-4-5' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.tierUsage.standard?.model).toBe('claude-haiku-4-5');
+  });
+
+  it('T3: complex tier reports implementer; standard tier absent', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 4.9 },
+        spec_review:  { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 0.2 },
+      },
+      models: { implementer: 'gpt-5.4' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    } as any);
+    expect(event.tierUsage.complex?.model).toBe('gpt-5.4');
+    expect(event.tierUsage.standard).toBeUndefined();
+  });
+
+  it('T4: tierUsage.standard absent when only synthetic stages contribute', () => {
+    const rr = makeFixtureRunResult({
+      stageStats: {
+        ...HAPPY.stageStats!,
+        implementing: { ...HAPPY.stageStats!.implementing, model: 'gpt-5.4', agentTier: 'complex', costUSD: 4.9 },
+      },
+      models: { implementer: 'gpt-5.4' },
+    } as RuntimeRunResult);
+    const event = buildTaskCompletedEvent({
+      route: 'investigate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+      reviewPolicy: 'none',
+    } as any);
+    expect(event.tierUsage.standard).toBeUndefined();
+    expect(event.tierUsage.complex?.model).toBe('gpt-5.4');
+  });
+});
