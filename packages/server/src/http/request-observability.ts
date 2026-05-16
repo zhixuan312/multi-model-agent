@@ -14,35 +14,33 @@ export interface EmitRequestReceivedInput {
 }
 
 export async function emitRequestReceived(input: EmitRequestReceivedInput): Promise<void> {
-  if (!input.config.diagnostics?.verbose) return;
-
   const json = JSON.stringify(input.parsed);
   const bodyBytes = Buffer.byteLength(json, 'utf8');
   const ts = new Date().toISOString();
 
-  // batch_created is emitted first and owned by the HTTP handler path.
-  console.log(composeVerboseLine({ event: 'batch_created', ts, batch: input.batchId }));
+  // 4.6.0+: always-on verbose; previously gated on diagnostics.verbose.
+  process.stderr.write(composeVerboseLine({ event: 'batch_created', ts, batch: input.batchId }) + '\n');
 
   if (bodyBytes <= INLINE_BODY_LIMIT_BYTES) {
-    console.log(composeVerboseLine({
+    process.stderr.write(composeVerboseLine({
       event: 'request_received',
       ts,
       batch: input.batchId,
       route: input.route,
       body: json,
       body_bytes: bodyBytes,
-    }));
+    }) + '\n');
     return;
   }
 
   const spillDir = join(homedir(), '.multi-model', 'logs', 'requests');
   const spilled = await spillRequestBody({ dir: spillDir, batch: input.batchId, body: input.parsed });
-  console.log(composeVerboseLine({
+  process.stderr.write(composeVerboseLine({
     event: 'request_received',
     ts,
     batch: input.batchId,
     route: input.route,
     body_path: spilled.path,
     body_bytes: spilled.bytes,
-  }));
+  }) + '\n');
 }
