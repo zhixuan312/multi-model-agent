@@ -5,6 +5,7 @@ import type { LifecycleState } from './stage-plan-types.js';
 import type { StageGate, StageDefinition, RouteName } from './stage-io.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
+import { GuardError } from '../bounded-execution/wall-clock-guard.js';
 
 /**
  * Walk `plan` in order. For each stage:
@@ -66,11 +67,12 @@ export async function runStagePlan(
         ctx.wallClockGuard.checkOrThrow();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const timeoutKind = err instanceof GuardError && err.errorCode === 'guard_wall_clock' ? 'wall_clock' : 'unknown';
         const haltGate: StageGate<null> = {
           outcome: 'halt',
           comment: `${stage.name} halted: ${msg}`,
           payload: null,
-          telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'timeout' },
+          telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'timeout', timeoutKind },
         };
         state.gates![stage.name] = haltGate;
         state.halted = true;

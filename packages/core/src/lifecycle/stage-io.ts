@@ -134,6 +134,7 @@ export type StageGate<TPayload = unknown> = {
     costUSD: number | null;
     turnsUsed: number;
     stopReason: StageStopReason;
+    timeoutKind?: 'wall_clock' | 'stall' | 'idle' | 'unknown';
   };
 };
 

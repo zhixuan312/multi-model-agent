@@ -1,4 +1,4 @@
-class GuardError extends Error {
+export class GuardError extends Error {
   constructor(message: string, public errorCode: string) {
     super(message);
     this.name = 'GuardError';
