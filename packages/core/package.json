@@ -184,6 +184,14 @@
       "types": "./dist/events/envelope-bus.d.ts",
       "import": "./dist/events/envelope-bus.js"
     },
+    "./events/log-writer": {
+      "types": "./dist/events/log-writer.d.ts",
+      "import": "./dist/events/log-writer.js"
+    },
+    "./events/telemetry-uploader": {
+      "types": "./dist/events/telemetry-uploader.d.ts",
+      "import": "./dist/events/telemetry-uploader.js"
+    },
     "./lifecycle/auto-commit": {
       "types": "./dist/lifecycle/auto-commit.d.ts",
       "import": "./dist/lifecycle/auto-commit.js"

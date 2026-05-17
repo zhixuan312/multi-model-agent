@@ -56,7 +56,6 @@ export function buildExecutionContext(
 
   return {
     config: deps.config,
-    logger: deps.logger,
     bus: deps.bus,
     // Per-request X-MMA-Main-Model header is the only source. Enforced at
     // the request-pipeline boundary (4.0.3+); by the time we reach this

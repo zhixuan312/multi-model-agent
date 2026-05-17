@@ -1,7 +1,7 @@
 // packages/server/src/http/handler-deps.ts
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
 import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
@@ -12,7 +12,7 @@ import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 export interface HandlerDeps {
   /** Full multi-model config (agents + defaults). May be undefined in unit tests. */
   config: MultiModelConfig;
-  logger: HttpServerLog;
+  logWriter: LogWriter;
   /** EnvelopeBus for structured observability — emits envelope snapshots and plain log entries. */
   bus: EnvelopeBus;
   projectRegistry: ProjectRegistry;
