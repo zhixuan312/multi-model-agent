@@ -19,12 +19,20 @@ import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claud
 import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-result.js';
 import { normalizeClaudeTurn } from './normalize-claude.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
+import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 
-interface BusLike { emit(event: Record<string, unknown>): void }
+interface BusLike { emitPlainEntry(entry: unknown): void }
 
 function busOf(opts: SessionOpts): BusLike | undefined {
-  const b = opts.bus as { emit?: unknown } | undefined;
-  return b && typeof b.emit === 'function' ? (b as BusLike) : undefined;
+  const b = opts.bus as { emitPlainEntry?: unknown } | undefined;
+  return b && typeof b.emitPlainEntry === 'function' ? (b as BusLike) : undefined;
+}
+
+function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
+  const e = opts.envelope as { recordToolCall?: unknown } | undefined;
+  return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
 }
 
 export class ClaudeSession implements Session {
@@ -32,6 +40,7 @@ export class ClaudeSession implements Session {
   private turns = 0;
   private sessionId?: string;
   private readonly bus: BusLike | undefined;
+  private readonly envelope: TaskEnvelopeStore | undefined;
   /** Active SDK query handle for the in-flight turn. Captured so close() can
    *  force-shut the query (releases the underlying SDK worker / network
    *  resources). Undefined between turns. */
@@ -40,13 +49,12 @@ export class ClaudeSession implements Session {
   constructor(private readonly args: { model: string; opts: SessionOpts; oauthAccessToken?: string }) {
     if (args.oauthAccessToken) process.env.ANTHROPIC_AUTH_TOKEN = args.oauthAccessToken;
     this.bus = busOf(args.opts);
-    this.bus?.emit({
-      event: 'claude_session_starting',
-      ts: new Date().toISOString(),
+    this.envelope = envelopeOf(args.opts);
+    this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
       model: args.model,
       cwd: args.opts.cwd,
       ...this.taskTag(),
-    });
+    }));
   }
 
   /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
@@ -63,14 +71,12 @@ export class ClaudeSession implements Session {
     const startMs = Date.now();
     this.turns += 1;
     const turnIndex = this.turns;
-    this.bus?.emit({
-      event: 'claude_turn_started',
-      ts: new Date().toISOString(),
+    this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_started', {
       turn: turnIndex,
       resume: Boolean(this.sessionId),
       ...(this.sessionId && { sessionId: this.sessionId }),
       ...this.taskTag(),
-    });
+    }));
 
     // Single-shot prompt iterable. The SDK iterates this once to pull the
     // user message, then runs to `result`. Closing the iterable after the
@@ -119,13 +125,11 @@ export class ClaudeSession implements Session {
       }
     } catch (err) {
       const e = err as { name?: string; message?: string };
-      this.bus?.emit({
-        event: 'claude_error',
-        ts: new Date().toISOString(),
+      this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_error', {
         name: e.name ?? 'unknown',
         message: e.message ?? String(err),
         ...this.taskTag(),
-      });
+      }));
       try { q.close(); } catch { /* ignore */ }
       this.activeQuery = undefined;
       throw err;
@@ -141,9 +145,7 @@ export class ClaudeSession implements Session {
     });
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
-    this.bus?.emit({
-      event: 'claude_turn_completed',
-      ts: new Date().toISOString(),
+    this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {
       turn: turnIndex,
       inputTokens: norm.usage.inputTokens,
       outputTokens: norm.usage.outputTokens,
@@ -154,7 +156,7 @@ export class ClaudeSession implements Session {
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),
       ...this.taskTag(),
-    });
+    }));
 
     return norm;
   }
@@ -167,7 +169,6 @@ export class ClaudeSession implements Session {
    */
   private emitEventTelemetry(ev: SDKMessage): void {
     if (!this.bus) return;
-    const ts = new Date().toISOString();
     const type = (ev as { type?: string }).type;
     if (type !== 'assistant') return;
     const message = (ev as { message?: { content?: unknown } }).message;
@@ -175,26 +176,28 @@ export class ClaudeSession implements Session {
     for (const block of content) {
       const b = block as { type?: string; text?: string; name?: string; input?: unknown };
       if (b.type === 'text' && typeof b.text === 'string' && b.text.length > 0) {
-        this.bus.emit({
-          event: 'claude_text_emission',
-          ts,
+        this.bus.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_text_emission', {
           turn: this.turns,
           chars: b.text.length,
           preview: b.text.slice(0, 200),
           ...this.taskTag(),
-        });
+        }));
       } else if (b.type === 'tool_use' && typeof b.name === 'string') {
         const inputPreview = typeof b.input === 'object' && b.input !== null
           ? JSON.stringify(b.input).slice(0, 300)
           : '';
-        this.bus.emit({
-          event: 'claude_tool_call',
-          ts,
+        this.envelope?.recordToolCall({
+          stage: 'implementing',
+          tool: b.name,
+          filesRead: [],
+          filesWritten: [],
+        });
+        this.bus.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_tool_call', {
           turn: this.turns,
           tool: b.name,
           input: inputPreview,
           ...this.taskTag(),
-        });
+        }));
       }
     }
   }
@@ -207,7 +210,9 @@ export class ClaudeSession implements Session {
     if (q && typeof q.close === 'function') {
       try { q.close(); } catch { /* ignore */ }
     }
-    this.bus?.emit({ event: 'claude_session_closed', ts: new Date().toISOString(), ...this.taskTag() });
+    this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_closed', {
+      ...this.taskTag(),
+    }));
   }
 
   /** ClaudeSession runs entirely in-process via the SDK; there's no separate

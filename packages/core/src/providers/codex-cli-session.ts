@@ -31,6 +31,9 @@ import type { Session, SessionOpts, TurnOpts, TurnResult, TokenUsage } from '../
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js';
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
+import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 
 const SIGKILL_GRACE_MS = 3000;
 /** Grace window during session.close() between SIGTERM and SIGKILL. Keeps
@@ -38,11 +41,16 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-interface BusLike { emit(event: Record<string, unknown>): void }
+interface BusLike { emitPlainEntry(entry: unknown): void }
 
 function busOf(opts: SessionOpts): BusLike | undefined {
-  const b = opts.bus as { emit?: unknown } | undefined;
-  return b && typeof b.emit === 'function' ? (b as BusLike) : undefined;
+  const b = opts.bus as { emitPlainEntry?: unknown } | undefined;
+  return b && typeof b.emitPlainEntry === 'function' ? (b as BusLike) : undefined;
+}
+
+function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
+  const e = opts.envelope as { recordToolCall?: unknown } | undefined;
+  return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
 }
 
 export class CodexCliSession implements Session {
@@ -87,18 +95,17 @@ export class CodexCliSession implements Session {
     });
 
     const bus = busOf(this.args.opts);
+    const envelope = envelopeOf(this.args.opts);
     const tag = this.taskTag();
-    const tracker = new TurnTracker(this.cumulativeUsage, bus, tag);
+    const tracker = new TurnTracker(this.cumulativeUsage, bus, envelope, tag);
 
-    bus?.emit({
-      event: 'codex_subprocess_starting',
-      ts: new Date().toISOString(),
+    bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_subprocess_starting', {
       model: this.args.cfg.model,
       cwd: this.args.opts.cwd,
       resume: Boolean(this.threadId),
       ...(this.threadId && { threadId: this.threadId }),
       ...tag,
-    });
+    }));
 
     let proc: ChildProcess;
     try {
@@ -122,22 +129,18 @@ export class CodexCliSession implements Session {
       });
     } catch (err) {
       const e = err as { code?: string; message?: string };
-      bus?.emit({
-        event: 'codex_spawn_failed',
-        ts: new Date().toISOString(),
+      bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_spawn_failed', {
         code: e.code ?? 'unknown',
         message: e.message ?? String(err),
         ...tag,
-      });
+      }));
       return this.finalizeError(tracker, startMs, e.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed', e.message ?? String(err));
     }
 
-    bus?.emit({
-      event: 'codex_subprocess_started',
-      ts: new Date().toISOString(),
+    bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_subprocess_started', {
       pid: proc.pid ?? -1,
       ...tag,
-    });
+    }));
 
     this.activeProc = proc;
     proc.stdin?.write(instruction);
@@ -154,9 +157,7 @@ export class CodexCliSession implements Session {
 
     if (tracker.threadId) this.threadId = tracker.threadId;
 
-    bus?.emit({
-      event: 'codex_subprocess_exited',
-      ts: new Date().toISOString(),
+    bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_subprocess_exited', {
       exitCode: proc.exitCode,
       turns: tracker.turns,
       terminationReason: tracker.terminationReason,
@@ -164,7 +165,7 @@ export class CodexCliSession implements Session {
       ...(stderrBufRef.value && { stderrTail: stderrBufRef.value.slice(-500) }),
       ...(proc.pid !== undefined && { pid: proc.pid }),
       ...tag,
-    });
+    }));
 
     const finalMessage = tracker.lastAgentMessage || await readOutputFile(outputFile);
     const turnUsage = tracker.flushUsageDelta();
@@ -375,30 +376,28 @@ class TurnTracker {
   constructor(
     private readonly cumulative: TokenUsage,
     private readonly bus?: BusLike,
+    private readonly envelope?: TaskEnvelopeStore,
     private readonly tag: { batchId?: string; taskIndex?: number } = {},
   ) {
     this.snapshot = { ...cumulative };
   }
 
   consume(ev: CodexCliEvent): void {
-    const ts = new Date().toISOString();
     switch (ev.kind) {
       case 'thread_started':
         if (ev.threadId) this.threadId = ev.threadId;
-        this.bus?.emit({ event: 'codex_thread_started', ts, threadId: ev.threadId, ...this.tag });
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_thread_started', { threadId: ev.threadId, ...this.tag }));
         break;
       case 'turn_started':
         this.turns += 1;
-        this.bus?.emit({ event: 'codex_turn_started', ts, turn: this.turns, ...this.tag });
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_turn_started', { turn: this.turns, ...this.tag }));
         break;
       case 'item_started':
         if (ev.item.type === 'command_execution') {
-          this.bus?.emit({
-            event: 'codex_command_started',
-            ts,
+          this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_command_started', {
             command: String(ev.item.command ?? '').slice(0, 500),
             ...this.tag,
-          });
+          }));
         }
         break;
       case 'item_completed':
@@ -406,15 +405,13 @@ class TurnTracker {
         break;
       case 'turn_completed':
         this.absorbUsage(ev.usage);
-        this.bus?.emit({
-          event: 'codex_turn_completed',
-          ts,
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_turn_completed', {
           turn: this.turns,
           inputTokens: ev.usage.input_tokens ?? 0,
           outputTokens: (ev.usage.output_tokens ?? 0) + (ev.usage.reasoning_output_tokens ?? 0),
           cachedInputTokens: ev.usage.cached_input_tokens ?? 0,
           ...this.tag,
-        });
+        }));
         break;
       case 'turn_failed':
         if (this.terminationReason === 'ok') {
@@ -422,7 +419,7 @@ class TurnTracker {
           this.errorCode = 'turn_failed';
           this.errorMessage = ev.error.message;
         }
-        this.bus?.emit({ event: 'codex_turn_failed', ts, message: ev.error.message, ...this.tag });
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_turn_failed', { message: ev.error.message, ...this.tag }));
         break;
       case 'error':
         if (this.terminationReason === 'ok') {
@@ -430,7 +427,7 @@ class TurnTracker {
           this.errorCode = 'codex_error';
           this.errorMessage = ev.message;
         }
-        this.bus?.emit({ event: 'codex_error', ts, message: ev.message, ...this.tag });
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_error', { message: ev.message, ...this.tag }));
         break;
       default:
         break;
@@ -438,34 +435,41 @@ class TurnTracker {
   }
 
   private absorbItem(item: CodexItem): void {
-    const ts = new Date().toISOString();
     if (item.type === 'agent_message' && typeof item.text === 'string') {
       this.lastAgentMessage = item.text;
-      this.bus?.emit({
-        event: 'codex_agent_message',
-        ts,
+      this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_agent_message', {
         chars: item.text.length,
         preview: item.text.slice(0, 200),
         ...this.tag,
-      });
+      }));
     } else if (item.type === 'command_execution') {
       this.toolCallsByName['run_shell'] = (this.toolCallsByName['run_shell'] ?? 0) + 1;
-      this.bus?.emit({
-        event: 'codex_command_completed',
-        ts,
+      this.envelope?.recordToolCall({
+        stage: 'implementing',
+        tool: 'run_shell',
+        filesRead: [],
+        filesWritten: [],
+      });
+      this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_command_completed', {
         command: String(item.command ?? '').slice(0, 500),
         exitCode: item.exit_code ?? null,
         ...this.tag,
-      });
+      }));
     } else if (item.type === 'file_change') {
       this.toolCallsByName['edit_file'] = (this.toolCallsByName['edit_file'] ?? 0) + 1;
-      if (typeof item.path === 'string') this.filesWritten.add(item.path);
-      this.bus?.emit({
-        event: 'codex_file_change',
-        ts,
+      if (typeof item.path === 'string') {
+        this.filesWritten.add(item.path);
+        this.envelope?.recordToolCall({
+          stage: 'implementing',
+          tool: 'edit_file',
+          filesRead: [],
+          filesWritten: [item.path],
+        });
+      }
+      this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_file_change', {
         ...(typeof item.path === 'string' && { path: item.path }),
         ...this.tag,
-      });
+      }));
     }
   }
 
