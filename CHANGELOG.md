@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.1] - 2026-05-17
+
+Two follow-on fixes to the 4.7.0 polling-headline rewire. 4.7.0 made the stage *label* advance through the lifecycle; 4.7.1 makes the `(N/M)` stage *counter* and the live `read / write / tool calls` counters actually move during a task instead of staying stuck at `(1/1)` and `0/0/0` respectively until the very last moment of each stage.
+
+### Fixed
+
+- **Driver-owned visible-stage counter (core).** The per-task polling headline's `(N/M)` segment was permanently stuck at `(1/1)` regardless of which lifecycle stage was running. Root cause: per-handler `heartbeat?.transition()` calls in `review-stage.ts`, `rework-stage.ts`, `git-commit-handler.ts`, `annotate-stage.ts`, and `perform-implementation.ts` all read `state.stageIndex ?? 1` for the counter index — but no code path ever wrote `state.stageIndex`, so the fallback always won. Fix: deleted all five per-handler transition calls; centralized stage-counter ownership in `lifecycle/lifecycle-driver.ts:runStagePlan()` which now fires `tracker.transition({stage, stageIndex, stageCount})` before each visible stage's handler runs. `stageCount` starts at the upper bound (count of `STAGE_PLAN` rows whose `applicableRoutes` match the active route AND map to a user-visible stage) and decrements when a visible stage is skipped via `shouldRun()`. User-visible stages: `implement | review | rework | commit | annotate` → `implementing | review | rework | committing | annotating`.
+- **Live progress counters via bus subscription (core).** The `read / write / tool calls` counts in the polling headline stayed at `0 / 0 / 0` for the duration of the implementing stage and only jumped to their final values right before the next stage label appeared. Root cause: the only `tracker.updateProgress(...)` caller in `perform-implementation.ts:248` fires AFTER `session.send()` returns, i.e. once at stage-end. The tracker's `recordFileRead()` / `recordToolCall()` increment methods existed but had no production callers — runners emit `claude_tool_call` / `codex_command_completed` / `codex_file_change` bus events that no one routed to the tracker. Fix: new `packages/core/src/bounded-execution/progress-events-subscriber.ts` module (pattern mirrors `stall-watchdog.ts`) subscribes to the EventEmitter, filters by `batchId`/`taskIndex`, and calls `tracker.recordFileRead()` / `recordFileWrite()` / `recordToolCall()` / `markEvent('tool')` in real time. Wired from `task-runner.ts` alongside the stall-watchdog (started after `heartbeat?.start(1)`, disposed in the existing `finally{}`).
+
+### Added
+
+- **`ActivityTracker.recordFileWrite()`** (core) — increment-style API for the new progress-events subscriber. Mirrors the existing `recordFileRead()` / `recordToolCall()`.
+- **Two new acceptance tests:** `tests/lifecycle/driver-stage-counter.test.ts` (4 cases — visible-stage selection, skip decrement, route-applicability filter, no-heartbeat tolerance) and `tests/bounded-execution/progress-events-subscriber.test.ts` (8 cases — per-event-type mapping, task-identity filtering, disposer correctness).
+
+### Internal
+
+- All four per-handler `heartbeat?.transition()` blocks (`review-stage`, `rework-stage`, `git-commit-handler`, `annotate-stage`) deleted, along with their now-orphan `safeTracker` helpers and `ctx` declarations. `perform-implementation.ts` lost its redundant first-stage transition (the driver now owns it).
+- Tracker module unchanged besides the `recordFileWrite()` method addition — no event-subscription logic moved into the tracker class.
+
 ## [4.7.0] - 2026-05-17
 
 ### BREAKING
@@ -296,7 +315,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...HEAD
+[4.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...v4.6.0
 [4.5.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...v4.5.4
