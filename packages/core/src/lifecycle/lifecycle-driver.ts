@@ -4,8 +4,25 @@
 import type { LifecycleState } from './stage-plan-types.js';
 import type { StageGate, StageDefinition, RouteName } from './stage-io.js';
 import type { ExecutionContext } from './lifecycle-context.js';
+import type { StageLabel } from './stage-labels.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 import { GuardError } from '../bounded-execution/wall-clock-guard.js';
+
+/** Maps STAGE_PLAN row name → visible heartbeat stage label. Only stages
+ *  that appear here count toward the user-visible (N/M) progress counter
+ *  and trigger heartbeat.transition() from the driver. The other four
+ *  rows (prepare, register-block, compose, terminal) are bookkeeping. */
+const VISIBLE_STAGE_LABEL: Record<string, StageLabel> = {
+  implement: 'implementing',
+  review: 'review',
+  rework: 'rework',
+  commit: 'committing',
+  annotate: 'annotating',
+};
+
+function isVisibleStage(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(VISIBLE_STAGE_LABEL, name);
+}
 
 /** Returns a promise that rejects when the signal aborts. Lets stage-handler
  *  awaits unwind on watchdog abort even when the handler itself does not
@@ -40,6 +57,17 @@ export async function runStagePlan(
 
   const route = (state.route as RouteName | undefined) ?? 'delegate';
 
+  // Initial upper bound: count every STAGE_PLAN row whose name is in
+  // VISIBLE_STAGE_LABEL AND whose applicableRoutes match the current
+  // route. shouldRun() decisions arrive later (state-dependent); we
+  // decrement `visibleTotal` on every visible skip we encounter.
+  let visibleRan = 0;
+  let visibleTotal = plan.filter((s) =>
+    isVisibleStage(s.name) &&
+    (s.applicableRoutes === 'all' ||
+     (s.applicableRoutes as readonly string[]).includes(route)),
+  ).length;
+
   for (const stage of plan) {
     if (state.halted && !stage.runOnHalt) continue;
 
@@ -55,6 +83,7 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
       continue;
     }
 
@@ -68,7 +97,37 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
       continue;
+    }
+
+    if (isVisibleStage(stage.name)) {
+      visibleRan += 1;
+      const wireStage = VISIBLE_STAGE_LABEL[stage.name];
+      const tracker = (state.executionContext as { heartbeat?: { transition: (f: Record<string, unknown>) => void } } | undefined)?.heartbeat;
+      if (tracker) {
+        try {
+          const transitionFields: Record<string, unknown> = {
+            stage: wireStage,
+            stageIndex: visibleRan,
+            stageCount: Math.max(visibleRan, visibleTotal),
+          };
+          // review/rework require reviewRound + attemptCap (enforced by
+          // ActivityTracker.transition). Default to 1/1 — handlers do not
+          // currently track multi-round review state on state.reviewRound.
+          if (wireStage === 'review' || wireStage === 'rework') {
+            const stateAny = state as { reviewRound?: number; attemptCap?: number };
+            transitionFields.reviewRound = stateAny.reviewRound ?? 1;
+            transitionFields.attemptCap = stateAny.attemptCap ?? 1;
+          }
+          tracker.transition(transitionFields);
+        } catch (e) {
+          // Heartbeat errors must not abort the lifecycle. Mirror the
+          // safeTracker pattern from perform-implementation.ts.
+          const logger = (state.executionContext as { logger?: { error: (kind: string, err: unknown) => void } } | undefined)?.logger;
+          logger?.error?.('heartbeat_transition_failed', e);
+        }
+      }
     }
 
     // Wall-clock guard before each non-runOnHalt stage.
