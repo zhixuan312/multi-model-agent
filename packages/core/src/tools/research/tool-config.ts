@@ -55,6 +55,7 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
   },
   buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext) => ({
     prompt: brief.compiledPrompt,
+    parallelTarget: brief.compiledPrompt,
     agentType: 'complex' as const,
     reviewPolicy: 'none' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
