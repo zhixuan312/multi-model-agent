@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { specReviewPrompt } from '../../packages/core/src/review/templates/spec-review.js';
+import { specReviewPrompt, legalOutcomes } from '../../packages/core/src/review/templates/spec-review.js';
 
 describe('spec-review template', () => {
-  it('assembled prompt contains the full output format with Verdict and Deviations sections', () => {
+  it('assembled prompt contains canonical format with Verdict, Findings, and Outcome sections', () => {
     const prompt = specReviewPrompt({
       brief: 'Test brief',
       workerSummary: 'Test summary',
@@ -10,13 +10,13 @@ describe('spec-review template', () => {
     });
     expect(prompt).toContain('## Verdict');
     expect(prompt).toContain('approved | changes_required');
-    expect(prompt).toContain('## Deviations');
     expect(prompt).toContain('## Findings');
-    expect(prompt).toContain('Severity:');
-    expect(prompt).toContain('Category:');
-    expect(prompt).toContain('Claim:');
-    expect(prompt).toContain('Evidence:');
-    expect(prompt).toContain('Suggestion:');
+    expect(prompt).toContain('## Outcome');
+    expect(prompt).toContain('found | clean');
+    expect(prompt).toContain('- Severity:');
+    expect(prompt).toContain('- Category:');
+    expect(prompt).toContain('- Evidence:');
+    expect(prompt).toContain('- Suggestion:');
     expect(prompt).toContain('## Finding N:');
   });
 
@@ -29,5 +29,21 @@ describe('spec-review template', () => {
     expect(prompt).toContain('My task brief');
     expect(prompt).toContain('What the worker did');
     expect(prompt).toContain('src/foo.ts');
+  });
+
+  it('exports legalOutcomes constant', () => {
+    expect(legalOutcomes).toEqual(['found', 'clean']);
+  });
+
+  it('prompt includes severity definitions verbatim', () => {
+    const prompt = specReviewPrompt({
+      brief: 'Test brief',
+      workerSummary: 'Test summary',
+      filesChanged: [],
+    });
+    expect(prompt).toContain('Plan step missed/wrong such that feature won\'t work');
+    expect(prompt).toContain('Plan step partially implemented');
+    expect(prompt).toContain('Diverges in non-essential ways');
+    expect(prompt).toContain('Cosmetic drift');
   });
 });

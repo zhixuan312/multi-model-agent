@@ -1,26 +1,33 @@
 import type { ReviewTemplate } from './shared.js';
 
+export const legalOutcomes = ['found', 'clean'] as const;
+
 export const OUTPUT_FORMAT = `
 ## Verdict
-<approved | changes_required>
-
-## Deviations
-List each gap on its own line as "- <plan step>: <what is wrong>". Write "(none)" if the diff fully satisfies the plan.
+approved | changes_required
 
 ## Findings
 Emit zero or more findings using EXACTLY this block format. Each finding is its own block.
 
-## Finding N:
-Severity: <critical|high|medium|low>
-Category: <one word — e.g. missing-step, wrong-file, broken-contract>
-Claim: <one sentence — what is wrong>
-Evidence: <verbatim excerpt from source, ≥20 chars — or empty if inferable>
-Suggestion: <one sentence — how to fix it>
+## Finding N: <one-line claim>
+- Severity: critical | high | medium | low
+- Category: <one word — e.g. missing-step, wrong-file, broken-contract>
+- Evidence: <verbatim excerpt from source, ≥20 chars — or (none) if inferable>
+- Suggestion: <one sentence — how to fix it>
 
 ## Finding N+1:
 ...
 
-If no findings, write "## Findings\n(none)" and stop.
+If no findings, write "## Findings\n(none)".
+
+## Outcome
+found | clean
+
+**Severity definitions (per spec-review):**
+- **critical:** Plan step missed/wrong such that feature won't work
+- **high:** Plan step partially implemented
+- **medium:** Diverges in non-essential ways
+- **low:** Cosmetic drift
 `.trim();
 
 export function specReviewPrompt(ctx: { brief: string; workerSummary: string; filesChanged: string[] }): string {
@@ -49,7 +56,8 @@ export const specLintTemplate: ReviewTemplate = {
     '- "approved" means the diff fully implements the plan section. Trivial wording differences are OK.',
     '- "changes_required" when any plan step is missing, partial, or wrong on disk.',
     '- Each finding must be specific enough that a rework worker can act on it without re-deriving.',
-    '- If no findings, write "## Findings\\n(none)".',
+    '- If no findings, write "## Findings\\n(none)" followed by "## Outcome\\nclean".',
+    '- If any findings, write "## Outcome\\nfound".',
     '- Do NOT use editor tools. Read-only investigation only. Editing is the rework stage\'s job.',
   ].join('\n'),
 
