@@ -271,6 +271,11 @@ export class ActivityTracker {
     this.filesRead++;
   }
 
+  recordFileWrite(): void {
+    if (!this.started || this.stopped) return;
+    this.filesWritten++;
+  }
+
   recordToolCall(): void {
     if (!this.started || this.stopped) return;
     this.toolCalls++;
