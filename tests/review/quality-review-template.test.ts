@@ -24,10 +24,16 @@ describe('quality-review template', () => {
     expect(legalOutcomes).toEqual(['found', 'clean']);
   });
 
-  it('prompt includes severity definitions verbatim', () => {
+  it('prompt includes all four severity definitions verbatim', () => {
     const prompt = qualityReviewPrompt({
       brief: 'do x', workerSummary: 'did x', filesChanged: ['a.ts'],
     });
+    // Each severity definition from spec §9 must appear exactly as specified
+    expect(prompt).toContain('critical:');
+    expect(prompt).toContain('high:');
+    expect(prompt).toContain('medium:');
+    expect(prompt).toContain('low:');
+    // Verify the exact severity definition lines for quality-review
     expect(prompt).toContain('Will break in production');
     expect(prompt).toContain('Correctness gap in normal use');
     expect(prompt).toContain('Maintainability/fragility');

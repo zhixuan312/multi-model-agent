@@ -35,12 +35,18 @@ describe('spec-review template', () => {
     expect(legalOutcomes).toEqual(['found', 'clean']);
   });
 
-  it('prompt includes severity definitions verbatim', () => {
+  it('prompt includes all four severity definitions verbatim', () => {
     const prompt = specReviewPrompt({
       brief: 'Test brief',
       workerSummary: 'Test summary',
       filesChanged: [],
     });
+    // Each severity definition from spec §9 must appear exactly as specified
+    expect(prompt).toContain('critical:');
+    expect(prompt).toContain('high:');
+    expect(prompt).toContain('medium:');
+    expect(prompt).toContain('low:');
+    // Verify the exact severity definition lines
     expect(prompt).toContain('Plan step missed/wrong such that feature won\'t work');
     expect(prompt).toContain('Plan step partially implemented');
     expect(prompt).toContain('Diverges in non-essential ways');
