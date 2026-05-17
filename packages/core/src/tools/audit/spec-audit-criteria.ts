@@ -62,4 +62,5 @@ export const SPEC_AUDIT_SEMANTICS: RouteSemantics = {
     low: 'stylistic / metadata gap; minor inconsistency that does not affect executability.',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };

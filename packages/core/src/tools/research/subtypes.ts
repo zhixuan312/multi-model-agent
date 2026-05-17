@@ -18,6 +18,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
     low: 'single secondary source, low confidence — present as an alternative for the reader to weigh.',
   },
   mustEmitAtLeastOne: true,
+  legalOutcomes: ['found', 'not_applicable'] as const,
 };
 
 export const RESEARCH_SUBTYPES: Record<ResearchSubtype, ReadOnlySubtypeSpec> = {

@@ -20,6 +20,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
     low: 'style, naming, comment nit, dead code — nice-to-fix.',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };
 
 export const REVIEW_SUBTYPES: Record<ReviewSubtype, ReadOnlySubtypeSpec> = {

@@ -60,4 +60,5 @@ export const SKILL_AUDIT_SEMANTICS: RouteSemantics = {
     low: 'stylistic / link / metadata fix; does not affect dispatch correctness.',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };

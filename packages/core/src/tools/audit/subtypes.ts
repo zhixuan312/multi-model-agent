@@ -29,6 +29,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
     low: 'stylistic / labeling / formatting issue; missing metadata; minor cross-reference fix.',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };
 
 // Copied verbatim from ROUTE_SEMANTICS.audit_plan.
@@ -43,6 +44,7 @@ const SEMANTICS_PLAN: RouteSemantics = {
     low: 'cosmetic — naming preference, missing metadata, minor cross-reference. Does not affect executability.',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };
 
 export const AUDIT_SUBTYPES: Record<AuditSubtype, ReadOnlySubtypeSpec> = {

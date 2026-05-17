@@ -19,6 +19,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
     low: 'possible contributing factor, low confidence — speculation worth noting but not the primary lead.',
   },
   mustEmitAtLeastOne: true,
+  legalOutcomes: ['found', 'not_applicable'] as const,
 };
 
 export const DEBUG_SUBTYPES: Record<DebugSubtype, ReadOnlySubtypeSpec> = {

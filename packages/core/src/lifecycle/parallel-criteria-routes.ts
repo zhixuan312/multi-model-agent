@@ -17,18 +17,25 @@ export type ReadOnlyRouteName = 'audit' | 'review' | 'debug' | 'investigate' | '
 /** Standard finding-format spec — uniform `## Finding N:` shape across
  *  all read-only routes so the downstream parser/annotator only reads
  *  one format. */
-const FINDING_FORMAT_SHARED = [
+export const FINDING_FORMAT_SHARED = [
   'Per-finding output format (use exactly this shape — `## Finding N:` blocks):',
   '',
-  '## Finding 1: <one-line title>',
+  '## Finding N: <one-line title>',
   '- Severity: critical | high | medium | low',
-  '- Location: file:line (when applicable)',
-  '- Issue: one-paragraph explanation (the issue OR the candidate-answer OR the verification verdict OR the root-cause hypothesis, per this route\'s "what a finding means")',
-  '- Suggestion: one-line follow-up (a fix / how to verify / where to look next)',
+  '- Category: <category of issue or focus area>',
+  '- Evidence: <one-paragraph explanation (the issue OR the candidate-answer OR the verification verdict OR the root-cause hypothesis, per this route\'s "what a finding means")>',
+  '- Suggestion: <one-line follow-up (a fix / how to verify / where to look next)>',
   '',
-  '## Finding 2: ... (one block per finding)',
+  '## Finding N+1: ... (one block per finding)',
   '',
-  'Number findings sequentially starting at 1. Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
+  'Number findings sequentially starting at 1. Severity / Category / Evidence / Suggestion bullets are on their own lines with the labels exactly as shown.',
+  '',
+  'For the investigate route, the Evidence field should include specific file:line references when pointing to code or documentation.',
+  '',
+  '## Outcome',
+  'found: at least one finding was reported',
+  'clean: no findings (artifact is satisfactory for this criterion)',
+  'not_applicable: this criterion does not apply to the target artifact',
 ].join('\n');
 
 interface RouteEntry {

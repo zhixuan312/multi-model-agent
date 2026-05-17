@@ -19,6 +19,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
     low: 'possible answer / candidate — weak evidence, presented as an alternative for the user to consider against other sub-workers\' candidates.',
   },
   mustEmitAtLeastOne: true,
+  legalOutcomes: ['found', 'not_applicable'] as const,
 };
 
 export const INVESTIGATE_SUBTYPES: Record<InvestigateSubtype, ReadOnlySubtypeSpec> = {
