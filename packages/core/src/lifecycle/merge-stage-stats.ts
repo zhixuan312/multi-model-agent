@@ -41,6 +41,8 @@ interface StageOptions {
   modelFamily?: string | null;
   /** For the `review` stage — combined verdict from parallel spec+quality sub-reviewers. */
   verdict?: string;
+  /** For the `review` stage — aggregated findings outcome from sub-reviewers. */
+  findingsOutcome?: 'clean' | 'found';
   /** Defaults to +1 per call so the wire's `roundsUsed` reflects rounds taken. */
   roundsDelta?: number;
 }
@@ -82,6 +84,7 @@ export function mergeStageStats(
 
   if (stage === 'review') {
     accumulated['verdict'] = options.verdict ?? existing?.['verdict'] ?? null;
+    accumulated['findingsOutcome'] = options.findingsOutcome ?? existing?.['findingsOutcome'] ?? null;
     accumulated['roundsUsed'] = ((existing?.['roundsUsed'] as number | undefined) ?? 0) + (options.roundsDelta ?? 1);
     accumulated['concernCategories'] = existing?.['concernCategories'] ?? [];
     accumulated['findingsBySeverity'] = existing?.['findingsBySeverity'] ?? { critical: 0, high: 0, medium: 0, low: 0 };

@@ -53,6 +53,7 @@ export type ReviewPayload = {
   findings: Finding[];                                    // source: 'reviewer'
   reviewersSucceeded: Array<'spec' | 'quality'>;
   reviewersErrored: Array<{ reviewer: 'spec' | 'quality'; error: string }>;
+  findingsOutcome: 'clean' | 'found';
 };
 
 export type ReworkPayload = {

@@ -8,6 +8,16 @@ import { mergeStageStats }     from '../merge-stage-stats.js';
 import type { AgentType } from '../../types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 
+function parseOutcomeFromText(text: string): 'clean' | 'found' | null {
+  const outcomeMatch = text.match(/^##\s*outcome\s*$/im);
+  if (!outcomeMatch) return null;
+  const after = text.slice(outcomeMatch.index! + outcomeMatch[0].length);
+  const firstLine = after.split('\n').map(s => s.trim()).find(s => s.length > 0) ?? '';
+  if (/found/i.test(firstLine)) return 'found';
+  if (/clean/i.test(firstLine)) return 'clean';
+  return null;
+}
+
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
   const policy = state.reviewPolicy; // 'full' | 'quality_only' | 'diff_only' | 'none'
@@ -39,6 +49,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     cachedReadTokens: number;
     cachedNonReadTokens: number;
     turnsUsed: number;
+    turn: any;
   };
   const subResults: SubResult[] = [];
 
@@ -60,6 +71,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       inputTokens: r.inputTokens, outputTokens: r.outputTokens,
       cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
       turnsUsed: r.turnsUsed,
+      turn: r.turn,
     });
   }
   if (runQuality) {
@@ -70,6 +82,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       inputTokens: r.inputTokens, outputTokens: r.outputTokens,
       cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
       turnsUsed: r.turnsUsed,
+      turn: r.turn,
     });
   }
 
@@ -85,6 +98,16 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       findings.push({ ...f, id: `F${nextId++}`, source: 'reviewer' });
     }
   }
+
+  // Aggregate outcomes from sub-reviewers. If any reviewer found issues, overall outcome = 'found'.
+  const subOutcomes: ('clean' | 'found')[] = [];
+  for (const s of subResults) {
+    const outcome = s.turn && s.turn.text ? parseOutcomeFromText(s.turn.text) : null;
+    if (outcome) {
+      subOutcomes.push(outcome);
+    }
+  }
+  const findingsOutcome: 'clean' | 'found' = subOutcomes.some(o => o === 'found') ? 'found' : 'clean';
 
   // Combined verdict: approved iff EVERY configured reviewer returned approved.
   let verdict: 'approved' | 'changes_required';
@@ -139,7 +162,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       durationMs: Math.max(totalMs, Date.now() - t0),
       filesReadCount: 0,
       filesWrittenCount: 0,
-    }, { tier: resolvedReviewerTier, model: reviewerModel, verdict });
+    }, { tier: resolvedReviewerTier, model: reviewerModel, verdict, findingsOutcome });
     // ↑ Pass the combined verdict so it flows: review-stage → mergeStageStats →
     //   state.lastRunResult.stageStats.review.verdict → lifecycle-driver.completeStage →
     //   envelope.stages[review].verdict → to-wire-record stages[review].verdict.
@@ -149,7 +172,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
 
   return {
     outcome: 'advance',
-    payload: { verdict, findings, reviewersSucceeded: succeeded, reviewersErrored: errored },
+    payload: { verdict, findings, reviewersSucceeded: succeeded, reviewersErrored: errored, findingsOutcome },
     telemetry: {
       stageLabel: 'review',
       durationMs: Math.max(totalMs, Date.now() - t0),
@@ -175,6 +198,7 @@ async function runReviewerWithRetries(
   cachedReadTokens: number;
   cachedNonReadTokens: number;
   turnsUsed: number;
+  turn: any;
 }> {
   const turn = await runReviewerTurn({
     prompt,
@@ -195,6 +219,7 @@ async function runReviewerWithRetries(
       cachedReadTokens: 0,
       cachedNonReadTokens: 0,
       turnsUsed: 0,
+      turn,
     };
   }
   const parsed = parseReviewReport(turn.text);
@@ -208,5 +233,6 @@ async function runReviewerWithRetries(
     cachedReadTokens: turn.cachedReadTokens,
     cachedNonReadTokens: turn.cachedNonReadTokens,
     turnsUsed: turn.turnsUsed,
+    turn,
   };
 }
