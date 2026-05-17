@@ -228,12 +228,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.7.2
+## What's new in 4.7.3
 
-- **Events/lifecycle pipeline rewrite.** The legacy `event-emitter` + sinks fan-out is replaced by `TaskEnvelope` + `EnvelopeBus` + `LogWriter` + `TelemetryUploader`. Lifecycle handlers (`stall-watchdog`, `annotate-stage`, `lifecycle-driver`, `heartbeat`, provider sessions, terminal handler) now mutate the envelope directly; the recorder only seals on terminal. `BatchEntry` is slimmed to `taskEnvelopes` plus required infrastructure.
-- **New subpath exports.** `./events/task-envelope`, `./events/envelope-bus`, `./events/log-writer`, `./events/telemetry-uploader`, `./events/wire-schema`. About 20 deleted files (old `event-emitter`, every sink class, `telemetry-channel`, `http-server-log`, dual schemas) are gone.
-- **identity/ slimmed to two files.** `claude-oauth.ts` (was `auth-token-store.ts`, now Claude-OAuth-only — Codex auth is handled by the `codex` CLI subprocess per `providers/codex.ts:9`) and `secret-redactor.ts`. The dormant `cwd-validator.ts`, `host-allowlist.ts`, `ssrf-guard.ts`, `index.ts` are deleted; `getClaudeAuth`/`getCodexAuth`/`ClaudeAuth`/`CodexAuth`/`claudeOAuth`/`codexOAuth` exports removed. The live `getClaudeOAuth()` body is byte-for-byte unchanged; six-case keychain test coverage added.
-- **From 4.7.1:** polling headline `(N/M)` stage counter and live `read/write/tool calls` counters update during a stage; `ActivityTracker.recordFileWrite()` added.
+- **Fix-forward release** closing the six envelope-pipeline regressions introduced by 4.7.2 (polling stuck at `[0/0] queued`, telemetry queue empty, `runner_crash` at terminal, read-route success sealed as `'failed'`, per-stage counters zeroed, sparse stderr stream) plus three long-standing aggregation gaps (`tierUsage: {}`, per-stage `inputTokens/outputTokens/costUSD: 0`, annotate `outcome: 'skipped'` even when annotate ran).
+- **New subpath export `./events/stderr-log-subscriber`.** Bus subscriber emitting `[mmagent] event=… ts=… key=val` to stderr — always-on, replaces the deleted 4.7.1 `VerboseLogChannel`.
+- **`verbose` concept removed.** No `--verbose` CLI flag, no `diagnostics.verbose` config field. Stderr event streaming is always on; `--log` toggles JSONL persistence to `~/.multi-model/logs/`.
+- **Telemetry wire record now correct end-to-end:** per-stage `tier`/`model`/`inputTokens`/`outputTokens`/`costUSD`/`turnsUsed` populate; `tierUsage` aggregates per-tier model + cost + tokens from the stages array; `agentType` derives from stages[0].tier; review `verdict` reads from envelope; annotate `outcome` maps via `'advance' → 'transformed'`.
+- **From 4.7.2:** events/lifecycle pipeline rewrite (`TaskEnvelope` + `EnvelopeBus` + `LogWriter` + `TelemetryUploader`); identity/ slimmed to `claude-oauth.ts` + `secret-redactor.ts`.
 - **From 4.7.0 (BREAKING):** USD cost caps removed end-to-end — `maxCostUSD`, `cost_cap`/`cost_exceeded`/`cost_check`, `pricingSchema` all deleted; `outputTargets` contract on `/delegate`/`/execute-plan`; `packages/core/src/escalation/` removed.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
