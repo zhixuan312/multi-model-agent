@@ -20,6 +20,7 @@ import { ATTEMPT_BUDGETS, type ToolCategory } from './rework-budget.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
+import { startProgressEventsSubscriber } from '../bounded-execution/progress-events-subscriber.js';
 import { normalizeOutputTargets } from './normalize-output-targets.js';
 export function errorResult(error: string): RuntimeRunResult {
   return {
@@ -365,6 +366,15 @@ export async function runTaskViaDispatcher(
 
   executionContext.heartbeat?.start(1);
 
+  const stopProgressEvents = (executionContext.heartbeat && executionContext.bus)
+    ? startProgressEventsSubscriber({
+        bus: executionContext.bus,
+        tracker: executionContext.heartbeat,
+        ...(executionContext.batchId !== undefined && { batchId: executionContext.batchId }),
+        ...(executionContext.taskIndex !== undefined && { taskIndex: executionContext.taskIndex }),
+      })
+    : () => { /* no-op disposer */ };
+
   let out;
   try {
     try {
@@ -376,6 +386,7 @@ export async function runTaskViaDispatcher(
       });
     } finally {
       stopWatchdog();
+      stopProgressEvents();
       // v4.4 session reuse: ExecutionContext owns the per-tier Session
       // cache that handlers populate via ctx.getSession(tier). Close them
       // here at task end so codex CLI subprocesses + claude-agent-sdk
