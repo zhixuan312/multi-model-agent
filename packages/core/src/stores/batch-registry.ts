@@ -75,19 +75,20 @@ export interface BatchEntry {
   // New envelope-driven fields (optional during migration):
   route?: string;
   dispatchedAt?: number;
-  startedAt?: string | number;
+  startedAt: number;  // epoch ms — TaskEnvelope carries its own ISO startedAt
   terminalAt?: string | null;
   taskEnvelopes?: (TaskEnvelopeStore | null)[];
   groups?: Array<{ key: string; taskIndices: number[] }>;
   groupingTelemetry?: { groupCount: number; groupSizes: number[]; serializationApplied: boolean };
   error?: { code: string; message: string; stack?: string };
-  // Legacy fields (kept for backward compatibility):
-  projectCwd?: string;
-  tool?: string;
+  // Required infrastructure fields (always set by register()):
+  projectCwd: string;
+  tool: string;
+  stateChangedAt: number;
+  blockIds: string[];
+  blocksReleased: boolean;
+  // Legacy fields kept for downstream compatibility during migration (will be removed in T17 cleanup):
   result?: unknown;
-  stateChangedAt?: number;
-  blockIds?: string[];
-  blocksReleased?: boolean;
   expiredAt?: number;
   runningHeadlineSnapshot?: HeadlineSnapshot;
   tasksTotal?: number;
