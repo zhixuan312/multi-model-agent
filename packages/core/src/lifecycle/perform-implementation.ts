@@ -98,6 +98,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         cachedPrefix,
         criteria: routeSpec.criteria,
         buildSuffix: routeSpec.buildSuffix,
+        legalOutcomes: routeSpec.semantics.legalOutcomes,
       });
 
       const totalCriteria = routeSpec.criteria.length;
@@ -136,6 +137,8 @@ export async function performImplementation(state: LifecycleState): Promise<void
         terminationReason,
         findings: dispatchResult.findings,
         criteriaErrors: dispatchResult.criteriaErrors,
+        findingsOutcome: dispatchResult.findingsOutcome,
+        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
         ...(incompleteReason && { incompleteReason }),
       } as unknown as RuntimeRunResult;
 

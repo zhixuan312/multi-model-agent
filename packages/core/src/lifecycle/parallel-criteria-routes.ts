@@ -56,6 +56,7 @@ export interface ResolvedRouteSpec {
   criteria: readonly CriterionEntry[];
   buildPrefix: (target: CachedPrefixTarget) => string;
   buildSuffix: (criterion: CriterionEntry) => string;
+  semantics: ReadOnlySubtypeSpec['semantics'];
 }
 
 /**
@@ -87,6 +88,7 @@ export function resolveSubtypeSpec(
     criteria: spec.criteria,
     buildPrefix: (target: CachedPrefixTarget) => buildReadOnlyCachedPrefix(blocks, target),
     buildSuffix: (criterion: CriterionEntry) => buildReadOnlyCriterionSuffix(spec.semantics, criterion),
+    semantics: spec.semantics,
   };
 }
 
