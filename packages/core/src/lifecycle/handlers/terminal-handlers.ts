@@ -206,53 +206,34 @@ export function persistToBatchRegistryHandler(state: LifecycleState): void {
 }
 
 /**
- * Row 5.6 — record_task_completed.
+ * Row 5.6 — record_task_completed → envelope.seal.
  *
- * Builds the cloud `task.completed` wire event and hands it to the server
- * recorder. Idempotent on state.taskCompletedRecorded. No-op when the
- * server hasn't supplied a recorder (CLI/test paths).
+ * Seals the per-task envelope to finalize all accumulated state and
+ * trigger telemetry upload via TelemetryUploader subscriber. Idempotent on
+ * state.taskCompletedRecorded. No-op when the server hasn't supplied an
+ * envelope (CLI/test paths).
  */
 export async function recordTaskCompletedHandler(state: LifecycleState): Promise<void> {
   if (state.taskCompletedRecorded) return;
   const ctx = state.executionContext;
   if (!ctx) return;
-  const recorder = ctx.recorder;
-  if (!recorder || typeof recorder.recordTaskCompleted !== 'function') {
+  const envelope = ctx.envelope;
+  if (!envelope) {
     state.taskCompletedRecorded = true;
     return;
   }
-  const task = state.task as TaskSpec | undefined;
+  const real = await getRealFilesChanged(state);
   const last = state.lastRunResult as RuntimeRunResult | undefined;
-  if (!task || !last) {
-    state.taskCompletedRecorded = true;
-    return;
+  if (real.source === 'git_error') {
+    envelope.recordValidationWarning({ rule: 'GitDiffUnavailable', path: 'realFilesChanged' });
   }
-  ensureImplementingStage(last, ctx);
-  const realFiles = await getRealFilesChanged(state);
-  try {
-    // Gap 15 fix (4.0.3+): thread the per-task reviewPolicy into the
-    // wire BuildContext so the wire row reflects what the lifecycle
-    // actually ran. Pre-fix the BuildContext fell back to the route
-    // default ('full' for delegate, 'quality_only' for read-only),
-    // overriding per-task TaskSpec.reviewPolicy that the lifecycle
-    // had already honored at the row level. Now: per-task wins; the
-    // route default applies only when the task didn't specify.
-    recorder.recordTaskCompleted({
-      route: ctx.route as Parameters<typeof recorder.recordTaskCompleted>[0]['route'],
-      taskSpec: task,
-      runResult: last,
-      realFilesChanged: realFiles.files,   // NEW — wire the computed list
-      client: ctx.client ?? '',
-      mainModel: ctx.mainModel ?? null,
-      // v5: thread state.gates so the wire builder can read each stage's
-      // canonical telemetry (durationMs / costUSD / turnsUsed) from the gate
-      // instead of relying solely on the legacy mergeStageStats mirror.
-      ...(state.gates && { gates: state.gates }),
-      ...(task.reviewPolicy !== undefined && { reviewPolicy: task.reviewPolicy }),
-    });
-  } catch {
-    // recorder is best-effort — never break terminal flow on telemetry.
-  }
+  envelope.seal({
+    status: state.workerStatus === 'done' ? 'done' : state.workerStatus === 'done_with_concerns' ? 'done_with_concerns' : 'failed',
+    terminalAt: new Date().toISOString(),
+    stopReason: last?.terminationReason?.cause ?? null,
+    structuredError: last?.structuredError ?? null,
+    realFilesChanged: real.files,
+  });
   state.taskCompletedRecorded = true;
 }
 
