@@ -222,7 +222,7 @@ async function runReviewerWithRetries(
       turn,
     };
   }
-  const parsed = parseReviewReport(turn.text);
+  const parsed = parseReviewReport(turn.text, undefined, undefined);
   return {
     parsed,
     costUSD: turn.costUSD,

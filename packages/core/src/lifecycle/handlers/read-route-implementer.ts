@@ -97,7 +97,7 @@ export async function runReadRouteImplementer(
         });
         continue;
       }
-      const result = parseFindings(turn.output, c.id);
+      const result = parseFindings(turn.output, c.id, input.legalOutcomes);
       findings.push(...result.findings);
       perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
       perCriterionOutcomes.push(result.outcome);

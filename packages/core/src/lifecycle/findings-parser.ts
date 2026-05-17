@@ -19,9 +19,16 @@ export interface FindingsParseResult {
   outcome: FindingsOutcomeKind;
 }
 
+type WarnSink = (event: string, data: Record<string, unknown>) => void;
+
 const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
 
-export function parseFindings(text: string, criterionId: string): FindingsParseResult {
+export function parseFindings(
+  text: string,
+  criterionId: string,
+  legalOutcomes: readonly FindingsOutcomeKind[] = ['found', 'clean', 'not_applicable'],
+  warnSink: WarnSink = () => {},
+): FindingsParseResult {
   if (!text || text.trim().length === 0) {
     return { findings: [], outcome: 'clean' };
   }
@@ -41,6 +48,10 @@ export function parseFindings(text: string, criterionId: string): FindingsParseR
 
   const findings: Finding[] = [];
   for (const block of blocks) {
+    // Extract heading for warning messages
+    const headingMatch = block.match(/^## Finding \d+:[ \t]*(.*)$/m);
+    const headingText = headingMatch ? `Finding ${headingMatch[0].match(/\d+/)?.[0]}: ${headingMatch[1]}` : '<missing-heading>';
+
     // Extract the claim from the "- Claim:" bullet line within the block.
     // Note: the ## Finding N: heading line has no inline text (just the
     // heading + colon + newline); the actual claim lives in the bullet.
@@ -48,17 +59,56 @@ export function parseFindings(text: string, criterionId: string): FindingsParseR
     // text on the `## Finding N: <text>` heading (legacy worker format).
     let claim = block.match(/^- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
     if (!claim) {
-      claim = block.match(/^## Finding \d+:\s*(.+)$/m)?.[1]?.trim() ?? '';
+      claim = block.match(/^## Finding \d+:[ \t]*(.*)$/m)?.[1]?.trim() ?? '';
     }
     if (claim.startsWith('[N/A]')) continue;
 
+    // Emit warning if claim is empty, but continue processing with empty claim
+    if (!claim || claim.trim().length === 0) {
+      warnSink('findings_parser_drop', {
+        route: criterionId,
+        droppedFindingHeading: headingText,
+        reasonCode: 'empty_claim',
+      });
+      continue;
+    }
+
     const sevRaw = block.match(/^- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();
-    const severity: Finding['severity'] = sevRaw && SEVERITY_VALUES.has(sevRaw)
+
+    // Emit warning if Severity is missing, but continue with default
+    if (!sevRaw) {
+      warnSink('findings_parser_drop', {
+        route: criterionId,
+        droppedFindingHeading: headingText,
+        reasonCode: 'missing_core_bullet',
+      });
+    }
+
+    // Emit warning if Severity is invalid, but continue with default
+    const severity: Finding['severity'] = (sevRaw && SEVERITY_VALUES.has(sevRaw))
       ? (sevRaw as Finding['severity'])
       : 'medium';
+    if (sevRaw && !SEVERITY_VALUES.has(sevRaw)) {
+      warnSink('findings_parser_drop', {
+        route: criterionId,
+        droppedFindingHeading: headingText,
+        reasonCode: 'invalid_severity',
+      });
+    }
+
     const category = block.match(/^- Category:\s*(\S+)/im)?.[1] ?? criterionId;
     const evidence = block.match(/^- (?:Issue|Evidence):\s*(.+)$/im)?.[1]?.trim();
     const suggestion = block.match(/^- (?:Suggestion|Fix):\s*(.+)$/im)?.[1]?.trim();
+
+    // Drop for investigate routes if Evidence doesn't start with file:line
+    if (criterionId.startsWith('investigate-') && evidence && !evidence.match(/^[^:\s]+:\d+/)) {
+      warnSink('findings_parser_drop', {
+        route: criterionId,
+        droppedFindingHeading: headingText,
+        reasonCode: 'invalid_evidence_format',
+      });
+      continue;
+    }
 
     const f: Finding = { severity, category, claim };
     if (evidence) f.evidence = evidence;

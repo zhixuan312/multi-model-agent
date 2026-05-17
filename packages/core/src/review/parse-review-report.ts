@@ -1,4 +1,5 @@
 import { parseFindings } from '../lifecycle/findings-parser.js';
+import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
 
 export interface ParsedReviewReport {
   verdict: 'approved' | 'changes_required';
@@ -14,7 +15,13 @@ export interface ParsedReviewReport {
 const VERDICT_HEADER = /^##\s*verdict\s*$/im;
 const FINDINGS_HEADER = /^##\s*findings\s*$/im;
 
-export function parseReviewReport(text: string): ParsedReviewReport {
+type WarnSink = (event: string, data: Record<string, unknown>) => void;
+
+export function parseReviewReport(
+  text: string,
+  legalOutcomes: readonly FindingsOutcomeKind[] = ['found', 'clean', 'not_applicable'],
+  warnSink?: WarnSink,
+): ParsedReviewReport {
   const safe = (text ?? '').toString();
   const verdictMatch = safe.match(VERDICT_HEADER);
   const findingsMatch = safe.match(FINDINGS_HEADER);
@@ -36,7 +43,7 @@ export function parseReviewReport(text: string): ParsedReviewReport {
   const findingsSection = findingsMatch
     ? safe.slice(findingsMatch.index! + findingsMatch[0].length)
     : '';
-  const result = parseFindings(findingsSection, 'reviewer');
+  const result = parseFindings(findingsSection, 'reviewer', legalOutcomes, warnSink);
   const findings = result.findings;
 
   // approved + findings → changes_required per design spec §4
