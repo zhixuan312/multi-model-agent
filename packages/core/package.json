@@ -172,6 +172,10 @@
       "types": "./dist/events/telemetry-uploader.d.ts",
       "import": "./dist/events/telemetry-uploader.js"
     },
+    "./events/stderr-log-subscriber": {
+      "types": "./dist/events/stderr-log-subscriber.d.ts",
+      "import": "./dist/events/stderr-log-subscriber.js"
+    },
     "./lifecycle/auto-commit": {
       "types": "./dist/lifecycle/auto-commit.d.ts",
       "import": "./dist/lifecycle/auto-commit.js"
