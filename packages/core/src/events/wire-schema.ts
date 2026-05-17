@@ -92,6 +92,10 @@ export const ReviewStageEntrySchema = StageEntryBase.extend({
   roundsUsed: z.number().int().min(1).max(10),
   concernCategories: z.array(_ConcernCategory).max(9),
   findingsBySeverity: FindingsBySeveritySchema,
+  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
+  findingsOutcomeReason: z.string().nullable().optional(),
+  outcomeInferred: z.boolean().optional(),
+  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const ReworkStageEntrySchema = StageEntryBase.extend({
@@ -103,6 +107,10 @@ export const AnnotatingStageEntrySchema = StageEntryBase.extend({
   name: z.literal('annotating'),
   outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
   skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
+  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
+  findingsOutcomeReason: z.string().nullable().optional(),
+  outcomeInferred: z.boolean().optional(),
+  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const CommitStageEntrySchema = StageEntryBase.extend({
@@ -113,6 +121,10 @@ export const CommitStageEntrySchema = StageEntryBase.extend({
 
 export const ImplementStageEntrySchema = StageEntryBase.extend({
   name: z.literal('implementing'),
+  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
+  findingsOutcomeReason: z.string().nullable().optional(),
+  outcomeInferred: z.boolean().optional(),
+  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const StageEntrySchema = z.discriminatedUnion('name', [

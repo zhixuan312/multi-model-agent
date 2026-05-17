@@ -139,6 +139,10 @@ export function toWireRecord(
       maxIdleMs: 0, // TODO: track per-stage max idle in envelope
       totalIdleMs: 0, // TODO: track per-stage total idle in envelope
       mainEquivalentCostUSD: null,
+      ...(s.findingsOutcome !== undefined && { findingsOutcome: s.findingsOutcome }),
+      ...(s.findingsOutcomeReason !== undefined && { findingsOutcomeReason: s.findingsOutcomeReason }),
+      ...(s.outcomeInferred !== undefined && { outcomeInferred: s.outcomeInferred }),
+      ...(s.outcomeMalformed !== undefined && { outcomeMalformed: s.outcomeMalformed }),
     };
 
     // Add route-specific fields based on stage name
