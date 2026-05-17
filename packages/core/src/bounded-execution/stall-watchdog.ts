@@ -1,9 +1,11 @@
+import type { EnvelopeBus } from '../events/envelope-bus.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 
 /**
  * Wires the long-declared-but-previously-inert orchestrator stall watchdog.
  *
- * Listens on the EventEmitter for runner progress events; resets
+ * Listens on the EnvelopeBus for runner progress events; resets
  * `lastEventAtMs` on each one. A polling timer fires
  * `controller.abort()` when no resetting event has arrived for longer
  * than `stallTimeoutMs` — i.e. the runner is hung at the network layer
@@ -39,31 +41,40 @@ const RESET_EVENTS = new Set<string>([
 export interface StallWatchdogContext {
   stall: { controller: AbortController; lastEventAtMs: number; fired: boolean };
   timing: { stallTimeoutMs: number };
-  bus?: EventEmitter;
+  bus?: EventEmitter | EnvelopeBus;
+  envelope?: TaskEnvelopeStore;
   batchId?: string;
   taskIndex?: number;
 }
 
 export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
-  ctx.bus?.emit({
-    event: 'stall_watchdog_armed',
-    ts: new Date().toISOString(),
-    ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-    ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-    stallTimeoutMs: ctx.timing.stallTimeoutMs,
-  });
+  const taskId = ctx.batchId ? `${ctx.batchId}:${ctx.taskIndex ?? 0}` : '';
+  const bus = ctx.bus as any;
+  if (bus?.emitPlainEntry) {
+    // EnvelopeBus — new API
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'stall_watchdog_armed',
+      fields: {
+        task_id: taskId,
+        idle_threshold_ms: ctx.timing.stallTimeoutMs,
+      },
+    });
+  } else if (bus?.emit) {
+    // EventEmitter — old API (fallback for compatibility)
+    bus.emit({
+      event: 'stall_watchdog_armed',
+      ts: new Date().toISOString(),
+      batchId: ctx.batchId,
+      taskIndex: ctx.taskIndex,
+      stallTimeoutMs: ctx.timing.stallTimeoutMs,
+    });
+  }
 
-  const busHandler = (event: Record<string, unknown>) => {
-    const eventName = typeof event.event === 'string' ? event.event : '';
-    if (!RESET_EVENTS.has(eventName)) return;
-    // Filter by task identity — the bus is process-wide and shared across all
-    // in-flight tasks. Without this filter, every task's progress events reset
-    // every other task's idle timer, and the watchdog never fires under load.
-    if (ctx.batchId !== undefined && event['batchId'] !== ctx.batchId) return;
-    if (ctx.taskIndex !== undefined && event['taskIndex'] !== ctx.taskIndex) return;
-    ctx.stall.lastEventAtMs = Date.now();
-  };
-  ctx.bus?.on(busHandler);
+  // Note: EnvelopeBus emits envelope snapshots and plain entries; we no longer
+  // subscribe to provider events for stall-watchdog detection. Provider event
+  // filtering will be handled by heartbeat tracking in execution-context.ts.
+  // This handler is a no-op for the new bus design.
 
   // Poll interval: fine enough to fire promptly, coarse enough to avoid
   // burning CPU on idle batches. Clamped to [1s, 5s].
@@ -82,19 +93,36 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
     if (idleMs >= ctx.timing.stallTimeoutMs) {
       ctx.stall.fired = true;
       ctx.stall.controller.abort();
-      ctx.bus?.emit({
-        event: 'stall_watchdog_fired',
-        ts: new Date().toISOString(),
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        idleMs,
-        stallTimeoutMs: ctx.timing.stallTimeoutMs,
-      });
+      const taskId = ctx.batchId ? `${ctx.batchId}:${ctx.taskIndex ?? 0}` : '';
+      const bus = ctx.bus as any;
+      if (bus?.emitPlainEntry) {
+        // EnvelopeBus — new API
+        bus.emitPlainEntry({
+          ts: new Date().toISOString(),
+          kind: 'stall_watchdog_fired',
+          fields: {
+            task_id: taskId,
+            idle_ms_observed: idleMs,
+          },
+        });
+      } else if (bus?.emit) {
+        // EventEmitter — old API (fallback for compatibility)
+        bus.emit({
+          event: 'stall_watchdog_fired',
+          ts: new Date().toISOString(),
+          batchId: ctx.batchId,
+          taskIndex: ctx.taskIndex,
+          idleMs,
+          stallTimeoutMs: ctx.timing.stallTimeoutMs,
+        });
+      }
+      if (ctx.envelope) {
+        ctx.envelope.recordStall({ atMs: Date.now(), idleMs });
+      }
     }
   }, pollIntervalMs);
 
   return () => {
     clearInterval(interval);
-    ctx.bus?.off(busHandler);
   };
 }

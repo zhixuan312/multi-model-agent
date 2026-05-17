@@ -365,6 +365,7 @@ export async function runTaskViaDispatcher(
     ...(executionContext.bus && { bus: executionContext.bus }),
     ...(executionContext.batchId !== undefined && { batchId: executionContext.batchId }),
     ...(executionContext.taskIndex !== undefined && { taskIndex: executionContext.taskIndex }),
+    ...(executionContext.envelope && { envelope: executionContext.envelope }),
   });
 
   executionContext.heartbeat?.start(1);

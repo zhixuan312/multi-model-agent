@@ -192,7 +192,8 @@ function emitHaltEvent(
   comment: string,
   stopReason: string,
 ): void {
-  ctx?.bus?.emit({ event: 'stage_halt', ts: new Date().toISOString(), stageName, comment, stopReason } as Record<string, unknown>);
+  // Stage halt events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.seal() or other stage-tracking methods.
 }
 
 function emitGateRecorded(
@@ -202,12 +203,6 @@ function emitGateRecorded(
   costUSD: number | null,
   durationMs: number,
 ): void {
-  ctx?.bus?.emit({
-    event: 'stage_gate_recorded',
-    ts: new Date().toISOString(),
-    stage: stageName,
-    outcome,
-    costUSD,
-    durationMs,
-  } as Record<string, unknown>);
+  // Gate recording events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.completeStage() or other mutations.
 }
