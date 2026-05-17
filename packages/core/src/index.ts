@@ -153,7 +153,6 @@ export type { EventSink } from './events/event-emitter.js';
 export { LocalLogSink } from './events/local-log-sink.js';
 export { TelemetrySink } from './events/telemetry-sink.js';
 export { VerboseLogChannel } from './events/verbose-log-channel.js';
-export { RunningHeadlineSink } from './events/running-headline-sink.js';
 export type { Recorder } from './events/telemetry-sink.js';
 export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
 export type { EventType } from './events/observability-events.js';
