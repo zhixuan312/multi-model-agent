@@ -228,13 +228,12 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.7.0
+## What's new in 4.7.1
 
-- **BREAKING: USD cost caps removed across the entire surface.** `defaults.maxCostUSD`, `tasks[].maxCostUSD`, `TaskSpec.maxCostUSD`, `RunOptions.maxCostUSD`, `DEFAULT_MAX_COST_USD`, `MAX_COST_PRESTOP_RATIO`, `pricingSchema`, `CostCheckEvent`, `'cost_exceeded'` terminal status, `'cost_cap'` incomplete reason — all deleted. Reported cost (`actualCostUSD`, `costUSD`) is unchanged; only the *cap* is gone. Migration: drop `maxCostUSD` everywhere.
-- **Polling headline now reflects live stage + counts.** The server's `recordHeartbeat` callback writes a structured per-task snapshot (`stageLabel`, `stageDone`, `stageTotal`, `toolReads`/`toolWrites`/`toolTotal`). `/batch/:id` 202 responses advance through `Implementing → Review → Annotating → Committing` instead of staying frozen on the seed value.
-- **`outputTargets` contract.** `/delegate` and `/execute-plan` tasks accept an optional `outputTargets: string[]`; missing paths post-run produce a `severity: high` finding (`missing_output_targets`).
-- **Module removal:** `packages/core/src/escalation/` deleted entirely. Write routes now go through `ctx.getSession(tier)` directly. Also deleted: `RunningHeadlineSink`, `cleanup/` folder, `body-size.ts` middleware, dormant bounded-execution helpers (`IdleGuard`, `CostMeter`, etc.), and `config/pricing-table.ts`.
-- **From 4.6.0, still relevant:** `isLlmStage` flag + `StageModelMissingError` defensive build, tier-uniformity invariant in `rollupByTier`, full token attribution on `RunAnnotatorResult` / `RunReviewerResult`, cross-tier reviewer policy via `invertedReviewerTier()`.
+- **Polling headline `(N/M)` stage counter actually moves.** Driver (`lifecycle/lifecycle-driver.ts`) now owns the visible-stage counter and fires `tracker.transition({stage, stageIndex, stageCount})` before each visible stage's handler runs. The per-handler transition calls in `review-stage`, `rework-stage`, `git-commit-handler`, `annotate-stage`, and the redundant first-stage call in `perform-implementation` are deleted. `stageCount` starts at the upper bound and decrements when `shouldRun()` skips a visible stage.
+- **Live `read / write / tool calls` counters update during a stage.** New `bounded-execution/progress-events-subscriber.ts` (pattern mirrors `stall-watchdog.ts`) subscribes to runner-emitted bus events (`claude_tool_call` / `codex_command_completed` / `codex_file_change`) and increments tracker counters in real time. Wired from `task-runner.ts` alongside the stall-watchdog.
+- **New API:** `ActivityTracker.recordFileWrite()` (mirrors existing `recordFileRead()` / `recordToolCall()`).
+- **From 4.7.0:** USD cost caps removed end-to-end (BREAKING — `maxCostUSD`, `cost_cap` / `cost_exceeded` / `cost_check`, `pricingSchema` all deleted); per-task polling headline wired; `outputTargets` contract on `/delegate` / `/execute-plan`; `packages/core/src/escalation/` removed.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
