@@ -46,6 +46,9 @@ export type ImplementPayload = {
   criteriaSucceeded: string[];
   criteriaErrors: Array<{ criterion: string; error: string }>;
   sourcesUsed: string[];
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 };
 
 export type ReviewPayload = {
@@ -54,6 +57,9 @@ export type ReviewPayload = {
   reviewersSucceeded: Array<'spec' | 'quality'>;
   reviewersErrored: Array<{ reviewer: 'spec' | 'quality'; error: string }>;
   findingsOutcome: 'clean' | 'found';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 };
 
 export type ReworkPayload = {
