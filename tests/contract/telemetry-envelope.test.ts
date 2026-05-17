@@ -1,70 +1,88 @@
 import { describe, it, expect } from 'vitest';
-import { TelemetrySink } from '../../packages/core/src/events/telemetry-sink.js';
-import { CLOUD_EVENT_NAMES, type EventType } from '../../packages/core/src/events/observability-events.js';
+import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uploader.js';
+import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 
 describe('telemetry envelope (v2)', () => {
-  it('TelemetrySink passes cloud events to recorder.enqueue', () => {
+  it('TelemetryUploader passes sealed envelopes to recorder.enqueue', () => {
     const enqueued: Record<string, unknown>[] = [];
     const stubRecorder = { enqueue: (e: Record<string, unknown>) => enqueued.push(e) };
-    const sink = new TelemetrySink(stubRecorder);
+    const uploader = new TelemetryUploader({
+      recorder: stubRecorder,
+      buildOpts: () => ({
+        reviewPolicy: 'full' as const,
+        toolMode: 'full' as const,
+        verifyCommandPresent: false,
+        implementerModel: 'claude-sonnet-4-6',
+        implementerTier: 'standard' as const,
+        mainModelFamily: 'claude',
+      }),
+    });
+    const bus = new EnvelopeBus();
+    bus.subscribe(uploader);
 
-    const ev = {
-      event: 'task.completed',
-      ts: new Date().toISOString(),
-      route: 'delegate',
-      agentType: 'standard',
-      capabilities: [],
-      toolMode: 'full',
-      client: 'test',
-      fileCountBucket: '1-5',
-      durationBucket: '<10s',
-      costBucket: '$0',
-      savedCostBucket: '$0',
-      implementerModelFamily: 'claude',
-      implementerModel: 'claude-sonnet-4-6',
-      terminalStatus: 'ok',
-      workerStatus: 'done',
-      errorCode: null,
-      escalated: false,
-      fallbackTriggered: false,
-      topToolNames: [],
-      stages: {},
-    } as unknown as EventType;
+    const store = TaskEnvelopeStore.create(
+      {
+        taskId: 'test-task-1',
+        batchId: 'test-batch-1',
+        taskIndex: 0,
+        route: 'delegate',
+        agentType: 'standard',
+        client: 'test',
+        mainModel: 'claude-sonnet-4-6',
+        cwd: '/tmp/test',
+      },
+      bus,
+    );
 
-    sink.emit(ev);
+    // Add a stage so toWireRecord validation passes
+    store.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard', startedAt: new Date().toISOString() });
+    store.completeStage('implementing', 1, {
+      outcome: 'advance',
+      costUSD: 0.01,
+      durationMs: 100,
+      turnsUsed: 1,
+      inputTokens: 100,
+      outputTokens: 50,
+      cachedReadTokens: 0,
+      cachedNonReadTokens: 0,
+      toolCallCount: 0,
+      filesReadCount: 0,
+      filesWrittenCount: 0,
+    });
+
+    store.seal({ status: 'done', terminalAt: new Date().toISOString(), stopReason: null, realFilesChanged: [] });
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toHaveProperty('event', 'task.completed');
+    // Verify the record has been enqueued as a valid task completed event
+    const record = enqueued[0] as Record<string, unknown>;
+    expect(record.eventId).toBeDefined();
+    expect(record.route).toBe('delegate');
+    expect(record.terminalStatus).toBe('ok');
   });
 
-  it('TelemetrySink ignores non-cloud events', () => {
+  it('TelemetryUploader ignores plain log entries', () => {
     const enqueued: Record<string, unknown>[] = [];
     const stubRecorder = { enqueue: (e: Record<string, unknown>) => enqueued.push(e) };
-    const sink = new TelemetrySink(stubRecorder);
+    const uploader = new TelemetryUploader({
+      recorder: stubRecorder,
+      buildOpts: () => ({
+        reviewPolicy: 'full' as const,
+        toolMode: 'full' as const,
+        verifyCommandPresent: false,
+        implementerModel: 'claude-sonnet-4-6',
+        implementerTier: 'standard' as const,
+        mainModelFamily: 'claude',
+      }),
+    });
+    const bus = new EnvelopeBus();
+    bus.subscribe(uploader);
 
-    const ev = {
-      event: 'heartbeat',
+    bus.emitPlainEntry({
       ts: new Date().toISOString(),
-      batchId: '12345678-1234-4234-8234-000000000001',
-      taskIndex: 0,
-      elapsed: '10s',
-      stage: 'implementing',
-      tools: 0,
-      read: 0,
-      wrote: 0,
-      text: 0,
-      cost: null,
-      idleMs: 0,
-    } as unknown as EventType;
+      kind: 'batch_created',
+      fields: { batch_id: 'test-batch-1' },
+    });
 
-    sink.emit(ev);
     expect(enqueued).toHaveLength(0);
-  });
-
-  it('CLOUD_EVENT_NAMES includes all four cloud event discriminators', () => {
-    expect(CLOUD_EVENT_NAMES.has('task.completed')).toBe(true);
-    expect(CLOUD_EVENT_NAMES.has('session.started')).toBe(true);
-    expect(CLOUD_EVENT_NAMES.has('install.changed')).toBe(true);
-    expect(CLOUD_EVENT_NAMES.has('skill.installed')).toBe(true);
-    expect(CLOUD_EVENT_NAMES.size).toBe(4);
   });
 });
