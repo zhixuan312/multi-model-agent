@@ -176,6 +176,14 @@
       "types": "./dist/events/jsonl-writer.d.ts",
       "import": "./dist/events/jsonl-writer.js"
     },
+    "./events/task-envelope": {
+      "types": "./dist/events/task-envelope.d.ts",
+      "import": "./dist/events/task-envelope.js"
+    },
+    "./events/envelope-bus": {
+      "types": "./dist/events/envelope-bus.d.ts",
+      "import": "./dist/events/envelope-bus.js"
+    },
     "./lifecycle/auto-commit": {
       "types": "./dist/lifecycle/auto-commit.d.ts",
       "import": "./dist/lifecycle/auto-commit.js"
