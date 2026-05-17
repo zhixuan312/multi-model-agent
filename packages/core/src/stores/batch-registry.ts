@@ -1,4 +1,5 @@
 import type { ToolCategory } from '../lifecycle/rework-budget.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 export type BatchState = 'pending' | 'complete' | 'failed' | 'expired';
 
@@ -65,35 +66,40 @@ export interface BatchEntryInput<Result = unknown> {
   tasks?: RegistryTaskSpec[];
 }
 
-// Stored entry — runningHeadlineSnapshot REQUIRED.
-export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
-  runningHeadlineSnapshot: HeadlineSnapshot;
-  /** Per-task ExecutionContexts owning the active sessions. Populated by the
-   *  task-runner via attachExecutionContext() so shutdown drain can call
-   *  closeSessions() on every in-flight task. Keyed by taskIndex. */
-  executionContexts?: Map<number, import('../lifecycle/lifecycle-context.js').ExecutionContext>;
-  /** Per-task headline snapshots, keyed by taskIndex. When a batch fans out
-   *  to multiple parallel tasks, each task tracks its own stage/elapsed/stats
-   *  so the polling endpoint can render one line per task instead of letting
-   *  the latest event overwrite the previous task's progress. */
-  perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
-  /**
-   * Per-batch grouping snapshot from groupTasksByRepo. Set via
-   * attachGroups() by task-executor immediately after grouping.
-   * Consumed by the 202 pending-headline composer to describe active
-   * groups without recomputing repo grouping. Absent for read-only routes
-   * and for batches that did not use serializeSameRepo.
-   */
+// New envelope-driven shape. For backward compatibility with callers still using
+// the old interface during migration, includes all old fields as optional.
+export interface BatchEntry {
+  // Core fields (required):
+  batchId: string;
+  state: BatchState;
+  // New envelope-driven fields (optional during migration):
+  route?: string;
+  dispatchedAt?: number;
+  startedAt?: string | number;
+  terminalAt?: string | null;
+  taskEnvelopes?: (TaskEnvelopeStore | null)[];
   groups?: Array<{ key: string; taskIndices: number[] }>;
-  /** taskIndex -> terminal context blockId; lazily created on first record */
-  terminalBlockIds?: Map<number, string>;
-  /**
-   * Per-batch grouping telemetry for emission on batch_completed event.
-   * Set via setGroupingTelemetry() by task-executor immediately after
-   * grouping resolves. Optional — absent on read-only routes and for
-   * batches that did not use serializeSameRepo.
-   */
   groupingTelemetry?: { groupCount: number; groupSizes: number[]; serializationApplied: boolean };
+  error?: { code: string; message: string; stack?: string };
+  // Legacy fields (kept for backward compatibility):
+  projectCwd?: string;
+  tool?: string;
+  result?: unknown;
+  stateChangedAt?: number;
+  blockIds?: string[];
+  blocksReleased?: boolean;
+  expiredAt?: number;
+  runningHeadlineSnapshot?: HeadlineSnapshot;
+  tasksTotal?: number;
+  tasksStarted?: number;
+  tasksCompleted?: number;
+  lastHeartbeatAt?: number;
+  running?: Array<{ worker: string; turn: number }>;
+  toolCategory?: ToolCategory;
+  tasks?: RegistryTaskSpec[];
+  executionContexts?: Map<number, import('../lifecycle/lifecycle-context.js').ExecutionContext>;
+  perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
+  terminalBlockIds?: Map<number, string>;
 }
 
 export interface BatchRegistryOptions {
@@ -139,8 +145,9 @@ export class BatchRegistry {
       };
     }
     const entry = input as BatchEntry;
+    if (!entry.taskEnvelopes) entry.taskEnvelopes = [];
     this.map.set(entry.batchId, entry);
-    if (this.deps.contextBlockStore) {
+    if (this.deps.contextBlockStore && entry.blockIds) {
       for (const bid of entry.blockIds) {
         this.deps.contextBlockStore.pin(bid);
       }
@@ -182,19 +189,15 @@ export class BatchRegistry {
     entry?.executionContexts?.delete(taskIndex);
   }
 
-  updateRunningHeadlineSnapshot(batchId: string, snapshot: HeadlineSnapshot): void {
+  attachEnvelope(batchId: string, taskIndex: number, env: TaskEnvelopeStore): void {
     const entry = this.map.get(batchId);
-    if (!entry) return;
-    if (isTerminal(entry.state)) return;
-    entry.runningHeadlineSnapshot = snapshot;
-  }
-
-  updatePerTaskHeadlineSnapshot(batchId: string, taskIndex: number, snapshot: HeadlineSnapshot): void {
-    const entry = this.map.get(batchId);
-    if (!entry) return;
-    if (isTerminal(entry.state)) return;
-    if (!entry.perTaskHeadlineSnapshots) entry.perTaskHeadlineSnapshots = new Map();
-    entry.perTaskHeadlineSnapshots.set(taskIndex, snapshot);
+    if (!entry) throw new Error(`BatchRegistry.attachEnvelope: unknown batch ${batchId}`);
+    if (!entry.taskEnvelopes) entry.taskEnvelopes = [];
+    while (entry.taskEnvelopes.length <= taskIndex) entry.taskEnvelopes.push(null);
+    if (entry.taskEnvelopes[taskIndex] !== null) {
+      throw new Error(`BatchRegistry.attachEnvelope: double-attach at ${batchId}[${taskIndex}]`);
+    }
+    entry.taskEnvelopes[taskIndex] = env;
   }
 
   attachGroups(batchId: string, groups: Array<{ key: string; taskIndices: number[] }>): void {
@@ -232,14 +235,12 @@ export class BatchRegistry {
     return this.map.values();
   }
 
-  complete<R>(batchId: string, result: R): void {
+  complete(batchId: string): void {
     const entry = this.map.get(batchId);
     if (!entry) return;
     if (isTerminal(entry.state)) return; // idempotent
     entry.state = 'complete';
-    entry.result = result;
-    entry.stateChangedAt = Date.now();
-    this.release(entry);
+    entry.terminalAt = new Date().toISOString();
   }
 
   fail(batchId: string, error: { code: string; message: string; stack?: string }): void {
@@ -261,7 +262,7 @@ export class BatchRegistry {
         toDelete.push(entry.batchId);
       } else if (
         (entry.state === 'complete' || entry.state === 'failed') &&
-        now - entry.stateChangedAt > this.options.batchTtlMs
+        now - (entry.stateChangedAt ?? 0) > this.options.batchTtlMs
       ) {
         // first-pass: transition terminal entries to expired
         entry.state = 'expired';
@@ -288,7 +289,7 @@ export class BatchRegistry {
         this.map.delete(key);
       } else if (
         (entry.state === 'complete' || entry.state === 'failed') &&
-        now - entry.stateChangedAt > this.options.batchTtlMs
+        now - (entry.stateChangedAt ?? 0) > this.options.batchTtlMs
       ) {
         this.release(entry);
         this.map.delete(key);
@@ -323,7 +324,7 @@ export class BatchRegistry {
     entry.lastHeartbeatAt = undefined;
     entry.running = undefined;
     if (entry.blocksReleased) return;
-    if (this.deps.contextBlockStore) {
+    if (this.deps.contextBlockStore && entry.blockIds) {
       for (const bid of entry.blockIds) {
         this.deps.contextBlockStore.unpin(bid);
       }
