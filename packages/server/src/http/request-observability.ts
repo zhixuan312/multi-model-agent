@@ -1,46 +1,33 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { composeVerboseLine } from '@zhixuan92/multi-model-agent-core/events/verbose-line';
-import { spillRequestBody } from '@zhixuan92/multi-model-agent-core/events/request-spill';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 
-const INLINE_BODY_LIMIT_BYTES = 16_384;
-
-export interface EmitRequestReceivedInput {
-  config: MultiModelConfig;
-  batchId: string;
-  route: string;
-  parsed: unknown;
+export interface EmitRequestReceivedDeps {
+  bus: EnvelopeBus;
+  logWriter: LogWriter;
 }
 
-export async function emitRequestReceived(input: EmitRequestReceivedInput): Promise<void> {
-  const json = JSON.stringify(input.parsed);
+export async function emitRequestReceived(
+  deps: EmitRequestReceivedDeps,
+  batchId: string,
+  route: string,
+  parsed: unknown
+): Promise<void> {
+  const json = JSON.stringify(parsed);
   const bodyBytes = Buffer.byteLength(json, 'utf8');
   const ts = new Date().toISOString();
 
-  // 4.6.0+: always-on verbose; previously gated on diagnostics.verbose.
-  process.stderr.write(composeVerboseLine({ event: 'batch_created', ts, batch: input.batchId }) + '\n');
+  // Emit batch_created plain entry
+  deps.bus.emitPlainEntry({ ts, kind: 'batch_created', fields: { batch_id: batchId, route } });
 
-  if (bodyBytes <= INLINE_BODY_LIMIT_BYTES) {
-    process.stderr.write(composeVerboseLine({
-      event: 'request_received',
-      ts,
-      batch: input.batchId,
-      route: input.route,
-      body: json,
-      body_bytes: bodyBytes,
-    }) + '\n');
-    return;
+  // Emit request_received plain entry
+  const inline = bodyBytes <= deps.logWriter.inlineBodyLimit();
+  const fields: Record<string, string | number | boolean | null> = { batch_id: batchId, route, body_bytes: bodyBytes };
+  if (inline) {
+    fields.body = json;
+  } else {
+    const spilled = await deps.logWriter.spillRequestBody({ batchId, body: parsed });
+    fields.body_path = spilled.path;
+    fields.body_bytes = spilled.bytes;
   }
-
-  const spillDir = join(homedir(), '.multi-model', 'logs', 'requests');
-  const spilled = await spillRequestBody({ dir: spillDir, batch: input.batchId, body: input.parsed });
-  process.stderr.write(composeVerboseLine({
-    event: 'request_received',
-    ts,
-    batch: input.batchId,
-    route: input.route,
-    body_path: spilled.path,
-    body_bytes: spilled.bytes,
-  }) + '\n');
+  deps.bus.emitPlainEntry({ ts, kind: 'request_received', fields });
 }
