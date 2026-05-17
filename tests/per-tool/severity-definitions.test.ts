@@ -6,6 +6,7 @@ import { INVESTIGATE_SUBTYPES } from '../../packages/core/src/tools/investigate/
 import { RESEARCH_SUBTYPES } from '../../packages/core/src/tools/research/subtypes.js';
 import { qualityLintTemplate } from '../../packages/core/src/review/templates/quality-review.js';
 import { specLintTemplate } from '../../packages/core/src/review/templates/spec-review.js';
+import { buildReadOnlyCachedPrefix } from '../../packages/core/src/tools/parallel-criteria-prompt.js';
 
 describe('severity-definitions — all 7 routes/templates have spec §9 definitions verbatim', () => {
   // Severity definitions per spec §9:
@@ -13,10 +14,14 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
   // review: critical="Production-breaking on merge", high="Correctness gap surfacing in normal use", etc.
   // etc.
 
-  const tests: Array<{ name: string; semantics: any; expectedDefinitions: Record<string, string> }> = [
+  const tests: Array<{
+    name: string;
+    subtypeSpec: any;
+    expectedDefinitions: Record<string, string>;
+  }> = [
     {
       name: 'audit (spec subtype)',
-      semantics: AUDIT_SUBTYPES.spec,
+      subtypeSpec: AUDIT_SUBTYPES.spec,
       expectedDefinitions: {
         critical: 'Blocks executability of the audited doc',
         high: 'Significant ambiguity/gap; rework needed',
@@ -26,7 +31,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     },
     {
       name: 'review',
-      semantics: REVIEW_SUBTYPES.default,
+      subtypeSpec: REVIEW_SUBTYPES.default,
       expectedDefinitions: {
         critical: 'Production-breaking on merge',
         high: 'Correctness gap surfacing in normal use',
@@ -36,7 +41,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     },
     {
       name: 'debug',
-      semantics: DEBUG_SUBTYPES.default,
+      subtypeSpec: DEBUG_SUBTYPES.default,
       expectedDefinitions: {
         critical: 'Confirmed root cause',
         high: 'Very likely root cause; one step unconfirmed',
@@ -46,7 +51,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     },
     {
       name: 'investigate',
-      semantics: INVESTIGATE_SUBTYPES.default,
+      subtypeSpec: INVESTIGATE_SUBTYPES.default,
       expectedDefinitions: {
         critical: 'Direct verbatim citation',
         high: 'Clearly inferable from cited source',
@@ -56,7 +61,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     },
     {
       name: 'research',
-      semantics: RESEARCH_SUBTYPES.default,
+      subtypeSpec: RESEARCH_SUBTYPES.default,
       expectedDefinitions: {
         critical: 'Primary authoritative source',
         high: 'Strong secondary source',
@@ -66,12 +71,33 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     },
   ];
 
-  for (const { name, semantics, expectedDefinitions } of tests) {
-    it(`${name} has all 4 severity definitions verbatim`, () => {
-      expect(semantics.semantics.severityMeanings.critical).toBe(expectedDefinitions.critical);
-      expect(semantics.semantics.severityMeanings.high).toBe(expectedDefinitions.high);
-      expect(semantics.semantics.severityMeanings.medium).toBe(expectedDefinitions.medium);
-      expect(semantics.semantics.severityMeanings.low).toBe(expectedDefinitions.low);
+  for (const { name, subtypeSpec, expectedDefinitions } of tests) {
+    describe(name, () => {
+      it('has all 4 severity definitions verbatim in RouteSemantics', () => {
+        expect(subtypeSpec.semantics.severityMeanings.critical).toBe(expectedDefinitions.critical);
+        expect(subtypeSpec.semantics.severityMeanings.high).toBe(expectedDefinitions.high);
+        expect(subtypeSpec.semantics.severityMeanings.medium).toBe(expectedDefinitions.medium);
+        expect(subtypeSpec.semantics.severityMeanings.low).toBe(expectedDefinitions.low);
+      });
+
+      it('renders severity definitions verbatim in the cached prefix prompt', () => {
+        const cachedPrefix = buildReadOnlyCachedPrefix(
+          {
+            orientation: subtypeSpec.orientation,
+            evidenceRule: subtypeSpec.evidenceRule,
+            scopeRule: subtypeSpec.scopeRule,
+            annotatorAwareness: subtypeSpec.annotatorAwareness,
+            criteria: subtypeSpec.criteria,
+            findingFormat: '',
+            semantics: subtypeSpec.semantics,
+          },
+          {},
+        );
+        expect(cachedPrefix).toContain(expectedDefinitions.critical);
+        expect(cachedPrefix).toContain(expectedDefinitions.high);
+        expect(cachedPrefix).toContain(expectedDefinitions.medium);
+        expect(cachedPrefix).toContain(expectedDefinitions.low);
+      });
     });
   }
 
@@ -84,7 +110,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
       low: 'Cosmetic drift',
     };
 
-    it('has all 4 severity definitions verbatim in OUTPUT_FORMAT or systemPrompt', () => {
+    it('has all 4 severity definitions verbatim in systemPrompt', () => {
       const fullPrompt = specLintTemplate.systemPrompt;
       expect(fullPrompt).toContain(expectedDefinitions.critical);
       expect(fullPrompt).toContain(expectedDefinitions.high);
@@ -101,7 +127,7 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
       low: 'Style',
     };
 
-    it('has all 4 severity definitions verbatim in OUTPUT_FORMAT or systemPrompt', () => {
+    it('has all 4 severity definitions verbatim in systemPrompt', () => {
       const fullPrompt = qualityLintTemplate.systemPrompt;
       expect(fullPrompt).toContain(expectedDefinitions.critical);
       expect(fullPrompt).toContain(expectedDefinitions.high);
