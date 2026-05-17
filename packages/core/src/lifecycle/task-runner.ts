@@ -8,8 +8,8 @@ import type {
 import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
 import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
-import type { HttpServerLog } from '../events/http-server-log.js';
-import type { EventEmitter } from '../events/event-emitter.js';
+
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../providers/agent-resolver.js';
@@ -78,7 +78,7 @@ export interface RunTasksOptions {
   runtime?: RunTasksRuntime;
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  logger?: HttpServerLog;
+  logger?: { error: (kind: string, err: unknown) => void };
   verbose?: boolean;
   verboseStream?: (line: string) => void;
   recorder?: {
@@ -94,7 +94,7 @@ export interface RunTasksOptions {
   };
   route?: string;
   client?: string;
-  bus?: EventEmitter;
+  bus?: EnvelopeBus;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   batchGroupCount?: number;
 }
@@ -179,7 +179,7 @@ export interface DispatchTaskInput {
   onProgress?: (taskIndex: number, event: ProgressEvent) => void;
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  logger?: HttpServerLog;
+  logger?: { error: (kind: string, err: unknown) => void };
   verbose?: boolean;
   verboseStream?: (line: string) => void;
   recorder?: ExecutionContext['recorder'];
@@ -188,7 +188,7 @@ export interface DispatchTaskInput {
   /** Calling agent's model (e.g., claude-opus-4-7), threaded into telemetry as mainModel.
    *  Sourced from X-MMA-Main-Model header → execution-context → here. */
   mainModel?: string | null;
-  bus?: EventEmitter;
+  bus?: EnvelopeBus;
   /** Context block store for expanding contextBlockIds into the task's prompt
    *  before dispatch. Without this, the worker LLM never sees the prior-round
    *  audit/review report referenced by contextBlockIds. */

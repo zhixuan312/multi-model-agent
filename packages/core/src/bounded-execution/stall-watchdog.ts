@@ -1,6 +1,5 @@
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
-import type { EventEmitter } from '../events/event-emitter.js';
 
 /**
  * Wires the long-declared-but-previously-inert orchestrator stall watchdog.
@@ -41,7 +40,7 @@ const RESET_EVENTS = new Set<string>([
 export interface StallWatchdogContext {
   stall: { controller: AbortController; lastEventAtMs: number; fired: boolean };
   timing: { stallTimeoutMs: number };
-  bus?: EventEmitter | EnvelopeBus;
+  bus?: EnvelopeBus;
   envelope?: TaskEnvelopeStore;
   batchId?: string;
   taskIndex?: number;
@@ -61,7 +60,7 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
       },
     });
   } else if (bus?.emit) {
-    // EventEmitter — old API (fallback for compatibility)
+    // EnvelopeBus — old API (fallback for compatibility)
     bus.emit({
       event: 'stall_watchdog_armed',
       ts: new Date().toISOString(),
@@ -106,7 +105,7 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
           },
         });
       } else if (bus?.emit) {
-        // EventEmitter — old API (fallback for compatibility)
+        // EnvelopeBus — old API (fallback for compatibility)
         bus.emit({
           event: 'stall_watchdog_fired',
           ts: new Date().toISOString(),

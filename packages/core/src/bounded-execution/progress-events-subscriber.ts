@@ -1,4 +1,4 @@
-import type { EventEmitter } from '../events/event-emitter.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ActivityTracker } from './activity-tracker.js';
 
 /**
@@ -7,7 +7,7 @@ import type { ActivityTracker } from './activity-tracker.js';
  * of jumping from 0/0/0 to the final value only at stage transition.
  *
  * Pattern mirrors stall-watchdog.ts:
- *   - Listens on EventEmitter for runner progress events.
+ *   - Listens on EnvelopeBus for runner progress events.
  *   - Filters by batchId + taskIndex (bus is process-wide; without filter
  *     every task's events would increment every other task's counters).
  *   - Calls tracker.recordFileRead / recordFileWrite / recordToolCall /
@@ -33,7 +33,7 @@ import type { ActivityTracker } from './activity-tracker.js';
  * end-of-stage updateProgress() call still snaps to the correct totals.
  */
 export interface ProgressEventsSubscriberContext {
-  bus: EventEmitter;
+  bus: EnvelopeBus;
   tracker: ActivityTracker;
   batchId?: string;
   taskIndex?: number;
@@ -87,9 +87,18 @@ export function startProgressEventsSubscriber(
     }
   };
 
-  ctx.bus.on(handler);
-
-  return () => {
-    ctx.bus.off(handler);
-  };
+  // EnvelopeBus replaces the old EventEmitter on/off API with subscribe().
+  // The subscriber receives BusMessage; only envelope snapshots are relevant
+  // here, so map them into the handler's old event shape on the fly.
+  const sub = ctx.bus.subscribe({
+    name: 'progress-events-subscriber',
+    receive(msg) {
+      if (msg.type === 'envelope') {
+        // Synthesize a coarse "envelope_updated" event for the handler so it
+        // still has a reason to refresh its progress signal.
+        handler({ event: 'envelope_updated', reason: msg.reason });
+      }
+    },
+  });
+  return () => { sub(); };
 }

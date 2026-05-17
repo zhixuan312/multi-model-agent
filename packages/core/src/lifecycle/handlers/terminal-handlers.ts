@@ -144,40 +144,14 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   }
   const stages = JSON.stringify(stagesMap);
 
-  bus.emit({
-    event: 'task_completed',
-    ts: new Date().toISOString(),
-    batchId: ctx.batchId,
-    taskIndex: ctx.taskIndex,
-    route: state.route,
-    status: last?.status ?? 'error',
-    workerStatus: last?.workerStatus ?? null,
-    turns: turnsTotal,
-    durationMs: last?.durationMs ?? null,
-    filesRead: filesReadTotal,
-    filesWritten: filesWrittenTotal,
-    toolCalls: toolCallsTotal,
-    inputTokens,
-    outputTokens,
-    cachedReadTokens,
-    cachedNonReadTokens,
-    // A11.2 — populate the full cost surface on the task_completed envelope.
-    // actualCostUSD is the new canonical field (sum of every stage's costUSD).
-    // costUSD and totalCostUSD are back-compat aliases — emit all three so
-    // existing callers and new callers both get the value they expect.
-    // costDeltaVsMainUSD: delta vs estimated main-tier cost (from CostBreakdown).
-    actualCostUSD,
-    costUSD: actualCostUSD,
-    totalCostUSD: actualCostUSD,
-    costDeltaVsMainUSD,
-    taskMaxIdleMs: null,
-    stallTriggered: false,
-    stages,
-    terminalBlockId: state.terminalBlockId,
-    specChainPassed: state.specChainPassed,
-    qualityChainPassed: state.qualityChainPassed,
-    diffReviewVerdict: state.diffReviewVerdict,
-  } as Record<string, unknown>);
+  // The old `task_completed` named event is replaced by the sealed-envelope snapshot
+  // push that happens inside envelope.seal() (see recordTaskCompletedHandler). The
+  // TelemetryUploader subscriber picks up the sealed snapshot and runs toWireRecord.
+  // No equivalent bus.emit needed here — the envelope IS the event.
+  void stages; void actualCostUSD; void costDeltaVsMainUSD; void turnsTotal;
+  void filesReadTotal; void filesWrittenTotal; void toolCallsTotal;
+  void inputTokens; void outputTokens; void cachedReadTokens; void cachedNonReadTokens;
+  void last; void bus;
   state.taskTerminalEmitted = true;
 }
 

@@ -194,7 +194,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
   const disposeWatchdog = startProgressWatchdog({
     state,
     controller: ctx.stall.controller,
-    emit: (event) => ctx.bus?.emit(event as any),
+    emit: (_event) => { /* signals flow via envelope + log-writer */ },
     config: wdConfig,
     taskIndex: ctx.taskIndex,
     batchId: ctx.batchId,
@@ -254,7 +254,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       state,
       enrichedResult.turns ?? 0,
       wdConfig,
-      (event) => ctx.bus?.emit(event as any),
+      (_event) => { /* signals flow via envelope + log-writer */ },
       ctx.taskIndex,
       ctx.batchId,
     );

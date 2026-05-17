@@ -20,7 +20,9 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import type { MultiModelConfig, ShutdownCause } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+// ShutdownCause: previously exported from http-server-log.ts (removed in events refactor).
+type ShutdownCause = 'sigterm' | 'sigint' | 'uncaught_exception' | 'unhandled_rejection' | 'stdout_epipe' | 'stdout_other_error' | 'uncaughtException' | 'unhandledRejection';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { sweepProjectCap } from '@zhixuan92/multi-model-agent-core/stores/context-block-project-cap';
 import { migrateStorage } from '../migration/storage-migration.js';
