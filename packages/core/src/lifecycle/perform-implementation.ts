@@ -176,7 +176,6 @@ export async function performImplementation(state: LifecycleState): Promise<void
   }
 
   // Build the watchdog config once, just before the session.send call:
-  safeTracker(() => ctx.heartbeat?.transition({ stage: 'implementing', stageIndex: 1 }), ctx);
   const wdConfig = {
     enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
     thrashTurns: ctx.config?.defaults?.thrashTurns ?? 50,
