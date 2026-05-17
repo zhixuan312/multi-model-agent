@@ -114,6 +114,13 @@ export function enrichRuntimeResult(state: LifecycleState): void {
     enriched.structuredReport = fallbackReport as RuntimeRunResult['structuredReport'];
   }
 
+  // ── Mirror findings outcome fields from structuredReport onto envelope ──────
+  const sr = enriched.structuredReport as any;
+  if (sr?.findingsOutcome !== undefined) (enriched as any).findingsOutcome = sr.findingsOutcome;
+  if (sr?.findingsOutcomeReason !== undefined) (enriched as any).findingsOutcomeReason = sr.findingsOutcomeReason;
+  if (sr?.outcomeInferred !== undefined) (enriched as any).outcomeInferred = sr.outcomeInferred;
+  if (sr?.outcomeMalformed !== undefined) (enriched as any).outcomeMalformed = sr.outcomeMalformed;
+
   // ── workerStatus derivation from output summary ─────────────────────────────
   if (enriched.workerStatus === undefined) {
     const summary = (fallbackReport?.summary ?? '').toLowerCase();

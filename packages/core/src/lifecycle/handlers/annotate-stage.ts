@@ -36,6 +36,10 @@ export interface StructuredReport {
   /** Research-only: parsed `## Sources used` markdown table. Absent on
    *  every other route (audit/review/debug/investigate/write routes). */
   sourcesUsed?: ResearchSourcesUsedEntry[];
+  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 }
 
 export async function annotator(state: LifecycleState): Promise<StageGate<AnnotatePayload>> {
@@ -68,6 +72,11 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     const lastOutput = (last.output as string | undefined) ?? '';
     report.sourcesUsed = parseSourcesUsed(lastOutput);
   }
+
+  report.findingsOutcome = (last.findingsOutcome as StructuredReport['findingsOutcome'] | undefined);
+  report.findingsOutcomeReason = (last.findingsOutcomeReason as string | null | undefined);
+  report.outcomeInferred = (last.outcomeInferred as boolean | undefined);
+  report.outcomeMalformed = (last.outcomeMalformed as boolean | undefined);
 
   (state as { structuredReport?: unknown }).structuredReport = report;
 
