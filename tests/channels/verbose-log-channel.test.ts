@@ -36,7 +36,7 @@ describe('VerboseLogChannel', () => {
 
   it('quotes string values containing whitespace or quotes', () => {
     const line = formatVerboseLine({
-      event: 'runner_turn_completed',
+      event: 'claude_turn_completed',
       ts: '2026-05-07T13:00:00.000Z',
       message: 'with spaces and "quotes"',
     });
