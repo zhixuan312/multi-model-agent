@@ -1,4 +1,4 @@
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from '../lifecycle/rework-budget.js';
 
 export type BatchState = 'pending' | 'complete' | 'failed' | 'expired';
 
@@ -68,6 +68,10 @@ export interface BatchEntryInput<Result = unknown> {
 // Stored entry — runningHeadlineSnapshot REQUIRED.
 export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
   runningHeadlineSnapshot: HeadlineSnapshot;
+  /** Per-task ExecutionContexts owning the active sessions. Populated by the
+   *  task-runner via attachExecutionContext() so shutdown drain can call
+   *  closeSessions() on every in-flight task. Keyed by taskIndex. */
+  executionContexts?: Map<number, import('../lifecycle/lifecycle-context.js').ExecutionContext>;
   /** Per-task headline snapshots, keyed by taskIndex. When a batch fans out
    *  to multiple parallel tasks, each task tracks its own stage/elapsed/stats
    *  so the polling endpoint can render one line per task instead of letting
@@ -145,6 +149,37 @@ export class BatchRegistry {
 
   get(batchId: string): BatchEntry | undefined {
     return this.map.get(batchId);
+  }
+
+  /** All non-terminal batch entries. Used by shutdown drain to find tasks
+   *  whose sessions still need closing. */
+  allInFlight(): BatchEntry[] {
+    const out: BatchEntry[] = [];
+    for (const e of this.map.values()) {
+      if (!isTerminal(e.state)) out.push(e);
+    }
+    return out;
+  }
+
+  /** Register an ExecutionContext on the batch entry, keyed by taskIndex.
+   *  task-runner calls this once per task immediately after building the ctx,
+   *  so shutdown drain can walk the registry and close every active session. */
+  attachExecutionContext(
+    batchId: string,
+    taskIndex: number,
+    ec: import('../lifecycle/lifecycle-context.js').ExecutionContext,
+  ): void {
+    const entry = this.map.get(batchId);
+    if (!entry) return;
+    if (!entry.executionContexts) entry.executionContexts = new Map();
+    entry.executionContexts.set(taskIndex, ec);
+  }
+
+  /** Remove the ExecutionContext mapping for a task that has finished
+   *  (closeSessions already called). Stops shutdown drain from re-closing it. */
+  detachExecutionContext(batchId: string, taskIndex: number): void {
+    const entry = this.map.get(batchId);
+    entry?.executionContexts?.delete(taskIndex);
   }
 
   updateRunningHeadlineSnapshot(batchId: string, snapshot: HeadlineSnapshot): void {

@@ -125,8 +125,6 @@ Every finding has this shape:
    (lighter color or `(low evidence)` annotation). User decides what to do.
 5. Severity-tier counts feed the dashboard.
 
-@include _shared/budget-defaults.md
-
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-debug`:

@@ -8,6 +8,8 @@ const taskSchema = z.object({
   task: z.string().trim().min(1, 'Task descriptor must be non-empty'),
   reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']).optional().default('full')
     .describe('Review lifecycle policy for this task. Default: full.'),
+  outputTargets: z.array(z.string().min(1)).optional()
+    .describe('Output files this plan-task is expected to produce. Validated post-task. Object task form only — string task form does not support outputTargets.'),
 }).strict();
 
 const taskInputSchema = z.union([
@@ -34,8 +36,6 @@ export const inputSchema = z.object({
     .describe('Files the sub-agent should focus on. Multiple files are processed in parallel.'),
   contextBlockIds: z.array(z.string()).optional()
     .describe('IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.'),
-  maxCostUSD: z.number().positive().finite().optional()
-    .describe('Maximum estimated cost in USD for each generated plan task. Optional; the executor applies a default of 10 when omitted. Validation when explicitly passed: positive finite.'),
   verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional()
     .describe('Commands to run after plan task completion to verify the work.'),
 }).strict();

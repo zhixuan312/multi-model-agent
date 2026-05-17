@@ -1,5 +1,5 @@
 // packages/core/src/bounded-execution/progress-watchdog.ts
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { getRealFilesChanged } from '../lifecycle/real-diff.js';
 import { normalizeScopeEntry, isInScope, type NormalizedScopeEntry } from '../lifecycle/scope-match.js';
 import type { LifecycleState } from '../lifecycle/stage-plan-types.js';
@@ -20,6 +20,21 @@ export interface ProgressWatchdogContext {
   batchId?: string;
   /** State the watchdog mutates: `fired` so post-hoc code knows the abort came from us. */
   state2: { fired: boolean };
+}
+
+async function gitDiffNameOnly(cwd: string, preSha: string): Promise<string[]> {
+  return new Promise((resolve) => {
+    let out = '';
+    let settled = false;
+    const done = (v: string[]) => { if (!settled) { settled = true; resolve(v); } };
+    const child = spawn('git', ['diff', '--name-only', `${preSha}..`], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', (b: Buffer) => { out += b.toString('utf8'); });
+    child.on('error', () => done([]));
+    child.on('exit', (code) => {
+      if (code !== 0) { done([]); return; }
+      done(out.split('\n').filter(Boolean));
+    });
+  });
 }
 
 /**
@@ -61,6 +76,7 @@ export function startProgressWatchdog(ctx: ProgressWatchdogContext): () => void 
   // few git invocations per task — negligible.
   const pollIntervalMs = Math.min(30_000, Math.max(5_000, Math.floor(ctx.config.thrashWallClockMs / 60)));
 
+  let pollInFlight = false;
   const interval = setInterval(() => {
     if (ctx.state2.fired) return;
     if (ctx.controller.signal.aborted) {
@@ -72,33 +88,42 @@ export function startProgressWatchdog(ctx: ProgressWatchdogContext): () => void 
     // point grepping git every 30s during the first few minutes of a task).
     if (wallClockMs < ctx.config.thrashSoftWallClockMs) return;
 
-    // Synchronous git diff via spawnSync — same pattern real-diff uses.
-    const cwd = ctx.state.cwd ?? '';
-    const preSha = ctx.state.preTaskHeadSha!;
-    const r = spawnSync('git', ['diff', '--name-only', `${preSha}..`], { cwd, encoding: 'utf8' });
-    const diffEmpty = r.status === 0 && r.stdout.trim().length === 0;
-    if (!diffEmpty) return;        // diff is non-empty; not thrashing
+    if (pollInFlight) return;          // skip tick if previous diff still running
+    pollInFlight = true;
+    void (async () => {
+      try {
+        const cwd = ctx.state.cwd ?? '';
+        const preSha = ctx.state.preTaskHeadSha!;
+        const files = await gitDiffNameOnly(cwd, preSha);
+        const diffEmpty = files.length === 0;
+        if (!diffEmpty) return;        // diff is non-empty; not thrashing
 
-    // Signal 2: soft warn (fires once per task)
-    if (!warned && wallClockMs >= ctx.config.thrashSoftWallClockMs) {
-      warned = true;
-      ctx.emit({ event: 'progress_watchdog_warn', ts: ts(), wallClockMs, ...meta });
-    }
+        // Signal 2: soft warn (fires once per task)
+        if (!warned && wallClockMs >= ctx.config.thrashSoftWallClockMs) {
+          warned = true;
+          ctx.emit({ event: 'progress_watchdog_warn', ts: ts(), wallClockMs, ...meta });
+        }
 
-    // Signal 1: hard thrash — wall-clock exceeded + diff still empty → abort
-    if (wallClockMs >= ctx.config.thrashWallClockMs) {
-      ctx.state2.fired = true;
-      ctx.state.thrashingDetected = true;
-      ctx.state.preStopReason = 'thrashing';
-      ctx.controller.abort();
-      ctx.emit({
-        event: 'progress_watchdog_fired_thrash',
-        ts: ts(),
-        wallClockMs,
-        threshold: 'wallclock',
-        ...meta,
-      });
-    }
+        // Signal 1: hard thrash — wall-clock exceeded + diff still empty → abort
+        if (wallClockMs >= ctx.config.thrashWallClockMs) {
+          ctx.state2.fired = true;
+          ctx.state.thrashingDetected = true;
+          ctx.state.preStopReason = 'thrashing';
+          ctx.controller.abort();
+          ctx.emit({
+            event: 'progress_watchdog_fired_thrash',
+            ts: ts(),
+            wallClockMs,
+            threshold: 'wallclock',
+            ...meta,
+          });
+        }
+      } catch {
+        // non-fatal: continue polling
+      } finally {
+        pollInFlight = false;
+      }
+    })();
   }, pollIntervalMs);
 
   return () => {

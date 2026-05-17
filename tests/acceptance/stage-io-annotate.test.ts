@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyAnnotatePreconditions } from '../../packages/core/src/lifecycle/annotate-parser.js';
-import { annotator } from '../../packages/core/src/lifecycle/handlers/annotator.js';
+import { annotator } from '../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 import type { AnnotatePayload } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 import { mockAnnotateState } from '../fixtures/lifecycle-state.js';

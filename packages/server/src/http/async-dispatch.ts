@@ -100,7 +100,7 @@ export function asyncDispatch<TResult>(
           });
           // Also seed the per-task snapshot so multi-task polling formatters
           // don't fall through to the legacy single-snapshot path before the
-          // first runner_turn_completed event fires.
+          // first turn-completion event fires.
           batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
             prefix,
             statsClause: ``,

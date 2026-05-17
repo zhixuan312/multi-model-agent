@@ -1,3 +1,9 @@
+// Normalize a ProviderConfig into a stable identity for equality checks used by
+// fallback/separation logic. Credentials, query strings, default ports, and
+// trailing slashes are stripped so two configs that point at the same provider
+// compare equal. `escalation/fallback.ts` treats failures here as fail-closed
+// (catch -> skip) so any malformed config is treated as a non-match rather than
+// silently equal.
 import type { ProviderConfig } from '../types.js';
 
 export interface CanonicalIdentity {

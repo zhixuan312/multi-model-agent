@@ -749,11 +749,13 @@
                           },
                           "type": "array"
                         },
-                        "maxCostUSD": {
-                          "description": "Maximum estimated cost in USD for this task. Optional; the executor applies a default of 10 when omitted. When explicitly passed it must be a positive finite number; <=0, NaN, or Infinity are rejected with HTTP 400.",
-                          "exclusiveMinimum": true,
-                          "minimum": 0,
-                          "type": "number"
+                        "outputTargets": {
+                          "description": "Output files the worker is expected to produce. Validated post-task; missing paths surface as a structured finding. Paths may be absolute or relative to cwd; relatives are normalized against cwd. Reject entries that escape cwd.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
                         },
                         "prompt": {
                           "description": "The task instruction. Required.",
@@ -872,12 +874,6 @@
                     },
                     "type": "array"
                   },
-                  "maxCostUSD": {
-                    "description": "Maximum estimated cost in USD for each generated plan task. Optional; the executor applies a default of 10 when omitted. Validation when explicitly passed: positive finite.",
-                    "exclusiveMinimum": true,
-                    "minimum": 0,
-                    "type": "number"
-                  },
                   "tasks": {
                     "description": "Descriptive task strings or task objects matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
                     "items": {
@@ -889,6 +885,14 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "outputTargets": {
+                              "description": "Output files this plan-task is expected to produce. Validated post-task. Object task form only — string task form does not support outputTargets.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
                             "reviewPolicy": {
                               "default": "full",
                               "description": "Review lifecycle policy for this task. Default: full.",

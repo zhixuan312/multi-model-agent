@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AnnotatePayload, LifecycleState, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
 import { mockAnnotateState } from '../fixtures/lifecycle-state.js';
-import { annotator } from '../../packages/core/src/lifecycle/handlers/annotator.js';
+import { annotator } from '../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 
 let emittedTruncationEvents: Array<{ event: string; tier?: number; droppedFieldCount?: number }> = [];
 let truncateTier: 1 | 2 | 3 | null = null;

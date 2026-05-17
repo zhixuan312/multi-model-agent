@@ -20,7 +20,7 @@ import type { ContextBlockStore } from '../stores/context-block-tool.js';
  *
  * Inputs (Group A) are read-only after row 2.5 completes.
  * Bus + heartbeat (Group B) carry mutable runtime state for the watchdog.
- * Cost (Group C) is the cost meter / runAccounted state — owned by CostMeter.
+ * Cost (Group C) is tracked via stateless priceTokens() / rollupByTier() in bounded-execution; not held on ExecutionContext.
  *
  * Per-chain accumulators (Group D) live on `LifecycleState` itself, not
  * here, because each chain handler mutates them as it fires; ExecutionContext
@@ -57,6 +57,11 @@ export interface ExecutionContext {
    */
   getSession(tier: AgentType): Session;
   closeSessions(): Promise<void>;
+  /** Returns OS pids of every currently-open session's CLI subprocess (if any).
+   *  Used by shutdown drain to SIGKILL stragglers when closeSessions() exceeds
+   *  its grace window. Empty array when no sessions are open OR the providers
+   *  do not spawn subprocesses (e.g. in-process SDK clients). */
+  getActivePids(): number[];
 
   // ── Per-task budgets ──
   timing: {
@@ -64,9 +69,6 @@ export interface ExecutionContext {
     timeoutMs: number;
     deadlineMs: number;
     stallTimeoutMs: number;
-  };
-  budgets: {
-    maxCostUSD: number | undefined;
   };
 
   /** Wall-clock budget guard. Throws GuardError once budgetMs since task start
@@ -159,4 +161,8 @@ export interface ExecutionContext {
   contextBlockStore?: ContextBlockStore;
   /** BatchId owning this execution — threaded so ActivityTracker can tag ticks. */
   batchId?: string;
+  /** Optional BatchRegistry — when set, task-runner attaches this ctx onto
+   *  the entry so shutdown drain can close sessions across all in-flight
+   *  tasks. Server callers pass this through HandlerDeps; CLI callers omit. */
+  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
 }

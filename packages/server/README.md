@@ -76,7 +76,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
+That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
 ### 4. Start the daemon + verify
 
@@ -88,7 +88,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.6.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.7.0",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -196,7 +196,6 @@ Every `defaults` knob has a built-in. Override only when you need to.
 |---|---|---|
 | `defaults.timeoutMs` | `3600000` (60 min) | Hard task-level wall-clock cap (bumped from 30 min in 3.9.0) |
 | `defaults.stallTimeoutMs` | `1200000` (20 min) | Aborts in-flight runs idle for this long (bumped from 10 min in 3.9.0) |
-| `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling; returns `cost_exceeded` when hit |
 | `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full` |
 | `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd` |
 
@@ -271,7 +270,7 @@ mmagent telemetry dump-queue                     # print the locally-queued even
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout.
+`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a wall-clock timeout.
 
 Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). Layer map and request lifecycle: [docs/ARCHITECTURE.md](https://github.com/zhixuan312/multi-model-agent/blob/master/docs/ARCHITECTURE.md).
 

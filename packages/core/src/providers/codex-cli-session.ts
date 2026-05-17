@@ -33,6 +33,10 @@ import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js'
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
 
 const SIGKILL_GRACE_MS = 3000;
+/** Grace window during session.close() between SIGTERM and SIGKILL. Keeps
+ *  task teardown bounded so the spec invariant "task done → children die"
+ *  holds within 2s for normal teardown. */
+const CLOSE_GRACE_MS = 2000;
 
 interface BusLike { emit(event: Record<string, unknown>): void }
 
@@ -45,6 +49,10 @@ export class CodexCliSession implements Session {
   private threadId?: string;
   private closed = false;
   private tempDir?: string;
+  /** Active codex CLI subprocess for the currently-running turn. Captured so
+   *  close() can synchronously kill the child (SIGTERM then SIGKILL after
+   *  CLOSE_GRACE_MS). Undefined between turns. */
+  private activeProc?: ChildProcess;
   private readonly cumulativeUsage: TokenUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -53,6 +61,16 @@ export class CodexCliSession implements Session {
   };
 
   constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {}
+
+  /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
+   *  The stall watchdog filters bus events by these fields — every emit must carry them
+   *  or stuck detection re-breaks under concurrent load. */
+  private taskTag(): { batchId?: string; taskIndex?: number } {
+    return {
+      ...(this.args.opts.batchId !== undefined && { batchId: this.args.opts.batchId }),
+      ...(this.args.opts.taskIndex !== undefined && { taskIndex: this.args.opts.taskIndex }),
+    };
+  }
 
   async send(instruction: string, _turnOpts?: TurnOpts): Promise<TurnResult> {
     if (this.closed) throw new Error('codex-cli-session: send() on closed session');
@@ -69,7 +87,8 @@ export class CodexCliSession implements Session {
     });
 
     const bus = busOf(this.args.opts);
-    const tracker = new TurnTracker(this.cumulativeUsage, bus);
+    const tag = this.taskTag();
+    const tracker = new TurnTracker(this.cumulativeUsage, bus, tag);
 
     bus?.emit({
       event: 'codex_subprocess_starting',
@@ -78,6 +97,7 @@ export class CodexCliSession implements Session {
       cwd: this.args.opts.cwd,
       resume: Boolean(this.threadId),
       ...(this.threadId && { threadId: this.threadId }),
+      ...tag,
     });
 
     let proc: ChildProcess;
@@ -107,6 +127,7 @@ export class CodexCliSession implements Session {
         ts: new Date().toISOString(),
         code: e.code ?? 'unknown',
         message: e.message ?? String(err),
+        ...tag,
       });
       return this.finalizeError(tracker, startMs, e.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed', e.message ?? String(err));
     }
@@ -115,8 +136,10 @@ export class CodexCliSession implements Session {
       event: 'codex_subprocess_started',
       ts: new Date().toISOString(),
       pid: proc.pid ?? -1,
+      ...tag,
     });
 
+    this.activeProc = proc;
     proc.stdin?.write(instruction);
     proc.stdin?.end();
 
@@ -126,6 +149,7 @@ export class CodexCliSession implements Session {
       await consumeStream(proc, tracker, stderrBufRef);
     } finally {
       cleanupGuards();
+      this.activeProc = undefined;
     }
 
     if (tracker.threadId) this.threadId = tracker.threadId;
@@ -138,6 +162,8 @@ export class CodexCliSession implements Session {
       terminationReason: tracker.terminationReason,
       ...(tracker.errorCode && { errorCode: tracker.errorCode }),
       ...(stderrBufRef.value && { stderrTail: stderrBufRef.value.slice(-500) }),
+      ...(proc.pid !== undefined && { pid: proc.pid }),
+      ...tag,
     });
 
     const finalMessage = tracker.lastAgentMessage || await readOutputFile(outputFile);
@@ -170,11 +196,39 @@ export class CodexCliSession implements Session {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    const proc = this.activeProc;
+    this.activeProc = undefined;
+    // Synchronous child termination guarantee: SIGTERM, then SIGKILL after
+    // CLOSE_GRACE_MS if still alive. Without this, close() leaked codex
+    // children — see 2026-05-16 leak post-mortem.
+    if (proc && proc.exitCode === null && !proc.killed) {
+      try { killGracefully(proc); } catch { /* ignore */ }
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const settle = () => { if (!settled) { settled = true; clearTimeout(t); resolve(); } };
+        proc.once('exit', settle);
+        const t = setTimeout(() => {
+          if (settled) return;
+          try {
+            // SIGKILL the whole process group (proc was spawned detached).
+            if (typeof proc.pid === 'number') process.kill(-proc.pid, 'SIGKILL');
+          } catch { /* ignore */ }
+          settle();
+        }, CLOSE_GRACE_MS);
+        t.unref();
+      });
+    }
     if (this.tempDir) {
       const dir = this.tempDir;
       this.tempDir = undefined;
       await rm(dir, { recursive: true, force: true }).catch(() => { /* swallow */ });
     }
+  }
+
+  /** OS pid of the currently-active codex CLI subprocess, if any. Undefined
+   *  between turns. Used by shutdown drain to SIGKILL stragglers. */
+  getPid(): number | undefined {
+    return this.activeProc?.pid;
   }
 
   private armGuards(proc: ChildProcess, tracker: TurnTracker): () => void {
@@ -318,7 +372,11 @@ class TurnTracker {
   errorMessage?: string;
   private readonly snapshot: TokenUsage;
 
-  constructor(private readonly cumulative: TokenUsage, private readonly bus?: BusLike) {
+  constructor(
+    private readonly cumulative: TokenUsage,
+    private readonly bus?: BusLike,
+    private readonly tag: { batchId?: string; taskIndex?: number } = {},
+  ) {
     this.snapshot = { ...cumulative };
   }
 
@@ -327,11 +385,11 @@ class TurnTracker {
     switch (ev.kind) {
       case 'thread_started':
         if (ev.threadId) this.threadId = ev.threadId;
-        this.bus?.emit({ event: 'codex_thread_started', ts, threadId: ev.threadId });
+        this.bus?.emit({ event: 'codex_thread_started', ts, threadId: ev.threadId, ...this.tag });
         break;
       case 'turn_started':
         this.turns += 1;
-        this.bus?.emit({ event: 'codex_turn_started', ts, turn: this.turns });
+        this.bus?.emit({ event: 'codex_turn_started', ts, turn: this.turns, ...this.tag });
         break;
       case 'item_started':
         if (ev.item.type === 'command_execution') {
@@ -339,6 +397,7 @@ class TurnTracker {
             event: 'codex_command_started',
             ts,
             command: String(ev.item.command ?? '').slice(0, 500),
+            ...this.tag,
           });
         }
         break;
@@ -354,6 +413,7 @@ class TurnTracker {
           inputTokens: ev.usage.input_tokens ?? 0,
           outputTokens: (ev.usage.output_tokens ?? 0) + (ev.usage.reasoning_output_tokens ?? 0),
           cachedInputTokens: ev.usage.cached_input_tokens ?? 0,
+          ...this.tag,
         });
         break;
       case 'turn_failed':
@@ -362,7 +422,7 @@ class TurnTracker {
           this.errorCode = 'turn_failed';
           this.errorMessage = ev.error.message;
         }
-        this.bus?.emit({ event: 'codex_turn_failed', ts, message: ev.error.message });
+        this.bus?.emit({ event: 'codex_turn_failed', ts, message: ev.error.message, ...this.tag });
         break;
       case 'error':
         if (this.terminationReason === 'ok') {
@@ -370,7 +430,7 @@ class TurnTracker {
           this.errorCode = 'codex_error';
           this.errorMessage = ev.message;
         }
-        this.bus?.emit({ event: 'codex_error', ts, message: ev.message });
+        this.bus?.emit({ event: 'codex_error', ts, message: ev.message, ...this.tag });
         break;
       default:
         break;
@@ -386,6 +446,7 @@ class TurnTracker {
         ts,
         chars: item.text.length,
         preview: item.text.slice(0, 200),
+        ...this.tag,
       });
     } else if (item.type === 'command_execution') {
       this.toolCallsByName['run_shell'] = (this.toolCallsByName['run_shell'] ?? 0) + 1;
@@ -394,6 +455,7 @@ class TurnTracker {
         ts,
         command: String(item.command ?? '').slice(0, 500),
         exitCode: item.exit_code ?? null,
+        ...this.tag,
       });
     } else if (item.type === 'file_change') {
       this.toolCallsByName['edit_file'] = (this.toolCallsByName['edit_file'] ?? 0) + 1;
@@ -402,6 +464,7 @@ class TurnTracker {
         event: 'codex_file_change',
         ts,
         ...(typeof item.path === 'string' && { path: item.path }),
+        ...this.tag,
       });
     }
   }

@@ -2,7 +2,7 @@ import type { WorkerStatus, VerifyOutcome } from '../types.js';
 export type { WorkerStatus, VerifyOutcome };
 export type OverallReviewVerdict = 'approved' | 'concerns' | 'annotated' | 'not_applicable';
 export type ArtifactsCheck = 'pass' | 'fail' | 'not_applicable';
-export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'cost_exceeded' | 'brief_too_vague' | 'unavailable';
+export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'brief_too_vague' | 'unavailable';
 
 export interface TerminalInputs {
   shutdownInProgress: boolean;
@@ -23,9 +23,7 @@ export class TerminalStatusDeriver {
   derive(inputs: TerminalInputs): TerminalDecision {
     // 1. shutdown
     if (inputs.shutdownInProgress) return { terminalStatus: 'unavailable', errorCode: inputs.errorCode };
-    // 2. cost ceiling
-    if (inputs.guardFires.includes('guard_cost_ceiling')) return { terminalStatus: 'cost_exceeded', errorCode: inputs.errorCode };
-    // 3. time / idle
+    // 2. time / idle
     if (inputs.guardFires.includes('guard_time_ceiling') || inputs.guardFires.includes('guard_idle_timeout')) {
       return { terminalStatus: 'timeout', errorCode: inputs.errorCode };
     }

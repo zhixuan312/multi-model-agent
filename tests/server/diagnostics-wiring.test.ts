@@ -31,7 +31,6 @@ function buildConfig(tokenPath: string, diagnostics: MultiModelConfig['diagnosti
     },
     defaults: {
       timeoutMs: 1_800_000,
-      maxCostUSD: 10,
       tools: 'full',
       sandboxPolicy: 'cwd-only',
     },

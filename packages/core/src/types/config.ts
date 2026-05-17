@@ -70,7 +70,6 @@ export interface MultiModelConfig {
   defaults: {
     timeoutMs: number
     stallTimeoutMs: number
-    maxCostUSD: number
     tools: ToolMode
     sandboxPolicy: SandboxPolicy
     largeResponseThresholdChars?: number

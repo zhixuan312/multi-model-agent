@@ -18,7 +18,7 @@ function cap() {
 function mkConfig(logDir: string, enabled = true): MultiModelConfig {
   return {
     agents: {} as MultiModelConfig['agents'],
-    defaults: { mainModel: '', tools: 'full', timeoutMs: 60_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' },
+    defaults: { mainModel: '', tools: 'full', timeoutMs: 60_000, sandboxPolicy: 'cwd-only' },
     diagnostics: { log: enabled, logDir },
     server: {} as MultiModelConfig['server'],
   } as MultiModelConfig;

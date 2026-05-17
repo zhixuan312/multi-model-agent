@@ -21,7 +21,7 @@ export const TaskCompletedCloudEvent = z.object({
   implementerModelFamily: z.string(),
   implementerModel: z.string(),
   terminalStatus: z.enum([
-    'ok', 'incomplete', 'timeout', 'error', 'cost_exceeded',
+    'ok', 'incomplete', 'timeout', 'error',
     'brief_too_vague', 'unavailable',
   ]),
   workerStatus: WorkerStatusEnum,

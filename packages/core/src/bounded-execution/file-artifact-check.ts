@@ -1,35 +1,14 @@
+// Post-task verifier for declared output files.
+// Callers set ctx.outputTargets in task-runner; the implementer stage handler
+// invokes checkOutputTargets() post-task to verify each path exists on disk.
+
 import { existsSync } from 'fs';
-import { resolve } from 'path';
-
-export interface FilePathPartition {
-  outputTargets: string[];
-}
 
 /**
- * Partition filePaths into existing (inputs) and non-existing (output targets).
- * Output targets are resolved to absolute paths.
+ * Returns the subset of `outputTargets` that do NOT exist on disk.
+ * Empty array means all targets exist. Caller decides whether non-empty
+ * is a failure (typically yes — surface as a structured finding).
  */
-export function partitionFilePaths(
-  filePaths: string[] | undefined,
-  cwd: string,
-): FilePathPartition {
-  if (!filePaths || filePaths.length === 0) return { outputTargets: [] };
-
-  const outputTargets: string[] = [];
-  for (const fp of filePaths) {
-    const abs = resolve(cwd, fp);
-    if (!existsSync(abs)) {
-      outputTargets.push(abs);
-    }
-  }
-  return { outputTargets };
-}
-
-/**
- * Check whether any output targets are still missing on disk.
- * Returns true if any target does not exist.
- */
-export function checkOutputTargets(outputTargets: string[]): boolean {
-  if (outputTargets.length === 0) return false;
-  return outputTargets.some(t => !existsSync(t));
+export function checkOutputTargets(outputTargets: string[]): string[] {
+  return outputTargets.filter((p) => !existsSync(p));
 }

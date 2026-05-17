@@ -17,20 +17,7 @@ export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
  * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
 export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
 
-/** Per-task cost cap in USD. Negative is rejected; zero allows free-agent
- * runs (both input/output price rates set to 0). */
-export const DEFAULT_MAX_COST_USD = 10;
-
-/** Pre-stop threshold ratio for cost — the runtime warns and may refuse
- * new turns when cost reaches DEFAULT_MAX_COST_USD × this ratio ($8).
- * A turn already in flight is allowed to complete, so the worst-case
- * total is DEFAULT_MAX_COST_USD / MAX_COST_PRESTOP_RATIO ($12.50).
- * This is NOT an 80%-overshoot allowance; it is an 80%-of-cap pre-stop.
- * See §3.8 for the rationale. */
-export const MAX_COST_PRESTOP_RATIO = 0.80;
-
-/** Clock counterpart of MAX_COST_PRESTOP_RATIO — same pre-stop semantics
- * applied to wall-clock time: the runtime warns at
+/** Wall-clock pre-stop ratio — the runtime warns at
  * DEFAULT_TASK_TIMEOUT_MS × this ratio (48 min), with a worst-case
  * total of DEFAULT_TASK_TIMEOUT_MS / MAX_TIME_PRESTOP_RATIO (1.25 h). */
 export const MAX_TIME_PRESTOP_RATIO = 0.80;
@@ -152,13 +139,6 @@ const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
 
-export const pricingSchema = z.object({
-  inputUSDPerMillion: z.number().nonnegative().finite(),
-  outputUSDPerMillion: z.number().nonnegative().finite(),
-  cachedReadUSDPerMillion: z.number().nonnegative().finite(),
-  cachedNonReadUSDPerMillion: z.number().nonnegative().finite(),
-}).strict();
-
 const baseAgentFields = {
   model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
   effort: effortSchema.optional(),
@@ -202,7 +182,6 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 const defaultsSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_TASK_TIMEOUT_MS),
   stallTimeoutMs: z.number().int().positive().default(DEFAULT_STALL_TIMEOUT_MS),
-  maxCostUSD: z.number().nonnegative().default(DEFAULT_MAX_COST_USD),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
@@ -217,7 +196,6 @@ const defaultsSchema = z.object({
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
-  maxCostUSD: DEFAULT_MAX_COST_USD,
   tools: 'full' as const,
   sandboxPolicy: 'cwd-only' as const,
 }));
@@ -267,16 +245,18 @@ const serverLimitsSchema = z.object({
   shutdownDrainMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.shutdownDrainMs),
 }).default(() => DEFAULT_SERVER_LIMITS);
 
+const serverBlockSchema = z.object({
+  bind: z.string().default(DEFAULT_SERVER.bind),
+  port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
+  auth: z.object({
+    tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
+  }).default(() => DEFAULT_SERVER_AUTH),
+  limits: serverLimitsSchema,
+  autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
+}).default(() => DEFAULT_SERVER);
+
 export const serverConfigSchema = z.object({
-  server: z.object({
-    bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
-    auth: z.object({
-      tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
-    }).default(() => DEFAULT_SERVER_AUTH),
-    limits: serverLimitsSchema,
-    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
-  }).default(() => DEFAULT_SERVER),
+  server: serverBlockSchema,
 }).strict();
 
 export const multiModelConfigSchema = z.object({
@@ -290,15 +270,7 @@ export const multiModelConfigSchema = z.object({
     logDir: z.string().min(1).optional(),
     verbose: z.boolean().default(false),
   }).optional(),
-  server: z.object({
-    bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
-    auth: z.object({
-      tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
-    }).default(() => DEFAULT_SERVER_AUTH),
-    limits: serverLimitsSchema,
-    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
-  }).default(() => DEFAULT_SERVER),
+  server: serverBlockSchema,
   // Per spec §7.1: opt-in telemetry. The recorder reads this independently;
   // we only need to allow the key here so the strict() validation doesn't
   // reject configs that have it.

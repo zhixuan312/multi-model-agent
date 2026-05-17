@@ -24,7 +24,6 @@ export const ErrorCodeSchema = z.enum([
   'tool_path_invalid',
   'tool_handler_exception',
   // guard_* — bounded-execution guards
-  'guard_cost_ceiling',
   'guard_time_ceiling',
   'guard_wall_clock',
   'guard_idle_timeout',

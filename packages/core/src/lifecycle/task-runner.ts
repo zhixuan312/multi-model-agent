@@ -12,13 +12,15 @@ import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ResolvedAgent } from '../escalation/agent-resolver.js';
+import type { ResolvedAgent } from '../providers/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
-import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
-import { resolveAgent } from '../escalation/agent-resolver.js';
+import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
+import { ATTEMPT_BUDGETS, type ToolCategory } from './rework-budget.js';
+import { resolveAgent } from '../providers/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
+import { normalizeOutputTargets } from './normalize-output-targets.js';
 export function errorResult(error: string): RuntimeRunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -191,6 +193,10 @@ export interface DispatchTaskInput {
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  /** Registry to attach/detach the per-task ExecutionContext on. When provided,
+   *  shutdown drain in serve.ts can walk the registry and call closeSessions()
+   *  on every in-flight task before the daemon exits. */
+  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -246,6 +252,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
       idleStallTimeoutMs: stallTimeoutMs,
       abortSignal: stallController.signal,
       ...(input.bus && { bus: input.bus as unknown as object }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
     });
     sessions.set(tier, session);
     return session;
@@ -255,6 +263,33 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     sessions.clear();
     await Promise.allSettled(entries.map(([, s]) => s.close()));
   };
+  const getActivePids = (): number[] => {
+    const pids: number[] = [];
+    for (const sess of sessions.values()) {
+      const pid = sess.getPid?.();
+      if (typeof pid === 'number' && pid > 0) pids.push(pid);
+    }
+    return pids;
+  };
+
+  const heartbeat = input.recordHeartbeat
+    ? new ActivityTracker(
+        // onProgress: internal-only tick hook. The recordHeartbeat callback
+        // (passed via options) is the canonical channel for headline updates.
+        // We deliberately do NOT forward ticks to the observability bus —
+        // the tick shape (kind: 'heartbeat') does not conform to the bus
+        // event schema (event: 'heartbeat') and is not part of the JSONL
+        // contract consumed by telemetry/observability sinks.
+        () => { /* no-op */ },
+        {
+          provider: resolved.provider.name,
+          ...(input.mainModel && { mainModel: input.mainModel }),
+          intervalMs: 5000,
+          recordHeartbeat: input.recordHeartbeat,
+          ...(input.batchId !== undefined && { batchId: input.batchId }),
+        },
+      )
+    : undefined;
 
   return {
     task,
@@ -273,20 +308,20 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     implementerIdentity: undefined,
     getSession,
     closeSessions,
+    getActivePids,
     timing: { startMs: startMsAt, timeoutMs, deadlineMs: deadlineAt, stallTimeoutMs },
-    budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
     wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
-    heartbeat: undefined,
+    heartbeat,
     logger: input.logger,
     verboseStream: input.verboseStream ?? ((line: string) => { process.stderr.write(line); }),
     verbose: true,
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
-    outputTargets: [],
+    outputTargets: normalizeOutputTargets(task.outputTargets, cwd),
   };
 }
 
@@ -309,6 +344,13 @@ export async function runTaskViaDispatcher(
 
   void ATTEMPT_BUDGETS[toolCategory];
 
+  // Register this task's ExecutionContext on the BatchRegistry so shutdown
+  // drain (serve.ts cleanupSignal) can find every in-flight task and call
+  // closeSessions() on it before the daemon exits. Detached in finally{}.
+  if (input.batchRegistry && input.batchId !== undefined) {
+    input.batchRegistry.attachExecutionContext(input.batchId, input.taskIndex, executionContext);
+  }
+
   // Arm the orchestrator stall watchdog. Spec §4.7: the AbortController on
   // ctx.stall has been declared since v3.x but never armed; this wires the
   // timer that fires .abort() after stallTimeoutMs of no runner events.
@@ -321,50 +363,61 @@ export async function runTaskViaDispatcher(
     ...(executionContext.taskIndex !== undefined && { taskIndex: executionContext.taskIndex }),
   });
 
+  executionContext.heartbeat?.start(1);
+
   let out;
   try {
-    out = await dispatcher.dispatch({
-      route,
-      toolCategory,
-      rawRequest: { tasks: [expandedTask] },
-      context: { task: expandedTask, executionContext },
-    });
-  } finally {
-    stopWatchdog();
-    // v4.4 session reuse: ExecutionContext owns the per-tier Session
-    // cache that handlers populate via ctx.getSession(tier). Close them
-    // here at task end so codex CLI subprocesses + claude-agent-sdk
-    // query handles release. Errors swallowed so disposal can't mask
-    // the task's real result.
-    await executionContext.closeSessions().catch(() => { /* idempotent */ });
-  }
+    try {
+      out = await dispatcher.dispatch({
+        route,
+        toolCategory,
+        rawRequest: { tasks: [expandedTask] },
+        context: { task: expandedTask, executionContext },
+      });
+    } finally {
+      stopWatchdog();
+      // v4.4 session reuse: ExecutionContext owns the per-tier Session
+      // cache that handlers populate via ctx.getSession(tier). Close them
+      // here at task end so codex CLI subprocesses + claude-agent-sdk
+      // query handles release. Errors swallowed so disposal can't mask
+      // the task's real result.
+      await executionContext.closeSessions().catch(() => { /* idempotent */ });
+      // Detach from BatchRegistry — closeSessions already ran, so shutdown
+      // drain shouldn't re-close.
+      if (input.batchRegistry && input.batchId !== undefined) {
+        input.batchRegistry.detachExecutionContext(input.batchId, input.taskIndex);
+      }
+    }
 
-  // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
-  // LifecycleState as `finalState`. The runtime mirror (RuntimeRunResult
-  // with workerStatus / stageStats / usage etc.) lives on
-  // finalState.lastRunResult — populated by performImplementation.
-  // Downstream consumers (executeTask, recorder, headline composer) still
-  // expect the runtime mirror, so return it directly.
-  const last = out.finalState?.lastRunResult as RuntimeRunResult | undefined;
-  if (last && typeof last === 'object' && 'output' in last) {
-    return last;
+    // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
+    // LifecycleState as `finalState`. The runtime mirror (RuntimeRunResult
+    // with workerStatus / stageStats / usage etc.) lives on
+    // finalState.lastRunResult — populated by performImplementation.
+    // Downstream consumers (executeTask, recorder, headline composer) still
+    // expect the runtime mirror, so return it directly.
+    const last = out.finalState?.lastRunResult as RuntimeRunResult | undefined;
+    if (last && typeof last === 'object' && 'output' in last) {
+      return last;
+    }
+    const body = out.body;
+    if (body && typeof body === 'object' && 'output' in body) {
+      return body as RuntimeRunResult;
+    }
+    return {
+      output: '',
+      status: 'error',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      error: 'dispatcher produced no RuntimeRunResult',
+      errorCode: 'runner_crash',
+      workerStatus: 'failed',
+    } as unknown as RuntimeRunResult;
+  } finally {
+    executionContext.heartbeat?.stop();
   }
-  const body = out.body;
-  if (body && typeof body === 'object' && 'output' in body) {
-    return body as RuntimeRunResult;
-  }
-  return {
-    output: '',
-    status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0 },
-    turns: 0,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: true,
-    escalationLog: [],
-    error: 'dispatcher produced no RuntimeRunResult',
-    errorCode: 'runner_crash',
-    workerStatus: 'failed',
-  } as unknown as RuntimeRunResult;
 }

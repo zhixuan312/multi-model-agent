@@ -7,9 +7,9 @@
 import { runStagePlan } from './lifecycle-driver.js';
 import { STAGE_PLAN } from './stage-plan-builder.js';
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from './rework-budget.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
-import { ATTEMPT_BUDGETS } from '../escalation/escalation-policy.js';
+import { ATTEMPT_BUDGETS } from './rework-budget.js';
 import type { ComposePayload } from './stage-io.js';
 
 export interface DispatchInput {

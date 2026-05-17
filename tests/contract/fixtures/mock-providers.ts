@@ -60,7 +60,6 @@ function statusToTermination(
 ): TurnResult['terminationReason'] {
   switch (status) {
     case 'ok': return 'ok';
-    case 'cost_exceeded': return 'cost_exceeded';
     case 'timeout': return 'time_exceeded';
     case 'incomplete':
       if (incompleteReason === 'stall') return 'stalled';
@@ -89,7 +88,8 @@ export type Stage =
   | 'incomplete'
   | 'max-turns'
   | 'review-rework'
-  | 'slow';
+  | 'slow'
+  | 'hang';   // never-resolves send() — for shutdown-drain test
 
 export interface SequenceItem {
   status?: RunStatus;
@@ -107,6 +107,10 @@ export interface MockProviderOptions {
   onPrompt?: (prompt: string) => void;
   sequence?: SequenceItem[];
   delayMs?: number;
+  /** Called once whenever the mock provider's openSession() is invoked. */
+  onOpen?: () => void;
+  /** Called once whenever the returned Session's close() is invoked. */
+  onClose?: () => void;
 }
 
 const STUB_CONFIG: ProviderConfig = {
@@ -316,28 +320,51 @@ export function mockProvider(opts: MockProviderOptions): Provider {
     name: 'mock',
     config: STUB_CONFIG,
     run: runOnce,
-    openSession: makeSessionFactory(runOnce),
+    openSession(sessionOpts: SessionOpts) {
+      opts.onOpen?.();
+      const stage = opts.stage ?? 'ok';
+      if (stage === 'hang') {
+        const inner = {
+          async send(): Promise<TurnResult> {
+            return new Promise<TurnResult>((_, reject) => {
+              if (sessionOpts?.abortSignal) {
+                sessionOpts.abortSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+              }
+            });
+          },
+          async close(): Promise<void> { /* no-op */ },
+        };
+        const origClose = inner.close.bind(inner);
+        return {
+          send: inner.send.bind(inner),
+          async close() {
+            try {
+              await origClose();
+            } finally {
+              opts.onClose?.();
+            }
+          },
+        };
+      }
+      const inner = makeSessionFactory(runOnce)(sessionOpts);
+      const origClose = inner.close.bind(inner);
+      return {
+        send: inner.send.bind(inner),
+        async close() {
+          try {
+            await origClose();
+          } finally {
+            opts.onClose?.();
+          }
+        },
+      };
+    },
   };
 }
 
 export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
   const run = async (): Promise<RuntimeRunResult> => {
     const output = opts.partialOutput ?? 'mock cap output';
-    if (opts.kind === 'cost') {
-      return {
-        ...buildIncomplete({ stage: 'incomplete', output }),
-        status: 'cost_exceeded',
-        incompleteReason: 'cost_cap',
-        terminationReason: {
-          cause: 'cost_exceeded',
-          turnsUsed: 1,
-          hasFileArtifacts: false,
-          usedShell: false,
-          workerSelfAssessment: null,
-          wasPromoted: false,
-        },
-      };
-    }
     if (opts.kind === 'wall_clock') {
       return {
         ...buildIncomplete({ stage: 'incomplete', output }),

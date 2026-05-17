@@ -84,7 +84,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
+That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
 ### 4. Start the daemon + verify
 
@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.6.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.7.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -210,7 +210,6 @@ Every `defaults` knob has a sane built-in. Override only when you have a reason.
 |---|---|---|
 | `defaults.timeoutMs` | `3600000` (60 min) | Hard task-level wall-clock cap. Per-runner-call timeouts are clamped to remaining budget. Bumped from 30 min in 3.9.0. |
 | `defaults.stallTimeoutMs` | `1200000` (20 min) | Aborts in-flight runs that have no LLM / tool / text activity for this long. Force-salvages and returns. Bumped from 10 min in 3.9.0. |
-| `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling. Returns `cost_exceeded` when hit. |
 | `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full`. |
 | `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd`. |
 

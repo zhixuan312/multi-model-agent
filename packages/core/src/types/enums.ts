@@ -47,7 +47,7 @@ export const ProviderTypeEnum = z.enum(['claude', 'codex']);
 
 export const InternalRunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
-  'provider_transport_failure', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
+  'provider_transport_failure', 'error', 'brief_too_vague', 'unavailable',
 ]);
 
 export const ReviewVerdictEnum = z.enum([
@@ -97,7 +97,7 @@ export const FindingConfidenceSchema = z.number().int().min(0).max(100);
 // Spec enums.md §7 enumerates these same 31 names — see that section if you
 // need the phase grouping. New event kinds add here AND in the spec §7 table.
 export const EventTypeEnum = z.enum([
-  'batch_completed','batch_failed','cost_check','escalation','escalation_unavailable',
+  'batch_completed','batch_failed','escalation','escalation_unavailable',
   'fallback','fallback_unavailable',
   'heartbeat','read_only_review.quality','read_only_review.terminal','review_decision',
   'stage_change','stall_abort','task_completed','task_started','text_emission',
@@ -120,7 +120,7 @@ export const ResearchAdapterEnum = z.enum([
 
 // ── §12 Diagnostics ───────────────────────────────────────────────────────
 
-export const IncompleteReasonEnum = z.enum(['turn_cap', 'cost_cap', 'timeout', 'missing_sections']);
+export const IncompleteReasonEnum = z.enum(['turn_cap', 'timeout', 'missing_sections']);
 
 /**
  * Forward-declared per spec enums.md §12. Consumed when the debug-report

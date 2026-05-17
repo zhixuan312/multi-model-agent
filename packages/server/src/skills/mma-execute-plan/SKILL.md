@@ -51,7 +51,6 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 | `taskDescriptors` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
 | `filePaths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
-| `maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted |
 | `verifyCommand` | string[] | no | See verify-and-review snippet below |
 | `perTaskReviewPolicy` | `Record<string, 'full'\|'quality_only'\|'diff_only'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"full"` |
 | `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
@@ -175,8 +174,6 @@ Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to fi
 ```
 
 `details` is optional and present only when the server has structured additional context.
-
-@include _shared/budget-defaults.md
 
 ## Best practices
 

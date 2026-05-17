@@ -26,7 +26,7 @@ export function mockState(opts: Partial<LifecycleState> & { route?: RouteName; g
   return {
     route: 'delegate',
     task: { id: 't1', brief: { title: 'T', body: 'B' } } as any,
-    config: { reviewPolicy: 'standard', autoCommit: true, sandboxPolicy: 'cwd-only', timeoutMs: 60_000, maxCostUSD: 1 } as any,
+    config: { reviewPolicy: 'standard', autoCommit: true, sandboxPolicy: 'cwd-only', timeoutMs: 60_000 } as any,
     request: {} as any,
     cwd: '/tmp/fake',
     preTaskHeadSha: 'aaaaaaa',

@@ -48,7 +48,6 @@ describe('investigate inputSchema', () => {
 
   it('rejects unknown fields (strict)', () => {
     expect(inputSchema.safeParse({ question: 'q', timeoutMs: 60000 }).success).toBe(false);
-    expect(inputSchema.safeParse({ question: 'q', maxCostUSD: 1 }).success).toBe(false);
   });
 
   it('accepts optional filePaths and contextBlockIds arrays', () => {

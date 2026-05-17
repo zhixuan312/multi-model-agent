@@ -1,6 +1,6 @@
 import type { InvestigationParseResult } from './report-parser-slots/investigate-report.js';
 
-export type IncompleteReason = 'turn_cap' | 'cost_cap' | 'timeout' | 'missing_sections';
+export type IncompleteReason = 'turn_cap' | 'timeout' | 'missing_sections';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked';
 
 export interface DeriveInput {

@@ -39,7 +39,6 @@ export function resolveDraft(
     reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-    maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     briefQualityPolicy: 'off',
     verifyCommand: draft.verifyCommand,

@@ -37,7 +37,6 @@ export type _TerminationCause =
   | 'finished'
   | 'incomplete'
   | 'timeout'
-  | 'cost_exceeded'
   | 'time_ceiling'
   | 'degenerate_exhausted'
   | 'api_error'
@@ -75,16 +74,29 @@ export interface SessionOpts {
   idleStallTimeoutMs?: number;
   abortSignal: AbortSignal;
   bus?: object;
+  /** Task identity — required for per-task event tagging so the stall watchdog
+   *  can filter the shared bus. Optional only because some unit tests construct
+   *  sessions directly without a task context. */
+  batchId?: string;
+  /** Index within batch. */
+  taskIndex?: number;
 }
 
 export interface TurnOpts {
   stageLabel?: string;
+  /** Cooperative cancellation — pass the per-task stall abort signal so
+   *  send() can be unwound by the stuck-detection watchdog. */
+  signal?: AbortSignal;
 }
 
 /** Interface implemented by ClaudeSession and CodexCliSession. */
 export interface Session {
   send(instruction: string, opts?: TurnOpts): Promise<TurnResult>;
   close(): Promise<void>;
+  /** Returns the OS pid of the active CLI subprocess if one exists. Undefined
+   *  between turns or for providers that do not spawn a child (e.g. in-process
+   *  SDK clients). Used by shutdown drain to SIGKILL stragglers. */
+  getPid?(): number | undefined;
 }
 
 // Provider — factory-created handle that openSession returns

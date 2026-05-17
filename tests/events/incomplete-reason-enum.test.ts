@@ -3,7 +3,7 @@ import { IncompleteReasonEnum } from '../../packages/core/src/types/enums.js';
 
 describe('IncompleteReasonEnum', () => {
   it('accepts the four spec values', () => {
-    for (const v of ['turn_cap', 'cost_cap', 'timeout', 'missing_sections'] as const) {
+    for (const v of ['turn_cap', 'timeout', 'missing_sections'] as const) {
       expect(() => IncompleteReasonEnum.parse(v)).not.toThrow();
     }
   });

@@ -43,6 +43,10 @@ export interface HarnessHandle {
 export interface BootOptions {
   provider: Provider;
   cwd: string;
+  /** Opt-in to JSONL diagnostic logging. Default false — tests should not
+   *  pollute the user's global mmagent-YYYY-MM-DD.jsonl. The observability
+   *  fixture sets this to true so it can read emitted events back from disk. */
+  diagnosticsLog?: boolean;
 }
 
 function installLoopbackOnlyFetch(): void {
@@ -102,12 +106,11 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
     defaults: {
       timeoutMs: 1_800_000,
-      maxCostUSD: 10,
       tools: 'full',
       sandboxPolicy: 'cwd-only',
     },
     diagnostics: {
-      log: true,
+      log: opts.diagnosticsLog ?? false,
     },
     server: {
       bind: '127.0.0.1',

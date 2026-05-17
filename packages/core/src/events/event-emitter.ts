@@ -21,7 +21,7 @@ export type EventListener = (event: Record<string, unknown>) => void;
  * sink — this preserves the spec C7 two-layer scrubbing rule.
  *
  * Schema validation fires in dev/test for events with registered schemas;
- * unknown event names (e.g. diagnostic cost_check, time_check, heartbeat_timer)
+ * unknown event names (e.g. diagnostic time_check, heartbeat_timer)
  * pass through without validation.
  */
 export class EventEmitter {
@@ -34,6 +34,11 @@ export class EventEmitter {
 
   on(l: EventListener): void {
     this.listeners.push(l);
+  }
+
+  off(l: EventListener): void {
+    const i = this.listeners.indexOf(l);
+    if (i !== -1) this.listeners.splice(i, 1);
   }
 
   addSink(sink: EventSink): void {

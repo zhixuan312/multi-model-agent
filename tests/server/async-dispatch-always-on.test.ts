@@ -20,7 +20,7 @@ describe('async-dispatch — always-on breadcrumbs (A5)', () => {
   });
 
   it('emits executor_started and batch_completed to stderr with diagnostics.log=false', async () => {
-    const handle = await startTestServerWithAgents({ diagnostics: { log: false }, defaults: { timeoutMs: 100, maxCostUSD: 1, tools: 'full', sandboxPolicy: 'cwd-only' } });
+    const handle = await startTestServerWithAgents({ diagnostics: { log: false }, defaults: { timeoutMs: 100, tools: 'full', sandboxPolicy: 'cwd-only' } });
     try {
       await fetch(`${handle.url}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',

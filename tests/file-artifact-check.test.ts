@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { partitionFilePaths, checkOutputTargets } from '@zhixuan92/multi-model-agent-core/bounded-execution/file-artifact-check';
+import { checkOutputTargets } from '@zhixuan92/multi-model-agent-core/bounded-execution/file-artifact-check';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
@@ -7,57 +7,26 @@ vi.mock('fs', () => ({
 
 import { existsSync } from 'fs';
 
-describe('partitionFilePaths', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('partitions into existing inputs and non-existing output targets', () => {
-    (existsSync as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce(true)   // src/existing.ts
-      .mockReturnValueOnce(false); // src/new-file.ts
-    const result = partitionFilePaths(['src/existing.ts', 'src/new-file.ts'], '/project');
-    expect(result.outputTargets).toEqual(['/project/src/new-file.ts']);
-  });
-
-  it('returns empty outputTargets when all paths exist', () => {
-    (existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    const result = partitionFilePaths(['src/a.ts', 'src/b.ts'], '/project');
-    expect(result.outputTargets).toEqual([]);
-  });
-
-  it('returns empty outputTargets when filePaths is undefined', () => {
-    const result = partitionFilePaths(undefined, '/project');
-    expect(result.outputTargets).toEqual([]);
-  });
-
-  it('returns empty outputTargets when filePaths is empty', () => {
-    const result = partitionFilePaths([], '/project');
-    expect(result.outputTargets).toEqual([]);
-  });
-});
-
 describe('checkOutputTargets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('returns false when all targets exist', () => {
+  it('returns empty array when all targets exist', () => {
     (existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
     const missing = checkOutputTargets(['/project/src/new-file.ts']);
-    expect(missing).toBe(false);
+    expect(missing).toEqual([]);
   });
 
-  it('returns true when any target is missing', () => {
+  it('returns the missing paths when some are absent', () => {
     (existsSync as ReturnType<typeof vi.fn>)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(false);
     const missing = checkOutputTargets(['/project/src/a.ts', '/project/src/b.ts']);
-    expect(missing).toBe(true);
+    expect(missing).toEqual(['/project/src/b.ts']);
   });
 
-  it('returns false for empty targets list', () => {
-    const missing = checkOutputTargets([]);
-    expect(missing).toBe(false);
+  it('returns empty array on empty input', () => {
+    expect(checkOutputTargets([])).toEqual([]);
   });
 });

@@ -14,7 +14,7 @@ export const COMPLETED_WORK_TOOLS = new Set(['writeFile', 'editFile', 'runShell'
  *  the cap should be generous enough for that pattern. 6 covers heavy-read
  *  tasks (plan implementation, wide refactors) while still bounding truly-stuck
  *  runs. Complex-tier runners that hit this cap fast are still bounded by
- *  maxCostUSD and timeoutMs. */
+ *  timeoutMs. */
 export const MAX_DEGENERATE_RETRIES = 6;
 
 /** Number of consecutive turns with no new file interactions before injecting a stall warning. */

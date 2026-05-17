@@ -19,7 +19,6 @@ export type RunStatus =
   | 'provider_transport_failure'
   | 'error'
   | 'brief_too_vague'
-  | 'cost_exceeded'
   | 'unavailable';
 
 /** Canonical 4-field token-count shape. reasoningTokens are summed into
@@ -61,7 +60,7 @@ export interface CostBreakdown {
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'time_ceiling' | 'degenerate_exhausted'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'time_ceiling' | 'degenerate_exhausted'
        | 'api_error' | 'provider_transport_failure' | 'api_aborted' | 'brief_too_vague' | 'error'
   turnsUsed: number
   hasFileArtifacts: boolean
@@ -107,7 +106,6 @@ export interface RunOptions {
    *  canonical orchestrator-side initial brief. */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
   mainModel?: string
-  maxCostUSD?: number
   formatConstraints?: FormatConstraints
   /** External abort signal — when fired, the runner force-salvages and
    *  returns a `timeout` result via the same path as the per-call timeout.
@@ -131,9 +129,9 @@ export interface RunOptions {
    *  provider-specific cache markers (e.g. Claude ephemeral cache_control). */
   cacheHints?: { cacheableSystemPrompt?: boolean }
   /** Bus for emitting per-turn / per-runner-call observability events. When
-   *  present, the runner-shell + adapter emit `runner_turn_started`,
-   *  `runner_turn_completed`, and `runner_response_received` events that the
-   *  server's VerboseLogChannel + LocalLogSink + TelemetrySink consume. */
+   *  present, the runner + adapter emit provider-specific events (e.g.
+   *  `claude_turn_started`, `claude_turn_completed`) that the server's
+   *  VerboseLogChannel + LocalLogSink + TelemetrySink consume. */
   bus?: EventEmitter
   /** Identifies the in-flight batch in emitted runner events. Plumbed
    *  through delegateWithEscalation so consumers can correlate runner-shell

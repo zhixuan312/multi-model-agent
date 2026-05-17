@@ -14,6 +14,14 @@ import type { RequestContext, RawHandler } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+// Daemon-wide draining flag — set true by the cleanupSignal handler when
+// SIGTERM/SIGINT fires. New dispatches refuse with 503 service_unavailable
+// while shutdown drains in-flight tasks. /health is allowed through so
+// operators can confirm the daemon is winding down.
+let drainingMode = false;
+export function setDraining(d: boolean): void { drainingMode = d; }
+export function isDraining(): boolean { return drainingMode; }
+
 export interface PipelineConfig {
   loopbackOnlyPaths: ReadonlySet<string>;
   authExemptPaths: ReadonlySet<string>;
@@ -33,6 +41,15 @@ export async function handleRequest(
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const rawUrl = req.url ?? '/';
+
+  // ── Step 0: draining check ────────────────────────────────────────────────
+  // Once SIGTERM/SIGINT fires and cleanupSignal calls setDraining(true), new
+  // dispatches refuse with 503 so in-flight tasks can drain cleanly. /health
+  // stays available so operators can confirm the daemon is winding down.
+  if (drainingMode && !rawUrl.startsWith('/health')) {
+    sendError(res, 503, 'service_unavailable', 'daemon is draining; retry after restart');
+    return;
+  }
 
   // ── Step 1: Body size cap ──────────────────────────────────────────────────
   let rawBody: Buffer | undefined;

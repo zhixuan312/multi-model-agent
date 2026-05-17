@@ -16,19 +16,7 @@
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": true,
-      "escalationLog": [
-        {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 99,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
-        }
-      ],
+      "escalationLog": [],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
       "terminationReason": {

@@ -44,7 +44,6 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
       briefQualityPolicy: origTask?.briefQualityPolicy ?? 'off',
       tools: origTask?.tools ?? defaults?.tools ?? 'full',
       timeoutMs: origTask?.timeoutMs ?? defaults?.timeoutMs ?? 1_800_000,
-      maxCostUSD: origTask?.maxCostUSD ?? defaults?.maxCostUSD ?? 10,
       sandboxPolicy: origTask?.sandboxPolicy ?? defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: origTask?.cwd ?? ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: origTask?.contextBlockIds ?? [],

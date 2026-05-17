@@ -38,7 +38,6 @@ function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
     providers: {},
     implementerIdentity: undefined,
     timing: { startMs: Date.now(), timeoutMs: 60_000, deadlineMs: Date.now() + 60_000, stallTimeoutMs: 60_000 },
-    budgets: { maxCostUSD: undefined },
     stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
     implementerToolMode: 'full',
     bus: undefined,

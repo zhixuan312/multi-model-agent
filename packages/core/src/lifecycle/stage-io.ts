@@ -99,7 +99,7 @@ export type ComposePayload = {
     workerSelfAssessment: WorkerSelfAssessment | null;
     reviewVerdict: 'approved' | 'changes_required' | null;
     commitOutcome: 'committed' | 'no_op' | 'not_applicable';
-    stopReason: 'normal' | 'turn_cap' | 'cost_cap' | 'timeout' | 'transport_error';
+    stopReason: 'normal' | 'turn_cap' | 'timeout' | 'transport_error';
     haltedStage: string | null;
     stages: Array<{
       name: string;
@@ -122,7 +122,7 @@ export type TerminalPayload = {
 // ───── Driver runtime types ─────
 
 export type StageStopReason =
-  'normal' | 'turn_cap' | 'cost_cap' | 'timeout' | 'transport_error';
+  'normal' | 'turn_cap' | 'timeout' | 'transport_error';
 
 export type StageGate<TPayload = unknown> = {
   outcome: 'advance' | 'skip' | 'halt';
@@ -134,6 +134,7 @@ export type StageGate<TPayload = unknown> = {
     costUSD: number | null;
     turnsUsed: number;
     stopReason: StageStopReason;
+    timeoutKind?: 'wall_clock' | 'stall' | 'idle' | 'unknown';
   };
 };
 

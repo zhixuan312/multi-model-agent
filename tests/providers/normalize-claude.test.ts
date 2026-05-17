@@ -39,9 +39,9 @@ describe('normalizeClaudeTurn', () => {
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_max_turns');
   });
-  it('max_budget maps to cost_exceeded/sdk_max_budget', () => {
+  it('max_budget maps to error/sdk_max_budget', () => {
     const r = normalizeClaudeTurn([result('error_max_budget_usd')], { durationMs: 1, costUSD: 0 });
-    expect(r.terminationReason).toBe('cost_exceeded');
+    expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_max_budget');
   });
   it('guard override wins over SDK terminal', () => {

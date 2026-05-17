@@ -1,9 +1,8 @@
 import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
 import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
-import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
+import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
-import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
 import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 import type { RunnerAdapter } from '../../packages/core/src/providers/runner-adapter.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
@@ -145,7 +144,6 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
   const emitter = new EventEmitter();
   const executor = new TaskExecutor(emitter);
   const deriver = new TerminalStatusDeriver();
-  const coord = new ShutdownCoordinator();
   const noop: StageHandler = () => undefined;
 
   // v4.4 test bridge: handlers that have migrated to session.send() read

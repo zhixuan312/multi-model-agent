@@ -2,7 +2,7 @@
  * Single source of truth for the user-facing lifecycle stage progression.
  *
  * Derived dynamically from `STAGE_PLAN` (the v5 9-stage ordered list) so:
- *   - There's no duplicated stage list in async-dispatch + RunningHeadlineSink.
+ *   - There's no duplicated stage list across lifecycle modules.
  *   - Adding/removing a stage in `stage-plan-builder.ts` immediately flows
  *     into the polling headline denominator without a second edit.
  *
@@ -11,7 +11,7 @@
  * when applicable so the bracket advances when rework runs.
  */
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ToolCategory } from './rework-budget.js';
 import { STAGE_PLAN } from './stage-plan-builder.js';
 import type { StageDefinition, RouteName } from './stage-io.js';
 import { HUMAN_LABEL } from './stage-labels.js';

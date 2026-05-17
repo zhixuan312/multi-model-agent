@@ -49,18 +49,4 @@ describe('tool-name-sets contract (Gap 14)', () => {
       expect(SHELL_TOOL_NAMES.has(name)).toBe(false);
     }
   });
-
-  it('sink + runner consume the SAME WRITE_TOOL_NAMES export (drift guard)', async () => {
-    // Both consumers must use the same identity-equal Set so a future
-    // contributor can't add a "local override" without editing
-    // tool-name-sets.ts directly.
-    const sinkModule = await import('../../packages/core/src/events/running-headline-sink.js');
-    // Re-importing the central set from the same module path returns
-    // the same object — this test is a static-import smoke check.
-    // The structural guarantee is in TypeScript: both consumers
-    // import from `tool-name-sets.ts`. If a future patch reintroduces
-    // a local copy, the test for `edit_file` write counting in
-    // running-headline-sink (separate test) will catch it.
-    expect(sinkModule.RunningHeadlineSink).toBeDefined();
-  });
 });

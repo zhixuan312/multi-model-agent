@@ -13,7 +13,7 @@ function buildConfig(tokenPath: string, diagnostics: MultiModelConfig['diagnosti
       standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
       complex:  { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
     },
-    defaults: { timeoutMs: 1_800_000, maxCostUSD: 10, tools: 'full', sandboxPolicy: 'cwd-only' },
+    defaults: { timeoutMs: 1_800_000, tools: 'full', sandboxPolicy: 'cwd-only' },
     ...(diagnostics ? { diagnostics } : {}),
     server: {
       bind: '127.0.0.1', port: 0, auth: { tokenFile: tokenPath },

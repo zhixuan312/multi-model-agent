@@ -21,17 +21,6 @@ describe('researchHeadlineTemplate', () => {
     expect(headline).toBe('[ok] research: 1 sources, 2 findings');
   });
 
-  it('emits incomplete headline for cost cap', () => {
-    const headline = researchHeadlineTemplate.compose({
-      taskBrief: 'x',
-      task: baseTask,
-      report: { findings: [], sourcesUsed: [] },
-      runResult: { ...baseRun, incompleteReason: 'cost_cap' } as unknown as RuntimeRunResult,
-      status: 'incomplete',
-    });
-    expect(headline).toBe('[incomplete] research: cost cap reached');
-  });
-
   it('emits incomplete headline for timeout', () => {
     const headline = researchHeadlineTemplate.compose({
       taskBrief: 'x',

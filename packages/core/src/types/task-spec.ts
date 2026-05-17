@@ -26,7 +26,6 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  maxCostUSD?: number
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
   mainModel?: string
@@ -37,6 +36,7 @@ export interface TaskSpec {
   verifyCommand?: string[]
   autoCommit?: boolean
   planContext?: string
+  outputTargets?: string[]
   /**
    * Optional task-specific tool injection. When present, runner adapters
    * merge these tools into the worker's tool surface ON TOP of whatever

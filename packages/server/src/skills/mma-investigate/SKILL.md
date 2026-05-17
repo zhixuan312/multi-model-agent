@@ -78,7 +78,7 @@ digraph when_to_use {
 ❌ `{ "question": "Where is parseConfig called?" }` — searches the whole repo
 ✅ `{ "question": "Where is parseConfig called?", "filePaths": ["src/"] }` — bounded
 
-**Why:** the worker greps and reads under its cost ceiling. Without anchors, broad questions exhaust the budget before they finish.
+**Why:** the worker greps and reads under a turn and wall-clock budget. Without anchors, broad questions exhaust those budgets before they finish.
 
 ## Full example
 

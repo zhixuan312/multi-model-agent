@@ -64,7 +64,7 @@ export function normalizeClaudeTurn(
       } else if (subtype === 'error_max_turns') {
         sdkTermination = 'error'; errorCode = 'sdk_max_turns';
       } else if (subtype === 'error_max_budget_usd') {
-        sdkTermination = 'cost_exceeded'; errorCode = 'sdk_max_budget';
+        sdkTermination = 'error'; errorCode = 'sdk_max_budget';
       } else if (subtype === 'error_during_execution') {
         sdkTermination = 'error'; errorCode = 'sdk_execution_error';
         const errs = (ev as { errors?: string[] }).errors;

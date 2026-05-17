@@ -28,9 +28,35 @@ export function buildExecutionContext(
     entry.lastHeartbeatAt = Date.now();
     entry.running = [{ worker: tick.provider, turn: Math.max(1, tick.stageIndex) }];
     if (tick.snapshot) {
+      // Legacy single-snapshot field — kept for back-compat with any reader
+      // that hasn't migrated to the per-task field.
       deps.batchRegistry.updateRunningHeadlineSnapshot(effectiveBatchId, tick.snapshot);
+      // Per-task snapshot — the polling handler's preferred branch
+      // (batch.ts:67-126). Populates structured fields so the polling 202
+      // body reflects current stage + counts instead of the seed value.
+      // Task index 0: async-dispatch seeded taskIndex=0; multi-task
+      // executors that fan out additional tasks supply their own real
+      // taskIndex via the runner's bus events, and that ladder is handled
+      // by the dispatcher-level seed. For single-task batches taskIndex
+      // defaults to 0 — matches the async-dispatch seed at line 104.
+      deps.batchRegistry.updatePerTaskHeadlineSnapshot(effectiveBatchId, 0, {
+        prefix: tick.snapshot.prefix,
+        statsClause: tick.snapshot.statsClause,
+        dispatchedAt: tick.snapshot.dispatchedAt,
+        fallback: tick.snapshot.fallback,
+        stageLabel: capitalizeStage(tick.stage),
+        stageDone: tick.stageIndex,
+        stageTotal: tick.stageCount,
+        toolReads: tick.progress.filesRead,
+        toolWrites: tick.progress.filesWritten,
+        toolTotal: tick.progress.toolCalls,
+      });
     }
   };
+
+  function capitalizeStage(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
 
   const attachBatchGroups: ExecutionContext['attachBatchGroups'] = (groups) => {
     deps.batchRegistry.attachGroups(batchId, groups);
@@ -66,6 +92,9 @@ export function buildExecutionContext(
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,
+    // Thread the BatchRegistry so task-runner can attach this ctx for
+    // shutdown-drain visibility into in-flight tasks.
+    batchRegistry: deps.batchRegistry,
     task: { prompt: '' },
     taskIndex: 0,
     cwd: pc.cwd,
@@ -75,7 +104,6 @@ export function buildExecutionContext(
     providers: {},
     implementerIdentity: undefined,
     timing: { startMs: now, timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },
-    budgets: { maxCostUSD: undefined },
     stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
     implementerToolMode: undefined,
     heartbeat: undefined,

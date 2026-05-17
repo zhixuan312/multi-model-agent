@@ -1,5 +1,6 @@
 // Config
-export { loadConfigFromFile, loadAuthToken, collectInlineApiKeyOffenders } from './config/load.js';
+export { loadConfigFromFile, loadAuthToken } from './config/load.js';
+export { collectInlineApiKeyOffenders } from './config/config-resolver.js';
 export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
 export type { ServerConfig } from './config/schema.js';
 
@@ -33,11 +34,8 @@ export type {
   BatchProgress,
   BatchAggregateCost,
 } from './lifecycle/executor-output-types.js';
-export type {
-  EligibilityFailureCheck,
-  EligibilityFailure,
-  ProviderEligibility,
-} from './escalation/types.js';
+// (EligibilityFailure / ProviderEligibility re-exports removed —
+//  escalation/types.js is being deleted along with the rest of escalation/.)
 export type {
   BriefQualityPolicy,
 } from './intake/types.js';
@@ -106,8 +104,8 @@ export type {
 } from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
-export { resolveAgent } from './escalation/agent-resolver.js';
-export type { ResolvedAgent } from './escalation/agent-resolver.js';
+export { resolveAgent } from './providers/agent-resolver.js';
+export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 export { otherTier } from './config/tier-policy-registry.js';
 
@@ -155,7 +153,6 @@ export type { EventSink } from './events/event-emitter.js';
 export { LocalLogSink } from './events/local-log-sink.js';
 export { TelemetrySink } from './events/telemetry-sink.js';
 export { VerboseLogChannel } from './events/verbose-log-channel.js';
-export { RunningHeadlineSink } from './events/running-headline-sink.js';
 export type { Recorder } from './events/telemetry-sink.js';
 export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
 export type { EventType } from './events/observability-events.js';

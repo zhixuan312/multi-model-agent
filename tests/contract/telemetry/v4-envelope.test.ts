@@ -247,16 +247,6 @@ describe('V4 envelope contract', () => {
     expect(parsed.terminalStatus).toBe('timeout');
   });
 
-  it('terminal cost_exceeded', () => {
-    const event = makeEvent('delegate', {
-      terminalStatus: 'cost_exceeded' as const,
-      workerStatus: 'failed' as const,
-      stages: [makeStage('implementing')],
-    });
-    const parsed = ValidatedTaskCompletedEventSchema.parse(event);
-    expect(parsed.terminalStatus).toBe('cost_exceeded');
-  });
-
   it('terminal brief_too_vague (empty stages allowed)', () => {
     const event = makeEvent('delegate', {
       terminalStatus: 'brief_too_vague' as const,

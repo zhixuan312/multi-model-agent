@@ -132,7 +132,6 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
     done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
     tools: ctx.config.defaults?.tools ?? 'full',
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-    maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
     // ctx.cwd is the HTTP `?cwd=` query param (set in execution-context.ts
     // from projectContext.cwd). Always prefer it over brief.cwd because the

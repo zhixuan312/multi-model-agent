@@ -38,7 +38,7 @@ function makeConfig(): MultiModelConfig {
       standard: { type: 'mock', timeoutMs: 60_000 } as unknown as MultiModelConfig['agents']['standard'],
       complex: { type: 'mock', timeoutMs: 60_000 } as unknown as MultiModelConfig['agents']['complex'],
     },
-    defaults: { timeoutMs: 60_000, stallTimeoutMs: 30_000, maxCostUSD: 5, tools: 'full', sandboxPolicy: 'cwd-only' },
+    defaults: { timeoutMs: 60_000, stallTimeoutMs: 30_000, tools: 'full', sandboxPolicy: 'cwd-only' },
     server: {
       bind: '127.0.0.1', port: 7337,
       auth: { tokenFile: '/tmp/x' },

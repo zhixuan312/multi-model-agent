@@ -71,7 +71,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
     applicableRoutes: ALL_TASK_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
     shouldRun: alwaysRun,
     handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/task-executor.js'));
+      const mod = await loadHandler(() => import('./handlers/implement-stage.js'));
       return mod.implementHandler(state);
     },
   },
@@ -90,7 +90,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
       return { run: true };
     },
     handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/review-handler.js'));
+      const mod = await loadHandler(() => import('./handlers/review-stage.js'));
       return mod.reviewHandler(state);
     },
   },
@@ -110,7 +110,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
       return { run: true };
     },
     handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/rework-handler.js'));
+      const mod = await loadHandler(() => import('./handlers/rework-stage.js'));
       return mod.reworkHandler(state);
     },
   },
@@ -139,7 +139,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
     applicableRoutes: ALL_TASK_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
     shouldRun: alwaysRun,
     handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/annotator.js'));
+      const mod = await loadHandler(() => import('./handlers/annotate-stage.js'));
       return mod.annotator(state);
     },
   },

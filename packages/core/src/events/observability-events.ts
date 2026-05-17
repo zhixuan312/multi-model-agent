@@ -153,15 +153,6 @@ export const TimeCheckEvent = TaskBase.extend({
   timeoutMs: z.number().int().min(0),
 }).strict();
 
-export const CostCheckEvent = TaskBase.extend({
-  event: z.literal('cost_check'),
-  stage: z.string(),
-  tripped: z.boolean(),
-  cost_used_usd: z.number().min(0),
-  cost_cap_usd: z.number().min(0),
-  cost_available: z.boolean(),
-}).strict();
-
 export const BatchCompletedEvent = BatchBase.extend({
   event: z.literal('batch_completed'),
   tool: z.string(),
@@ -210,7 +201,7 @@ const EscalationFiredItemSchema = z.object({
 export const TaskTerminationEvent = TaskBase.extend({
   event: z.literal('task_termination'),
   cause: z.string(),
-  terminal_status: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
+  terminal_status: z.enum(['ok', 'incomplete', 'timeout', 'error', 'brief_too_vague', 'unavailable']),
   turns: z.number().int().min(0),
   duration_ms: z.number().int().min(0),
   supervision_state: z.object({
@@ -441,7 +432,6 @@ export const Event = z.discriminatedUnion('event', [
   ReadOnlyReviewTerminalEvent,
   StallAbortEvent,
   TimeCheckEvent,
-  CostCheckEvent,
   BatchCompletedEvent,
   BatchFailedEvent,
   TaskCompletedLocalEvent,
@@ -496,7 +486,6 @@ export const EventSchemas: Record<string, z.ZodType> = {
   'read_only_review.terminal': ReadOnlyReviewTerminalEvent,
   stall_abort:                StallAbortEvent,
   time_check:                 TimeCheckEvent,
-  cost_check:                 CostCheckEvent,
   task_completed:             TaskCompletedLocalEvent,
   batch_completed:            BatchCompletedEvent,
   batch_failed:               BatchFailedEvent,

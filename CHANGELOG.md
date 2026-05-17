@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-05-17
+
+### BREAKING
+
+- **Per-task USD cost caps removed across the entire surface (core + server).** The `defaults.maxCostUSD` config field, the `tasks[].maxCostUSD` HTTP request field on `/delegate` and `/execute-plan`, and the `TaskSpec.maxCostUSD` / `RunOptions.maxCostUSD` type slots are all deleted. Existing user-config files containing `defaults: { maxCostUSD: N }` will fail to load against the new `.strict()` schema; HTTP callers still sending `tasks[].maxCostUSD` will receive `400 invalid_request`. Migration: drop the field everywhere. Reported cost (`actualCostUSD`, `costUSD`) is unchanged — only the *cap* is gone.
+- **Status enum narrowings.** `TerminalStatus`, `RunStatus`, and `RuntimeRunResult.cause` no longer carry `'cost_exceeded'`. `IncompleteReasonEnum` and `stopReason` no longer carry `'cost_cap'`. `EventTypeEnum` no longer carries `'cost_check'`. TypeScript consumers that switch/case on these values will see narrowed unions.
+- **Removed exports from `@zhixuan92/multi-model-agent-core`:** `DEFAULT_MAX_COST_USD`, `MAX_COST_PRESTOP_RATIO`, `pricingSchema`, `CostCheckEvent`, `RunningHeadlineSink`. The `error-codes` enum no longer contains `'guard_cost_ceiling'`.
+- **Module removal:** the entire `packages/core/src/escalation/` folder is gone — escalation/retry logic moved into `lifecycle/perform-implementation.ts` and related handlers. Anyone importing from `@zhixuan92/multi-model-agent-core/escalation/*` subpaths will break at module-load.
+
+### Added
+
+- **Per-task headline snapshot wiring (server).** The `recordHeartbeat` callback in `execution-context.ts` now writes a structured `HeadlineSnapshot` to `perTaskHeadlineSnapshots` on every activity-tracker tick — with `stageLabel`, `stageDone`, `stageTotal`, `toolReads`, `toolWrites`, `toolTotal` populated from the tick info. The polling `/batch/:id` 202 response now reflects current stage and live counts instead of staying frozen on the seed value for the entire task lifetime.
+- **Annotating-stage transition (core).** `annotate-stage.ts` now calls `ctx.heartbeat?.transition({stage: 'annotating'})` on entry, so polling shows `Annotating` between Review and Committing.
+- **outputTargets contract (core).** `/delegate` and `/execute-plan` tasks accept an optional `outputTargets: string[]`. After the task finishes, `checkOutputTargets()` verifies each declared path exists on disk and emits a `severity: high` finding (`missing_output_targets`) for any path that does not. Paths are normalized cwd-relative at task start.
+- **EventEmitter.off()** for listener cleanup (`packages/core/src/events/event-emitter.ts`). Used by the stall-watchdog disposer.
+
+### Changed
+
+- **Reviewer and annotator stage-label vocabulary (core).** `run-reviewer.ts` now passes `{ stageLabel: HUMAN_LABEL.review }` to `session.send` (previously omitted); `run-annotator-turn.ts` now passes `HUMAN_LABEL.annotating` (previously the raw string `'annotate'`).
+- **SDK `error_max_budget_usd` subtype (core).** Mapped to `sdkTermination: 'error'` with `errorCode: 'sdk_max_budget'`. Previously mapped to the now-deleted `'cost_exceeded'` terminal status — kept as a defensive branch since the SDK can theoretically still emit this even though we no longer pass `maxBudget`.
+- **Per-task session lifecycle (core).** `task-runner.ts` instantiates `ActivityTracker` per task with explicit start/stop, and `perform-implementation.ts` / `review-stage.ts` / `rework-stage.ts` / `git-commit-handler.ts` / `annotate-stage.ts` all report stage transitions to the tracker.
+- **ProgressWatchdog defaults (core).** `thrashTurns` default raised from 25 → 50 to reduce false-positive trips on legitimately long workflows.
+- **Synchronous session close (core).** Worker close runs synchronously with a 100-child safety ceiling, eliminating a class of orphan codex processes on cancellation.
+
+### Fixed
+
+- **`stuck-detection` per-task scoping + real event names + abort race (core).** Detection was firing on cross-task events because the watchdog reset its idle clock on any event, not just events tagged with the same `batchId`/`taskIndex`. Fixed in `bounded-execution/stall-watchdog.ts`.
+- **stall-watchdog disposer removes its bus listener (core).** Without this, every task instantiated a new listener that lived past task termination — slow memory leak proportional to throughput.
+- **ActivityTracker ticks no longer forwarded to the observability bus (core).** The tick shape (`kind: 'heartbeat'`) does not conform to the wire event schema (`event: 'heartbeat'`); pushing it caused schema-validation warnings. Ticks now stay on the dedicated `recordHeartbeat` callback channel.
+- **`stageStats.implementing.costUSD` preserves `null` (core).** Previously coerced to `0`, which masked rate-card-unresolved cases. Now `null` flows through to telemetry so consumers can tell "free run" apart from "cost unknown".
+- **`wall-clock` errorCode propagated into halted stage `timeoutKind` (core).** Halt gates now carry the specific timeout kind instead of a generic string.
+- **codex subprocess: spawn detached + kill via process group, settle `consumeStream` on exit (core).** Hardens cleanup; no more orphan codex processes when the parent task aborts mid-run.
+
+### Removed
+
+- **Dead `RunningHeadlineSink` (core).** The sink filtered for `event['event'] !== 'runner_turn_completed'` — a name no producer emits. The activity-tracker path now does what this sink was supposed to. Sink module deleted, public re-export removed, server instantiations removed, two dedicated test files deleted, two incidental references neutralized.
+- **Dead `cleanup/` folder (core).** Five wrapper classes that no runtime path consumed. Real cleanup duties live in `BatchRegistry.runExpirySweep`, `FileBackedContextBlockStore.runIdleSweep`, `ProjectRegistry.evictIdle`, and `serve.ts` shutdown handlers.
+- **Dead `body-size.ts` middleware (server).** Duplicated a `config/schema.ts` constant and exported a zero-caller `buildServerOpts` helper. Runtime body-size enforcement reads `cfg.server.limits.maxBodyBytes` directly from parsed config.
+- **Dormant bounded-execution leftovers (core).** `IdleGuard`, `CostMeter`, `SAFETY_MAX_TURNS`, parallel error-classifier, `partitionFilePaths`, and the bounded-execution barrel index — all unused.
+- **Config-folder cleanups (core).** `pricing-table.ts` (dormant façade), the internal `config/index.ts` barrel (no callers), and `validateUserPricing` / `resolveMainAgentModel` / their types from `config-resolver.ts` (test-only via a `load.ts` compatibility re-export). The `serverConfigSchema` block was de-duplicated against the embedded `multiModelConfigSchema.server` block.
+- **`@include _shared/budget-defaults.md`** removed from 5 SKILL.md files; the shared doc itself was deleted.
+
+### Internal
+
+- **Stage handlers renamed to `<stage>-stage.ts`** (`refactor(handlers): rename stage handlers to <stage>-stage.ts`).
+- **`packages/core/src/escalation/` folder deleted entirely** — write routes now go through `ctx.getSession(tier)` directly, no escalation orchestrator.
+- **`findModelProfile` hot path** — lowercase prefixes precomputed once at module load, profile entries frozen, no per-call clone. Cited hot paths: events normalize, cost compute, lifecycle stats.
+- **Test fixtures + goldens trimmed** to drop `maxCostUSD` literals, `budgets: { maxCostUSD: undefined }` blocks, `cost_exceeded` mock branches, and the `cost_check` golden entry.
+
 ## [4.6.0] - 2026-05-16
 
 ### Changed
@@ -247,7 +296,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...HEAD
+[4.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...v4.6.0
 [4.5.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...v4.5.4
 [4.5.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...v4.5.3

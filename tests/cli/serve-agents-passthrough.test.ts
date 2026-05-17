@@ -24,7 +24,6 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
       defaults: {
         tools: 'full',
         timeoutMs: 60_000,
-        maxCostUSD: 10,
         sandboxPolicy: 'cwd-only',
       },
       server: {

@@ -175,19 +175,5 @@ describe('M2 fix — AC-15 — read route with no commit completes', () => {
   });
 });
 
-describe('M1 fix — AC-14 — escalation no longer gates promotion on workerStatus', () => {
-  // M1 lives in delegate-with-escalation.ts. Test indirectly by importing the
-  // module and asserting the gate logic is gone.
-  it('source no longer contains the workerStatus === done promotion gate', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const url = await import('node:url');
-    const here = path.dirname(url.fileURLToPath(import.meta.url));
-    const escalationPath = path.resolve(here, '../../../packages/core/src/escalation/delegate-with-escalation.ts');
-    const src = fs.readFileSync(escalationPath, 'utf-8');
-    // The old gate was: `best.workerStatus === 'done' && outputIsSubstantive && (...filesWritten...||hasShellVerification)`
-    expect(src).not.toMatch(/best\.workerStatus\s*===\s*'done'\s*&&[\s\S]*outputIsSubstantive[\s\S]*hasShellVerification/);
-    // The v5 truthful comment marker should be present.
-    expect(src).toMatch(/v5: escalation no longer gates on workerSelfAssessment/);
-  });
-});
+// M1 fix block deleted with the escalation module — when the file you were
+// regression-testing no longer exists, there is nothing left to regress.

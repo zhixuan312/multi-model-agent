@@ -1,9 +1,7 @@
 {
   "folders": [
     "bounded-execution",
-    "cleanup",
     "config",
-    "escalation",
     "events",
     "identity",
     "intake",

@@ -421,6 +421,17 @@ const PROFILE_ENTRIES: ModelProfile[] = (() => {
   return [...resolved.values()].sort((a, b) => b.prefix.length - a.prefix.length);
 })();
 
+// Precompute lowercase prefixes once at module load. findModelProfile is in the
+// hot path for telemetry normalization and cost compute; lowercasing each
+// prefix per call would re-allocate N strings per lookup.
+const PROFILE_LOOKUP: ReadonlyArray<{ entry: ModelProfile; prefixLc: string }> =
+  Object.freeze(PROFILE_ENTRIES.map(e => Object.freeze({
+    entry: Object.freeze(e) as ModelProfile,
+    prefixLc: e.prefix.toLowerCase(),
+  })));
+
+const FROZEN_DEFAULT_PROFILE: ModelProfile = Object.freeze({ ...DEFAULT_PROFILE });
+
 /**
  * Used for model COST/PROFILE lookup only — NOT a telemetry allowlist.
  * Adding/removing entries here does NOT affect what telemetry accepts.
@@ -434,14 +445,11 @@ export const ALL_MODEL_IDS: readonly string[] = Object.freeze(
 );
 
 export function findModelProfile(modelId: string): ModelProfile {
-  const canonical = extractCanonicalModelName(modelId);
-  const normalized = canonical.toLowerCase();
-  for (const entry of PROFILE_ENTRIES) {
-    if (normalized.startsWith(entry.prefix.toLowerCase())) {
-      return { ...entry };
-    }
+  const normalized = extractCanonicalModelName(modelId).toLowerCase();
+  for (const { entry, prefixLc } of PROFILE_LOOKUP) {
+    if (normalized.startsWith(prefixLc)) return entry;
   }
-  return { ...DEFAULT_PROFILE };
+  return FROZEN_DEFAULT_PROFILE;
 }
 
 export function getEffectiveCostTier(config: ProviderConfig): CostTier {

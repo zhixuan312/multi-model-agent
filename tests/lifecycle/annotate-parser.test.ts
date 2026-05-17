@@ -144,7 +144,7 @@ describe('applyAnnotatePreconditions — read route', () => {
         workerStatus: 'done',
         status: 'ok',
         criteriaSucceeded: [],
-        criteriaErrors: [{ criterionId: 'c1', error: 'cost_cap' }],
+        criteriaErrors: [{ criterionId: 'c1', error: 'timeout' }],
       },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);

@@ -5,8 +5,8 @@
 import type { TaskSpec, RuntimeRunResult, Provider } from '../types.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
-import { pickEscalation } from '../escalation/policy.js';
-import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
+import { assembleRunResult } from '../providers/assemble-run-result.js';
+import { retryableFor } from '../error-codes.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
@@ -15,15 +15,22 @@ import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
 
+function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
+  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
+}
+
 export async function performImplementation(state: LifecycleState): Promise<void> {
   const task = state.task as TaskSpec | undefined;
   const ctx = state.executionContext as ExecutionContext | undefined;
   if (!task || !ctx) {
     throw new Error(`performImplementation: state.task / state.executionContext not set for route '${state.route}'`);
   }
-  const baseTier = ctx.assignedTier;
-  const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
-  const provider = ctx.providers[decision.impl] as Provider | undefined;
+  // No tier rotation — tasks stay on their assigned tier per the v0.5 design.
+  // The escalation/policy.ts pickEscalation() was used for an attempt-2 swap
+  // that this codebase doesn't need; deleted along with the escalation/ dir.
+  const implTier = ctx.assignedTier;
+  const decision = { impl: implTier };
+  const provider = ctx.providers[implTier] as Provider | undefined;
   if (!provider) {
     state.lastRunResult = {
       output: '',
@@ -35,7 +42,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       toolCalls: [],
       outputIsDiagnostic: true,
       escalationLog: [],
-      error: `no provider configured for tier '${decision.impl}'`,
+      error: `no provider configured for tier '${implTier}'`,
       errorCode: 'all_tiers_unavailable',
       workerStatus: 'failed',
     } as unknown as RuntimeRunResult;
@@ -168,10 +175,11 @@ export async function performImplementation(state: LifecycleState): Promise<void
     }
   }
 
-  // Build the watchdog config once, just before the delegateWithEscalation call:
+  // Build the watchdog config once, just before the session.send call:
+  safeTracker(() => ctx.heartbeat?.transition({ stage: 'implementing', stageIndex: 1 }), ctx);
   const wdConfig = {
     enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
-    thrashTurns: ctx.config?.defaults?.thrashTurns ?? 25,
+    thrashTurns: ctx.config?.defaults?.thrashTurns ?? 50,
     thrashWallClockMs: ctx.config?.defaults?.thrashWallClockMs ?? 1_200_000,
     thrashSoftWallClockMs: ctx.config?.defaults?.thrashWallClockMs
       ? Math.floor((ctx.config.defaults.thrashWallClockMs ?? 1_200_000) / 2)
@@ -182,8 +190,8 @@ export async function performImplementation(state: LifecycleState): Promise<void
   const wdState2 = { fired: false };
 
   // Wire the watchdog. ctx.stall.controller is the existing AbortController
-  // passed to delegateWithEscalation as options.abortSignal — when the watchdog
-  // fires, the controller's abort propagates into the session.
+  // passed into session.send via TurnOpts.signal — when the watchdog fires,
+  // the controller's abort propagates into the active subprocess.
   const disposeWatchdog = startProgressWatchdog({
     state,
     controller: ctx.stall.controller,
@@ -195,31 +203,50 @@ export async function performImplementation(state: LifecycleState): Promise<void
   });
 
   try {
-    const result = await delegateWithEscalation(
-      {
-        prompt: task.prompt,
-        cwd: ctx.cwd,
-        agentType: decision.impl,
-        briefQualityPolicy: 'off',
-        timeoutMs: ctx.timing.timeoutMs,
-        ...(task.tools !== undefined && { tools: task.tools }),
+    // v0.5: single cached session per (task, tier) — owned by task-runner.ts's
+    // sessions Map and closed in finally{} by closeSessions(). No retry
+    // wrapper, no per-attempt respawn; SDKs handle transport retry internally
+    // on the same persistent session.
+    const session = ctx.getSession(decision.impl);
+    const turn = await session.send(task.prompt, {
+      stageLabel: HUMAN_LABEL.implementing,
+      signal: ctx.stall.controller.signal,
+    });
+    const raw = assembleRunResult(turn) as RuntimeRunResult;
+    // Match the structured `terminationReason` shape that the old
+    // delegate-with-escalation wrapper used to populate (consumed by
+    // golden-checked downstream telemetry).
+    const usedShell = Array.isArray(raw.toolCalls)
+      && raw.toolCalls.some((tc) => typeof tc === 'string' && tc.startsWith('runShell'));
+    const cause = raw.status === 'ok' ? 'finished'
+      : raw.status === 'incomplete' ? 'incomplete'
+      : 'error';
+    const result: RuntimeRunResult = {
+      ...raw,
+      terminationReason: {
+        cause,
+        turnsUsed: raw.turns ?? 0,
+        hasFileArtifacts: Array.isArray(raw.filesWritten) && raw.filesWritten.length > 0,
+        usedShell,
+        workerSelfAssessment: raw.workerStatus ?? null,
+        wasPromoted: false,
       },
-      [provider],
-      {
-        explicitlyPinned: false,
-        taskDeadlineMs: ctx.timing.deadlineMs,
-        abortSignal: ctx.stall.controller.signal,
-        assignedTier: decision.impl,
-        stageLabel: HUMAN_LABEL.implementing,
-        ...(ctx.bus && { bus: ctx.bus }),
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        taskIndex: ctx.taskIndex,
-      },
-    );
+      escalationLog: [],
+      // Match the errorCode + retryable defaults the old escalation wrapper
+      // used to populate for non-ok statuses (consumed by golden-checked envelope).
+      ...(raw.status !== 'ok' && {
+        errorCode: raw.errorCode ?? raw.status,
+        retryable: raw.retryable ?? retryableFor(raw.status),
+      }),
+    } as unknown as RuntimeRunResult;
     const enrichedResult: RuntimeRunResult = {
       ...result,
       ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
     } as unknown as RuntimeRunResult;
+    const filesRead = Array.isArray(result.filesRead) ? result.filesRead.length : 0;
+    const filesWritten = Array.isArray(result.filesWritten) ? result.filesWritten.length : 0;
+    const toolCalls = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+    safeTracker(() => ctx.heartbeat?.updateProgress(filesRead, filesWritten, toolCalls), ctx);
     state.lastRunResult = enrichedResult;
 
     // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
@@ -240,6 +267,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
     // `actualCostUSD` (the current source of truth from claude/codex
     // turns). Without the actualCostUSD fallback every claude-tier
     // implementing stage records cost=null and telemetry under-reports.
+    const costUSDForStage = result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null;
     mergeStageStats(state, 'implementing', {
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
@@ -247,7 +275,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
       turnCount: result.turns ?? 0,
       toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-      costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
+      costUSD: costUSDForStage,
       durationMs: result.durationMs ?? null,
       filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
       filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
@@ -255,6 +283,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       tier: ctx.assignedTier,
       model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
     });
+    safeTracker(() => ctx.heartbeat?.applyCost({ costUSD: costUSDForStage ?? 0, costDeltaVsMainUSD: 0 }), ctx);
     if (result.status !== 'ok') {
       state.terminal = true;
     }

@@ -60,14 +60,6 @@ export const ERROR_API: RuntimeRunResult = {
   workerStatus: 'failed',
 };
 
-export const COST_EXCEEDED: RuntimeRunResult = {
-  ...structuredClone(BASE_RUN_RESULT),
-  status: 'cost_exceeded',
-  terminationReason: 'cost_ceiling' as unknown as RuntimeRunResult['terminationReason'],
-  workerStatus: 'failed',
-  usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-};
-
 export const BRIEF_TOO_VAGUE: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'brief_too_vague',
@@ -141,7 +133,6 @@ export const ALL: FixtureEntry[] = [
   { name: 'incomplete_delegate', route: 'delegate', terminal: 'incomplete', input: INCOMPLETE },
   { name: 'timeout_delegate', route: 'delegate', terminal: 'timeout', input: TIMEOUT },
   { name: 'error_delegate', route: 'delegate', terminal: 'error', input: ERROR_API },
-  { name: 'cost_exceeded_delegate', route: 'delegate', terminal: 'cost_exceeded', input: COST_EXCEEDED },
   { name: 'brief_too_vague_delegate', route: 'delegate', terminal: 'brief_too_vague', input: BRIEF_TOO_VAGUE },
   { name: 'escalated_delegate', route: 'delegate', terminal: 'ok', input: ESCALATED },
   { name: 'fallback_delegate', route: 'delegate', terminal: 'ok', input: FALLBACK },

@@ -61,7 +61,6 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
     contextBlockIds: brief.contextBlockIds,
     tools: 'readonly' as const,
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-    maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
     mainModel: ctx.mainModel ?? undefined,
   }),

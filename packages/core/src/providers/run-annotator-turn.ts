@@ -7,6 +7,7 @@
 // deterministic parser when this helper returns transport_error.
 
 import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 
 export type RunAnnotatorInput = {
   prompt: string;
@@ -39,7 +40,7 @@ export async function runAnnotatorTurn(input: RunAnnotatorInput): Promise<RunAnn
     if (BACKOFF_MS[attempt] > 0) await sleep(BACKOFF_MS[attempt]);
     try {
       const session = input.ctx.getSession(input.tier ?? 'standard');
-      const turn = await session.send(input.prompt, { stageLabel: 'annotate' });
+      const turn = await session.send(input.prompt, { stageLabel: HUMAN_LABEL.annotating });
       return {
         kind: 'ok',
         text: turn.output ?? '',
