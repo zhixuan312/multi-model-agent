@@ -139,25 +139,18 @@ export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-i
 // Batch registry
 export * from './stores/batch-registry.js';
 
-// Diagnostics
-export { createHttpServerLog } from './events/http-server-log.js';
-export type {
-  HttpServerLog,
-  ShutdownCause,
-  CreateHttpServerLogOptions,
-} from './events/http-server-log.js';
-
 // Observability
-export { EventEmitter } from './events/event-emitter.js';
-export type { EventSink } from './events/event-emitter.js';
-export { LocalLogSink } from './events/local-log-sink.js';
-export { TelemetrySink } from './events/telemetry-sink.js';
-export { VerboseLogChannel } from './events/verbose-log-channel.js';
-export type { Recorder } from './events/telemetry-sink.js';
-export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
-export type { EventType } from './events/observability-events.js';
+export { TaskEnvelopeStore } from './events/task-envelope.js';
+export type { TaskEnvelope, StageRecord, ToolCallRecord } from './events/task-envelope.js';
+export { EnvelopeBus } from './events/envelope-bus.js';
+export type { BusMessage, Subscriber } from './events/envelope-bus.js';
+export { LogWriter } from './events/log-writer.js';
+export type { LogWriterOpts } from './events/log-writer.js';
+export { TelemetryUploader } from './events/telemetry-uploader.js';
+export { toWireRecord } from './events/to-wire-record.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
+export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from './events/wire-schema.js';
 
 // Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
 export { specLintTemplate } from './review/templates/spec-review.js';
