@@ -22,6 +22,17 @@ describe('TaskEnvelopeStore.seal', () => {
     expect(() => s.seal({ status: 'done', stopReason: 'x', realFilesChanged: [] })).toThrow(SealedEnvelopeError);
   });
 
+  it('recordHeartbeat is a silent no-op after seal (regression: periodic timer can race past seal)', () => {
+    // The heartbeat ActivityTracker fires on a 5s interval and may tick once
+    // more between seal() and timer disposal. If recordHeartbeat threw, the
+    // throw would propagate as runner_crash at terminal — sealing the task
+    // as failed even though the worker succeeded. Heartbeats are advisory,
+    // so they no-op after seal instead of throwing.
+    const s = TaskEnvelopeStore.create(seed);
+    s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
+    expect(() => s.recordHeartbeat({ stallIdleMs: 0 })).not.toThrow();
+  });
+
   it('isSealed reports true after seal', () => {
     const s = TaskEnvelopeStore.create(seed);
     expect(s.isSealed()).toBe(false);

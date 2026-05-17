@@ -37,7 +37,10 @@ describe('TaskEnvelopeStore mutations', () => {
     expect(snap.filesRead).toEqual(['/a', '/b']);
     expect(snap.filesWritten).toEqual(['/a']);
     expect(snap.stages[0].toolCallCount).toBe(2);
-    expect(snap.headline.toolTotal).toBe(3);
+    // toolTotal counts tool calls, not files. Two recordToolCall invocations → 2.
+    expect(snap.headline.toolTotal).toBe(2);
+    expect(snap.headline.toolReads).toBe(2);  // /a, /b
+    expect(snap.headline.toolWrites).toBe(1); // /a
   });
 
   it('snapshot returns immutable deep clone', () => {
