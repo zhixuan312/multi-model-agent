@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventEmitter, LocalLogSink, TelemetrySink, VerboseLogChannel, RunningHeadlineSink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import { EventEmitter, LocalLogSink, TelemetrySink, VerboseLogChannel, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
@@ -120,7 +120,6 @@ async function registerToolHandlers(
     sinks.push(new LocalLogSink(writer));
   }
   sinks.push(new TelemetrySink(recorderForBus));
-  sinks.push(new RunningHeadlineSink(batchRegistry));
   sinks.push(new VerboseLogChannel());
   const bus = new EventEmitter(sinks);
 
@@ -199,7 +198,6 @@ async function registerControlHandlers(
       sinks.push(new LocalLogSink(writer));
     }
     sinks.push(new TelemetrySink(recorderForBus));
-    sinks.push(new RunningHeadlineSink(batchRegistry));
     sinks.push(new VerboseLogChannel());
     const bus = new EventEmitter(sinks);
     const deps: import('./handler-deps.js').HandlerDeps = {
