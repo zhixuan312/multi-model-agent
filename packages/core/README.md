@@ -228,14 +228,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.6.0
+## What's new in 4.7.0
 
-- **`isLlmStage: boolean` on the internal `StageEntryInternal` shape** (required, no default — compile-time enforced). `rollupByTier` filters out non-LLM stages (synthetic review, commit) before computing tier rollup, so synthetic placeholders no longer corrupt `tierUsage.<tier>.model` under last-seen semantics.
-- **`StageModelMissingError` + `safeBuild` wrapper** around stage builders. Missing-model errors drop the offending stage with a `validation_warnings` diagnostic; the rest of the event ships.
-- **Tier-uniformity invariant.** Two LLM stages on the same tier with different models trigger an `R-TIER-MODEL-DIVERGENCE` diagnostic and the tier is omitted from `tierUsage`.
-- **`RunAnnotatorResult` and `RunReviewerResult` carry full token attribution** (`inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedNonReadTokens`) plus `model` — read from `turn.usage` and `turn.model` on the `Session.send` return.
-- **Cross-tier reviewer policy** via `invertedReviewerTier()` helper exported from `review/run-reviewer.ts`. Single-tier deployments fall back to the implementer tier.
-- **`buildSyntheticReviewStage(findings)`** continues to emit `costUSD: 0` and `model: 'custom'` with `isLlmStage: false`.
+- **BREAKING: USD cost caps removed across the entire surface.** `defaults.maxCostUSD`, `tasks[].maxCostUSD`, `TaskSpec.maxCostUSD`, `RunOptions.maxCostUSD`, `DEFAULT_MAX_COST_USD`, `MAX_COST_PRESTOP_RATIO`, `pricingSchema`, `CostCheckEvent`, `'cost_exceeded'` terminal status, `'cost_cap'` incomplete reason — all deleted. Reported cost (`actualCostUSD`, `costUSD`) is unchanged; only the *cap* is gone. Migration: drop `maxCostUSD` everywhere.
+- **Polling headline now reflects live stage + counts.** The server's `recordHeartbeat` callback writes a structured per-task snapshot (`stageLabel`, `stageDone`, `stageTotal`, `toolReads`/`toolWrites`/`toolTotal`). `/batch/:id` 202 responses advance through `Implementing → Review → Annotating → Committing` instead of staying frozen on the seed value.
+- **`outputTargets` contract.** `/delegate` and `/execute-plan` tasks accept an optional `outputTargets: string[]`; missing paths post-run produce a `severity: high` finding (`missing_output_targets`).
+- **Module removal:** `packages/core/src/escalation/` deleted entirely. Write routes now go through `ctx.getSession(tier)` directly. Also deleted: `RunningHeadlineSink`, `cleanup/` folder, `body-size.ts` middleware, dormant bounded-execution helpers (`IdleGuard`, `CostMeter`, etc.), and `config/pricing-table.ts`.
+- **From 4.6.0, still relevant:** `isLlmStage` flag + `StageModelMissingError` defensive build, tier-uniformity invariant in `rollupByTier`, full token attribution on `RunAnnotatorResult` / `RunReviewerResult`, cross-tier reviewer policy via `invertedReviewerTier()`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
