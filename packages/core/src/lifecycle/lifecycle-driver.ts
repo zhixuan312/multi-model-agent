@@ -210,6 +210,7 @@ export async function runStagePlan(
       state.gates![stage.name] = gate;
       emitGateRecorded(state.executionContext, stage.name, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
       recordStageOnEnvelope(state, stage.name, gate);
+      hoistReviewPayloadToState(state, stage.name, gate);
       if (gate.outcome === 'halt') {
         state.halted = true;
         emitHaltEvent(state.executionContext, stage.name, gate.comment ?? '', gate.telemetry.stopReason);
@@ -234,6 +235,36 @@ export async function runStagePlan(
   }
 
   return state;
+}
+
+/** When the review stage advances, the v5 driver writes its gate at
+ *  state.gates['review'] but never promotes payload.verdict / payload.findings
+ *  into the top-level state.reviewVerdict / state.reviewFindings slots.
+ *  rework-stage gates on those state fields — without this hoist it always
+ *  skips with `rework skipped: review verdict is not changes_required`,
+ *  even when the reviewer returned changes_required with real findings.
+ *  This was a missed step in the legacy reviewed-lifecycle → STAGE_PLAN
+ *  migration; the legacy path wrote those state fields explicitly. */
+function hoistReviewPayloadToState(state: LifecycleState, stageName: string, gate: StageGate<unknown>): void {
+  if (stageName !== 'review' || gate.outcome !== 'advance' || gate.payload == null) return;
+  const payload = gate.payload as {
+    verdict?: 'approved' | 'changes_required';
+    findings?: Array<{ source?: string; claim?: string; evidence?: string; suggestion?: string; text?: string }>;
+  };
+  if (payload.verdict === 'approved' || payload.verdict === 'changes_required') {
+    (state as { reviewVerdict?: 'approved' | 'changes_required' }).reviewVerdict = payload.verdict;
+  }
+  if (Array.isArray(payload.findings)) {
+    (state as { reviewFindings?: Array<{ source: string; text: string }> }).reviewFindings =
+      payload.findings.map((f) => {
+        const parts: string[] = [];
+        if (f.claim) parts.push(f.claim);
+        if (f.evidence) parts.push(`(evidence: ${f.evidence})`);
+        if (f.suggestion) parts.push(`(fix: ${f.suggestion})`);
+        const text = parts.length > 0 ? parts.join(' ') : (f.text ?? '');
+        return { source: f.source ?? 'reviewer', text };
+      });
+  }
 }
 
 /** Record this stage's outcome on the TaskEnvelope. Visible stages were already
