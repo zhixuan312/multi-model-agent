@@ -139,14 +139,17 @@ export function toWireRecord(
       maxIdleMs: 0, // TODO: track per-stage max idle in envelope
       totalIdleMs: 0, // TODO: track per-stage total idle in envelope
       mainEquivalentCostUSD: null,
-      ...(s.findingsOutcome !== undefined && { findingsOutcome: s.findingsOutcome }),
-      ...(s.findingsOutcomeReason !== undefined && { findingsOutcomeReason: s.findingsOutcomeReason }),
-      ...(s.outcomeInferred !== undefined && { outcomeInferred: s.outcomeInferred }),
-      ...(s.outcomeMalformed !== undefined && { outcomeMalformed: s.outcomeMalformed }),
     };
 
     // Add route-specific fields based on stage name
-    if (name === 'implementing') return base;
+    if (name === 'implementing')
+      return {
+        ...base,
+        ...(s.findingsOutcome !== undefined && { findingsOutcome: s.findingsOutcome }),
+        ...(s.findingsOutcomeReason !== undefined && { findingsOutcomeReason: s.findingsOutcomeReason }),
+        ...(s.outcomeInferred !== undefined && { outcomeInferred: s.outcomeInferred }),
+        ...(s.outcomeMalformed !== undefined && { outcomeMalformed: s.outcomeMalformed }),
+      };
     if (name === 'review') {
       // Map envelope `verdict` to the wire's review verdict enum
       // (approved|concerns|changes_required|error|skipped|annotated|not_applicable).
@@ -177,6 +180,10 @@ export function toWireRecord(
           medium: 0,
           low: 0,
         },
+        ...(s.findingsOutcome !== undefined && { findingsOutcome: s.findingsOutcome }),
+        ...(s.findingsOutcomeReason !== undefined && { findingsOutcomeReason: s.findingsOutcomeReason }),
+        ...(s.outcomeInferred !== undefined && { outcomeInferred: s.outcomeInferred }),
+        ...(s.outcomeMalformed !== undefined && { outcomeMalformed: s.outcomeMalformed }),
       };
     }
     if (name === 'rework')
@@ -200,6 +207,10 @@ export function toWireRecord(
         ...base,
         outcome: out as never,
         skipReason: (s.skipReason ?? null) as never,
+        ...(s.findingsOutcome !== undefined && { findingsOutcome: s.findingsOutcome }),
+        ...(s.findingsOutcomeReason !== undefined && { findingsOutcomeReason: s.findingsOutcomeReason }),
+        ...(s.outcomeInferred !== undefined && { outcomeInferred: s.outcomeInferred }),
+        ...(s.outcomeMalformed !== undefined && { outcomeMalformed: s.outcomeMalformed }),
       };
     }
     // committing
