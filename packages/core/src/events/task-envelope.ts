@@ -4,6 +4,8 @@
 // EscalationEntry: existing as EscalationRecord on RunResult — local re-shape here.
 // ValidationWarning: existing inline in TaskCompletedEventSchema — local re-shape here.
 
+import type { EnvelopeBus } from './envelope-bus.js';
+
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
 export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
@@ -122,7 +124,11 @@ export class TaskEnvelopeStore {
     this.notify = notify;
   }
 
-  static create(seed: CreateSeed, notify: Notify = () => {}): TaskEnvelopeStore {
+  static create(seed: CreateSeed, busOrNotify: EnvelopeBus | Notify = () => {}): TaskEnvelopeStore {
+    const notify: Notify = typeof busOrNotify === 'function'
+      ? busOrNotify
+      : (reason) => busOrNotify.emitEnvelopeSnapshot(store.snapshot(), reason);
+    let store!: TaskEnvelopeStore;
     const env: TaskEnvelope = {
       taskId: seed.taskId, batchId: seed.batchId, taskIndex: seed.taskIndex,
       route: seed.route, agentType: seed.agentType,
@@ -136,7 +142,7 @@ export class TaskEnvelopeStore {
       findings: [], escalationLog: [], validationWarnings: [],
       headline: { prefix: '', stageLabel: 'queued', stageDone: 0, stageTotal: 0, toolReads: 0, toolWrites: 0, toolTotal: 0 },
     };
-    const store = new TaskEnvelopeStore(env, notify);
+    store = new TaskEnvelopeStore(env, notify);
     store.recomputeHeadline();
     return store;
   }
