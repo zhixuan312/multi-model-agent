@@ -78,7 +78,7 @@ export interface MultiModelConfig {
     thrashTurns?: number
     thrashWallClockMs?: number
   }
-  diagnostics?: { log: boolean; logDir?: string; verbose?: boolean }
+  diagnostics?: { log: boolean; logDir?: string }
   server: {
     bind: string
     port: number

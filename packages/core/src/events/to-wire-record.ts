@@ -143,10 +143,28 @@ export function toWireRecord(
 
     // Add route-specific fields based on stage name
     if (name === 'implementing') return base;
-    if (name === 'review')
+    if (name === 'review') {
+      // Map envelope `verdict` to the wire's review verdict enum
+      // (approved|concerns|changes_required|error|skipped|annotated|not_applicable).
+      // Envelope holds the actual review payload's verdict ('approved' |
+      // 'changes_required') after the 4.7.3 mergeStageStats fix that threaded
+      // it through. Falls back to 'skipped' when the stage didn't run (review
+      // gate skipped, e.g. read-route or reviewPolicy:none).
+      const reviewVerdict = s.verdict;
+      let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
+      if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
+          || reviewVerdict === 'concerns' || reviewVerdict === 'error') {
+        wireVerdict = reviewVerdict;
+      } else if (s.outcome === 'skipped' || s.outcome === null) {
+        wireVerdict = 'skipped';
+      } else if (s.outcome === 'fail') {
+        wireVerdict = 'error';
+      } else {
+        wireVerdict = 'skipped';
+      }
       return {
         ...base,
-        verdict: (s.verdict ?? 'skipped') as never,
+        verdict: wireVerdict as never,
         roundsUsed: 1, // TODO: track round count for review stages
         concernCategories: s.concernCategories ?? [],
         findingsBySeverity: s.findingsBySeverity ?? {
@@ -156,17 +174,30 @@ export function toWireRecord(
           low: 0,
         },
       };
+    }
     if (name === 'rework')
       return {
         ...base,
         triggeringConcernCategories: s.concernCategories ?? [],
       };
-    if (name === 'annotating')
+    if (name === 'annotating') {
+      // Annotate stages don't carry a `verdict` — that's a review-only field.
+      // Map from envelope `s.outcome` (advance|fail|skipped) to the wire's
+      // annotate-specific enum (passed|failed|skipped|not_applicable|transformed).
+      // 'advance' maps to 'transformed' because annotate's success mode is
+      // transforming the worker's raw report into the structured wire payload —
+      // matches the legacy semantic set by terminal-handlers.ts.
+      const ann = s as { outcome?: 'advance' | 'fail' | 'skipped' | null };
+      let out: 'transformed' | 'failed' | 'skipped' | 'not_applicable' | 'passed';
+      if (ann.outcome === 'advance') out = 'transformed';
+      else if (ann.outcome === 'fail') out = 'failed';
+      else out = 'skipped';
       return {
         ...base,
-        outcome: (s.verdict ?? 'skipped') as never,
+        outcome: out as never,
         skipReason: (s.skipReason ?? null) as never,
       };
+    }
     // committing
     return {
       ...base,
@@ -181,11 +212,47 @@ export function toWireRecord(
       .filter(Boolean),
   ).size;
 
+  // Aggregate per-tier usage from the envelope's stages array. Each stage
+  // already carries `tier`, `model`, `costUSD`, and token counts; bucket by
+  // tier and sum. Without this, downstream telemetry can't break out
+  // standard-vs-complex cost/token usage and standard_model / complex_model
+  // columns stay NULL in the DB.
+  type TierBucket = {
+    model: string;
+    costUSD: number | null;
+    inputTokens: number;
+    outputTokens: number;
+    cachedReadTokens: number | null;
+    cachedNonReadTokens: number | null;
+  };
+  const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket } = {};
+  for (const s of env.stages) {
+    if (s.tier !== 'standard' && s.tier !== 'complex') continue;
+    const bucket = tierUsageBuckets[s.tier] ?? {
+      model: normalizeModel(s.model).canonical,
+      costUSD: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedReadTokens: 0,
+      cachedNonReadTokens: 0,
+    };
+    if (!tierUsageBuckets[s.tier]) tierUsageBuckets[s.tier] = bucket;
+    bucket.costUSD = (bucket.costUSD ?? 0) + (s.costUSD ?? 0);
+    bucket.inputTokens += s.inputTokens;
+    bucket.outputTokens += s.outputTokens;
+    if (s.cachedReadTokens !== null && bucket.cachedReadTokens !== null) bucket.cachedReadTokens += s.cachedReadTokens;
+    if (s.cachedNonReadTokens !== null && bucket.cachedNonReadTokens !== null) bucket.cachedNonReadTokens += s.cachedNonReadTokens;
+  }
+  // Prefer the first stage's tier as the task's headline agentType — matches
+  // implementerTier's derivation and reflects what the task actually used,
+  // not whatever default async-dispatch seeded the envelope with.
+  const wireAgentType: 'standard' | 'complex' = env.stages[0]?.tier ?? env.agentType;
+
   const record: TaskCompletedEventType = {
     eventId: randomUUID(),
     route: env.route,
     client: env.client,
-    agentType: env.agentType,
+    agentType: wireAgentType,
     toolMode: opts.toolMode,
     reviewPolicy: opts.reviewPolicy,
     verifyCommandPresent: opts.verifyCommandPresent,
@@ -193,7 +260,7 @@ export function toWireRecord(
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,
     mainModelFamily: opts.mainModelFamily as never,
-    tierUsage: { standard: undefined, complex: undefined } as never,
+    tierUsage: tierUsageBuckets as never,
     terminalStatus: terminalStatus as never,
     workerStatus: workerStatus as never,
     errorCode: ((env.structuredError as { code?: string } | null)?.code ?? null) as never,

@@ -201,8 +201,13 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
   if (real.source === 'git_error') {
     envelope.recordValidationWarning({ rule: 'GitDiffUnavailable', path: 'realFilesChanged' });
   }
+  // workerStatus lives on lastRunResult for read routes (enrich-runtime-result
+   // derives it there). `state.workerStatus` is only set by rework-stage on the
+   // write path. Falling back to lastRunResult covers both — without this,
+   // every read-route task sealed as 'failed' even when the worker succeeded.
+   const ws = (state.workerStatus ?? last?.workerStatus) as string | undefined;
   envelope.seal({
-    status: state.workerStatus === 'done' ? 'done' : state.workerStatus === 'done_with_concerns' ? 'done_with_concerns' : 'failed',
+    status: ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed',
     terminalAt: new Date().toISOString(),
     stopReason: last?.terminationReason?.cause ?? null,
     structuredError: last?.structuredError ?? null,

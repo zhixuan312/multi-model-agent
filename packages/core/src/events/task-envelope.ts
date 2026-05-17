@@ -38,7 +38,12 @@ export interface StageRecord {
   filesCommittedCount?: number;
   branchCreated?: boolean;
   skipReason?: 'noop' | 'no_command' | 'not_applicable' | 'reviewPolicy_none';
-  verdict?: 'passed' | 'failed' | 'no_command' | 'annotated';
+  // Stage verdicts:
+  //   review stage → 'approved' | 'changes_required' | 'error' (combined verdict
+  //     of spec + quality sub-reviewers; matches wire enum, see wire-schema.ts).
+  //   committing / verify stages → 'passed' | 'failed' | 'no_command' | 'annotated'
+  //   annotating stage → tracked separately via `outcome` not `verdict`
+  verdict?: 'passed' | 'failed' | 'no_command' | 'annotated' | 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
   concernCategories?: string[];
 }
@@ -208,7 +213,15 @@ export class TaskEnvelopeStore {
 
   recordFinding(f: Finding): void { this.guard('recordFinding'); this.env.findings.push(f); this.notify('recordFinding'); }
   recordValidationWarning(w: ValidationWarning): void { this.guard('recordValidationWarning'); this.env.validationWarnings.push(w); this.notify('recordValidationWarning'); }
-  recordHeartbeat(_state: { stallIdleMs: number }): void { this.guard('recordHeartbeat'); this.recomputeHeadline(); this.notify('recordHeartbeat'); }
+  recordHeartbeat(_state: { stallIdleMs: number }): void {
+    // Heartbeats fire on a periodic timer that can race past seal(). Silently
+    // no-op once sealed — other mutations (startStage, completeStage, recordX)
+    // still throw because their callers should know they're operating on a
+    // finalized envelope, but a stray heartbeat tick is harmless.
+    if (this.sealed) return;
+    this.recomputeHeadline();
+    this.notify('recordHeartbeat');
+  }
 
   seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; realFilesChanged: string[] }): void {
     this.guard('seal');
@@ -245,12 +258,16 @@ export class TaskEnvelopeStore {
     const lastStage = this.env.stages[this.env.stages.length - 1];
     const reads = this.env.filesRead.length;
     const writes = this.env.filesWritten.length;
+    // toolTotal is the count of recorded tool calls (run_shell, edit_file, …),
+    // NOT reads+writes. Codex's run_shell commands pass empty file lists so
+    // computing toolTotal from file counts only would report zero through an
+    // entire investigation where the worker ran many shell commands.
     this.env.headline = {
       prefix: '',
       stageLabel: lastStage ? lastStage.name : 'queued',
       stageDone: this.env.stages.filter(s => s.outcome !== null).length,
       stageTotal: stageNames.length,
-      toolReads: reads, toolWrites: writes, toolTotal: reads + writes,
+      toolReads: reads, toolWrites: writes, toolTotal: this.env.toolCalls.length,
     };
   }
 }

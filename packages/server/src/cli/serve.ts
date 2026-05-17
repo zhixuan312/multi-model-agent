@@ -195,6 +195,14 @@ export async function startServe(
     // best-effort — never let drift check block serve
   }
 
+  // Create the telemetry recorder BEFORE startServer. The server's bus
+  // subscriber (TelemetryUploader) calls getRecorder() during startServer →
+  // if recorder is null at that moment, the uploader is wired with
+  // recorder=null and silently drops every event for the daemon's lifetime.
+  const homeDir = path.join(os.homedir(), '.multi-model');
+  const mmagentVersion = readServerVersion();
+  createRecorder({ homeDir, mmagentVersion });
+
   // Pass the full MultiModelConfig (not just the server block) so
   // registerToolHandlers sees `agents` and registers real tool endpoints.
   // Stripping to { server } here caused a 3.1.0 regression where tool
@@ -247,12 +255,8 @@ export async function startServe(
   onUncaughtRef = onUncaught;
   onUnhandledRejectionRef = onUnhandledRejection;
 
-  // ── Telemetry: recorder ────────────────────────────────────────────────
-  const homeDir = path.join(os.homedir(), '.multi-model');
-  const mmagentVersion = readServerVersion();
-
-  const recorder = createRecorder({ homeDir, mmagentVersion });
-
+  // Recorder was created above (BEFORE startServer). homeDir + mmagentVersion
+  // are computed there and reused here for the version-pin file + Flusher.
   const lastVersionPath = path.join(homeDir, 'last-version');
   let lastVersion: string | null = null;
   try {

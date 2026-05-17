@@ -105,7 +105,7 @@ export function asyncDispatch<TResult>(
         // see the executor lifecycle past request_received without grepping the
         // JSONL log.
         process.stderr.write(
-          `[mmagent verbose] event=executor_started ts=${new Date().toISOString()} batch=${batchId} route=${tool}\n`,
+          `[mmagent] event=executor_started ts=${new Date().toISOString()} batch=${batchId} route=${tool}\n`,
         );
         const result = await opts.executor(ctx, batchId);
         const resultObj = result as Record<string, unknown> | undefined;
@@ -128,7 +128,7 @@ export function asyncDispatch<TResult>(
           deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: failure.code, error_message: failure.message } });
           batchRegistry.fail(batchId, failure);
           process.stderr.write(
-            `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
+            `[mmagent] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
           );
         } else {
           const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
@@ -137,7 +137,7 @@ export function asyncDispatch<TResult>(
           const serializationApplied = groupingInfo?.serializationApplied;
           deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { batch_id: batchId, tool, duration_ms: durationMs, task_count: taskCount, ...(groupCount !== undefined ? { group_count: groupCount, group_sizes: JSON.stringify(groupSizes), serialization_applied: serializationApplied } : {}) } });
           process.stderr.write(
-            `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
+            `[mmagent] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
           );
         }
       } catch (err) {
@@ -152,7 +152,7 @@ export function asyncDispatch<TResult>(
         const durationMs = Date.now() - startedAtMs;
         deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
         process.stderr.write(
-          `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
+          `[mmagent] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
         );
       }
     })();
