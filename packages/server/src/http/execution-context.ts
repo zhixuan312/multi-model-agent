@@ -85,10 +85,6 @@ export function buildExecutionContext(
     stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
     implementerToolMode: undefined,
     heartbeat: undefined,
-    // Verbose is compulsory (4.6.0+). Always wire the stderr stream so the
-    // runner-shell + adapter emit per-turn events to the daemon's stderr.
-    verboseStream: (line: string) => { process.stderr.write(line); },
-    verbose: true,
     outputTargets: [],
     envelope,
   } as unknown as ExecutionContext;

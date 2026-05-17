@@ -79,8 +79,6 @@ export interface RunTasksOptions {
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   logger?: { error: (kind: string, err: unknown) => void };
-  verbose?: boolean;
-  verboseStream?: (line: string) => void;
   recorder?: {
     recordTaskCompleted: (ctx: {
       route: string;
@@ -157,8 +155,6 @@ export async function runTasks(
         ...(options.batchId !== undefined && { batchId: options.batchId }),
         ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
         ...(options.logger && { logger: options.logger }),
-        verbose: true,
-        ...(options.verboseStream && { verboseStream: options.verboseStream }),
         ...(options.recorder && { recorder: options.recorder }),
         ...(options.route !== undefined && { route: options.route }),
         ...(options.client !== undefined && { client: options.client }),
@@ -180,8 +176,6 @@ export interface DispatchTaskInput {
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   logger?: { error: (kind: string, err: unknown) => void };
-  verbose?: boolean;
-  verboseStream?: (line: string) => void;
   recorder?: ExecutionContext['recorder'];
   route?: string;
   client?: string;
@@ -255,6 +249,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
       idleStallTimeoutMs: stallTimeoutMs,
       abortSignal: stallController.signal,
       ...(input.bus && { bus: input.bus as unknown as object }),
+      ...(input.envelope && { envelope: input.envelope }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
       ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
     });
@@ -320,8 +315,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     bus: input.bus,
     heartbeat,
     logger: input.logger,
-    verboseStream: input.verboseStream ?? ((line: string) => { process.stderr.write(line); }),
-    verbose: true,
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: normalizeOutputTargets(task.outputTargets, cwd),

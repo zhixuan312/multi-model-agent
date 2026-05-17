@@ -4,35 +4,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 
-describe('LogWriter', () => {
+describe('LogWriter — JSONL disabled (4.7.3+ contract)', () => {
   let stderrSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => { stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); });
 
-  it('writes plain entry as one JSON line to stderr when diagnosticsLog=false', () => {
+  it('is a no-op on receive() when diagnosticsLog=false (stderr is owned by StderrLogSubscriber)', () => {
     const w = new LogWriter({ diagnosticsLog: false });
     w.receive({ type: 'plain', entry: { ts: '2026-05-17T00:00:00Z', kind: 'batch_created', fields: { batch_id: 'b1' } } });
-    expect(stderrSpy).toHaveBeenCalledTimes(1);
-    const line = stderrSpy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(line.trim());
-    expect(parsed).toEqual({ ts: '2026-05-17T00:00:00Z', kind: 'batch_created', fields: { batch_id: 'b1' } });
+    w.receive({ type: 'envelope', envelope: { taskId: 't', headline: {} } as never, reason: 'startStage' });
+    expect(stderrSpy).not.toHaveBeenCalled();
   });
+});
 
-  it('writes envelope snapshot with reason field', () => {
-    const w = new LogWriter({ diagnosticsLog: false });
-    const env = { taskId: 't', headline: {} } as never;
-    w.receive({ type: 'envelope', envelope: env, reason: 'startStage' });
-    const line = stderrSpy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(line.trim());
-    expect(parsed.kind).toBe('envelope_snapshot');
-    expect(parsed.reason).toBe('startStage');
-    expect(parsed.envelope).toEqual(env);
-  });
-
-  it('runs secret redaction on output', () => {
-    const w = new LogWriter({ diagnosticsLog: false });
+describe('LogWriter — JSONL enabled', () => {
+  it('runs secret redaction before writing to file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-log-redact-'));
+    const w = new LogWriter({ diagnosticsLog: true, logDir: dir });
     w.receive({ type: 'plain', entry: { ts: '2026-05-17T00:00:00Z', kind: 'server_started', fields: { token: 'sk-ant-abc123def456ghi789jkl' } } });
-    const line = stderrSpy.mock.calls[0][0] as string;
-    expect(line).not.toContain('sk-ant-abc123def456ghi789jkl');
+    await new Promise(r => setTimeout(r, 50));
+    const files = readdirSync(dir).filter(f => f.endsWith('.jsonl'));
+    const contents = readFileSync(join(dir, files[0]), 'utf8');
+    expect(contents).not.toContain('sk-ant-abc123def456ghi789jkl');
   });
 });
 

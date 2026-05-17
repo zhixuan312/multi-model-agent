@@ -36,8 +36,6 @@ function makeCtx(): ExecutionContext {
     bus: undefined,
     heartbeat: undefined,
     logger: undefined,
-    verboseStream: () => {},
-    verbose: false,
     outputTargets: [],
   };
 }

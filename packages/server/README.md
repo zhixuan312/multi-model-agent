@@ -88,7 +88,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.7.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.7.3",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).

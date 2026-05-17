@@ -98,9 +98,6 @@ export interface ExecutionContext {
    *  Minimal structural shape; the full HttpServerLog interface was removed in the
    *  events unification refactor. Only `error(kind, err)` is consumed by callers. */
   logger?: { error: (kind: string, err: unknown) => void };
-  /** Verbose stream sink (process.stderr by default). */
-  verboseStream: (line: string) => void;
-  verbose: boolean;
 
   /** Per-task event envelope for recording lifecycle mutations. */
   envelope: TaskEnvelopeStore;

@@ -9,6 +9,7 @@ import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
+import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
 import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
@@ -106,6 +107,8 @@ async function registerToolHandlers(
   const bus = new EnvelopeBus();
   const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
   bus.subscribe(logWriter);
+  // Always-on stderr log stream — no quiet mode and no --verbose flag (4.7.3+).
+  bus.subscribe(new StderrLogSubscriber());
 
   let recorderForBus: Recorder | null = null;
   try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
@@ -202,6 +205,7 @@ async function registerControlHandlers(
     const bus = new EnvelopeBus();
     const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
     bus.subscribe(logWriter);
+    bus.subscribe(new StderrLogSubscriber());
 
     let recorderForBus: Recorder | null = null;
     try { recorderForBus = getRecorder(); } catch { /* not initialized */ }

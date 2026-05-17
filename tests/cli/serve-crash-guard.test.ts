@@ -32,7 +32,7 @@ function minimalConfig(tokenFile: string) {
       },
       autoUpdateSkills: false,
     },
-    diagnostics: { log: false, verbose: false },
+    diagnostics: { log: false },
   };
 }
 

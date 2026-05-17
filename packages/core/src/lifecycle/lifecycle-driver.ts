@@ -133,10 +133,15 @@ export async function runStagePlan(
           const round = envelopeName === 'reviewing' || envelopeName === 'reworking'
             ? ((state as { reviewRound?: number }).reviewRound ?? 1)
             : 1;
-          const provider = (state.executionContext as { implementerProvider?: { config?: { model?: string }; tier?: AgentTier } } | undefined)?.implementerProvider;
+          // Tier source: ctx.assignedTier holds the route's resolved tier slot
+          // ('standard' | 'complex'). `provider.tier` doesn't exist on the
+          // Provider type — reading it always returned undefined and defaulted
+          // to 'standard', mis-labeling every complex-tier implementing stage.
+          const ctx = state.executionContext as { implementerProvider?: { config?: { model?: string } }; assignedTier?: AgentTier } | undefined;
+          const provider = ctx?.implementerProvider;
           envelope.startStage(envelopeName, {
             model: provider?.config?.model ?? '',
-            tier: provider?.tier ?? 'standard',
+            tier: ctx?.assignedTier ?? 'standard',
             round,
           });
         } catch { /* envelope errors must not abort lifecycle */ }
@@ -253,28 +258,71 @@ function recordStageOnEnvelope(
   // to update.
   const snap = envelope.snapshot();
   if (!snap.stages.some(s => s.name === envelopeName && s.round === round)) {
-    const provider = (state.executionContext as { implementerProvider?: { config?: { model?: string }; tier?: AgentTier } } | undefined)?.implementerProvider;
+    const ctx2 = state.executionContext as { implementerProvider?: { config?: { model?: string } }; assignedTier?: AgentTier } | undefined;
+    const provider = ctx2?.implementerProvider;
     try {
       envelope.startStage(envelopeName, {
         model: provider?.config?.model ?? '',
-        tier: provider?.tier ?? 'standard',
+        tier: ctx2?.assignedTier ?? 'standard',
         round,
       });
     } catch { return; }
   }
+  // Per-stage tokens/cost/turnCount come from state.lastRunResult.stageStats,
+  // populated by mergeStageStats inside each stage handler (perform-implementation,
+  // annotate-stage, etc.). Without pulling these in here, the envelope stage
+  // record stays at zero for tokens — even though the runtime captured real
+  // numbers — which masks usage and breaks tier-rollup aggregation downstream.
+  // mergeStageStats keys: 'implementing' | 'review' | 'rework' | 'annotating' | 'committing'.
+  const stageStatsKey: Record<string, string> = {
+    implementing: 'implementing',
+    reviewing: 'review',
+    reworking: 'rework',
+    annotating: 'annotating',
+    committing: 'committing',
+  };
+  const lastRunResult = (state as { lastRunResult?: { stageStats?: Record<string, Record<string, unknown> | undefined> } }).lastRunResult;
+  const stats = lastRunResult?.stageStats?.[stageStatsKey[envelopeName] ?? envelopeName];
+
+  const numericOrUndef = (v: unknown): number | undefined =>
+    typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  const numericNullable = (v: unknown): number | null | undefined =>
+    v === null ? null : typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+
+  // Reviewer cross-tier inversion: the review handler picks the inverted tier
+  // at dispatch time and writes the actual reviewer's tier + model into
+  // stageStats. The envelope row was originally stamped with the implementer's
+  // tier (from ctx.assignedTier) during startStage; overwrite with the
+  // reviewer's actual tier here so tierUsage rollup attributes review cost
+  // to the correct tier bucket.
+  const statsTier = stats?.['agentTier'];
+  const statsModel = stats?.['model'];
+  const wireTier = (statsTier === 'standard' || statsTier === 'complex') ? statsTier as AgentTier : undefined;
+  const wireModel = typeof statsModel === 'string' && statsModel.length > 0 ? statsModel : undefined;
+  // Verdict (review stage only): set by review-stage via mergeStageStats's
+  // verdict option. Other stages don't set this and we leave the field as-is.
+  const statsVerdict = stats?.['verdict'];
+  const wireVerdict: 'approved' | 'changes_required' | 'concerns' | 'error' | undefined =
+    statsVerdict === 'approved' || statsVerdict === 'changes_required' || statsVerdict === 'concerns' || statsVerdict === 'error'
+      ? statsVerdict : undefined;
+
   try {
     envelope.completeStage(envelopeName, round, {
       outcome: envelopeOutcome(gate.outcome),
       durationMs: gate.telemetry.durationMs,
-      costUSD: gate.telemetry.costUSD ?? 0,
-      turnsUsed: gate.telemetry.turnsUsed ?? 0,
-      inputTokens: 0,    // populated from per-turn provider events; envelope.recordToolCall + provider plain entries carry the totals
-      outputTokens: 0,
-      cachedReadTokens: null,
-      cachedNonReadTokens: null,
-      toolCallCount: 0,
-      filesReadCount: 0,
-      filesWrittenCount: 0,
+      costUSD: numericOrUndef(stats?.['costUSD']) ?? gate.telemetry.costUSD ?? 0,
+      turnsUsed: numericOrUndef(stats?.['turnCount']) ?? gate.telemetry.turnsUsed ?? 0,
+      ...(wireTier && { tier: wireTier }),
+      ...(wireModel && { model: wireModel }),
+      ...(wireVerdict && { verdict: wireVerdict }),
+      ...(stats?.['inputTokens'] !== undefined && { inputTokens: numericOrUndef(stats['inputTokens']) ?? 0 }),
+      ...(stats?.['outputTokens'] !== undefined && { outputTokens: numericOrUndef(stats['outputTokens']) ?? 0 }),
+      ...(stats?.['cachedReadTokens'] !== undefined && { cachedReadTokens: numericNullable(stats['cachedReadTokens']) ?? null }),
+      ...(stats?.['cachedNonReadTokens'] !== undefined && { cachedNonReadTokens: numericNullable(stats['cachedNonReadTokens']) ?? null }),
+      // Don't include toolCallCount/filesReadCount/filesWrittenCount here —
+      // those are accumulated incrementally by envelope.recordToolCall() and
+      // would be clobbered by Object.assign. mergeStageStats does track them
+      // but the session-side accumulation is the source of truth in flight.
       ...(skipReason && gate.outcome === 'skip' ? { skipReason } : {}),
     });
   } catch { /* sealed during the call; harmless */ }

@@ -139,7 +139,12 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       durationMs: Math.max(totalMs, Date.now() - t0),
       filesReadCount: 0,
       filesWrittenCount: 0,
-    }, { tier: resolvedReviewerTier, model: reviewerModel });
+    }, { tier: resolvedReviewerTier, model: reviewerModel, verdict });
+    // ↑ Pass the combined verdict so it flows: review-stage → mergeStageStats →
+    //   state.lastRunResult.stageStats.review.verdict → lifecycle-driver.completeStage →
+    //   envelope.stages[review].verdict → to-wire-record stages[review].verdict.
+    // Without this, the wire row always shows verdict='skipped' even when
+    // review ran with real cost + findings.
   }
 
   return {

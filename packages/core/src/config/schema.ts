@@ -268,7 +268,6 @@ export const multiModelConfigSchema = z.object({
   diagnostics: z.object({
     log: z.boolean().default(false),
     logDir: z.string().min(1).optional(),
-    verbose: z.boolean().default(false),
   }).optional(),
   server: serverBlockSchema,
   // Per spec §7.1: opt-in telemetry. The recorder reads this independently;

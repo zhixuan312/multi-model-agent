@@ -39,7 +39,7 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
         },
         autoUpdateSkills: false,
       },
-      diagnostics: { log: false, verbose: false },
+      diagnostics: { log: false },
     } as unknown as MultiModelConfig;
 
     const handle = await startServe(config, (() => {}) as (code: number) => never);

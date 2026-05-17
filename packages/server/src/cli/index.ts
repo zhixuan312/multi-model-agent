@@ -73,7 +73,7 @@ export interface CliDeps {
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
     string: ['config', 'batch'],
-    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'verbose', 'log'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -230,13 +230,11 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
-      // --verbose and --log are independent:
-      //   --verbose enables inline stderr streaming (plus JSONL log lines IF --log is on)
-      //   --log persists events to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl
-      if (opts['verbose'] === true || opts['log'] === true) {
-        if (!config.diagnostics) config.diagnostics = { log: false, verbose: false };
-        if (opts['verbose'] === true) config.diagnostics.verbose = true;
-        if (opts['log'] === true) config.diagnostics.log = true;
+      // Stderr event streaming is always on (4.7.3+; no --verbose flag).
+      // --log enables JSONL persistence to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl.
+      if (opts['log'] === true) {
+        if (!config.diagnostics) config.diagnostics = { log: false };
+        config.diagnostics.log = true;
       }
       // startServe() blocks until a signal arrives and exits the process.
       await startServe(config, exit);

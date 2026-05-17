@@ -25,15 +25,15 @@ export class LogWriter implements Subscriber {
   }
 
   receive(msg: BusMessage): void {
+    // No-op when JSONL persistence is disabled — stderr observability is owned
+    // by StderrLogSubscriber, wired in server.ts. Falling back to stderr here
+    // would double-log every event.
+    if (!this.writer) return;
     const record = this.serialize(msg);
     // redactSecrets is a recursive walker that returns the redacted value at the same shape.
     const redactedRecord = redactSecrets(record) as Record<string, unknown>;
-    if (this.writer) {
-      try { this.writer.writeLine(redactedRecord); } catch (err) {
-        process.stderr.write(`[mmagent] log_writer_error: ${(err as Error).message}\n`);
-      }
-    } else {
-      process.stderr.write(JSON.stringify(redactedRecord) + '\n');
+    try { this.writer.writeLine(redactedRecord); } catch (err) {
+      process.stderr.write(`[mmagent] log_writer_error: ${(err as Error).message}\n`);
     }
   }
 
