@@ -4,6 +4,7 @@
 
 import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
 import type { AgentType } from '../types.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 
 export type RunReviewerInput = {
   prompt: string;
@@ -59,7 +60,7 @@ export async function runReviewerTurn(input: RunReviewerInput): Promise<RunRevie
       const providers = (input.ctx as { providers?: Partial<Record<AgentType, unknown>> }).providers;
       const tierToUse: AgentType = providers && providers[desired] ? desired : input.implementerTier;
       const session = input.ctx.getSession(tierToUse);
-      const r = await session.send(input.prompt);
+      const r = await session.send(input.prompt, { stageLabel: HUMAN_LABEL.review });
       return {
         kind: 'ok',
         text: r.output ?? '',
