@@ -8,21 +8,8 @@ import { mergeStageStats }     from '../merge-stage-stats.js';
 import type { AgentType } from '../../types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 
-function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
-  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
-}
-
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
-  const reviewCtx = state.executionContext as ExecutionContext | undefined;
-  if (reviewCtx) {
-    safeTracker(() => reviewCtx.heartbeat?.transition({
-      stage: 'review',
-      stageIndex: ((state as { stageIndex?: number }).stageIndex ?? 1),
-      reviewRound: ((state as { reviewRound?: number }).reviewRound ?? 1),
-      attemptCap: ((state as { attemptCap?: number }).attemptCap ?? 1),
-    }), reviewCtx);
-  }
   const policy = state.reviewPolicy; // 'full' | 'quality_only' | 'diff_only' | 'none'
   // v5 review-policy mapping (per spec §14 assumption 2 — adapted to v4 enum):
   //   'full'         → run BOTH spec + quality
