@@ -36,7 +36,8 @@ export function parseReviewReport(text: string): ParsedReviewReport {
   const findingsSection = findingsMatch
     ? safe.slice(findingsMatch.index! + findingsMatch[0].length)
     : '';
-  const findings = parseFindings(findingsSection, 'reviewer');
+  const result = parseFindings(findingsSection, 'reviewer');
+  const findings = result.findings;
 
   // approved + findings → changes_required per design spec §4
   if (verdict === 'approved' && findings.length > 0) {

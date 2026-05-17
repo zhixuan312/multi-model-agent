@@ -88,7 +88,7 @@ export async function runReadRouteImplementer(
         });
         continue;
       }
-      findings.push(...parseFindings(turn.output, c.id));
+      findings.push(...parseFindings(turn.output, c.id).findings);
       perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
     } catch (err) {
       criteriaErrors.push({

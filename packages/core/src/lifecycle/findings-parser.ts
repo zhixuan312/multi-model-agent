@@ -2,6 +2,8 @@
 // turn. Worker emits `## Finding N:` blocks per the format spec; this
 // parser converts them into StructuredReport.findings[] entries.
 
+import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
+
 export interface Finding {
   id?: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
@@ -12,10 +14,17 @@ export interface Finding {
   source?: 'implementer' | 'reviewer';
 }
 
+export interface FindingsParseResult {
+  findings: Finding[];
+  outcome: FindingsOutcomeKind;
+}
+
 const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
 
-export function parseFindings(text: string, criterionId: string): Finding[] {
-  if (!text || text.trim().length === 0) return [];
+export function parseFindings(text: string, criterionId: string): FindingsParseResult {
+  if (!text || text.trim().length === 0) {
+    return { findings: [], outcome: 'clean' };
+  }
 
   const blocks: string[] = [];
   const lines = text.split('\n');
@@ -56,5 +65,24 @@ export function parseFindings(text: string, criterionId: string): Finding[] {
     if (suggestion) f.suggestion = suggestion;
     findings.push(f);
   }
-  return findings;
+
+  // Extract outcome from ## Outcome section
+  let outcome: FindingsOutcomeKind = findings.length > 0 ? 'found' : 'clean';
+
+  // Check if ## Outcome section exists
+  if (/^## Outcome/m.test(text)) {
+    // Extract the value after the ## Outcome heading
+    const outcomeMatch = text.match(/^## Outcome\s*\n\s*(\w*)/m);
+    if (outcomeMatch) {
+      const outcomeRaw = outcomeMatch[1].trim().toLowerCase();
+      if (outcomeRaw === 'found' || outcomeRaw === 'clean' || outcomeRaw === 'not_applicable') {
+        outcome = outcomeRaw as FindingsOutcomeKind;
+      } else if (outcomeRaw === '') {
+        // Empty outcome section → default to clean
+        outcome = 'clean';
+      }
+    }
+  }
+
+  return { findings, outcome };
 }
