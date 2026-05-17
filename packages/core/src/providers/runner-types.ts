@@ -131,7 +131,7 @@ export interface RunOptions {
   /** Bus for emitting per-turn / per-runner-call observability events. When
    *  present, the runner + adapter emit provider-specific events (e.g.
    *  `claude_turn_started`, `claude_turn_completed`) that the server's
-   *  VerboseLogChannel + LocalLogSink + TelemetrySink consume. */
+   *  EnvelopeBus consume. */
   bus?: EnvelopeBus
   /** Identifies the in-flight batch in emitted runner events. Plumbed
    *  through delegateWithEscalation so consumers can correlate runner-shell

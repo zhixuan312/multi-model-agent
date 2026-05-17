@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 /**
  * Spec C1 HTTPListener — bind loopback, accept HTTP. Supports a graceful
  * shutdown state where new requests are rejected with 503 while in-flight
- * async batches complete and TelemetryChannel (C7) drains.
+ * async batches complete and TelemetryUploader drains.
  *
  * The listener owns the socket lifecycle. Routing and request pipeline are
  * separate (RouteDispatcher + RequestPipeline). Wire them together in the
