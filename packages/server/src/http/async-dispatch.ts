@@ -62,21 +62,23 @@ export function asyncDispatch<TResult>(
     blocksReleased: false,
   });
 
+  // Create and attach envelope to registry
+  const envelope = TaskEnvelopeStore.create({
+    taskId: batchId + ':' + 0,
+    batchId: batchId, taskIndex: 0,
+    route: tool as any, agentType: 'standard',
+    client: opts.caller?.client ?? '', mainModel: opts.caller?.mainModel ?? '', cwd: projectCwd,
+  }, deps.bus);
+  batchRegistry.attachEnvelope(batchId, 0, envelope);
+
   // Build execution context for this batch
-  const ctx = buildExecutionContext(deps, projectContext, batchId, tool, opts.caller);
+  const ctx = buildExecutionContext(deps, projectContext, batchId, envelope, tool, opts.caller);
 
   // Schedule executor asynchronously — do not await here
   const startedAtMs = Date.now();
   setImmediate(() => {
     void (async () => {
       try {
-        const envelope = TaskEnvelopeStore.create({
-          taskId: batchId + ':' + 0,
-          batchId: batchId, taskIndex: 0,
-          route: tool as any, agentType: 'standard',
-          client: opts.caller?.client ?? '', mainModel: opts.caller?.mainModel ?? '', cwd: projectCwd,
-        }, deps.bus);
-        batchRegistry.attachEnvelope(batchId, 0, envelope);
         // Mark the batch as running so /batch/:id polling reports
         // "1/1 running, Xs elapsed" the instant the executor begins.
         // Without bumping the headline snapshot here, the polling endpoint

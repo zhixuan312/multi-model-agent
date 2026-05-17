@@ -17,6 +17,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 export type { ComposePayload as RunResult } from '../lifecycle/stage-io.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 // ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
 // `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
@@ -80,6 +81,8 @@ export interface SessionOpts {
   batchId?: string;
   /** Index within batch. */
   taskIndex?: number;
+  /** Per-task event envelope for recording provider mutations. Optional during wiring phase. */
+  envelope?: TaskEnvelopeStore;
 }
 
 export interface TurnOpts {

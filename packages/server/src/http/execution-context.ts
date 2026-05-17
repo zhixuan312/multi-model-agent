@@ -1,6 +1,7 @@
 // packages/server/src/http/execution-context.ts
 import type { HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
+import type { TaskEnvelopeStore } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import type { HandlerDeps } from './handler-deps.js';
 import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import { getRecorder } from '../telemetry/recorder.js';
@@ -18,6 +19,7 @@ export function buildExecutionContext(
   deps: HandlerDeps,
   pc: ProjectContext,
   batchId: string,
+  envelope: TaskEnvelopeStore,
   route?: string,
   caller?: { client: string; mainModel?: string | null },
 ): ExecutionContext {
@@ -112,5 +114,6 @@ export function buildExecutionContext(
     verboseStream: (line: string) => { process.stderr.write(line); },
     verbose: true,
     outputTargets: [],
+    envelope,
   } as unknown as ExecutionContext;
 }

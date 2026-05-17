@@ -198,6 +198,8 @@ export interface DispatchTaskInput {
    *  shutdown drain in serve.ts can walk the registry and call closeSessions()
    *  on every in-flight task before the daemon exits. */
   batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
+  /** Per-task event envelope for recording lifecycle mutations. Optional during migration. */
+  envelope?: import('../events/task-envelope.js').TaskEnvelopeStore;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -323,7 +325,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: normalizeOutputTargets(task.outputTargets, cwd),
-  };
+    ...(input.envelope && { envelope: input.envelope }),
+  } as unknown as ExecutionContext;
 }
 
 export async function runTaskViaDispatcher(

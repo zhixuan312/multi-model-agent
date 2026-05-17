@@ -12,6 +12,7 @@ import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { ProjectContext } from '../stores/project-context-registry.js';
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 /**
  * Spec C10 ExecutionContext — the typed shared state for a per-task run.
@@ -98,6 +99,9 @@ export interface ExecutionContext {
   /** Verbose stream sink (process.stderr by default). */
   verboseStream: (line: string) => void;
   verbose: boolean;
+
+  /** Per-task event envelope for recording lifecycle mutations. */
+  envelope: TaskEnvelopeStore;
 
   /**
    * Heartbeat tick recorder — server-supplied callback that turns
