@@ -10,7 +10,7 @@
 import type { Provider, SessionOpts } from '../types/run-result.js';
 import type { ClaudeProviderConfig, ProviderConfig } from '../types/config.js';
 import { ClaudeSession } from './claude-session.js';
-import { getClaudeOAuth } from '../identity/auth-token-store.js';
+import { getClaudeOAuth } from '../identity/claude-oauth.js';
 
 export function makeClaudeProvider(cfg: ClaudeProviderConfig): Provider {
   return {
