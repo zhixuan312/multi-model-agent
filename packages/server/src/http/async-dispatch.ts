@@ -95,25 +95,9 @@ export function asyncDispatch<TResult>(
           // instant the executor starts — instead of an opaque
           // "1/1 running" that doesn't tell the main agent how far along
           // the lifecycle has progressed.
-          const stagesTotal = STAGE_ORDER_BY_ROUTE[tool]?.length ?? 1;
-          const initialStage = STAGE_ORDER_BY_ROUTE[tool]?.[0] ?? 'Running';
-          const prefix = `${initialStage} (1/${stagesTotal}) - `;
-          const fallback = `${initialStage} (1/${stagesTotal})`;
-          batchRegistry.updateRunningHeadlineSnapshot(batchId, {
-            prefix,
-            statsClause: ``,
-            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback,
-          });
-          // Also seed the per-task snapshot so multi-task polling formatters
-          // don't fall through to the legacy single-snapshot path before the
-          // first turn-completion event fires.
-          batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
-            prefix,
-            statsClause: ``,
-            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback,
-          });
+          // Headline seeding moved to envelope creation in T7-T11 migration —
+          // each TaskEnvelope's headline is derived on every mutation, and
+          // BatchRegistry no longer caches snapshot objects.
         }
         // 4.6.0+: always-on verbose breadcrumb so operators tailing the daemon
         // see the executor lifecycle past request_received without grepping the
