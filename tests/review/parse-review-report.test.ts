@@ -13,7 +13,7 @@ approved
 - Severity: high
 - Category: correctness
 - Claim: The function does not handle the case where input is undefined
-- Issue: The code path at src/foo.ts:42 silently returns undefined instead of raising an error
+- Evidence: The code path at src/foo.ts:42 silently returns undefined instead of raising an error
 - Suggestion: Add a guard clause at the top of the function
 
 ## Finding 2:
@@ -55,7 +55,7 @@ approved
 - Severity: critical
 - Category: security
 - Claim: SQL injection vulnerability in the query builder
-- Issue: User input is concatenated directly into the SQL string without parameterization
+- Evidence: User input is concatenated directly into the SQL string without parameterization
 - Suggestion: Use parameterized queries instead
 `;
 
@@ -126,7 +126,7 @@ approved
 - Severity: high
 - Category: correctness
 - Claim: Actual issue here
-- Issue: The code is broken
+- Evidence: The code is broken
 `;
 
     const result = parseReviewReport(reviewerOutput);
