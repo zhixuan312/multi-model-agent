@@ -164,4 +164,34 @@ Every completed task automatically registers a terminal markdown context block c
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
+## Outcome semantics
+
+Every task result carries outcome fields that describe the code review's conclusion status:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the review uncover issues? |
+| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "Test gap: login() has no null-username case" or "Code is clean across all review criteria"). |
+| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the reviewer explicitly stated it. |
+| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
+
+### Enum values
+
+- **`found`** — the review surfaced one or more issues (findings) across one or more review categories (test gap, cross-file ripple, race, leak, security, performance, etc.). This indicates the code needs rework before merge.
+- **`clean`** — the review completed and found zero issues. The code passes the review bar and is safe to merge.
+- **`not_applicable`** — the review could not proceed (e.g., wrong input type, missing preconditions, or system error). This is rare; most reviews resolve to `found` or `clean`.
+
+### Empty findings ≠ failure
+
+A crucial semantic: **empty findings does NOT mean `completed: false` or a failed review.** Finding nothing wrong is a successful review outcome — it means the code passed inspection. A review with zero findings is `completed: true` with `findingsOutcome: 'clean'`.
+
+### Per-route legal outcomes
+
+The legal outcomes for this route are: `['found', 'clean']`
+
+- **`found`** — one or more issues were detected across the review categories.
+- **`clean`** — zero issues were detected; the code is ready to merge.
+
+The outcome `not_applicable` is not legal for `mma-review` (except on actual precondition failures) because a code review always produces a verdict: either issues found or clean.
+
 @include _shared/error-handling.md

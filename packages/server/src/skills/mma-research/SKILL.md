@@ -153,4 +153,34 @@ results[0].output                          // raw narrative report
 
 ❌ **Expecting opinionated output.** This worker reports what's out there with citations. Ranking and synthesis happen elsewhere — in `mma-explore` or in your own judgment. **Fix:** if you need ranked options, use `mma-explore`.
 
+## Outcome semantics
+
+Every task result carries outcome fields that describe the research investigation's conclusion status:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the research produce candidate sources and insights? |
+| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "3 primary sources identified across arxiv and semantic_scholar" or "No sources found matching the research criteria"). |
+| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the researcher explicitly stated it. |
+| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
+
+### Enum values
+
+- **`found`** — the research identified one or more candidate sources or insights (findings) across one or more search criteria. This indicates the question has published material or prior art available.
+- **`clean`** — the research completed but produced zero findings. This is valid for out-of-scope or nascent topics and indicates "no signal found."
+- **`not_applicable`** — the research could not proceed (e.g., question was out of scope, search system unavailable, or preconditions failed). This is the "cannot research" state.
+
+### Empty findings ≠ failure
+
+A crucial semantic: **empty findings does NOT mean `completed: false` or a failed research task.** Research that proceeds thoroughly and produces zero sources is a valid `completed: true` outcome; it answers the question "I searched widely and found nothing," which is valuable information. An empty-findings result often surfaces a `not_applicable` outcome (topic too new, domain too narrow) but zero findings is still a success.
+
+### Per-route legal outcomes
+
+The legal outcomes for this route are: `['found', 'not_applicable']`
+
+- **`found`** — one or more candidate sources or insights were identified via the research criteria.
+- **`not_applicable`** — the research could not proceed or the question was out of scope.
+
+The outcome `clean` (zero findings + success) is not legal for `mma-research` because a research task always either identifies sources or indicates the topic is inaccessible.
+
 @include _shared/error-handling.md
