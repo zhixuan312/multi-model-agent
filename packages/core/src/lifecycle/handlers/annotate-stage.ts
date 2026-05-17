@@ -19,6 +19,10 @@ import type { AnnotatePayload, StageGate } from '../stage-io.js';
 
 const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
+function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
+  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
+}
+
 export interface StructuredReport {
   summary: string;
   workerStatus: 'done' | 'done_with_concerns' | 'blocked' | 'failed';
@@ -39,6 +43,10 @@ export interface StructuredReport {
 }
 
 export async function annotator(state: LifecycleState): Promise<StageGate<AnnotatePayload>> {
+  const annCtx = state.executionContext as { heartbeat?: { transition: (f: { stage: 'annotating'; stageIndex?: number; stageCount?: number }) => void }; logger?: { error: (kind: string, err: unknown) => void } } | undefined;
+  if (annCtx) {
+    safeTracker(() => annCtx.heartbeat?.transition({ stage: 'annotating' }), annCtx);
+  }
   const t0 = Date.now();
   const last = ((state.lastRunResult as Record<string, unknown> | undefined) ?? {});
   const route = (state as { route?: string }).route;
