@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.3] - 2026-05-17
+
+Fix-forward release closing the envelope-pipeline regressions introduced by 4.7.2's events/lifecycle rewrite, plus the long-standing aggregation gaps the same data-flow audit surfaced. Every public HTTP route + skill + CLI command behaves the same; observability (polling headline, stderr stream, telemetry queue) is now end-to-end correct.
+
+### Fixed
+
+- **Polling headline stays stuck at `[0/0] queued` for the entire task (core).** `task-executor.runTaskViaDispatcher` dropped `envelope` from the per-task `ExecutionContext`, so `envelope.startStage` / `recordToolCall` / `seal` all silently no-op'd. Stages array never populated; the `/batch/:id` 202 body kept showing `[0/0] queued` while the worker was actively executing.
+- **Provider sessions never call `envelope.recordToolCall` (core).** `task-runner.openSession` dropped `envelope` from `SessionOpts`, so `codex-cli-session` + `claude-session`'s `envelopeOf(opts)` returned undefined. Same root pattern as the executor bug above.
+- **Read-route tasks sealed as `status='failed'` despite the worker succeeding (core).** `recordTaskCompletedHandler` read `state.workerStatus` (only set by `rework-stage`); read routes had `workerStatus` only on `state.lastRunResult.workerStatus`. Now falls back to `lastRunResult`.
+- **Per-stage counters reset to 0 at stage completion (core).** `lifecycle-driver.completeStage` hardcoded `toolCallCount/filesReadCount/filesWrittenCount: 0` in the payload; `Object.assign` clobbered whatever `recordToolCall` had accumulated during the stage. Now the driver omits those fields so accumulation survives.
+- **Heartbeat-after-seal `runner_crash` at terminal (core).** `task-envelope.recordHeartbeat` threw `SealedEnvelopeError` when the periodic timer raced past `seal()` — bubbled up as `runner_crash` and tainted the terminal state. Now a silent no-op once sealed; other mutations still throw because their callers should know they're hitting a finalized envelope.
+- **Telemetry queue empty for the daemon's entire lifetime (server).** `serve.ts` called `createRecorder()` AFTER `startServer()`; the bus subscriber called `getRecorder()` during `startServer()` boot, caught the "not initialized" throw silently, and wired `TelemetryUploader` with `recorder=null`. Every event silently dropped. Now `createRecorder` runs before `startServer`.
+- **Always-on stderr event stream went silent (core/server).** The 4.7.2 deletion of `VerboseLogChannel` removed the only bus → stderr subscriber. Only 4 hardcoded `[mmagent verbose]` lines in `async-dispatch.ts` remained. Now a `StderrLogSubscriber` is wired alongside `LogWriter` at server boot. Always-on — there is no quiet mode and no `--verbose` flag.
+- **LogWriter double-logged to stderr (core).** When `diagnosticsLog=false`, `LogWriter` fell back to writing JSON to stderr — alongside the new `StderrLogSubscriber`. Now `LogWriter` is a no-op when no file writer is configured; stderr is owned exclusively by `StderrLogSubscriber`.
+- **Polling `tools=N` counter stayed at 0 even when shell commands ran (core).** `task-envelope.recomputeHeadline.toolTotal` was computed as `reads + writes` — always 0 because codex `run_shell` passes empty file lists. Now `toolTotal = toolCalls.length`.
+- **`stages[].tier` always defaulted to `standard` (core).** `lifecycle-driver.startStage` read `provider.tier` which doesn't exist on the `Provider` type — always fell through to `'standard'`. Now reads `ctx.assignedTier`.
+
+### Changed — telemetry wire aggregation (pre-existing 4.7.2 gaps, fixed in same release)
+
+- **Per-stage `inputTokens`, `outputTokens`, `costUSD`, `turnsUsed` now populate from `state.lastRunResult.stageStats[stage]`.** Previously the envelope stages array carried zeros for these even though `mergeStageStats` wrote real numbers into `lastRunResult.stageStats`. `lifecycle-driver.completeStage` now pulls them through; `recomputeTotals` auto-rolls them into envelope totals.
+- **`tierUsage` now aggregates from envelope stages instead of hardcoded `{standard: undefined, complex: undefined}`.** Wire telemetry now reports per-tier model + cost + tokens. `standard_model` / `complex_model` / `standard_cost_usd` / `complex_cost_usd` columns will populate in downstream DBs.
+- **`agentType` (top-level) derives from `stages[0].tier`** instead of the hardcoded `'standard'` seeded by `async-dispatch`. Matches the actual implementer tier the task used.
+- **`review.verdict` wire field reads from envelope `s.verdict`** (populated via `review-stage` → `mergeStageStats` → `lifecycle-driver.completeStage` → envelope) instead of always defaulting to `'skipped'`. Successful reviews now record `'approved'` / `'changes_required'`.
+- **`review.tier` + `review.model`** now reflect the actual cross-tier reviewer (complex when implementer is standard, and vice versa) instead of always showing the implementer's tier. `tierUsage.complex` correctly attributes review cost.
+- **`annotating.outcome` maps from envelope `s.outcome`** (`'advance' → 'transformed'`, `'fail' → 'failed'`, `'skipped' → 'skipped'`) instead of from the never-set `s.verdict` (which defaulted to `'skipped'` even on successful annotate runs).
+
+### Removed
+
+- **`verbose` concept (CLI flag, config field, type field, dead `verboseStream`).** Stderr event streaming is always-on for `mmagent serve`. The 4.6.0 `--verbose` and `config.diagnostics.verbose: boolean` are gone; `--log` (file-mode JSONL persistence) is the only remaining diagnostics toggle. `ExecutionContext.verbose` and `ExecutionContext.verboseStream` were dead since the 4.7.2 rewrite and are now removed.
+
+### Added
+
+- **`packages/core/src/events/stderr-log-subscriber.ts` (`StderrLogSubscriber`).** Bus subscriber that streams every `PlainLogEntry` to stderr in `[mmagent] event=… ts=… key=val` snake_case format. Exposed via `@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber`. Filters: emits plain entries only; envelope snapshots are intentionally NOT echoed to stderr (too noisy at 5-second heartbeat cadence).
+- **Integration test `tests/integration/envelope-pipeline.test.ts` (5 cases).** End-to-end with a recording mock provider — proves envelope threads through executor → SessionOpts → session.send; stage counters survive `completeStage`; envelope seals as `done` for successful read routes; the full bus → uploader → recorder chain delivers an enqueueable record; per-stage tokens + `tierUsage` + annotate outcome wire correctly. This is the test that would have caught every 4.7.3-regression bug.
+- **`tests/cli/serve-recorder-init-order.test.ts`.** Source-text check that pins `createRecorder` before `startServer` in `serve.ts` — a future refactor that swaps them breaks this test instead of silently breaking telemetry.
+- **`task-envelope-seal.test.ts` regression case.** `recordHeartbeat` is a silent no-op after seal (heartbeat timer can race past seal).
+
 ## [4.7.2] - 2026-05-17
 
 Two largely independent strands landed together: a structural events/lifecycle rewrite that replaces the legacy `event-emitter` + sinks fan-out with a `TaskEnvelope` + `EnvelopeBus` + `LogWriter` + `TelemetryUploader` pipeline, and a cleanup of `packages/core/src/identity/` that drops five dormant files and slims the remaining auth helper. Public HTTP routes, skill surface, and CLI commands are unchanged. Telemetry wire schema (`packages/core/src/telemetry/types.ts`) is unchanged — no privacy-disclosure update needed.
@@ -354,7 +391,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.3...HEAD
+[4.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...v4.7.3
 [4.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...v4.7.2
 [4.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...v4.7.0
