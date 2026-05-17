@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { BatchRegistry, ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
 import { STAGE_ORDER_BY_ROUTE } from '@zhixuan92/multi-model-agent-core/lifecycle/stage-progression';
+import { TaskEnvelopeStore } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import type { HandlerDeps } from './handler-deps.js';
 import { buildExecutionContext } from './execution-context.js';
 
@@ -61,15 +62,23 @@ export function asyncDispatch<TResult>(
     blocksReleased: false,
   });
 
+  // Create and attach envelope to registry
+  const envelope = TaskEnvelopeStore.create({
+    taskId: batchId + ':' + 0,
+    batchId: batchId, taskIndex: 0,
+    route: tool as any, agentType: 'standard',
+    client: opts.caller?.client ?? '', mainModel: opts.caller?.mainModel ?? '', cwd: projectCwd,
+  }, deps.bus);
+  batchRegistry.attachEnvelope(batchId, 0, envelope);
+
   // Build execution context for this batch
-  const ctx = buildExecutionContext(deps, projectContext, batchId, tool, opts.caller);
+  const ctx = buildExecutionContext(deps, projectContext, batchId, envelope, tool, opts.caller);
 
   // Schedule executor asynchronously — do not await here
   const startedAtMs = Date.now();
   setImmediate(() => {
     void (async () => {
       try {
-        deps.bus.emit({ event: 'task_started', ts: new Date().toISOString(), batchId, taskIndex: 0, route: tool, cwd: projectCwd } as any);
         // Mark the batch as running so /batch/:id polling reports
         // "1/1 running, Xs elapsed" the instant the executor begins.
         // Without bumping the headline snapshot here, the polling endpoint
@@ -88,25 +97,9 @@ export function asyncDispatch<TResult>(
           // instant the executor starts — instead of an opaque
           // "1/1 running" that doesn't tell the main agent how far along
           // the lifecycle has progressed.
-          const stagesTotal = STAGE_ORDER_BY_ROUTE[tool]?.length ?? 1;
-          const initialStage = STAGE_ORDER_BY_ROUTE[tool]?.[0] ?? 'Running';
-          const prefix = `${initialStage} (1/${stagesTotal}) - `;
-          const fallback = `${initialStage} (1/${stagesTotal})`;
-          batchRegistry.updateRunningHeadlineSnapshot(batchId, {
-            prefix,
-            statsClause: ``,
-            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback,
-          });
-          // Also seed the per-task snapshot so multi-task polling formatters
-          // don't fall through to the legacy single-snapshot path before the
-          // first turn-completion event fires.
-          batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
-            prefix,
-            statsClause: ``,
-            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback,
-          });
+          // Headline seeding moved to envelope creation in T7-T11 migration —
+          // each TaskEnvelope's headline is derived on every mutation, and
+          // BatchRegistry no longer caches snapshot objects.
         }
         // 4.6.0+: always-on verbose breadcrumb so operators tailing the daemon
         // see the executor lifecycle past request_received without grepping the
@@ -119,7 +112,7 @@ export function asyncDispatch<TResult>(
 
         const entryAfter = batchRegistry.get(batchId);
         if (entryAfter) entryAfter.tasksCompleted = 1;
-        batchRegistry.complete(batchId, result);
+        batchRegistry.complete(batchId);
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
         const durationMs = Date.now() - startedAtMs;
 
@@ -132,25 +125,17 @@ export function asyncDispatch<TResult>(
         // never string comparisons.
         const failure = detectFailure(resultObj);
         if (failure) {
-          deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: failure.code, errorMessage: failure.message } as any);
+          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: failure.code, error_message: failure.message } });
+          batchRegistry.fail(batchId, failure);
           process.stderr.write(
             `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
           );
         } else {
           const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
-          deps.bus.emit({
-            event: 'batch_completed',
-            ts: new Date().toISOString(),
-            batchId,
-            tool,
-            durationMs,
-            taskCount,
-            ...(groupingInfo ? {
-              groupCount: groupingInfo.groupCount,
-              groupSizes: groupingInfo.groupSizes,
-              serializationApplied: groupingInfo.serializationApplied,
-            } : {}),
-          } as any);
+          const groupCount = groupingInfo?.groupCount;
+          const groupSizes = groupingInfo?.groupSizes;
+          const serializationApplied = groupingInfo?.serializationApplied;
+          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { batch_id: batchId, tool, duration_ms: durationMs, task_count: taskCount, ...(groupCount !== undefined ? { group_count: groupCount, group_sizes: JSON.stringify(groupSizes), serialization_applied: serializationApplied } : {}) } });
           process.stderr.write(
             `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
           );
@@ -158,13 +143,14 @@ export function asyncDispatch<TResult>(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
-        batchRegistry.fail(batchId, {
+        const errObj = {
           code: 'runner_crash',
           message,
           ...(stack !== undefined && { stack }),
-        });
+        };
+        batchRegistry.fail(batchId, errObj);
         const durationMs = Date.now() - startedAtMs;
-        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: 'runner_crash', errorMessage: message } as any);
+        deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
         process.stderr.write(
           `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
         );

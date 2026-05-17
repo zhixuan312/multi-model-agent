@@ -4,9 +4,42 @@ import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import { notApplicable, type BatchRegistry, formatElapsed } from '@zhixuan92/multi-model-agent-core';
+import type { TaskEnvelope, TaskEnvelopeStore } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 
 export interface BatchHandlerDeps {
   batchRegistry: BatchRegistry;
+}
+
+// envelopeToPublicResult converts a TaskEnvelope to the public-safe per-task result shape.
+function envelopeToPublicResult(env: TaskEnvelope) {
+  return {
+    taskId: env.taskId, taskIndex: env.taskIndex, route: env.route, agentType: env.agentType,
+    status: env.status, terminalAt: env.terminalAt, stopReason: env.stopReason,
+    stages: env.stages, // already PII-safe (counts/numerics/enums)
+    totals: {
+      costUSD: env.totalCostUSD, durationMs: env.totalDurationMs, turnsUsed: env.turnsUsed,
+      inputTokens: env.totalInputTokens, outputTokens: env.totalOutputTokens,
+    },
+    findings: env.findings.map((f: any) => ({ id: f.id, severity: f.severity, category: f.category, claim: f.claim, source: f.source })),
+    filesChangedCount: env.realFilesChanged.length,
+    error: env.structuredError ? { code: (env.structuredError as any).code, message: (env.structuredError as any).message } : null,
+    escalationSummary: { count: env.escalationLog.length, distinctProviders: new Set(env.escalationLog.map((e: any) => (e.toModel ?? ''))).size },
+  };
+}
+
+// buildPendingHeadline constructs a pending batch headline from running envelope snapshots.
+function buildPendingHeadline(entry: { taskEnvelopes?: (TaskEnvelopeStore | null)[]; tasksTotal?: number }): string {
+  const running = (entry.taskEnvelopes ?? []).filter((e): e is TaskEnvelopeStore => e !== null && e.snapshot().status === 'running');
+  if (running.length === 0) return `[0/${entry.tasksTotal ?? 1}] queued`;
+  const rep = running[0];
+  const repSnap = rep.snapshot();
+  const summed = running.reduce((acc, e) => {
+    const s = e.snapshot().headline;
+    return { reads: acc.reads + s.toolReads, writes: acc.writes + s.toolWrites, total: acc.total + s.toolTotal };
+  }, { reads: 0, writes: 0, total: 0 });
+  const suffix = running.length > 1 ? ` +${running.length - 1}` : '';
+  const stats = `reads=${summed.reads} writes=${summed.writes} tools=${summed.total}`;
+  return `[${repSnap.headline.stageDone}/${repSnap.headline.stageTotal}] ${repSnap.headline.stageLabel}${suffix} — ${stats}`;
 }
 
 /**
@@ -65,13 +98,18 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
     // Final shape (identical for N=1 and N>1):
     //   [X/Y] Implementing by Standard worker (1/9)[+K] - 6m 0s, 142 read, 8 write, 234 tool calls
     if (entry.state === 'pending') {
-      const perTask = entry.perTaskHeadlineSnapshots;
-      // tasksTotal is set by async-dispatch to a placeholder (1) before the
-      // executor knows the real fan-out size; perTask.size reflects actual
-      // tasks that have started, so prefer the larger of the two.
-      const totalTasks = Math.max(entry.tasksTotal ?? 1, perTask?.size ?? 0);
       let headline: string;
-      if (perTask && perTask.size > 0) {
+
+      // Try envelope-based path first if envelopes are available
+      if (entry.taskEnvelopes && entry.taskEnvelopes.length > 0) {
+        headline = buildPendingHeadline(entry);
+      } else {
+        const perTask = entry.perTaskHeadlineSnapshots;
+        // tasksTotal is set by async-dispatch to a placeholder (1) before the
+        // executor knows the real fan-out size; perTask.size reflects actual
+        // tasks that have started, so prefer the larger of the two.
+        const totalTasks = Math.max(entry.tasksTotal ?? 1, perTask?.size ?? 0);
+        if (perTask && perTask.size > 0) {
         const sortedIndices = [...perTask.keys()].sort((a, b) => a - b);
         // Slowest = oldest dispatchedAt (i.e., largest elapsed). Stable
         // tie-break on lowest taskIndex (sortedIndices is already ascending).
@@ -102,83 +140,88 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
             sumTotal += snap.toolTotal ?? 0;
           }
         }
-        const startedCount = perTask.size;
-        const taskBracket = `[${startedCount}/${totalTasks}]`;
-        const runningSuffix = startedCount > 1 ? ` +${startedCount - 1}` : '';
-        const elapsedMs = Date.now() - slowest.dispatchedAt;
-        if (haveStructuredCounts && slowest.stageLabel) {
-          const tierClause = slowest.tier ? ` by ${slowest.tier} worker` : '';
-          const stageProgressClause =
-            typeof slowest.stageDone === 'number' && typeof slowest.stageTotal === 'number'
-              ? ` (${slowest.stageDone}/${slowest.stageTotal})`
-              : '';
-          const statsClause = `, ${sumRead} read, ${sumWrite} write, ${sumTotal} tool calls`;
-          headline = `${taskBracket} ${slowest.stageLabel}${tierClause}${stageProgressClause}${runningSuffix} - ${formatElapsed(elapsedMs)}${statsClause}`;
-        } else if (slowest.prefix) {
-          // Older snapshot path: inject the +K suffix before the prefix's " - "
-          // separator if needed.
-          const prefixWithSuffix = runningSuffix
-            ? slowest.prefix.replace(/ - $/, `${runningSuffix} - `)
-            : slowest.prefix;
-          headline = `${taskBracket} ${prefixWithSuffix}${formatElapsed(elapsedMs)}${slowest.statsClause}`;
-        } else {
-          headline = `${taskBracket} ${slowest.fallback}${runningSuffix}`;
-        }
-      } else {
-        const snap = entry.runningHeadlineSnapshot;
-        const elapsedMs = Date.now() - snap.dispatchedAt;
-        headline = snap.prefix
-          ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
-          : snap.fallback;
-      }
-
-      // Group-aware suffix (4.6.0+): only applies when this batch was dispatched
-      // via serializeSameRepo and the dispatcher attached group metadata.
-      if (entry.groups && entry.groups.length > 0) {
-        const perTask = entry.perTaskHeadlineSnapshots;
-        type GroupRunning = { groupIdx: number; earliestDispatchedAt: number; inflightInGroup: number };
-        const runningByGroup: GroupRunning[] = [];
-        let totalInflight = 0;
-        entry.groups.forEach((g, gi) => {
-          let earliest = Infinity;
-          let inflight = 0;
-          for (const ti of g.taskIndices) {
-            const snap = perTask?.get(ti);
-            if (!snap) continue;
-            // Convention: presence of a snapshot on a pending batch === in-flight.
-            inflight++;
-            totalInflight++;
-            if (snap.dispatchedAt < earliest) earliest = snap.dispatchedAt;
-          }
-          if (inflight > 0) {
-            runningByGroup.push({ groupIdx: gi, earliestDispatchedAt: earliest, inflightInGroup: inflight });
-          }
-        });
-        // Pick leader by earliest dispatchedAt; ties break to smaller groupIdx.
-        runningByGroup.sort((a, b) =>
-          a.earliestDispatchedAt - b.earliestDispatchedAt || a.groupIdx - b.groupIdx,
-        );
-        const leader = runningByGroup[0];
-
-        if (entry.groups.length === 1) {
-          // Single-group batch: append (sequential); strip any +K suffix
-          // because there's never a concurrent sibling in a single group.
-          headline = headline.replace(/ \+\d+/, '') + ' (sequential)';
-        } else if (leader) {
-          // Multi-group batch: insert (group X/Y, sequential) before the
-          // " - <elapsed>" tail. +K now reflects only OTHER-group inflight.
-          const otherInflight = totalInflight - leader.inflightInGroup;
-          const groupSuffix = ` (group ${leader.groupIdx + 1}/${entry.groups.length}, sequential)`;
-          headline = headline.replace(/ \+\d+/, '');
-          if (otherInflight > 0) {
-            headline = headline.replace(/( - )/, `${groupSuffix} +${otherInflight}$1`);
+          const startedCount = perTask.size;
+          const taskBracket = `[${startedCount}/${totalTasks}]`;
+          const runningSuffix = startedCount > 1 ? ` +${startedCount - 1}` : '';
+          const elapsedMs = Date.now() - slowest.dispatchedAt;
+          if (haveStructuredCounts && slowest.stageLabel) {
+            const tierClause = slowest.tier ? ` by ${slowest.tier} worker` : '';
+            const stageProgressClause =
+              typeof slowest.stageDone === 'number' && typeof slowest.stageTotal === 'number'
+                ? ` (${slowest.stageDone}/${slowest.stageTotal})`
+                : '';
+            const statsClause = `, ${sumRead} read, ${sumWrite} write, ${sumTotal} tool calls`;
+            headline = `${taskBracket} ${slowest.stageLabel}${tierClause}${stageProgressClause}${runningSuffix} - ${formatElapsed(elapsedMs)}${statsClause}`;
+          } else if (slowest.prefix) {
+            // Older snapshot path: inject the +K suffix before the prefix's " - "
+            // separator if needed.
+            const prefixWithSuffix = runningSuffix
+              ? slowest.prefix.replace(/ - $/, `${runningSuffix} - `)
+              : slowest.prefix;
+            headline = `${taskBracket} ${prefixWithSuffix}${formatElapsed(elapsedMs)}${slowest.statsClause}`;
           } else {
-            headline = headline.replace(/( - )/, `${groupSuffix}$1`);
+            headline = `${taskBracket} ${slowest.fallback}${runningSuffix}`;
           }
-        } else if (entry.groups.length > 1) {
-          // Multi-group batch with no in-flight task yet (pre-dispatch race
-          // window): still annotate so the user knows grouping is in play.
-          headline += ` (groups: ${entry.groups.length}, sequential)`;
+        } else {
+          const snap = entry.runningHeadlineSnapshot;
+          if (!snap) {
+            headline = '[0/0] queued';
+          } else {
+            const elapsedMs = Date.now() - snap.dispatchedAt;
+            headline = snap.prefix
+              ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+              : snap.fallback;
+          }
+        }
+
+        // Group-aware suffix (4.6.0+): only applies when this batch was dispatched
+        // via serializeSameRepo and the dispatcher attached group metadata.
+        if (entry.groups && entry.groups.length > 0) {
+          const perTask = entry.perTaskHeadlineSnapshots;
+          type GroupRunning = { groupIdx: number; earliestDispatchedAt: number; inflightInGroup: number };
+          const runningByGroup: GroupRunning[] = [];
+          let totalInflight = 0;
+          entry.groups.forEach((g, gi) => {
+            let earliest = Infinity;
+            let inflight = 0;
+            for (const ti of g.taskIndices) {
+              const snap = perTask?.get(ti);
+              if (!snap) continue;
+              // Convention: presence of a snapshot on a pending batch === in-flight.
+              inflight++;
+              totalInflight++;
+              if (snap.dispatchedAt < earliest) earliest = snap.dispatchedAt;
+            }
+            if (inflight > 0) {
+              runningByGroup.push({ groupIdx: gi, earliestDispatchedAt: earliest, inflightInGroup: inflight });
+            }
+          });
+          // Pick leader by earliest dispatchedAt; ties break to smaller groupIdx.
+          runningByGroup.sort((a, b) =>
+            a.earliestDispatchedAt - b.earliestDispatchedAt || a.groupIdx - b.groupIdx,
+          );
+          const leader = runningByGroup[0];
+
+          if (entry.groups.length === 1) {
+            // Single-group batch: append (sequential); strip any +K suffix
+            // because there's never a concurrent sibling in a single group.
+            headline = headline.replace(/ \+\d+/, '') + ' (sequential)';
+          } else if (leader) {
+            // Multi-group batch: insert (group X/Y, sequential) before the
+            // " - <elapsed>" tail. +K now reflects only OTHER-group inflight.
+            const otherInflight = totalInflight - leader.inflightInGroup;
+            const groupSuffix = ` (group ${leader.groupIdx + 1}/${entry.groups.length}, sequential)`;
+            headline = headline.replace(/ \+\d+/, '');
+            if (otherInflight > 0) {
+              headline = headline.replace(/( - )/, `${groupSuffix} +${otherInflight}$1`);
+            } else {
+              headline = headline.replace(/( - )/, `${groupSuffix}$1`);
+            }
+          } else if (entry.groups.length > 1) {
+            // Multi-group batch with no in-flight task yet (pre-dispatch race
+            // window): still annotate so the user knows grouping is in play.
+            headline += ` (groups: ${entry.groups.length}, sequential)`;
+          }
         }
       }
 
@@ -187,7 +230,73 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
       return;
     }
 
-    const fullResult = entry.result as Record<string, unknown> | undefined;
+    // Build terminal response from envelopes if available, otherwise use pre-computed result
+    let fullResult: Record<string, unknown> | undefined;
+
+    if (entry.taskEnvelopes && entry.taskEnvelopes.length > 0) {
+      // Build response from envelope snapshots
+      const snapshots = entry.taskEnvelopes
+        .map(e => e?.snapshot())
+        .filter((snap): snap is TaskEnvelope => snap !== undefined && snap !== null);
+
+      if (snapshots.length > 0) {
+        // Build results array from envelopes
+        const results = snapshots.map((env: TaskEnvelope) => envelopeToPublicResult(env));
+
+        // Derive batchTimings from envelopes
+        const allStartedAt = snapshots.map(s => new Date(s.startedAt).getTime());
+        const allTerminalAt = snapshots.map(s => (s.terminalAt ? new Date(s.terminalAt).getTime() : 0));
+        const batchStart = Math.min(...allStartedAt);
+        const batchEnd = Math.max(...allTerminalAt.filter(t => t > 0));
+        const sumDurations = snapshots.reduce((sum, s) => sum + s.totalDurationMs, 0);
+
+        const batchTimings = {
+          wallClockMs: batchEnd - batchStart,
+          sumOfTaskMs: sumDurations,
+          estimatedParallelSavingsMs: Math.max(0, sumDurations - (batchEnd - batchStart)),
+        };
+
+        // Derive costSummary from envelopes
+        const costSummary = {
+          totalActualCostUSD: snapshots.reduce((sum, s) => sum + s.totalCostUSD, 0),
+          totalCostDeltaVsMainUSD: 0, // Not available from envelopes
+        };
+
+        // Derive structuredReport from findings
+        const allFindings = snapshots.flatMap(s => s.findings);
+        const structuredReport = {
+          summary: allFindings.length > 0 ? `${allFindings.length} finding(s)` : 'No findings',
+          workerStatus: snapshots.length > 0 ? snapshots[0].status : 'unknown',
+          unresolved: [] as unknown[],
+          filesChanged: snapshots.flatMap(s => s.realFilesChanged),
+          reviewVerdict: null,
+          reviewConcerns: [] as unknown[],
+          reworkApplied: false,
+          validationsRun: [] as unknown[],
+          commitSha: null,
+          commitMessage: null,
+          commitSkipReason: null,
+          findings: allFindings.map(f => ({ severity: f.severity, category: f.category, claim: f.claim })),
+          criteriaErrors: [] as unknown[],
+        };
+
+        // Build headline
+        const headline = `${entry.tool}: ${snapshots.length} task(s) complete`;
+
+        // Build error from first failed envelope if any
+        const firstError = snapshots.find(s => s.structuredError);
+        const error = firstError?.structuredError
+          ? { code: firstError.structuredError.code, message: firstError.structuredError.message }
+          : { kind: 'not_applicable' as const, reason: 'batch succeeded' };
+
+        fullResult = { headline, results, batchTimings, costSummary, structuredReport, error };
+      }
+    }
+
+    // Fall back to pre-computed result if not built from envelopes
+    if (!fullResult) {
+      fullResult = entry.result as Record<string, unknown> | undefined;
+    }
 
     if (entry.state === 'failed' || entry.state === 'expired' || !fullResult) {
       const reason = `batch ${entry.state}`;

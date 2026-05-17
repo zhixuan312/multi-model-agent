@@ -4,8 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventEmitter, LocalLogSink, TelemetrySink, VerboseLogChannel, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
+import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
+import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
@@ -75,7 +79,7 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, createHttpServerLog } =
+  const { buildToolSurfaceRegistry } =
     await import('@zhixuan92/multi-model-agent-core');
 
   const surface = buildToolSurfaceRegistry();
@@ -99,37 +103,45 @@ async function registerToolHandlers(
     return;
   }
 
-  const logDir = multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs');
-  const writer = new JsonlWriter({ dir: logDir });
+  const bus = new EnvelopeBus();
+  const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
+  bus.subscribe(logWriter);
 
-  const logger = createHttpServerLog({
-    enabled: multiModelConfig.diagnostics?.log ?? false,
-    writer,
-  });
-
-  // Wire TelemetrySink to the server Recorder when telemetry is initialized
-  // (the serve.ts entrypoint calls createRecorder before this code path).
-  // Tests that exercise http/server.ts without initializing telemetry get
-  // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
-  let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
-  try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-  // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
-  // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
-  const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
-  if (multiModelConfig.diagnostics?.log) {
-    sinks.push(new LocalLogSink(writer));
-  }
-  sinks.push(new TelemetrySink(recorderForBus));
-  sinks.push(new VerboseLogChannel());
-  const bus = new EventEmitter(sinks);
-
-  const deps: import('./handler-deps.js').HandlerDeps = {
-    config: multiModelConfig,
-    logger,
-    bus,
-    projectRegistry,
-    batchRegistry,
+  let recorderForBus: Recorder | null = null;
+  try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
+  // decideConsent signature: read from packages/server/src/telemetry/consent.ts. Today it reads
+  // process.env.MMAGENT_TELEMETRY + a config.json. Replicate that call here:
+  const decideConsentForUploader = () => {
+    const envVal = process.env.MMAGENT_TELEMETRY;
+    let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
+    try {
+      const cfgPath = join(homedir(), '.multi-model', 'config.json');
+      const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+      if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
+        configState = { enabled: cfg.telemetry.enabled };
+      }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+        configState = { kind: 'unreadable' };
+      }
+    }
+    return decideConsent({ env: envVal, config: configState });
   };
+  const uploader = new TelemetryUploader({
+    recorder: recorderForBus,
+    consent: { decide: decideConsentForUploader },
+    buildOpts: (env: any) => ({
+      reviewPolicy: 'full',                 // default; refine if envelope carries reviewPolicy later
+      toolMode: 'full',                     // default; refine if envelope carries toolMode later
+      verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
+      implementerModel: env.stages[0]?.model ?? env.mainModel,
+      implementerTier: env.stages[0]?.tier ?? env.agentType,
+      mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',  // simple family extraction; replace with normalizeModel-based lookup if needed
+    }),
+  });
+  bus.subscribe(uploader);
+
+  const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
   // us WHICH route to register and at WHICH path/method; this map answers HOW
@@ -180,7 +192,6 @@ async function registerControlHandlers(
   const { buildRetryHandler } = await import('./handlers/control/retry.js');
   const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
-  const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
     ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
@@ -188,28 +199,43 @@ async function registerControlHandlers(
 
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
-    const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
-    let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
-    try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-    // v4.6.0+: VerboseLogChannel is always wired (verbose streaming is compulsory).
-    // LocalLogSink is gated on diagnostics.log — when false, no JSONL bus persistence.
-    const sinks: import('@zhixuan92/multi-model-agent-core').EventSink[] = [];
-    if (multiModelConfig.diagnostics?.log) {
-      sinks.push(new LocalLogSink(writer));
-    }
-    sinks.push(new TelemetrySink(recorderForBus));
-    sinks.push(new VerboseLogChannel());
-    const bus = new EventEmitter(sinks);
-    const deps: import('./handler-deps.js').HandlerDeps = {
-      config: multiModelConfig,
-      logger: createHttpServerLog({
-        enabled: multiModelConfig.diagnostics?.log ?? false,
-        writer,
-      }),
-      bus,
-      projectRegistry,
-      batchRegistry,
+    const bus = new EnvelopeBus();
+    const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
+    bus.subscribe(logWriter);
+
+    let recorderForBus: Recorder | null = null;
+    try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
+    const decideConsentForUploader = () => {
+      const envVal = process.env.MMAGENT_TELEMETRY;
+      let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
+      try {
+        const cfgPath = join(homedir(), '.multi-model', 'config.json');
+        const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+        if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
+          configState = { enabled: cfg.telemetry.enabled };
+        }
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+          configState = { kind: 'unreadable' };
+        }
+      }
+      return decideConsent({ env: envVal, config: configState });
     };
+    const uploader = new TelemetryUploader({
+      recorder: recorderForBus,
+      consent: { decide: decideConsentForUploader },
+      buildOpts: (env: any) => ({
+        reviewPolicy: 'full',                 // default; refine if envelope carries reviewPolicy later
+        toolMode: 'full',                     // default; refine if envelope carries toolMode later
+        verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
+        implementerModel: env.stages[0]?.model ?? env.mainModel,
+        implementerTier: env.stages[0]?.tier ?? env.agentType,
+        mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',  // simple family extraction; replace with normalizeModel-based lookup if needed
+      }),
+    });
+    bus.subscribe(uploader);
+
+    const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({

@@ -6,12 +6,15 @@ import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
-import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/events/telemetry-types';
-import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/events/telemetry-types';
-import {
-  buildTaskCompletedEvent,
-  type BuildContext,
-} from '@zhixuan92/multi-model-agent-core/events/event-builder';
+import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
+import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
+// event-builder.ts was removed in the events unification refactor. Recorder.recordTaskCompleted
+// is now only called via the TelemetryUploader subscriber path; this BuildContext type alias is
+// kept temporarily for any in-flight callers and will be removed when those are migrated.
+type BuildContext = unknown;
+function buildTaskCompletedEvent(_ctx: BuildContext): WireTelemetryRecord {
+  throw new Error('buildTaskCompletedEvent removed — use TelemetryUploader → toWireRecord path');
+}
 
 export interface ValidationWarningsResult {
   warnings: Array<{ rule: string; path: string }>;

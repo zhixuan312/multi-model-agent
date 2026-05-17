@@ -5,8 +5,29 @@ import type { LifecycleState } from './stage-plan-types.js';
 import type { StageGate, StageDefinition, RouteName } from './stage-io.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { StageLabel } from './stage-labels.js';
+import type { TaskEnvelopeStore, StageName as EnvelopeStageName, AgentTier } from '../events/task-envelope.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 import { GuardError } from '../bounded-execution/wall-clock-guard.js';
+
+/** Map raw STAGE_PLAN row name → TaskEnvelope StageName. Mirrors VISIBLE_STAGE_LABEL
+ *  but typed against the envelope's closed enum. */
+const ENVELOPE_STAGE_NAME: Record<string, EnvelopeStageName> = {
+  implement: 'implementing',
+  review: 'reviewing',
+  rework: 'reworking',
+  commit: 'committing',
+  annotate: 'annotating',
+};
+
+function getEnvelope(ctx: ExecutionContext | undefined): TaskEnvelopeStore | undefined {
+  return (ctx as { envelope?: TaskEnvelopeStore } | undefined)?.envelope;
+}
+
+function envelopeOutcome(gateOutcome: 'advance' | 'skip' | 'halt'): 'advance' | 'fail' | 'skipped' {
+  if (gateOutcome === 'advance') return 'advance';
+  if (gateOutcome === 'skip') return 'skipped';
+  return 'fail';
+}
 
 /** Maps STAGE_PLAN row name → visible heartbeat stage label. Only stages
  *  that appear here count toward the user-visible (N/M) progress counter
@@ -83,6 +104,7 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      recordStageOnEnvelope(state, stage.name, skipGate, 'not_applicable');
       if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
       continue;
     }
@@ -97,8 +119,28 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      recordStageOnEnvelope(state, stage.name, skipGate, 'noop');
       if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
       continue;
+    }
+
+    // Start-of-stage envelope notification (visible stages only).
+    if (isVisibleStage(stage.name)) {
+      const envelope = getEnvelope(state.executionContext as ExecutionContext | undefined);
+      const envelopeName = ENVELOPE_STAGE_NAME[stage.name];
+      if (envelope && !envelope.isSealed() && envelopeName) {
+        try {
+          const round = envelopeName === 'reviewing' || envelopeName === 'reworking'
+            ? ((state as { reviewRound?: number }).reviewRound ?? 1)
+            : 1;
+          const provider = (state.executionContext as { implementerProvider?: { config?: { model?: string }; tier?: AgentTier } } | undefined)?.implementerProvider;
+          envelope.startStage(envelopeName, {
+            model: provider?.config?.model ?? '',
+            tier: provider?.tier ?? 'standard',
+            round,
+          });
+        } catch { /* envelope errors must not abort lifecycle */ }
+      }
     }
 
     if (isVisibleStage(stage.name)) {
@@ -148,6 +190,7 @@ export async function runStagePlan(
         state.halted = true;
         emitGateRecorded(ctx, stage.name, 'halt', 0, 0);
         emitHaltEvent(ctx, stage.name, haltGate.comment ?? '', 'timeout');
+        recordStageOnEnvelope(state, stage.name, haltGate);
         continue;
       }
     }
@@ -161,6 +204,7 @@ export async function runStagePlan(
       ]);
       state.gates![stage.name] = gate;
       emitGateRecorded(state.executionContext, stage.name, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
+      recordStageOnEnvelope(state, stage.name, gate);
       if (gate.outcome === 'halt') {
         state.halted = true;
         emitHaltEvent(state.executionContext, stage.name, gate.comment ?? '', gate.telemetry.stopReason);
@@ -177,6 +221,7 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = haltGate;
       emitGateRecorded(state.executionContext, stage.name, 'halt', 0, tCatch);
+      recordStageOnEnvelope(state, stage.name, haltGate);
       state.halted = true;
       state.terminal = true;
       emitHaltEvent(state.executionContext, stage.name, haltGate.comment ?? '', 'transport_error');
@@ -186,13 +231,63 @@ export async function runStagePlan(
   return state;
 }
 
+/** Record this stage's outcome on the TaskEnvelope. Visible stages were already
+ *  started via envelope.startStage(); we complete them here. Non-visible stages
+ *  (prepare, register-block, compose, terminal) are bookkeeping and not recorded
+ *  on the envelope at all — they don't appear in the wire-schema stages array. */
+function recordStageOnEnvelope(
+  state: LifecycleState,
+  rawName: string,
+  gate: StageGate<unknown>,
+  skipReason?: 'noop' | 'no_command' | 'not_applicable' | 'reviewPolicy_none',
+): void {
+  const envelopeName = ENVELOPE_STAGE_NAME[rawName];
+  if (!envelopeName) return;  // bookkeeping stage — skip envelope
+  const envelope = getEnvelope(state.executionContext as ExecutionContext | undefined);
+  if (!envelope || envelope.isSealed()) return;
+  const round = envelopeName === 'reviewing' || envelopeName === 'reworking'
+    ? ((state as { reviewRound?: number }).reviewRound ?? 1)
+    : 1;
+  // If startStage was not called (e.g. skip-on-not-applicable hits before the
+  // visible-stage check above), start it now so completeStage has a stage row
+  // to update.
+  const snap = envelope.snapshot();
+  if (!snap.stages.some(s => s.name === envelopeName && s.round === round)) {
+    const provider = (state.executionContext as { implementerProvider?: { config?: { model?: string }; tier?: AgentTier } } | undefined)?.implementerProvider;
+    try {
+      envelope.startStage(envelopeName, {
+        model: provider?.config?.model ?? '',
+        tier: provider?.tier ?? 'standard',
+        round,
+      });
+    } catch { return; }
+  }
+  try {
+    envelope.completeStage(envelopeName, round, {
+      outcome: envelopeOutcome(gate.outcome),
+      durationMs: gate.telemetry.durationMs,
+      costUSD: gate.telemetry.costUSD ?? 0,
+      turnsUsed: gate.telemetry.turnsUsed ?? 0,
+      inputTokens: 0,    // populated from per-turn provider events; envelope.recordToolCall + provider plain entries carry the totals
+      outputTokens: 0,
+      cachedReadTokens: null,
+      cachedNonReadTokens: null,
+      toolCallCount: 0,
+      filesReadCount: 0,
+      filesWrittenCount: 0,
+      ...(skipReason && gate.outcome === 'skip' ? { skipReason } : {}),
+    });
+  } catch { /* sealed during the call; harmless */ }
+}
+
 function emitHaltEvent(
   ctx: ExecutionContext | undefined,
   stageName: string,
   comment: string,
   stopReason: string,
 ): void {
-  ctx?.bus?.emit({ event: 'stage_halt', ts: new Date().toISOString(), stageName, comment, stopReason } as Record<string, unknown>);
+  // Stage halt events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.seal() or other stage-tracking methods.
 }
 
 function emitGateRecorded(
@@ -202,12 +297,6 @@ function emitGateRecorded(
   costUSD: number | null,
   durationMs: number,
 ): void {
-  ctx?.bus?.emit({
-    event: 'stage_gate_recorded',
-    ts: new Date().toISOString(),
-    stage: stageName,
-    outcome,
-    costUSD,
-    durationMs,
-  } as Record<string, unknown>);
+  // Gate recording events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.completeStage() or other mutations.
 }

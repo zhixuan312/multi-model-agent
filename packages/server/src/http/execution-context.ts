@@ -1,6 +1,7 @@
 // packages/server/src/http/execution-context.ts
 import type { HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
+import type { TaskEnvelopeStore } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import type { HandlerDeps } from './handler-deps.js';
 import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import { getRecorder } from '../telemetry/recorder.js';
@@ -18,6 +19,7 @@ export function buildExecutionContext(
   deps: HandlerDeps,
   pc: ProjectContext,
   batchId: string,
+  envelope: TaskEnvelopeStore,
   route?: string,
   caller?: { client: string; mainModel?: string | null },
 ): ExecutionContext {
@@ -27,31 +29,8 @@ export function buildExecutionContext(
     if (!entry) return;
     entry.lastHeartbeatAt = Date.now();
     entry.running = [{ worker: tick.provider, turn: Math.max(1, tick.stageIndex) }];
-    if (tick.snapshot) {
-      // Legacy single-snapshot field — kept for back-compat with any reader
-      // that hasn't migrated to the per-task field.
-      deps.batchRegistry.updateRunningHeadlineSnapshot(effectiveBatchId, tick.snapshot);
-      // Per-task snapshot — the polling handler's preferred branch
-      // (batch.ts:67-126). Populates structured fields so the polling 202
-      // body reflects current stage + counts instead of the seed value.
-      // Task index 0: async-dispatch seeded taskIndex=0; multi-task
-      // executors that fan out additional tasks supply their own real
-      // taskIndex via the runner's bus events, and that ladder is handled
-      // by the dispatcher-level seed. For single-task batches taskIndex
-      // defaults to 0 — matches the async-dispatch seed at line 104.
-      deps.batchRegistry.updatePerTaskHeadlineSnapshot(effectiveBatchId, 0, {
-        prefix: tick.snapshot.prefix,
-        statsClause: tick.snapshot.statsClause,
-        dispatchedAt: tick.snapshot.dispatchedAt,
-        fallback: tick.snapshot.fallback,
-        stageLabel: capitalizeStage(tick.stage),
-        stageDone: tick.stageIndex,
-        stageTotal: tick.stageCount,
-        toolReads: tick.progress.filesRead,
-        toolWrites: tick.progress.filesWritten,
-        toolTotal: tick.progress.toolCalls,
-      });
-    }
+    // Record heartbeat to envelope — this triggers snapshot push with recomputed headline
+    envelope.recordHeartbeat({ stallIdleMs: 0 });
   };
 
   function capitalizeStage(s: string): string {
@@ -77,7 +56,6 @@ export function buildExecutionContext(
 
   return {
     config: deps.config,
-    logger: deps.logger,
     bus: deps.bus,
     // Per-request X-MMA-Main-Model header is the only source. Enforced at
     // the request-pipeline boundary (4.0.3+); by the time we reach this
@@ -112,5 +90,6 @@ export function buildExecutionContext(
     verboseStream: (line: string) => { process.stderr.write(line); },
     verbose: true,
     outputTargets: [],
+    envelope,
   } as unknown as ExecutionContext;
 }

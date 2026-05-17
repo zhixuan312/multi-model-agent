@@ -86,7 +86,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       },
     });
 
-    await emitRequestReceived({ config: deps.config, batchId, route: _req.url ?? '', parsed: input });
+    await emitRequestReceived(deps, batchId, _req.url ?? '', input);
     sendJson(res, 202, { batchId, statusUrl });
   };
 }

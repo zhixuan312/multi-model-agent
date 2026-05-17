@@ -117,7 +117,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     disposeWd = startProgressWatchdog({
       state,
       controller: wdController,
-      emit: (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
+      emit: (_event) => { /* progress-watchdog signals now flow through envelope.recordStall + log-writer */ },
       config: wdConfig,
       taskIndex: ctx.taskIndex,
       batchId: ctx.batchId,
@@ -141,7 +141,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
       state,
       (turn as { turns?: number }).turns ?? 0,
       wdConfig,
-      (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
+      (_event) => { /* progress-watchdog signals now flow through envelope + log-writer */ },
       ctx.taskIndex,
       ctx.batchId,
     );

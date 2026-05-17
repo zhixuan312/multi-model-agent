@@ -1,20 +1,74 @@
 {
-  "version": "4.0.0",
-  "events": [
-    { "name": "request_received",       "scope": "batch", "required_keys": ["batch", "route", "body_bytes"], "either_or": [["body", "body_path"]] },
-    { "name": "batch_created",          "scope": "batch", "required_keys": ["batch"] },
-    { "name": "task_started",           "scope": "task",  "required_keys": ["task", "provider", "agent_type"] },
-    { "name": "stage_change",           "scope": "task",  "required_keys": ["from", "to"] },
-    { "name": "tool_call",              "scope": "task",  "required_keys": ["tool", "args_summary"] },
-    { "name": "text_emission",          "scope": "task",  "required_keys": ["preview"] },
-    { "name": "heartbeat",              "scope": "task",  "required_keys": ["idle_since_llm_ms", "idle_since_tool_ms", "idle_since_text_ms"] },
-    { "name": "commit_recorded",        "scope": "task",  "required_keys": ["sha", "subject"] },
-    { "name": "verify_step",            "scope": "task",  "required_keys": ["command", "status", "exit_code", "signal", "duration_ms"] },
-    { "name": "verify_skipped",         "scope": "task",  "required_keys": ["reason", "stage"] },
-    { "name": "review_decision",        "scope": "task",  "required_keys": ["stage", "verdict", "round"] },
-    { "name": "task_terminal",          "scope": "task",  "required_keys": ["worker_status"] },
-    { "name": "context_block_registered", "scope": "task",  "required_keys": ["block_id", "route"] },
-    { "name": "explore_thread_started",   "scope": "batch", "required_keys": ["thread_index"] },
-    { "name": "explore_thread_completed", "scope": "batch", "required_keys": ["thread_index"] }
+  "schemaVersion": 2,
+  "kinds": [
+    {
+      "kind": "server_started",
+      "provider_events": []
+    },
+    {
+      "kind": "server_stopped",
+      "provider_events": []
+    },
+    {
+      "kind": "batch_created",
+      "provider_events": []
+    },
+    {
+      "kind": "request_received",
+      "provider_events": []
+    },
+    {
+      "kind": "request_spilled",
+      "provider_events": []
+    },
+    {
+      "kind": "batch_completed",
+      "provider_events": []
+    },
+    {
+      "kind": "batch_failed",
+      "provider_events": []
+    },
+    {
+      "kind": "project_evicted",
+      "provider_events": []
+    },
+    {
+      "kind": "stall_watchdog_armed",
+      "provider_events": []
+    },
+    {
+      "kind": "stall_watchdog_fired",
+      "provider_events": []
+    },
+    {
+      "kind": "provider_event",
+      "provider_events": [
+        "claude_session_starting",
+        "claude_turn_started",
+        "claude_error",
+        "claude_turn_completed",
+        "claude_text_emission",
+        "claude_tool_call",
+        "claude_session_closed",
+        "codex_subprocess_starting",
+        "codex_spawn_failed",
+        "codex_subprocess_started",
+        "codex_subprocess_exited",
+        "codex_thread_started",
+        "codex_turn_started",
+        "codex_command_started",
+        "codex_command_completed",
+        "codex_turn_completed",
+        "codex_turn_failed",
+        "codex_error",
+        "codex_agent_message",
+        "codex_file_change"
+      ]
+    },
+    {
+      "kind": "server_error",
+      "provider_events": []
+    }
   ]
 }

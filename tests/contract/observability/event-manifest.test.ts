@@ -1,47 +1,45 @@
 import manifest from '../goldens/observability/event-manifest.json' with { type: 'json' };
+import { PlainLogKindEnum, PROVIDER_EVENT_NAMES } from '../../../packages/core/src/events/plain-log-entry.js';
 import { describe, expect, it } from 'vitest';
 
 describe('observability event manifest', () => {
-  it('contains exactly 15 events', () => {
-    expect(manifest.events).toHaveLength(15);
+  it('contains exactly 12 plain log kinds', () => {
+    expect(PlainLogKindEnum.options).toHaveLength(12);
+    expect(manifest.kinds).toHaveLength(12);
   });
 
-  it('every event has a unique name', () => {
-    const names = manifest.events.map(e => e.name);
-    expect(new Set(names).size).toBe(names.length);
+  it('every kind in manifest matches PlainLogKindEnum', () => {
+    const enumKinds = new Set(PlainLogKindEnum.options);
+    for (const kindEntry of manifest.kinds) {
+      expect(enumKinds.has(kindEntry.kind), `kind ${kindEntry.kind} not in PlainLogKindEnum`).toBe(true);
+    }
   });
 
-  it('task-scoped events implicitly carry task; batch-scoped events carry batch', () => {
-    for (const e of manifest.events) {
-      // The composer always adds `task` for task-scoped events from the emission site;
-      // the manifest's required_keys list is in addition to those implicit fields.
-      // Concretely: assert the implicit-key contract by scope.
-      if (e.scope === 'task') {
-        expect(['task', 'request_received', 'batch_created'].includes(e.scope === 'task' ? 'task' : e.name) || e.required_keys).toBeTruthy();
-        // The real assertion: task-scoped events MUST NOT list 'batch' as a required_keys
-        // entry (batch is implicit-batch-context, not redundantly required).
-        expect(e.required_keys.includes('batch')).toBe(false);
-      }
-      if (e.scope === 'batch') {
-        // batch_created is the one event that LISTS batch in required_keys (since it
-        // creates the binding); other batch-scoped events have batch implicit.
-        if (e.name === 'batch_created') {
-          expect(e.required_keys).toContain('batch');
-        }
+  it('provider_event kind documents the list of valid provider event names', () => {
+    const providerEventEntry = manifest.kinds.find((k) => k.kind === 'provider_event');
+    expect(providerEventEntry).toBeDefined();
+    expect(Array.isArray(providerEventEntry!.provider_events)).toBe(true);
+    expect(providerEventEntry!.provider_events.length).toBe(PROVIDER_EVENT_NAMES.length);
+    for (const name of PROVIDER_EVENT_NAMES) {
+      expect(providerEventEntry!.provider_events).toContain(name);
+    }
+  });
+
+  it('non-provider_event kinds have empty provider_events array', () => {
+    for (const kindEntry of manifest.kinds) {
+      if (kindEntry.kind !== 'provider_event') {
+        expect(Array.isArray(kindEntry.provider_events)).toBe(true);
+        expect(kindEntry.provider_events).toHaveLength(0);
       }
     }
   });
 
-  it('every required_keys list is non-empty and uses snake_case names', () => {
-    for (const e of manifest.events) {
-      expect(e.required_keys.length).toBeGreaterThan(0);
-      for (const k of e.required_keys) {
-        expect(k).toMatch(/^[a-z][a-z0-9_]*$/);
-      }
-    }
+  it('every kind has a unique name', () => {
+    const kinds = manifest.kinds.map((k) => k.kind);
+    expect(new Set(kinds).size).toBe(kinds.length);
   });
 
-  it('version matches expected', () => {
-    expect(manifest.version).toBe('4.0.0');
+  it('schemaVersion matches expected', () => {
+    expect(manifest.schemaVersion).toBe(2);
   });
 });

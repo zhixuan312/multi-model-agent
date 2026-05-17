@@ -5,13 +5,14 @@ import type {
   AgentType,
 } from '../types.js';
 import type { Session } from '../types/run-result.js';
-import type { EventEmitter } from '../events/event-emitter.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
-import type { HttpServerLog } from '../events/http-server-log.js';
+
 import type { ProjectContext } from '../stores/project-context-registry.js';
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
+import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 /**
  * Spec C10 ExecutionContext — the typed shared state for a per-task run.
@@ -91,13 +92,18 @@ export interface ExecutionContext {
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
 
   // ── Group B: Bus + heartbeat ──
-  bus: EventEmitter | undefined;
+  bus: EnvelopeBus | undefined;
   heartbeat: ActivityTracker | undefined;
-  /** Logger sink — Step 6 (terminal handlers) will use this for final flush. */
-  logger: HttpServerLog | undefined;
+  /** Logger sink — Step 6 (terminal handlers) will use this for final flush.
+   *  Minimal structural shape; the full HttpServerLog interface was removed in the
+   *  events unification refactor. Only `error(kind, err)` is consumed by callers. */
+  logger?: { error: (kind: string, err: unknown) => void };
   /** Verbose stream sink (process.stderr by default). */
   verboseStream: (line: string) => void;
   verbose: boolean;
+
+  /** Per-task event envelope for recording lifecycle mutations. */
+  envelope: TaskEnvelopeStore;
 
   /**
    * Heartbeat tick recorder — server-supplied callback that turns

@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.2] - 2026-05-17
+
+Two largely independent strands landed together: a structural events/lifecycle rewrite that replaces the legacy `event-emitter` + sinks fan-out with a `TaskEnvelope` + `EnvelopeBus` + `LogWriter` + `TelemetryUploader` pipeline, and a cleanup of `packages/core/src/identity/` that drops five dormant files and slims the remaining auth helper. Public HTTP routes, skill surface, and CLI commands are unchanged. Telemetry wire schema (`packages/core/src/telemetry/types.ts`) is unchanged — no privacy-disclosure update needed.
+
+### Added
+
+- **`TaskEnvelope` + `TaskEnvelopeStore` (core).** Per-task mutable record that aggregates timings, costs, stage outcomes, findings, and final payload. Async-dispatch state now reads/writes envelopes through a single mutation API instead of layered partial updates across multiple stores. `packages/core/src/events/task-envelope.ts`.
+- **`EnvelopeBus` + `Subscriber` (core).** Push-on-mutation bus that fans envelope deltas to in-process subscribers. Replaces the old multi-sink `event-emitter`. `packages/core/src/events/envelope-bus.ts`.
+- **`LogWriter` subscriber (core).** File-or-stderr writer fed by the envelope bus. Handles request-side spill for `/audit`-style routes too. `packages/core/src/events/log-writer.ts`.
+- **`TelemetryUploader` subscriber (core).** Bus-driven uploader with dedupe and a consent gate; replaces the previous out-of-band recorder calls scattered across lifecycle handlers. `packages/core/src/events/telemetry-uploader.ts`.
+- **`PlainLogEntry` + provider-event mapping (core).** Single normalized log-entry shape with explicit field mapping from `claude_tool_call`, `codex_command_completed`, `codex_file_change`, etc. Powers `LogWriter` and the wire projection.
+- **`wire-schema.ts` (core).** Future home of `TaskCompletedEventSchema` and the canonical wire projection. `toWireRecord` performs PII projection + exhaustive status mapping. `packages/core/src/events/wire-schema.ts`.
+- **`getClaudeOAuth()` keychain test coverage (tests).** New `tests/identity/claude-oauth.test.ts` covers six branches: non-darwin, keychain miss, malformed JSON, missing accessToken, expired token, valid token. Mocks `child_process.execFileSync` via `vi.mock`.
+
+### Changed
+
+- **Lifecycle handlers consume the envelope API (core).** `stall-watchdog`, `annotate-stage`, `lifecycle-driver`, `heartbeat`, the Claude/Codex provider sessions, and the terminal handler all read and mutate `TaskEnvelope` instead of calling the recorder directly. Stage transitions and `costUSD` aggregation flow through the envelope; the recorder now only seals on terminal.
+- **`/batch/:id` reads envelopes directly (server).** The HTTP handler converts a `TaskEnvelope` to the public terminal/polling response via a new `envelopeToPublicResult` helper. Removes the previous indirection through the partial-state stores.
+- **Request-observability emits plain entries via the bus (server).** Server-side request logs flow through the same `EnvelopeBus` + `LogWriter` chain as task events. Request spill is now a single pathway, not a separate writer.
+- **`BatchEntry` slimmed (core).** The store keeps only `taskEnvelopes` plus required infrastructure fields. Headline snapshot fields are removed (envelopes carry that state).
+- **`identity/auth-token-store.ts` → `identity/claude-oauth.ts` (core).** File renamed and slimmed; keeps only `getClaudeOAuth()` + `ClaudeOAuthCredentials`. The body of `getClaudeOAuth()` is byte-for-byte unchanged. The single import in `packages/core/src/providers/claude.ts:13` was updated.
+
+### Fixed
+
+- **`event-emitter` downstream propagation gaps (T16/T17).** Stage recording, polling regression, and stale-goldens caused by the deletion sweep are patched in `events` and the contract goldens are refreshed.
+- **Residual `updateHeadlineSnapshot` calls (server).** Removed leftover call sites from the earlier T9 worker pass that referenced the now-removed snapshot fields.
+
+### Removed
+
+- **Old `event-emitter` + sinks + dual schemas (core).** Approximately 20 files including the legacy event-emitter, every sink class, `telemetry-channel`, `http-server-log`, and the parallel schema definitions are deleted. The new bus/subscriber chain is the only event pathway.
+- **Bootstrap fixtures for the deleted modules (tests).** Implementation-coupled tests rewritten or removed where the underlying module is gone. Observability manifest regenerated.
+- **Five dormant files from `identity/` (core).** `cwd-validator.ts` (shadowed by `packages/server/src/http/cwd-validator.ts`), `host-allowlist.ts` (shadowed by `packages/core/src/intake/host-allowlist-builder.ts`), `ssrf-guard.ts` (shadowed by `packages/core/src/research/ssrf-guard.ts`), the unconsumed `identity/index.ts` barrel, plus the dormant `getClaudeAuth`, `getCodexAuth`, `ClaudeAuth`, `CodexAuth`, `claudeOAuth`, `codexOAuth` exports from the old `auth-token-store.ts`. Codex auth is handled by the `codex` CLI subprocess and never needed an in-process token helper (see `packages/core/src/providers/codex.ts:9`).
+- **Two dead test files (tests).** `tests/identity/cwd-validator.test.ts` and `tests/identity/codex-oauth.test.ts` — both tested deleted code paths.
+
+### Internal
+
+- **`packages/core/src/identity/` reduced to two files.** After this release the directory contains only `claude-oauth.ts` and `secret-redactor.ts`. Both have at least one live production caller.
+- **`ExecutionContext` threads `TaskEnvelopeStore`** (T10–T12 worker) for lifecycle handlers that need to mutate the envelope without reaching for the global store.
+
 ## [4.7.1] - 2026-05-17
 
 Two follow-on fixes to the 4.7.0 polling-headline rewire. 4.7.0 made the stage *label* advance through the lifecycle; 4.7.1 makes the `(N/M)` stage *counter* and the live `read / write / tool calls` counters actually move during a task instead of staying stuck at `(1/1)` and `0/0/0` respectively until the very last moment of each stage.
@@ -315,7 +354,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...HEAD
+[4.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...v4.7.2
 [4.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...v4.6.0

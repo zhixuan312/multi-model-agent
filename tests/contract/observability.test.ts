@@ -1,103 +1,132 @@
 import { describe, it, expect } from 'vitest';
-import manifest from './goldens/observability.json' with { type: 'json' };
-import { runFullFixtureSuite, runTaskLifecycleFixtures, runEdgeCaseFixtures, runCloudFixtures } from './fixtures/observability-fixtures.js';
+import { PlainLogEntrySchema, PlainLogKindEnum } from '../../packages/core/src/events/plain-log-entry.js';
+import type { TaskEnvelope } from '../../packages/core/src/events/task-envelope.js';
+import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
+import type { Subscriber, BusMessage } from '../../packages/core/src/events/envelope-bus.js';
+import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 
-describe('observability contract — exhaustive', () => {
-  it('forward: every emitted event in fixtures appears in manifest with required fields', { timeout: 60_000 }, async () => {
-    const captured = await runFullFixtureSuite();
-    expect(captured.length).toBeGreaterThan(0);
-    for (const ev of captured) {
-      const entry = manifest.events.find(e => e.name === ev.event);
-      expect(entry, `event ${ev.event} not in manifest`).toBeDefined();
-      for (const field of entry!.requiredFields) {
-        expect(ev[field as keyof typeof ev], `event ${ev.event} missing required field ${field}`).toBeDefined();
-      }
+describe('observability contract — envelope + plain entries', () => {
+  it('every envelope snapshot conforms to TaskEnvelope shape', async () => {
+    const captured: BusMessage[] = [];
+    const testSink: Subscriber = {
+      name: 'test-capture',
+      receive: (msg) => captured.push(msg),
+    };
+    const bus = new EnvelopeBus();
+    bus.subscribe(testSink);
+
+    const store = TaskEnvelopeStore.create(
+      {
+        taskId: 'test-task-envelope-1',
+        batchId: 'test-batch-envelope-1',
+        taskIndex: 0,
+        route: 'delegate',
+        agentType: 'standard',
+        client: 'test',
+        mainModel: 'claude-sonnet-4-6',
+        cwd: '/tmp/test',
+      },
+      bus,
+    );
+
+    store.recordToolCall({ stage: 'implementing', tool: 'bash', filesRead: [], filesWritten: [] });
+    store.seal({ status: 'done', terminalAt: new Date().toISOString(), stopReason: null, realFilesChanged: [] });
+
+    const envelopeSnapshots = captured.filter((m) => m.type === 'envelope');
+    expect(envelopeSnapshots.length).toBeGreaterThan(0);
+
+    for (const msg of envelopeSnapshots) {
+      if (msg.type !== 'envelope') continue;
+      const env = msg.envelope;
+      // Verify essential fields exist and have correct types
+      expect(typeof env.taskId).toBe('string');
+      expect(typeof env.batchId).toBe('string');
+      expect(typeof env.taskIndex).toBe('number');
+      expect(['delegate', 'audit', 'review', 'debug', 'investigate', 'execute-plan', 'retry', 'research']).toContain(env.route);
+      expect(['standard', 'complex']).toContain(env.agentType);
+      expect(typeof env.client).toBe('string');
+      expect(typeof env.mainModel).toBe('string');
+      expect(typeof env.cwd).toBe('string');
+      expect(typeof env.startedAt).toBe('string');
+      expect(['running', 'done', 'done_with_concerns', 'failed']).toContain(env.status);
+      expect(Array.isArray(env.stages)).toBe(true);
+      expect(Array.isArray(env.toolCalls)).toBe(true);
+      expect(Array.isArray(env.filesRead)).toBe(true);
+      expect(Array.isArray(env.filesWritten)).toBe(true);
+      expect(Array.isArray(env.realFilesChanged)).toBe(true);
+      expect(typeof env.totalCostUSD).toBe('number');
+      expect(typeof env.totalInputTokens).toBe('number');
+      expect(typeof env.totalOutputTokens).toBe('number');
+      expect(typeof env.totalDurationMs).toBe('number');
+      expect(typeof env.headline).toBe('object');
     }
   });
 
-  it('reverse (task-lifecycle subset): each lifecycle event fires at least once across fixture set', async () => {
-    const captured = await runTaskLifecycleFixtures();
-    const seen = new Set(captured.map(e => e.event));
-    const lifecycleEvents = [
-      'task_started', 'stage_change', 'heartbeat', 'fallback', 'escalation',
-      'review_decision', 'verify_step', 'verify_skipped', 'batch_completed',
-      'task_completed', 'worker_start', 'turn_start', 'turn_complete',
-      'tool_call', 'text_emission',
-    ];
-    // Verify each lifecycle event name has a manifest entry
-    for (const name of lifecycleEvents) {
-      const manifestEntry = manifest.events.find(e => e.name === name);
-      expect(manifestEntry, `lifecycle event ${name} not in manifest`).toBeDefined();
-    }
-    // Verify events that fire are valid against manifest
-    for (const ev of captured) {
-      if (!lifecycleEvents.includes(ev.event)) continue;
-      const entry = manifest.events.find(e => e.name === ev.event)!;
-      for (const field of entry.requiredFields) {
-        expect(ev[field as keyof typeof ev], `event ${ev.event} missing required field ${field}`).toBeDefined();
-      }
-    }
-    // Core events that must fire in a delegate lifecycle
-    expect(seen.has('task_started'), 'task_started never emitted').toBe(true);
-    expect(seen.has('batch_completed'), 'batch_completed never emitted').toBe(true);
-    // Remaining lifecycle events are checked best-effort: some require
-    // specific wiring (review, verify, etc.) that may be incomplete;
-    // the manifest validity check above ensures schema coverage.
-  });
+  it('every plain log entry conforms to PlainLogEntrySchema', async () => {
+    const captured: BusMessage[] = [];
+    const testSink: Subscriber = {
+      name: 'test-capture',
+      receive: (msg) => captured.push(msg),
+    };
+    const bus = new EnvelopeBus();
+    bus.subscribe(testSink);
 
-  it('reverse (edge-case subset): failProvider emits task_started; manifest covers batch_failed', { timeout: 60_000 }, async () => {
-    const captured = await runEdgeCaseFixtures();
-    const seen = new Set(captured.map(e => e.event));
-    expect(seen.has('task_started'), 'task_started never emitted').toBe(true);
-    // batch_failed only fires from async-dispatch when the executor throws
-    // (not from provider-level errors that surface as RuntimeRunResult.status). The
-    // fixture covers that contract by ensuring the manifest entry exists; an
-    // emission-side fixture is added when an executor-throwing path lands.
-    const batchFailedEntry = manifest.events.find(e => e.name === 'batch_failed');
-    expect(batchFailedEntry, 'batch_failed not in manifest').toBeDefined();
-    // stall_abort fires when idle detection is wired
-    if (!seen.has('stall_abort')) {
-      const stallEntry = manifest.events.find(e => e.name === 'stall_abort');
-      expect(stallEntry, 'stall_abort not in manifest').toBeDefined();
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'batch_created',
+      fields: { batch_id: 'test-batch-1' },
+    });
+
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'provider_event',
+      fields: { provider: 'codex', event: 'codex_turn_completed', task_id: 'test-task-1' },
+    });
+
+    const plainEntries = captured.filter((m) => m.type === 'plain').map((m) => (m.type === 'plain' ? m.entry : null));
+    expect(plainEntries.length).toBeGreaterThan(0);
+
+    for (const entry of plainEntries) {
+      if (!entry) continue;
+      const result = PlainLogEntrySchema.safeParse(entry);
+      expect(result.success, `entry failed validation: ${result.error?.message}`).toBe(true);
     }
   });
 
-  it('reverse (cloud subset): cloud event names are present in the manifest', async () => {
-    // Boot + introspection endpoints don't emit JSONL events yet; the cloud
-    // events (session.started, install.changed, skill.installed) are wired in
-    // a future task. For now the contract test verifies manifest coverage so
-    // those names cannot be removed without a deliberate change. Capture is
-    // still exercised so we can detect any pipeline regression.
-    await runCloudFixtures();
-    const cloudEventNames = ['session.started', 'install.changed', 'skill.installed'];
-    for (const name of cloudEventNames) {
-      const entry = manifest.events.find(e => e.name === name);
-      expect(entry, `cloud event ${name} not in manifest`).toBeDefined();
-    }
-  });
-});
+  it('every plain entry kind is in PlainLogKindEnum', async () => {
+    const validKinds = PlainLogKindEnum.options;
+    const captured: BusMessage[] = [];
+    const testSink: Subscriber = {
+      name: 'test-capture',
+      receive: (msg) => captured.push(msg),
+    };
+    const bus = new EnvelopeBus();
+    bus.subscribe(testSink);
 
-describe('golden does not drift', () => {
-  it('manifest covers all 50 events', () => {
-    // 26 base + 9 parallel-criteria/stall + 2 angle cap + 2 warmer cap + 2 annotator cap
-    // + 7 progress-watchdog events:
-    //   progress_watchdog_armed, progress_watchdog_skipped_disabled,
-    //   progress_watchdog_skipped_non_git, progress_watchdog_warn,
-    //   progress_watchdog_fired_thrash, progress_watchdog_disarmed,
-    //   progress_watchdog_scope_violation
-    expect(manifest.events).toHaveLength(50);   // +2 in v5: stage_gate_recorded, stage_halt
-  });
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'batch_created',
+      fields: { batch_id: 'test-batch-1' },
+    });
 
-  it('every event has a unique name', () => {
-    const names = manifest.events.map(e => e.name);
-    expect(new Set(names).size).toBe(names.length);
-  });
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'request_received',
+      fields: { batch_id: 'test-batch-1', route: 'delegate', body_bytes: 1024 },
+    });
 
-  it('every required field name is camelCase (or dot-separated for nested)', () => {
-    for (const e of manifest.events) {
-      for (const field of e.requiredFields) {
-        expect(field).toMatch(/^[a-z][a-zA-Z0-9.]*$/);
-      }
+    bus.emitPlainEntry({
+      ts: new Date().toISOString(),
+      kind: 'stall_watchdog_armed',
+      fields: { task_id: 'test-task-1', idle_threshold_ms: 30000 },
+    });
+
+    const plainEntries = captured.filter((m) => m.type === 'plain').map((m) => (m.type === 'plain' ? m.entry : null));
+    expect(plainEntries.length).toBeGreaterThan(0);
+
+    for (const entry of plainEntries) {
+      if (!entry) continue;
+      expect(validKinds).toContain(entry.kind);
     }
   });
 });

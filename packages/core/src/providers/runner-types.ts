@@ -8,7 +8,7 @@ import type {
   ToolMode,
 } from '../types.js';
 import type { ResearchToolDefinition } from '../research/types.js';
-import type { EventEmitter } from '../events/event-emitter.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 
 export type RunStatus =
   | 'ok'
@@ -131,8 +131,8 @@ export interface RunOptions {
   /** Bus for emitting per-turn / per-runner-call observability events. When
    *  present, the runner + adapter emit provider-specific events (e.g.
    *  `claude_turn_started`, `claude_turn_completed`) that the server's
-   *  VerboseLogChannel + LocalLogSink + TelemetrySink consume. */
-  bus?: EventEmitter
+   *  EnvelopeBus consume. */
+  bus?: EnvelopeBus
   /** Identifies the in-flight batch in emitted runner events. Plumbed
    *  through delegateWithEscalation so consumers can correlate runner-shell
    *  output back to the originating /audit, /delegate, etc. request. */

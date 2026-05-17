@@ -5,7 +5,7 @@ import {
   clampInputTokens,
   clampOutputTokens,
   clampDurationMsTotal,
-} from '../events/clamp.js';
+} from '../events/to-wire-record.js';
 
 export interface TaskCompletionSummary {
   batchId: string;

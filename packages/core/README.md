@@ -228,12 +228,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.7.1
+## What's new in 4.7.2
 
-- **Polling headline `(N/M)` stage counter actually moves.** Driver (`lifecycle/lifecycle-driver.ts`) now owns the visible-stage counter and fires `tracker.transition({stage, stageIndex, stageCount})` before each visible stage's handler runs. The per-handler transition calls in `review-stage`, `rework-stage`, `git-commit-handler`, `annotate-stage`, and the redundant first-stage call in `perform-implementation` are deleted. `stageCount` starts at the upper bound and decrements when `shouldRun()` skips a visible stage.
-- **Live `read / write / tool calls` counters update during a stage.** New `bounded-execution/progress-events-subscriber.ts` (pattern mirrors `stall-watchdog.ts`) subscribes to runner-emitted bus events (`claude_tool_call` / `codex_command_completed` / `codex_file_change`) and increments tracker counters in real time. Wired from `task-runner.ts` alongside the stall-watchdog.
-- **New API:** `ActivityTracker.recordFileWrite()` (mirrors existing `recordFileRead()` / `recordToolCall()`).
-- **From 4.7.0:** USD cost caps removed end-to-end (BREAKING — `maxCostUSD`, `cost_cap` / `cost_exceeded` / `cost_check`, `pricingSchema` all deleted); per-task polling headline wired; `outputTargets` contract on `/delegate` / `/execute-plan`; `packages/core/src/escalation/` removed.
+- **Events/lifecycle pipeline rewrite.** The legacy `event-emitter` + sinks fan-out is replaced by `TaskEnvelope` + `EnvelopeBus` + `LogWriter` + `TelemetryUploader`. Lifecycle handlers (`stall-watchdog`, `annotate-stage`, `lifecycle-driver`, `heartbeat`, provider sessions, terminal handler) now mutate the envelope directly; the recorder only seals on terminal. `BatchEntry` is slimmed to `taskEnvelopes` plus required infrastructure.
+- **New subpath exports.** `./events/task-envelope`, `./events/envelope-bus`, `./events/log-writer`, `./events/telemetry-uploader`, `./events/wire-schema`. About 20 deleted files (old `event-emitter`, every sink class, `telemetry-channel`, `http-server-log`, dual schemas) are gone.
+- **identity/ slimmed to two files.** `claude-oauth.ts` (was `auth-token-store.ts`, now Claude-OAuth-only — Codex auth is handled by the `codex` CLI subprocess per `providers/codex.ts:9`) and `secret-redactor.ts`. The dormant `cwd-validator.ts`, `host-allowlist.ts`, `ssrf-guard.ts`, `index.ts` are deleted; `getClaudeAuth`/`getCodexAuth`/`ClaudeAuth`/`CodexAuth`/`claudeOAuth`/`codexOAuth` exports removed. The live `getClaudeOAuth()` body is byte-for-byte unchanged; six-case keychain test coverage added.
+- **From 4.7.1:** polling headline `(N/M)` stage counter and live `read/write/tool calls` counters update during a stage; `ActivityTracker.recordFileWrite()` added.
+- **From 4.7.0 (BREAKING):** USD cost caps removed end-to-end — `maxCostUSD`, `cost_cap`/`cost_exceeded`/`cost_check`, `pricingSchema` all deleted; `outputTargets` contract on `/delegate`/`/execute-plan`; `packages/core/src/escalation/` removed.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

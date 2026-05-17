@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.7.1",
+  "version": "4.7.2",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -67,14 +67,6 @@
     "./intake/verify-command-validator": {
       "types": "./dist/intake/verify-command-validator.d.ts",
       "import": "./dist/intake/verify-command-validator.js"
-    },
-    "./events/verbose-line": {
-      "types": "./dist/events/verbose-line.d.ts",
-      "import": "./dist/events/verbose-line.js"
-    },
-    "./events/request-spill": {
-      "types": "./dist/events/request-spill.d.ts",
-      "import": "./dist/events/request-spill.js"
     },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
@@ -160,21 +152,25 @@
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
     },
-    "./events/observability-events": {
-      "types": "./dist/events/observability-events.d.ts",
-      "import": "./dist/events/observability-events.js"
-    },
-    "./events/local-log-sink": {
-      "types": "./dist/events/local-log-sink.d.ts",
-      "import": "./dist/events/local-log-sink.js"
-    },
-    "./events/telemetry-sink": {
-      "types": "./dist/events/telemetry-sink.d.ts",
-      "import": "./dist/events/telemetry-sink.js"
-    },
     "./events/jsonl-writer": {
       "types": "./dist/events/jsonl-writer.d.ts",
       "import": "./dist/events/jsonl-writer.js"
+    },
+    "./events/task-envelope": {
+      "types": "./dist/events/task-envelope.d.ts",
+      "import": "./dist/events/task-envelope.js"
+    },
+    "./events/envelope-bus": {
+      "types": "./dist/events/envelope-bus.d.ts",
+      "import": "./dist/events/envelope-bus.js"
+    },
+    "./events/log-writer": {
+      "types": "./dist/events/log-writer.d.ts",
+      "import": "./dist/events/log-writer.js"
+    },
+    "./events/telemetry-uploader": {
+      "types": "./dist/events/telemetry-uploader.d.ts",
+      "import": "./dist/events/telemetry-uploader.js"
     },
     "./lifecycle/auto-commit": {
       "types": "./dist/lifecycle/auto-commit.d.ts",
@@ -284,14 +280,6 @@
       "types": "./dist/events/consent-rules.d.ts",
       "import": "./dist/events/consent-rules.js"
     },
-    "./events/event-builder": {
-      "types": "./dist/events/event-builder.d.ts",
-      "import": "./dist/events/event-builder.js"
-    },
-    "./events/telemetry-types": {
-      "types": "./dist/events/telemetry-types.d.ts",
-      "import": "./dist/events/telemetry-types.js"
-    },
     "./tool-surface/manifest": {
       "types": "./dist/tool-surface/manifest.d.ts",
       "import": "./dist/tool-surface/manifest.js"
@@ -335,6 +323,10 @@
     "./stores/context-block-project-cap": {
       "types": "./dist/stores/context-block-project-cap.d.ts",
       "import": "./dist/stores/context-block-project-cap.js"
+    },
+    "./events/wire-schema": {
+      "types": "./dist/events/wire-schema.d.ts",
+      "import": "./dist/events/wire-schema.js"
     }
   },
   "scripts": {

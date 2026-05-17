@@ -80,7 +80,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   //            spec-text message; completed=false; findings passthrough.
   const cfg = (state as { config?: { truncateAnnotatePromptTier?: number } }).config ?? {};
   const tier = cfg.truncateAnnotatePromptTier ?? 0;
-  const bus = (state.executionContext as { bus?: { emit: (e: unknown) => void } } | undefined)?.bus;
+  const envelope = (state.executionContext as { envelope?: unknown } | undefined)?.envelope;
 
   // Aggregate candidate findings from all upstream sources (mirrors §5.7 rule 1
   // and the fallback specifier in §5.7.3). lastRunResult.findings is the read-
@@ -128,17 +128,21 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
       delete (cp as { evidence?: string }).evidence;
       return cp;
     });
-    bus?.emit({ event: 'annotate_truncation', ts: new Date().toISOString(), tier: 1, droppedFieldCount: droppedEvidenceCount });
+    // Annotation truncation is now recorded as a validation warning in the envelope
+    const env = envelope as any;
+    env?.recordValidationWarning?.({ rule: 'AnnotateTruncationTier1', path: 'annotatePrompt' });
   }
   if (tier >= 2) {
     const dropped = truncatedSummary ? 1 : 0;
     truncatedSummary = '';
-    bus?.emit({ event: 'annotate_truncation', ts: new Date().toISOString(), tier: 2, droppedFieldCount: dropped });
+    const env = envelope as any;
+    env?.recordValidationWarning?.({ rule: 'AnnotateTruncationTier2', path: 'annotatePrompt' });
   }
   if (tier >= 3) {
     // Tier 3 = fallback mode per spec §5.7.3
     fallbackMode = true;
-    bus?.emit({ event: 'annotate_truncation', ts: new Date().toISOString(), tier: 3, droppedFieldCount: 0 });
+    const env = envelope as any;
+    env?.recordValidationWarning?.({ rule: 'AnnotateTruncationTier3', path: 'annotatePrompt' });
   }
 
   let annotated: AnnotatePayload;
@@ -229,7 +233,9 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
         // transport_error — fall through to mechanical synthesis
         llmTransportFailed = true;
         llmDurationMs = tres.ms;
-        bus?.emit({ event: 'annotate_llm_transport_error', ts: new Date().toISOString(), message: tres.message, durationMs: tres.ms } as Record<string, unknown>);
+        // Transport errors are now recorded as validation warnings
+        const env = envelope as any;
+        env?.recordValidationWarning?.({ rule: 'AnnotateLLMTransportError', path: 'annotatePrompt' });
       }
     }
     annotated = applyAnnotatePreconditions(proposed, state);
