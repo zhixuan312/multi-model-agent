@@ -146,17 +146,25 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
     const rbGate = gates['register-block'];
     const rbPayload = rbGate?.payload as { blockId?: string; bytes?: number } | null;
     const blockId: string | null = rbPayload?.blockId ?? null;
-    payload = {
+    const last = state.lastRunResult as any;
+    const basePayload = {
       completed: rbGate?.outcome === 'advance',
       message: rbGate?.outcome === 'advance'
         ? `Context block ${blockId} registered (${rbPayload?.bytes ?? 0} bytes)`
         : `Block registration failed: ${rbGate?.comment ?? 'unknown'}`,
-      findings: [],
+      findings: [] as ComposePayload['findings'],
       summary: '',
-      filesChanged: [],
-      commitSha: null,
+      filesChanged: [] as string[],
+      commitSha: null as string | null,
       blockId,
       telemetry: makeComposeTelemetry(state),
+    };
+    payload = {
+      ...basePayload,
+      ...(last?.findingsOutcome !== undefined && { findingsOutcome: last.findingsOutcome as 'found' | 'clean' | 'not_applicable' }),
+      ...(last?.findingsOutcomeReason && { findingsOutcomeReason: last.findingsOutcomeReason as string | null }),
+      ...(last?.outcomeInferred !== undefined && { outcomeInferred: last.outcomeInferred as boolean }),
+      ...(last?.outcomeMalformed !== undefined && { outcomeMalformed: last.outcomeMalformed as boolean }),
     };
   } else if (annotateGate?.outcome === 'advance') {
     // Path 1 — normal (annotate ran)
@@ -164,54 +172,76 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
     // Explicitly set blockId=null for non-register routes so the wire shape is
     // complete (not undefined).
     const ap = annotateGate.payload as { completed: boolean; message: string; findings: ComposePayload['findings']; summary: string; filesChanged: string[]; commitSha: string | null };
-    payload = {
+    const last = state.lastRunResult as any;
+    const basePayload = {
       completed: ap.completed,
       message: ap.message,
       findings: ap.findings,
       summary: ap.summary,
       filesChanged: ap.filesChanged,
       commitSha: ap.commitSha,
-      blockId: null,
+      blockId: null as string | null,
       telemetry: makeComposeTelemetry(state),
+    };
+    payload = {
+      ...basePayload,
+      ...(last?.findingsOutcome !== undefined && { findingsOutcome: last.findingsOutcome as 'found' | 'clean' | 'not_applicable' }),
+      ...(last?.findingsOutcomeReason && { findingsOutcomeReason: last.findingsOutcomeReason as string | null }),
+      ...(last?.outcomeInferred !== undefined && { outcomeInferred: last.outcomeInferred as boolean }),
+      ...(last?.outcomeMalformed !== undefined && { outcomeMalformed: last.outcomeMalformed as boolean }),
     };
   } else if (halted) {
     // Path 3 — pre-annotate halt synthesis
     const haltedEntry = Object.values(gates).find(g => g.outcome === 'halt');
     const haltedStageName = haltedEntry?.telemetry.stageLabel ?? 'unknown';
-    payload = {
+    const last = state.lastRunResult as any;
+    const basePayload = {
       completed: false,
       message: `${haltedStageName} halted: ${haltedEntry?.comment ?? 'unknown halt'}`,
       findings: buildHaltFindings(gates),
       summary: buildHaltSummary(gates),
       filesChanged: buildHaltFilesChanged(gates),
-
       commitSha: buildHaltCommitSha(gates),
-
       blockId: (gates['register-block']?.outcome === 'advance'
         ? ((gates['register-block'].payload as { blockId?: string })?.blockId ?? null)
         : null) as string | null,
       telemetry: makeComposeTelemetry(state),
     };
+    payload = {
+      ...basePayload,
+      ...(last?.findingsOutcome !== undefined && { findingsOutcome: last.findingsOutcome as 'found' | 'clean' | 'not_applicable' }),
+      ...(last?.findingsOutcomeReason && { findingsOutcomeReason: last.findingsOutcomeReason as string | null }),
+      ...(last?.outcomeInferred !== undefined && { outcomeInferred: last.outcomeInferred as boolean }),
+      ...(last?.outcomeMalformed !== undefined && { outcomeMalformed: last.outcomeMalformed as boolean }),
+    };
   } else {
     // Path 4 — internal_state_corrupted degenerate fallback
-    payload = {
+    const last = state.lastRunResult as any;
+    const basePayload = {
       completed: false,
       message: 'internal_state_corrupted',
-      findings: [],
+      findings: [] as ComposePayload['findings'],
       summary: '',
-      filesChanged: [],
-      commitSha: null,
-      blockId: null,
+      filesChanged: [] as string[],
+      commitSha: null as string | null,
+      blockId: null as string | null,
       telemetry: {
         totalDurationMs: 0,
         totalCostUSD: null,
         workerSelfAssessment: null,
         reviewVerdict: null,
-        commitOutcome: 'not_applicable',
+        commitOutcome: 'not_applicable' as const,
         stopReason: 'transport_error' as StageStopReason,
         haltedStage: null,
         stages: STAGE_NAMES.map(name => ({ name, outcome: 'not_run' as const, durationMs: 0, costUSD: 0 })),
       },
+    };
+    payload = {
+      ...basePayload,
+      ...(last?.findingsOutcome !== undefined && { findingsOutcome: last.findingsOutcome as 'found' | 'clean' | 'not_applicable' }),
+      ...(last?.findingsOutcomeReason && { findingsOutcomeReason: last.findingsOutcomeReason as string | null }),
+      ...(last?.outcomeInferred !== undefined && { outcomeInferred: last.outcomeInferred as boolean }),
+      ...(last?.outcomeMalformed !== undefined && { outcomeMalformed: last.outcomeMalformed as boolean }),
     };
   }
 

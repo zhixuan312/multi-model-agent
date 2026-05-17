@@ -42,6 +42,8 @@ export interface ReadRouteImplementerResult {
   synthesizedOutput: string;
   findingsOutcome: FindingsOutcomeKind;
   findingsOutcomeReason: string | null;
+  outcomeInferred: boolean;
+  outcomeMalformed: boolean;
 }
 
 /**
@@ -140,5 +142,7 @@ export async function runReadRouteImplementer(
     synthesizedOutput: perCriterionOutputs.join('\n\n'),
     findingsOutcome: aggregatedOutcome,
     findingsOutcomeReason: aggregatedReason,
+    outcomeInferred: false,
+    outcomeMalformed: false,
   };
 }

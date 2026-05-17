@@ -139,6 +139,8 @@ export async function performImplementation(state: LifecycleState): Promise<void
         criteriaErrors: dispatchResult.criteriaErrors,
         findingsOutcome: dispatchResult.findingsOutcome,
         findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
+        outcomeInferred: dispatchResult.outcomeInferred,
+        outcomeMalformed: dispatchResult.outcomeMalformed,
         ...(incompleteReason && { incompleteReason }),
       } as unknown as RuntimeRunResult;
 
