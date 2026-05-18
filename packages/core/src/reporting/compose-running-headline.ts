@@ -76,26 +76,23 @@ function capitalizeState(state: string): string {
 }
 
 function formatDoneTaskLine(task: RunningTaskProgress): string {
-  const reads = Math.max(0, task.filesRead ?? 0);
-  const toolCalls = Math.max(0, task.toolCalls ?? 0);
   const files = Array.isArray(task.files) ? task.files : [];
 
   if (files.length === 0) {
-    return `done — ${reads} read, ${toolCalls} tool calls`;
+    return `done — ${task.filesWritten ?? 0} files written`;
   }
 
   const shownFiles = files.slice(0, 3);
   const fileSuffix = files.length > 3 ? `, ... +${files.length - 3} more` : '';
-  return `done — ${reads} read, ${toolCalls} tool calls — files: ${shownFiles.join(', ')}${fileSuffix}`;
+  return `done — ${task.filesWritten ?? 0} files written — files: ${shownFiles.join(', ')}${fileSuffix}`;
 }
 
 function formatActiveTaskLine(task: RunningTaskProgress): string {
   const verb = capitalizeState(task.state);
-  const reads = Math.max(0, task.filesRead ?? 0);
   const writes = Math.max(0, task.filesWritten ?? 0);
-  const calls = Math.max(0, task.toolCalls ?? 0);
+  const turns = Math.max(0, task.turns ?? 0);
   const worker = task.stageInfo ?? 'worker';
-  return `${verb} by ${worker} - ${reads} read, ${writes} write, ${calls} tool calls`;
+  return `${verb} by ${worker} - ${writes} files written, ${turns} turns`;
 }
 
 function formatTaskLine(task: RunningTaskProgress): string {
