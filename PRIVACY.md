@@ -113,7 +113,7 @@ Single top-level source of truth for findings-summary signals. Previously these 
 | `clarificationRequested` | boolean | Clarification frequency |
 | `briefQualityWarningCount` | integer (0–20) | Brief-quality warning rate |
 | `sandboxViolationCount` | integer (0–100) | Sandbox-policy violation rate |
-| `validation_warnings` | optional array of `{ rule: string, path: string }` | Cross-field schema-validation warnings (R1–R16) attached when the event triggers a refinement issue. **Meta about validation only — does NOT contain user data.** Each entry carries the rule name (e.g. `"R1: ..."`) and the Zod issue path (empty string for cross-field rules). Absent on healthy events. Backend uses this to quantify warning rates without re-running validation. |
+| `validation_warnings` | optional array of `{ rule: string, path: string }` | Validation warnings from two producers: (1) **Zod cross-field schema validation (R1–R16)** — `rule` is the rule name (e.g. `"R1: ..."`), `path` is the Zod issue path (empty string for cross-field rules); (2) **Findings-parser drops (4.7.5+)** — `rule` is `"findings_parser_drop"`, `path` is `"<reason>:<heading>"` where reason is one of `empty_claim` / `missing_core_bullet` / `invalid_severity` / `invalid_evidence_format` and `heading` is the literal `Finding N: <title>` text the worker emitted (truncated to 120 chars). The heading slice may contain a fragment of the worker's output (the finding title only) so a worker that put sensitive content in a Finding title would leak that fragment here. Backend uses this to quantify warning rates without re-running validation. Absent on healthy events. |
 
 #### Stages array (0–16 entries)
 
