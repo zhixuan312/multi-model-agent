@@ -124,7 +124,6 @@
     "reviewVerdict": null,
     "reviewConcerns": [],
     "reworkApplied": false,
-    "validationsRun": [],
     "commitSha": null,
     "commitMessage": null,
     "commitSkipReason": null,

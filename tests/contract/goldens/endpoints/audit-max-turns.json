@@ -138,7 +138,6 @@
   "structuredReport": {
     "summary": "",
     "filesChanged": [],
-    "validationsRun": [],
     "deviationsFromBrief": [],
     "unresolved": [],
     "extraSections": {}
