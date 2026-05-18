@@ -165,11 +165,13 @@ export function extractCanonicalModelName(raw: string): string {
   // profile prefix. Covers the common case (`claude-opus-4-7`,
   // `bedrock.claude-opus-4-7`, `vertex_ai/anthropic.claude-sonnet-4-5`).
   const cleaned = cleanCandidate(raw);
-  if (longestPrefixCanonical(cleaned)) return cleaned;
+  const cleanedPrefix = longestPrefixCanonical(cleaned);
+  if (cleanedPrefix) return cleanedPrefix + cleaned.slice(cleanedPrefix.length);
 
   // Fallback A: aggressive trailing-marker stripping (release tags etc.)
   const fullyStripped = stripTrailingMarkers(cleaned);
-  if (longestPrefixCanonical(fullyStripped)) return fullyStripped;
+  const strippedPrefix = longestPrefixCanonical(fullyStripped);
+  if (strippedPrefix) return strippedPrefix + fullyStripped.slice(strippedPrefix.length);
 
   // Fallback B: best-effort substring extraction for ids embedded in
   // arbitrary wrappers (`my_router_42_claude-opus-4-7_xyz`,
@@ -180,8 +182,9 @@ export function extractCanonicalModelName(raw: string): string {
   const substringMatch = longestPrefixSubstring(raw);
   if (substringMatch !== null) {
     const cleanedSlice = cleanCandidate(raw.slice(substringMatch.startIndex));
-    if (cleanedSlice.length > 0 && longestPrefixCanonical(cleanedSlice)) {
-      return cleanedSlice;
+    const slicePrefix = cleanedSlice.length > 0 ? longestPrefixCanonical(cleanedSlice) : null;
+    if (slicePrefix) {
+      return slicePrefix + cleanedSlice.slice(slicePrefix.length);
     }
   }
 
