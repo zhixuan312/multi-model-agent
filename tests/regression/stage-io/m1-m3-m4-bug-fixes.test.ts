@@ -50,7 +50,7 @@ describe('M3 fix — AC-16 — truthful workerSelfAssessment in compose', () => 
     state.gates = {};
     await composeHandler(state);
     const env = (state as any).responseEnvelope;
-    expect(env.errorCode).toBe('review_rejected');
+    expect(env.errorCode).toBe('review_quality_findings_unresolved');
     // The M3 bug: this used to be hardcoded 'done_with_concerns'. After the fix
     // it reads the real workerStatus from lastRunResult.
     expect(env.terminationReason.workerSelfAssessment).toBe('failed');
@@ -58,7 +58,7 @@ describe('M3 fix — AC-16 — truthful workerSelfAssessment in compose', () => 
   });
 });
 
-describe('M4 fix — AC-17 — rework that cleared findings yields ok, not review_rejected', () => {
+describe('M4 fix — AC-17 — rework that cleared findings yields ok, not review_quality_findings_unresolved', () => {
   it('promotes to ok when reworkApplied=true and no reworkError, even with stale reviewVerdict=changes_required', async () => {
     const state = mkState({
       reviewPolicy: 'full',
@@ -80,7 +80,7 @@ describe('M4 fix — AC-17 — rework that cleared findings yields ok, not revie
     state.gates = {};
     await composeHandler(state);
     const env = (state as any).responseEnvelope;
-    // The M4 bug: this used to be 'incomplete' + 'review_rejected'. After the fix,
+    // The M4 bug: this used to be 'incomplete' + 'review_quality_findings_unresolved'. After the fix,
     // reworkApplied without error promotes to ok.
     expect(env.status).toBe('ok');
     expect(env.errorCode).not.toBe('review_rejected');
@@ -108,7 +108,7 @@ describe('M4 fix — AC-17 — rework that cleared findings yields ok, not revie
     await composeHandler(state);
     const env = (state as any).responseEnvelope;
     expect(env.status).toBe('incomplete');
-    expect(env.errorCode).toBe('review_rejected');
+    expect(env.errorCode).toBe('review_quality_findings_unresolved');
     // M3 fix still applies: truthful workerSelfAssessment.
     expect(env.terminationReason.workerSelfAssessment).toBe('failed');
   });
