@@ -199,6 +199,35 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 4 |
 | `reviewPolicy` values `'spec_only'` / `'off'` | Removed. Closed enum is `'full' | 'quality_only' | 'diff_only' | 'none'` |
 
+### v0.4.7.5 — Intake directory dissolved; per-route briefSlots co-located
+
+The `packages/core/src/intake/` directory was removed. Every dispatching route now owns its briefSlot at `packages/core/src/tools/<route>/brief-slot.ts` with the uniform shape `<route>BriefSlot` + `<Route>Brief`.
+
+**Removed public exports (TypeScript error on upgrade if consumed externally):**
+
+- `runIntakePipeline`, `classifyDraft`, `inferMissingFields`, `resolveDraft`
+- `validateSource`
+- `compileExecutePlan`, `executePlanSlot`, `makeRetrySlot`
+- `extractPlanSection`, `PlanExtractionError`, `PlanSection`
+- `compileDelegatePrompt`
+- `createDraftId`, `parseDraftId`, `generateRequestId`
+- Intake route enums (`SourceRoute`, `AnySource`, `DelegateSource`, `IntakeResult`, etc.)
+
+**Removed `./intake/*` subpath exports from `packages/core/package.json`** (a separate flavor of break for consumers importing via the subpath form):
+
+- `./intake/pipeline`, `./intake/classify`, `./intake/resolve`, `./intake/field-inferer`, `./intake/source-schema`, `./intake/types`, `./intake/draft-id`, `./intake/verify-command-validator`
+- `./intake/brief-compiler-slots/debug`, `./intake/brief-compiler-slots/delegate`, `./intake/brief-compiler-slots/execute-plan`, `./intake/brief-compiler-slots/research`, `./intake/brief-compiler-slots/review`
+
+**Renamed:** `toolExecutePlanBriefSlot` → `executePlanBriefSlot` (drops the `tool` prefix that disambiguated from the deleted `executePlanSlot`).
+
+**Re-routed (still exported under the same name from new home):**
+
+- `BriefQualityPolicy` — now from `core/src/types/brief-quality-policy.ts`
+- `DraftTask` — now from `core/src/types/draft-task.ts`
+- `ReviewPolicy` — extracted to `core/src/types/review-policy.ts` (shared by delegate + execute-plan briefs)
+
+**Server-side move:** `verify-command-validator.ts` moved from `core/src/intake/` to `packages/server/src/http/validation/verify-command.ts`. Internal to server package; no public-API impact.
+
 Where to add:
 
 - **A new provider:** `core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `core/src/provider.ts` factory.
