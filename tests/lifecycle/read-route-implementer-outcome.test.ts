@@ -28,7 +28,8 @@ describe('runReadRouteImplementer — outcome aggregation', () => {
       cachedPrefix: 'prefix',
       criteria: [{ id: 'c1', title: 'a', description: '' }, { id: 'c2', title: 'b', description: '' }],
       buildSuffix: () => 'suffix',
-      legalOutcomes: ['found', 'clean'] as const,
+      // Test the not_applicable aggregation path — route must legally allow it.
+      legalOutcomes: ['found', 'clean', 'not_applicable'] as const,
     });
     expect(result.findingsOutcome).toBe('not_applicable');
     expect(result.findingsOutcomeReason).toBe('reason A; reason B');

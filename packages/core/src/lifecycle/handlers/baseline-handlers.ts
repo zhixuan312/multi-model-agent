@@ -251,6 +251,31 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
   // produced. See enrich-runtime-result.ts.
   enrichRuntimeResult(state);
 
+  // Bridge the composed findings onto envelope.findings. envelopeToPublicResult
+  // (server batch handler) serves env.findings to HTTP callers — without this
+  // push, every per-task result has findings:[] regardless of what the worker
+  // emitted or the parser extracted. recordFinding exists on the envelope API
+  // but had no producer until now. Normalize required envelope fields (id,
+  // evidence, source) since parser-emitted findings only set them when present.
+  const ctx = state.executionContext as { envelope?: { recordFinding?: (f: unknown) => void; isSealed?: () => boolean } } | undefined;
+  const envelope = ctx?.envelope;
+  if (envelope?.recordFinding && !envelope.isSealed?.() && Array.isArray(payload.findings)) {
+    payload.findings.forEach((f, i) => {
+      const fin = f as Partial<{ id: string; severity: string; category: string; claim: string; evidence: string; suggestion: string; source: 'implementer' | 'reviewer' }>;
+      try {
+        envelope.recordFinding!({
+          id: fin.id ?? `F${i + 1}`,
+          severity: fin.severity ?? 'medium',
+          category: fin.category ?? 'unknown',
+          claim: fin.claim ?? '',
+          evidence: fin.evidence ?? '',
+          ...(fin.suggestion !== undefined && { suggestion: fin.suggestion }),
+          source: fin.source ?? 'implementer',
+        });
+      } catch { /* sealed mid-call → harmless */ }
+    });
+  }
+
   return {
     outcome: 'advance',
     payload,

@@ -88,7 +88,10 @@ found`;
     expect(result.outcome).toBe('found');
   });
 
-  it('returns clean as default when outcome line is empty or whitespace-only', () => {
+  it('keeps inferred outcome when ## Outcome value is empty or whitespace-only', () => {
+    // Tolerance rule: when worker emits ## Outcome but leaves the value blank,
+    // trust the inferred outcome (from finding presence) rather than overriding
+    // to 'clean'. A finding is present → outcome stays 'found'.
     const text = `## Finding 1: bug
 - Severity: high
 - Category: x
@@ -96,6 +99,6 @@ found`;
 ## Outcome
    `;
     const result = parseFindings(text, 'C1');
-    expect(result.outcome).toBe('clean');
+    expect(result.outcome).toBe('found');
   });
 });
