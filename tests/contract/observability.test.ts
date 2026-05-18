@@ -29,7 +29,7 @@ describe('observability contract — envelope + plain entries', () => {
       bus,
     );
 
-    store.recordToolCall({ stage: 'implementing', tool: 'bash', filesRead: [], filesWritten: [] });
+    store.recordToolCall({ stage: 'implementing', tool: 'bash', filesWritten: [] });
     store.seal({ status: 'done', terminalAt: new Date().toISOString(), stopReason: null, realFilesChanged: [] });
 
     const envelopeSnapshots = captured.filter((m) => m.type === 'envelope');
@@ -51,7 +51,6 @@ describe('observability contract — envelope + plain entries', () => {
       expect(['running', 'done', 'done_with_concerns', 'failed']).toContain(env.status);
       expect(Array.isArray(env.stages)).toBe(true);
       expect(Array.isArray(env.toolCalls)).toBe(true);
-      expect(Array.isArray(env.filesRead)).toBe(true);
       expect(Array.isArray(env.filesWritten)).toBe(true);
       expect(Array.isArray(env.realFilesChanged)).toBe(true);
       expect(typeof env.totalCostUSD).toBe('number');

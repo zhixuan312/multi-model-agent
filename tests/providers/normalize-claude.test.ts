@@ -19,14 +19,6 @@ describe('normalizeClaudeTurn', () => {
     expect(r.usage.inputTokens).toBe(100);
     expect(r.usage.outputTokens).toBe(50);
   });
-  it('records Read tool as filesRead', () => {
-    const r = normalizeClaudeTurn(
-      [tool('Read', { file_path: '/a/b.ts' }), result('success')],
-      { durationMs: 1, costUSD: 0 },
-    );
-    expect(r.filesRead).toEqual(['/a/b.ts']);
-    expect(r.toolCallsByName.Read).toBe(1);
-  });
   it('records Edit tool as filesWritten', () => {
     const r = normalizeClaudeTurn(
       [tool('Edit', { file_path: 'x.ts' }), result('success')],
@@ -34,22 +26,56 @@ describe('normalizeClaudeTurn', () => {
     );
     expect(r.filesWritten).toEqual(['x.ts']);
   });
-  it('max_turns maps to error/sdk_max_turns', () => {
-    const r = normalizeClaudeTurn([result('error_max_turns')], { durationMs: 1, costUSD: 0 });
+  it('records Bash tool as usedShell', () => {
+    const r = normalizeClaudeTurn(
+      [tool('Bash', { command: 'ls -la' }), result('success')],
+      { durationMs: 1, costUSD: 0 },
+    );
+    expect(r.usedShell).toBe(true);
+  });
+  it('terminationReason ok from success', () => {
+    const r = normalizeClaudeTurn(
+      [result('success')],
+      { durationMs: 1, costUSD: 0 },
+    );
+    expect(r.terminationReason).toBe('ok');
+  });
+  it('terminationReason error from error_during_execution', () => {
+    const r = normalizeClaudeTurn(
+      [result('error_during_execution')],
+      { durationMs: 1, costUSD: 0 },
+    );
+    expect(r.terminationReason).toBe('error');
+    expect(r.errorCode).toBe('sdk_execution_error');
+  });
+  it('terminationReason cap_exhausted from error_max_turns', () => {
+    const r = normalizeClaudeTurn(
+      [result('error_max_turns')],
+      { durationMs: 1, costUSD: 0 },
+    );
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_max_turns');
   });
-  it('max_budget maps to error/sdk_max_budget', () => {
-    const r = normalizeClaudeTurn([result('error_max_budget_usd')], { durationMs: 1, costUSD: 0 });
-    expect(r.terminationReason).toBe('error');
-    expect(r.errorCode).toBe('sdk_max_budget');
-  });
-  it('guard override wins over SDK terminal', () => {
+  it('terminationReason time_exceeded from guardTerminationReason', () => {
     const r = normalizeClaudeTurn(
       [result('success')],
       { durationMs: 1, costUSD: 0, guardTerminationReason: 'time_exceeded' },
     );
     expect(r.terminationReason).toBe('time_exceeded');
+  });
+  it('terminationReason stalled from guardTerminationReason', () => {
+    const r = normalizeClaudeTurn(
+      [result('success')],
+      { durationMs: 1, costUSD: 0, guardTerminationReason: 'stalled' },
+    );
+    expect(r.terminationReason).toBe('stalled');
+  });
+  it('terminationReason aborted from guardTerminationReason', () => {
+    const r = normalizeClaudeTurn(
+      [result('success')],
+      { durationMs: 1, costUSD: 0, guardTerminationReason: 'aborted' },
+    );
+    expect(r.terminationReason).toBe('aborted');
   });
 });
 

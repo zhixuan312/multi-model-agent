@@ -111,8 +111,12 @@ export function asyncDispatch<TResult>(
         const resultObj = result as Record<string, unknown> | undefined;
 
         const entryAfter = batchRegistry.get(batchId);
-        if (entryAfter) entryAfter.tasksCompleted = 1;
-        batchRegistry.complete(batchId);
+        if (entryAfter) {
+          // For multi-task batches the executor bumped tasksTotal from the
+          // placeholder of 1 to the real fan-out width. Mark every task as
+          // completed so the live/terminal headline reports n/n complete.
+          entryAfter.tasksCompleted = Math.max(entryAfter.tasksTotal ?? 1, 1);
+        }
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
         const durationMs = Date.now() - startedAtMs;
 
@@ -123,14 +127,22 @@ export function asyncDispatch<TResult>(
         // misleadingly while the verbose log gives operators no signal
         // that anything went wrong. Detection uses STRUCTURED FIELDS ONLY,
         // never string comparisons.
+        //
+        // Order matters: detect failure FIRST, then call complete() or
+        // fail() exactly once. Pre-fix, complete() ran unconditionally
+        // before fail() — the fail() then no-op'd because the registry
+        // entry was already terminal, leaving the wire error field stuck
+        // at "not_applicable" even when detectFailure returned a real
+        // failure. Probe I (multi-task /delegate) hit this every time.
         const failure = detectFailure(resultObj);
         if (failure) {
-          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: failure.code, error_message: failure.message } });
           batchRegistry.fail(batchId, failure);
+          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { batch_id: batchId, tool, duration_ms: durationMs, error_code: failure.code, error_message: failure.message } });
           process.stderr.write(
             `[mmagent] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
           );
         } else {
+          batchRegistry.complete(batchId);
           const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
           const groupCount = groupingInfo?.groupCount;
           const groupSizes = groupingInfo?.groupSizes;

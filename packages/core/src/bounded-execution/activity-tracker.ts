@@ -41,9 +41,7 @@ export class ActivityTracker {
   private attemptCap: number | undefined;
 
   // Progress counters (cumulative totals)
-  private filesRead = 0;
   private filesWritten = 0;
-  private toolCalls = 0;
 
   // Cost
   private costUSD: number | null = null;
@@ -97,9 +95,7 @@ export class ActivityTracker {
       attemptCap: this.attemptCap,
       provider: this.provider,
       progress: {
-        filesRead: this.filesRead,
         filesWritten: this.filesWritten,
-        toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
       costDeltaVsMainUSD: this.costDeltaVsMainUSD,
@@ -131,9 +127,7 @@ export class ActivityTracker {
     this.stageCount = stageCount;
     this.reviewRound = undefined;
     this.attemptCap = undefined;
-    this.filesRead = 0;
     this.filesWritten = 0;
-    this.toolCalls = 0;
     this.costUSD = null;
     this.costDeltaVsMainUSD = null;
     this.timer = setInterval(() => this.emit(false), this.intervalMs);
@@ -253,11 +247,9 @@ export class ActivityTracker {
     this.stageCount = stageCount;
   }
 
-  updateProgress(filesRead: number, filesWritten: number, toolCalls: number): void {
+  updateProgress(filesWritten: number): void {
     if (!this.started || this.stopped) return;
-    this.filesRead = filesRead;
     this.filesWritten = filesWritten;
-    this.toolCalls = toolCalls;
   }
 
   updateCost(costUSD: number | null, costDeltaVsMainUSD: number | null): void {
@@ -266,19 +258,9 @@ export class ActivityTracker {
     this.costDeltaVsMainUSD = costDeltaVsMainUSD;
   }
 
-  recordFileRead(): void {
-    if (!this.started || this.stopped) return;
-    this.filesRead++;
-  }
-
   recordFileWrite(): void {
     if (!this.started || this.stopped) return;
     this.filesWritten++;
-  }
-
-  recordToolCall(): void {
-    if (!this.started || this.stopped) return;
-    this.toolCalls++;
   }
 
   applyCost(cost: { costUSD: number; costDeltaVsMainUSD: number }): void {
@@ -328,9 +310,7 @@ export class ActivityTracker {
       reviewRound: this.reviewRound,
       attemptCap: this.attemptCap,
       progress: {
-        filesRead: this.filesRead,
         filesWritten: this.filesWritten,
-        toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
       costDeltaVsMainUSD: this.costDeltaVsMainUSD,
@@ -357,9 +337,7 @@ export class ActivityTracker {
     const stats = [
       elapsed,
       ...(costClause ? [costClause] : []),
-      `${this.filesRead} read`,
       `${this.filesWritten} written`,
-      `${this.toolCalls} tool calls`,
     ].join(', ');
     return `${prefix}${roundSuffix}${providerClause} — ${stats}`;
   }
@@ -407,9 +385,7 @@ export class ActivityTracker {
     const parts: string[] = [];
     const cost = this.composeCostClauseSafe();
     if (cost) parts.push(cost);
-    if (this.filesRead > 0) parts.push(`${this.filesRead} read`);
     if (this.filesWritten > 0) parts.push(`${this.filesWritten} written`);
-    if (this.toolCalls > 0) parts.push(`${this.toolCalls} tool ${this.toolCalls === 1 ? 'call' : 'calls'}`);
     return parts.length === 0 ? '' : `, ${parts.join(', ')}`;
   }
 

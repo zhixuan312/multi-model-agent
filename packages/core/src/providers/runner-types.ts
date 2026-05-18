@@ -14,9 +14,6 @@ export type RunStatus =
   | 'ok'
   | 'incomplete'
   | 'timeout'
-  | 'api_aborted'
-  | 'api_error'
-  | 'provider_transport_failure'
   | 'error'
   | 'brief_too_vague'
   | 'unavailable';
@@ -60,8 +57,7 @@ export interface CostBreakdown {
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'incomplete' | 'timeout' | 'time_ceiling' | 'degenerate_exhausted'
-       | 'api_error' | 'provider_transport_failure' | 'api_aborted' | 'brief_too_vague' | 'error'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'time_ceiling' | 'degenerate_exhausted' | 'brief_too_vague' | 'error'
   turnsUsed: number
   hasFileArtifacts: boolean
   usedShell: boolean
@@ -207,9 +203,7 @@ export type ProgressEvent = {
   reviewRound?: number
   attemptCap?: number
   progress: {
-    filesRead: number
     filesWritten: number
-    toolCalls: number
   }
   costUSD: number | null
   costDeltaVsMainUSD: number | null

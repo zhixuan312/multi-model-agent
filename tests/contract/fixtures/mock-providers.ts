@@ -19,7 +19,7 @@ import type {
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
-import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
+import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** v4.4: build a Session whose `send()` invokes the same RuntimeRunResult-producing
  *  runner the legacy `provider.run()` path uses. Lets every mock provider
@@ -29,20 +29,10 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
   // Each session.send() represents one model session whose internal turn
   // count (claude-agent-sdk reports num_turns, codex CLI reports turns)
   // is what TurnResult.turns carries. The mock simply forwards rr.turns.
-  const toolCallsByName: Record<string, number> = {};
-  const toolCalls = Array.isArray(rr.toolCalls) ? rr.toolCalls : [];
-  for (const entry of toolCalls) {
-    const raw = typeof entry === 'string' ? entry : '';
-    const parenIdx = raw.indexOf('(');
-    const name = parenIdx === -1 ? raw : raw.slice(0, parenIdx);
-    if (name) toolCallsByName[name] = (toolCallsByName[name] ?? 0) + 1;
-  }
   return {
     output: rr.output ?? '',
     usage: rr.usage,
-    filesRead: rr.filesRead ?? [],
     filesWritten: rr.filesWritten ?? [],
-    toolCallsByName,
     turns: rr.turns ?? 1,
     durationMs: rr.durationMs ?? 0,
     costUSD: rr.actualCostUSD ?? rr.cost?.costUSD ?? null,
@@ -65,7 +55,6 @@ function statusToTermination(
       if (incompleteReason === 'stall') return 'stalled';
       return 'cap_exhausted';
     case 'error':
-    case 'api_error':
     case 'auth_error':
     case 'rate_limited':
     default:
@@ -144,9 +133,7 @@ function buildOk(opts: MockProviderOptions): RuntimeRunResult {
     status: 'ok',
     usage: usage(cost),
     turns: 1,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [attempt('ok', 1, cost)],
     durationMs: 0,
@@ -169,9 +156,7 @@ function buildIncomplete(opts: MockProviderOptions): RuntimeRunResult {
     status: 'incomplete',
     usage: usage(0.001),
     turns: 1,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [attempt('incomplete', 1, 0.001)],
     durationMs: 0,
@@ -193,9 +178,7 @@ function buildMaxTurns(opts: MockProviderOptions): RuntimeRunResult {
     status: 'incomplete',
     usage: usage(0.002),
     turns: 99,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [attempt('incomplete', 99, 0.002)],
     durationMs: 0,
@@ -217,9 +200,7 @@ function buildReviewRework(opts: MockProviderOptions): RuntimeRunResult {
     status: 'ok',
     usage: usage(0.001),
     turns: 1,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [attempt('ok', 1, 0.001)],
     durationMs: 0,
@@ -244,9 +225,7 @@ function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): 
     status: 'ok',
     usage: usage(opts.cost ?? 0.001),
     turns: 1,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [attempt('ok', 1, opts.cost ?? 0.001)],
     durationMs: 0,
@@ -270,9 +249,7 @@ function buildFromSequenceItem(item: SequenceItem): RuntimeRunResult {
     status: item.status ?? 'ok',
     usage: usage(cost),
     turns: 1,
-    filesRead: [],
     filesWritten: item.filesWritten ?? [],
-    toolCalls: [],
     outputIsDiagnostic: item.status !== 'ok',
     escalationLog: [attempt(item.status ?? 'ok', 1, cost)],
     durationMs: 0,
@@ -413,7 +390,7 @@ export interface FailProviderOptions {
 
 export function failProvider(messageOrOpts: string | FailProviderOptions = 'mocked failure'): Provider {
   const opts: FailProviderOptions = typeof messageOrOpts === 'string'
-    ? { status: 'api_error', errorCode: messageOrOpts }
+    ? { status: 'error', errorCode: messageOrOpts }
     : messageOrOpts;
   if (opts.status && opts.status !== 'ok') {
     const statusFinal: RunStatus = opts.status;
@@ -422,9 +399,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
       status: statusFinal,
       usage: usage(null),
       turns: 1,
-      filesRead: [],
       filesWritten: [],
-      toolCalls: [],
       outputIsDiagnostic: true,
       escalationLog: [attempt(statusFinal, 1, null)],
       durationMs: 0,
@@ -438,7 +413,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
         workerSelfAssessment: 'failed',
         wasPromoted: false,
       },
-      structuredError: { code: opts.errorCode ?? 'api_error', message: opts.errorCode ?? statusFinal },
+      structuredError: { code: opts.errorCode ?? 'runner_crash', message: opts.errorCode ?? statusFinal },
     });
     return {
       name: 'mock-fail',

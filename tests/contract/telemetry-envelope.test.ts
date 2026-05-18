@@ -46,8 +46,8 @@ describe('telemetry envelope (v2)', () => {
       outputTokens: 50,
       cachedReadTokens: 0,
       cachedNonReadTokens: 0,
-      toolCallCount: 0,
-      filesReadCount: 0,
+      
+      
       filesWrittenCount: 0,
     });
 

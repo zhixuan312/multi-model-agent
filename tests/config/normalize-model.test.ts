@@ -159,6 +159,22 @@ describe('extractCanonicalModelName', () => {
   it('preserves model name case after prefix strip', () => {
     expect(extractCanonicalModelName('bedrock.MiniMax-M2.7')).toBe('MiniMax-M2.7');
   });
+
+  // Regression: bare names with non-canonical casing on the prefix portion
+  // (e.g. user typo `claude-Haiku-4-5`) used to pass the case-insensitive
+  // prefix check but be returned verbatim, producing duplicate model rows
+  // in telemetry rollups. Now the canonical prefix casing is spliced in.
+  it('canonicalizes prefix casing for bare claude-Haiku-4-5', () => {
+    expect(extractCanonicalModelName('claude-Haiku-4-5')).toBe('claude-haiku-4-5');
+  });
+
+  it('canonicalizes prefix casing for bare CLAUDE-OPUS-4-7', () => {
+    expect(extractCanonicalModelName('CLAUDE-OPUS-4-7')).toBe('claude-opus-4-7');
+  });
+
+  it('canonicalizes prefix casing after vendor strip', () => {
+    expect(extractCanonicalModelName('bedrock.claude-Haiku-4-5')).toBe('claude-haiku-4-5');
+  });
 });
 
 // findModelProfile still uses prefix collapse for cost lookup — the

@@ -6,31 +6,24 @@
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { TurnResult, TokenUsage } from '../types/run-result.js';
-
-const READ_TOOLS = new Set(['Read', 'Grep', 'Glob']);
-const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
+import { classifyClaudeToolCall, CLAUDE_SHELL_TOOLS } from './claude-tool-categories.js';
 
 export function normalizeClaudeTurn(
   events: SDKMessage[],
   args: {
     durationMs: number;
-    /** Cost computed by the caller from usage × rate card. */
     costUSD: number;
-    /** When set, overrides any SDK-reported terminal reason. */
     guardTerminationReason?: TurnResult['terminationReason'];
-    /** Model ID for this turn. */
     model?: string;
   },
 ): TurnResult {
   let outputText = '';
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
-  const filesRead = new Set<string>();
   const filesWritten = new Set<string>();
-  const toolCallsByName: Record<string, number> = {};
+  let usedShell = false;
   let turns = 0;
   let sdkTermination: TurnResult['terminationReason'] = 'ok';
   let errorCode: string | undefined;
-  let errorMessage: string | undefined;
 
   for (const ev of events) {
     if (ev.type === 'assistant') {
@@ -38,12 +31,11 @@ export function normalizeClaudeTurn(
       for (const b of blocks) {
         if (b.type === 'text') outputText += (b as { text?: string }).text ?? '';
         if (b.type === 'tool_use') {
-          const name = ((b as { name?: string }).name) ?? 'unknown';
-          toolCallsByName[name] = (toolCallsByName[name] ?? 0) + 1;
-          const input = (b as { input?: { file_path?: string; pattern?: string } }).input;
-          const path = input?.file_path ?? input?.pattern;
-          if (path && READ_TOOLS.has(name)) filesRead.add(path);
-          if (path && WRITE_TOOLS.has(name)) filesWritten.add(path);
+          const name = ((b as { name?: string }).name) ?? '';
+          const input = (b as { input?: unknown }).input;
+          const { writtenPath, isShell } = classifyClaudeToolCall(name, input);
+          if (writtenPath) filesWritten.add(writtenPath);
+          if (isShell) usedShell = true;
         }
       }
       turns += 1;
@@ -58,7 +50,6 @@ export function normalizeClaudeTurn(
       const subtype = (ev as { subtype: string }).subtype;
       if (subtype === 'success') {
         sdkTermination = 'ok';
-        // The SDK's `result` field carries the final assistant text for success.
         const finalText = (ev as { result?: string }).result;
         if (finalText && !outputText) outputText = finalText;
       } else if (subtype === 'error_max_turns') {
@@ -67,8 +58,6 @@ export function normalizeClaudeTurn(
         sdkTermination = 'error'; errorCode = 'sdk_max_budget';
       } else if (subtype === 'error_during_execution') {
         sdkTermination = 'error'; errorCode = 'sdk_execution_error';
-        const errs = (ev as { errors?: string[] }).errors;
-        if (errs?.length) errorMessage = errs[0];
       } else if (subtype === 'error_max_structured_output_retries') {
         sdkTermination = 'error'; errorCode = 'sdk_max_structured_output_retries';
       }
@@ -79,15 +68,12 @@ export function normalizeClaudeTurn(
   return {
     output: outputText,
     usage,
-    filesRead: [...filesRead],
     filesWritten: [...filesWritten],
-    toolCallsByName,
+    usedShell,
     turns,
     durationMs: args.durationMs,
     costUSD: args.costUSD,
     terminationReason: finalTermination,
     ...(errorCode && { errorCode }),
-    ...(errorMessage && { errorMessage }),
-    ...(args.model && { model: args.model }),
   };
 }

@@ -26,9 +26,7 @@ describe('RuntimeRunResult shape (Phase 0 contract)', () => {
       status: 'done' as const,
       usage: { input: 0, output: 0, costUSD: 0 },
       turns: 1,
-      filesRead: [],
       filesWritten: [],
-      toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
       agents: {
@@ -48,7 +46,7 @@ describe('RuntimeRunResult shape (Phase 0 contract)', () => {
 
     const required = [
       'agents','escalationLog','models','reviewRounds','specReviewStatus',
-      'qualityReviewStatus','workerStatus','terminationReason','toolCalls',
+      'qualityReviewStatus','workerStatus','terminationReason',
       'usage','stageStats',
     ];
     for (const key of required) {

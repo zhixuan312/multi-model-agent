@@ -31,7 +31,7 @@ describe('ActivityTracker', () => {
         expect(first.stageCount).toBe(3);
         expect(first.reviewRound).toBeUndefined();
         expect(first.attemptCap).toBeUndefined();
-        expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0 });
+        expect(first.progress).toEqual({ filesWritten: 0 });
         expect(first.costUSD).toBeNull();
         expect(first.costDeltaVsMainUSD).toBeNull();
         expect(first.final).toBe(false);
@@ -158,7 +158,7 @@ describe('ActivityTracker', () => {
     });
     timer.start(1);
 
-    timer.updateProgress(5, 2, 10);
+    timer.updateProgress(2);
     expect(events).toHaveLength(0);
     timer.stop();
   });
@@ -183,13 +183,12 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(1);
-    timer.updateProgress(3, 1, 8);
+    timer.updateProgress(1);
     timer.updateCost(0.05, null);
 
     timer.stop();
     expect(events).toHaveLength(1);
     expect(events[0].final).toBe(true);
-    expect(events[0].progress.filesRead).toBe(3);
     expect(events[0].costUSD).toBe(0.05);
   });
 
@@ -218,7 +217,7 @@ describe('ActivityTracker', () => {
     timer.stop();
     const countAfterStop = events.length;
 
-    timer.updateProgress(10, 10, 10);
+    timer.updateProgress(10);
     timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     timer.setProvider('new-provider');
     expect(events.length).toBe(countAfterStop);
@@ -233,7 +232,7 @@ describe('ActivityTracker', () => {
     });
     timer.start(3);
     timer.updateCost(0.05, -0.12);
-    timer.updateProgress(4, 2, 12);
+    timer.updateProgress(2);
 
     timer.stop();
     const final = events.find(e => e.final)!;
@@ -249,7 +248,7 @@ describe('ActivityTracker', () => {
     });
     timer.start(1);
     timer.updateCost(0.03, null);
-    timer.updateProgress(4, 2, 12);
+    timer.updateProgress(2);
 
     timer.stop();
     const final = events.find(e => e.final)!;
@@ -280,16 +279,14 @@ describe('ActivityTracker', () => {
     });
     timer.start(5);
     timer.transition({ stage: 'review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
-    timer.updateProgress(2, 1, 7);
+    timer.updateProgress(1);
     timer.updateCost(0.03, -0.12);
 
     const tick = timer.getHeartbeatTickInfo();
     expect(tick.headline).toContain('[3/5] Review');
     expect(tick.headline).toContain('(round 1/2)');
     expect(tick.headline).toContain('(gpt-5.4)');
-    expect(tick.headline).toContain('2 read');
     expect(tick.headline).toContain('1 written');
-    expect(tick.headline).toContain('7 tool calls');
     expect(tick.headline).toContain('$0.12 saved');
     timer.stop();
   });
@@ -316,12 +313,11 @@ describe('ActivityTracker', () => {
       provider: 'test',
       intervalMs: 10_000,
     });
-    timer.updateProgress(5, 3, 10);
+    timer.updateProgress(3);
     timer.updateCost(0.05, -0.10);
     timer.start(1);
     timer.stop();
     const final = events.find(e => e.final)!;
-    expect(final.progress.filesRead).toBe(0);
     expect(final.costUSD).toBeNull();
   });
 

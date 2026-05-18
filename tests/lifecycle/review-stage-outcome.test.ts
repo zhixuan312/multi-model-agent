@@ -4,21 +4,16 @@ import { reviewHandler } from '../../packages/core/src/lifecycle/handlers/review
 let mockReviewerTurns: Array<ReturnType<typeof fakeReviewerTurn>> = [];
 let turnIndex = 0;
 
-vi.mock('../../packages/core/src/review/run-reviewer.js', () => ({
-  runReviewerTurn: vi.fn().mockImplementation(() => {
-    const turn = mockReviewerTurns[turnIndex++];
-    return Promise.resolve(turn);
-  }),
+vi.mock('../../packages/core/src/review/tier-policy.js', () => ({
   invertedReviewerTier: vi.fn(() => 'complex'),
 }));
 
 function fakeReviewerTurn(verdict: 'approved' | 'changes_required', findings = '') {
   const findingsSection = findings ? `## Findings\n${findings}` : '## Findings\n(none)';
   return {
-    kind: 'completed' as const,
-    text: `## Verdict\n${verdict}\n\n${findingsSection}\n\n## Outcome\n${verdict === 'approved' ? 'clean' : 'found'}`,
-    costUSD: 0, ms: 100, model: 'mock-model', inputTokens: 1, outputTokens: 1,
-    cachedReadTokens: 0, cachedNonReadTokens: 0, turnsUsed: 1,
+    output: `## Verdict\n${verdict}\n\n${findingsSection}\n\n## Outcome\n${verdict === 'approved' ? 'clean' : 'found'}`,
+    costUSD: 0, turns: 1,
+    usage: { inputTokens: 1, outputTokens: 1, cachedReadTokens: 0, cachedNonReadTokens: 0 },
   };
 }
 
@@ -29,7 +24,16 @@ function makeState(reviewerTurns: Array<ReturnType<typeof fakeReviewerTurn>>) {
     reviewPolicy: 'full',
     gates: { implement: { payload: { summary: 's', filesChanged: [] } } },
     task: { brief: 'b' },
-    executionContext: { assignedTier: 'standard' },
+    executionContext: {
+      assignedTier: 'standard',
+      providers: { standard: {}, complex: {} },
+      getSession: vi.fn(() => ({
+        send: vi.fn().mockImplementation(() => {
+          const turn = mockReviewerTurns[turnIndex++];
+          return Promise.resolve(turn);
+        }),
+      })),
+    },
     lastRunResult: { stageStats: {} },
   } as any;
 }

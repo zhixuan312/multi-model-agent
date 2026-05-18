@@ -78,12 +78,12 @@ export async function runTaskLifecycleFixtures(): Promise<EventType[]> {
   });
 }
 
-/** Edge cases: batch_failed via invalid request, api_error provider, stall_abort. */
+/** Edge cases: batch_failed via invalid request, error provider, stall_abort. */
 export async function runEdgeCaseFixtures(): Promise<EventType[]> {
   const events: EventType[] = [];
 
-  // Sub-fixture A: failProvider returning api_error — triggers batch_failed
-  events.push(...await bootAndCapture(failProvider({ status: 'api_error', errorCode: 'provider_api_error' }), async (h, cwd) => {
+  // Sub-fixture A: failProvider returning error — triggers batch_failed
+  events.push(...await bootAndCapture(failProvider({ status: 'error', errorCode: 'runner_crash' }), async (h, cwd) => {
     const dispatch = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },

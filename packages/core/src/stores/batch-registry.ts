@@ -27,7 +27,6 @@ export interface HeadlineSnapshot {
   tier?: string;
   stageDone?: number;
   stageTotal?: number;
-  toolReads?: number;
   toolWrites?: number;
   toolTotal?: number;
 }

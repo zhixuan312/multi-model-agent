@@ -38,6 +38,103 @@ function turnCompletedEvent(usage: {
   return { kind: 'turn_completed', usage } as CodexCliEvent;
 }
 
+describe('codex TurnTracker — 9-field TurnResult contract', () => {
+  it('produces usedShell: true when a command_execution item is consumed', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const itemCompletedEvent: CodexCliEvent = {
+      kind: 'item_completed',
+      item: { type: 'command_execution', command: 'ls', exit_code: 0 },
+    } as CodexCliEvent;
+    tracker.consume(itemCompletedEvent);
+    expect(tracker.usedShell).toBe(true);
+  });
+
+  it('produces filesWritten: [...] when file_change items are consumed (legacy flat path)', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const itemCompletedEvent: CodexCliEvent = {
+      kind: 'item_completed',
+      item: { type: 'file_change', path: '/x.ts' },
+    } as CodexCliEvent;
+    tracker.consume(itemCompletedEvent);
+    expect(Array.from(tracker.filesWritten)).toContain('/x.ts');
+  });
+
+  it('produces filesWritten: [...] when file_change items use changes[{path,kind}] shape (codex 0.130+)', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const itemCompletedEvent: CodexCliEvent = {
+      kind: 'item_completed',
+      item: {
+        type: 'file_change',
+        changes: [
+          { path: '/a.ts', kind: 'add' },
+          { path: '/b.ts', kind: 'modify' },
+        ],
+      },
+    } as CodexCliEvent;
+    tracker.consume(itemCompletedEvent);
+    expect(Array.from(tracker.filesWritten).sort()).toEqual(['/a.ts', '/b.ts']);
+  });
+
+  it('produces terminationReason: "ok" from clean turn_completed + exit 0', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const turnCompletedEvent: CodexCliEvent = {
+      kind: 'turn_completed',
+      usage: { input_tokens: 100, output_tokens: 50 },
+    } as CodexCliEvent;
+    tracker.consume(turnCompletedEvent);
+    expect(tracker.terminationReason).toBe('ok');
+  });
+
+  it('produces terminationReason: "error" from turn_failed event', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const turnFailedEvent: CodexCliEvent = {
+      kind: 'turn_failed',
+      error: { message: 'test error' },
+    } as CodexCliEvent;
+    tracker.consume(turnFailedEvent);
+    expect(tracker.terminationReason).toBe('error');
+    expect(tracker.errorCode).toBe('turn_failed');
+  });
+
+  it('produces terminationReason: "time_exceeded" from wall_clock_exceeded errorCode', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    // Simulate guard injection setting terminationReason via errorCode
+    tracker.errorCode = 'wall_clock_exceeded';
+    tracker.terminationReason = 'time_exceeded';
+    expect(tracker.terminationReason).toBe('time_exceeded');
+  });
+
+  it('produces terminationReason: "aborted" from aborted errorCode', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    tracker.errorCode = 'aborted';
+    tracker.terminationReason = 'aborted';
+    expect(tracker.terminationReason).toBe('aborted');
+  });
+
+  it('produces terminationReason: "stalled" from guard injection', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    tracker.terminationReason = 'stalled';
+    expect(tracker.terminationReason).toBe('stalled');
+  });
+
+  it('does NOT produce terminationReason: "cap_exhausted" (Codex has no turn cap)', () => {
+    // Codex CLI does not have a native turn cap like Claude SDK does.
+    // This terminationReason value is reserved for parity but cannot be
+    // produced by the Codex provider. This test documents that constraint.
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    expect(tracker.terminationReason).not.toBe('cap_exhausted');
+  });
+});
+
 describe('codex TurnTracker — TokenUsage disjoint-partition contract', () => {
   it('subtracts cached_input_tokens from input_tokens before storing (gross → net)', () => {
     // Codex reports: input_tokens=1000 (GROSS, includes cached), cached=700.

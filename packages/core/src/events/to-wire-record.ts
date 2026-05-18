@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { extractCanonicalModelName, findModelProfile } from '../config/model-profile-registry.js';
 import type { ModelFamily } from '../config/model-profile-registry.js';
+import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import type { TaskEnvelope } from './task-envelope.js';
 import type { TaskCompletedEventType } from './wire-schema.js';
 import { ValidatedTaskCompletedEventSchema } from './wire-schema.js';
@@ -107,6 +108,14 @@ export function toWireRecord(
     (env.structuredError as { code?: string } | null)?.code ?? null,
   );
 
+  // Resolve the main model's rate card once; per-stage and top-level
+  // mainCostUSD reuse it. Null when mainModel is unset or unknown to the
+  // profile registry — in that case mainCostUSD / costDeltaVsMainUSD stay
+  // null at every level (per PRIVACY.md). Restored after the v4.7.2
+  // envelope-unification refactor accidentally dropped this compute
+  // (regression introduced when event-builder.ts was deleted).
+  const mainCard = resolveRateCard(env.mainModel);
+
   // build stages with route-specific extras
   const wireStages = env.stages.map((s) => {
     const name =
@@ -132,13 +141,18 @@ export function toWireRecord(
       cachedReadTokens: s.cachedReadTokens === null ? null : clampCachedTokens(s.cachedReadTokens),
       cachedNonReadTokens:
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
-      toolCallCount: clampToolCallCount(s.toolCallCount),
-      filesReadCount: clampFilesReadCount(s.filesReadCount),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
       maxIdleMs: 0, // TODO: track per-stage max idle in envelope
       totalIdleMs: 0, // TODO: track per-stage total idle in envelope
-      mainEquivalentCostUSD: null,
+      mainCostUSD: mainCard
+        ? priceTokens({
+            inputTokens: s.inputTokens,
+            outputTokens: s.outputTokens,
+            cachedReadTokens: s.cachedReadTokens ?? 0,
+            cachedNonReadTokens: s.cachedNonReadTokens ?? 0,
+          }, mainCard)
+        : null,
     };
 
     // Add route-specific fields based on stage name.
@@ -255,8 +269,22 @@ export function toWireRecord(
     cachedNonReadTokens: clampCachedTokens(env.totalCachedNonReadTokens),
     totalDurationMs: clampDurationMsTotal(env.totalDurationMs),
     totalCostUSD: clampTaskCost(env.totalCostUSD),
-    mainEquivalentCostUSD: null,
-    costDeltaVsMainUSD: null,
+    mainCostUSD: mainCard
+      ? priceTokens({
+          inputTokens: env.totalInputTokens,
+          outputTokens: env.totalOutputTokens,
+          cachedReadTokens: env.totalCachedReadTokens,
+          cachedNonReadTokens: env.totalCachedNonReadTokens,
+        }, mainCard)
+      : null,
+    costDeltaVsMainUSD: mainCard
+      ? clampTaskCost(env.totalCostUSD) - priceTokens({
+          inputTokens: env.totalInputTokens,
+          outputTokens: env.totalOutputTokens,
+          cachedReadTokens: env.totalCachedReadTokens,
+          cachedNonReadTokens: env.totalCachedNonReadTokens,
+        }, mainCard)
+      : null,
     concernCount: env.findings.length,
     findingsBySeverity: env.findings.reduce(
       (acc, f) => {

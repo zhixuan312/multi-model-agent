@@ -40,9 +40,6 @@ export type _TerminationCause =
   | 'timeout'
   | 'time_ceiling'
   | 'degenerate_exhausted'
-  | 'api_error'
-  | 'provider_transport_failure'
-  | 'api_aborted'
   | 'brief_too_vague'
   | 'error';
 
@@ -52,21 +49,13 @@ export type TurnTerminationReason = _TerminationCause;
 export interface TurnResult {
   output: string;
   usage: TokenUsage;
-  filesRead: string[];
-  filesWritten: string[];
-  toolCallsByName: Record<string, number>;
+  costUSD: number;
   turns: number;
   durationMs: number;
-  costUSD: number;
-  /** Raw termination reason from the SDK; may include provider-specific values
-   *  beyond the standard _TerminationCause set. assembleRunResult normalizes
-   *  via mapStatus/mapTermination before writing to RunResult.terminationReason. */
-  terminationReason: string;
-  workerSelfAssessment?: string;
-  outputIsDiagnostic?: boolean;
+  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted';
   errorCode?: string;
-  errorMessage?: string;
-  model?: string;
+  filesWritten: string[];
+  usedShell: boolean;
 }
 
 export interface SessionOpts {
@@ -124,13 +113,12 @@ export interface RuntimeRunResult {
   usage: TokenUsage;
   actualCostUSD: number;
   turns: number;
-  filesRead: string[];
   filesWritten: string[];
-  toolCalls: string[];
   outputIsDiagnostic: boolean;
   directoriesListed: string[];
   workerStatus?: 'done' | 'failed' | 'blocked';
   terminationReason?: { cause: _TerminationCause; turnsUsed: number; hasFileArtifacts: boolean; usedShell: boolean; workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped' | null; wasPromoted: boolean; wallClockMs?: number };
+  usedShell?: boolean;
   errorCode?: string;
   error?: string;
   retryable?: boolean;
@@ -234,8 +222,6 @@ export interface RawStageStatsShape {
   cachedReadTokens?: number | null;
   cachedNonReadTokens?: number | null;
   turnCount?: number | null;
-  toolCallCount?: number | null;
-  filesReadCount?: number | null;
   filesWrittenCount?: number | null;
   activityEvents?: number | null;
 }

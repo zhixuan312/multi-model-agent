@@ -18,6 +18,7 @@ import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from './rework-budget.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
+import { releaseTask } from '../providers/provider-factory.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { startProgressEventsSubscriber } from '../bounded-execution/progress-events-subscriber.js';
@@ -28,9 +29,7 @@ export function errorResult(error: string): RuntimeRunResult {
     status: 'error',
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     turns: 0,
-    filesRead: [],
     filesWritten: [],
-    toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [],
     error,
@@ -395,6 +394,12 @@ export async function runTaskViaDispatcher(
       if (input.batchRegistry && input.batchId !== undefined) {
         input.batchRegistry.detachExecutionContext(input.batchId, input.taskIndex);
       }
+      // Safety net: force-close any sessions that escaped normal close path.
+      // Per-task safety ceiling (D6) requires explicit release on task termination.
+      if (input.batchId !== undefined) {
+        const bus = input.bus as unknown as { emit?: (e: Record<string, unknown>) => void } | undefined;
+        await releaseTask(input.batchId, input.taskIndex, bus);
+      }
     }
 
     // v5: dispatcher.dispatch returns ComposePayload as `body` and the full
@@ -416,9 +421,7 @@ export async function runTaskViaDispatcher(
       status: 'error',
       usage: { inputTokens: 0, outputTokens: 0 },
       turns: 0,
-      filesRead: [],
       filesWritten: [],
-      toolCalls: [],
       outputIsDiagnostic: true,
       escalationLog: [],
       error: 'dispatcher produced no RuntimeRunResult',

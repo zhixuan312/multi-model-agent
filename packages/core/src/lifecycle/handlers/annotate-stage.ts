@@ -8,13 +8,13 @@
 
 import type { LifecycleState } from '../stage-plan-types.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
+import { HUMAN_LABEL } from '../stage-labels.js';
 import {
   parseSourcesUsed,
   type ResearchSourcesUsedEntry,
 } from '../../reporting/report-parser-slots/research-report.js';
 import { applyAnnotatePreconditions } from '../annotate-parser.js';
 import { annotatePromptWrite, annotatePromptRead } from '../annotate-prompts.js';
-import { runAnnotatorTurn } from '../../providers/run-annotator-turn.js';
 import type { AnnotatePayload, StageGate } from '../stage-io.js';
 
 const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
@@ -213,7 +213,41 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
       { getSession?: (tier: 'standard' | 'complex') => { send: (p: string, o?: { stageLabel?: string }) => Promise<unknown> } } | undefined;
     if (ctx && typeof ctx.getSession === 'function') {
       const prompt = isRead ? annotatePromptRead(state) : annotatePromptWrite(state);
-      const tres = await runAnnotatorTurn({ prompt, ctx: ctx as unknown as Parameters<typeof runAnnotatorTurn>[0]['ctx'], tier: 'standard' });
+      const session = ctx.getSession('standard');
+      let tres:
+        | { kind: 'ok'; text: string; costUSD: number | null; turnsUsed: number; ms: number; model: string | null; inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number }
+        | { kind: 'transport_error'; message: string; ms: number };
+      const t0 = Date.now();
+      // Retry on transport errors: 3 attempts with 0s, 1s, 2s backoff (AC-19, AC-20)
+      const retryDelays = [0, 1000, 2000];
+      let lastErr: Error | undefined;
+      // Initialize to error; will be overwritten on success or last failure
+      tres = { kind: 'transport_error', message: 'annotator transport failed', ms: 0 };
+      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
+        try {
+          const r = await session.send(prompt, { stageLabel: HUMAN_LABEL.annotating });
+          tres = {
+            kind: 'ok',
+            text: (r as any).output ?? '',
+            costUSD: typeof (r as any).costUSD === 'number' ? (r as any).costUSD : null,
+            turnsUsed: (r as any).turns ?? 1,
+            ms: Date.now() - t0,
+            model: (r as any).model ?? null,
+            inputTokens: (r as any).usage?.inputTokens ?? 0,
+            outputTokens: (r as any).usage?.outputTokens ?? 0,
+            cachedReadTokens: (r as any).usage?.cachedReadTokens ?? 0,
+            cachedNonReadTokens: (r as any).usage?.cachedNonReadTokens ?? 0,
+          };
+          break; // Success, exit retry loop
+        } catch (err) {
+          lastErr = err instanceof Error ? err : new Error(String(err));
+          // Update error message for next retry or final failure
+          tres = { kind: 'transport_error', message: lastErr.message, ms: Date.now() - t0 };
+        }
+      }
       if (tres.kind === 'ok') {
         llmCostUSD = tres.costUSD ?? 0;
         llmModel = tres.model;
@@ -257,10 +291,8 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     cachedReadTokens: llmCachedReadTokens,
     cachedNonReadTokens: llmCachedNonReadTokens,
     turnCount: llmTurnsUsed,
-    toolCallCount: 0,
     costUSD: llmCostUSD,
     durationMs: Date.now() - t0,
-    filesReadCount: 0,
     filesWrittenCount: 0,
   }, {
     tier: llmTurnsUsed > 0 ? 'standard' : null,

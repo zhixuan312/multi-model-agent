@@ -114,7 +114,6 @@ export type {
 export { resolveAgent } from './providers/agent-resolver.js';
 export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
-export { otherTier } from './config/tier-policy-registry.js';
 
 export type {
   DraftTask,

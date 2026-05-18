@@ -27,8 +27,6 @@ export interface StageRecord {
   model: string;
   tier: AgentTier;
   turnsUsed: number;
-  toolCallCount: number;
-  filesReadCount: number;
   filesWrittenCount: number;
   inputTokens: number;
   outputTokens: number;
@@ -57,7 +55,6 @@ export interface ToolCallRecord {
   ts: string;
   stage: string;
   tool: string;
-  filesRead: string[];
   filesWritten: string[];
 }
 
@@ -66,7 +63,6 @@ export interface HeadlineSnapshot {
   stageLabel: string;
   stageDone: number;
   stageTotal: number;
-  toolReads: number;
   toolWrites: number;
   toolTotal: number;
 }
@@ -90,7 +86,6 @@ export interface TaskEnvelope {
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
-  filesRead: string[];
   filesWritten: string[];
   realFilesChanged: string[];
   // totals
@@ -145,12 +140,12 @@ export class TaskEnvelopeStore {
       client: seed.client, mainModel: seed.mainModel, cwd: seed.cwd,
       startedAt: new Date().toISOString(),
       status: 'running', terminalAt: null, stopReason: null, structuredError: null,
-      stages: [], toolCalls: [], filesRead: [], filesWritten: [], realFilesChanged: [],
+      stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
       findings: [], escalationLog: [], validationWarnings: [],
-      headline: { prefix: '', stageLabel: 'queued', stageDone: 0, stageTotal: 0, toolReads: 0, toolWrites: 0, toolTotal: 0 },
+      headline: { prefix: '', stageLabel: 'queued', stageDone: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
     };
     store = new TaskEnvelopeStore(env, notify);
     store.recomputeHeadline();
@@ -165,7 +160,7 @@ export class TaskEnvelopeStore {
       name, round: init.round ?? 1, outcome: null,
       startedAt: init.startedAt ?? new Date().toISOString(), completedAt: null,
       durationMs: 0, costUSD: null, model: init.model, tier: init.tier,
-      turnsUsed: 0, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+      turnsUsed: 0, filesWrittenCount: 0,
       inputTokens: 0, outputTokens: 0, cachedReadTokens: null, cachedNonReadTokens: null,
     });
     this.recomputeHeadline();
@@ -182,17 +177,16 @@ export class TaskEnvelopeStore {
     this.notify('completeStage');
   }
 
-  recordToolCall(entry: { stage: string; tool: string; filesRead?: string[]; filesWritten?: string[] }): void {
+  recordToolCall(entry: { stage: string; tool: string; filesWritten?: string[] }): void {
     this.guard('recordToolCall');
     const rec: ToolCallRecord = {
       ts: new Date().toISOString(), stage: entry.stage, tool: entry.tool,
-      filesRead: entry.filesRead ?? [], filesWritten: entry.filesWritten ?? [],
+      filesWritten: entry.filesWritten ?? [],
     };
     this.env.toolCalls.push(rec);
-    for (const f of rec.filesRead) if (!this.env.filesRead.includes(f)) this.env.filesRead.push(f);
     for (const f of rec.filesWritten) if (!this.env.filesWritten.includes(f)) this.env.filesWritten.push(f);
     const last = this.env.stages[this.env.stages.length - 1];
-    if (last) { last.toolCallCount++; last.filesReadCount = this.env.filesRead.length; last.filesWrittenCount = this.env.filesWritten.length; }
+    if (last) { last.filesWrittenCount = this.env.filesWritten.length; }
     this.recomputeHeadline();
     this.notify('recordToolCall');
   }
@@ -261,10 +255,8 @@ export class TaskEnvelopeStore {
   private recomputeHeadline(): void {
     const stageNames = this.env.stages.map(s => s.name);
     const lastStage = this.env.stages[this.env.stages.length - 1];
-    const reads = this.env.filesRead.length;
-    const writes = this.env.filesWritten.length;
     // toolTotal is the count of recorded tool calls (run_shell, edit_file, …),
-    // NOT reads+writes. Codex's run_shell commands pass empty file lists so
+    // NOT writes. Codex's run_shell commands pass empty file lists, so
     // computing toolTotal from file counts only would report zero through an
     // entire investigation where the worker ran many shell commands.
     this.env.headline = {
@@ -272,7 +264,7 @@ export class TaskEnvelopeStore {
       stageLabel: lastStage ? lastStage.name : 'queued',
       stageDone: this.env.stages.filter(s => s.outcome !== null).length,
       stageTotal: stageNames.length,
-      toolReads: reads, toolWrites: writes, toolTotal: this.env.toolCalls.length,
+      toolWrites: this.env.filesWritten.length, toolTotal: this.env.toolCalls.length,
     };
   }
 }

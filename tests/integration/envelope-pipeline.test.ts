@@ -143,18 +143,11 @@ describe('envelope pipeline — end-to-end', () => {
     const snap = envelope.snapshot();
     const implementing = snap.stages.find(s => s.name === 'implementing');
     expect(implementing).toBeDefined();
-    // Regression: if lifecycle-driver's completeStage payload re-introduces
-    // hardcoded zero counter fields, Object.assign clobbers what
-    // recordToolCall accumulated and this drops to 0. The mock provider
-    // fires 2 tool calls per session.send. The annotate stage reuses the
-    // same standard-tier session (per ExecutionContext.getSession cache),
-    // so we expect at least 2 (implementing alone).
-    expect(implementing!.toolCallCount).toBeGreaterThanOrEqual(2);
-    // Regression: headline.toolTotal must count tool calls, not files.
-    // Same reasoning — at least 2 from implementing.
+    // Regression: headline.toolTotal must count tool calls.
+    // The mock provider fires 2 tool calls per session.send. The annotate
+    // stage reuses the same standard-tier session, so we expect at least 2.
     expect(snap.headline.toolTotal).toBeGreaterThanOrEqual(2);
-    // The toolCalls array is the source of truth — count must match across
-    // the whole envelope, not just one stage.
+    // The toolCalls array is the source of truth — count must match.
     expect(snap.toolCalls.length).toBe(snap.headline.toolTotal);
   });
 

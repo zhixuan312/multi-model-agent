@@ -25,9 +25,7 @@ function cwdCapturingProvider(capturedCwds: string[]): Provider {
           return {
             output: '## Summary\napproved\n\nNo issues found.',
             usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-            filesRead: [],
             filesWritten: [],
-            toolCallsByName: {},
             turns: 1,
             durationMs: 0,
             costUSD: 0.001,

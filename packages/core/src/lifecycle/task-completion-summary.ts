@@ -39,9 +39,6 @@ function deriveTerminalStatus(rr: RuntimeRunResult): string {
     case 'degenerate_exhausted': return 'incomplete';
     case 'timeout': return 'timeout';
     case 'brief_too_vague': return 'brief_too_vague';
-    case 'api_error':
-    case 'provider_transport_failure':
-    case 'api_aborted':
     case 'error': return 'error';
     default: return 'incomplete';
   }

@@ -26,27 +26,12 @@ export function assembleRunResult(
   turn: TurnResult,
   parsed: ParsedReportFields = {},
 ): RuntimeRunResult {
-  const status = mapStatus(turn.terminationReason, turn.errorCode);
-
-  // RuntimeRunResult.toolCalls is a string[] per the current shape (each entry like
-  // "toolName(<input-preview>)"). With v4.4 dropping per-call detail, we
-  // synthesize one entry per toolCallsByName count.
-  const toolCalls: string[] = [];
-  for (const [name, count] of Object.entries(turn.toolCallsByName)) {
-    for (let i = 0; i < count; i++) toolCalls.push(name);
-  }
-
-  // Map SDK termination reason; derived once to avoid recomputation.
+  const status = mapStatus(turn.terminationReason);
   const tr = turn.terminationReason;
   const mapsToCause = tr === 'ok' || tr === 'cap_exhausted' || tr === 'stalled';
   const terminationReason = mapsToCause
     ? undefined
     : (mapTermination(tr) as RuntimeRunResult['terminationReason']);
-
-  const workerStatus: RuntimeRunResult['workerStatus'] | undefined =
-    turn.workerSelfAssessment
-      ? (turn.workerSelfAssessment as 'done' | 'failed')
-      : (tr === 'ok' ? 'done' : undefined);
 
   return {
     output: turn.output,
@@ -54,47 +39,27 @@ export function assembleRunResult(
     usage: turn.usage as TokenUsage,
     actualCostUSD: turn.costUSD,
     turns: turn.turns,
-    filesRead: turn.filesRead,
     filesWritten: turn.filesWritten,
-    toolCalls,
-    outputIsDiagnostic: turn.outputIsDiagnostic ?? false,
+    usedShell: turn.usedShell,
     escalationLog: [],
     durationMs: turn.durationMs,
     directoriesListed: [],
-    ...(workerStatus && { workerStatus: workerStatus as 'done' | 'failed' }),
     ...(terminationReason && { terminationReason }),
     ...(turn.errorCode && { errorCode: turn.errorCode }),
-    ...(turn.errorMessage && { error: turn.errorMessage }),
     ...parsed,
   } as unknown as RuntimeRunResult;
 }
 
-function mapStatus(r: string, errorCode?: string): RuntimeRunResult['status'] {
+function mapStatus(r: string): RuntimeRunResult['status'] {
   switch (r) {
     case 'ok': return 'ok';
     case 'time_exceeded': return 'timeout';
     case 'cap_exhausted': return 'incomplete';
     case 'stalled': return 'incomplete';
     case 'aborted': return 'error';
-    case 'error':
-      // Preserve transient error subtypes so delegateWithEscalation's retry
-      // policy (api_error / provider_transport_failure) can still operate.
-      if (errorCode === 'api_error' || errorCode === 'provider_transport_failure') {
-        return errorCode as RuntimeRunResult['status'];
-      }
-      return 'error';
-    default:
-      // Unknown SDK termination reasons: degrade gracefully to 'error'.
-      // This is the safe choice — the run is non-ok, and error is the
-      // catch-all that lifecycle handlers inspect.
-      return 'error';
+    case 'error': return 'error';
+    default: return 'error';
   }
-}
-
-function mapIncompleteReason(r: string): RuntimeRunResult['incompleteReason'] | undefined {
-  if (r === 'cap_exhausted') return 'turn_cap';
-  if (r === 'stalled') return 'timeout';
-  return undefined;
 }
 
 function mapTermination(r: string): string | undefined {

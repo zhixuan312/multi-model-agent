@@ -44,7 +44,7 @@ describe('SkillManifestSync.driftReport', () => {
     const supported = [
       'multi-model-agent', 'mma-delegate', 'mma-audit', 'mma-review',
       'mma-debug', 'mma-execute-plan', 'mma-retry',
-      'mma-context-blocks', 'mma-investigate', 'mma-explore',
+      'mma-context-blocks', 'mma-investigate', 'mma-research', 'mma-explore',
     ];
     for (const s of supported) {
       writeSkill(claudeSkillsDir, s, canonicalVersion);
@@ -72,7 +72,7 @@ describe('SkillManifestSync.driftReport', () => {
     const drift = s.driftReport();
     const missing = drift.filter((d) => d.issue === 'missing');
     // Should have all other supported skills as missing
-    expect(missing.length).toBeGreaterThanOrEqual(9); // 10 total - 1 present
+    expect(missing.length).toBeGreaterThanOrEqual(10); // 11 total - 1 present
     expect(missing.every((d) => d.client === 'claude-code')).toBe(true);
     expect(missing.every((d) => d.skill !== 'mma-delegate')).toBe(true);
   });

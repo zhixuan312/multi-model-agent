@@ -3,7 +3,8 @@ import type { StageGate, ReviewPayload, Finding } from '../stage-io.js';
 import { specReviewPrompt }    from '../../review/templates/spec-review.js';
 import { qualityReviewPrompt } from '../../review/templates/quality-review.js';
 import { parseReviewReport }   from '../../review/parse-review-report.js';
-import { runReviewerTurn, invertedReviewerTier } from '../../review/run-reviewer.js';
+import { invertedReviewerTier } from '../../review/tier-policy.js';
+import { HUMAN_LABEL } from '../stage-labels.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
 import type { AgentType } from '../../types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
@@ -157,10 +158,8 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       cachedReadTokens: totalCachedRead,
       cachedNonReadTokens: totalCachedNonRead,
       turnCount: totalTurns,
-      toolCallCount: 0,
       costUSD: totalCost,
       durationMs: Math.max(totalMs, Date.now() - t0),
-      filesReadCount: 0,
       filesWrittenCount: 0,
     }, { tier: resolvedReviewerTier, model: reviewerModel, verdict, findingsOutcome });
     // ↑ Pass the combined verdict so it flows: review-stage → mergeStageStats →
@@ -200,26 +199,44 @@ async function runReviewerWithRetries(
   turnsUsed: number;
   turn: any;
 }> {
-  const turn = await runReviewerTurn({
-    prompt,
-    ctx: state.executionContext as any,
-    reviewer: name,
-    implementerTier,
-  });
-  if (turn.kind === 'transport_error') {
+  const desired = invertedReviewerTier(implementerTier);
+  const providers = (state.executionContext as { providers?: Partial<Record<AgentType, unknown>> }).providers;
+  const tierToUse: AgentType = providers && providers[desired] ? desired : implementerTier;
+  const session = (state.executionContext as any).getSession(tierToUse);
+  let reviewerResult;
+  try {
+    const r = await session.send(prompt, { stageLabel: HUMAN_LABEL.review });
+    reviewerResult = {
+      kind: 'ok' as const,
+      text: r.output ?? '',
+      costUSD: r.costUSD ?? null,
+      turnsUsed: r.turns ?? 1,
+      ms: 0, // (the wrapper measured this; if downstream needs it, capture Date.now())
+      model: null,
+      inputTokens: r.usage?.inputTokens ?? 0,
+      outputTokens: r.usage?.outputTokens ?? 0,
+      cachedReadTokens: r.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: r.usage?.cachedNonReadTokens ?? 0,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    reviewerResult = { kind: 'transport_error' as const, message: msg, ms: 0 };
+  }
+
+  if (reviewerResult.kind === 'transport_error') {
     // Final failure surfaces as a parse-failure shape so the aggregator treats
     // this reviewer as errored — same downstream effect as an unparseable response.
     return {
-      parsed: { verdict: undefined, findings: [], parseError: turn.message } as any,
+      parsed: { verdict: undefined, findings: [], parseError: reviewerResult.message } as any,
       costUSD: null,
-      ms: turn.ms,
+      ms: reviewerResult.ms,
       model: null,
       inputTokens: 0,
       outputTokens: 0,
       cachedReadTokens: 0,
       cachedNonReadTokens: 0,
       turnsUsed: 0,
-      turn,
+      turn: reviewerResult,
     };
   }
   const ctx = state.executionContext as { envelope?: { recordValidationWarning?: (w: { rule: string; path: string }) => void } } | undefined;
@@ -231,17 +248,17 @@ async function runReviewerWithRetries(
       });
     } catch { /* sealed envelope — harmless */ }
   };
-  const parsed = parseReviewReport(turn.text, undefined, warnSink);
+  const parsed = parseReviewReport(reviewerResult.text, undefined, warnSink);
   return {
     parsed,
-    costUSD: turn.costUSD,
-    ms: turn.ms,
-    model: turn.model,
-    inputTokens: turn.inputTokens,
-    outputTokens: turn.outputTokens,
-    cachedReadTokens: turn.cachedReadTokens,
-    cachedNonReadTokens: turn.cachedNonReadTokens,
-    turnsUsed: turn.turnsUsed,
-    turn,
+    costUSD: reviewerResult.costUSD,
+    ms: reviewerResult.ms,
+    model: reviewerResult.model,
+    inputTokens: reviewerResult.inputTokens,
+    outputTokens: reviewerResult.outputTokens,
+    cachedReadTokens: reviewerResult.cachedReadTokens,
+    cachedNonReadTokens: reviewerResult.cachedNonReadTokens,
+    turnsUsed: reviewerResult.turnsUsed,
+    turn: reviewerResult,
   };
 }

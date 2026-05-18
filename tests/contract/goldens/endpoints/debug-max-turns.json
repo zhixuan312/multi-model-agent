@@ -11,9 +11,7 @@
         "cachedNonReadTokens": 0
       },
       "turns": 495,
-      "filesRead": [],
       "filesWritten": [],
-      "toolCalls": [],
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "workerStatus": "failed",
@@ -65,8 +63,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 495,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0
         }
       },

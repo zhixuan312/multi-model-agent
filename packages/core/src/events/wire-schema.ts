@@ -77,13 +77,11 @@ export const StageEntryBase = z.object({
   outputTokens: z.number().int().min(0).max(2_000_000),
   cachedReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
   cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
-  toolCallCount: z.number().int().min(0).max(5000),
-  filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
   maxIdleMs: z.number().int().min(0).max(1_200_000),
   totalIdleMs: z.number().int().min(0).max(3_600_000),
-  mainEquivalentCostUSD: z.number().nullable(),   // main-model-equivalent cost for this stage's tokens
+  mainCostUSD: z.number().nullable(),   // what this stage's tokens would have cost at the main model's rate (renamed from mainEquivalentCostUSD in 4.7.6 to match DB column main_cost_usd)
 });
 
 // 4.7.4+ standardization: findingsBySeverity + findingsOutcome and its
@@ -169,7 +167,7 @@ export const TaskCompletedEventSchema = z.object({
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
   totalCostUSD: z.number().min(0).max(5_000).nullable(),
-  mainEquivalentCostUSD: z.number().nullable(),
+  mainCostUSD: z.number().nullable(),
   costDeltaVsMainUSD: z.number().nullable(),
 
   // Lifecycle counts

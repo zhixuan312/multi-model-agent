@@ -31,7 +31,7 @@ describe('ActivityTracker terminal-stage auto-stop (P4)', () => {
     hb.start(3);
     hb.setStage('terminal', 3);
     const after = events.length;
-    hb.updateProgress(1, 1, 1);
+    hb.updateProgress(1);
     hb.updateCost(1, null);
     hb.markEvent('llm');
     expect(events.length).toBe(after);

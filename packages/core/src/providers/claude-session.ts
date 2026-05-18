@@ -18,6 +18,7 @@
 import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-result.js';
 import { normalizeClaudeTurn } from './normalize-claude.js';
+import { classifyClaudeToolCall } from './claude-tool-categories.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
@@ -35,35 +36,6 @@ function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
   return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
 }
 
-// Maps Claude tool_use blocks to (filesRead, filesWritten) so the envelope
-// counters reflect real file activity. Read-only tools contribute to
-// filesRead; write/edit tools contribute to filesWritten. All other tools
-// (Bash, Glob, Grep, WebFetch, etc.) record the call but no file activity.
-//
-// NotebookEdit reads-then-writes the notebook so it counts as both.
-// Tool input shapes match the Claude SDK contract: `file_path` for most,
-// `notebook_path` for NotebookEdit.
-const READ_TOOLS = new Set(['Read']);
-const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
-const READ_WRITE_TOOLS = new Set(['NotebookEdit']);
-
-function extractFilesFromToolUse(
-  toolName: string,
-  input: unknown,
-): { filesRead: string[]; filesWritten: string[] } {
-  const empty = { filesRead: [] as string[], filesWritten: [] as string[] };
-  if (typeof input !== 'object' || input === null) return empty;
-  const inp = input as { file_path?: unknown; notebook_path?: unknown };
-  const path = typeof inp.file_path === 'string' ? inp.file_path
-    : typeof inp.notebook_path === 'string' ? inp.notebook_path
-    : null;
-  if (!path) return empty;
-  if (READ_TOOLS.has(toolName))       return { filesRead: [path], filesWritten: [] };
-  if (WRITE_TOOLS.has(toolName))      return { filesRead: [], filesWritten: [path] };
-  if (READ_WRITE_TOOLS.has(toolName)) return { filesRead: [path], filesWritten: [path] };
-  return empty;
-}
-
 export class ClaudeSession implements Session {
   private closed = false;
   private turns = 0;
@@ -75,8 +47,13 @@ export class ClaudeSession implements Session {
    *  resources). Undefined between turns. */
   private activeQuery?: { close?: () => unknown };
 
-  constructor(private readonly args: { model: string; opts: SessionOpts; oauthAccessToken?: string }) {
-    if (args.oauthAccessToken) process.env.ANTHROPIC_AUTH_TOKEN = args.oauthAccessToken;
+  constructor(private readonly args: {
+    model: string;
+    opts: SessionOpts;
+    apiKey?: string;
+    baseUrl?: string;
+    oauthAccessToken?: string;
+  }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
@@ -122,17 +99,15 @@ export class ClaudeSession implements Session {
     const q = query({
       prompt: promptIterable(),
       options: {
-        // (lifecycle: capture this handle so close() can force-shut)
         model: this.args.model,
-        // v4.4: mma operates headlessly — never prompt the user for
-        // tool permission. bypassPermissions tells the SDK to run every
-        // tool without confirmation, the Claude analogue of codex's
-        // --dangerously-bypass-approvals-and-sandbox.
         permissionMode: 'bypassPermissions',
         cwd: this.args.opts.cwd,
         abortSignal: this.args.opts.abortSignal,
-        // Cross-stage continuity: reload prior conversation from the
-        // SDK's session store (~/.claude/projects/<dir>/<sessionId>).
+        env: {
+          ...(this.args.apiKey && { ANTHROPIC_API_KEY: this.args.apiKey }),
+          ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
+          ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),
+        },
         ...(this.sessionId && { resume: this.sessionId }),
       } as Parameters<typeof query>[0]['options'],
     });
@@ -181,7 +156,6 @@ export class ClaudeSession implements Session {
       cachedReadTokens: norm.usage.cachedReadTokens ?? 0,
       cachedNonReadTokens: norm.usage.cachedNonReadTokens ?? 0,
       terminationReason: norm.terminationReason,
-      filesRead: norm.filesRead.length,
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),
       ...this.taskTag(),
@@ -216,15 +190,14 @@ export class ClaudeSession implements Session {
           ? JSON.stringify(b.input).slice(0, 300)
           : '';
         // Extract file_path / notebook_path from tool input so the envelope
-        // counters reflect actual file activity. Without this, every tool
-        // call recorded filesRead:[] / filesWritten:[] and the polling
-        // headline's reads=/writes= signals stayed flat at 0.
-        const { filesRead, filesWritten } = extractFilesFromToolUse(b.name, b.input);
+        // counters reflect actual file activity. isShell is computed but not
+        // recorded at the envelope level — it flows through normalize-claude.ts
+        // into TurnResult.usedShell.
+        const { writtenPath, isShell } = classifyClaudeToolCall(b.name, b.input);
         this.envelope?.recordToolCall({
           stage: 'implementing',
           tool: b.name,
-          filesRead,
-          filesWritten,
+          filesWritten: writtenPath ? [writtenPath] : [],
         });
         this.bus.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_tool_call', {
           turn: this.turns,

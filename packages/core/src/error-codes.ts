@@ -10,9 +10,6 @@ export const ErrorCodeSchema = z.enum([
   // provider_* — provider HTTP/SDK errors
   'provider_rate_limited',
   'provider_auth_failed',
-  'provider_transport_failure',
-  'provider_api_error',
-  'provider_api_aborted',
   'provider_timeout',
   // runner_* — runner internals
   'runner_crash',
@@ -55,7 +52,7 @@ export const ErrorCodeSchema = z.enum([
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
 export function retryableFor(status: string): boolean {
-  return ['provider_timeout', 'provider_transport_failure', 'provider_api_error'].includes(status);
+  return status === 'provider_timeout';
 }
 
 export function classifyContextBlockError(err: Error): 'context_block_not_found' | 'retryable' | 'non_retryable' {

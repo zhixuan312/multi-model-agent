@@ -45,45 +45,45 @@ describe('composeRunningHeadline', () => {
 describe('composeRunningHeadline N>1 multi-line format (A7)', () => {
   it('N=1 unchanged: keeps single-line format with timing on the same line', () => {
     const out = composeRunningHeadline({
-      tasks: [{ state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 9, filesWritten: 0, toolCalls: 9 }],
+      tasks: [{ state: 'implementing', stageInfo: 'Complex worker (1/3)', filesWritten: 0, turns: 9 }],
       elapsedMs: 254_000,
     });
-    expect(out).toMatch(/^\[1\/1\] Implementing by Complex worker \(1\/3\) - 4m 14s, 9 read, 0 write, 9 tool calls/);
+    expect(out).toMatch(/^\[1\/1\] Implementing by Complex worker \(1\/3\) - 4m 14s, 0 files written, 9 turns/);
   });
 
   it('N=4 all running: uses [N/N] running <elapsed> top line + 4 indented per-task lines, 1-indexed', () => {
     const out = composeRunningHeadline({
       tasks: [
-        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 12, filesWritten: 8, toolCalls: 20 },
-        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 9, filesWritten: 0, toolCalls: 9 },
-        { state: 'reviewing',    stageInfo: 'Complex worker (1/3)', filesRead: 5, filesWritten: 0, toolCalls: 5 },
-        { state: 'error',        errorMessage: 'provider_transport_failure' },
+        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesWritten: 8, turns: 20 },
+        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesWritten: 0, turns: 9 },
+        { state: 'reviewing',    stageInfo: 'Complex worker (1/3)', filesWritten: 0, turns: 5 },
+        { state: 'error',        errorMessage: 'runner_crash' },
       ],
       elapsedMs: 254_000,
     });
     const lines = out.split('\n');
     expect(lines[0]).toBe('[4/4] running 4m 14s');
-    expect(lines[1]).toMatch(/^  \[1\] Implementing by Complex worker \(1\/3\) - 12 read, 8 write, 20 tool calls$/);
-    expect(lines[2]).toMatch(/^  \[2\] Implementing by Complex worker \(1\/3\) - 9 read, 0 write, 9 tool calls$/);
-    expect(lines[3]).toMatch(/^  \[3\] Reviewing by Complex worker \(1\/3\) - 5 read, 0 write, 5 tool calls$/);
-    expect(lines[4]).toMatch(/^  \[4\] error: provider_transport_failure$/);
+    expect(lines[1]).toMatch(/^  \[1\] Implementing by Complex worker \(1\/3\) - 8 files written, 20 turns$/);
+    expect(lines[2]).toMatch(/^  \[2\] Implementing by Complex worker \(1\/3\) - 0 files written, 9 turns$/);
+    expect(lines[3]).toMatch(/^  \[3\] Reviewing by Complex worker \(1\/3\) - 0 files written, 5 turns$/);
+    expect(lines[4]).toMatch(/^  \[4\] error: runner_crash$/);
   });
 
   it('N=4 mixed (some done, some running): top line uses [<doneCount>/N done] running <elapsed>', () => {
     const out = composeRunningHeadline({
       tasks: [
-        { state: 'done', filesWritten: 2, files: ['src/foo.ts', 'src/bar.ts'], filesRead: 12, toolCalls: 20 },
-        { state: 'done', filesWritten: 1, files: ['src/baz.ts'], filesRead: 9, toolCalls: 9 },
-        { state: 'implementing', stageInfo: 'Complex worker (2/3)', filesRead: 22, filesWritten: 0, toolCalls: 22 },
-        { state: 'error', errorMessage: 'provider_transport_failure' },
+        { state: 'done', filesWritten: 2, files: ['src/foo.ts', 'src/bar.ts'] },
+        { state: 'done', filesWritten: 1, files: ['src/baz.ts'] },
+        { state: 'implementing', stageInfo: 'Complex worker (2/3)', filesWritten: 0, turns: 22 },
+        { state: 'error', errorMessage: 'runner_crash' },
       ],
       elapsedMs: 482_000,
     });
     const lines = out.split('\n');
     expect(lines[0]).toBe('[2/4 done] running 8m 2s');
-    expect(lines[1]).toMatch(/^  \[1\] done — 12 read, 20 tool calls — files: src\/foo\.ts, src\/bar\.ts$/);
-    expect(lines[2]).toMatch(/^  \[2\] done — 9 read, 9 tool calls — files: src\/baz\.ts$/);
-    expect(lines[3]).toMatch(/^  \[3\] Implementing by Complex worker \(2\/3\) - 22 read, 0 write, 22 tool calls$/);
-    expect(lines[4]).toMatch(/^  \[4\] error: provider_transport_failure$/);
+    expect(lines[1]).toMatch(/^  \[1\] done — 2 files written — files: src\/foo\.ts, src\/bar\.ts$/);
+    expect(lines[2]).toMatch(/^  \[2\] done — 1 files written — files: src\/baz\.ts$/);
+    expect(lines[3]).toMatch(/^  \[3\] Implementing by Complex worker \(2\/3\) - 0 files written, 22 turns$/);
+    expect(lines[4]).toMatch(/^  \[4\] error: runner_crash$/);
   });
 });

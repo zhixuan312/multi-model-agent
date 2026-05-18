@@ -354,10 +354,10 @@ function recordStageOnEnvelope(
       ...(stats?.['findingsOutcomeReason'] !== undefined && { findingsOutcomeReason: stats['findingsOutcomeReason'] as string | null | undefined }),
       ...(stats?.['outcomeInferred'] !== undefined && { outcomeInferred: stats['outcomeInferred'] as boolean | undefined }),
       ...(stats?.['outcomeMalformed'] !== undefined && { outcomeMalformed: stats['outcomeMalformed'] as boolean | undefined }),
-      // Don't include toolCallCount/filesReadCount/filesWrittenCount here —
-      // those are accumulated incrementally by envelope.recordToolCall() and
-      // would be clobbered by Object.assign. mergeStageStats does track them
-      // but the session-side accumulation is the source of truth in flight.
+      // Don't include filesWrittenCount here — it's accumulated incrementally
+      // by envelope.recordToolCall() and would be clobbered by Object.assign.
+      // mergeStageStats tracks it; the session-side accumulation is the source
+      // of truth in flight.
       ...(skipReason && gate.outcome === 'skip' ? { skipReason } : {}),
     });
   } catch { /* sealed during the call; harmless */ }
