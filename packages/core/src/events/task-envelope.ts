@@ -27,8 +27,6 @@ export interface StageRecord {
   model: string;
   tier: AgentTier;
   turnsUsed: number;
-  toolCallCount: number;
-  filesReadCount: number;
   filesWrittenCount: number;
   inputTokens: number;
   outputTokens: number;

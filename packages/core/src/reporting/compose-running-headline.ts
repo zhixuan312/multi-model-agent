@@ -17,9 +17,8 @@ export interface RunningState {
 interface RunningTaskProgress {
   state: 'implementing' | 'reviewing' | 'done' | 'error' | string;
   stageInfo?: string;
-  filesRead?: number;
   filesWritten?: number;
-  toolCalls?: number;
+  turns?: number;
   errorMessage?: string;
   files?: string[];
 }
