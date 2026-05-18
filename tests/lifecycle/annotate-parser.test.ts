@@ -139,6 +139,7 @@ describe('applyAnnotatePreconditions — read route', () => {
     const state = mkState({
       route: 'investigate',
       reviewPolicy: 'quality_only',
+      gates: { implement: { outcome: 'advance' } },
       lastRunResult: {
         workerStatus: 'done',
         status: 'ok',
@@ -153,6 +154,7 @@ describe('applyAnnotatePreconditions — read route', () => {
   it('overrides to false when zero criteria succeeded', () => {
     const state = mkState({
       route: 'audit',
+      gates: { implement: { outcome: 'advance' } },
       lastRunResult: {
         workerStatus: 'done',
         status: 'ok',
@@ -199,10 +201,11 @@ describe('applyAnnotatePreconditions — recovery-message synthesis', () => {
       reviewVerdict: 'approved',
       commits: [],
       gates: { implement: { outcome: 'advance' }, commit: undefined },
-      autoCommit: false,
+      autoCommit: true,
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload({ message: '' }), state);
+    expect(result.completed).toBe(false);
     expect(result.message).toMatch(/Recommend re-dispatch/);
   });
 });

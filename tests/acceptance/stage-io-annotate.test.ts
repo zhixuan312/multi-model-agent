@@ -46,6 +46,7 @@ describe('AC-9: parser overrides completed=true to false on each precondition fa
   it('read route: zero criteria succeeded with errors', () => {
     const state = mkState({
       route: 'investigate',
+      gates: { implement: { outcome: 'advance' } },
       lastRunResult: { workerStatus: 'done', status: 'ok', criteriaSucceeded: [], criteriaErrors: [{ criterionId: 'c', error: 'x' }] },
     });
     const out = applyAnnotatePreconditions(mkPayload({ completed: true }), state);

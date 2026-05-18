@@ -73,7 +73,7 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
 import type { LifecycleState } from './stage-plan-types.js';
 
 export function extractCompletionInputs(state: LifecycleState): CompletionInputs {
-  const last = state.lastRunResult as { criteriaSucceeded?: string[] } | undefined;
+  const last = state.lastRunResult as { criteriaSucceeded?: string[]; unaddressedFindingIds?: string[] } | undefined;
   return {
     route: state.route as RouteName,
     implementOutcome: state.gates?.implement?.outcome,
@@ -82,7 +82,7 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     reviewSubResults: (state as { reviewSubResults?: Array<{ name: 'spec' | 'quality'; verdict: string }> }).reviewSubResults,
     reworkApplied: state.reworkApplied,
     reworkError: state.reworkError,
-    unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds,
+    unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds ?? last?.unaddressedFindingIds,
     commitKind: (state.gates?.commit?.payload as { kind?: 'committed' | 'no_op' } | undefined)?.kind,
     autoCommit: state.autoCommit ?? true,
     criteriaSucceeded: last?.criteriaSucceeded,
