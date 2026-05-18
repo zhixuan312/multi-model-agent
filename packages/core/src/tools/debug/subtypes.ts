@@ -13,12 +13,13 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
   emptyOutcomeLine: 'If THIS lens reveals nothing in the failure under investigation, respond with "No findings for this criterion." — valid outcome.',
   findingMeaningParagraph: 'A finding is a ROOT-CAUSE HYPOTHESIS (or contributing factor) for the failure under investigation, viewed through this criterion\'s lens. Title = the proposed cause. Severity reflects how strong the trace from symptom to cause is.',
   severityMeanings: {
-    critical: 'root cause definitively identified with reproducible evidence + a concrete fix is implied — the maintainer can act now.',
-    high: 'strong root-cause hypothesis with traced upstream evidence (file:line citations along the call/data path), fix path identified.',
-    medium: 'likely candidate cause, needs verification — the trace has 1-2 inferred steps, fix scope unclear.',
-    low: 'possible contributing factor, low confidence — speculation worth noting but not the primary lead.',
+    critical: 'Confirmed root cause',
+    high: 'Very likely root cause; one step unconfirmed',
+    medium: 'Plausible hypothesis',
+    low: 'Peripheral observation',
   },
   mustEmitAtLeastOne: true,
+  legalOutcomes: ['found', 'not_applicable'] as const,
 };
 
 export const DEBUG_SUBTYPES: Record<DebugSubtype, ReadOnlySubtypeSpec> = {

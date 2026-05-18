@@ -123,10 +123,19 @@ export function parseConfidence(rawLines: string[]): Confidence | null {
   return { level, rationale };
 }
 
+// ── Finding parsing ──
+
+export interface Finding {
+  title: string;
+  evidence: Citation[];
+  evidenceIsNone: boolean;
+}
+
 // ── Investigation report parsing ──
 
 export interface ParsedInvestigation {
   citations: Citation[];
+  findings: Finding[];
   confidence: Confidence | null;
   needsCallerClarification: boolean;
   diagnostics: {
@@ -162,12 +171,126 @@ function detectNeedsContext(unresolvedLines: string[]): boolean {
   return unresolvedLines.some(l => NEEDS_CONTEXT_BULLET_RE.test(l.trim()));
 }
 
+// ── Finding block parsing ──
+
+const FINDING_BLOCK_RE = /^##\s+finding\s+\d+:\s*(.+)$/im;
+const EVIDENCE_BULLET_RE = /^(?:[-*]|\d+[.)])\s+evidence:\s*(.+)$/im;
+
+function parseEvidenceLine(line: string): { isNone: boolean; citations: Citation[]; malformed: number } {
+  const match = line.match(EVIDENCE_BULLET_RE);
+  if (!match || !match[1]) {
+    return { isNone: false, citations: [], malformed: 0 };
+  }
+  const evidenceContent = match[1]!.trim();
+
+  // Check if evidence is (none)
+  if (evidenceContent === '(none)' || evidenceContent === 'none') {
+    return { isNone: true, citations: [], malformed: 0 };
+  }
+
+  // Parse as a citation line (format: file:lines — claim or file:lines -- claim)
+  const citationMatch = evidenceContent.match(CITATION_RE);
+  if (!citationMatch || !citationMatch.groups) {
+    return { isNone: false, citations: [], malformed: 1 };
+  }
+
+  const { file, lines, claim } = citationMatch.groups;
+  if (!isValidLineToken(lines!)) {
+    return { isNone: false, citations: [], malformed: 1 };
+  }
+  if (!claim || !claim.trim()) {
+    return { isNone: false, citations: [], malformed: 1 };
+  }
+
+  return {
+    isNone: false,
+    citations: [{ file: file!.trim(), lines: lines!, claim: claim.trim() }],
+    malformed: 0,
+  };
+}
+
+function extractFindingsFromReport(rawOutput: string): {
+  findings: Finding[];
+  allCitations: Citation[];
+  malformedEvidenceLines: number;
+} {
+  const findings: Finding[] = [];
+  let allCitations: Citation[] = [];
+  let malformedCount = 0;
+
+  // Split by Finding blocks (case-insensitive)
+  const findingRegex = /^##\s+finding\s+\d+:\s*(.+)$/im;
+  const lines = rawOutput.split('\n');
+  let currentFinding: { title: string; lines: string[] } | null = null;
+
+  for (const line of lines) {
+    const findingMatch = line.match(findingRegex);
+    if (findingMatch) {
+      // Start a new finding
+      if (currentFinding) {
+        // Process the previous finding
+        const finding = processFindingLines(currentFinding);
+        if (finding) {
+          findings.push(finding);
+          allCitations = allCitations.concat(finding.evidence);
+          malformedCount += finding.malformedLines;
+        }
+      }
+      currentFinding = { title: findingMatch[1]!.trim(), lines: [] };
+    } else if (currentFinding) {
+      currentFinding.lines.push(line);
+    }
+  }
+
+  // Process the last finding
+  if (currentFinding) {
+    const finding = processFindingLines(currentFinding);
+    if (finding) {
+      findings.push(finding);
+      allCitations = allCitations.concat(finding.evidence);
+      malformedCount += finding.malformedLines;
+    }
+  }
+
+  return { findings, allCitations, malformedEvidenceLines: malformedCount };
+}
+
+interface ProcessedFinding extends Finding {
+  malformedLines: number;
+}
+
+function processFindingLines(finding: { title: string; lines: string[] }): ProcessedFinding | null {
+  let evidenceIsNone = false;
+  let citations: Citation[] = [];
+  let malformed = 0;
+
+  // Look for Evidence: bullet
+  for (const line of finding.lines) {
+    if (EVIDENCE_BULLET_RE.test(line)) {
+      const result = parseEvidenceLine(line);
+      evidenceIsNone = result.isNone;
+      citations = result.citations;
+      malformed = result.malformed;
+      break;
+    }
+  }
+
+  return {
+    title: finding.title,
+    evidence: citations,
+    evidenceIsNone,
+    malformedLines: malformed,
+  };
+}
+
 export function parseInvestigationReport(rawOutput: string): InvestigationParseResult {
   if (!rawOutput || !rawOutput.trim()) return { kind: 'no_structured_report' };
 
+  // Check for investigation headers: can have Findings, or traditional Citations/Confidence/Summary
+  const hasFindingsHeader = hasSectionHeader(rawOutput, 'finding');
   const recognized = ['summary', 'citations', 'confidence'];
-  const hasInvestigationHeader = recognized.some(name => hasSectionHeader(rawOutput, name));
-  if (!hasInvestigationHeader) return { kind: 'no_structured_report' };
+  const hasTraditionalHeader = recognized.some(name => hasSectionHeader(rawOutput, name));
+  if (!hasFindingsHeader && !hasTraditionalHeader) return { kind: 'no_structured_report' };
 
   const generic = parseStructuredReport(rawOutput);
 
@@ -185,19 +308,37 @@ export function parseInvestigationReport(rawOutput: string): InvestigationParseR
   else if (confidenceParsed) confidenceValidity = 'valid';
   else confidenceValidity = 'invalid';
 
-  const citationsHeaderPresent = hasSectionHeader(rawOutput, 'citations');
-  const citationsLines = generic.extraSections['citations'] ?? [];
+  // Extract findings and citations from Finding blocks if present
+  const { findings: rawFindings, allCitations: findingsCitations, malformedEvidenceLines } = extractFindingsFromReport(rawOutput);
+
+  // Second-pass: filter findings with evidenceIsNone when confidence is not low
+  let finalFindings = rawFindings;
+  if (confidenceParsed && confidenceParsed.level !== 'low') {
+    finalFindings = rawFindings.filter(f => !f.evidenceIsNone);
+  }
+
+  // Determine citations validity
   let citationsValidity: SectionValidity['citations'];
   let citationsParsed: { citations: Citation[]; malformedCitationLines: number };
-  if (!citationsHeaderPresent) {
-    citationsValidity = 'missing';
-    citationsParsed = { citations: [], malformedCitationLines: 0 };
-  } else if (isLegitimatelyNone(citationsLines)) {
-    citationsParsed = { citations: [], malformedCitationLines: 0 };
-    citationsValidity = (confidenceParsed?.level === 'low') ? 'empty_legitimate' : 'empty_invalid';
+
+  if (hasFindingsHeader && rawFindings.length > 0) {
+    // Use citations from findings
+    citationsParsed = { citations: findingsCitations, malformedCitationLines: malformedEvidenceLines };
+    citationsValidity = findingsCitations.length > 0 ? 'valid' : 'empty_invalid';
   } else {
-    citationsParsed = parseCitations(citationsLines);
-    citationsValidity = citationsParsed.citations.length > 0 ? 'valid' : 'empty_invalid';
+    // Fall back to traditional ## Citations section
+    const citationsHeaderPresent = hasSectionHeader(rawOutput, 'citations');
+    const citationsLines = generic.extraSections['citations'] ?? [];
+    if (!citationsHeaderPresent) {
+      citationsValidity = 'missing';
+      citationsParsed = { citations: [], malformedCitationLines: 0 };
+    } else if (isLegitimatelyNone(citationsLines)) {
+      citationsParsed = { citations: [], malformedCitationLines: 0 };
+      citationsValidity = (confidenceParsed?.level === 'low') ? 'empty_legitimate' : 'empty_invalid';
+    } else {
+      citationsParsed = parseCitations(citationsLines);
+      citationsValidity = citationsParsed.citations.length > 0 ? 'valid' : 'empty_invalid';
+    }
   }
 
   const missing: string[] = [];
@@ -216,6 +357,7 @@ export function parseInvestigationReport(rawOutput: string): InvestigationParseR
     kind: 'structured_report',
     investigation: {
       citations: citationsParsed.citations,
+      findings: finalFindings,
       confidence: confidenceParsed,
       needsCallerClarification,
       diagnostics: {

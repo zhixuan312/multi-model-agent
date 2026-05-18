@@ -141,15 +141,12 @@ export function toWireRecord(
       mainEquivalentCostUSD: null,
     };
 
-    // Add route-specific fields based on stage name
+    // Add route-specific fields based on stage name.
+    // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred /
+    // outcomeMalformed are top-level only — stages do NOT carry them.
     if (name === 'implementing') return base;
     if (name === 'review') {
-      // Map envelope `verdict` to the wire's review verdict enum
-      // (approved|concerns|changes_required|error|skipped|annotated|not_applicable).
-      // Envelope holds the actual review payload's verdict ('approved' |
-      // 'changes_required') after the 4.7.3 mergeStageStats fix that threaded
-      // it through. Falls back to 'skipped' when the stage didn't run (review
-      // gate skipped, e.g. read-route or reviewPolicy:none).
+      // Map envelope `verdict` to the wire's review verdict enum.
       const reviewVerdict = s.verdict;
       let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
       if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
@@ -165,14 +162,8 @@ export function toWireRecord(
       return {
         ...base,
         verdict: wireVerdict as never,
-        roundsUsed: 1, // TODO: track round count for review stages
+        roundsUsed: 1,
         concernCategories: s.concernCategories ?? [],
-        findingsBySeverity: s.findingsBySeverity ?? {
-          critical: 0,
-          high: 0,
-          medium: 0,
-          low: 0,
-        },
       };
     }
     if (name === 'rework')
@@ -181,12 +172,6 @@ export function toWireRecord(
         triggeringConcernCategories: s.concernCategories ?? [],
       };
     if (name === 'annotating') {
-      // Annotate stages don't carry a `verdict` — that's a review-only field.
-      // Map from envelope `s.outcome` (advance|fail|skipped) to the wire's
-      // annotate-specific enum (passed|failed|skipped|not_applicable|transformed).
-      // 'advance' maps to 'transformed' because annotate's success mode is
-      // transforming the worker's raw report into the structured wire payload —
-      // matches the legacy semantic set by terminal-handlers.ts.
       const ann = s as { outcome?: 'advance' | 'fail' | 'skipped' | null };
       let out: 'transformed' | 'failed' | 'skipped' | 'not_applicable' | 'passed';
       if (ann.outcome === 'advance') out = 'transformed';
@@ -273,6 +258,39 @@ export function toWireRecord(
     mainEquivalentCostUSD: null,
     costDeltaVsMainUSD: null,
     concernCount: env.findings.length,
+    findingsBySeverity: env.findings.reduce(
+      (acc, f) => {
+        const s = f.severity;
+        if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') acc[s] += 1;
+        return acc;
+      },
+      { critical: 0, high: 0, medium: 0, low: 0 },
+    ),
+    // 4.7.4+ outcome rollup. Source priority: review → annotating → implementing.
+    // Each stage stores the same value the worker / reviewer emitted; the
+    // first non-null wins because later stages mirror earlier ones (see
+    // mergeStageStats branch for 'implementing | annotating' and review-stage
+    // handler). Top-level is the single source backend + frontend read.
+    ...(() => {
+      const outcomePriority: Array<'reviewing' | 'annotating' | 'implementing'> = ['reviewing', 'annotating', 'implementing'];
+      type StageWithOutcome = {
+        name: string;
+        findingsOutcome?: 'found' | 'clean' | 'not_applicable' | null;
+        findingsOutcomeReason?: string | null;
+        outcomeInferred?: boolean;
+        outcomeMalformed?: boolean;
+      };
+      const pick = outcomePriority
+        .map((n) => (env.stages as StageWithOutcome[]).find((st) => st.name === n && st.findingsOutcome != null))
+        .find((s): s is StageWithOutcome => s !== undefined);
+      if (!pick) return {};
+      return {
+        findingsOutcome: pick.findingsOutcome ?? undefined,
+        ...(pick.findingsOutcomeReason !== undefined && { findingsOutcomeReason: pick.findingsOutcomeReason }),
+        ...(pick.outcomeInferred !== undefined && { outcomeInferred: pick.outcomeInferred }),
+        ...(pick.outcomeMalformed !== undefined && { outcomeMalformed: pick.outcomeMalformed }),
+      };
+    })(),
     escalationCount: Math.max(0, distinctProviders - 1),
     fallbackCount: 0,
     filesWrittenCount: clampFilesWrittenCount(env.realFilesChanged.length),

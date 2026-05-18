@@ -163,4 +163,34 @@ Every completed task automatically registers a terminal markdown context block c
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
+## Outcome semantics
+
+Every task result carries outcome fields that describe the debugging investigation's conclusion status:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the investigation identify a root cause? |
+| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "Root cause identified with high confidence: bcrypt binding fails on non-ASCII input" or "No evidence supports the hypothesis; root cause remains unknown"). |
+| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the investigator explicitly stated it. |
+| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
+
+### Enum values
+
+- **`found`** — the investigation identified one or more root-cause hypotheses (findings) with supporting evidence. This indicates the problem has a diagnosed cause.
+- **`clean`** — the investigation completed but found zero root causes. This is rare for debug and indicates the failure remains unexplained despite thorough investigation.
+- **`not_applicable`** — the investigation could not proceed (e.g., inability to reproduce the failure, missing context, or out of scope). This is the "unable to diagnose" state.
+
+### Empty findings ≠ failure
+
+A crucial semantic: **empty findings does NOT mean `completed: false` or a failed debug session.** An investigation that proceeds thoroughly and produces zero root-cause candidates is a valid `completed: true` outcome; it means "I looked hard and found nothing." For debug, this often surfaces a `not_applicable` outcome instead (root cause is elsewhere), but zero findings is still a success.
+
+### Per-route legal outcomes
+
+The legal outcomes for this route are: `['found', 'not_applicable']`
+
+- **`found`** — one or more root-cause hypotheses were identified across the investigation criteria.
+- **`not_applicable`** — the failure could not be diagnosed (reproduction failed, wrong area, or scope issue).
+
+The outcome `clean` (zero findings + success) is not legal for `mma-debug` because a debug session always either identifies a root cause or cannot proceed.
+
 @include _shared/error-handling.md

@@ -12,12 +12,13 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
   emptyOutcomeLine: 'If you can produce no candidate insight at all under this lens, respond with "No findings for this criterion." — valid but rare; in most cases you can produce at least one source-cited candidate.',
   findingMeaningParagraph: 'A finding is a CANDIDATE INSIGHT from ONE cited external source, viewed through this criterion\'s lens. Title = the insight in one line. Issue = the insight + reasoning + source citation. Severity = strength of evidence chain.',
   severityMeanings: {
-    critical: 'primary source with rock-solid evidence chain — the user can act on this without re-verification.',
-    high: 'strong source with limited inferred steps — practitioner sanity-check recommended.',
-    medium: 'secondary source / single citation / one inferred step — useful as one input among several.',
-    low: 'single secondary source, low confidence — present as an alternative for the reader to weigh.',
+    critical: 'Primary authoritative source',
+    high: 'Strong secondary source',
+    medium: 'Tertiary source',
+    low: 'Inferred/synthesized',
   },
   mustEmitAtLeastOne: true,
+  legalOutcomes: ['found', 'not_applicable'] as const,
 };
 
 export const RESEARCH_SUBTYPES: Record<ResearchSubtype, ReadOnlySubtypeSpec> = {

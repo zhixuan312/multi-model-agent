@@ -46,6 +46,10 @@ export type ImplementPayload = {
   criteriaSucceeded: string[];
   criteriaErrors: Array<{ criterion: string; error: string }>;
   sourcesUsed: string[];
+  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 };
 
 export type ReviewPayload = {
@@ -53,6 +57,10 @@ export type ReviewPayload = {
   findings: Finding[];                                    // source: 'reviewer'
   reviewersSucceeded: Array<'spec' | 'quality'>;
   reviewersErrored: Array<{ reviewer: 'spec' | 'quality'; error: string }>;
+  findingsOutcome: 'clean' | 'found';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 };
 
 export type ReworkPayload = {
@@ -92,6 +100,11 @@ export type ComposePayload = {
   filesChanged: string[];
   commitSha: string | null;
   blockId: string | null;
+  // outcome fields
+  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
   // telemetry slice
   telemetry: {
     totalDurationMs: number;

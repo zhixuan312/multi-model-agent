@@ -1,4 +1,5 @@
 import type { CriterionEntry } from './criteria-types.js';
+import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
 
 /**
  * Per-route semantics for findings. Same wire shape (`## Finding N:`) and
@@ -41,6 +42,12 @@ export interface RouteSemantics {
    *    annotator dedups + ranks; soft signals are valuable, not noise.
    */
   mustEmitAtLeastOne: boolean;
+  /** Per-route legal values for the `## Outcome` enum the worker emits.
+   *  Issue-hunting routes (audit/review): ['found', 'clean'].
+   *  Answer-producing routes (debug/investigate/research): ['found', 'not_applicable'].
+   *  Used by findings-parser to validate the worker's ## Outcome and by
+   *  inferFromFindings to pick the right default when the worker omits it. */
+  legalOutcomes: readonly FindingsOutcomeKind[];
 }
 
 /**

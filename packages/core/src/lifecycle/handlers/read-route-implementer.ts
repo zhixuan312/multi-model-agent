@@ -11,6 +11,8 @@
 
 import type { Session } from '../../types/run-result.js';
 import { parseFindings, type Finding } from '../findings-parser.js';
+import type { FindingsOutcomeKind } from '../../reporting/findings-outcome.js';
+import { aggregateOutcomes } from '../../reporting/findings-outcome.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
 import { buildWarmFollowupMessage } from '../warm-followup.js';
 
@@ -25,6 +27,7 @@ export interface ReadRouteImplementerInput {
   cachedPrefix: string;
   criteria: readonly Criterion[];
   buildSuffix: (c: Criterion) => string;
+  legalOutcomes: readonly FindingsOutcomeKind[];
 }
 
 export interface ReadRouteImplementerResult {
@@ -37,6 +40,10 @@ export interface ReadRouteImplementerResult {
   /** Joined per-criterion narrative — used by downstream parsers that
    *  read raw text (annotator fallback, terminal-block renderers). */
   synthesizedOutput: string;
+  findingsOutcome: FindingsOutcomeKind;
+  findingsOutcomeReason: string | null;
+  outcomeInferred: boolean;
+  outcomeMalformed: boolean;
 }
 
 /**
@@ -51,6 +58,8 @@ export async function runReadRouteImplementer(
   const findings: Finding[] = [];
   const criteriaErrors: { criterionId: string; error: string }[] = [];
   const perCriterionOutputs: string[] = [];
+  const perCriterionOutcomes: FindingsOutcomeKind[] = [];
+  const perCriterionReasons: (string | null)[] = [];
 
   let totalInput = 0, totalOutput = 0, totalCachedRead = 0, totalCachedNonRead = 0;
   let totalCost: number | null = null;
@@ -88,8 +97,18 @@ export async function runReadRouteImplementer(
         });
         continue;
       }
-      findings.push(...parseFindings(turn.output, c.id));
+      const result = parseFindings(turn.output, c.id, input.legalOutcomes);
+      findings.push(...result.findings);
       perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
+      perCriterionOutcomes.push(result.outcome);
+
+      // Extract reason for not_applicable outcomes
+      if (result.outcome === 'not_applicable') {
+        const reasonMatch = turn.output.match(/^## Outcome\s*\n\s*not_applicable\s*—\s*(.+)$/m);
+        perCriterionReasons.push(reasonMatch ? reasonMatch[1].trim() : null);
+      } else {
+        perCriterionReasons.push(null);
+      }
     } catch (err) {
       criteriaErrors.push({
         criterionId: c.id,
@@ -97,6 +116,16 @@ export async function runReadRouteImplementer(
       });
     }
   }
+
+  // Aggregate outcomes by precedence: found > not_applicable > clean
+  const aggregatedOutcome: FindingsOutcomeKind = perCriterionOutcomes.length > 0
+    ? aggregateOutcomes(perCriterionOutcomes)
+    : 'clean';
+
+  // Aggregate reasons: concatenate not_applicable reasons with semicolon separator
+  const aggregatedReason: string | null = aggregatedOutcome === 'not_applicable'
+    ? perCriterionReasons.filter((r): r is string => r !== null).join('; ')
+    : null;
 
   return {
     findings,
@@ -111,5 +140,9 @@ export async function runReadRouteImplementer(
     costUSD: totalCost,
     durationMs: totalDuration,
     synthesizedOutput: perCriterionOutputs.join('\n\n'),
+    findingsOutcome: aggregatedOutcome,
+    findingsOutcomeReason: aggregatedReason,
+    outcomeInferred: false,
+    outcomeMalformed: false,
   };
 }

@@ -46,6 +46,11 @@ export interface StageRecord {
   verdict?: 'passed' | 'failed' | 'no_command' | 'annotated' | 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
   concernCategories?: string[];
+  // Findings outcome threading (review + implementing stages)
+  findingsOutcome?: 'clean' | 'found' | 'not_applicable' | null;
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 }
 
 export interface ToolCallRecord {

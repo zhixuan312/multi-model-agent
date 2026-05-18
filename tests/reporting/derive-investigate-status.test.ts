@@ -6,6 +6,7 @@ function makeValidReport(): InvestigationParseResult {
     kind: 'structured_report',
     investigation: {
       citations: [{ file: 'a.ts', lines: '1', claim: 'c' }],
+      findings: [],
       confidence: { level: 'high', rationale: 'r' },
       needsCallerClarification: false,
       diagnostics: { malformedCitationLines: 0, missingRequiredSections: [], invalidRequiredSections: [] },

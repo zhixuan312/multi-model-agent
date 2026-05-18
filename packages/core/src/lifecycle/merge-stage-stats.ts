@@ -14,6 +14,7 @@
 
 import type { LifecycleState } from './stage-plan-types.js';
 import type { RuntimeRunResult } from '../types.js';
+import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
 
 export type StageName =
   | 'implementing'
@@ -41,6 +42,14 @@ interface StageOptions {
   modelFamily?: string | null;
   /** For the `review` stage — combined verdict from parallel spec+quality sub-reviewers. */
   verdict?: string;
+  /** Aggregated findings outcome (review: from sub-reviewers; implementing: from read-route dispatcher). */
+  findingsOutcome?: FindingsOutcomeKind;
+  /** Reason for the findings outcome. */
+  findingsOutcomeReason?: string | null;
+  /** Whether the outcome was inferred (no explicit `## Outcome` section). */
+  outcomeInferred?: boolean;
+  /** Whether the worker emitted a malformed `## Outcome` section. */
+  outcomeMalformed?: boolean;
   /** Defaults to +1 per call so the wire's `roundsUsed` reflects rounds taken. */
   roundsDelta?: number;
 }
@@ -82,9 +91,29 @@ export function mergeStageStats(
 
   if (stage === 'review') {
     accumulated['verdict'] = options.verdict ?? existing?.['verdict'] ?? null;
+    accumulated['findingsOutcome'] = options.findingsOutcome ?? existing?.['findingsOutcome'] ?? null;
+    accumulated['findingsOutcomeReason'] = options.findingsOutcomeReason ?? existing?.['findingsOutcomeReason'] ?? null;
+    accumulated['outcomeInferred'] = options.outcomeInferred ?? existing?.['outcomeInferred'] ?? undefined;
+    accumulated['outcomeMalformed'] = options.outcomeMalformed ?? existing?.['outcomeMalformed'] ?? undefined;
     accumulated['roundsUsed'] = ((existing?.['roundsUsed'] as number | undefined) ?? 0) + (options.roundsDelta ?? 1);
     accumulated['concernCategories'] = existing?.['concernCategories'] ?? [];
     accumulated['findingsBySeverity'] = existing?.['findingsBySeverity'] ?? { critical: 0, high: 0, medium: 0, low: 0 };
+  } else if (stage === 'implementing' || stage === 'annotating') {
+    // Same outcome-threading shape for both: implementing carries the value
+    // the worker emitted (read-route only); annotating mirrors it so the
+    // annotated stage row also shows what the LLM judge saw.
+    if (options.findingsOutcome !== undefined || existing?.['findingsOutcome'] !== undefined) {
+      accumulated['findingsOutcome'] = options.findingsOutcome ?? existing?.['findingsOutcome'] ?? null;
+    }
+    if (options.findingsOutcomeReason !== undefined || existing?.['findingsOutcomeReason'] !== undefined) {
+      accumulated['findingsOutcomeReason'] = options.findingsOutcomeReason ?? existing?.['findingsOutcomeReason'] ?? null;
+    }
+    if (options.outcomeInferred !== undefined || existing?.['outcomeInferred'] !== undefined) {
+      accumulated['outcomeInferred'] = options.outcomeInferred ?? existing?.['outcomeInferred'];
+    }
+    if (options.outcomeMalformed !== undefined || existing?.['outcomeMalformed'] !== undefined) {
+      accumulated['outcomeMalformed'] = options.outcomeMalformed ?? existing?.['outcomeMalformed'];
+    }
   } else if (stage === 'rework') {
     accumulated['triggeringConcernCategories'] = existing?.['triggeringConcernCategories'] ?? [];
   }

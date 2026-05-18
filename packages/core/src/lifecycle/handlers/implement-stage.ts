@@ -177,6 +177,10 @@ export async function implementHandler(
       criteriaSucceeded: result.criteriaSucceeded ?? parsed.criteriaSucceeded ?? [],
       criteriaErrors: result.criteriaErrors ?? parsed.criteriaErrors ?? [],
       sourcesUsed: result.sourcesUsed ?? parsed.sourcesUsed ?? [],
+      ...(result.findingsOutcome !== undefined && { findingsOutcome: result.findingsOutcome }),
+      ...(result.findingsOutcomeReason !== undefined && { findingsOutcomeReason: result.findingsOutcomeReason }),
+      ...(result.outcomeInferred !== undefined && { outcomeInferred: result.outcomeInferred }),
+      ...(result.outcomeMalformed !== undefined && { outcomeMalformed: result.outcomeMalformed }),
     };
 
     // Halt ONLY on hard worker error. 'incomplete' (worker hit a cap but

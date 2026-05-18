@@ -18,6 +18,14 @@ vi.mock('../../../packages/core/src/lifecycle/parallel-criteria-routes.js', asyn
       buildPrefix: () => 'mock prefix',
       criteria: [{ id: 'c1', label: 'criterion 1' }],
       buildSuffix: (_c: { id: string }) => 'mock suffix',
+      semantics: {
+        goalLine: 'mock goal',
+        emptyOutcomeLine: 'mock empty',
+        findingMeaningParagraph: 'mock finding',
+        severityMeanings: { critical: 'c', high: 'h', medium: 'm', low: 'l' },
+        mustEmitAtLeastOne: false,
+        legalOutcomes: ['found', 'clean'] as const,
+      },
     }),
     isReadOnlyRoute: (route: string) => ['audit', 'review', 'debug', 'investigate', 'explore'].includes(route),
   };
@@ -135,6 +143,8 @@ describe('implementHandler', () => {
       costUSD: 0.02,
       durationMs: 500,
       synthesizedOutput: 'criterion 1 narrative...',
+      findingsOutcome: 'found',
+      findingsOutcomeReason: null,
     });
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 

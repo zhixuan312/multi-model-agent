@@ -56,10 +56,11 @@ export const SPEC_AUDIT_SEMANTICS: RouteSemantics = {
   emptyOutcomeLine: 'If THIS criterion does not surface a real gap in the spec, respond with the literal text "No findings for this criterion." — that is a valid outcome on a clean spec.',
   findingMeaningParagraph: 'A finding is a PLACE WHERE THE SPEC PROSE FAILS THE EXECUTABILITY TEST viewed through this criterion. Title = the failing prose snippet (or its anchor). Severity reflects whether the failure would silently ship wrong behavior, block the executor, force a clarification round, or just leave a stylistic gap.',
   severityMeanings: {
-    critical: 'literal execution would silently produce the wrong outcome — e.g. a requirement whose stated test would pass on broken behavior, or two requirements that contradict in a way the executor cannot detect.',
-    high: 'would block the executor — vague verb without a measurable outcome on a load-bearing requirement, missing acceptance criterion on a critical path, undeclared assumption that downstream code depends on.',
-    medium: 'would force a clarification round — implicit scope, decision without trace, non-functional constraint hinted but not stated.',
-    low: 'stylistic / metadata gap; minor inconsistency that does not affect executability.',
+    critical: 'Blocks executability of the audited doc',
+    high: 'Significant ambiguity/gap; rework needed',
+    medium: 'Clarity gap; minor assumption needed',
+    low: 'Polish; no behavior change',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };

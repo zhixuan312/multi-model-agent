@@ -14,12 +14,13 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
   emptyOutcomeLine: 'If none exist, respond with the literal text "No findings for this criterion." — that is a fully valid outcome. Do NOT pad to avoid returning empty.',
   findingMeaningParagraph: 'A finding is an ISSUE introduced or worsened by the change under review (correctness bug, missing test, race, security regression, contract break, etc.). Severity reflects how much the issue blocks merge / ships a regression.',
   severityMeanings: {
-    critical: 'security regression / data corruption / build-breaking change — must NOT merge.',
-    high: 'real correctness bug, broken tests, race, missing edge case that ships a regression — blocks release.',
-    medium: 'contract violation, maintainability issue, doc gap, deprecated API, performance regression on a non-hot path — fix soon, not blocking.',
-    low: 'style, naming, comment nit, dead code — nice-to-fix.',
+    critical: 'Production-breaking on merge',
+    high: 'Correctness gap surfacing in normal use',
+    medium: 'Maintainability/fragility',
+    low: 'Style',
   },
   mustEmitAtLeastOne: false,
+  legalOutcomes: ['found', 'clean'] as const,
 };
 
 export const REVIEW_SUBTYPES: Record<ReviewSubtype, ReadOnlySubtypeSpec> = {

@@ -63,6 +63,10 @@ export interface ParsedStructuredReport {
   extraSections: Record<string, string[]>;
   commit?: CommitFields;
   commitDiagnostic?: string;
+  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
 }
 
 export type StructuredReport = ParsedStructuredReport;

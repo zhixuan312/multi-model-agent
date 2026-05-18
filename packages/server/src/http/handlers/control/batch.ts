@@ -12,15 +12,43 @@ export interface BatchHandlerDeps {
 
 // envelopeToPublicResult converts a TaskEnvelope to the public-safe per-task result shape.
 function envelopeToPublicResult(env: TaskEnvelope) {
+  // 4.7.4+ standardization: findings/outcome summary fields live ONLY at
+  // the top level of the per-task result. Per-stage rows carry stage
+  // mechanics (durationMs, costUSD, verdict, etc.) but NOT findings
+  // duplicates — one source of truth for backend + dashboard consumers.
+  const stripFindingsFields = (s: any) => {
+    const { findingsOutcome, findingsOutcomeReason, outcomeInferred, outcomeMalformed, findingsBySeverity, ...rest } = s ?? {};
+    return rest;
+  };
+  // Outcome rollup: review > annotating > implementing (first non-null wins).
+  const outcomePriority = ['reviewing', 'annotating', 'implementing'];
+  const pick = outcomePriority
+    .map((n) => (env.stages as any[]).find((st) => st.name === n && st.findingsOutcome != null))
+    .find((s) => s !== undefined);
+  const sevCounts = env.findings.reduce(
+    (acc, f) => {
+      const s = (f as any).severity as 'critical' | 'high' | 'medium' | 'low' | undefined;
+      if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') acc[s] += 1;
+      return acc;
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 } as { critical: number; high: number; medium: number; low: number },
+  );
   return {
     taskId: env.taskId, taskIndex: env.taskIndex, route: env.route, agentType: env.agentType,
     status: env.status, terminalAt: env.terminalAt, stopReason: env.stopReason,
-    stages: env.stages, // already PII-safe (counts/numerics/enums)
+    stages: env.stages.map(stripFindingsFields),
     totals: {
       costUSD: env.totalCostUSD, durationMs: env.totalDurationMs, turnsUsed: env.turnsUsed,
       inputTokens: env.totalInputTokens, outputTokens: env.totalOutputTokens,
     },
     findings: env.findings.map((f: any) => ({ id: f.id, severity: f.severity, category: f.category, claim: f.claim, source: f.source })),
+    findingsBySeverity: sevCounts,
+    ...(pick && {
+      findingsOutcome: (pick as any).findingsOutcome ?? null,
+      ...((pick as any).findingsOutcomeReason !== undefined && { findingsOutcomeReason: (pick as any).findingsOutcomeReason }),
+      ...((pick as any).outcomeInferred !== undefined && { outcomeInferred: (pick as any).outcomeInferred }),
+      ...((pick as any).outcomeMalformed !== undefined && { outcomeMalformed: (pick as any).outcomeMalformed }),
+    }),
     filesChangedCount: env.realFilesChanged.length,
     error: env.structuredError ? { code: (env.structuredError as any).code, message: (env.structuredError as any).message } : null,
     escalationSummary: { count: env.escalationLog.length, distinctProviders: new Set(env.escalationLog.map((e: any) => (e.toModel ?? ''))).size },
@@ -262,8 +290,19 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           totalCostDeltaVsMainUSD: 0, // Not available from envelopes
         };
 
-        // Derive structuredReport from findings
+        // Derive structuredReport from findings + per-stage outcome roll-up.
+        // findingsOutcome aggregation rule: any 'found' → 'found'; else any
+        // 'not_applicable' → 'not_applicable'; else 'clean'. null entries skip.
         const allFindings = snapshots.flatMap(s => s.findings);
+        const stageOutcomes = snapshots
+          .flatMap(s => s.stages)
+          .map(st => (st as { findingsOutcome?: 'found' | 'clean' | 'not_applicable' | null }).findingsOutcome)
+          .filter((o): o is 'found' | 'clean' | 'not_applicable' => o === 'found' || o === 'clean' || o === 'not_applicable');
+        const rollupOutcome: 'found' | 'clean' | 'not_applicable' | null = stageOutcomes.length === 0
+          ? null
+          : stageOutcomes.includes('found') ? 'found'
+          : stageOutcomes.includes('not_applicable') ? 'not_applicable'
+          : 'clean';
         const structuredReport = {
           summary: allFindings.length > 0 ? `${allFindings.length} finding(s)` : 'No findings',
           workerStatus: snapshots.length > 0 ? snapshots[0].status : 'unknown',
@@ -277,6 +316,7 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           commitMessage: null,
           commitSkipReason: null,
           findings: allFindings.map(f => ({ severity: f.severity, category: f.category, claim: f.claim })),
+          findingsOutcome: rollupOutcome,
           criteriaErrors: [] as unknown[],
         };
 

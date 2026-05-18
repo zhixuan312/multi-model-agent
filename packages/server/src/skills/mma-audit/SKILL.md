@@ -223,4 +223,34 @@ Every completed task automatically registers a terminal markdown context block c
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
+## Outcome semantics
+
+Every task result carries outcome fields that describe the audit's conclusion status:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the audit uncover issues? |
+| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "3 critical findings: broken paths, missing symbols, mismatched signatures" or "Document is clean across all audit criteria"). |
+| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the auditor explicitly stated it. |
+| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
+
+### Enum values
+
+- **`found`** — the audit surfaced one or more issues (findings) in the artifact across one or more criteria. This indicates the artifact needs rework before downstream use.
+- **`clean`** — the audit completed and found zero issues. The artifact is clear across all audit criteria and ready for downstream use.
+- **`not_applicable`** — the audit could not proceed (e.g., wrong input type, missing preconditions, or system error). This is rare; most audits resolve to `found` or `clean`.
+
+### Empty findings ≠ failure
+
+A crucial semantic: **empty findings does NOT mean `completed: false` or a failed task.** Finding nothing wrong is a successful audit outcome — it means the document passed the bar. An audit with zero findings is `completed: true` with `findingsOutcome: 'clean'`.
+
+### Per-route legal outcomes
+
+The legal outcomes for this route are: `['found', 'clean']`
+
+- **`found`** — one or more issues were detected across the audit criteria.
+- **`clean`** — zero issues were detected; the artifact is ready for downstream use.
+
+The outcome `not_applicable` is not legal for `mma-audit` (except on actual precondition failures) because an audit always produces a verdict: either issues found or clean.
+
 @include _shared/error-handling.md

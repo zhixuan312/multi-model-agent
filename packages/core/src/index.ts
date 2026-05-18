@@ -44,6 +44,13 @@ export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
 export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
 export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type VerifyOutcome, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
+export {
+  FINDINGS_OUTCOME_KINDS,
+  findingsOutcomeKindSchema,
+  inferFromFindings,
+  aggregateOutcomes,
+  type FindingsOutcomeKind,
+} from './reporting/findings-outcome.js';
 
 // Context blocks
 export {

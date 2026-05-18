@@ -98,6 +98,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         cachedPrefix,
         criteria: routeSpec.criteria,
         buildSuffix: routeSpec.buildSuffix,
+        legalOutcomes: routeSpec.semantics.legalOutcomes,
       });
 
       const totalCriteria = routeSpec.criteria.length;
@@ -136,6 +137,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
         terminationReason,
         findings: dispatchResult.findings,
         criteriaErrors: dispatchResult.criteriaErrors,
+        findingsOutcome: dispatchResult.findingsOutcome,
+        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
+        outcomeInferred: dispatchResult.outcomeInferred,
+        outcomeMalformed: dispatchResult.outcomeMalformed,
         ...(incompleteReason && { incompleteReason }),
       } as unknown as RuntimeRunResult;
 
@@ -151,6 +156,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
       }, {
         tier: ctx.assignedTier,
         model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+        findingsOutcome: dispatchResult.findingsOutcome,
+        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
+        outcomeInferred: dispatchResult.outcomeInferred,
+        outcomeMalformed: dispatchResult.outcomeMalformed,
       });
       if (status !== 'ok') state.terminal = true;
       return undefined;
