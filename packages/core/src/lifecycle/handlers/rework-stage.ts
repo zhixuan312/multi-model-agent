@@ -180,7 +180,6 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     cachedReadTokens: result.usage?.cachedReadTokens ?? 0,
     cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
     turnCount: result.turns ?? 1,
-    toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
     // `result` comes from assembleRunResult which writes the turn cost to
     // top-level `actualCostUSD` (not a `costUSD` field). Reading the wrong
     // field name was the historical cause of rework stages recording
@@ -188,7 +187,6 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     // legacy `costUSD` as a safety fallback.
     costUSD: (result as { actualCostUSD?: number | null }).actualCostUSD ?? (result as { costUSD?: number | null }).costUSD ?? null,
     durationMs: (result as { durationMs?: number }).durationMs ?? null,
-    filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
     filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
   }, {
     tier: reworkTier,
