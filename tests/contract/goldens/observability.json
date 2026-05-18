@@ -17,8 +17,7 @@
         "providerType",
         "turnIndex",
         "finishReason",
-        "assistantTextLen",
-        "toolCallCount"
+        "assistantTextLen"
       ]
     },
     {
@@ -208,9 +207,7 @@
         "workerStatus",
         "turns",
         "durationMs",
-        "filesRead",
         "filesWritten",
-        "toolCalls",
         "inputTokens",
         "outputTokens",
         "costUSD"

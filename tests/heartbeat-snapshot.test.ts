@@ -2,16 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
 
 describe('ActivityTracker.getHeadlineSnapshot', () => {
-  it('emits prefix without elapsed and a stats clause that grows as counters fire', () => {
+  it('emits prefix without elapsed and a stats clause that grows as filesWritten increments', () => {
     const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: null });
     ht.start(5);
     let snap = ht.getHeadlineSnapshot();
     expect(snap.prefix).toBe('[1/5] Implementing (gpt-5) — ');
     expect(snap.statsClause).toBe('');
-    ht.recordToolCall();
-    ht.recordFileRead();
+    ht.updateProgress(1);
     snap = ht.getHeadlineSnapshot();
-    expect(snap.statsClause).toBe(', 1 read, 1 tool call');
+    expect(snap.statsClause).toBe(', 1 written');
   });
 
   it('omits saved-cost clause when costDeltaVsMainUSD is zero', () => {

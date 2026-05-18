@@ -77,8 +77,6 @@ export const StageEntryBase = z.object({
   outputTokens: z.number().int().min(0).max(2_000_000),
   cachedReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
   cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
-  toolCallCount: z.number().int().min(0).max(5000),
-  filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
   maxIdleMs: z.number().int().min(0).max(1_200_000),

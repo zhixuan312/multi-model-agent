@@ -39,18 +39,18 @@ function makeMockTurn(opts: {
   costUSD: number;
   workerSelfAssessment?: 'done' | 'failed';
   terminationReason?: string;
+  filesWritten?: string[];
 }): TurnResult {
   return {
     output: opts.output,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    filesRead: [],
-    filesWritten: [],
-    toolCallsByName: {},
+    filesWritten: opts.filesWritten ?? [],
+    usedShell: false,
     turns: opts.turnsUsed,
     durationMs: 100,
     costUSD: opts.costUSD,
-    terminationReason: opts.terminationReason ?? 'ok',
-    ...(opts.workerSelfAssessment && { workerSelfAssessment: opts.workerSelfAssessment }),
+    terminationReason: (opts.terminationReason ?? 'ok') as TurnResult['terminationReason'],
+    ...(opts.workerSelfAssessment && { workerSelfAssessment: opts.workerSelfAssessment } as any),
   };
 }
 

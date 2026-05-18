@@ -35,11 +35,6 @@ describe('assembleRunResult', () => {
     expect(r.status).toBe('timeout');
     expect(r.terminationReason).toBe('time_ceiling');
   });
-  it('flattens toolCallsByName into toolCalls string[]', () => {
-    const r = assembleRunResult(turn({ toolCallsByName: { Read: 2, Edit: 1 } }));
-    expect(r.toolCalls.length).toBe(3);
-    expect(r.toolCalls.filter(t => t === 'Read').length).toBe(2);
-  });
   it('parsedFindings is undefined unless parsed', () => {
     const r = assembleRunResult(turn());
     expect(r.parsedFindings).toBeUndefined();
