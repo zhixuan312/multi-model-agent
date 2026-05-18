@@ -18,7 +18,11 @@ ${JSON.stringify(ctx, null, 2)}
 
 Rules:
 1. Emit ONLY a JSON code block with these exact fields: completed (boolean), message (string, 1-3 sentences), findings (array passed through from upstream — you may dedupe identical entries and re-categorize severity ONLY; never invent new findings), summary, filesChanged, commitSha.
-2. Set completed=true ONLY IF: the latest worker self-assessment is 'done'; AND review is approved OR rework's unaddressedFindingIds is empty; AND commit is 'committed' or 'no_op:no_diff' or skipped-with-autoCommit-disabled.
+2. Set completed=true ONLY IF (the system applies these gates after your proposal):
+  - implement stage advanced; AND
+  - review is approved OR (changes_required + rework applied + no unaddressed findings) OR reviewPolicy=none; AND
+  - commit gate kind is 'committed' or 'no_op' OR autoCommit=false.
+Worker self-assessment is recorded in telemetry but does not gate completion.
 3. If completed=false, message must name a specific blocking gate or finding ID AND suggest a recovery action.
 4. filesChanged and commitSha must come from commit.payload if it committed, else [] and null. Do not invent them.
 
@@ -65,8 +69,10 @@ export function serializeWriteContext(state: LifecycleState): unknown {
       unaddressedFindingIds: last?.unaddressedFindingIds ?? [],
     },
     commit: {
-      committed: Array.isArray((state as any).commits) && (state as any).commits.length > 0,
-      skipReason: last?.commitSkipReason ?? null,
+      committed: (state.gates?.commit?.payload as { kind?: 'committed' | 'no_op' } | undefined)?.kind === 'committed',
+      skipReason: ((state.gates?.commit?.payload as { kind?: string; reason?: string } | undefined)?.kind === 'no_op'
+        ? (state.gates?.commit?.payload as { reason?: string })?.reason ?? null
+        : null),
       sha: last?.commitSha ?? null,
     },
   };
