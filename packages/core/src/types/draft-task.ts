@@ -1,17 +1,7 @@
-import type { AgentType, TaskSpec } from '../types.js';
+import type { AgentType } from '../types.js';
 
-export type BriefQualityWarning =
-  | 'outsourced_discovery'
-  | 'brittle_line_anchors'
-  | 'mixed_environment_actions'
-  | 'bare_topic_noun'
-  | 'no_done_condition'
-  | 'no_output_contract'
-  | 'tiny_brief'
-  | 'huge_brief';
-
-export type BriefQualityPolicy = 'strict' | 'warn' | 'off' | undefined;
-
+// Source-route union: the routes through which a draft can be constructed.
+// Each variant carries its route-specific fields alongside the original input.
 export type SourceRoute = 'delegate_tasks' | 'review_code' | 'debug_task' | 'verify_work' | 'audit_document' | 'execute_plan' | 'investigate_codebase';
 
 export type DelegateSource = { route: 'delegate_tasks'; originalInput: Record<string, unknown> };
@@ -37,36 +27,4 @@ export interface DraftTask {
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommand?: string[];
   skipCompletionHeuristic?: boolean;
-}
-
-export type ClassificationResult = 
-  | { draft: DraftTask; classification: 'ready'; reasons: [] }
-  | { draft: DraftTask; classification: 'needs_confirmation'; reasons: string[] }
-  | { draft: DraftTask; classification: 'unrecoverable'; reasons: string[] };
-
-export interface HardError {
-  draftId: string;
-  taskIndex: number;
-  error: string;
-  errorCode: string;
-  details?: Record<string, unknown>;
-}
-
-export interface IntakeProgress {
-  totalDrafts: number;
-  readyDrafts: number;
-  hardErrorDrafts: number;
-  executedDrafts: number;
-}
-
-export interface ReadyDraft {
-  task: TaskSpec;
-  draftId: string;
-  taskIndex: number;
-}
-
-export interface IntakeResult {
-  ready: ReadyDraft[];
-  hardErrors: HardError[];
-  intakeProgress: IntakeProgress;
 }

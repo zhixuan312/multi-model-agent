@@ -1,6 +1,6 @@
 // Per-task brief shape — what callers send to /delegate, /audit, etc.
 // Matches spec architecture.md `types/task-spec.ts` slot.
-import type { BriefQualityPolicy } from '../intake/types.js';
+import type { BriefQualityPolicy } from './brief-quality-policy.js';
 import type { ResearchToolDefinition } from '../research/types.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';

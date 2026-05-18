@@ -100,10 +100,6 @@
       "types": "./dist/providers/call-cache.d.ts",
       "import": "./dist/providers/call-cache.js"
     },
-    "./intake/types": {
-      "types": "./dist/intake/types.d.ts",
-      "import": "./dist/intake/types.js"
-    },
     "./intake/brief-compiler-slots/delegate": {
       "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
       "import": "./dist/intake/brief-compiler-slots/delegate.js"

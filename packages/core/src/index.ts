@@ -38,7 +38,7 @@ export type {
 //  escalation/types.js is being deleted along with the rest of escalation/.)
 export type {
   BriefQualityPolicy,
-} from './intake/types.js';
+} from './types/brief-quality-policy.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
@@ -118,7 +118,7 @@ export { otherTier } from './config/tier-policy-registry.js';
 
 export type {
   DraftTask,
-} from './intake/types.js';
+} from './types/draft-task.js';
 
 // Batch registry
 export * from './stores/batch-registry.js';

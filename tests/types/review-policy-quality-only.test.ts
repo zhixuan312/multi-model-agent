@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { inputSchema as delegateInputSchema } from '../../packages/core/src/tools/delegate/schema.js';
 import { inputSchema as executePlanInputSchema } from '../../packages/core/src/tools/execute-plan/schema.js';
 import type { TaskSpec } from '../../packages/core/src/types.js';
-import type { DraftTask } from '../../packages/core/src/intake/types.js';
+import type { DraftTask } from '../../packages/core/src/types/draft-task.js';
 
 describe("reviewPolicy: 'quality_only'", () => {
   it('TaskSpec.reviewPolicy accepts quality_only at the type level', () => {
