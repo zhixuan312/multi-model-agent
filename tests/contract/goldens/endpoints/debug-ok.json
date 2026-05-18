@@ -11,9 +11,7 @@
         "cachedNonReadTokens": 0
       },
       "turns": 5,
-      "filesRead": [],
       "filesWritten": [],
-      "toolCalls": [],
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "workerStatus": "done",
@@ -44,8 +42,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 5,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0
         },
         "annotating": {
@@ -64,8 +60,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0,
           "outcome": "transformed"
         }

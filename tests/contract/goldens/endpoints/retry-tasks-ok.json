@@ -12,9 +12,7 @@
       },
       "actualCostUSD": null,
       "turns": 1,
-      "filesRead": [],
       "filesWritten": [],
-      "toolCalls": [],
       "outputIsDiagnostic": true,
       "escalationLog": [],
       "durationMs": "<DETERMINISTIC>",
@@ -54,8 +52,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0
         },
         "review": {
@@ -74,8 +70,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 2,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0,
           "verdict": null,
           "roundsUsed": 1,
@@ -103,8 +97,6 @@
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
           "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
           "filesWrittenCount": 0,
           "outcome": "transformed"
         }
