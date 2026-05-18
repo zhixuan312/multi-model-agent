@@ -7,12 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.7.7] - 2026-05-18
 
-PRIVACY.md schema documentation update: removed deprecated `verifyCommandPresent` field and clarified `reviewPolicy` description.
+Wire-record honesty pass + complete `verifyCommand` feature removal. The wire telemetry now distinguishes per-task `reviewPolicy` intent from the actual stage outcome, and `errorCode` is preserved through the seal path so reviewer rejection lands a non-null code (`review_quality_findings_unresolved` or `review_spec_rejected_terminal`) instead of being indistinguishable from transport failure. Schema version stays at 5 (bumping would silently drop queued v5 records via `flusher.ts:143`). 20 commits since 4.7.6; full suite 2057/2057 passing.
 
-### Changed
+### Removed
 
-- **`verifyCommandPresent` field removed from PRIVACY.md.** This field tracked verify-command adoption rate, deprecated since the 4.3.1 stage vocabulary collapse. Removal simplifies the telemetry schema documentation without changing collection behavior.
-- **`reviewPolicy` field description refined in PRIVACY.md.** Clarified to distinguish the requested review policy (intent) from the outcome of whether review actually ran (`stages.review.outcome`).
+- **`verifyCommand` feature end-to-end.** Removed from the delegate + execute-plan Zod request schemas (callers passing the field now get `400 invalid_request` via Zod `.strict()`), `TaskSpec`, `DraftTask`, both brief slots, delegate `implementer-criteria` worker prompts (4 mentions), rework-stage prompt + header comment, the dead `VerifyStageRunner` reporting module, the `validateVerifyCommand` server-side allowlist validator and its 2 handler call sites in `delegate.ts`/`execute-plan.ts`, the `verifyOutcome` field in `stage-plan-types`/`stage-stats`, the `validator_verify_command_failed` member of `ErrorCodeSchema`, the `verifyCommandPresent` wire field (schema + projector + lifecycle slots in `stage-plan-types`/`task-runner`/`lifecycle-context` + server `buildOpts` defaults), and the inert `validationsRun` byproduct field (parser + lifecycle handlers + fallback report + batch handler + fixtures). Skill docs (`mma-delegate/SKILL.md`, `mma-execute-plan/SKILL.md`) drop the `verifyCommand` row and the "Skipping verifyCommand" pitfall; the shared snippet `_shared/verify-and-review.md` was renamed to `review-policy.md` with the verify half stripped. OpenAPI + endpoint goldens regenerated. The dedicated tests `tests/tool-schemas/verify-command.test.ts` and `tests/reporting/verify-stage-runner.test.ts` were deleted; row 8 of the terminal-status truth table (`verifyOutcome=failed → validator_verify_command_failed`) was dropped along with the matching deriver case.
+- **Server-side default `reviewPolicy: 'full'` constant in `TelemetryUploader.buildOpts`.** Both `server.ts` uploader registrations no longer supply `reviewPolicy`; the value now comes from `TaskEnvelope.reviewPolicy`, populated at envelope construction from per-task `state.reviewPolicy`. The wire `review_policy` column is now the per-task intent — not a server default — and is complementary to `stages.review.outcome`, which describes what actually ran. An intent=`full` + outcome=`skipped` row (e.g. implement stage failed, read route, review-skip gate triggered) is now a legitimate and queryable signal rather than the apparent contradiction it used to be.
+- **Server-side `verifyCommandPresent: false` constant in `buildOpts`.** Field gone from the wire schema; backend DB column is nullable and continues to receive null for new records.
+
+### Fixed
+
+- **`error_code` was null on reviewer rejection.** `recordTaskCompletedHandler` (`terminal-handlers.ts:202`) now copies `runtime.errorCode` onto the sealed envelope alongside `structuredError`. Reviewer-rejected paths land `review_quality_findings_unresolved` (quality review verdict=`changes_required`) or `review_spec_rejected_terminal` (spec review verdict=`changes_required`) in the wire `errorCode` column. Previously `terminal_status=error + error_code=null` was indistinguishable from a transport/runtime failure.
+- **`enrich-runtime-result.ts` no longer emits the invalid `'review_rejected'` errorCode value.** `'review_rejected'` was never a member of `ErrorCodeSchema`; the bug was masked because the seal path dropped `errorCode` anyway. Now `enrich-runtime-result` inspects `state.reviewSubResults` and emits the right canonical code based on which sub-result returned `changes_required`. As part of the fix, `enrich-runtime-result` also sets `enriched.workerStatus = 'failed'` on the review-rejected branch, so the seal handler maps to envelope `status='failed'` → wire `terminalStatus='error'` (without this the workerStatus stayed at the earlier `'done'` default and the wire emitted `terminalStatus='ok'` alongside the new `errorCode`, violating the R1 invariant).
+
+### Added
+
+- **`TaskEnvelope.reviewPolicy` (required) and `TaskEnvelope.errorCode` (optional).** `reviewPolicy` enum matches `delegate/schema.ts` / `execute-plan/schema.ts`: `'full' | 'quality_only' | 'diff_only' | 'none'`. `TaskEnvelopeStore.create()` throws if the seed omits `reviewPolicy` — a silent default would re-introduce the dishonesty bug. `seal()` preserves `errorCode` from the runtime result.
+- **Wire-schema docstring invariants.** `wire-schema.ts` now documents that `reviewPolicy` is per-task intent (not outcome) and that `errorCode` is non-null whenever `terminalStatus === 'error'`. New `tests/contract/wire-schema-version.test.ts` pins `SCHEMA_VERSION === 5` so an accidental bump can't slip into a routine field removal again. New `errorCode invariant` describe block in `tests/contract/observability/event-manifest.test.ts` (sentinel; real end-to-end coverage in the integration test below).
+- **`tests/integration/review-rejection-error-code-pipeline.test.ts`.** Two end-to-end cases — quality and spec rejection — drive `enrichRuntimeResult` + `recordTaskCompletedHandler` and assert the wire record has `terminalStatus='error'`, `workerStatus='failed'`, and the matching `errorCode`. Closes the original bug.
+- **`tests/tool-schemas/strict-unknown-keys.test.ts`.** Regression guard: any request that sends `verifyCommand` to `/delegate` or `/execute-plan` is rejected with `400 invalid_request`. Pins the `.strict()` precondition explicitly so a future schema refactor can't silently accept the removed field again.
+- **`tests/events/to-wire-record-review-policy.test.ts` and `to-wire-record-error-code.test.ts`.** Unit-level coverage for the new envelope-resident `reviewPolicy` and `errorCode` projection.
+
+### Notes
+
+- **`SCHEMA_VERSION` stays at 5.** Bumping would drop queued v5 records via `flusher.ts:143`. The wire shape change is intentional and unversioned per the greenfield rule in `.claude/rules/development-mode.md`.
+- Backend ingester column `verify_command_present` is already nullable and continues to accept null for new records. No backend migration required.
 
 ## [4.7.6] - 2026-05-18
 
