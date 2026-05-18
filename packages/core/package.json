@@ -112,17 +112,9 @@
       "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
       "import": "./dist/intake/brief-compiler-slots/delegate.js"
     },
-    "./intake/brief-compiler-slots/execute-plan": {
-      "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
-    },
     "./intake/brief-compiler-slots/research": {
       "types": "./dist/intake/brief-compiler-slots/research.d.ts",
       "import": "./dist/intake/brief-compiler-slots/research.js"
-    },
-    "./intake/draft-id": {
-      "types": "./dist/intake/draft-id.d.ts",
-      "import": "./dist/intake/draft-id.js"
     },
     "./events/jsonl-writer": {
       "types": "./dist/events/jsonl-writer.d.ts",

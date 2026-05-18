@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
-import { extractPlanSection } from '../plan-extractor.js';
-import type { ReviewPolicy } from './delegate.js';
+import { extractPlanSection } from './plan-extractor.js';
+import type { ReviewPolicy } from '../../types/review-policy.js';
 
-// ── Generic executor brief slot ──
-// Used by tool-config.ts as ToolConfig.briefSlot.
+// ── Brief slot for the execute-plan route ──
+// Wired as ToolConfig.briefSlot in tool-config.ts.
 
-export interface ToolExecutePlanBrief {
+export interface ExecutePlanBrief {
   taskDescriptor: string;
   filePaths: string[];
   sectionBody: string;
@@ -17,7 +17,7 @@ export interface ToolExecutePlanBrief {
   verifyCommand?: string[];
 }
 
-export interface ToolExecutePlanInput {
+export interface ExecutePlanInput {
   filePaths: string[];
   taskDescriptors: string[];
   cwd?: string;
@@ -26,7 +26,7 @@ export interface ToolExecutePlanInput {
   verifyCommand?: string[];
 }
 
-export function toolExecutePlanBriefSlot(input: ToolExecutePlanInput): ToolExecutePlanBrief[] {
+export function executePlanBriefSlot(input: ExecutePlanInput): ExecutePlanBrief[] {
   const planPath = input.filePaths[0]!;
   const cwd = input.cwd ?? process.cwd();
   const rp = input.perTaskReviewPolicy ?? {};

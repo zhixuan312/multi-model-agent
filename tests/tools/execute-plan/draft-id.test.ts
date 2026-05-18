@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDraftId, parseDraftId, generateRequestId, escapeFanoutKey, canonicalizePath, disambiguateFanoutKeys } from '../../packages/core/src/intake/draft-id.js';
+import { createDraftId, parseDraftId, generateRequestId, escapeFanoutKey, canonicalizePath, disambiguateFanoutKeys } from '../../../packages/core/src/tools/execute-plan/draft-id.js';
 
 describe('draft-id', () => {
   describe('createDraftId / parseDraftId', () => {

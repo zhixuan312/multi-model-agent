@@ -3,7 +3,7 @@ import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js
 import { specLintTemplate } from '../../review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
-import { toolExecutePlanBriefSlot, type ToolExecutePlanBrief } from '../../intake/brief-compiler-slots/execute-plan.js';
+import { executePlanBriefSlot, type ExecutePlanBrief } from './brief-slot.js';
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';
 import { executePlanReportSchema } from '../../reporting/report-parser-slots/execute-plan-report.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
@@ -119,12 +119,12 @@ function buildExecutePlanPrompt(
   return parts.join('\n');
 }
 
-export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> = {
+export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
   name: 'execute_plan',
   category: 'artifact_producing',
   serializeSameRepo: true,
   agentType: 'standard',
-  briefSlot: toolExecutePlanBriefSlot,
+  briefSlot: executePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
     prompt: buildExecutePlanPrompt(brief.filePaths, brief.taskDescriptor, brief.sectionBody, brief.sectionTruncated),
     agentType: 'standard',
