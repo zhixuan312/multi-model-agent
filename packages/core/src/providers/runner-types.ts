@@ -203,9 +203,7 @@ export type ProgressEvent = {
   reviewRound?: number
   attemptCap?: number
   progress: {
-    filesRead: number
     filesWritten: number
-    toolCalls: number
   }
   costUSD: number | null
   costDeltaVsMainUSD: number | null

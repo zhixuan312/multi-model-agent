@@ -233,8 +233,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
     // Match the structured `terminationReason` shape that the old
     // delegate-with-escalation wrapper used to populate (consumed by
     // golden-checked downstream telemetry).
-    const usedShell = Array.isArray(raw.toolCalls)
-      && raw.toolCalls.some((tc) => typeof tc === 'string' && tc.startsWith('runShell'));
+    const usedShell = Boolean(raw.usedShell);
     const cause = raw.status === 'ok' ? 'finished'
       : raw.status === 'incomplete' ? 'incomplete'
       : 'error';
@@ -286,10 +285,8 @@ export async function performImplementation(state: LifecycleState): Promise<void
         findingsOutcome: parsedFindings.outcome,
       }),
     } as unknown as RuntimeRunResult;
-    const filesRead = Array.isArray(result.filesRead) ? result.filesRead.length : 0;
     const filesWritten = Array.isArray(result.filesWritten) ? result.filesWritten.length : 0;
-    const toolCalls = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
-    safeTracker(() => ctx.heartbeat?.updateProgress(filesRead, filesWritten, toolCalls), ctx);
+    safeTracker(() => ctx.heartbeat?.updateProgress(filesWritten), ctx);
     state.lastRunResult = enrichedResult;
 
     // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
@@ -317,10 +314,8 @@ export async function performImplementation(state: LifecycleState): Promise<void
       cachedReadTokens: result.usage.cachedReadTokens ?? 0,
       cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
       turnCount: result.turns ?? 0,
-      toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
       costUSD: costUSDForStage,
       durationMs: result.durationMs ?? null,
-      filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
       filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
     }, {
       tier: ctx.assignedTier,

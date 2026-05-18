@@ -56,14 +56,11 @@ export function startProgressEventsSubscriber(
     switch (eventName) {
       case 'claude_tool_call': {
         const tool = typeof event['tool'] === 'string' ? event['tool'] : '';
-        ctx.tracker.recordToolCall();
-        if (READ_TOOLS.has(tool)) ctx.tracker.recordFileRead();
-        else if (WRITE_TOOLS.has(tool)) ctx.tracker.recordFileWrite();
+        if (WRITE_TOOLS.has(tool)) ctx.tracker.recordFileWrite();
         ctx.tracker.markEvent('tool');
         return;
       }
       case 'codex_command_completed': {
-        ctx.tracker.recordToolCall();
         ctx.tracker.markEvent('tool');
         return;
       }
