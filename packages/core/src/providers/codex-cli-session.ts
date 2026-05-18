@@ -441,7 +441,6 @@ class TurnTracker {
       this.envelope?.recordToolCall({
         stage: 'implementing',
         tool: 'run_shell',
-        filesRead: [],
         filesWritten: [],
       });
       this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_command_completed', {
@@ -455,7 +454,6 @@ class TurnTracker {
         this.envelope?.recordToolCall({
           stage: 'implementing',
           tool: 'edit_file',
-          filesRead: [],
           filesWritten: [item.path],
         });
       }

@@ -55,7 +55,6 @@ function statusToTermination(
       if (incompleteReason === 'stall') return 'stalled';
       return 'cap_exhausted';
     case 'error':
-    case 'api_error':
     case 'auth_error':
     case 'rate_limited':
     default:
@@ -391,7 +390,7 @@ export interface FailProviderOptions {
 
 export function failProvider(messageOrOpts: string | FailProviderOptions = 'mocked failure'): Provider {
   const opts: FailProviderOptions = typeof messageOrOpts === 'string'
-    ? { status: 'api_error', errorCode: messageOrOpts }
+    ? { status: 'error', errorCode: messageOrOpts }
     : messageOrOpts;
   if (opts.status && opts.status !== 'ok') {
     const statusFinal: RunStatus = opts.status;
@@ -414,7 +413,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
         workerSelfAssessment: 'failed',
         wasPromoted: false,
       },
-      structuredError: { code: opts.errorCode ?? 'api_error', message: opts.errorCode ?? statusFinal },
+      structuredError: { code: opts.errorCode ?? 'runner_crash', message: opts.errorCode ?? statusFinal },
     });
     return {
       name: 'mock-fail',

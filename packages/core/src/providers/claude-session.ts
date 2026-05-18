@@ -156,7 +156,6 @@ export class ClaudeSession implements Session {
       cachedReadTokens: norm.usage.cachedReadTokens ?? 0,
       cachedNonReadTokens: norm.usage.cachedNonReadTokens ?? 0,
       terminationReason: norm.terminationReason,
-      filesRead: norm.filesRead.length,
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),
       ...this.taskTag(),

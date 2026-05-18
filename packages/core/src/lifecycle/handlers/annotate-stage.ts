@@ -218,22 +218,35 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
         | { kind: 'ok'; text: string; costUSD: number | null; turnsUsed: number; ms: number; model: string | null; inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number }
         | { kind: 'transport_error'; message: string; ms: number };
       const t0 = Date.now();
-      try {
-        const r = await session.send(prompt, { stageLabel: HUMAN_LABEL.annotating });
-        tres = {
-          kind: 'ok',
-          text: (r as any).output ?? '',
-          costUSD: typeof (r as any).costUSD === 'number' ? (r as any).costUSD : null,
-          turnsUsed: (r as any).turns ?? 1,
-          ms: Date.now() - t0,
-          model: (r as any).model ?? null,
-          inputTokens: (r as any).usage?.inputTokens ?? 0,
-          outputTokens: (r as any).usage?.outputTokens ?? 0,
-          cachedReadTokens: (r as any).usage?.cachedReadTokens ?? 0,
-          cachedNonReadTokens: (r as any).usage?.cachedNonReadTokens ?? 0,
-        };
-      } catch (err) {
-        tres = { kind: 'transport_error', message: err instanceof Error ? err.message : String(err), ms: Date.now() - t0 };
+      // Retry on transport errors: 3 attempts with 0s, 1s, 2s backoff (AC-19, AC-20)
+      const retryDelays = [0, 1000, 2000];
+      let lastErr: Error | undefined;
+      // Initialize to error; will be overwritten on success or last failure
+      tres = { kind: 'transport_error', message: 'annotator transport failed', ms: 0 };
+      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
+        try {
+          const r = await session.send(prompt, { stageLabel: HUMAN_LABEL.annotating });
+          tres = {
+            kind: 'ok',
+            text: (r as any).output ?? '',
+            costUSD: typeof (r as any).costUSD === 'number' ? (r as any).costUSD : null,
+            turnsUsed: (r as any).turns ?? 1,
+            ms: Date.now() - t0,
+            model: (r as any).model ?? null,
+            inputTokens: (r as any).usage?.inputTokens ?? 0,
+            outputTokens: (r as any).usage?.outputTokens ?? 0,
+            cachedReadTokens: (r as any).usage?.cachedReadTokens ?? 0,
+            cachedNonReadTokens: (r as any).usage?.cachedNonReadTokens ?? 0,
+          };
+          break; // Success, exit retry loop
+        } catch (err) {
+          lastErr = err instanceof Error ? err : new Error(String(err));
+          // Update error message for next retry or final failure
+          tres = { kind: 'transport_error', message: lastErr.message, ms: Date.now() - t0 };
+        }
       }
       if (tres.kind === 'ok') {
         llmCostUSD = tres.costUSD ?? 0;

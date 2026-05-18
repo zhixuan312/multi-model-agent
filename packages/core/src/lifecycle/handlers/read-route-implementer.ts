@@ -98,7 +98,7 @@ export async function runReadRouteImplementer(
         // route's headline + status correctly reflect partial completion.
         criteriaErrors.push({
           criterionId: c.id,
-          error: turn.errorMessage ?? `turn ended with ${turn.terminationReason}`,
+          error: turn.errorCode ?? `turn ended with ${turn.terminationReason}`,
         });
         continue;
       }

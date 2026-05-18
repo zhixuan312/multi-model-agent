@@ -159,7 +159,6 @@ export async function performImplementation(state: LifecycleState): Promise<void
         cachedReadTokens: dispatchResult.usage.cachedReadTokens,
         cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
         turnCount: dispatchResult.turns,
-        toolCallCount: 0,
         costUSD: dispatchResult.costUSD,
         durationMs: dispatchResult.durationMs,
       }, {

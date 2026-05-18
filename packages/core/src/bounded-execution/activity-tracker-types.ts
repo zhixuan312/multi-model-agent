@@ -43,9 +43,7 @@ export interface HeartbeatTickInfo {
   attemptCap?: number;
   provider: string;
   progress: {
-    filesRead: number;
     filesWritten: number;
-    toolCalls: number;
   };
   costUSD: number | null;
   costDeltaVsMainUSD: number | null;
