@@ -41,7 +41,12 @@ function envelopeToPublicResult(env: TaskEnvelope) {
       costUSD: env.totalCostUSD, durationMs: env.totalDurationMs, turnsUsed: env.turnsUsed,
       inputTokens: env.totalInputTokens, outputTokens: env.totalOutputTokens,
     },
-    findings: env.findings.map((f: any) => ({ id: f.id, severity: f.severity, category: f.category, claim: f.claim, source: f.source })),
+    findings: env.findings.map((f: any) => ({
+      id: f.id, severity: f.severity, category: f.category, claim: f.claim,
+      ...(f.evidence !== undefined && f.evidence !== '' && { evidence: f.evidence }),
+      ...(f.suggestion !== undefined && f.suggestion !== '' && { suggestion: f.suggestion }),
+      source: f.source,
+    })),
     findingsBySeverity: sevCounts,
     ...(pick && {
       findingsOutcome: (pick as any).findingsOutcome ?? null,
@@ -327,7 +332,11 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           commitSha: null,
           commitMessage: null,
           commitSkipReason: null,
-          findings: allFindings.map(f => ({ severity: f.severity, category: f.category, claim: f.claim })),
+          findings: allFindings.map(f => ({
+            severity: f.severity, category: f.category, claim: f.claim,
+            ...((f as any).evidence !== undefined && (f as any).evidence !== '' && { evidence: (f as any).evidence }),
+            ...((f as any).suggestion !== undefined && (f as any).suggestion !== '' && { suggestion: (f as any).suggestion }),
+          })),
           findingsOutcome: rollupOutcome,
           criteriaErrors: [] as unknown[],
         };
