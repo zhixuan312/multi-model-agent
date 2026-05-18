@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import * as delegate from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/delegate/tool-config';
-import { validateVerifyCommand } from '@zhixuan92/multi-model-agent-core/intake/verify-command-validator';
+import { validateVerifyCommand } from '../../validation/verify-command.js';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

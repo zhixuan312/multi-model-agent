@@ -1,10 +1,17 @@
 import type { AgentType } from '../types.js';
-import type { BriefSlotFiller } from '../intake/brief-compiler.js';
 import type { ReportSchema } from '../reporting/structured-report-parser.js';
 import type { HeadlineTemplate } from '../reporting/headline-composer.js';
 import type { ReviewTemplate } from '../review/templates/shared.js';
 import type { TaskSpec } from '../types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
+
+/**
+ * A briefSlot turns raw tool input into an array of briefs ready for the
+ * generic executor. Each route owns its own briefSlot at
+ * `tools/<route>/brief-slot.ts` (per the intake-dissolution cleanup; the
+ * old shared `intake/brief-compiler.ts` location is gone).
+ */
+export type BriefSlotFiller<TInput, TBrief> = (input: TInput) => TBrief;
 
 export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> {
   name: string;

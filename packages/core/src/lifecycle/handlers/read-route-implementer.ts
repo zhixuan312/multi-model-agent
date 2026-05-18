@@ -28,6 +28,11 @@ export interface ReadRouteImplementerInput {
   criteria: readonly Criterion[];
   buildSuffix: (c: Criterion) => string;
   legalOutcomes: readonly FindingsOutcomeKind[];
+  /** Optional sink for dropped/malformed Finding warnings (parser-side).
+   *  Pass an envelope-bound sink so silent parser drops become visible in
+   *  validationWarnings — otherwise a worker's malformed Findings vanish
+   *  without trace. Defaults to no-op (back-compat with tests). */
+  warnSink?: (event: string, data: Record<string, unknown>) => void;
 }
 
 export interface ReadRouteImplementerResult {
@@ -97,7 +102,7 @@ export async function runReadRouteImplementer(
         });
         continue;
       }
-      const result = parseFindings(turn.output, c.id, input.legalOutcomes);
+      const result = parseFindings(turn.output, c.id, input.legalOutcomes, input.warnSink);
       findings.push(...result.findings);
       perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
       perCriterionOutcomes.push(result.outcome);

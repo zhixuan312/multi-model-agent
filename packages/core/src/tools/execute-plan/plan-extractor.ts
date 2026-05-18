@@ -21,7 +21,7 @@ export class PlanExtractionError extends Error {
 
 export interface PlanSection {
   descriptor: string;
-  body: string;     // <= 10 KB after truncation
+  body: string;     // <= 30 KB after truncation (SLICE_CAP_BYTES)
   headingLevel: number;
   truncated: boolean;
 }

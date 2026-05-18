@@ -64,10 +64,6 @@
       "types": "./dist/lifecycle/stage-labels.d.ts",
       "import": "./dist/lifecycle/stage-labels.js"
     },
-    "./intake/verify-command-validator": {
-      "types": "./dist/intake/verify-command-validator.d.ts",
-      "import": "./dist/intake/verify-command-validator.js"
-    },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
       "import": "./dist/lifecycle/handlers/commit-stage.js"
@@ -104,53 +100,9 @@
       "types": "./dist/providers/call-cache.d.ts",
       "import": "./dist/providers/call-cache.js"
     },
-    "./intake/types": {
-      "types": "./dist/intake/types.d.ts",
-      "import": "./dist/intake/types.js"
-    },
     "./intake/brief-compiler-slots/delegate": {
       "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
       "import": "./dist/intake/brief-compiler-slots/delegate.js"
-    },
-    "./intake/brief-compiler-slots/review": {
-      "types": "./dist/intake/brief-compiler-slots/review.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/review.js"
-    },
-    "./intake/brief-compiler-slots/debug": {
-      "types": "./dist/intake/brief-compiler-slots/debug.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/debug.js"
-    },
-    "./intake/brief-compiler-slots/execute-plan": {
-      "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
-    },
-    "./intake/brief-compiler-slots/research": {
-      "types": "./dist/intake/brief-compiler-slots/research.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/research.js"
-    },
-    "./intake/pipeline": {
-      "types": "./dist/intake/pipeline.d.ts",
-      "import": "./dist/intake/pipeline.js"
-    },
-    "./intake/classify": {
-      "types": "./dist/intake/classify.d.ts",
-      "import": "./dist/intake/classify.js"
-    },
-    "./intake/field-inferer": {
-      "types": "./dist/intake/field-inferer.d.ts",
-      "import": "./dist/intake/field-inferer.js"
-    },
-    "./intake/resolve": {
-      "types": "./dist/intake/resolve.d.ts",
-      "import": "./dist/intake/resolve.js"
-    },
-    "./intake/source-schema": {
-      "types": "./dist/intake/source-schema.d.ts",
-      "import": "./dist/intake/source-schema.js"
-    },
-    "./intake/draft-id": {
-      "types": "./dist/intake/draft-id.d.ts",
-      "import": "./dist/intake/draft-id.js"
     },
     "./events/jsonl-writer": {
       "types": "./dist/events/jsonl-writer.d.ts",

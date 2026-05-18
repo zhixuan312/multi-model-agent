@@ -53,7 +53,7 @@ describe('investigate toolConfig.briefSlot', () => {
     const brief = briefs[0] as InvestigateBrief & { prompt?: unknown };
     expect(brief.compiledPrompt).toContain('Question: q');
     expect(brief.compiledPrompt).toContain('## Summary');
-    expect(brief.compiledPrompt).toContain('## Citations');
+    expect(brief.compiledPrompt).toContain('## Finding 1:');
     expect(brief.compiledPrompt).toContain('## Confidence');
     expect(brief.prompt).toBeUndefined();
   });

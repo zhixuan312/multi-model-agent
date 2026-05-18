@@ -298,6 +298,13 @@ export function toWireRecord(
     taskMaxIdleMs: env.taskMaxIdleMs,
     sandboxViolationCount: env.sandboxViolationCount,
     stages: wireStages as never,
+    // 4.7.5: surface parser-side validation warnings (dropped Findings, malformed
+    // bullets) on the wire so the backend can analytics on output-format drift.
+    // Optional in schema — absent for healthy events; populated only when the
+    // findings-parser warnSink fired during this task.
+    ...(env.validationWarnings.length > 0 && {
+      validation_warnings: env.validationWarnings.map((w) => ({ rule: w.rule, path: w.path })),
+    }),
   };
 
   return ValidatedTaskCompletedEventSchema.parse(record);

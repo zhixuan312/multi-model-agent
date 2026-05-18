@@ -4,7 +4,7 @@ import type { Input } from './schema.js';
 import { qualityDebugTemplate } from '../../review/templates/quality-review-debug.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
-import { debugBriefSlot, type ToolDebugBrief } from '../../intake/brief-compiler-slots/debug.js';
+import { debugBriefSlot, type ToolDebugBrief } from './brief-slot.js';
 import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';

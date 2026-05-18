@@ -4,8 +4,7 @@ import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { delegateHeadlineTemplate } from '../../reporting/headline-templates/delegate.js';
 import { delegateReportSchema } from '../../reporting/report-parser-slots/delegate-report.js';
-import { compileDelegatePrompt } from '../../intake/brief-compiler-slots/delegate.js';
-import type { ReviewPolicy } from '../../intake/brief-compiler-slots/delegate.js';
+import { delegateBriefSlot, type DelegateBrief } from './brief-slot.js';
 import { specLintTemplate } from '../../review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
@@ -24,31 +23,12 @@ export function registerDelegate(registry: ToolSurfaceRegistry): void {
   });
 }
 
-export interface DelegateBrief {
-  prompt: string;
-  done?: string;
-  filePaths?: string[];
-  agentType: 'standard' | 'complex';
-  reviewPolicy: ReviewPolicy;
-  contextBlockIds?: string[];
-  verifyCommand?: string[];
-}
-
 export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   name: 'delegate',
   category: 'artifact_producing',
   serializeSameRepo: true,
   agentType: 'standard',
-  briefSlot: (input) =>
-    input.tasks.map((t) => ({
-      prompt: compileDelegatePrompt({ prompt: t.prompt }),
-      done: t.done,
-      filePaths: t.filePaths,
-      agentType: t.agentType ?? 'standard',
-      reviewPolicy: t.reviewPolicy ?? 'full',
-      contextBlockIds: t.contextBlockIds,
-      verifyCommand: t.verifyCommand,
-    })),
+  briefSlot: delegateBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
     prompt: brief.prompt,
     agentType: brief.agentType,

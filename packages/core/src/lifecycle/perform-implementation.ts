@@ -8,6 +8,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import { assembleRunResult } from '../providers/assemble-run-result.js';
 import { retryableFor } from '../error-codes.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import { parseFindings } from './findings-parser.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
 import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
@@ -99,6 +100,14 @@ export async function performImplementation(state: LifecycleState): Promise<void
         criteria: routeSpec.criteria,
         buildSuffix: routeSpec.buildSuffix,
         legalOutcomes: routeSpec.semantics.legalOutcomes,
+        warnSink: (event, data) => {
+          try {
+            ctx.envelope?.recordValidationWarning({
+              rule: event,
+              path: `${data['reasonCode'] ?? 'unknown'}:${String(data['droppedFindingHeading'] ?? '').slice(0, 120)}`,
+            });
+          } catch { /* envelope sealed — race with terminal stage, harmless */ }
+        },
       });
 
       const totalCriteria = routeSpec.criteria.length;
@@ -247,9 +256,35 @@ export async function performImplementation(state: LifecycleState): Promise<void
         retryable: raw.retryable ?? retryableFor(raw.status),
       }),
     } as unknown as RuntimeRunResult;
+    // Canonical findings extraction: 4.7.4 ships `## Finding N:` as the
+    // wire-grade format and bridges results[N].findings through baseline-handlers.
+    // Read-route-implementer parses + populates these directly. The standard
+    // (write/assist) path historically left `findings` undefined, so any tool
+    // that doesn't hit the read-route branch (notably the retry tool re-running
+    // an investigate task) silently dropped the worker's emitted Finding blocks.
+    // Parse them here so the bridge has data to push into envelope.findings.
+    // criterionId = the route so per-route warn telemetry stays attributable.
+    const findingsWarnSink = (event: string, data: Record<string, unknown>) => {
+      // Surface dropped/malformed Finding blocks on the envelope so a user reading
+      // the verbose log or per-task validationWarnings can see why a Finding
+      // didn't materialize. Pre-this-wire, parser drops were invisible.
+      try {
+        ctx.envelope?.recordValidationWarning({
+          rule: event,
+          path: `${data['reasonCode'] ?? 'unknown'}:${String(data['droppedFindingHeading'] ?? '').slice(0, 120)}`,
+        });
+      } catch { /* envelope sealed — race with terminal stage, harmless */ }
+    };
+    const parsedFindings = (result as { findings?: unknown }).findings === undefined && result.output
+      ? parseFindings(result.output, `${route}-standard`, undefined, findingsWarnSink)
+      : null;
     const enrichedResult: RuntimeRunResult = {
       ...result,
       ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
+      ...(parsedFindings && parsedFindings.findings.length > 0 && {
+        findings: parsedFindings.findings,
+        findingsOutcome: parsedFindings.outcome,
+      }),
     } as unknown as RuntimeRunResult;
     const filesRead = Array.isArray(result.filesRead) ? result.filesRead.length : 0;
     const filesWritten = Array.isArray(result.filesWritten) ? result.filesWritten.length : 0;
