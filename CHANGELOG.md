@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.5] - 2026-05-18
+
+Polling-headline truthfulness pass. The pre-4.7.5 polling output (`[N/M] stage — reads=0 writes=0 tools=K`) showed `reads=0 writes=0` for the entire task lifetime because Claude's tool_use blocks always recorded empty file arrays — making it look like no file activity was happening even when the worker was actively running Read/Write/Edit tools. Two fixes ship together so the headline becomes truthful.
+
+### Added
+
+- **Claude file-path extraction (core).** `claude-session` now extracts `file_path` (or `notebook_path`) from each tool_use block's input and records it through `envelope.recordToolCall`. `Read` contributes to `filesRead`; `Write` / `Edit` / `MultiEdit` contribute to `filesWritten`; `NotebookEdit` contributes to both. Other tools (Bash, Glob, Grep, WebFetch, etc.) record the call but no file activity.
+
+### Changed
+
+- **Adaptive polling-headline stats (server).** `/batch/:id` 202 body now shows `tools=N` always (the most reliable activity signal across all providers) and appends `reads=N` / `writes=N` only when each is > 0. Previously the literal `reads=0 writes=0` rendered through the entire lifetime of most tasks; now those tokens only appear when there's real file activity to report.
+
 ## [4.7.4] - 2026-05-18
 
 End-to-end findings coherence release. Read-route workers (investigate / audit / debug / research) now contribute their actual findings to the wire, the HTTP per-task result, and downstream telemetry — previously dropped silently. Findings-summary signals are now emitted at one canonical place (the top level of the wire event + per-task HTTP result), with per-stage rows reserved for stage mechanics only. Backend telemetry ingest, dashboard severity tiles, and the daemon's local HTTP responses all read from the same source of truth.
@@ -415,7 +427,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.5...HEAD
+[4.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.4...v4.7.5
 [4.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.3...v4.7.4
 [4.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...v4.7.3
 [4.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...v4.7.2
