@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { deriveCompletionFromWire } from './derive-completion-from-wire.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SELECT_QUERY = fs.readFileSync(path.join(__dirname, 'false-negative-query.sql'), 'utf8');
 
 export interface RecoverOpts {
   dbUrl: string;
@@ -35,6 +34,9 @@ export async function recoverFalseNegatives(opts: RecoverOpts): Promise<RecoverS
   };
 
   try {
+    // Load the SQL query at runtime (lazy loading, after CLI validation)
+    const SELECT_QUERY = fs.readFileSync(path.join(__dirname, 'false-negative-query.sql'), 'utf8');
+
     // Create the recovered_at column upfront (idempotent). Required for both dry-run and
     // apply modes so the query's AND recovered_at IS NULL clause doesn't fail on
     // pre-migration databases.
