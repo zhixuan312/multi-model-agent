@@ -79,7 +79,7 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   for (const [k, v] of Object.entries(process.env)) {
     if (typeof v === 'string') env[k] = v;
   }
-  if (cfg.apiKey && cfg.apiKeyEnv) env[cfg.apiKeyEnv] = cfg.apiKey;
+  if (cfg.apiKey) env[cfg.apiKeyEnv ?? 'OPENAI_API_KEY'] = cfg.apiKey;
 
   return {
     command: process.env.MMAGENT_CODEX_BIN ?? 'codex',
