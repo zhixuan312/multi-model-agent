@@ -21,7 +21,7 @@ import type { TaskEnvelopeStore } from '../events/task-envelope.js';
  *
  * Inputs (Group A) are read-only after row 2.5 completes.
  * Bus + heartbeat (Group B) carry mutable runtime state for the watchdog.
- * Cost (Group C) is tracked via stateless priceTokens() / rollupByTier() in bounded-execution; not held on ExecutionContext.
+ * Cost (Group C) is tracked via stateless priceTokens() in bounded-execution and aggregated inline in events/to-wire-record.ts; not held on ExecutionContext.
  *
  * Per-chain accumulators (Group D) live on `LifecycleState` itself, not
  * here, because each chain handler mutates them as it fires; ExecutionContext
