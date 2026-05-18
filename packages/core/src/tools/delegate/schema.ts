@@ -20,9 +20,6 @@ const taskSchema = z.object({
   ),
   outputTargets: z.array(z.string().min(1)).optional()
     .describe('Output files the worker is expected to produce. Validated post-task; missing paths surface as a structured finding. Paths may be absolute or relative to cwd; relatives are normalized against cwd. Reject entries that escape cwd.'),
-  verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional().describe(
-    'Commands to run after task completion to verify the work.',
-  ),
   reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']).optional().default('full').describe(
     'Review lifecycle policy for this task. Default: full.',
   ),

@@ -204,6 +204,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     terminalAt: new Date().toISOString(),
     stopReason: last?.terminationReason?.cause ?? null,
     structuredError: last?.structuredError ?? null,
+    errorCode: (last as { errorCode?: import('../../error-codes.js').ErrorCode | null } | undefined)?.errorCode ?? null,
     realFilesChanged: real.files,
   });
   state.taskCompletedRecorded = true;

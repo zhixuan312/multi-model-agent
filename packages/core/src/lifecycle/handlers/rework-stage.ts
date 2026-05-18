@@ -2,13 +2,10 @@
 //
 // Fires only when reviewVerdict === 'changes_required'. Runs on the
 // same standard session that did Implementing (full conversation
-// continuity). Worker is asked to address the reviewer's concerns AND
-// re-run any verifyCommand. Rework's WorkerOutput merges onto
-// Implementing's per the spec's "Rework → Implementing field merge
-// rules": summary/workerStatus/unresolved/commitMessage take Rework's
-// values; filesChanged is the union of both phases; validationsRun is
-// REPLACED by Rework's value (empty list signals validation_stale to
-// Committing).
+// continuity). Worker is asked to address the reviewer's concerns.
+// Rework's WorkerOutput merges onto Implementing's per the spec's
+// "Rework → Implementing field merge rules": summary/workerStatus/unresolved/commitMessage take Rework's
+// values; filesChanged is the union of both phases.
 
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
@@ -100,7 +97,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   // fix action) wrapped in the standard warm-followup preamble.
   const fullPrompt =
     buildWarmFollowupMessage(reworkTemplate.buildUserPrompt(promptCtx))
-    + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
+    + '\n\nDo NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RuntimeRunResult;
   // Wire progress watchdog around the rework session.send.
@@ -160,16 +157,14 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   replaceLastRunResultPreservingTrackers(state, result);
 
   // Apply merge rules: Rework owns summary/workerStatus/unresolved/commitMessage;
-  // filesChanged is the union of Implementing's + Rework's; validationsRun is
-  // REPLACED by Rework's value (so an empty list signals validation_stale).
+  // filesChanged is the union of Implementing's + Rework's.
   const merged = state.lastRunResult as Record<string, unknown> | undefined;
   if (merged) {
     const priorFilesChanged = ((last as { filesChanged?: string[] }).filesChanged) ?? [];
     merged.summary = reworked.summary;
     merged.workerStatus = reworked.workerSelfAssessment;
     merged.filesChanged = Array.from(new Set([...priorFilesChanged, ...reworked.filesChanged]));
-    // v5: validationsRun, unresolved, commitMessage removed from worker output schema
-    merged.validationsRun = (reworked as any).validationsRun ?? [];
+    // v5: unresolved, commitMessage removed from worker output schema
     merged.unresolved = (reworked as any).unresolved ?? [];
     if ((reworked as any).commitMessage) merged.commitMessage = (reworked as any).commitMessage;
   }

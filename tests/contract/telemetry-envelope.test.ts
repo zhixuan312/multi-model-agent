@@ -10,9 +10,7 @@ describe('telemetry envelope (v2)', () => {
     const uploader = new TelemetryUploader({
       recorder: stubRecorder,
       buildOpts: () => ({
-        reviewPolicy: 'full' as const,
         toolMode: 'full' as const,
-        verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
         mainModelFamily: 'claude',
@@ -31,6 +29,7 @@ describe('telemetry envelope (v2)', () => {
         client: 'test',
         mainModel: 'claude-sonnet-4-6',
         cwd: '/tmp/test',
+        reviewPolicy: 'full' as const,
       },
       bus,
     );
@@ -66,9 +65,7 @@ describe('telemetry envelope (v2)', () => {
     const uploader = new TelemetryUploader({
       recorder: stubRecorder,
       buildOpts: () => ({
-        reviewPolicy: 'full' as const,
         toolMode: 'full' as const,
-        verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
         mainModelFamily: 'claude',

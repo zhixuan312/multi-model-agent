@@ -90,17 +90,15 @@ describe('delegateBriefSlot — brief construction', () => {
     expect(briefs[0].reviewPolicy).toBe('full');
   });
 
-  it('forwards verifyCommand and contextBlockIds onto the brief', () => {
+  it('forwards contextBlockIds onto the brief', () => {
     const briefs = delegateBriefSlot({
       tasks: [{
         prompt: 'x',
-        verifyCommand: ['npm', 'test'],
         contextBlockIds: ['cb-1'],
         agentType: 'standard',
         reviewPolicy: 'full',
       }],
     } as any);
-    expect(briefs[0].verifyCommand).toEqual(['npm', 'test']);
     expect(briefs[0].contextBlockIds).toEqual(['cb-1']);
   });
 });

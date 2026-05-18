@@ -12,8 +12,7 @@
 //   §2 Tool surface             — (toolMode + reviewPolicy are TS string
 //                                   literal types in types/task-spec.ts)
 //   §3 Verdicts & status        — InternalRunStatusEnum, ReviewVerdictEnum,
-//                                  WorkerStatusEnum, VerifyOutcomeEnum,
-//                                  VerifySkipReasonEnum
+//                                  WorkerStatusEnum
 //   §4 Errors                   — ErrorCodeSchema (lives in error-codes.ts
 //                                   next to retryableFor; not re-imported here
 //                                   to avoid a cycle with that helper module)
@@ -51,12 +50,6 @@ export const InternalRunStatusEnum = z.enum([
 
 export const ReviewVerdictEnum = z.enum([
   'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
-]);
-
-export const VerifyOutcomeEnum = z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']);
-
-export const VerifySkipReasonEnum = z.enum([
-  'no_command', 'dirty_worktree', 'not_applicable', 'other',
 ]);
 
 export const WorkerStatusEnum = z.enum([

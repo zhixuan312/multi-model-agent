@@ -15,7 +15,7 @@ describe('PRIVACY.md ↔ schema sync', () => {
       'tierUsage', 'mainModel', 'round',
       'concernCount', 'escalationCount', 'fallbackCount',
       'stallCount', 'taskMaxIdleMs',
-      'reviewPolicy', 'verifyCommandPresent',
+      'reviewPolicy',
       'agentType', 'toolMode', 'capabilities',
       'verdict', 'errorCode', 'mainModelFamily',
     ];

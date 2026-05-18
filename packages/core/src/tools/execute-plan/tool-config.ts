@@ -22,7 +22,6 @@ export const executePlanInputSchema = z.object({
   cwd: z.string().optional(),
   perTaskReviewPolicy: z.record(z.string(), z.enum(['full', 'quality_only', 'diff_only', 'none'])).optional(),
   contextBlockIds: z.array(z.string()).optional(),
-  verifyCommand: z.array(z.string()).optional(),
 }).strict();
 
 export type ExecutePlanWireInput = z.infer<typeof executePlanInputSchema>;
@@ -141,7 +140,6 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
     autoCommit: true,
-    verifyCommand: brief.verifyCommand,
     ...(brief.sectionBody ? { planContext: brief.sectionBody } : {}),
   }),
   reportSchema: executePlanReportSchema,

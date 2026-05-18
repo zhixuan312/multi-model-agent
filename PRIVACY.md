@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 5** · **Last revised:** 2026-05-11 — 4.3.1 (stage vocabulary collapse)
+**Schema version: 5** · **Last revised:** 2026-05-18 — 4.7.7 (wire-record honesty pass: `verifyCommandPresent` + `validationsRun` removed, `reviewPolicy` reframed as per-task intent, `errorCode` preserved through seal)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -23,15 +23,14 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
 | `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
 
-#### Configuration (5 fields)
+#### Configuration (4 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `agentType` | enum: `standard`, `complex` | Tier distribution → model selection defaults |
 | `toolMode` | enum: `none`, `readonly`, `no-shell`, `full` | Safety surface tracking |
 | `capabilities` | string array: `web_search`, `web_fetch`, `other` | Feature usage → investment decisions |
-| `reviewPolicy` | enum: `full`, `quality_only`, `diff_only`, `none` | Review topology distribution |
-| `verifyCommandPresent` | boolean | Verify-command adoption rate |
+| `reviewPolicy` | The per-task review policy that was requested. One of `full`, `quality_only`, `diff_only`, `none`. This is intent, not outcome — whether review actually ran is captured in `stages.review.outcome`. |
 
 #### Model (3 fields)
 
@@ -251,6 +250,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-18 | 5 | Wire-record honesty pass (4.7.7 release). **Removed:** `verifyCommandPresent` (boolean) — the verify-command feature was deleted end-to-end, so the adoption signal is no longer collected; backend column `verify_command_present` remains nullable and accepts null for new records (no migration required). **Removed:** `validationsRun` byproduct field — inert plumbing that carried no signal. **Semantic redefinition** of `reviewPolicy` — same enum (`full` / `quality_only` / `diff_only` / `none`) but now sourced from per-task `TaskEnvelope.reviewPolicy` populated at envelope construction from the caller's per-task intent, no longer a server default. The wire `review_policy` column is now complementary to `stages.review.outcome` — intent vs what actually ran. An intent=`full` + outcome=`skipped` row is now a legitimate queryable signal rather than the apparent contradiction it used to be. **New invariant** on `errorCode`: the field was always nullable on the wire schema, but `recordTaskCompletedHandler` now preserves `errorCode` through seal so reviewer-rejection rows land `review_quality_findings_unresolved` or `review_spec_rejected_terminal` instead of `null`; previously `terminal_status=error + error_code=null` was indistinguishable from a transport failure. No new content collected; no schema version bump (bumping would silently drop queued v5 records via `flusher.ts:143`). |
 | 2026-05-18 | 5 | Wire field rename (4.7.6 release): `mainEquivalentCostUSD` → `mainCostUSD` at top-level AND on every stage. Same semantic ("what these tokens would have cost at the main model's rate"); renamed for column-parity with `events_raw.main_cost_usd`. Also restores the per-stage and top-level compute that was accidentally dropped to `null` in 4.7.2's envelope-unification refactor — every v4.7.2–v4.7.5 event was emitting the field as `null`, collapsing per-model savings attribution. Backend dual-accepts both wire names during the daemon-restart transition. No new content collected. |
 | 2026-05-18 | 5 | Additive within v5 (4.7.4 release). Top-level findings rollup: `findingsBySeverity` (relocated from per-stage review row), `findingsOutcome` (enum), `findingsOutcomeReason` (string), `outcomeInferred` (bool), `outcomeMalformed` (bool). Same data the review stage previously carried, lifted to top-level so all routes (not just routes that ran the review stage) contribute. Backend reads top-level; per-stage rows no longer carry these. No new content collected. |
 | 2026-05-13 | 5 | Additive within v5 (4.5.0 release). Top-level: `subtype` (string \| null, finer-grained tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`) and `filesWrittenCount` (integer, count only — sourced from real git diff via sub-project A, not worker self-report). Stage base: `mainEquivalentCostUSD` (float \| null, per-stage main-model-equivalent cost). Annotating-stage `outcome` enum gains `transformed` for pure-transform passes. No new content collected, no schema version bump — counts/labels only. |

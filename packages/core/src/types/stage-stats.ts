@@ -6,9 +6,6 @@
 export type ReviewVerdict =
   | 'approved' | 'concerns' | 'changes_required' | 'annotated' | 'error' | 'skipped' | 'not_applicable';
 
-export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed';
-export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other';
-
 /**
  * Stages whose execution we record per-stage stats for.
  *
@@ -53,8 +50,6 @@ export type RawStageStats =
   | (BaseStageStats & { stage: 'committing' })
   | (BaseStageStats & {
       stage:      'annotating';
-      outcome:    VerifyOutcome   | null;
-      skipReason: VerifySkipReason | null;
     })
   | (BaseStageStats & {
       stage:      'review';

@@ -34,7 +34,6 @@ export const ErrorCodeSchema = z.enum([
   'validator_no_artifacts',
   'validator_silent_incomplete',
   'validator_dirty_worktree',
-  'validator_verify_command_failed',
   'validator_commit_metadata_invalid',
   'validator_commit_metadata_repair_modified_files',
   // config_* — boot-time config errors

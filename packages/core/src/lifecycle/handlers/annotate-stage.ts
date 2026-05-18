@@ -27,7 +27,6 @@ export interface StructuredReport {
   reviewVerdict: 'approved' | 'changes_required' | null;
   reviewConcerns: string[];
   reworkApplied: boolean;
-  validationsRun: { name: string; passed: boolean; output: string }[];
   commitSha: string | null;
   commitMessage: string | null;
   commitSkipReason: string | null;
@@ -60,7 +59,6 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     reviewVerdict: isRead ? null : (((state as { reviewVerdict?: StructuredReport['reviewVerdict'] }).reviewVerdict) ?? null),
     reviewConcerns: isRead ? [] : (((state as { reviewConcerns?: string[] }).reviewConcerns) ?? []),
     reworkApplied: isRead ? false : Boolean((state as { reworkApplied?: boolean }).reworkApplied),
-    validationsRun: isRead ? [] : ((last.validationsRun as StructuredReport['validationsRun'] | undefined) ?? []),
     commitSha: isRead ? null : ((last.commitSha as string | null | undefined) ?? null),
     commitMessage: isRead ? null : ((last.commitMessage as string | null | undefined) ?? null),
     commitSkipReason: isRead ? null : ((last.commitSkipReason as string | null | undefined) ?? null),

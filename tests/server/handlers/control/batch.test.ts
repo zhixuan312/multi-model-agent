@@ -71,6 +71,7 @@ describe('GET /batch/:batchId', () => {
           taskId: `${batchId}:${i}`, batchId, taskIndex: i,
           route: 'delegate', agentType: 'standard',
           client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+          reviewPolicy: 'full' as const,
         });
         env.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
         s.batchRegistry.attachEnvelope(batchId, i, env);
@@ -137,6 +138,7 @@ describe('GET /batch/:batchId', () => {
         taskId: `${batchId}:0`, batchId, taskIndex: 0,
         route: 'delegate', agentType: 'standard',
         client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+        reviewPolicy: 'full' as const,
       });
       env.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
       s.batchRegistry.attachEnvelope(batchId, 0, env);
@@ -261,6 +263,7 @@ describe('GET /batch/:batchId', () => {
           taskId: `${batchId}:${i}`, batchId, taskIndex: i,
           route: 'delegate', agentType: 'standard',
           client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+          reviewPolicy: 'full' as const,
         });
         env.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
         for (let r = 0; r < counts[i].reads; r++) env.recordToolCall({ stage: 'implementing', tool: 'Read', filesRead: [`/f-r-${i}-${r}`] });
@@ -299,6 +302,7 @@ describe('GET /batch/:batchId', () => {
         taskId: `${batchId}:0`, batchId, taskIndex: 0,
         route: 'delegate', agentType: 'standard',
         client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+        reviewPolicy: 'full' as const,
       });
       env.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
       for (let r = 0; r < 22; r++) env.recordToolCall({ stage: 'implementing', tool: 'Read', filesRead: [`/f-${r}`] });

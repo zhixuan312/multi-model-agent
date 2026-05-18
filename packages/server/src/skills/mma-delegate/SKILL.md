@@ -56,10 +56,9 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 | `tasks[].filePaths` | string[] | no | Files the worker focuses on |
 | `tasks[].done` | string | no | Acceptance criteria |
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `tasks[].verifyCommand` | string[] | no | See verify-and-review snippet below |
-| `tasks[].reviewPolicy` | `"full"` / `"quality_only"` / `"diff_only"` / `"none"` | no | See verify-and-review snippet below. Default `"full"` |
+| `tasks[].reviewPolicy` | `"full"` / `"quality_only"` / `"diff_only"` / `"none"` | no | See review-policy snippet below. Default `"full"` |
 
-@include _shared/verify-and-review.md
+@include _shared/review-policy.md
 
 ## Full example
 

@@ -73,24 +73,6 @@ describe('executePlanBriefSlot', () => {
     }
   });
 
-  it('passes through contextBlockIds and verifyCommand', () => {
-    const cwd = makeTempCwd();
-    try {
-      writeFileSync(join(cwd, 'plan.md'), FIXTURE_PLAN);
-      const briefs = executePlanBriefSlot({
-        filePaths: ['plan.md'],
-        taskDescriptors: ['Task 1: Do something'],
-        cwd,
-        contextBlockIds: ['ctx-1', 'ctx-2'],
-        verifyCommand: ['npm', 'test'],
-      });
-      expect(briefs[0].contextBlockIds).toEqual(['ctx-1', 'ctx-2']);
-      expect(briefs[0].verifyCommand).toEqual(['npm', 'test']);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
-
   it('truncates sections larger than 30 KB cap (SLICE_CAP_BYTES)', () => {
     const cwd = makeTempCwd();
     try {

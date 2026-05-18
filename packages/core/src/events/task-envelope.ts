@@ -5,6 +5,7 @@
 // ValidationWarning: existing inline in TaskCompletedEventSchema — local re-shape here.
 
 import type { EnvelopeBus } from './envelope-bus.js';
+import type { ErrorCode } from '../error-codes.js';
 
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
@@ -83,6 +84,8 @@ export interface TaskEnvelope {
   terminalAt: string | null;
   stopReason: string | null;
   structuredError: StructuredError | null;
+  errorCode: ErrorCode | null;
+  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
@@ -111,6 +114,7 @@ export interface CreateSeed {
   taskId: string; batchId: string; taskIndex: number;
   route: Route; agentType: AgentTier;
   client: string; mainModel: string; cwd: string;
+  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
 }
 
 export class SealedEnvelopeError extends Error {
@@ -130,6 +134,9 @@ export class TaskEnvelopeStore {
   }
 
   static create(seed: CreateSeed, busOrNotify: EnvelopeBus | Notify = () => {}): TaskEnvelopeStore {
+    if (seed.reviewPolicy === undefined) {
+      throw new Error('TaskEnvelopeStore.create: reviewPolicy is required (lifecycle init must set state.reviewPolicy before envelope construction)');
+    }
     const notify: Notify = typeof busOrNotify === 'function'
       ? busOrNotify
       : (reason) => busOrNotify.emitEnvelopeSnapshot(store.snapshot(), reason);
@@ -140,6 +147,8 @@ export class TaskEnvelopeStore {
       client: seed.client, mainModel: seed.mainModel, cwd: seed.cwd,
       startedAt: new Date().toISOString(),
       status: 'running', terminalAt: null, stopReason: null, structuredError: null,
+      errorCode: null,
+      reviewPolicy: seed.reviewPolicy,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
@@ -153,6 +162,22 @@ export class TaskEnvelopeStore {
   }
 
   private guard(method: string) { if (this.sealed) throw new SealedEnvelopeError(method); }
+
+  /**
+   * Overwrite reviewPolicy after construction. Needed because async-dispatch
+   * creates task 0's envelope before per-task TaskSpecs are known (the brief
+   * slot runs inside the executor), so the initial seed is always the route
+   * default. task-executor calls this once tasks[] is built so the wire
+   * envelope reports per-task caller intent, not the dispatch-time default.
+   * Without this, /delegate's per-task `reviewPolicy: 'none'` silently shows
+   * up on the wire as 'full' — the dishonesty bug 4.7.7 was meant to close.
+   */
+  setReviewPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'none'): void {
+    this.guard('setReviewPolicy');
+    if (this.env.reviewPolicy === policy) return;
+    this.env.reviewPolicy = policy;
+    this.notify('setReviewPolicy');
+  }
 
   startStage(name: StageName, init: { model: string; tier: AgentTier; startedAt?: string; round?: number }): void {
     this.guard('startStage');
@@ -222,12 +247,13 @@ export class TaskEnvelopeStore {
     this.notify('recordHeartbeat');
   }
 
-  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; realFilesChanged: string[] }): void {
+  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; errorCode?: ErrorCode | null; realFilesChanged: string[] }): void {
     this.guard('seal');
     this.env.status = terminal.status;
     this.env.terminalAt = terminal.terminalAt ?? new Date().toISOString();
     this.env.stopReason = terminal.stopReason;
     this.env.structuredError = terminal.structuredError ?? null;
+    this.env.errorCode = terminal.errorCode ?? null;
     this.env.realFilesChanged = [...terminal.realFilesChanged];
     this.recomputeTotals();
     this.recomputeHeadline();

@@ -84,6 +84,7 @@ found`,
       taskId: 'fo1:0', batchId: 'fo1', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -111,9 +112,7 @@ found`,
     // The wire record must pass strict validation AND carry findingsOutcome on
     // implementing if it was set on the envelope.
     const wire = toWireRecord(snap, {
-      reviewPolicy: 'full',
       toolMode: 'none',
-      verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,
       implementerTier: snap.stages[0]?.tier ?? snap.agentType,
       mainModelFamily: snap.mainModel.split('-')[0] ?? 'unknown',
@@ -135,6 +134,7 @@ found`,
       taskId: 'fo2:0', batchId: 'fo2', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -155,9 +155,7 @@ found`,
     // on stage rows, so the test asserts the broader pipeline survives the
     // missing-## Outcome case without erroring.
     const wire = toWireRecord(snap, {
-      reviewPolicy: 'full',
       toolMode: 'none',
-      verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,
       implementerTier: snap.stages[0]?.tier ?? snap.agentType,
       mainModelFamily: snap.mainModel.split('-')[0] ?? 'unknown',
@@ -175,9 +173,7 @@ found`,
       recorder: { enqueue: (e) => { enqueued.push(e); } },
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
-        reviewPolicy: 'full',
         toolMode: 'none',
-        verifyCommandPresent: false,
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
@@ -187,6 +183,7 @@ found`,
       taskId: 'fo3:0', batchId: 'fo3', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     }, bus);
     const provider = makeProviderEmittingOutput(
       `## Summary\nAll clean.\n\n## Outcome\nclean`,

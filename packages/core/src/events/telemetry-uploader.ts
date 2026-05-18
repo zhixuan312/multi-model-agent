@@ -14,7 +14,12 @@ export interface ConsentLike {
 export interface TelemetryUploaderOpts {
   recorder: RecorderLike | null;
   consent?: ConsentLike;
-  buildOpts: (env: TaskEnvelope) => Parameters<typeof toWireRecord>[1];
+  buildOpts: (env: TaskEnvelope) => {
+    toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
+    implementerModel: string;
+    implementerTier: 'standard' | 'complex';
+    mainModelFamily: string;
+  };
 }
 
 export class TelemetryUploader implements Subscriber {

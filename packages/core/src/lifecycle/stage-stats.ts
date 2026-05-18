@@ -1,7 +1,7 @@
 // Stage-stats helpers: pure functions that build / mutate the per-task
 // StageStatsMap. No closure state captured here — the orchestrator stays
 // focused on flow control.
-import type { StageStatsMap, ReviewVerdict, VerifyOutcome, VerifySkipReason } from '../types.js';
+import type { StageStatsMap, ReviewVerdict } from '../types.js';
 import { findModelProfile } from '../config/model-profile-registry.js';
 
 export const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
@@ -15,7 +15,7 @@ export function emptyStats(): StageStatsMap {
     implementing: { stage: 'implementing', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
     rework:       { stage: 'rework',       entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
     committing:   { stage: 'committing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
-    annotating:   { stage: 'annotating',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, outcome: null, skipReason: null, ..._emptyMetrics },
+    annotating:   { stage: 'annotating',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
     review:       { stage: 'review',       entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, verdict: null, roundsUsed: null, ..._emptyMetrics },
   };
 }
@@ -178,34 +178,3 @@ export function commitReworkStage(
   };
 }
 
-export function endVerifyStage(
-  stats: StageStatsMap,
-  t0: number,
-  c0: number | null,
-  agent: { tier: 'standard' | 'complex'; model: string },
-  finalCostUSD: number | null,
-  idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
-  outcome: VerifyOutcome,
-  skipReason: VerifySkipReason | null,
-): void {
-  stats.annotating = {
-    stage: 'annotating',
-    entered: true,
-    durationMs: Date.now() - t0,
-    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
-    agentTier: agent.tier,
-    modelFamily: modelFamily(agent.model),
-    model: agent.model,
-    maxIdleMs: idle?.maxIdleMs ?? 0,
-    totalIdleMs: idle?.totalIdleMs ?? 0,
-    activityEvents: idle?.activityEvents ?? 0,
-    inputTokens: null,
-    outputTokens: null,
-    cachedReadTokens: null,
-    cachedNonReadTokens: null,
-    turnCount: null,
-    filesWrittenCount: null,
-    outcome,
-    skipReason,
-  } as StageStatsMap['annotating'];
-}

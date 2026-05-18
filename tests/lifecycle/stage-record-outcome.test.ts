@@ -18,7 +18,8 @@ describe('stage-record-outcome: recordStageOnEnvelope threads findings fields', 
       agentType: 'standard' as const,
       client: 'claude-code',
       mainModel: 'claude-opus-4-7',
-      cwd: '/tmp'
+      cwd: '/tmp',
+      reviewPolicy: 'full' as const,
     };
     const envelope = TaskEnvelopeStore.create(seed);
 

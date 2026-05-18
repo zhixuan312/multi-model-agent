@@ -7,9 +7,6 @@ One-line summary of what was done.
 ## Files changed
 List of files modified, added, or deleted.
 
-## Validations run
-Checks performed to verify correctness (e.g., "tsc passes", "tests pass").
-
 ## Deviations from brief
 Any intentional or unintentional deviations from the original brief.
 
@@ -57,7 +54,6 @@ export interface FileChange {
 export interface ParsedStructuredReport {
   summary: string | null;
   filesChanged: FileChange[];
-  validationsRun: Array<{ command: string; result: string }>;
   deviationsFromBrief: string[];
   unresolved: string[];
   extraSections: Record<string, string[]>;
@@ -76,7 +72,6 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
     return {
       summary: null,
       filesChanged: [],
-      validationsRun: [],
       deviationsFromBrief: [],
       unresolved: [],
       extraSections: {},
@@ -86,7 +81,7 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
   const sections = extractSections(output);
 
   const TYPED_HEADERS = new Set([
-    'summary', 'files changed', 'validations run', 'deviations from brief', 'unresolved',
+    'summary', 'files changed', 'deviations from brief', 'unresolved',
   ]);
   const extraSections: Record<string, string[]> = {};
   for (const [key, value] of Object.entries(sections)) {
@@ -98,7 +93,6 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
   const report: ParsedStructuredReport = {
     summary: sections['summary']?.[0] ?? null,
     filesChanged: parseFilesChanged(sections['files changed']),
-    validationsRun: parseValidationsRun(sections['validations run']),
     deviationsFromBrief: sections['deviations from brief'] ?? [],
     unresolved: sections['unresolved'] ?? [],
     extraSections,
@@ -218,15 +212,4 @@ function parseFilesChanged(lines: string[] | undefined): FileChange[] {
     });
 }
 
-function parseValidationsRun(lines: string[] | undefined): Array<{ command: string; result: string }> {
-  if (isLegitimatelyEmpty(lines)) return [];
-  return (lines as string[])
-    .map(l => l.replace(/^[-*]\s*/, '').trim())
-    .filter(l => l && !l.startsWith('#'))
-    .map(l => {
-      const colonIdx = l.indexOf(':');
-      if (colonIdx === -1) return { command: l, result: '' };
-      return { command: l.slice(0, colonIdx).trim(), result: l.slice(colonIdx + 1).trim() };
-    });
-}
 

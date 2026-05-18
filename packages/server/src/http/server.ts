@@ -134,12 +134,10 @@ async function registerToolHandlers(
     recorder: recorderForBus,
     consent: { decide: decideConsentForUploader },
     buildOpts: (env: any) => ({
-      reviewPolicy: 'full',                 // default; refine if envelope carries reviewPolicy later
-      toolMode: 'full',                     // default; refine if envelope carries toolMode later
-      verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
+      toolMode: 'full',                     // default
       implementerModel: env.stages[0]?.model ?? env.mainModel,
       implementerTier: env.stages[0]?.tier ?? env.agentType,
-      mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',  // simple family extraction; replace with normalizeModel-based lookup if needed
+      mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
     }),
   });
   bus.subscribe(uploader);
@@ -229,12 +227,10 @@ async function registerControlHandlers(
       recorder: recorderForBus,
       consent: { decide: decideConsentForUploader },
       buildOpts: (env: any) => ({
-        reviewPolicy: 'full',                 // default; refine if envelope carries reviewPolicy later
-        toolMode: 'full',                     // default; refine if envelope carries toolMode later
-        verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
+        toolMode: 'full',                     // default
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
-        mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',  // simple family extraction; replace with normalizeModel-based lookup if needed
+        mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
       }),
     });
     bus.subscribe(uploader);

@@ -1,5 +1,5 @@
-import type { WorkerStatus, VerifyOutcome } from '../types.js';
-export type { WorkerStatus, VerifyOutcome };
+import type { WorkerStatus } from '../types.js';
+export type { WorkerStatus };
 export type OverallReviewVerdict = 'approved' | 'concerns' | 'annotated' | 'not_applicable';
 export type ArtifactsCheck = 'pass' | 'fail' | 'not_applicable';
 export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'brief_too_vague' | 'unavailable';
@@ -9,7 +9,6 @@ export interface TerminalInputs {
   workerStatus: WorkerStatus;
   overallReviewVerdict: OverallReviewVerdict;
   artifactsCheck: ArtifactsCheck;
-  verifyOutcome: VerifyOutcome;
   guardFires: string[];
   errorCode: string | null;
 }
@@ -37,9 +36,7 @@ export class TerminalStatusDeriver {
     if (inputs.errorCode === 'intake_brief_invalid') return { terminalStatus: 'brief_too_vague', errorCode: inputs.errorCode };
     // 7. artifacts missing
     if (inputs.artifactsCheck === 'fail') return { terminalStatus: 'incomplete', errorCode: 'validator_no_artifacts' };
-    // 8. verify command failed
-    if (inputs.verifyOutcome === 'failed') return { terminalStatus: 'error', errorCode: 'validator_verify_command_failed' };
-    // 9. happy path
+    // 8. happy path
     const reviewOk = ['approved', 'concerns', 'annotated', 'not_applicable'].includes(inputs.overallReviewVerdict);
     const workerOk = inputs.workerStatus === 'done' || inputs.workerStatus === 'done_with_concerns';
     if (reviewOk && workerOk) return { terminalStatus: 'ok', errorCode: null };

@@ -5,7 +5,6 @@ import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/
 import type { ExecutePlanWireInput } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
-import { validateVerifyCommand } from '../../validation/verify-command.js';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
@@ -26,12 +25,6 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
     // The schema marks cwd as optional; callers normally provide it via URL.
     const cwd = ctx.cwd!;
     const input: ExecutePlanWireInput = { ...parsed.data, cwd } as ExecutePlanWireInput;
-
-    const vr = validateVerifyCommand(input.verifyCommand);
-    if (!vr.ok) {
-      sendError(res, 400, 'invalid_request', vr.error!);
-      return;
-    }
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {

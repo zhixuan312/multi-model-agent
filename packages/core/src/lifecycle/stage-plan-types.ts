@@ -93,7 +93,6 @@ export interface LifecycleState {
   autoCommit?: boolean;
   filesChanged?: string[];
   readOnlyTask?: boolean;
-  verifyCommandPresent?: boolean;
   contextBlockIds?: string[];
 
   // Slots populated by Step 1+ handlers as the decomposition advances. Listed
@@ -196,7 +195,6 @@ export interface LifecycleState {
   callCache?: unknown;
   taskIndex?: number;
   artifactsCheck?: string;
-  verifyOutcome?: string;
   guardFires?: string[];
   terminalStatus?: string;
   terminationReason?: string | null;

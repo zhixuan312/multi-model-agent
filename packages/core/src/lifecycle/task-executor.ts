@@ -179,6 +179,15 @@ export async function executeTask<Input, Brief, Report>(
     directoriesListed: [],
   });
 
+  // Sync task 0's envelope reviewPolicy from the resolved TaskSpec.
+  // async-dispatch creates task 0's envelope before briefs run, so its
+  // initial seed is always the route default ('full') — see
+  // async-dispatch.ts. Now that tasks[] exists with the per-task value
+  // from the request, override so wire telemetry reports caller intent.
+  if (ctx.envelope && tasks[0]?.reviewPolicy) {
+    ctx.envelope.setReviewPolicy(tasks[0].reviewPolicy);
+  }
+
   // Multi-task envelope fix: async-dispatch creates exactly ONE envelope
   // (taskIndex=0) before the executor runs. For multi-task batches (e.g.
   // /delegate with tasks.length > 1) we need a distinct envelope per task
@@ -203,6 +212,7 @@ export async function executeTask<Input, Brief, Report>(
         client: e0.client,
         mainModel: e0.mainModel,
         cwd: e0.cwd,
+        reviewPolicy: tasks[i]!.reviewPolicy ?? 'full',
       }, ctx.bus);
       ctx.batchRegistry.attachEnvelope(ctx.batchId, i, env);
     }

@@ -334,7 +334,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           reviewVerdict: null,
           reviewConcerns: [] as unknown[],
           reworkApplied: false,
-          validationsRun: [] as unknown[],
           commitSha: null,
           commitMessage: null,
           commitSkipReason: null,

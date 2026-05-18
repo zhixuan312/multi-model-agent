@@ -6,7 +6,6 @@ const base = {
   workerStatus: 'done' as const,
   overallReviewVerdict: 'approved' as const,
   artifactsCheck: 'pass' as const,
-  verifyOutcome: 'passed' as const,
   guardFires: [] as string[],
   errorCode: null as string | null,
 };
@@ -48,13 +47,7 @@ describe('TerminalStatusDeriver truth table', () => {
     expect(r.errorCode).toBe('validator_no_artifacts');
   });
 
-  it('row 8: verifyOutcome=failed -> error + validator_verify_command_failed', () => {
-    const r = d.derive({ ...base, verifyOutcome: 'failed' });
-    expect(r.terminalStatus).toBe('error');
-    expect(r.errorCode).toBe('validator_verify_command_failed');
-  });
-
-  it('row 9: happy path with review approved -> ok', () => {
+  it('row 8: happy path with review approved -> ok', () => {
     expect(d.derive({ ...base }).terminalStatus).toBe('ok');
   });
 

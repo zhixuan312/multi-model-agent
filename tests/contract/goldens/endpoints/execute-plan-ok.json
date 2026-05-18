@@ -29,7 +29,6 @@
       "implementationReport": {
         "summary": "mocked ok",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
@@ -121,7 +120,6 @@
         "reviewVerdict": null,
         "reviewConcerns": [],
         "reworkApplied": false,
-        "validationsRun": [],
         "commitSha": null,
         "commitMessage": null,
         "commitSkipReason": null,
@@ -152,7 +150,6 @@
     "reviewVerdict": null,
     "reviewConcerns": [],
     "reworkApplied": false,
-    "validationsRun": [],
     "commitSha": null,
     "commitMessage": null,
     "commitSkipReason": null,

@@ -142,21 +142,18 @@ describe('runTasks', () => {
       implementationReport: {
         summary: 'did it',
         filesChanged: [],
-        validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],
       },
       specReviewReport: {
         summary: 'looks good',
         filesChanged: [],
-        validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],
       },
       qualityReviewReport: {
         summary: 'code is clean',
         filesChanged: [],
-        validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],
       },
