@@ -5,9 +5,7 @@ const BASE_RUN_RESULT: RuntimeRunResult = {
   status: 'ok',
   usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
   turns: 3,
-  filesRead: ['/tmp/test/a.ts'],
   filesWritten: ['/tmp/test/b.ts'],
-  toolCalls: ['read_file', 'edit_file', 'grep'],
   outputIsDiagnostic: false,
   escalationLog: [
     { provider: 'claude', status: 'ok', turns: 3, inputTokens: 500, outputTokens: 200, costUSD: 0.005, initialPromptLengthChars: 100, initialPromptHash: 'abc' },
@@ -55,8 +53,8 @@ export const TIMEOUT: RuntimeRunResult = {
 
 export const ERROR_API: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
-  status: 'api_error',
-  terminationReason: { cause: 'api_error', turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: null, wasPromoted: false },
+  status: 'error',
+  terminationReason: { cause: 'error', turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: null, wasPromoted: false },
   workerStatus: 'failed',
 };
 
