@@ -41,7 +41,10 @@ function fakeFalseNegativeRow(id: number) {
 
 describe('recoverFalseNegatives', () => {
   it('case 1: dry-run on false-negative row prints diff, no DB writes', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [fakeFalseNegativeRow(1)] }).mockResolvedValueOnce({ rows: [] });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })  // ALTER TABLE (now always runs)
+      .mockResolvedValueOnce({ rows: [fakeFalseNegativeRow(1)] })
+      .mockResolvedValueOnce({ rows: [] });
     const summary = await recoverFalseNegatives({ dbUrl: 'postgres://x', since: '2026-05-01', apply: false, pageSize: 500 });
     expect(summary.updated).toBe(1);
     expect(mockQuery).not.toHaveBeenCalledWith(expect.stringMatching(/^UPDATE/), expect.anything());
@@ -65,7 +68,10 @@ describe('recoverFalseNegatives', () => {
 
   it('case 3: malformed row (no review stage) is skipped', async () => {
     const malformed = { id: 99, event: { route: 'delegate', reviewPolicy: 'full', stages: [{ name: 'implementing', outcome: 'advance' }] } };
-    mockQuery.mockResolvedValueOnce({ rows: [malformed] }).mockResolvedValueOnce({ rows: [] });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })  // ALTER TABLE
+      .mockResolvedValueOnce({ rows: [malformed] })
+      .mockResolvedValueOnce({ rows: [] });
     const summary = await recoverFalseNegatives({ dbUrl: 'postgres://x', since: '2026-05-01', apply: false, pageSize: 500 });
     expect(summary.skippedMalformed).toBe(1);
     expect(summary.skippedMalformedIds).toContain(99);
@@ -84,7 +90,10 @@ describe('recoverFalseNegatives', () => {
         ],
       },
     };
-    mockQuery.mockResolvedValueOnce({ rows: [legit] }).mockResolvedValueOnce({ rows: [] });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })  // ALTER TABLE
+      .mockResolvedValueOnce({ rows: [legit] })
+      .mockResolvedValueOnce({ rows: [] });
     const summary = await recoverFalseNegatives({ dbUrl: 'postgres://x', since: '2026-05-01', apply: false, pageSize: 500 });
     expect(summary.legitFailures).toBe(1);
     expect(summary.updated).toBe(0);
@@ -95,6 +104,7 @@ describe('recoverFalseNegatives', () => {
     const page2 = Array.from({ length: 100 }, (_, i) => fakeFalseNegativeRow(100 + i));
     const page3 = Array.from({ length: 50 }, (_, i) => fakeFalseNegativeRow(200 + i));
     mockQuery
+      .mockResolvedValueOnce({ rows: [] })  // ALTER TABLE
       .mockResolvedValueOnce({ rows: page1 })
       .mockResolvedValueOnce({ rows: page2 })
       .mockResolvedValueOnce({ rows: page3 })

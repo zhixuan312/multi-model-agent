@@ -88,9 +88,9 @@ export function deriveCompletionFromWire(event: WireEvent): ReconstructResult {
 
   // implementOutcome inference: if any downstream stage exists, implement
   // must have advanced. For halted-implement rows, stages would have only
-  // implementing — we treat that as `fail`. Otherwise `advance`.
+  // implementing — we treat that as `halt`. Otherwise `advance`.
   const downstreamExists = stages.some((s) => s.name !== 'implementing');
-  const implementOutcome: 'advance' | 'fail' | 'skipped' = downstreamExists ? 'advance' : 'fail';
+  const implementOutcome: 'advance' | 'halt' | undefined = downstreamExists ? 'advance' : 'halt';
 
   const reviewStage = stages.find((s) => s.name === 'review') as WireReviewStage | undefined;
   let reviewVerdict: 'approved' | 'changes_required' | 'error' | undefined;

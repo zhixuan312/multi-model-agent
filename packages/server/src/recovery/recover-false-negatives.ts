@@ -35,16 +35,19 @@ export async function recoverFalseNegatives(opts: RecoverOpts): Promise<RecoverS
   };
 
   try {
-    if (opts.apply) {
-      await client.query('ALTER TABLE mma_telemetry ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ NULL;');
-    }
+    // Create the recovered_at column upfront (idempotent). Required for both dry-run and
+    // apply modes so the query's AND recovered_at IS NULL clause doesn't fail on
+    // pre-migration databases.
+    await client.query('ALTER TABLE mma_telemetry ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ NULL;');
 
-    let offset = 0;
+    // Keyset pagination on id. Avoids skipping rows when apply mode removes candidates
+    // from the result set.
+    let lastId = 0;
     while (true) {
       if (opts.limit && summary.candidates >= opts.limit) break;
       const pageLimit = Math.min(opts.pageSize, opts.limit ? opts.limit - summary.candidates : opts.pageSize);
 
-      const result = await client.query(SELECT_QUERY, [opts.since, pageLimit, offset]);
+      const result = await client.query(SELECT_QUERY, [opts.since, pageLimit, lastId]);
       if (result.rows.length === 0) break;
 
       summary.candidates += result.rows.length;
@@ -87,14 +90,15 @@ export async function recoverFalseNegatives(opts: RecoverOpts): Promise<RecoverS
         } catch (err) {
           await client.query('ROLLBACK').catch(() => {});
           summary.pagesRolledBack++;
-          throw new Error(`Page rollback at offset ${offset}: ${(err as Error).message}`);
+          throw new Error(`Page rollback at lastId ${lastId}: ${(err as Error).message}`);
         }
       } else {
         summary.updated += updates.length;  // dry-run: count as "would update"
         summary.pagesProcessed++;
       }
 
-      offset += result.rows.length;
+      // Advance keyset cursor to the last row's id for next iteration.
+      lastId = result.rows[result.rows.length - 1].id;
       if (result.rows.length < pageLimit) break;
     }
   } finally {
