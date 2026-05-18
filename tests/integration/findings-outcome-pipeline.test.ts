@@ -177,7 +177,6 @@ found`,
       recorder: { enqueue: (e) => { enqueued.push(e); } },
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
-        reviewPolicy: 'full',
         toolMode: 'none',
         verifyCommandPresent: false,
         implementerModel: env.stages[0]?.model ?? env.mainModel,

@@ -38,7 +38,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      reviewPolicy: 'full',
       toolMode: 'full',
       verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
@@ -83,7 +82,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      reviewPolicy: 'full',
       toolMode: 'full',
       verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
@@ -123,7 +121,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      reviewPolicy: 'full',
       toolMode: 'full',
       verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
@@ -149,7 +146,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      reviewPolicy: 'full',
       toolMode: 'full',
       verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',

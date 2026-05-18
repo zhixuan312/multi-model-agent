@@ -95,7 +95,6 @@ export function mapStatusToWire(
 export function toWireRecord(
   env: TaskEnvelope,
   opts: {
-    reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     verifyCommandPresent: boolean;
     implementerModel: string;
@@ -253,7 +252,7 @@ export function toWireRecord(
     client: env.client,
     agentType: wireAgentType,
     toolMode: opts.toolMode,
-    reviewPolicy: opts.reviewPolicy,
+    reviewPolicy: env.reviewPolicy,
     verifyCommandPresent: opts.verifyCommandPresent,
     implementerModel: opts.implementerModel,
     implementerTier: opts.implementerTier,
@@ -262,7 +261,7 @@ export function toWireRecord(
     tierUsage: tierUsageBuckets as never,
     terminalStatus: terminalStatus as never,
     workerStatus: workerStatus as never,
-    errorCode: ((env.structuredError as { code?: string } | null)?.code ?? null) as never,
+    errorCode: (env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)) as never,
     inputTokens: clampInputTokens(env.totalInputTokens),
     outputTokens: clampOutputTokens(env.totalOutputTokens),
     cachedReadTokens: clampCachedTokens(env.totalCachedReadTokens),
