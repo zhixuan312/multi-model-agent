@@ -1,0 +1,118 @@
+import type { Input } from './schema.js';
+import {
+  INVESTIGATE_PURPOSE_ORIENTATION,
+  EVIDENCE_RULE_INVESTIGATE,
+  SCOPE_RULE_INVESTIGATE,
+  ANNOTATOR_AWARENESS_INVESTIGATE,
+  INVESTIGATE_FAILURE_MODES,
+  CONFIDENCE_REMINDER_INVESTIGATE,
+} from './implementer-criteria.js';
+
+// ── Enriched input: the handler resolves context blocks and canonicalizes
+//    file paths before passing them here, so briefSlot operates on resolved data.
+
+export interface ResolvedContextBlock {
+  id: string;
+  content: string;
+}
+
+export interface EnrichedInvestigateInput extends Input {
+  resolvedContextBlocks: ResolvedContextBlock[];
+  canonicalizedFilePaths: string[];
+  relativeFilePathsForPrompt: string[];
+}
+
+export interface InvestigateBrief {
+  /** The user's original question — drives the headline text. */
+  question: string;
+  /**
+   * The fully compiled implementer prompt (template + question + anchors +
+   * context blocks). Stored here for buildTaskSpec to forward as
+   * TaskSpec.prompt, but deliberately NOT named `prompt`/`brief`. The
+   * task-executor's `taskBrief` resolution chain reads
+   * `briefs[0].prompt ?? .brief ?? .question`; a `prompt` field here would
+   * cause the headline to be the prompt-template instructions (the tool
+   * sweep #5 bug — headline read 'Investigation: "Produce a narrative
+   * investigation report. Number each findin…"'). Falling through to
+   * `question` is the desired behavior.
+   */
+  compiledPrompt: string;
+  filePaths: string[];
+  contextBlockIds: string[];
+  tools?: 'none' | 'readonly';
+}
+
+function compilePrompt(input: EnrichedInvestigateInput): string {
+  const promptParts: string[] = [];
+  // Orientation goes FIRST — the worker needs to know why this
+  // investigation exists (caller will act on this answer; wrong file
+  // path becomes a bug) before reading the format spec / taxonomy.
+  // Without it, workers default to plausible-sounding answers with
+  // shaky citations.
+  promptParts.push(INVESTIGATE_PURPOSE_ORIENTATION);
+  promptParts.push(
+    [
+      'Produce an investigation report in this EXACT structured format. The deterministic',
+      'parser extracts citations, confidence, and unresolved items by section — do NOT emit',
+      'JSON, and do NOT use a numbered-list narrative. Sections MUST use h2 headers (`##`).',
+      '',
+      '## Summary',
+      'One paragraph stating the answer to the question, in plain prose.',
+      '',
+      '## Citations',
+      'One bullet per evidence item. Each bullet must start with `-` and contain `<file>:<LINE> — <claim>` (em-dash, OR `--` is also accepted). The parser tolerates an optional pair of backticks wrapping the path:line portion (e.g. `` `src/foo.ts:42` — claim ``) but the canonical form is without backticks.',
+      'Examples (use either form):',
+      '  - src/foo.ts:42 — claim about line 42',
+      '  - src/foo.ts:42-58 — claim about a span',
+      'Use a LINE-LINE range when an evidence span covers multiple lines.',
+      'If the question is fully project-level (no code evidence applies), write `(none)` on its own line — but only when Confidence is `low`.',
+      '',
+      '## Confidence',
+      'One of high, medium, or low, optionally followed by ` — <one-line rationale>`. Do NOT wrap the level in backticks; emit it as plain text.',
+      '',
+      '## Unresolved',
+      'Optional bullets describing follow-up questions; write `(none)` if there are none.',
+      'Prefix a bullet with `[needs_context]` if it requires the caller to supply more',
+      'information before the question can be answered.',
+    ].join('\n'),
+  );
+  for (const block of input.resolvedContextBlocks) {
+    promptParts.push(block.content);
+  }
+  if (input.relativeFilePathsForPrompt.length > 0) {
+    promptParts.push(
+      'Anchor paths to start from (you may also read beyond these):\n' +
+      input.relativeFilePathsForPrompt.map(p => `- ${p}`).join('\n'),
+    );
+  }
+  promptParts.push(`Question: ${input.question}`);
+  if (input.resolvedContextBlocks.length > 0) {
+    promptParts.push(
+      'A prior investigation report is provided as context above. Refine or extend that investigation. In your output, mark which prior unresolved questions you resolved this round and which remain open.',
+    );
+  }
+  // Tool sweep #12: shared rubric. Investigate doesn't use the
+  // SEVERITY_LADDER (its findings are citations, not severity-rated)
+  // but evidence-grounding + scope-discipline + annotator-awareness
+  // apply just as much. Workers that cite hallucinated lines or
+  // speculate about unread files now have the rubric inline.
+  promptParts.push(
+    INVESTIGATE_FAILURE_MODES,
+    CONFIDENCE_REMINDER_INVESTIGATE,
+    EVIDENCE_RULE_INVESTIGATE,
+    SCOPE_RULE_INVESTIGATE,
+    ANNOTATOR_AWARENESS_INVESTIGATE,
+  );
+  return promptParts.join('\n\n');
+}
+
+export const investigateBriefSlot = (input: EnrichedInvestigateInput): InvestigateBrief[] => {
+  const compiledPrompt = compilePrompt(input);
+  return [{
+    question: input.question,
+    compiledPrompt,
+    filePaths: input.canonicalizedFilePaths,
+    contextBlockIds: input.contextBlockIds ?? [],
+    tools: input.tools,
+  }];
+};
