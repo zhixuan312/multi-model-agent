@@ -181,16 +181,13 @@ export class CodexCliSession implements Session {
     return {
       output: finalMessage,
       usage: turnUsage,
-      filesRead: [...tracker.filesRead],
-      filesWritten: [...tracker.filesWritten],
-      toolCallsByName: tracker.toolCallsByName,
+      costUSD,
       turns: tracker.turns,
       durationMs: Date.now() - startMs,
-      costUSD,
       terminationReason: tracker.terminationReason,
       ...(tracker.errorCode && { errorCode: tracker.errorCode }),
-      ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
-      model: this.args.cfg.model,
+      filesWritten: [...tracker.filesWritten],
+      usedShell: tracker.usedShell,
     };
   }
 
@@ -271,15 +268,13 @@ export class CodexCliSession implements Session {
     return {
       output: '',
       usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      filesRead: [],
-      filesWritten: [],
-      toolCallsByName: {},
+      costUSD: 0,
       turns: 0,
       durationMs: Date.now() - startMs,
-      costUSD: 0,
       terminationReason: 'error',
       errorCode: code,
-      errorMessage: message,
+      filesWritten: [],
+      usedShell: false,
     };
   }
 }
@@ -365,9 +360,8 @@ class TurnTracker {
   threadId?: string;
   turns = 0;
   lastAgentMessage = '';
-  filesRead = new Set<string>();
   filesWritten = new Set<string>();
-  toolCallsByName: Record<string, number> = {};
+  usedShell = false;
   terminationReason: TurnResult['terminationReason'] = 'ok';
   errorCode?: string;
   errorMessage?: string;
@@ -443,7 +437,7 @@ class TurnTracker {
         ...this.tag,
       }));
     } else if (item.type === 'command_execution') {
-      this.toolCallsByName['run_shell'] = (this.toolCallsByName['run_shell'] ?? 0) + 1;
+      this.usedShell = true;
       this.envelope?.recordToolCall({
         stage: 'implementing',
         tool: 'run_shell',
@@ -456,7 +450,6 @@ class TurnTracker {
         ...this.tag,
       }));
     } else if (item.type === 'file_change') {
-      this.toolCallsByName['edit_file'] = (this.toolCallsByName['edit_file'] ?? 0) + 1;
       if (typeof item.path === 'string') {
         this.filesWritten.add(item.path);
         this.envelope?.recordToolCall({
@@ -511,13 +504,3 @@ class TurnTracker {
 // Re-export the tracker for tests that want to unit-test consume() in
 // isolation. Not part of the public API.
 export const __test = { TurnTracker, killGracefully, consumeStream };
-
-/** Helper for tests/probes: write a JSON-schema object to a temp file
- *  and return its path. Used when callers want `--output-schema`. The
- *  caller is responsible for cleanup; in practice CodexCliSession.close()
- *  removes its tempDir which includes any schema files written there. */
-export async function writeSchemaFile(dir: string, schema: object): Promise<string> {
-  const p = join(dir, `schema-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
-  await writeFile(p, JSON.stringify(schema), 'utf8');
-  return p;
-}
