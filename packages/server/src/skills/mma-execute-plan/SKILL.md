@@ -51,7 +51,6 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 | `taskDescriptors` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
 | `filePaths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
-| `verifyCommand` | string[] | no | See verify-and-review snippet below |
 | `perTaskReviewPolicy` | `Record<string, 'full'\|'quality_only'\|'diff_only'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"full"` |
 | `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
 
@@ -198,9 +197,6 @@ Worker can't read the task body. **Fix:** always include the plan path: `filePat
 
 ❌ **Dispatching dependent tasks in one batch**
 Task 5 depends on Task 4's output → workers race; Task 5 might run before Task 4 finishes. **Fix:** dispatch Task 4, wait for terminal, then dispatch Task 5.
-
-❌ **Skipping `verifyCommand` when one exists**
-A passing local check is the cheapest signal you're going to get. **Fix:** wire `["npm test"]` or the focused package test.
 
 ## Terminal context block
 

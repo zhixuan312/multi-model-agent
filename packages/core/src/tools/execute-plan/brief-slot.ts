@@ -14,7 +14,6 @@ export interface ExecutePlanBrief {
   contextBlockIds: string[];
   reviewPolicy: ReviewPolicy;
   cwd: string;
-  verifyCommand?: string[];
 }
 
 export interface ExecutePlanInput {
@@ -23,7 +22,6 @@ export interface ExecutePlanInput {
   cwd?: string;
   perTaskReviewPolicy?: Record<string, 'full' | 'quality_only' | 'diff_only' | 'none'>;
   contextBlockIds?: string[];
-  verifyCommand?: string[];
 }
 
 export function executePlanBriefSlot(input: ExecutePlanInput): ExecutePlanBrief[] {
@@ -52,7 +50,6 @@ export function executePlanBriefSlot(input: ExecutePlanInput): ExecutePlanBrief[
       contextBlockIds: input.contextBlockIds ?? [],
       reviewPolicy: (rp[String(i)] ?? rp[i] ?? 'full') as ReviewPolicy,
       cwd,
-      verifyCommand: input.verifyCommand,
     };
   });
 }

@@ -910,14 +910,6 @@
                     },
                     "minItems": 1,
                     "type": "array"
-                  },
-                  "verifyCommand": {
-                    "description": "Commands to run after plan task completion to verify the work.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "minItems": 1,
-                    "type": "array"
                   }
                 },
                 "required": [
