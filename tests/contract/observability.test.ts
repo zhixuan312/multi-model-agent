@@ -25,6 +25,7 @@ describe('observability contract — envelope + plain entries', () => {
         client: 'test',
         mainModel: 'claude-sonnet-4-6',
         cwd: '/tmp/test',
+        reviewPolicy: 'full' as const,
       },
       bus,
     );

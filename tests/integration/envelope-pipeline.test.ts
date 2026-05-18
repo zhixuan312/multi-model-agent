@@ -99,6 +99,7 @@ describe('envelope pipeline — end-to-end', () => {
       taskId: 'b1:0', batchId: 'b1', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -125,6 +126,7 @@ describe('envelope pipeline — end-to-end', () => {
       taskId: 'b2:0', batchId: 'b2', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -157,6 +159,7 @@ describe('envelope pipeline — end-to-end', () => {
       taskId: 'b3:0', batchId: 'b3', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -207,6 +210,7 @@ describe('envelope pipeline — end-to-end', () => {
       taskId: 'b4:0', batchId: 'b4', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     }, bus);
 
     const provider = makeRecordingProvider({ envelopeSeen: false });
@@ -285,6 +289,7 @@ describe('envelope pipeline — end-to-end', () => {
       taskId: 'b5:0', batchId: 'b5', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     }, bus);
 
     await runTaskViaDispatcher({

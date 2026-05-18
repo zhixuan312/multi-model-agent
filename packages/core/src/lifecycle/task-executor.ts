@@ -203,6 +203,7 @@ export async function executeTask<Input, Brief, Report>(
         client: e0.client,
         mainModel: e0.mainModel,
         cwd: e0.cwd,
+        reviewPolicy: e0.reviewPolicy,
       }, ctx.bus);
       ctx.batchRegistry.attachEnvelope(ctx.batchId, i, env);
     }

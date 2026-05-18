@@ -84,6 +84,7 @@ found`,
       taskId: 'fo1:0', batchId: 'fo1', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -135,6 +136,7 @@ found`,
       taskId: 'fo2:0', batchId: 'fo2', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
     const task: TaskSpec = {
       prompt: 'do the thing', cwd: os.tmpdir(),
@@ -187,6 +189,7 @@ found`,
       taskId: 'fo3:0', batchId: 'fo3', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     }, bus);
     const provider = makeProviderEmittingOutput(
       `## Summary\nAll clean.\n\n## Outcome\nclean`,

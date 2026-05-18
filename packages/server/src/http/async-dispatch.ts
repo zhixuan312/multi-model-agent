@@ -22,6 +22,7 @@ export interface AsyncDispatchOptions<TResult> {
    * implied by `route` for the 99% case (mma-<route> → /<route>).
    */
   caller?: { client: string; mainModel?: string | null };
+  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   /**
    * The async function that does the real work. Receives the ExecutionContext
    * and the pre-allocated batchId.
@@ -68,6 +69,7 @@ export function asyncDispatch<TResult>(
     batchId: batchId, taskIndex: 0,
     route: tool as any, agentType: 'standard',
     client: opts.caller?.client ?? '', mainModel: opts.caller?.mainModel ?? '', cwd: projectCwd,
+    reviewPolicy: opts.reviewPolicy ?? 'full',
   }, deps.bus);
   batchRegistry.attachEnvelope(batchId, 0, envelope);
 

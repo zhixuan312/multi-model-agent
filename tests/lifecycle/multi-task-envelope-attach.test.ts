@@ -75,6 +75,7 @@ describe('multi-task /delegate envelope attachment', () => {
       taskId: `${batchId}:0`, batchId, taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'test', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+      reviewPolicy: 'full' as const,
     }, bus);
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);
@@ -100,6 +101,7 @@ describe('multi-task /delegate envelope attachment', () => {
       taskId: `${batchId}:0`, batchId, taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'test', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+      reviewPolicy: 'full' as const,
     }, bus);
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);
@@ -148,6 +150,7 @@ describe('multi-task /delegate envelope attachment', () => {
       taskId: `${batchId}:0`, batchId, taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'test', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+      reviewPolicy: 'full' as const,
     }, bus);
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);

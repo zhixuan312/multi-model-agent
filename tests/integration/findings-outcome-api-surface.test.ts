@@ -68,6 +68,7 @@ found — 1 critical finding`);
       taskId: 'audit-test-0', batchId: 'audit-batch', taskIndex: 0,
       route: 'audit', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
@@ -105,6 +106,7 @@ found — security issue found`);
       taskId: 'audit-test-1', batchId: 'audit-batch', taskIndex: 0,
       route: 'audit', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
@@ -145,6 +147,7 @@ found — style issue`);
       taskId: 'audit-test-2', batchId: 'audit-batch', taskIndex: 0,
       route: 'audit', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
+      reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
