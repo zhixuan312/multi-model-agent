@@ -112,10 +112,6 @@
       "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
       "import": "./dist/intake/brief-compiler-slots/delegate.js"
     },
-    "./intake/brief-compiler-slots/review": {
-      "types": "./dist/intake/brief-compiler-slots/review.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/review.js"
-    },
     "./intake/brief-compiler-slots/execute-plan": {
       "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
       "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
