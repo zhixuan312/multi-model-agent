@@ -66,7 +66,14 @@ function buildPendingHeadline(entry: { taskEnvelopes?: (TaskEnvelopeStore | null
     return { reads: acc.reads + s.toolReads, writes: acc.writes + s.toolWrites, total: acc.total + s.toolTotal };
   }, { reads: 0, writes: 0, total: 0 });
   const suffix = running.length > 1 ? ` +${running.length - 1}` : '';
-  const stats = `reads=${summed.reads} writes=${summed.writes} tools=${summed.total}`;
+  // Adaptive: tools=N always (the most reliable activity signal across all
+  // providers); reads=/writes= only when > 0. Pre-4.7.5 this showed
+  // reads=0 writes=0 even when the worker was actively running tools,
+  // because most provider tool calls didn't populate the file counters.
+  const statsParts = [`tools=${summed.total}`];
+  if (summed.reads > 0)  statsParts.push(`reads=${summed.reads}`);
+  if (summed.writes > 0) statsParts.push(`writes=${summed.writes}`);
+  const stats = statsParts.join(' ');
   return `[${repSnap.headline.stageDone}/${repSnap.headline.stageTotal}] ${repSnap.headline.stageLabel}${suffix} — ${stats}`;
 }
 
