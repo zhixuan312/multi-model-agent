@@ -18,19 +18,17 @@ export function makeClaudeProvider(cfg: ClaudeProviderConfig): Provider {
     config: cfg,
     openSession(opts: SessionOpts) {
       let oauthAccessToken: string | undefined;
-      if (cfg.apiKey) {
-        process.env.ANTHROPIC_API_KEY = cfg.apiKey;
-      } else if (!cfg.baseUrl) {
-        // Only attempt OAuth when targeting the default Anthropic backend.
-        // For an Anthropic-compatible proxy, the operator MUST supply apiKey.
+      if (!cfg.apiKey && !cfg.baseUrl) {
         const oauth = getClaudeOAuth();
         if (oauth) oauthAccessToken = oauth.accessToken;
       }
-      if (cfg.baseUrl) {
-        // The Anthropic SDK reads ANTHROPIC_BASE_URL from env.
-        process.env.ANTHROPIC_BASE_URL = cfg.baseUrl;
-      }
-      return new ClaudeSession({ model: cfg.model, opts, ...(oauthAccessToken && { oauthAccessToken }) });
+      return new ClaudeSession({
+        model: cfg.model,
+        opts,
+        ...(cfg.apiKey && { apiKey: cfg.apiKey }),
+        ...(cfg.baseUrl && { baseUrl: cfg.baseUrl }),
+        ...(oauthAccessToken && { oauthAccessToken }),
+      });
     },
   };
 }
