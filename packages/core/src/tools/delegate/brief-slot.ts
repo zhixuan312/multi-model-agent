@@ -1,12 +1,22 @@
+import type { Input } from './schema.js';
+import type { ReviewPolicy } from '../../types/review-policy.js';
 import {
   DELEGATE_PURPOSE_ORIENTATION,
   DELEGATE_SCOPE_RULE,
   DELEGATE_FAILURE_MODES,
   COMPLETENESS_REMINDER_DELEGATE,
   TURN_BUDGET_DELEGATE,
-} from '../../tools/delegate/implementer-criteria.js';
+} from './implementer-criteria.js';
 
-export type { ReviewPolicy } from '../../types/review-policy.js';
+export interface DelegateBrief {
+  prompt: string;
+  done?: string;
+  filePaths?: string[];
+  agentType: 'standard' | 'complex';
+  reviewPolicy: ReviewPolicy;
+  contextBlockIds?: string[];
+  verifyCommand?: string[];
+}
 
 /**
  * Compile a delegate worker prompt — slimmed in 4.2.3 from ~9 KB to
@@ -25,7 +35,7 @@ export type { ReviewPolicy } from '../../types/review-policy.js';
  *   5. Top-4 failure-mode taxonomy
  *   6. Brief-vs-diff walk
  */
-export function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }): string {
+function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }): string {
   const filePathsClause = input.filePaths && input.filePaths.length > 0
     ? `\n\nFILE CONSTRAINT: write to exactly these path(s), no others, no renames: ${input.filePaths.map((p) => `\`${p}\``).join(', ')}.\n- Existing files in this list are pre-verified to read and modify.\n- Non-existent paths in this list are explicit OUTPUT TARGETS — create them.\n- Files NOT in this list are off-limits to write unless the brief\'s task genuinely requires touching them (call out the deviation in your summary).`
     : '';
@@ -46,3 +56,14 @@ export function compileDelegatePrompt(input: { prompt: string; filePaths?: strin
     TURN_BUDGET_DELEGATE,
   ].join('\n');
 }
+
+export const delegateBriefSlot = (input: Input): DelegateBrief[] =>
+  input.tasks.map((t) => ({
+    prompt: compileDelegatePrompt({ prompt: t.prompt, filePaths: t.filePaths }),
+    done: t.done,
+    filePaths: t.filePaths,
+    agentType: t.agentType ?? 'standard',
+    reviewPolicy: t.reviewPolicy ?? 'full',
+    contextBlockIds: t.contextBlockIds,
+    verifyCommand: t.verifyCommand,
+  }));
