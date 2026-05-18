@@ -36,6 +36,7 @@ describe('AC-9: parser overrides completed=true to false on each precondition fa
       route: 'delegate',
       reviewVerdict: 'changes_required',
       commits: [{ sha: 'a' }],
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     });
     const out = applyAnnotatePreconditions(mkPayload({ completed: true }), state);
@@ -159,17 +160,21 @@ describe('AC-23: completed=false message names specific blocking gate or finding
     expect(out.message).toMatch(/criteria/i);
   });
 
-  it('write route — worker self-assessed as failed names the worker assessment', () => {
-    const state = mkState({
-      route: 'delegate',
-      reviewVerdict: 'approved',
-      commits: [{ sha: 'a' }],
-      lastRunResult: { workerStatus: 'failed', status: 'ok' },
-    });
-    const out = applyAnnotatePreconditions(mkPayload({ completed: true }), state);
-    expect(out.completed).toBe(false);
-    assertSpecificAndRecoverable(out.message);
-    expect(out.message).toMatch(/worker self-assessed/i);
+  it('worker self-assess "failed" does not block when objective signals agree (4.7.8)', () => {
+    const result = applyAnnotatePreconditions(
+      { completed: true, message: '', findings: [] } as never,
+      {
+        route: 'delegate',
+        reviewPolicy: 'full',
+        reviewVerdict: 'approved',
+        reworkApplied: false,
+        gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
+        lastRunResult: { workerStatus: 'failed' } as never,
+        autoCommit: true,
+      } as never,
+    );
+    expect(result.completed).toBe(true);
+    expect(result.message).not.toMatch(/worker self/i);
   });
 });
 
