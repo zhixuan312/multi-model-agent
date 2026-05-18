@@ -62,6 +62,9 @@ describe('toWireRecord', () => {
     const json = JSON.stringify(wire);
     expect(json).not.toContain('/secret/path');
     expect(json).not.toContain('toolCalls');
-    expect(json).not.toContain('findings');
+    // `findingsBySeverity` is PII-safe (counts only, no claim/evidence text)
+    // so it IS present on the wire. The PII rule is: no finding *text* leaks.
+    expect(json).not.toContain('"claim"');
+    expect(json).not.toContain('"evidence"');
   });
 });

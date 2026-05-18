@@ -86,16 +86,17 @@ export const StageEntryBase = z.object({
   mainEquivalentCostUSD: z.number().nullable(),   // main-model-equivalent cost for this stage's tokens
 });
 
+// 4.7.4+ standardization: findingsBySeverity + findingsOutcome and its
+// companion booleans (outcomeInferred / outcomeMalformed) live ONLY at the
+// top level of TaskCompletedEventSchema. Per-stage rows used to carry
+// duplicates of these fields; they were lifted out so there is one
+// authoritative source — the task as a whole has one final findings list
+// and one final outcome, regardless of which stage produced them.
 export const ReviewStageEntrySchema = StageEntryBase.extend({
   name: z.literal('review'),
   verdict: z.enum(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated', 'not_applicable']),
   roundsUsed: z.number().int().min(1).max(10),
   concernCategories: z.array(_ConcernCategory).max(9),
-  findingsBySeverity: FindingsBySeveritySchema,
-  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
-  findingsOutcomeReason: z.string().nullable().optional(),
-  outcomeInferred: z.boolean().optional(),
-  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const ReworkStageEntrySchema = StageEntryBase.extend({
@@ -107,10 +108,6 @@ export const AnnotatingStageEntrySchema = StageEntryBase.extend({
   name: z.literal('annotating'),
   outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
   skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
-  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
-  findingsOutcomeReason: z.string().nullable().optional(),
-  outcomeInferred: z.boolean().optional(),
-  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const CommitStageEntrySchema = StageEntryBase.extend({
@@ -121,10 +118,6 @@ export const CommitStageEntrySchema = StageEntryBase.extend({
 
 export const ImplementStageEntrySchema = StageEntryBase.extend({
   name: z.literal('implementing'),
-  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
-  findingsOutcomeReason: z.string().nullable().optional(),
-  outcomeInferred: z.boolean().optional(),
-  outcomeMalformed: z.boolean().optional(),
 }).strict();
 
 export const StageEntrySchema = z.discriminatedUnion('name', [
@@ -181,6 +174,15 @@ export const TaskCompletedEventSchema = z.object({
 
   // Lifecycle counts
   concernCount: z.number().int().min(0).max(150),
+  // 4.7.4+ standardization: ALL findings-summary signals live at the top
+  // level. Per-stage rows no longer carry these — there is one final
+  // findings list per task and one final outcome, regardless of which
+  // stage produced them. Backend + frontend read here and only here.
+  findingsBySeverity: FindingsBySeveritySchema.optional(),
+  findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
+  findingsOutcomeReason: z.string().nullable().optional(),
+  outcomeInferred: z.boolean().optional(),
+  outcomeMalformed: z.boolean().optional(),
   escalationCount: z.number().int().min(0).max(20),
   fallbackCount: z.number().int().min(0).max(20),
 

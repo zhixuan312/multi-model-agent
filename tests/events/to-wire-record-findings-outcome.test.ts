@@ -3,6 +3,11 @@ import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/wire-schema.js';
 
+// 4.7.4+ standardization: findingsOutcome / findingsOutcomeReason /
+// outcomeInferred / outcomeMalformed live ONLY at the top level of the wire
+// event. Per-stage rows do not carry these fields. The top-level value is
+// rolled up across stages with priority: review > annotating > implementing.
+
 const seed = {
   taskId: 't',
   batchId: 'b',
@@ -14,8 +19,8 @@ const seed = {
   cwd: '/tmp',
 };
 
-describe('toWireRecord — findings outcome projection', () => {
-  it('projects findingsOutcome quartet from implementing stage to wire row', () => {
+describe('toWireRecord — top-level findings-outcome rollup', () => {
+  it('lifts implementing-stage outcome to top-level when no review stage ran', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -40,19 +45,21 @@ describe('toWireRecord — findings outcome projection', () => {
       mainModelFamily: 'claude',
     });
 
-    // Wire record should pass validation
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
-
-    // Check the implementing stage has the four fields
-    const implStage = wire.stages.find((s: any) => s.name === 'implementing');
-    expect(implStage).toBeDefined();
-    expect(implStage.findingsOutcome).toBe('found');
-    expect(implStage.findingsOutcomeReason).toBe('1 high-severity finding');
-    expect(implStage.outcomeInferred).toBe(false);
-    expect(implStage.outcomeMalformed).toBe(false);
+    // Top-level carries the outcome rollup
+    expect(wire.findingsOutcome).toBe('found');
+    expect(wire.findingsOutcomeReason).toBe('1 high-severity finding');
+    expect(wire.outcomeInferred).toBe(false);
+    expect(wire.outcomeMalformed).toBe(false);
+    // Per-stage rows do NOT carry outcome fields anymore
+    const implStage = wire.stages.find((st: any) => st.name === 'implementing') as any;
+    expect(implStage.findingsOutcome).toBeUndefined();
+    expect(implStage.findingsOutcomeReason).toBeUndefined();
+    expect(implStage.outcomeInferred).toBeUndefined();
+    expect(implStage.outcomeMalformed).toBeUndefined();
   });
 
-  it('projects outcome fields from review stage to wire row', () => {
+  it('prefers review-stage outcome over implementing when both are present', () => {
     const s = TaskEnvelopeStore.create({ ...seed, route: 'delegate' });
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -83,16 +90,17 @@ describe('toWireRecord — findings outcome projection', () => {
       mainModelFamily: 'claude',
     });
 
-    // Check the review stage has the outcome fields
-    const reviewStage = wire.stages.find((s: any) => s.name === 'review');
-    expect(reviewStage).toBeDefined();
-    expect(reviewStage.findingsOutcome).toBe('clean');
-    expect(reviewStage.findingsOutcomeReason).toBeNull();
-    expect(reviewStage.outcomeInferred).toBe(false);
-    expect(reviewStage.outcomeMalformed).toBe(false);
+    expect(wire.findingsOutcome).toBe('clean');
+    expect(wire.findingsOutcomeReason).toBeNull();
+    expect(wire.outcomeInferred).toBe(false);
+    // Review-stage row carries verdict but NOT outcome fields
+    const reviewStage = wire.stages.find((st: any) => st.name === 'review') as any;
+    expect(reviewStage.verdict).toBe('approved');
+    expect(reviewStage.findingsOutcome).toBeUndefined();
+    expect(reviewStage.findingsBySeverity).toBeUndefined();
   });
 
-  it('projects outcome fields from annotating stage to wire row', () => {
+  it('falls back to annotating when implementing has no outcome and no review ran', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -122,16 +130,14 @@ describe('toWireRecord — findings outcome projection', () => {
       mainModelFamily: 'claude',
     });
 
-    // Check the annotating stage has the outcome fields
-    const annStage = wire.stages.find((s: any) => s.name === 'annotating');
-    expect(annStage).toBeDefined();
-    expect(annStage.findingsOutcome).toBe('not_applicable');
-    expect(annStage.findingsOutcomeReason).toBe('project-level question');
-    expect(annStage.outcomeInferred).toBe(true);
-    expect(annStage.outcomeMalformed).toBe(false);
+    expect(wire.findingsOutcome).toBe('not_applicable');
+    expect(wire.findingsOutcomeReason).toBe('project-level question');
+    expect(wire.outcomeInferred).toBe(true);
+    const annStage = wire.stages.find((st: any) => st.name === 'annotating') as any;
+    expect(annStage.findingsOutcome).toBeUndefined();
   });
 
-  it('omits outcome fields when not set on envelope stage', () => {
+  it('omits top-level outcome fields when no stage emitted one', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -139,7 +145,6 @@ describe('toWireRecord — findings outcome projection', () => {
       durationMs: 1000,
       inputTokens: 100,
       outputTokens: 50,
-      // NO outcome fields set
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
@@ -152,10 +157,9 @@ describe('toWireRecord — findings outcome projection', () => {
     });
 
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
-    const implStage = wire.stages.find((s: any) => s.name === 'implementing');
-    expect(implStage.findingsOutcome).toBeUndefined();
-    expect(implStage.findingsOutcomeReason).toBeUndefined();
-    expect(implStage.outcomeInferred).toBeUndefined();
-    expect(implStage.outcomeMalformed).toBeUndefined();
+    expect(wire.findingsOutcome).toBeUndefined();
+    expect(wire.findingsOutcomeReason).toBeUndefined();
+    expect(wire.outcomeInferred).toBeUndefined();
+    expect(wire.outcomeMalformed).toBeUndefined();
   });
 });
