@@ -116,32 +116,9 @@ export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 export { otherTier } from './config/tier-policy-registry.js';
 
-// Intake pipeline
-export { compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
-export { compileExecutePlan } from './intake/brief-compiler-slots/execute-plan.js';
-export type { ExecutePlanInput } from './intake/brief-compiler-slots/execute-plan.js';
-export { runIntakePipeline } from './intake/pipeline.js';
-export { classifyDraft } from './intake/classify.js';
-export { inferMissingFields } from './intake/field-inferer.js';
-export { resolveDraft } from './intake/resolve.js';
-export { validateSource } from './intake/source-schema.js';
 export type {
   DraftTask,
-  SourceRoute,
-  AnySource,
-  DelegateSource,
-  ReviewSource,
-  DebugSource,
-  VerifySource,
-  AuditSource,
-  ExecutePlanSource,
-  ClassificationResult,
-  HardError,
-  IntakeProgress,
-  ReadyDraft,
-  IntakeResult,
 } from './intake/types.js';
-export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
 // Batch registry
 export * from './stores/batch-registry.js';
@@ -169,16 +146,6 @@ export { qualityInvestigateTemplate } from './review/templates/quality-review-in
 export { reworkTemplate } from './review/templates/rework.js';
 export type { ReviewTemplate } from './review/templates/shared.js';
 
-// Intake-pipeline slots
-export type { ReviewPolicy } from './intake/brief-compiler-slots/delegate.js';
-export { executePlanSlot } from './intake/brief-compiler-slots/execute-plan.js';
-export type { ExecutePlanBrief } from './intake/brief-compiler-slots/execute-plan.js';
-export { makeRetrySlot } from './intake/brief-compiler-slots/retry.js';
-export type { RetryInput, RetryBrief } from './intake/brief-compiler-slots/retry.js';
-
-// Plan extractor
-export { extractPlanSection, PlanExtractionError } from './intake/plan-extractor.js';
-export type { PlanSection } from './intake/plan-extractor.js';
 
 // Reporting slots
 export { delegateReportSchema } from './reporting/report-parser-slots/delegate-report.js';
