@@ -262,7 +262,16 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     durationMs: Date.now() - t0,
     filesReadCount: 0,
     filesWrittenCount: 0,
-  }, { tier: llmTurnsUsed > 0 ? 'standard' : null, model: llmModel });
+  }, {
+    tier: llmTurnsUsed > 0 ? 'standard' : null,
+    model: llmModel,
+    // Mirror the outcome the implementer (or reviewer) computed so the
+    // annotating stage row carries the same value downstream consumers see.
+    findingsOutcome: (last.findingsOutcome as 'found' | 'clean' | 'not_applicable' | undefined),
+    findingsOutcomeReason: (last.findingsOutcomeReason as string | null | undefined),
+    outcomeInferred: (last.outcomeInferred as boolean | undefined),
+    outcomeMalformed: (last.outcomeMalformed as boolean | undefined),
+  });
   // suppress unused-variable warning while keeping the durationMs field for
   // diagnostics callers; mergeStageStats already captured the value above.
   void llmDurationMs;

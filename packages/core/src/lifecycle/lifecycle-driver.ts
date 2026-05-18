@@ -350,7 +350,7 @@ function recordStageOnEnvelope(
       ...(stats?.['outputTokens'] !== undefined && { outputTokens: numericOrUndef(stats['outputTokens']) ?? 0 }),
       ...(stats?.['cachedReadTokens'] !== undefined && { cachedReadTokens: numericNullable(stats['cachedReadTokens']) ?? null }),
       ...(stats?.['cachedNonReadTokens'] !== undefined && { cachedNonReadTokens: numericNullable(stats['cachedNonReadTokens']) ?? null }),
-      ...(stats?.['findingsOutcome'] !== undefined && { findingsOutcome: stats['findingsOutcome'] as 'clean' | 'found' | null | undefined }),
+      ...(stats?.['findingsOutcome'] !== undefined && { findingsOutcome: stats['findingsOutcome'] as 'clean' | 'found' | 'not_applicable' | null | undefined }),
       ...(stats?.['findingsOutcomeReason'] !== undefined && { findingsOutcomeReason: stats['findingsOutcomeReason'] as string | null | undefined }),
       ...(stats?.['outcomeInferred'] !== undefined && { outcomeInferred: stats['outcomeInferred'] as boolean | undefined }),
       ...(stats?.['outcomeMalformed'] !== undefined && { outcomeMalformed: stats['outcomeMalformed'] as boolean | undefined }),

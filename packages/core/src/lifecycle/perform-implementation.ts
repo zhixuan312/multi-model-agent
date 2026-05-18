@@ -156,6 +156,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
       }, {
         tier: ctx.assignedTier,
         model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+        findingsOutcome: dispatchResult.findingsOutcome,
+        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
+        outcomeInferred: dispatchResult.outcomeInferred,
+        outcomeMalformed: dispatchResult.outcomeMalformed,
       });
       if (status !== 'ok') state.terminal = true;
       return undefined;
