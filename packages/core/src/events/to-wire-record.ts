@@ -141,8 +141,6 @@ export function toWireRecord(
       cachedReadTokens: s.cachedReadTokens === null ? null : clampCachedTokens(s.cachedReadTokens),
       cachedNonReadTokens:
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
-      toolCallCount: clampToolCallCount(s.toolCallCount),
-      filesReadCount: clampFilesReadCount(s.filesReadCount),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
       maxIdleMs: 0, // TODO: track per-stage max idle in envelope
