@@ -33,7 +33,6 @@ export interface TaskSpec {
   skipCompletionHeuristic?: boolean
   expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
   testCommand?: string
-  verifyCommand?: string[]
   autoCommit?: boolean
   planContext?: string
   outputTargets?: string[]

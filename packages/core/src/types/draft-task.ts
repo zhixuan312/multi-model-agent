@@ -25,6 +25,5 @@ export interface DraftTask {
   confirmed?: boolean;
   contextBlockIds?: string[];
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
-  verifyCommand?: string[];
   skipCompletionHeuristic?: boolean;
 }

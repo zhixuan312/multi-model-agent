@@ -771,14 +771,6 @@
                             "none"
                           ],
                           "type": "string"
-                        },
-                        "verifyCommand": {
-                          "description": "Commands to run after task completion to verify the work.",
-                          "items": {
-                            "type": "string"
-                          },
-                          "minItems": 1,
-                          "type": "array"
                         }
                       },
                       "required": [

@@ -3,7 +3,7 @@
  *
  * mma-delegate is the generic dispatcher for ad-hoc implementation
  * tasks. Caller hands you a `prompt` (and optionally a `done` acceptance
- * criterion, `filePaths`, `verifyCommand`); your output is a diff.
+ * criterion, `filePaths`); your output is a diff.
  *
  * Pipeline mindset (different from earlier versions):
  * - This is a SINGLE-PASS pipeline. There are NO rework rounds for you.
@@ -31,7 +31,6 @@ export const DELEGATE_PURPOSE_ORIENTATION = [
   '- Implement EXACTLY what the brief asks for. Not less. Not more.',
   '- If the brief lists `filePaths`, those are the authorized targets. Existing entries = read-and-modify; non-existent entries = create. Files outside the list are off-limits to write unless the brief\'s task genuinely requires it (call out any deviation in your summary).',
   '- If the brief includes a `done` criterion, your diff must satisfy it precisely.',
-  '- If the brief includes a `verifyCommand`, run it after your changes. Green = part of complete; red = part of incomplete.',
   '- If you change a public symbol (exported function signature, exported type, public method), update callers in the named files. Stale callers are an INCOMPLETE REFACTOR.',
   '- Do NOT modify tests or fixtures to make a wrong implementation pass. If a test fails, fix the implementation.',
 ].join('\n');
@@ -55,7 +54,7 @@ export const DELEGATE_FAILURE_MODES = [
   '',
   '1. SCOPE CREEP — touched files / added features beyond the brief. For every diff hunk, ask: "is this required by a brief item?" If no, remove it.',
   '2. SILENT PARTIAL FIX — declared done with the work demonstrably incomplete. Naming a step as "done" when the diff doesn\'t contain it is the worst delegate failure. Either implement it or report explicitly that you did not.',
-  '3. PHANTOM TEST PASS — claimed "tests pass" without actually running them. If `verifyCommand` is set, run that exact command and quote the output. Otherwise run the focused test for the area you changed.',
+  '3. PHANTOM TEST PASS — claimed "tests pass" without actually running them. Run the focused test for the area you changed.',
   '4. INCOMPLETE REFACTOR — changed a public symbol and did not update callers. Stale callers either crash at runtime or compile-but-misbehave. Update callers in the named files; report any callers outside `filePaths` in your summary.',
 ].join('\n');
 
@@ -70,7 +69,6 @@ export const COMPLETENESS_REMINDER_DELEGATE = [
   '  1. List every requirement in `prompt` (and `done` if present).',
   '  2. For each, locate the diff hunk that satisfies it. If you cannot, you are not done.',
   '  3. Walk the diff in reverse: for each changed file/line, name the brief item it satisfies. If you cannot, the hunk is SCOPE CREEP — remove it.',
-  '  4. If `verifyCommand` is set, run it. Quote the relevant output line in your summary.',
   '',
   '"Smallest" means no extras. "Complete" means no gaps. Both at once.',
 ].join('\n');
