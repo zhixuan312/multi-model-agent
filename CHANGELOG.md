@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.7] - 2026-05-18
+
+PRIVACY.md schema documentation update: removed deprecated `verifyCommandPresent` field and clarified `reviewPolicy` description.
+
+### Changed
+
+- **`verifyCommandPresent` field removed from PRIVACY.md.** This field tracked verify-command adoption rate, deprecated since the 4.3.1 stage vocabulary collapse. Removal simplifies the telemetry schema documentation without changing collection behavior.
+- **`reviewPolicy` field description refined in PRIVACY.md.** Clarified to distinguish the requested review policy (intent) from the outcome of whether review actually ran (`stages.review.outcome`).
+
 ## [4.7.6] - 2026-05-18
 
 Providers/runtime-spine refactor + correctness fixes for multi-task `/delegate`, codex file-write attestation, wire/log divergence on failed batches, and the always-`null` `mainCostUSD` regression introduced by the 4.7.2 envelope rewrite. 48 commits since 4.7.5; full suite 2055/2055 passing. Three structural cuts: (1) the `providers/` directory dropped from 19 files to 12 — every retained file has live callers, no wrappers, no dead enum members; (2) `TurnResult` narrowed from 14 fields to exactly 9; (3) wrapper layers around the per-tier SDK calls (`run-reviewer.ts`, `run-annotator-turn.ts`, `run-worker-turn.ts`, `stall-detector.ts`, etc.) deleted in favor of direct `session.send` and inline tier policy.

@@ -23,15 +23,14 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
 | `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
 
-#### Configuration (5 fields)
+#### Configuration (4 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `agentType` | enum: `standard`, `complex` | Tier distribution → model selection defaults |
 | `toolMode` | enum: `none`, `readonly`, `no-shell`, `full` | Safety surface tracking |
 | `capabilities` | string array: `web_search`, `web_fetch`, `other` | Feature usage → investment decisions |
-| `reviewPolicy` | enum: `full`, `quality_only`, `diff_only`, `none` | Review topology distribution |
-| `verifyCommandPresent` | boolean | Verify-command adoption rate |
+| `reviewPolicy` | The per-task review policy that was requested. One of `full`, `quality_only`, `diff_only`, `none`. This is intent, not outcome — whether review actually ran is captured in `stages.review.outcome`. |
 
 #### Model (3 fields)
 
