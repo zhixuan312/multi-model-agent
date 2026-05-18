@@ -77,9 +77,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   let outputTokens = 0;
   let cachedReadTokens = 0;
   let cachedNonReadTokens = 0;
-  let toolCallsTotal = 0;
   let turnsTotal = 0;
-  let filesReadTotal = 0;
   let filesWrittenTotal = 0;
   const ss = (last as { stageStats?: Record<string, Record<string, unknown>> } | undefined)?.stageStats;
 
@@ -96,9 +94,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
       outputTokens += (stage['outputTokens'] as number | null | undefined) ?? 0;
       cachedReadTokens += (stage['cachedReadTokens'] as number | null | undefined) ?? 0;
       cachedNonReadTokens += (stage['cachedNonReadTokens'] as number | null | undefined) ?? 0;
-      toolCallsTotal += (stage['toolCallCount'] as number | null | undefined) ?? 0;
       turnsTotal += (stage['turnCount'] as number | null | undefined) ?? 0;
-      filesReadTotal += (stage['filesReadCount'] as number | null | undefined) ?? 0;
       filesWrittenTotal += (stage['filesWrittenCount'] as number | null | undefined) ?? 0;
       const stageCost = stage['costUSD'] as number | null | undefined;
       if (stageCost !== null && stageCost !== undefined) {
@@ -115,8 +111,6 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     cachedNonReadTokens = last.usage.cachedNonReadTokens ?? 0;
   }
   if (turnsTotal === 0) turnsTotal = last?.turns ?? 0;
-  if (toolCallsTotal === 0) toolCallsTotal = Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0;
-  if (filesReadTotal === 0) filesReadTotal = Array.isArray(last?.filesRead) ? last!.filesRead.length : 0;
   if (filesWrittenTotal === 0) filesWrittenTotal = Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0;
 
   // Emit a per-stage map so consumers see the breakdown without unpacking
@@ -133,7 +127,6 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
         cachedNonReadTokens: stage['cachedNonReadTokens'] ?? 0,
         costUSD: stage['costUSD'] ?? null,
         turnCount: stage['turnCount'] ?? 0,
-        toolCallCount: stage['toolCallCount'] ?? 0,
         durationMs: stage['durationMs'] ?? null,
         agentTier: stage['agentTier'] ?? null,
         model: stage['model'] ?? null,
@@ -149,7 +142,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   // TelemetryUploader subscriber picks up the sealed snapshot and runs toWireRecord.
   // No equivalent bus.emit needed here — the envelope IS the event.
   void stages; void actualCostUSD; void costDeltaVsMainUSD; void turnsTotal;
-  void filesReadTotal; void filesWrittenTotal; void toolCallsTotal;
+  void filesWrittenTotal;
   void inputTokens; void outputTokens; void cachedReadTokens; void cachedNonReadTokens;
   void last; void bus;
   state.taskTerminalEmitted = true;
@@ -269,8 +262,6 @@ function ensureImplementingStage(
     cachedReadTokens: usage.cachedReadTokens ?? 0,
     cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
     turnCount: rr.turns ?? 0,
-    toolCallCount: Array.isArray(rr.toolCalls) ? rr.toolCalls.length : 0,
-    filesReadCount: Array.isArray(rr.filesRead) ? rr.filesRead.length : 0,
     filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
     directoriesListed: 0,
   };
