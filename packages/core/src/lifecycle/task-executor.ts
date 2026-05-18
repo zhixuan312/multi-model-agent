@@ -14,6 +14,7 @@ import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { groupTasksByRepo, type TaskGroup } from './task-grouping.js';
 import { buildCancelledResult } from './build-cancelled-result.js';
 import { getDirtyFiles, formatHygieneAdvisory } from './repo-hygiene.js';
+import { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 /**
  * Inner loop for grouped dispatch. Runs each group in parallel; within
@@ -178,12 +179,55 @@ export async function executeTask<Input, Brief, Report>(
     directoriesListed: [],
   });
 
+  // Multi-task envelope fix: async-dispatch creates exactly ONE envelope
+  // (taskIndex=0) before the executor runs. For multi-task batches (e.g.
+  // /delegate with tasks.length > 1) we need a distinct envelope per task
+  // so per-task recordToolCall / startStage / seal don't collide. Tasks
+  // beyond index 0 get a freshly-created envelope attached to the same
+  // batchRegistry entry; task 0 keeps reusing the pre-created envelope so
+  // single-task batches behave exactly as before.
+  if (
+    tasks.length > 1 &&
+    ctx.batchId !== undefined &&
+    ctx.batchRegistry &&
+    ctx.envelope
+  ) {
+    const e0 = ctx.envelope.snapshot();
+    for (let i = 1; i < tasks.length; i++) {
+      const env = TaskEnvelopeStore.create({
+        taskId: `${ctx.batchId}:${i}`,
+        batchId: ctx.batchId,
+        taskIndex: i,
+        route: e0.route,
+        agentType: e0.agentType,
+        client: e0.client,
+        mainModel: e0.mainModel,
+        cwd: e0.cwd,
+      }, ctx.bus);
+      ctx.batchRegistry.attachEnvelope(ctx.batchId, i, env);
+    }
+    // Bump tasksTotal/tasksStarted from the async-dispatch placeholder of
+    // 1 so the live headline reports the real fan-out width.
+    const entry = ctx.batchRegistry.get(ctx.batchId);
+    if (entry) {
+      entry.tasksTotal = tasks.length;
+      entry.tasksStarted = tasks.length;
+    }
+  }
+
+  const envelopeForTask = (i: number): TaskEnvelopeStore | undefined => {
+    if (i === 0) return ctx.envelope;
+    if (!ctx.batchId || !ctx.batchRegistry) return ctx.envelope;
+    return ctx.batchRegistry.get(ctx.batchId)?.taskEnvelopes?.[i] ?? ctx.envelope;
+  };
+
   const dispatchOne = async (task: TaskSpec, i: number): Promise<RuntimeRunResult> => {
     const r = resolvedPerTask[i]!;
     if ('error' in r) {
       return buildAgentNotConfiguredResult(r.error);
     }
     try {
+      const taskEnvelope = envelopeForTask(i);
       return await runTaskViaDispatcher({
         task,
         resolved: r,
@@ -197,7 +241,7 @@ export async function executeTask<Input, Brief, Report>(
         client: ctx.client,
         mainModel: ctx.mainModel,
         bus: ctx.bus,
-        envelope: ctx.envelope,
+        ...(taskEnvelope && { envelope: taskEnvelope }),
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
         ...(ctx.batchRegistry && { batchRegistry: ctx.batchRegistry }),
         ...((ctx as any).reviewerEngine !== undefined && { reviewerEngine: (ctx as any).reviewerEngine }),

@@ -13,7 +13,10 @@ export interface CodexItem {
   aggregated_output?: string;
   exit_code?: number | null;
   status?: 'in_progress' | 'completed' | string;
+  /** Codex 0.130.0+ emits file_change items as { changes: [{ path, kind: 'add'|'modify'|'delete' }] }.
+   *  Older codex versions used a flat `path` on the item itself; both are accepted. */
   path?: string;
+  changes?: Array<{ path?: string; kind?: 'add' | 'modify' | 'delete' | string }>;
 }
 
 export interface CodexUsage {

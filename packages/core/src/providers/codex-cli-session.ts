@@ -449,16 +449,27 @@ class TurnTracker {
         ...this.tag,
       }));
     } else if (item.type === 'file_change') {
-      if (typeof item.path === 'string') {
-        this.filesWritten.add(item.path);
+      // Collect paths from both the modern `changes: [{ path, kind }]` shape
+      // (codex 0.130.0+) and the legacy flat `path` field. We treat them
+      // identically — recordToolCall fires once with the union of paths so the
+      // envelope's filesWritten and stage.filesWrittenCount stay accurate.
+      const paths: string[] = [];
+      if (Array.isArray(item.changes)) {
+        for (const c of item.changes) {
+          if (c && typeof c.path === 'string' && c.path.length > 0) paths.push(c.path);
+        }
+      }
+      if (typeof item.path === 'string' && item.path.length > 0) paths.push(item.path);
+      for (const p of paths) this.filesWritten.add(p);
+      if (paths.length > 0) {
         this.envelope?.recordToolCall({
           stage: 'implementing',
           tool: 'edit_file',
-          filesWritten: [item.path],
+          filesWritten: paths,
         });
       }
       this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_file_change', {
-        ...(typeof item.path === 'string' && { path: item.path }),
+        ...(paths.length > 0 && { paths }),
         ...this.tag,
       }));
     }

@@ -50,7 +50,7 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
     expect(tracker.usedShell).toBe(true);
   });
 
-  it('produces filesWritten: [...] when file_change items are consumed', () => {
+  it('produces filesWritten: [...] when file_change items are consumed (legacy flat path)', () => {
     const cumulative = zeroUsage();
     const tracker = new TurnTracker(cumulative);
     const itemCompletedEvent: CodexCliEvent = {
@@ -59,6 +59,23 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
     } as CodexCliEvent;
     tracker.consume(itemCompletedEvent);
     expect(Array.from(tracker.filesWritten)).toContain('/x.ts');
+  });
+
+  it('produces filesWritten: [...] when file_change items use changes[{path,kind}] shape (codex 0.130+)', () => {
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative);
+    const itemCompletedEvent: CodexCliEvent = {
+      kind: 'item_completed',
+      item: {
+        type: 'file_change',
+        changes: [
+          { path: '/a.ts', kind: 'add' },
+          { path: '/b.ts', kind: 'modify' },
+        ],
+      },
+    } as CodexCliEvent;
+    tracker.consume(itemCompletedEvent);
+    expect(Array.from(tracker.filesWritten).sort()).toEqual(['/a.ts', '/b.ts']);
   });
 
   it('produces terminationReason: "ok" from clean turn_completed + exit 0', () => {

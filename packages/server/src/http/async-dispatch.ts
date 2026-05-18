@@ -111,7 +111,12 @@ export function asyncDispatch<TResult>(
         const resultObj = result as Record<string, unknown> | undefined;
 
         const entryAfter = batchRegistry.get(batchId);
-        if (entryAfter) entryAfter.tasksCompleted = 1;
+        if (entryAfter) {
+          // For multi-task batches the executor bumped tasksTotal from the
+          // placeholder of 1 to the real fan-out width. Mark every task as
+          // completed so the live/terminal headline reports n/n complete.
+          entryAfter.tasksCompleted = Math.max(entryAfter.tasksTotal ?? 1, 1);
+        }
         batchRegistry.complete(batchId);
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
         const durationMs = Date.now() - startedAtMs;
