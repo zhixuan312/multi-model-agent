@@ -5,7 +5,7 @@ import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/
 import type { ExecutePlanWireInput } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
-import { validateVerifyCommand } from '@zhixuan92/multi-model-agent-core/intake/verify-command-validator';
+import { validateVerifyCommand } from '../../validation/verify-command.js';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

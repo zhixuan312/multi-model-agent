@@ -64,10 +64,6 @@
       "types": "./dist/lifecycle/stage-labels.d.ts",
       "import": "./dist/lifecycle/stage-labels.js"
     },
-    "./intake/verify-command-validator": {
-      "types": "./dist/intake/verify-command-validator.d.ts",
-      "import": "./dist/intake/verify-command-validator.js"
-    },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
       "import": "./dist/lifecycle/handlers/commit-stage.js"

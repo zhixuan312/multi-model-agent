@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateVerifyCommand } from '../../packages/core/src/intake/verify-command-validator.js';
+import { validateVerifyCommand } from '../../../../packages/server/src/http/validation/verify-command.js';
 
 describe('validateVerifyCommand', () => {
   it('accepts undefined / empty', () => {
