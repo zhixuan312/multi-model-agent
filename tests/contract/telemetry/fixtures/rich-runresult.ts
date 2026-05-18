@@ -9,9 +9,7 @@ export function richRunResult(): RuntimeRunResult {
     usage: { inputTokens: 1000, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     cost: { costUSD: 0.05, costDeltaVsMainUSD: null },
     turns: 14,
-    filesRead: ['src/a.ts', 'src/b.ts'],
     filesWritten: ['src/a.ts'],
-    toolCalls: ['readFile(src/a.ts)', 'writeFile(src/a.ts)'],
     directoriesListed: ['src'],
     outputIsDiagnostic: false,
     escalationLog: [
