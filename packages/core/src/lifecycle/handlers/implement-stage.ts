@@ -7,7 +7,6 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ImplementPayload, RouteName } from '../stage-io.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import type { Finding, Citation } from '../stage-io.js';
-import { runWorkerTurn } from '../../providers/run-worker-turn.js';
 import { performImplementation } from '../perform-implementation.js';
 import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.js';
 import { spawnSync } from 'node:child_process';
