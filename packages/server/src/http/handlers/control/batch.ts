@@ -52,6 +52,11 @@ function envelopeToPublicResult(env: TaskEnvelope) {
     filesChangedCount: env.realFilesChanged.length,
     error: env.structuredError ? { code: (env.structuredError as any).code, message: (env.structuredError as any).message } : null,
     escalationSummary: { count: env.escalationLog.length, distinctProviders: new Set(env.escalationLog.map((e: any) => (e.toModel ?? ''))).size },
+    // 4.7.5: surface parser-side validation warnings (e.g. dropped Finding blocks)
+    // so operators can see WHY a worker's output yielded fewer findings than
+    // expected. recordValidationWarning() on the envelope pushes here; without
+    // this projection the data was invisible to /batch callers.
+    validationWarnings: env.validationWarnings,
   };
 }
 

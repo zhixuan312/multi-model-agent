@@ -222,7 +222,16 @@ async function runReviewerWithRetries(
       turn,
     };
   }
-  const parsed = parseReviewReport(turn.text, undefined, undefined);
+  const ctx = state.executionContext as { envelope?: { recordValidationWarning?: (w: { rule: string; path: string }) => void } } | undefined;
+  const warnSink = (event: string, data: Record<string, unknown>) => {
+    try {
+      ctx?.envelope?.recordValidationWarning?.({
+        rule: event,
+        path: `${data['reasonCode'] ?? 'unknown'}:${String(data['droppedFindingHeading'] ?? '').slice(0, 120)}`,
+      });
+    } catch { /* sealed envelope — harmless */ }
+  };
+  const parsed = parseReviewReport(turn.text, undefined, warnSink);
   return {
     parsed,
     costUSD: turn.costUSD,
