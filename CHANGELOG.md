@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.4] - 2026-05-18
+
+End-to-end findings coherence release. Read-route workers (investigate / audit / debug / research) now contribute their actual findings to the wire, the HTTP per-task result, and downstream telemetry — previously dropped silently. Findings-summary signals are now emitted at one canonical place (the top level of the wire event + per-task HTTP result), with per-stage rows reserved for stage mechanics only. Backend telemetry ingest, dashboard severity tiles, and the daemon's local HTTP responses all read from the same source of truth.
+
+### Added
+
+- **Tolerant findings parser (core).** Accepts `## Finding N:`, `### Finding N`, `## Issue N:`, `## Concern N:`, optional `**bold**` wrapping, and `:`/`./`)` terminators. Bullet matcher accepts `-` or `*` and `**Severity:**` bold-bullet style. `## Outcome` extractor accepts canonical, inline (`## Outcome: found`), and headless (`Outcome: found`) forms. LLM-emitted heading drift no longer silently drops findings.
+- **`envelope.recordFinding` bridge (core).** `composeHandler` now pushes `payload.findings` onto `envelope.findings` (normalizing required envelope fields: `id`, `evidence`, `source`). Previously the API was defined but had no producer — every `results[N].findings` was `[]` regardless of what the worker emitted.
+- **Top-level findings rollup on wire + HTTP (core / server).** `TaskCompletedEventSchema` and `envelopeToPublicResult` now expose `findingsBySeverity`, `findingsOutcome`, `findingsOutcomeReason`, `outcomeInferred`, `outcomeMalformed` at the top level. Backend ingest reads from one place; frontend severity tile remains unchanged.
+- **`findingsOutcome` threading for read routes (core).** `mergeStageStats` propagates the outcome quartet through `implementing` and `annotating` stages (was previously `review`-only). `perform-implementation` passes the worker-emitted outcome from the read-route dispatcher.
+
+### Changed
+
+- **Per-stage wire rows no longer carry `findingsBySeverity` / `findingsOutcome` / `findingsOutcomeReason` / `outcomeInferred` / `outcomeMalformed`.** These fields lived on review, implementing, and annotating rows under 4.7.3 — three sources for the same data, with backend extractors re-implementing aggregation. They are now top-level only. Backend transformer prefers top-level; falls back to per-stage review rollup for pre-4.7.4 events (back-compat).
+- **Investigate evidence-format check loosened (core).** Findings whose `Evidence` line contains `file:line` anywhere (not just at the start) are now accepted. Workers naturally write `In [src/foo.ts:42] …` or wrap citations in markdown links; both forms now pass.
+- **Legal-outcome guard in parser (core).** When a worker declares an outcome that isn't legal for the route (e.g. `not_applicable` on an issue-hunting criterion), the parser falls back to the inferred outcome rather than passing illegal values downstream.
+- **Batch-level `structuredReport.findingsOutcome` (server).** `/batch/:id` response now exposes a rollup outcome aggregated across all snapshots' stages (any `found` → `found`; else any `not_applicable` → `not_applicable`; else `clean`; `null` if no stage emitted one).
+
+### Fixed
+
+- **`results[N].findings` returned `[]` for every read-route batch (core).** Worker findings were parsed correctly but never reached `envelope.findings` because `recordFinding` had no caller. Fixed by the compose-handler bridge above.
+- **`stages[implementing].findingsOutcome` always `null` on read routes (core).** Even when the worker explicitly declared `## Outcome\nfound`, the value never made it into the wire stage row. Fixed by extending `mergeStageStats` to thread `findingsOutcome` for `implementing` and `annotating` stages.
+
 ## [4.7.3] - 2026-05-17
 
 Fix-forward release closing the envelope-pipeline regressions introduced by 4.7.2's events/lifecycle rewrite, plus the long-standing aggregation gaps the same data-flow audit surfaced. Every public HTTP route + skill + CLI command behaves the same; observability (polling headline, stderr stream, telemetry queue) is now end-to-end correct.
@@ -392,7 +415,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.3...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.4...HEAD
+[4.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.3...v4.7.4
 [4.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...v4.7.3
 [4.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.1...v4.7.2
 [4.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.0...v4.7.1
