@@ -9,7 +9,6 @@ describe('annotator (unified)', () => {
         output: 'worker text',
         summary: 'did the thing', workerStatus: 'done',
         filesChanged: ['a.ts'],
-        validationsRun: [{ name: 'npm test', passed: true, output: '' }],
         unresolved: [],
         committed: true,
         commitSha: 'a'.repeat(40),
@@ -51,7 +50,7 @@ describe('annotator (unified)', () => {
       route: 'delegate',
       lastRunResult: {
         summary: 'no changes', workerStatus: 'done',
-        filesChanged: [], validationsRun: [], unresolved: [],
+        filesChanged: [], unresolved: [],
         committed: false, commitSha: null, commitMessage: null, commitSkipReason: 'no_diff',
       },
       reviewVerdict: 'approved', reviewConcerns: [],

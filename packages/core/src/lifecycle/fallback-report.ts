@@ -31,7 +31,6 @@ export function buildFallbackImplReport(result: RuntimeRunResult): ParsedStructu
   return {
     summary: result.output.substring(0, 200),
     filesChanged: result.filesWritten.map(f => ({ path: f, summary: 'updated' })),
-    validationsRun: [],
     deviationsFromBrief: [],
     unresolved: [],
     extraSections: {},

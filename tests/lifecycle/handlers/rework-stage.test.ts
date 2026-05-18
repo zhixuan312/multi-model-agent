@@ -21,7 +21,6 @@ const REWORK_WORKER_OUTPUT = [
     workerStatus: 'done',
     filesChanged: ['src/foo.ts'],
     unresolved: [],
-    validationsRun: [],
   }),
   '```',
 ].join('\n');

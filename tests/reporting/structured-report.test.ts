@@ -6,7 +6,6 @@ describe('structuredReportSuffix', () => {
     const s = structuredReportSuffix;
     expect(s).toContain('## Summary');
     expect(s).toContain('## Files changed');
-    expect(s).toContain('## Validations run');
     expect(s).toContain('## Deviations from brief');
     expect(s).toContain('## Unresolved');
   });
@@ -80,10 +79,6 @@ None.`;
       { path: 'src/auth.ts', summary: '' },
       { path: 'src/auth.test.ts', summary: '' },
     ]);
-    expect(r.validationsRun).toEqual([
-      { command: 'tsc passes', result: '' },
-      { command: 'tests pass', result: '' },
-    ]);
     expect(r.deviationsFromBrief).toEqual(['None.']);
     expect(r.unresolved).toEqual(['None.']);
   });
@@ -137,11 +132,6 @@ describe('(none) literal handling', () => {
     expect(r.filesChanged).toEqual([]);
   });
 
-  it('parseStructuredReport returns empty validationsRun when body is "(none)"', () => {
-    const r = parseStructuredReport('## Summary\nx\n## Validations run\n(none)\n');
-    expect(r.validationsRun).toEqual([]);
-  });
-
   it('does not collapse non-(none) entries that happen to contain the word', () => {
     const r = parseStructuredReport('## Summary\nx\n## Files changed\n- src/none-handler.ts: tweak\n');
     expect(r.filesChanged).toEqual([{ path: 'src/none-handler.ts', summary: 'tweak' }]);
@@ -155,11 +145,10 @@ describe('extraSections', () => {
     expect(r.extraSections['confidence']).toEqual(['high']);
   });
 
-  it('does NOT include the five typed headers in extraSections', () => {
-    const r = parseStructuredReport('## Summary\nx\n## Files changed\n(none)\n## Validations run\n(none)\n## Deviations from brief\nnone\n## Unresolved\nfoo\n');
+  it('does NOT include the four typed headers in extraSections', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\n(none)\n## Deviations from brief\nnone\n## Unresolved\nfoo\n');
     expect(r.extraSections['summary']).toBeUndefined();
     expect(r.extraSections['files changed']).toBeUndefined();
-    expect(r.extraSections['validations run']).toBeUndefined();
     expect(r.extraSections['deviations from brief']).toBeUndefined();
     expect(r.extraSections['unresolved']).toBeUndefined();
   });

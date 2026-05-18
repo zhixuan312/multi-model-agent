@@ -96,11 +96,10 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   // ── implementationReport + structuredReport (annotator wins; else fallback) ─
   const fallbackReport = (last.output
     ? parseStructuredReport(last.output)
-    : { summary: '', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
+    : { summary: '', filesChanged: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
   ) as unknown as {
     summary?: string;
     filesChanged?: string[];
-    validationsRun?: unknown[];
     deviationsFromBrief?: unknown[];
     unresolved?: unknown[];
     extraSections?: Record<string, unknown>;
