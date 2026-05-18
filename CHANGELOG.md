@@ -9,13 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Polling-headline truthfulness pass. The pre-4.7.5 polling output (`[N/M] stage — reads=0 writes=0 tools=K`) showed `reads=0 writes=0` for the entire task lifetime because Claude's tool_use blocks always recorded empty file arrays — making it look like no file activity was happening even when the worker was actively running Read/Write/Edit tools. Two fixes ship together so the headline becomes truthful.
 
+**Principle: only record file paths we can directly observe.** Tool-name heuristics and shell pattern matching are not used; if we don't know the actual file from the provider's structured event, we don't count it. The adaptive headline below hides what we can't see, so the counters are always honest.
+
 ### Added
 
-- **Claude file-path extraction (core).** `claude-session` now extracts `file_path` (or `notebook_path`) from each tool_use block's input and records it through `envelope.recordToolCall`. `Read` contributes to `filesRead`; `Write` / `Edit` / `MultiEdit` contribute to `filesWritten`; `NotebookEdit` contributes to both. Other tools (Bash, Glob, Grep, WebFetch, etc.) record the call but no file activity.
+- **Claude file-path extraction (core).** `claude-session` now extracts `file_path` (or `notebook_path`) from each tool_use block's input and records it through `envelope.recordToolCall`. `Read` contributes to `filesRead`; `Write` / `Edit` / `MultiEdit` contribute to `filesWritten`; `NotebookEdit` contributes to both (reads-then-writes). `Bash`, `Glob`, `Grep`, `WebFetch`, and similar tools record the call but no file activity — `Glob` returns a pattern not a file; `Grep` doesn't tell us which matching files the agent actually consumed.
 
 ### Changed
 
-- **Adaptive polling-headline stats (server).** `/batch/:id` 202 body now shows `tools=N` always (the most reliable activity signal across all providers) and appends `reads=N` / `writes=N` only when each is > 0. Previously the literal `reads=0 writes=0` rendered through the entire lifetime of most tasks; now those tokens only appear when there's real file activity to report.
+- **Adaptive polling-headline stats (server).** `/batch/:id` 202 body now shows `tools=N` always (the most reliable activity signal across all providers) and appends `reads=N` / `writes=N` only when each is > 0. Previously the literal `reads=0 writes=0` rendered through the entire lifetime of most tasks; now those tokens only appear when there's real file activity to report. Codex shell-reads (`cat` / `nl` / `sed` / etc.) remain intentionally untracked — codex CLI does not emit a `file_read` event, and shell-parsing heuristics would create false positives.
 
 ## [4.7.4] - 2026-05-18
 
