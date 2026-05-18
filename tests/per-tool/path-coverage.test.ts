@@ -15,7 +15,10 @@ import { readdirSync } from 'node:fs';
 // 'delegate' per-tool test deleted in Task A5 (legacy-cleanup); active delegate
 // integration coverage lives in tests/delegate*.test.ts,
 // tests/contract/http/delegate.test.ts, and tests/server/handlers/tools/delegate.test.ts.
-const expectedTools = ['execute-plan', 'investigate', 'research', 'retry'];
+// 'retry' per-tool test deleted in PR 1 of the intake-dissolution cleanup
+// (it tested the dead makeRetrySlot from intake/brief-compiler-slots/retry.ts).
+// New retry briefSlot coverage will live at tests/tools/retry/brief-slot.test.ts (PR 2).
+const expectedTools = ['execute-plan', 'investigate', 'research'];
 const presentTests = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.test.ts') && f !== 'path-coverage.test.ts').map(f => f.replace('.test.ts', ''));
 
 describe('per-tool path coverage', () => {
