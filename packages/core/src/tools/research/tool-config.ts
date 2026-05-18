@@ -1,12 +1,15 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
-import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { researchReportSchema, type ResearchReport } from '../../reporting/report-parser-slots/research-report.js';
 import { researchHeadlineTemplate } from '../../reporting/headline-templates/research.js';
-import { compileResearch, type ResolvedContextBlock } from '../../intake/brief-compiler-slots/research.js';
+import { researchBriefSlot, type EnrichedResearchInput, type ResearchBrief } from './brief-slot.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+
+// Re-export for external consumers (server handler imports these from this
+// module's path).
+export type { EnrichedResearchInput, ResearchBrief, ResolvedContextBlock } from './brief-slot.js';
 
 export function registerResearch(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -22,37 +25,11 @@ export function registerResearch(registry: ToolSurfaceRegistry): void {
   });
 }
 
-export interface EnrichedResearchInput extends Input {
-  resolvedContextBlocks: ResolvedContextBlock[];
-  /** Operator-configured source descriptors (research.userSources). */
-  userSources: readonly string[];
-  /** True iff research.brave.apiKeys is non-empty (drives the prompt branch
-   *  that says "escalate to web_search"). */
-  hasBrave: boolean;
-}
-
-export interface ResearchBrief {
-  compiledPrompt: string;
-  contextBlockIds: string[];
-}
-
 export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, ResearchReport> = {
   name: 'research',
   category: 'read_only',
   agentType: 'complex',
-  briefSlot: (input: EnrichedResearchInput): ResearchBrief[] => {
-    // cwd is irrelevant to prompt compilation (research is external-only); the
-    // generic executor's buildTaskSpec sets the cwd on the TaskSpec from
-    // ExecutionContext.
-    const { task } = compileResearch(input, input.resolvedContextBlocks, '', {
-      userSources: input.userSources,
-      hasBrave: input.hasBrave,
-    });
-    return [{
-      compiledPrompt: task.prompt,
-      contextBlockIds: input.contextBlockIds ?? [],
-    }];
-  },
+  briefSlot: researchBriefSlot,
   buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext) => ({
     prompt: brief.compiledPrompt,
     parallelTarget: brief.compiledPrompt,
