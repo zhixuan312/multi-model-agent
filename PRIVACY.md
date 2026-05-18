@@ -86,6 +86,18 @@ A keyed record `{ standard?, complex?, main? }` where each present tier carries 
 | `escalationCount` | integer (0–20) | Escalation frequency |
 | `fallbackCount` | integer (0–20) | Provider-fallback frequency |
 
+#### Findings rollup (5 fields, as of 4.7.4)
+
+Single top-level source of truth for findings-summary signals. Previously these were scattered across per-stage rows (review stage carried `findingsBySeverity`; implementing / review / annotating stages carried the outcome quartet). 4.7.4 lifts them to the top level; per-stage rows no longer carry duplicates. **Same data — only the JSON path moved.** No new collection.
+
+| Field | Type | Decision driver |
+|-------|------|-----------------|
+| `findingsBySeverity` | object `{ critical, high, medium, low }` — non-negative integer count per severity tier of the task's final findings list (sum across implementer + reviewer findings, post-dedupe) | Severity-mix analytics. **Relocated from per-stage review row in 4.7.4.** |
+| `findingsOutcome` | enum or null: `found`, `clean`, `not_applicable` — the task's final findings outcome rolled up across stages with priority review > annotating > implementing | Outcome distribution per route/tier |
+| `findingsOutcomeReason` | string or null — short reason text the worker emitted alongside the outcome (e.g. when `not_applicable`, why). String is bounded by the worker's emission and the parser's slice; never contains user code or evidence text. | Outcome-reason categorization |
+| `outcomeInferred` | boolean — `false` when the worker emitted an explicit `## Outcome` section the parser recognized; `true` when the parser inferred it from finding presence. | Worker-emission-quality signal — distinguishes "worker said so" from "parser fell back" |
+| `outcomeMalformed` | boolean — `true` when the worker emitted a `## Outcome` section but with a value the parser couldn't parse | Worker-emission-quality signal |
+
 #### Files (1 field)
 
 | Field | Type | Decision driver |
@@ -129,7 +141,7 @@ Each stage is a discriminated-union entry on `(name, round)`. As of 4.3.1 (schem
 
 Stage-type-specific extras:
 
-- **Review stage** (`review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier). Combines spec + quality sub-reviewers under one entry per round.
+- **Review stage** (`review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`). Combines spec + quality sub-reviewers under one entry per round. As of 4.7.4, `findingsBySeverity` is no longer carried on the review stage row — it lives at the top level (see "Findings rollup" above).
 - **Rework stage** (`rework`): `triggeringConcernCategories` (string array). Single combined pass replacing the prior `spec_rework` / `quality_rework` split.
 - **Annotating stage** (`annotating`): `outcome` (enum: `passed`, `failed`, `skipped`, `not_applicable`, `transformed`), `skipReason` (enum or null: `no_command`, `dirty_worktree`, `not_applicable`, `other`). Renamed from `verifying`. `transformed` was added in 4.5.0 to mark pure-transform annotating passes (no LLM call) so the per-stage emission shape stays consistent with the other stages and per-stage dashboards stop showing a gap.
 - **Committing stage** (`committing`): `filesCommittedCount` (integer), `branchCreated` (boolean).
@@ -239,6 +251,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-18 | 5 | Additive within v5 (4.7.4 release). Top-level findings rollup: `findingsBySeverity` (relocated from per-stage review row), `findingsOutcome` (enum), `findingsOutcomeReason` (string), `outcomeInferred` (bool), `outcomeMalformed` (bool). Same data the review stage previously carried, lifted to top-level so all routes (not just routes that ran the review stage) contribute. Backend reads top-level; per-stage rows no longer carry these. No new content collected. |
 | 2026-05-13 | 5 | Additive within v5 (4.5.0 release). Top-level: `subtype` (string \| null, finer-grained tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`) and `filesWrittenCount` (integer, count only — sourced from real git diff via sub-project A, not worker self-report). Stage base: `mainEquivalentCostUSD` (float \| null, per-stage main-model-equivalent cost). Annotating-stage `outcome` enum gains `transformed` for pure-transform passes. No new content collected, no schema version bump — counts/labels only. |
 | 2026-05-11 | 5 | V5 schema (stage vocabulary collapse): eight legacy stage names fold into five — `spec_review` + `quality_review` + `diff_review` → `review`; `spec_rework` + `quality_rework` → `rework`; `verifying` → `annotating`; `implementing` and `committing` unchanged. Stage-specific extras unchanged (review keeps `verdict` / `roundsUsed` / `concernCategories` / `findingsBySeverity`; rework keeps `triggeringConcernCategories`; annotating keeps `outcome` / `skipReason`). No new fields, no new collection — pure rename. mma emits v5 only; backend normalises legacy v4 records on read. |
 | 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `mainModel` (specific identity alongside `mainModelFamily`), and `mainEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
