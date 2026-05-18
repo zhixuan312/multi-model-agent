@@ -40,7 +40,7 @@ export async function recoverFalseNegatives(opts: RecoverOpts): Promise<RecoverS
     // Create the recovered_at column upfront (idempotent). Required for both dry-run and
     // apply modes so the query's AND recovered_at IS NULL clause doesn't fail on
     // pre-migration databases.
-    await client.query('ALTER TABLE mma_telemetry ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ NULL;');
+    await client.query('ALTER TABLE mma_telemetry.events_raw ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ NULL;');
 
     // Keyset pagination on id. Avoids skipping rows when apply mode removes candidates
     // from the result set.
@@ -82,7 +82,7 @@ export async function recoverFalseNegatives(opts: RecoverOpts): Promise<RecoverS
           await client.query('BEGIN');
           for (const u of updates) {
             await client.query(
-              'UPDATE mma_telemetry SET terminal_status=$1, worker_status=$2, error_code=$3, recovered_at=NOW() WHERE id=$4',
+              'UPDATE mma_telemetry.events_raw SET terminal_status=$1, worker_status=$2, error_code=$3, recovered_at=NOW() WHERE id=$4',
               [u.terminal, u.worker, u.errorCode, u.id]
             );
           }
