@@ -14,21 +14,8 @@ let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<AgentType, Provider> | null = null;
 
 // ─── Safety ceiling ────────────────────────────────────────────────────────
-// Process-wide counter of live CLI children (codex + claude combined). When
-// the count would exceed SAFETY_CEILING, openSession refuses with
-// safety_ceiling_exceeded. This is a "should never happen" guard — the per-
-// task close-on-end invariant + stuck-detection watchdog should keep us far
-// below this in normal operation. Capped at 100 children → up to 50
-// concurrent tasks (each task uses ≤2 sessions: 1 standard + 1 complex).
-//
+// KEEP these existing exports/symbols (still used):
 const SAFETY_CEILING = 100;
-let liveChildren = 0;
-
-/** Test-only — number of currently-live CLI children. */
-export function __liveChildren(): number { return liveChildren; }
-/** Test-only — process-wide safety ceiling. */
-export function __safetyCeiling(): number { return SAFETY_CEILING; }
-
 export class SafetyCeilingExceededError extends Error {
   readonly code = 'safety_ceiling_exceeded';
   constructor(current: number, ceiling: number) {
@@ -36,36 +23,134 @@ export class SafetyCeilingExceededError extends Error {
   }
 }
 
+// REMOVE: let liveChildren = 0;
+// REMOVE: export function __liveChildren(): number { return liveChildren; }
+// REMOVE: export function __safetyCeiling(): number { return SAFETY_CEILING; }
+
+// ADD: per-task accounting. Values are Maps of sessionId → underlying Session
+// so releaseTask() can iterate them and force-close.
+const liveByTask = new Map<string, Map<string, Session>>();
+
+export class TaskSessionLimitExceededError extends Error {
+  readonly code = 'task_session_limit_exceeded';
+  constructor(taskKey: string, limit: number) {
+    super(`task_session_limit_exceeded: taskKey=${taskKey} limit=${limit}`);
+  }
+}
+
+export class MissingTaskIdentityError extends Error {
+  readonly code = 'missing_task_identity';
+  constructor() {
+    super('missing_task_identity: openSession requires opts.batchId and opts.taskIndex');
+  }
+}
+
+/** Test-only snapshot of the per-task live-sessions map.
+ *  Returns Maps of sessionId → Session (handles included). */
+export function __liveByTask(): Map<string, Map<string, Session>> {
+  const snap = new Map<string, Map<string, Session>>();
+  for (const [k, v] of liveByTask) snap.set(k, new Map(v));
+  return snap;
+}
+
+function sumOfAllLive(): number {
+  let n = 0;
+  for (const v of liveByTask.values()) n += v.size;
+  return n;
+}
+
+function taskKey(opts: SessionOpts): string {
+  if (opts.batchId === undefined || opts.taskIndex === undefined) {
+    throw new MissingTaskIdentityError();
+  }
+  return `${opts.batchId}:${opts.taskIndex}`;
+}
+
+/**
+ * Force-close any sessions still tracked under (batchId, taskIndex).
+ * Iterates the per-task session map; each close() is awaited inside its
+ * own try/catch so a throw from one session does not skip the others.
+ * Errors are logged via the bus under `release_task_close_failed` and
+ * do not propagate to the caller. After iteration, the map entry is
+ * unconditionally deleted.
+ */
+export async function releaseTask(
+  batchId: string,
+  taskIndex: number,
+  bus?: { emit?: (e: Record<string, unknown>) => void },
+): Promise<void> {
+  const key = `${batchId}:${taskIndex}`;
+  const live = liveByTask.get(key);
+  if (!live) return;
+  for (const [sessionId, session] of live) {
+    try {
+      await session.close();
+    } catch (err) {
+      bus?.emit?.({
+        event: 'release_task_close_failed',
+        ts: new Date().toISOString(),
+        severity: 'warn',
+        batchId,
+        taskIndex,
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  liveByTask.delete(key);
+}
+
 function wrapWithSafetyCeiling(p: Provider): Provider {
   return {
     name: p.name,
     config: p.config,
     openSession(opts: SessionOpts): Session {
-      if (liveChildren >= SAFETY_CEILING) {
-        // Bus may not be available — emit through opts.bus if present.
+      const key = taskKey(opts); // throws MissingTaskIdentityError if missing
+      const existing = liveByTask.get(key)?.size ?? 0;
+      if (existing >= 2) {
+        throw new TaskSessionLimitExceededError(key, 2);
+      }
+      if (sumOfAllLive() >= SAFETY_CEILING) {
         const bus = (opts.bus as { emit?: (e: Record<string, unknown>) => void } | undefined);
         bus?.emit?.({
           event: 'safety_ceiling_hit',
           ts: new Date().toISOString(),
           severity: 'error',
-          liveChildren,
+          liveChildren: sumOfAllLive(),
           ceiling: SAFETY_CEILING,
           ...(opts.batchId !== undefined && { batchId: opts.batchId }),
           ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
         });
-        throw new SafetyCeilingExceededError(liveChildren, SAFETY_CEILING);
+        throw new SafetyCeilingExceededError(sumOfAllLive(), SAFETY_CEILING);
       }
-      liveChildren++;
+      // Open underlying session FIRST — sync throws don't leak the counter.
       const inner = p.openSession(opts);
-      let decremented = false;
-      const dec = (): void => { if (!decremented) { decremented = true; liveChildren--; } };
-      return {
+      const sessionId = `${key}:${Math.random().toString(36).slice(2, 10)}`;
+      let removed = false;
+      const removeFromMap = (): void => {
+        if (removed) return;
+        removed = true;
+        const live = liveByTask.get(key);
+        if (live) {
+          live.delete(sessionId);
+          if (live.size === 0) liveByTask.delete(key);
+        }
+      };
+      // Build the wrapped Session that close() in the normal path uses.
+      const wrapped: Session = {
         send: inner.send.bind(inner),
         async close(): Promise<void> {
-          try { await inner.close(); } finally { dec(); }
+          try { await inner.close(); } finally { removeFromMap(); }
         },
         ...(inner.getPid && { getPid: inner.getPid.bind(inner) }),
       };
+      // Register AFTER the inner open succeeded. Store the WRAPPED Session
+      // so releaseTask() can call .close() (which routes to inner.close()
+      // AND removes from the map via the same removeFromMap guard).
+      const map = liveByTask.get(key) ?? new Map<string, Session>();
+      map.set(sessionId, wrapped);
+      liveByTask.set(key, map);
+      return wrapped;
     },
   };
 }
