@@ -36,7 +36,6 @@ import { runInfo } from './info.js';
 import { runSyncSkills } from './sync-skills.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
-import { runRecoverTelemetry } from './recover-telemetry.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -181,7 +180,6 @@ Commands:
   sync-skills      Install + update + reconcile all shipped skills (single upsert command, replaces 4.0.x install-skill / update-skills)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
-  recover-telemetry  Re-derive completion status for false-negative telemetry rows (dry-run by default)
 
 Global options:
   --config, -c <path>   Path to config file
@@ -352,13 +350,6 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       });
       exit(code);
       break;
-    }
-    case 'recover-telemetry': {
-      const subCmdIdx = argv.indexOf('recover-telemetry');
-      const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
-      const code = await runRecoverTelemetry(subArgv);
-      exit(code);
-      return;
     }
     default: {
       stderr(`Unknown command: ${subcommand}\nRun 'mmagent --help' for usage.\n`);

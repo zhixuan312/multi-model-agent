@@ -11,8 +11,7 @@ Deterministic completion gate. The completion judgment that produces wire `termi
 
 ### Added
 
-- **`deriveCompletion(state)` pure function** (`packages/core/src/lifecycle/derive-completion.ts`). Single source of truth used by the annotator gate, envelope seal, and recovery script. Inputs: `implementOutcome`, `reviewPolicy`, `reviewVerdict`, `reworkApplied`, `reworkError`, `unaddressedFindingIds`, `commitKind`, `autoCommit`, `route`, `criteriaSucceeded`. Worker self-assessment is intentionally not a parameter.
-- **`mmagent recover-telemetry` CLI command.** One-shot recovery of false-negative rows on the backend telemetry DB. Dry-run is the default; `--apply` writes per-page transactions. Required flags: `--since YYYY-MM-DD`, `--db-url`. Optional: `--page-size N` (default 500), `--limit N`. Reuses `deriveCompletion()` (impossible to drift from live gate). Adds idempotent `recovered_at TIMESTAMPTZ` column.
+- **`deriveCompletion(state)` pure function** (`packages/core/src/lifecycle/derive-completion.ts`). Single source of truth used by the annotator gate and the envelope seal. Inputs: `implementOutcome`, `reviewPolicy`, `reviewVerdict`, `reworkApplied`, `reworkError`, `unaddressedFindingIds`, `commitKind`, `autoCommit`, `route`, `criteriaSucceeded`. Worker self-assessment is intentionally not a parameter.
 - **`tests/contract/wire-record-blast-radius.test.ts`** — regression guard asserting only 5 named status fields may differ between pre/post change for a fixed fixture. All cost/token/timing/identity/counter/stage fields unchanged.
 
 ### Changed
@@ -27,12 +26,12 @@ Deterministic completion gate. The completion judgment that produces wire `termi
 
 - **47% of false-negative telemetry rows (commit-plumbing bucket).** Annotator now reads the active commit gate (`state.gates.commit?.payload?.kind`) instead of the unmaintained legacy `state.commits[]` mirror. Workers' real `git commit` SHAs are now visible to the gate.
 - **26% of false-negative telemetry rows (worker self-assess misreport).** Worker `'failed'` self-assessment no longer overrides objective signals. When review approves and the commit lands, the wire record is `terminal_status='ok'` regardless of what the worker reported.
+- **Backfilled 72 historical false-negative rows** in the production telemetry DB (`mma_telemetry.events_raw`) via a one-shot `deriveCompletion()`-based re-derivation. Updated rows now carry `terminal_status='ok'` + `worker_status='done'`/`done_with_concerns` + `error_code=NULL` + `recovered_at` timestamp. The script that performed the backfill was removed from the codebase after the apply succeeded (one-shot tooling).
 
 ### Notes
 
 - **`SCHEMA_VERSION` stays at 5.** Same reason as 4.7.7 — `flusher.ts:143` drops queued v5 records on bump. Field semantics change; shape unchanged.
-- **Recovery script execution is operator-driven.** It ships with the code but `--apply` MUST NOT run until A+B+C are deployed, CI tests pass, and at least one fresh end-to-end task has produced `terminal_status='ok'` via the new gate.
-- **Backend ingester column `recovered_at`** is added idempotently by the recovery script on first `--apply`. No separate migration required.
+- **Backend ingester column `recovered_at`** was added once during the historical-row backfill and is now part of the live schema. Future runs of the live ingester ignore it.
 - **Worker self-assessment is still emitted in the wire record** for telemetry analytics ("how often do workers correctly self-report?") but does not affect completion gating.
 
 ## [4.7.7] - 2026-05-18

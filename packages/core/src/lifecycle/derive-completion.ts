@@ -1,8 +1,7 @@
 // Pure completion-judgment function. Single source of truth for determining
-// when a task has reached a terminal completion state. Will be integrated by:
-//   - annotator gate (lifecycle/annotate-parser.ts) — Task 2
-//   - envelope seal (lifecycle/handlers/terminal-handlers.ts) — Task 3
-//   - recovery script (server/src/recovery/recover-false-negatives.ts) — Future
+// when a task has reached a terminal completion state. Used by:
+//   - annotator gate (lifecycle/annotate-parser.ts)
+//   - envelope seal (lifecycle/handlers/terminal-handlers.ts)
 //
 // Inputs are objective lifecycle signals — NOT worker self-assessment.
 // Worker self-assessment is logged in telemetry separately, never gates
