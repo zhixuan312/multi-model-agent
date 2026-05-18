@@ -163,7 +163,7 @@ export class TaskEnvelopeStore {
       name, round: init.round ?? 1, outcome: null,
       startedAt: init.startedAt ?? new Date().toISOString(), completedAt: null,
       durationMs: 0, costUSD: null, model: init.model, tier: init.tier,
-      turnsUsed: 0, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+      turnsUsed: 0, filesWrittenCount: 0,
       inputTokens: 0, outputTokens: 0, cachedReadTokens: null, cachedNonReadTokens: null,
     });
     this.recomputeHeadline();
@@ -180,17 +180,16 @@ export class TaskEnvelopeStore {
     this.notify('completeStage');
   }
 
-  recordToolCall(entry: { stage: string; tool: string; filesRead?: string[]; filesWritten?: string[] }): void {
+  recordToolCall(entry: { stage: string; tool: string; filesWritten?: string[] }): void {
     this.guard('recordToolCall');
     const rec: ToolCallRecord = {
       ts: new Date().toISOString(), stage: entry.stage, tool: entry.tool,
-      filesRead: entry.filesRead ?? [], filesWritten: entry.filesWritten ?? [],
+      filesRead: [], filesWritten: entry.filesWritten ?? [],
     };
     this.env.toolCalls.push(rec);
-    for (const f of rec.filesRead) if (!this.env.filesRead.includes(f)) this.env.filesRead.push(f);
     for (const f of rec.filesWritten) if (!this.env.filesWritten.includes(f)) this.env.filesWritten.push(f);
     const last = this.env.stages[this.env.stages.length - 1];
-    if (last) { last.toolCallCount++; last.filesReadCount = this.env.filesRead.length; last.filesWrittenCount = this.env.filesWritten.length; }
+    if (last) { last.filesWrittenCount = this.env.filesWritten.length; }
     this.recomputeHeadline();
     this.notify('recordToolCall');
   }
