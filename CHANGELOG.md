@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.8] - 2026-05-19
+
+Deterministic completion gate. The completion judgment that produces wire `terminal_status` / `worker_status` / `error_code` is now derived from objective lifecycle signals (review verdict, commit gate payload, rework state, implement outcome, criteria success) instead of worker self-assessment. Worker self-assessment is recorded in telemetry but no longer gates completion. Closes the bug class where 68% of worker structured outputs reported `completed: false` on 2026-05-18 despite the underlying work succeeding (analysis: review-approved + commit-landed but seal-gate downgraded). Schema version stays at 5.
+
+### Added
+
+- **`deriveCompletion(state)` pure function** (`packages/core/src/lifecycle/derive-completion.ts`). Single source of truth used by the annotator gate, envelope seal, and recovery script. Inputs: `implementOutcome`, `reviewPolicy`, `reviewVerdict`, `reworkApplied`, `reworkError`, `unaddressedFindingIds`, `commitKind`, `autoCommit`, `route`, `criteriaSucceeded`. Worker self-assessment is intentionally not a parameter.
+- **`mmagent recover-telemetry` CLI command.** One-shot recovery of false-negative rows on the backend telemetry DB. Dry-run is the default; `--apply` writes per-page transactions. Required flags: `--since YYYY-MM-DD`, `--db-url`. Optional: `--page-size N` (default 500), `--limit N`. Reuses `deriveCompletion()` (impossible to drift from live gate). Adds idempotent `recovered_at TIMESTAMPTZ` column.
+- **`tests/contract/wire-record-blast-radius.test.ts`** — regression guard asserting only 5 named status fields may differ between pre/post change for a fixed fixture. All cost/token/timing/identity/counter/stage fields unchanged.
+
+### Changed
+
+- **Annotator gate** (`packages/core/src/lifecycle/annotate-parser.ts`). `applyAnnotatePreconditions` now delegates to `deriveCompletion()`. Removed the hard `workerSelfAssessment !== 'done'` blocks at lines 37-39 (read) and 48-50 (write). Reads commit state from `state.gates.commit?.payload?.kind`, not the legacy `state.commits[]` mirror.
+- **Envelope seal** (`packages/core/src/lifecycle/handlers/terminal-handlers.ts`). `envelope.status` derived from `deriveCompletion()`. `done_with_concerns` preserved as side branch when `env.findings` non-empty.
+- **`enrich-runtime-result.ts`**. Removed the `enriched.workerStatus = 'failed'` line added in 4.7.7 Task 3 — no longer needed since the seal uses `deriveCompletion()` directly. The `errorCode` mapping for review-rejection stays (still useful for the new gate).
+- **Annotator prompt builder** (`packages/core/src/lifecycle/annotate-prompts.ts`). Serializes `committed` from `state.gates.commit?.payload?.kind === 'committed'`. Prompt prose rewritten to describe the new gate semantics; worker self-assessment is informational only.
+- **Worker prompts.** `tools/execute-plan/implementer-criteria.ts` Self-verification block rewritten: "report what you completed; environment limitations go in `summary`; mark 'done' if code changes are complete; the system independently verifies." `tools/delegate/implementer-criteria.ts` gains the same explicit guidance. `review/templates/rework.ts` adds "verification is the reviewer's responsibility — do not mark yourself failed because you couldn't independently verify."
+
+### Fixed
+
+- **47% of false-negative telemetry rows (commit-plumbing bucket).** Annotator now reads the active commit gate (`state.gates.commit?.payload?.kind`) instead of the unmaintained legacy `state.commits[]` mirror. Workers' real `git commit` SHAs are now visible to the gate.
+- **26% of false-negative telemetry rows (worker self-assess misreport).** Worker `'failed'` self-assessment no longer overrides objective signals. When review approves and the commit lands, the wire record is `terminal_status='ok'` regardless of what the worker reported.
+
+### Notes
+
+- **`SCHEMA_VERSION` stays at 5.** Same reason as 4.7.7 — `flusher.ts:143` drops queued v5 records on bump. Field semantics change; shape unchanged.
+- **Recovery script execution is operator-driven.** It ships with the code but `--apply` MUST NOT run until A+B+C are deployed, CI tests pass, and at least one fresh end-to-end task has produced `terminal_status='ok'` via the new gate.
+- **Backend ingester column `recovered_at`** is added idempotently by the recovery script on first `--apply`. No separate migration required.
+- **Worker self-assessment is still emitted in the wire record** for telemetry analytics ("how often do workers correctly self-report?") but does not affect completion gating.
+
 ## [4.7.7] - 2026-05-18
 
 Wire-record honesty pass + complete `verifyCommand` feature removal. The wire telemetry now distinguishes per-task `reviewPolicy` intent from the actual stage outcome, and `errorCode` is preserved through the seal path so reviewer rejection lands a non-null code (`review_quality_findings_unresolved` or `review_spec_rejected_terminal`) instead of being indistinguishable from transport failure. Schema version stays at 5 (bumping would silently drop queued v5 records via `flusher.ts:143`). Full suite 2064/2064 passing.

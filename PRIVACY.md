@@ -49,6 +49,8 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `errorCode` | enum or null — values include `verify_command_error`, `commit_metadata_invalid`, `commit_metadata_repair_modified_files`, `dirty_worktree`, `diff_review_rejected`, `runner_crash`, `executor_error`, `api_error`, `network_error`, `rate_limit_exceeded`, `incomplete_no_summary`, `reviewer_separation_unsatisfiable`, `other` | Failure attribution (no raw error messages). `incomplete_no_summary` and `reviewer_separation_unsatisfiable` were added in 3.12.1 to surface previously-silent failure modes. |
 | `mainModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
 
+**Note on completion semantics (4.7.8+):** `terminal_status` and `worker_status` are derived from objective lifecycle signals — review verdict, commit-gate outcome, rework state, and per-stage `implement.outcome`. Worker self-assessment (whether the sub-agent said it was "done" or "failed") is recorded in the wire record for telemetry analytics but does NOT gate completion. A worker that says "failed" because it couldn't run verification, but whose code was approved by the reviewer and committed, will still record `terminal_status='ok'` / `worker_status='done'`.
+
 #### Token economics (5 fields)
 
 | Field | Type | Decision driver |
