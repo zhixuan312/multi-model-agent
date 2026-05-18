@@ -29,10 +29,8 @@ interface StageDelta {
   cachedReadTokens?: number;
   cachedNonReadTokens?: number;
   turnCount: number;
-  toolCallCount: number;
   costUSD: number | null;
   durationMs: number | null;
-  filesReadCount?: number;
   filesWrittenCount?: number;
 }
 
@@ -84,8 +82,6 @@ export function mergeStageStats(
     cachedReadTokens: ((existing?.['cachedReadTokens'] as number | null | undefined) ?? 0) + (delta.cachedReadTokens ?? 0),
     cachedNonReadTokens: ((existing?.['cachedNonReadTokens'] as number | null | undefined) ?? 0) + (delta.cachedNonReadTokens ?? 0),
     turnCount: ((existing?.['turnCount'] as number | null | undefined) ?? 0) + delta.turnCount,
-    toolCallCount: ((existing?.['toolCallCount'] as number | null | undefined) ?? 0) + delta.toolCallCount,
-    filesReadCount: ((existing?.['filesReadCount'] as number | null | undefined) ?? 0) + (delta.filesReadCount ?? 0),
     filesWrittenCount: ((existing?.['filesWrittenCount'] as number | null | undefined) ?? 0) + (delta.filesWrittenCount ?? 0),
   } as Record<string, unknown>;
 
@@ -187,8 +183,6 @@ export function replaceLastRunResultPreservingTrackers(
   state.lastRunResult = {
     ...newResult,
     stageStats: prior.stageStats ?? newResult.stageStats,
-    filesRead: unionStrings(prior.filesRead, newResult.filesRead),
     filesWritten: unionStrings(prior.filesWritten, newResult.filesWritten),
-    toolCalls: [...(prior.toolCalls ?? []), ...(newResult.toolCalls ?? [])],
   };
 }
