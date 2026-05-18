@@ -75,8 +75,13 @@ export class ClaudeSession implements Session {
    *  resources). Undefined between turns. */
   private activeQuery?: { close?: () => unknown };
 
-  constructor(private readonly args: { model: string; opts: SessionOpts; oauthAccessToken?: string }) {
-    if (args.oauthAccessToken) process.env.ANTHROPIC_AUTH_TOKEN = args.oauthAccessToken;
+  constructor(private readonly args: {
+    model: string;
+    opts: SessionOpts;
+    apiKey?: string;
+    baseUrl?: string;
+    oauthAccessToken?: string;
+  }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
@@ -122,17 +127,15 @@ export class ClaudeSession implements Session {
     const q = query({
       prompt: promptIterable(),
       options: {
-        // (lifecycle: capture this handle so close() can force-shut)
         model: this.args.model,
-        // v4.4: mma operates headlessly — never prompt the user for
-        // tool permission. bypassPermissions tells the SDK to run every
-        // tool without confirmation, the Claude analogue of codex's
-        // --dangerously-bypass-approvals-and-sandbox.
         permissionMode: 'bypassPermissions',
         cwd: this.args.opts.cwd,
         abortSignal: this.args.opts.abortSignal,
-        // Cross-stage continuity: reload prior conversation from the
-        // SDK's session store (~/.claude/projects/<dir>/<sessionId>).
+        env: {
+          ...(this.args.apiKey && { ANTHROPIC_API_KEY: this.args.apiKey }),
+          ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
+          ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),
+        },
         ...(this.sessionId && { resume: this.sessionId }),
       } as Parameters<typeof query>[0]['options'],
     });
