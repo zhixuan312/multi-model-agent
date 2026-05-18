@@ -6,7 +6,7 @@ import {
   TURN_BUDGET_DELEGATE,
 } from '../../tools/delegate/implementer-criteria.js';
 
-export type ReviewPolicy = 'full' | 'quality_only' | 'diff_only' | 'none';
+export type { ReviewPolicy } from '../../types/review-policy.js';
 
 /**
  * Compile a delegate worker prompt — slimmed in 4.2.3 from ~9 KB to
