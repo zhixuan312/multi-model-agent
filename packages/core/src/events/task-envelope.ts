@@ -163,6 +163,22 @@ export class TaskEnvelopeStore {
 
   private guard(method: string) { if (this.sealed) throw new SealedEnvelopeError(method); }
 
+  /**
+   * Overwrite reviewPolicy after construction. Needed because async-dispatch
+   * creates task 0's envelope before per-task TaskSpecs are known (the brief
+   * slot runs inside the executor), so the initial seed is always the route
+   * default. task-executor calls this once tasks[] is built so the wire
+   * envelope reports per-task caller intent, not the dispatch-time default.
+   * Without this, /delegate's per-task `reviewPolicy: 'none'` silently shows
+   * up on the wire as 'full' — the dishonesty bug 4.7.7 was meant to close.
+   */
+  setReviewPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'none'): void {
+    this.guard('setReviewPolicy');
+    if (this.env.reviewPolicy === policy) return;
+    this.env.reviewPolicy = policy;
+    this.notify('setReviewPolicy');
+  }
+
   startStage(name: StageName, init: { model: string; tier: AgentTier; startedAt?: string; round?: number }): void {
     this.guard('startStage');
     this.env.stages.push({
