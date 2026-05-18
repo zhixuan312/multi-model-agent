@@ -65,8 +65,8 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `totalDurationMs` | integer (0–86,400,000) | Exact elapsed wall-clock time in milliseconds |
 | `totalCostUSD` | float (0–800) or null | Token-times-pricing cost estimate in US dollars. Null when any contributing stage has unresolvable model pricing (honest-null discipline). |
-| `mainEquivalentCostUSD` | float (0–800) or null | What the SAME tokens would have cost on the main model. Null when `mainModel` is null or its pricing profile is unavailable. Added in 3.12.2. |
-| `costDeltaVsMainUSD` | float (−800 to 800) or null | `totalCostUSD − mainEquivalentCostUSD`. Positive = worker cost more than parent. Negative = saved. Null when either contributing field is null. |
+| `mainCostUSD` | float (0–800) or null | What the SAME tokens would have cost on the main model. Null when `mainModel` is null or its pricing profile is unavailable. Added in 3.12.2 as `mainEquivalentCostUSD`; renamed to `mainCostUSD` in 4.7.6 to match the DB column `main_cost_usd`. |
+| `costDeltaVsMainUSD` | float (−800 to 800) or null | `totalCostUSD − mainCostUSD`. Positive = worker cost more than parent. Negative = saved. Null when either contributing field is null. |
 
 #### Per-tier rollup (`tierUsage`)
 
@@ -127,7 +127,7 @@ Each stage is a discriminated-union entry on `(name, round)`. As of 4.3.1 (schem
 | `tier` | enum: `standard`, `complex`, `main` — agent tier slot. Replaces the prior `agentTier` field as of 3.12.1; reviewer-separation now gates on tier, not model. |
 | `durationMs` | integer — exact elapsed time for this stage |
 | `costUSD` | float or null — cost estimate for this stage at this stage's own model rate; `null` when pricing is unavailable. |
-| `mainEquivalentCostUSD` | float or null — what THIS stage's tokens would have cost at the main model's rate. Null when `mainModel` is null or its pricing profile is unavailable. Added in 4.5.0 so per-model savings can be sliced per stage without re-running rate-card math on the consumer side. |
+| `mainCostUSD` | float or null — what THIS stage's tokens would have cost at the main model's rate. Null when `mainModel` is null or its pricing profile is unavailable. Added in 4.5.0 as `mainEquivalentCostUSD` so per-model savings can be sliced per stage without re-running rate-card math on the consumer side; renamed to `mainCostUSD` in 4.7.6 to match the DB column `main_cost_usd`. |
 | `inputTokens` | integer — sibling semantics (excludes cache) as of 3.12.2 schema v4. |
 | `outputTokens` | integer |
 | `cachedReadTokens` | integer or null — cache-read tokens. Replaces `cachedTokens` as of 3.12.2 schema v4. |
@@ -173,7 +173,7 @@ cost =   inputTokens          × inputRate          (non-cached new input only)
 
 Per-stage cost is computed at that stage's own model rate. The top-level `totalCostUSD` is the sum of per-stage costs (equivalently: the sum of `tierUsage[T].costUSD` across tiers).
 
-`mainEquivalentCostUSD = priceTokens(allTokens, parentRateCard)` — the same totals priced at the main model's rate. `costDeltaVsMainUSD = totalCostUSD − mainEquivalentCostUSD`. Positive = paid more than parent would have. Negative = saved. Both are null when `mainModel` is null or its pricing profile is unavailable. Like cost, all of these are estimates, not guarantees.
+`mainCostUSD = priceTokens(allTokens, parentRateCard)` — the same totals priced at the main model's rate. `costDeltaVsMainUSD = totalCostUSD − mainCostUSD`. Positive = paid more than parent would have. Negative = saved. Both are null when `mainModel` is null or its pricing profile is unavailable. Like cost, all of these are estimates, not guarantees.
 
 ### About durations
 
@@ -251,6 +251,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-18 | 5 | Wire field rename (4.7.6 release): `mainEquivalentCostUSD` → `mainCostUSD` at top-level AND on every stage. Same semantic ("what these tokens would have cost at the main model's rate"); renamed for column-parity with `events_raw.main_cost_usd`. Also restores the per-stage and top-level compute that was accidentally dropped to `null` in 4.7.2's envelope-unification refactor — every v4.7.2–v4.7.5 event was emitting the field as `null`, collapsing per-model savings attribution. Backend dual-accepts both wire names during the daemon-restart transition. No new content collected. |
 | 2026-05-18 | 5 | Additive within v5 (4.7.4 release). Top-level findings rollup: `findingsBySeverity` (relocated from per-stage review row), `findingsOutcome` (enum), `findingsOutcomeReason` (string), `outcomeInferred` (bool), `outcomeMalformed` (bool). Same data the review stage previously carried, lifted to top-level so all routes (not just routes that ran the review stage) contribute. Backend reads top-level; per-stage rows no longer carry these. No new content collected. |
 | 2026-05-13 | 5 | Additive within v5 (4.5.0 release). Top-level: `subtype` (string \| null, finer-grained tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`) and `filesWrittenCount` (integer, count only — sourced from real git diff via sub-project A, not worker self-report). Stage base: `mainEquivalentCostUSD` (float \| null, per-stage main-model-equivalent cost). Annotating-stage `outcome` enum gains `transformed` for pure-transform passes. No new content collected, no schema version bump — counts/labels only. |
 | 2026-05-11 | 5 | V5 schema (stage vocabulary collapse): eight legacy stage names fold into five — `spec_review` + `quality_review` + `diff_review` → `review`; `spec_rework` + `quality_rework` → `rework`; `verifying` → `annotating`; `implementing` and `committing` unchanged. Stage-specific extras unchanged (review keeps `verdict` / `roundsUsed` / `concernCategories` / `findingsBySeverity`; rework keeps `triggeringConcernCategories`; annotating keeps `outcome` / `skipReason`). No new fields, no new collection — pure rename. mma emits v5 only; backend normalises legacy v4 records on read. |

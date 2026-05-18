@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.6] - 2026-05-18
+
+Per-stage and top-level main-cost compute was emitted as `null` from v4.7.2 through v4.7.5 — every audit / review / debug / investigate event in that window landed at the warehouse with `main_cost_usd = NULL`, which collapsed per-model savings attribution on the Lite dashboard by ~17% for the affected window (one observed case: haiku savings showed as $304 instead of ~$335 because 209 of 1,254 haiku stages contributed $0). Root cause: the 4.7.2 envelope-unification refactor (`a1ec2177`) deleted `event-builder.ts` and replaced it with `to-wire-record.ts`, but never ported the 15-line compute block from `e9d42fbb` (4.5.0) that resolves the main model's rate card and prices each stage's tokens against it. The new file just hardcoded `mainEquivalentCostUSD: null` / `costDeltaVsMainUSD: null` at every level. The contract test that would have caught this (`tests/contract/telemetry/v4-envelope.test.ts`) was deleted in `5c1d4090` ("delete tests for deleted modules"), so CI passed and the field silently went null.
+
+### Fixed
+
+- **Per-stage and top-level `mainCostUSD` + `costDeltaVsMainUSD` are computed again (core).** `to-wire-record.ts` now resolves the main rate card once via `resolveRateCard(env.mainModel)` and runs `priceTokens(stageTokens, mainCard)` per stage and over the totals at top-level. `costDeltaVsMainUSD = totalCostUSD − mainCostUSD` is written at top-level only (per-stage delta would be redundant). When `mainModel` is unknown to the profile registry, both fields stay null at every level (honest-null discipline). Five new test assertions in `tests/events/to-wire-record.test.ts` lock in the populated values, the per-stage-sum invariant, and the null-when-unknown behavior so the field cannot silently revert to null again.
+
+### Changed
+
+- **Wire field rename: `mainEquivalentCostUSD` → `mainCostUSD` (core).** Aligns the wire field name with the DB column `main_cost_usd`, consistent with the v4.0.3 "internal === wire" principle. Same semantic ("what the SAME tokens would have cost at the main model's rate"). `costDeltaVsMainUSD` unchanged. Backend dual-accepts both names during the daemon-restart transition; the old name will be removed in a future release once all live daemons are confirmed restarted. PRIVACY.md + the privacy-doc-sync contract test updated in lockstep.
+
 ## [4.7.5] - 2026-05-18
 
 Polling-headline truthfulness pass. The pre-4.7.5 polling output (`[N/M] stage — reads=0 writes=0 tools=K`) showed `reads=0 writes=0` for the entire task lifetime because Claude's tool_use blocks always recorded empty file arrays — making it look like no file activity was happening even when the worker was actively running Read/Write/Edit tools. Two fixes ship together so the headline becomes truthful.
