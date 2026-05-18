@@ -168,7 +168,16 @@ export async function implementHandler(
       }
     }
     const payload: ImplementPayload = {
-      workerSelfAssessment: result.workerStatus ?? 'failed',
+      // workerSelfAssessment lookup chain matches the rest of the payload
+      // composition: prefer the runtime-level `workerStatus` (set by
+      // enrich-runtime-result on the read-route path), fall back to the
+      // structured JSON block the worker emitted (`parseWorkerOutput`),
+      // and only default to 'failed' when neither produced a value. Pre-fix,
+      // standard write tasks always read 'failed' because workerStatus is
+      // populated by enrichRuntimeResult — which runs AFTER implement-stage.
+      workerSelfAssessment: (result.workerStatus
+        ?? parsed.workerSelfAssessment
+        ?? 'failed') as 'done' | 'failed',
       summary: parsed.summary ?? result.summary ?? '',
       filesChanged: parsed.filesChanged ?? result.filesWritten ?? result.filesChanged ?? [],
       findings,

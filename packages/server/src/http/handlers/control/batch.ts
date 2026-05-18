@@ -54,7 +54,17 @@ function envelopeToPublicResult(env: TaskEnvelope) {
       ...((pick as any).outcomeInferred !== undefined && { outcomeInferred: (pick as any).outcomeInferred }),
       ...((pick as any).outcomeMalformed !== undefined && { outcomeMalformed: (pick as any).outcomeMalformed }),
     }),
-    filesChangedCount: env.realFilesChanged.length,
+    // filesChangedCount prefers the authoritative git-diff signal
+    // (env.realFilesChanged, populated by terminal-handlers via getRealFilesChanged).
+    // Falls back to the per-task worker tool-call signal (env.filesWritten)
+    // when realFilesChanged is empty but filesWritten is non-empty — covers
+    // cwds that are not git repos (e.g. /tmp), where `git diff` returns
+    // nothing even though the worker actually wrote files. Pre-fix, codex
+    // tasks under /tmp reported filesChangedCount=0 despite the file existing
+    // on disk; reviewer then halted on "no files changed."
+    filesChangedCount: env.realFilesChanged.length > 0
+      ? env.realFilesChanged.length
+      : env.filesWritten.length,
     error: env.structuredError ? { code: (env.structuredError as any).code, message: (env.structuredError as any).message } : null,
     escalationSummary: { count: env.escalationLog.length, distinctProviders: new Set(env.escalationLog.map((e: any) => (e.toModel ?? ''))).size },
     // 4.7.5: surface parser-side validation warnings (e.g. dropped Finding blocks)
@@ -318,7 +328,9 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           summary: allFindings.length > 0 ? `${allFindings.length} finding(s)` : 'No findings',
           workerStatus: snapshots.length > 0 ? snapshots[0].status : 'unknown',
           unresolved: [] as unknown[],
-          filesChanged: snapshots.flatMap(s => s.realFilesChanged),
+          filesChanged: snapshots.flatMap(s =>
+            s.realFilesChanged.length > 0 ? s.realFilesChanged : s.filesWritten,
+          ),
           reviewVerdict: null,
           reviewConcerns: [] as unknown[],
           reworkApplied: false,
