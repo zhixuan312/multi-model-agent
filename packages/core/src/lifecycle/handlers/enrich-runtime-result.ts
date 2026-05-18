@@ -171,11 +171,6 @@ export function enrichRuntimeResult(state: LifecycleState): void {
     enriched.status = 'error';
   } else if (reviewRejected) {
     enriched.status = 'incomplete';
-    // Mark the worker as failed so the seal handler maps to envelope.status='failed'
-    // → wire terminalStatus='error'. Without this, workerStatus stays at the
-    // earlier 'done' default and the wire shows terminalStatus='ok' alongside
-    // errorCode, which violates the R1 invariant.
-    enriched.workerStatus = 'failed';
     // Map review rejection to the canonical errorCode based on which
     // review sub-result returned changes_required. See error-codes.ts.
     const subResults = (state as { reviewSubResults?: Array<{ name: 'spec' | 'quality'; verdict: string }> }).reviewSubResults ?? [];

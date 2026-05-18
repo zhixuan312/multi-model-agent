@@ -74,6 +74,16 @@ import type { LifecycleState } from './stage-plan-types.js';
 
 export function extractCompletionInputs(state: LifecycleState): CompletionInputs {
   const last = state.lastRunResult as { criteriaSucceeded?: string[]; unaddressedFindingIds?: string[] } | undefined;
+  // commitKind sources, in priority order:
+  //   1. gates.commit.payload.kind — populated by the commit handler (committed / no_op)
+  //   2. gates.commit.outcome === 'skip' — populated by the lifecycle driver
+  //      when shouldRun returned false (e.g., "no files changed"). That is a
+  //      legitimate no-op for completion purposes.
+  const commitGate = state.gates?.commit as { outcome?: string; payload?: { kind?: 'committed' | 'no_op' } } | undefined;
+  let commitKind: 'committed' | 'no_op' | undefined = commitGate?.payload?.kind;
+  if (commitKind === undefined && commitGate?.outcome === 'skip') {
+    commitKind = 'no_op';
+  }
   return {
     route: state.route as RouteName,
     implementOutcome: state.gates?.implement?.outcome,
@@ -83,7 +93,7 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     reworkApplied: state.reworkApplied,
     reworkError: state.reworkError,
     unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds ?? last?.unaddressedFindingIds,
-    commitKind: (state.gates?.commit?.payload as { kind?: 'committed' | 'no_op' } | undefined)?.kind,
+    commitKind,
     autoCommit: state.autoCommit ?? true,
     criteriaSucceeded: last?.criteriaSucceeded,
   };

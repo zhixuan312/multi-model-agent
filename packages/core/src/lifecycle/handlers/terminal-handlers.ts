@@ -5,6 +5,7 @@ import type { RuntimeRunResult, TaskSpec } from '../../types.js';
 import type { StageGate, TerminalPayload } from '../stage-io.js';
 import { findModelProfile } from '../../config/model-profile-registry.js';
 import { getRealFilesChanged } from '../real-diff.js';
+import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -194,13 +195,26 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
   if (real.source === 'git_error') {
     envelope.recordValidationWarning({ rule: 'GitDiffUnavailable', path: 'realFilesChanged' });
   }
-  // workerStatus lives on lastRunResult for read routes (enrich-runtime-result
-   // derives it there). `state.workerStatus` is only set by rework-stage on the
-   // write path. Falling back to lastRunResult covers both — without this,
-   // every read-route task sealed as 'failed' even when the worker succeeded.
-   const ws = (state.workerStatus ?? last?.workerStatus) as string | undefined;
+  const completionInputs = extractCompletionInputs(state);
+  // Use deriveCompletion when implement gate is populated. commitKind being
+  // undefined is legitimate (read routes; autoCommit=false routes) — deriveCompletion
+  // handles those branches internally. Only fall back to workerStatus when the
+  // implement gate itself is missing (lifecycle never started, brief_too_vague paths).
+  const hasGateInputs = completionInputs.implementOutcome !== undefined;
+
+  let sealStatus: 'done' | 'done_with_concerns' | 'failed';
+  if (hasGateInputs) {
+    const { completed } = deriveCompletion(completionInputs);
+    const hasConcerns = (state.executionContext?.envelope?.snapshot()?.findings ?? []).length > 0;
+    sealStatus = completed ? (hasConcerns ? 'done_with_concerns' : 'done') : 'failed';
+  } else {
+    // Fallback only when implement gate is missing entirely (brief_too_vague etc.)
+    const ws = (state.workerStatus ?? last?.workerStatus) as string | undefined;
+    sealStatus = ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed';
+  }
+
   envelope.seal({
-    status: ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed',
+    status: sealStatus,
     terminalAt: new Date().toISOString(),
     stopReason: last?.terminationReason?.cause ?? null,
     structuredError: last?.structuredError ?? null,
