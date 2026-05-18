@@ -2,10 +2,9 @@
 //
 // Fires only when reviewVerdict === 'changes_required'. Runs on the
 // same standard session that did Implementing (full conversation
-// continuity). Worker is asked to address the reviewer's concerns AND
-// re-run any verifyCommand. Rework's WorkerOutput merges onto
-// Implementing's per the spec's "Rework → Implementing field merge
-// rules": summary/workerStatus/unresolved/commitMessage take Rework's
+// continuity). Worker is asked to address the reviewer's concerns.
+// Rework's WorkerOutput merges onto Implementing's per the spec's
+// "Rework → Implementing field merge rules": summary/workerStatus/unresolved/commitMessage take Rework's
 // values; filesChanged is the union of both phases; validationsRun is
 // REPLACED by Rework's value (empty list signals validation_stale to
 // Committing).
@@ -100,7 +99,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   // fix action) wrapped in the standard warm-followup preamble.
   const fullPrompt =
     buildWarmFollowupMessage(reworkTemplate.buildUserPrompt(promptCtx))
-    + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
+    + '\n\nDo NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RuntimeRunResult;
   // Wire progress watchdog around the rework session.send.
