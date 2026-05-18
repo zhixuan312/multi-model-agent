@@ -25,11 +25,12 @@ Stage 1 — INGRESS  (HTTP boundary)
                           request-pipeline,request-observability}.ts +
                           core/src/executors/execution-context.ts
 
-Stage 2 — INTAKE  (interpret request → executable plan)
-  2.1  Pipeline entry     core/src/intake/pipeline.ts
-  2.2  Per-route compile  core/src/intake/compilers/<tool>.ts        ← vertical slice point
-  2.3  Brief classification core/src/intake/classify.ts
-  2.4  Inference          core/src/intake/{infer,resolve}.ts
+Stage 2 — BRIEF COMPILATION  (interpret request → executable brief, per-tool)
+  2.1  Per-tool briefSlot  core/src/tools/<tool>/tool-config.ts (briefSlot field)  ← vertical slice point
+                           (PR 2 of intake-dissolution will extract to
+                           core/src/tools/<tool>/brief-slot.ts uniformly)
+  2.2  Boundary validation packages/server/src/http/validation/verify-command
+                           (server-side gate before dispatch)
 
 Stage 3 — DISPATCH  (pick agent, run implementer, supervise)
   3.1  Agent resolution   core/src/routing/{resolve-agent,model-profiles,
@@ -81,7 +82,7 @@ Every tool is a stack of files at fixed layers. Adding a tool adds one row at ea
 ```
 Layer L.1  Schema           core/src/tool-schemas/<tool>.ts            (Zod input/output)
 Layer L.2  HTTP handler     server/src/http/handlers/tools/<tool>.ts   (or .../control/)
-Layer L.3  Compiler         core/src/intake/compilers/<tool>.ts        (raw → DraftTask[])
+Layer L.3  Brief slot       core/src/tools/<tool>/tool-config.ts:briefSlot  (raw → TaskBrief[])
 Layer L.4  Executor         core/src/executors/<tool>.ts               (review policy + lifecycle)
 Layer L.5  Bespoke output   core/src/reporting/parse-<tool>-report.ts +
                             compose-<tool>-headline.ts                  (tools w/ custom output)
@@ -156,7 +157,7 @@ Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` i
 ## Request lifecycle (concrete trace)
 
 1. **Ingress** — `server/src/http/server.ts` routes `POST /<tool>?cwd=<abs>` to a handler. Handlers reserve a `ProjectContext` per cwd and build an `ExecutionContext` via `core/src/executors/execution-context.ts`.
-2. **Intake** — `core/src/intake/pipeline.ts` compiles raw input into `DraftTask[]` and classifies brief quality. Route compilers live under `intake/compilers/`. v4.0 removed the clarification gate; ambiguous briefs proceed with the most likely interpretation.
+2. **Brief compilation** — Each route's `tools/<tool>/tool-config.ts:briefSlot` translates raw input into `Brief[]` consumed by the generic executor. No central pipeline; each tool owns its briefSlot (PR 2 of intake-dissolution extracts these into uniform `tools/<tool>/brief-slot.ts` files). Boundary validation (e.g. `validateVerifyCommand`) runs server-side before dispatch. v4.0 removed the clarification gate; ambiguous briefs proceed with the most likely interpretation.
 3. **Dispatch** — `core/src/run-tasks/index.ts::runTasks` drives each task through `reviewed-lifecycle.ts`, which calls `execute-task.ts` → `delegate-with-escalation.ts`. The escalation orchestrator picks a provider via `routing/resolve-agent.ts` and invokes `Provider.run(prompt, options)`, collecting `AttemptRecord`s.
 4. **Review** — `reviewed-lifecycle.ts` runs spec review, quality review, and (when applicable) diff review per the task's `reviewPolicy`, looping rework until approved, plateaued, or capped.
 5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), telemetry events emitted via the observability bus, and the result stored in `BatchRegistry` for retrieval via `GET /batch/:id`.
@@ -188,19 +189,20 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | Old | New |
 |---|---|
 | `packages/core/src/run-tasks.ts` (monolith) | `packages/core/src/run-tasks/index.ts` + siblings (`execute-task`, `reviewed-lifecycle`, `worker-status`, `fallback-report`, `plan-extraction`) |
-| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only (~147 LOC); runner-local types in `runners/types.ts`, intake-local in `intake/types.ts`, routing-local in `routing/types.ts`, executor-local in `executors/types.ts` |
+| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only (~147 LOC); runner-local types in `runners/types.ts`, brief-local types in each `tools/<tool>/brief-slot.ts`, routing-local in `routing/types.ts`, executor-local in `executors/types.ts` |
 | `packages/mcp/` | Deleted. All MCP-layer concerns now live under `packages/server/` (HTTP service) + `packages/server/src/skills/` (distributed skill markdown) |
 | `ExecutionContext.providerFactory`, `.onProgress`, `.awaitClarification` | Deleted — all three were dead fields. `ExecutionContext` now has 7 fields; construction goes through `executors/execution-context.ts::buildExecutionContext` |
 | `buildXOkResult` / `buildXIncompleteResult` / `buildXForceSalvageResult` / `buildXMaxTurnsExitResult` duplicated across three runners | Shared builders in `runners/base/result-builders.ts`; runners pass pre-normalized usage. Adapter interface at `runners/base/types.ts` |
-| Clarification flow (`intake/{clarification-store,force-clarification,confirm}.ts`, `confirm_clarifications` route, `mma-clarifications` skill) | Deleted in v4.0. Intake routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |
-| `readiness/readiness.ts`, `effort-inference.ts`, `cross-tier-guard.ts` | Removed. Brief classification lives in `intake/classify.ts`; effort flows from intake/dispatch directly |
+| Clarification flow (clarification-store, force-clarification, confirm route, `mma-clarifications` skill) | Deleted in v4.0. Routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |
+| `readiness/readiness.ts`, `effort-inference.ts`, `cross-tier-guard.ts` | Removed. Effort flows from dispatch directly; per-tool briefSlot in `tools/<tool>/tool-config.ts` is the sole brief-construction layer |
+| `core/src/intake/` directory (pipeline, classify, resolve, field-inferer, context-overflow-estimator, source-schema, verify-referenced-blocks, host-allowlist-builder, brief-compiler classes, dead scaffolded slots) | Removed across PR 1 + PR 2 of the intake-dissolution cleanup. Live brief compilation co-located with each tool at `tools/<tool>/brief-slot.ts`. Plan extraction + draft-id helpers under `tools/execute-plan/`. Boundary `verify-command` validator moved to `packages/server/src/http/validation/` |
 | 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 4 |
 | `reviewPolicy` values `'spec_only'` / `'off'` | Removed. Closed enum is `'full' | 'quality_only' | 'diff_only' | 'none'` |
 
 Where to add:
 
 - **A new provider:** `core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `core/src/provider.ts` factory.
-- **A new specialized preset:** fill the L.1–L.7 stack — `tool-schemas/<name>.ts`, `intake/compilers/<name>.ts`, `executors/<name>.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
+- **A new specialized preset:** fill the L.1–L.7 stack — `tool-schemas/<name>.ts`, `tools/<name>/brief-slot.ts` (briefSlot extraction; PR 2 of intake-dissolution makes this the uniform pattern), `tools/<name>/tool-config.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
 - **A new observability event:** emit structured log line from `diagnostics/` or a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
 - **A new tool/route:** register in `server/src/http/server.ts`; add handler under `http/handlers/tools/`; add route to `tests/contract/goldens/routes.json`; add tool schema in `core/src/tool-schemas/`; pin per-stage goldens under `tests/contract/goldens/endpoints/`.
