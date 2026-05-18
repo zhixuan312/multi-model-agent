@@ -157,10 +157,8 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       cachedReadTokens: totalCachedRead,
       cachedNonReadTokens: totalCachedNonRead,
       turnCount: totalTurns,
-      toolCallCount: 0,
       costUSD: totalCost,
       durationMs: Math.max(totalMs, Date.now() - t0),
-      filesReadCount: 0,
       filesWrittenCount: 0,
     }, { tier: resolvedReviewerTier, model: reviewerModel, verdict, findingsOutcome });
     // ↑ Pass the combined verdict so it flows: review-stage → mergeStageStats →

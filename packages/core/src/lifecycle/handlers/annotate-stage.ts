@@ -257,10 +257,8 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     cachedReadTokens: llmCachedReadTokens,
     cachedNonReadTokens: llmCachedNonReadTokens,
     turnCount: llmTurnsUsed,
-    toolCallCount: 0,
     costUSD: llmCostUSD,
     durationMs: Date.now() - t0,
-    filesReadCount: 0,
     filesWrittenCount: 0,
   }, {
     tier: llmTurnsUsed > 0 ? 'standard' : null,
