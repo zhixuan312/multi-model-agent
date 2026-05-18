@@ -54,7 +54,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 | `perTaskReviewPolicy` | `Record<string, 'full'\|'quality_only'\|'diff_only'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"full"` |
 | `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
 
-@include _shared/verify-and-review.md
+@include _shared/review-policy.md
 
 > **No `agentType` here.** Worker tier is hardcoded to `standard` for every plan task; sending `agentType` (top-level or per-task) is rejected with HTTP 400. For tasks that need `complex` tier, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
