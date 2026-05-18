@@ -1,6 +1,7 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
+import { retryBriefSlot, type RetryBrief } from './brief-slot.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec, RuntimeRunResult } from '../../types.js';
 import { retryReportSchema } from '../../reporting/report-parser-slots/retry-report.js';
@@ -21,17 +22,11 @@ export function registerRetry(registry: ToolSurfaceRegistry): void {
   });
 }
 
-interface RetryBrief {
-  batchId: string;
-  taskIndex: number;
-}
-
 export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   name: 'retry',
   category: 'assist',
   agentType: 'standard',
-  briefSlot: (input) =>
-    input.taskIndices.map((idx) => ({ batchId: input.batchId, taskIndex: idx })),
+  briefSlot: retryBriefSlot,
   buildTaskSpec: (brief, ctx) => {
     const batchCache = ctx.projectContext?.batchCache;
     const batch = batchCache?.get(brief.batchId);
