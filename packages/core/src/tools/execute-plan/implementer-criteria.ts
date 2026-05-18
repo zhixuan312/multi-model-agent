@@ -91,7 +91,11 @@ export const SELF_VERIFICATION = [
   '  Self-verification:',
   '  - $ <command>  PASS / FAIL (<N> tests)',
   '',
-  'If any command FAILS: do NOT declare "done". Investigate, fix, re-run. A failing test is your output, not the reviewer\'s problem. If you cannot run a command (shell unavailable, dependency missing): say so explicitly AND treat the task as incomplete.',
+  'If a command FAILS for a real reason (the code is wrong): investigate, fix, re-run. A failing test is your output, not the reviewer\'s problem.',
+  '',
+  'If you CANNOT run a command (shell unavailable, dependency missing, sandbox denied, missing credentials): say so explicitly in your summary AND still report workerSelfAssessment: "done" if the code changes are complete. Inability to verify is not the same as failure. The system independently verifies via reviewer + commit-stage signals; your self-assessment never gates completion.',
+  '',
+  'Mark workerSelfAssessment: "failed" ONLY when you could not complete the requested code changes (you got stuck on the implementation itself, the brief was impossible, you decided to bail).',
 ].join('\n');
 
 /**

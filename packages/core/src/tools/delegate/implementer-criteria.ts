@@ -74,6 +74,22 @@ export const COMPLETENESS_REMINDER_DELEGATE = [
 ].join('\n');
 
 /**
+ * Self-assessment honesty — the deterministic gate (4.7.8+) derives
+ * completion from objective signals; worker self-assessment is telemetry
+ * only. This block tells workers not to mark themselves 'failed' purely
+ * because they couldn't run verification.
+ */
+export const WORKER_SELF_ASSESSMENT_DELEGATE = [
+  'Worker self-assessment:',
+  '',
+  'Report workerSelfAssessment: "done" when the requested code changes are complete. Verification (running tests, checking build, ensuring CI would pass) is the system\'s job, not yours. Environment limitations (sandbox denials, missing commands, missing credentials) go in the summary field, not into a "failed" self-assessment.',
+  '',
+  'The system independently verifies via reviewer + commit-stage signals. Your self-assessment never gates completion.',
+  '',
+  'Report workerSelfAssessment: "failed" ONLY when you could not complete the requested code changes (you got stuck, the brief was impossible, you decided to bail). Inability to independently verify is not failure.',
+].join('\n');
+
+/**
  * Turn budget — calibration block. Same rationale as execute-plan's:
  * cheap models default to "be thorough" and treat each turn as
  * "re-verify by re-reading", which becomes a discovery loop. This

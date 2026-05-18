@@ -5,6 +5,7 @@ import {
   DELEGATE_SCOPE_RULE,
   DELEGATE_FAILURE_MODES,
   COMPLETENESS_REMINDER_DELEGATE,
+  WORKER_SELF_ASSESSMENT_DELEGATE,
   TURN_BUDGET_DELEGATE,
 } from './implementer-criteria.js';
 
@@ -51,6 +52,8 @@ function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }):
     DELEGATE_FAILURE_MODES,
     '',
     COMPLETENESS_REMINDER_DELEGATE,
+    '',
+    WORKER_SELF_ASSESSMENT_DELEGATE,
     '',
     TURN_BUDGET_DELEGATE,
   ].join('\n');

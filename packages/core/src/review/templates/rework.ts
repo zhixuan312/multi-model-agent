@@ -20,7 +20,7 @@ export const reworkTemplate: ReviewTemplate = {
     'When done: write summary "Fixed: <list of deviations>. Could not fix: <list with reasons>." End your turn.',
     '',
     'workerStatus calibration (this is where rework workers commonly under-rate themselves):',
-    '- "done"             — you applied a fix for EVERY listed deviation. This is the correct value even though the reviewer originally flagged concerns. Being asked to rework is not, by itself, a "concern" — addressing the rework IS the success path.',
+    '- "done"             — you applied a fix for EVERY listed deviation. This is the correct value even though the reviewer originally flagged concerns. Being asked to rework is not, by itself, a "concern" — addressing the rework IS the success path. Verification of the fix is the reviewer\'s responsibility on the next round — do not mark yourself failed because you couldn\'t independently verify.',
     '- "done_with_concerns" — you addressed every listed deviation AND noticed a NEW unrelated issue you couldn\'t fix in this turn. Put the new issue in `unresolved`.',
     '- "blocked" / "failed"  — you were unable to apply a fix for ONE OR MORE of the listed deviations (conflicting constraints, missing source, ambiguous instruction). Put those entries in the "Could not fix" line AND in `unresolved`.',
     'If your summary line is "Fixed: <every deviation>. Could not fix: (none)." then workerStatus MUST be "done".',
