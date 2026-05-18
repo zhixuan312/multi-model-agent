@@ -145,8 +145,7 @@ function combineCost(a: number | null | undefined, b: number | null): number | n
  *
  * Stage stats already tracked the writes correctly per-stage (the wire
  * telemetry's `findings_low` etc. are computed from stageStats). Only
- * the result envelope's `filesRead` / `filesWritten` / `toolCalls`
- * arrays were broken.
+ * the result envelope's `filesWritten` array was broken.
  *
  * Fix: union the arrays across all rework rounds. Stable de-dupe via
  * Set so a file edited twice doesn't appear twice in the envelope.

@@ -73,15 +73,12 @@ function buildPendingHeadline(entry: { taskEnvelopes?: (TaskEnvelopeStore | null
   const repSnap = rep.snapshot();
   const summed = running.reduce((acc, e) => {
     const s = e.snapshot().headline;
-    return { reads: acc.reads + s.toolReads, writes: acc.writes + s.toolWrites, total: acc.total + s.toolTotal };
-  }, { reads: 0, writes: 0, total: 0 });
+    return { writes: acc.writes + s.toolWrites, total: acc.total + s.toolTotal };
+  }, { writes: 0, total: 0 });
   const suffix = running.length > 1 ? ` +${running.length - 1}` : '';
   // Adaptive: tools=N always (the most reliable activity signal across all
-  // providers); reads=/writes= only when > 0. Pre-4.7.5 this showed
-  // reads=0 writes=0 even when the worker was actively running tools,
-  // because most provider tool calls didn't populate the file counters.
+  // providers); writes= only when > 0.
   const statsParts = [`tools=${summed.total}`];
-  if (summed.reads > 0)  statsParts.push(`reads=${summed.reads}`);
   if (summed.writes > 0) statsParts.push(`writes=${summed.writes}`);
   const stats = statsParts.join(' ');
   return `[${repSnap.headline.stageDone}/${repSnap.headline.stageTotal}] ${repSnap.headline.stageLabel}${suffix} — ${stats}`;
@@ -141,7 +138,7 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
     // lowest taskIndex), counts are summed across all started tasks, and a
     // " +K" suffix marks how many other tasks are running concurrently.
     // Final shape (identical for N=1 and N>1):
-    //   [X/Y] Implementing by Standard worker (1/9)[+K] - 6m 0s, 142 read, 8 write, 234 tool calls
+    //   [X/Y] Implementing by Standard worker (1/9)[+K] - 6m 0s, 8 write, 234 tool calls
     if (entry.state === 'pending') {
       let headline: string;
 
@@ -168,19 +165,16 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           }
         }
         // Sum counts across all started tasks for the aggregate stats clause.
-        let sumRead = 0;
         let sumWrite = 0;
         let sumTotal = 0;
         let haveStructuredCounts = false;
         for (const idx of sortedIndices) {
           const snap = perTask.get(idx)!;
           if (
-            typeof snap.toolReads === 'number' ||
             typeof snap.toolWrites === 'number' ||
             typeof snap.toolTotal === 'number'
           ) {
             haveStructuredCounts = true;
-            sumRead += snap.toolReads ?? 0;
             sumWrite += snap.toolWrites ?? 0;
             sumTotal += snap.toolTotal ?? 0;
           }
@@ -195,7 +189,7 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
               typeof slowest.stageDone === 'number' && typeof slowest.stageTotal === 'number'
                 ? ` (${slowest.stageDone}/${slowest.stageTotal})`
                 : '';
-            const statsClause = `, ${sumRead} read, ${sumWrite} write, ${sumTotal} tool calls`;
+            const statsClause = `, ${sumWrite} write, ${sumTotal} tool calls`;
             headline = `${taskBracket} ${slowest.stageLabel}${tierClause}${stageProgressClause}${runningSuffix} - ${formatElapsed(elapsedMs)}${statsClause}`;
           } else if (slowest.prefix) {
             // Older snapshot path: inject the +K suffix before the prefix's " - "

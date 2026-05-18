@@ -115,7 +115,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
 
   // Emit a per-stage map so consumers see the breakdown without unpacking
   // RuntimeRunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
-  // turnCount, toolCallCount, durationMs, tier, model, verdict? }.
+  // turnCount, durationMs, tier, model, verdict? }.
   const stagesMap: Record<string, Record<string, unknown>> = {};
   if (ss) {
     for (const [name, stage] of Object.entries(ss)) {

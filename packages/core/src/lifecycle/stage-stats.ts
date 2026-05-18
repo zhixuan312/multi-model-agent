@@ -131,7 +131,7 @@ export function emptyReworkAcc(): ReworkAccumulator {
 
 export function accumulateReworkIteration(
   acc: ReworkAccumulator,
-  result: { usage?: { inputTokens?: number | null; outputTokens?: number | null; costUSD?: number | null; cachedReadTokens?: number | null; cachedNonReadTokens?: number | null } | null; turns?: number; toolCalls?: unknown[]; filesRead?: unknown[]; filesWritten?: unknown[] },
+  result: { usage?: { inputTokens?: number | null; outputTokens?: number | null; costUSD?: number | null; cachedReadTokens?: number | null; cachedNonReadTokens?: number | null } | null; turns?: number; filesWritten?: unknown[] },
   iterDurationMs: number,
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
 ): void {

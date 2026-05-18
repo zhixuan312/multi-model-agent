@@ -51,7 +51,6 @@ describe('observability contract — envelope + plain entries', () => {
       expect(['running', 'done', 'done_with_concerns', 'failed']).toContain(env.status);
       expect(Array.isArray(env.stages)).toBe(true);
       expect(Array.isArray(env.toolCalls)).toBe(true);
-      expect(Array.isArray(env.filesRead)).toBe(true);
       expect(Array.isArray(env.filesWritten)).toBe(true);
       expect(Array.isArray(env.realFilesChanged)).toBe(true);
       expect(typeof env.totalCostUSD).toBe('number');

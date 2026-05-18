@@ -222,8 +222,6 @@ export interface RawStageStatsShape {
   cachedReadTokens?: number | null;
   cachedNonReadTokens?: number | null;
   turnCount?: number | null;
-  toolCallCount?: number | null;
-  filesReadCount?: number | null;
   filesWrittenCount?: number | null;
   activityEvents?: number | null;
 }
