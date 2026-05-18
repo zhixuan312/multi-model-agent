@@ -5,8 +5,6 @@
 
 export type {
   ReviewVerdict,
-  VerifyOutcome,
-  VerifySkipReason,
   StageName,
   RawStageStats,
   StageStatsMap,

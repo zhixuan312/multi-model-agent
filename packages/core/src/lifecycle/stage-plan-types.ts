@@ -196,7 +196,6 @@ export interface LifecycleState {
   callCache?: unknown;
   taskIndex?: number;
   artifactsCheck?: string;
-  verifyOutcome?: string;
   guardFires?: string[];
   terminalStatus?: string;
   terminationReason?: string | null;
