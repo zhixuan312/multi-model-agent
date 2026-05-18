@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { RunnerAdapter } from '../../packages/core/src/providers/runner-adapter.js';
+import type { RunnerAdapter } from '../helpers/test-harness.js';
 
 const VALID_PROVIDER_TYPES = ['claude', 'claude', 'openai', 'codex', 'codex'] as const;
 

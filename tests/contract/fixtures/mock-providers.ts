@@ -19,7 +19,7 @@ import type {
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
-import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
+import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** v4.4: build a Session whose `send()` invokes the same RuntimeRunResult-producing
  *  runner the legacy `provider.run()` path uses. Lets every mock provider
