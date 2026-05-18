@@ -21,3 +21,4 @@ coverage/
 *.swo
 .worktrees/
 .mma/
+*.tgz
