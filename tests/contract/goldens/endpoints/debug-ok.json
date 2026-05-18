@@ -81,7 +81,6 @@
       "implementationReport": {
         "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
@@ -94,7 +93,6 @@
         "reviewVerdict": null,
         "reviewConcerns": [],
         "reworkApplied": false,
-        "validationsRun": [],
         "commitSha": null,
         "commitMessage": null,
         "commitSkipReason": null,

@@ -83,7 +83,6 @@
       "implementationReport": {
         "summary": "",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
@@ -91,7 +90,6 @@
       "structuredReport": {
         "summary": "",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}

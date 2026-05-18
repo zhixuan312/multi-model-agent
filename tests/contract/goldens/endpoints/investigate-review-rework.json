@@ -81,7 +81,6 @@
       "implementationReport": {
         "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
@@ -94,7 +93,6 @@
         "reviewVerdict": null,
         "reviewConcerns": [],
         "reworkApplied": false,
-        "validationsRun": [],
         "commitSha": null,
         "commitMessage": null,
         "commitSkipReason": null,

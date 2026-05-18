@@ -29,7 +29,6 @@
       "implementationReport": {
         "summary": "needs rework per review",
         "filesChanged": [],
-        "validationsRun": [],
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
@@ -121,7 +120,6 @@
         "reviewVerdict": null,
         "reviewConcerns": [],
         "reworkApplied": false,
-        "validationsRun": [],
         "commitSha": null,
         "commitMessage": null,
         "commitSkipReason": null,
