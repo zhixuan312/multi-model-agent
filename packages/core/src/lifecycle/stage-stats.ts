@@ -8,7 +8,7 @@ export const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
   'audit', 'review', 'investigate', 'debug',
 ]);
 
-const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null } as const;
+const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, turnCount: null, filesWrittenCount: null } as const;
 
 export function emptyStats(): StageStatsMap {
   return {
@@ -32,7 +32,7 @@ export function endBaseStage(
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
-  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; filesWrittenCount?: number; costUSD?: number },
 ): void {
   (stats as Record<string, unknown>)[name] = {
     stage: name,
@@ -51,8 +51,6 @@ export function endBaseStage(
     cachedReadTokens: metrics?.cachedReadTokens ?? null,
     cachedNonReadTokens: metrics?.cachedNonReadTokens ?? null,
     turnCount: metrics?.turnCount ?? null,
-    toolCallCount: metrics?.toolCallCount ?? null,
-    filesReadCount: metrics?.filesReadCount ?? null,
     filesWrittenCount: metrics?.filesWrittenCount ?? null,
   };
 }
@@ -67,7 +65,7 @@ export function endReviewStage(
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
   verdict: ReviewVerdict,
   roundsUsed: number,
-  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
 ): void {
   const durationMs = metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0;
   // Idle-tracker leak guard: tail events from cross-runner async cleanup can
@@ -97,8 +95,6 @@ export function endReviewStage(
     cachedReadTokens: metrics?.cachedReadTokens ?? null,
     cachedNonReadTokens: metrics?.cachedNonReadTokens ?? null,
     turnCount: metrics?.turnCount ?? null,
-    toolCallCount: metrics?.toolCallCount ?? null,
-    filesReadCount: metrics?.filesReadCount ?? null,
     filesWrittenCount: metrics?.filesWrittenCount ?? null,
     verdict,
     roundsUsed,
@@ -117,8 +113,6 @@ export interface ReworkAccumulator {
   cachedReadTokens: number;
   cachedNonReadTokens: number;
   turnCount: number;
-  toolCallCount: number;
-  filesReadCount: number;
   filesWrittenCount: number;
   maxIdleMs: number;
   totalIdleMs: number;
@@ -130,7 +124,7 @@ export function emptyReworkAcc(): ReworkAccumulator {
     occurred: false,
     durationMs: 0, costUSD: 0,
     inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0,
-    turnCount: 0, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+    turnCount: 0, filesWrittenCount: 0,
     maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0,
   };
 }
@@ -149,8 +143,6 @@ export function accumulateReworkIteration(
   acc.cachedReadTokens += result.usage?.cachedReadTokens ?? 0;
   acc.cachedNonReadTokens += result.usage?.cachedNonReadTokens ?? 0;
   acc.turnCount += result.turns ?? 0;
-  acc.toolCallCount += result.toolCalls?.length ?? 0;
-  acc.filesReadCount += result.filesRead?.length ?? 0;
   acc.filesWrittenCount += result.filesWritten?.length ?? 0;
   if (idle) {
     if (idle.maxIdleMs > acc.maxIdleMs) acc.maxIdleMs = idle.maxIdleMs;
@@ -182,8 +174,6 @@ export function commitReworkStage(
     cachedReadTokens: acc.cachedReadTokens,
     cachedNonReadTokens: acc.cachedNonReadTokens,
     turnCount: acc.turnCount,
-    toolCallCount: acc.toolCallCount,
-    filesReadCount: acc.filesReadCount,
     filesWrittenCount: acc.filesWrittenCount,
   };
 }
@@ -214,8 +204,6 @@ export function endVerifyStage(
     cachedReadTokens: null,
     cachedNonReadTokens: null,
     turnCount: null,
-    toolCallCount: null,
-    filesReadCount: null,
     filesWrittenCount: null,
     outcome,
     skipReason,
