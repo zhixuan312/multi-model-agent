@@ -10,7 +10,6 @@ describe('telemetry envelope (v2)', () => {
     const uploader = new TelemetryUploader({
       recorder: stubRecorder,
       buildOpts: () => ({
-        reviewPolicy: 'full' as const,
         toolMode: 'full' as const,
         verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',
@@ -67,7 +66,6 @@ describe('telemetry envelope (v2)', () => {
     const uploader = new TelemetryUploader({
       recorder: stubRecorder,
       buildOpts: () => ({
-        reviewPolicy: 'full' as const,
         toolMode: 'full' as const,
         verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',

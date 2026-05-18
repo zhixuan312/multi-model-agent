@@ -112,7 +112,6 @@ found`,
     // The wire record must pass strict validation AND carry findingsOutcome on
     // implementing if it was set on the envelope.
     const wire = toWireRecord(snap, {
-      reviewPolicy: 'full',
       toolMode: 'none',
       verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,
@@ -157,7 +156,6 @@ found`,
     // on stage rows, so the test asserts the broader pipeline survives the
     // missing-## Outcome case without erroring.
     const wire = toWireRecord(snap, {
-      reviewPolicy: 'full',
       toolMode: 'none',
       verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,

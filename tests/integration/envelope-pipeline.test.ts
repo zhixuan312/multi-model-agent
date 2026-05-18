@@ -196,7 +196,6 @@ describe('envelope pipeline — end-to-end', () => {
       recorder: { enqueue: (e) => { enqueued.push(e); } },
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
-        reviewPolicy: 'full',
         toolMode: 'full',
         verifyCommandPresent: false,
         implementerModel: env.stages[0]?.model ?? env.mainModel,
