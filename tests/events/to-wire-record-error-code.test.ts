@@ -5,7 +5,6 @@ import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.
 function baseOpts() {
   return {
     toolMode: 'full' as const,
-    verifyCommandPresent: false, // still required by toWireRecord signature until Task 14 removes it
     implementerModel: 'claude-haiku-4-5',
     implementerTier: 'standard' as const,
     mainModelFamily: 'claude',

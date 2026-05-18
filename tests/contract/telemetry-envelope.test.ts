@@ -11,7 +11,6 @@ describe('telemetry envelope (v2)', () => {
       recorder: stubRecorder,
       buildOpts: () => ({
         toolMode: 'full' as const,
-        verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
         mainModelFamily: 'claude',
@@ -67,7 +66,6 @@ describe('telemetry envelope (v2)', () => {
       recorder: stubRecorder,
       buildOpts: () => ({
         toolMode: 'full' as const,
-        verifyCommandPresent: false,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
         mainModelFamily: 'claude',

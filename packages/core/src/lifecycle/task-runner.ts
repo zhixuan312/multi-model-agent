@@ -86,7 +86,6 @@ export interface RunTasksOptions {
       client: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
-      verifyCommandPresent?: boolean;
     }) => void;
   };
   route?: string;

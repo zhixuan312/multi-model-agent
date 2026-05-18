@@ -96,7 +96,6 @@ export function toWireRecord(
   env: TaskEnvelope,
   opts: {
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
-    verifyCommandPresent: boolean;
     implementerModel: string;
     implementerTier: 'standard' | 'complex';
     mainModelFamily: string;
@@ -253,7 +252,6 @@ export function toWireRecord(
     agentType: wireAgentType,
     toolMode: opts.toolMode,
     reviewPolicy: env.reviewPolicy,
-    verifyCommandPresent: opts.verifyCommandPresent,
     implementerModel: opts.implementerModel,
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,

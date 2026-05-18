@@ -30,7 +30,6 @@ describe('toWireRecord', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: ['/a', '/b'] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
@@ -61,7 +60,6 @@ describe('toWireRecord', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-haiku-4-5',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
@@ -89,7 +87,7 @@ describe('toWireRecord', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      toolMode: 'full', verifyCommandPresent: false,
+      toolMode: 'full',
       implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'claude',
     });
     const perStageSum = wire.stages.reduce(
@@ -110,7 +108,7 @@ describe('toWireRecord', () => {
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
-      toolMode: 'full', verifyCommandPresent: false,
+      toolMode: 'full',
       implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'other',
     });
     expect(wire.mainCostUSD).toBeNull();
@@ -131,7 +129,6 @@ describe('toWireRecord', () => {
     s.seal({ status: 'done', stopReason: 'ok', realFilesChanged: ['/secret/path'] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'm',
       implementerTier: 'standard',
       mainModelFamily: 'other',

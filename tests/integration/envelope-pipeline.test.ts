@@ -197,7 +197,6 @@ describe('envelope pipeline — end-to-end', () => {
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
         toolMode: 'full',
-        verifyCommandPresent: false,
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
@@ -278,7 +277,7 @@ describe('envelope pipeline — end-to-end', () => {
       recorder: { enqueue: (e) => { enqueued.push(e); } },
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
-        toolMode: 'full', verifyCommandPresent: false,
+        toolMode: 'full',
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',

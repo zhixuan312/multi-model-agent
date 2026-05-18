@@ -16,7 +16,6 @@ export interface TelemetryUploaderOpts {
   consent?: ConsentLike;
   buildOpts: (env: TaskEnvelope) => {
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
-    verifyCommandPresent: boolean;
     implementerModel: string;
     implementerTier: 'standard' | 'complex';
     mainModelFamily: string;

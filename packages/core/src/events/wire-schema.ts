@@ -138,8 +138,12 @@ export const TaskCompletedEventSchema = z.object({
   // Configuration
   agentType: z.enum(['standard', 'complex']),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
+  // reviewPolicy is per-task intent, not outcome.
+  // Shows what the task requested ('full' | 'quality_only' | 'diff_only' | 'none').
+  // Whether review actually ran is in stages.review.outcome.
+  // intent='full' + outcome='skipped' is legal (e.g., implement failed;
+  // read route; review-skip gate triggered).
   reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']),
-  verifyCommandPresent: z.boolean(),
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
@@ -156,6 +160,11 @@ export const TaskCompletedEventSchema = z.object({
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'brief_too_vague', 'unavailable']),
   workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_capped']),
+  // errorCode is non-null whenever terminalStatus === 'error'.
+  // For reviewer-rejection paths, the code is one of:
+  //   review_diff_rejected, review_quality_findings_unresolved, review_spec_rejected_terminal.
+  // terminalStatus remains 'error' (no distinct 'review_rejected' status).
+  // Disambiguate reviewer rejection from transport/runtime failure by reading errorCode.
   errorCode: ErrorCode.nullable(),
 
   // Token economics

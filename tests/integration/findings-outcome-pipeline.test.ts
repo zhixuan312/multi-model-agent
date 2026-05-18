@@ -113,7 +113,6 @@ found`,
     // implementing if it was set on the envelope.
     const wire = toWireRecord(snap, {
       toolMode: 'none',
-      verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,
       implementerTier: snap.stages[0]?.tier ?? snap.agentType,
       mainModelFamily: snap.mainModel.split('-')[0] ?? 'unknown',
@@ -157,7 +156,6 @@ found`,
     // missing-## Outcome case without erroring.
     const wire = toWireRecord(snap, {
       toolMode: 'none',
-      verifyCommandPresent: false,
       implementerModel: snap.stages[0]?.model ?? snap.mainModel,
       implementerTier: snap.stages[0]?.tier ?? snap.agentType,
       mainModelFamily: snap.mainModel.split('-')[0] ?? 'unknown',
@@ -176,7 +174,6 @@ found`,
       consent: { decide: () => ({ enabled: true }) },
       buildOpts: (env) => ({
         toolMode: 'none',
-        verifyCommandPresent: false,
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',

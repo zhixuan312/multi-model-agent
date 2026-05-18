@@ -93,7 +93,6 @@ export interface LifecycleState {
   autoCommit?: boolean;
   filesChanged?: string[];
   readOnlyTask?: boolean;
-  verifyCommandPresent?: boolean;
   contextBlockIds?: string[];
 
   // Slots populated by Step 1+ handlers as the decomposition advances. Listed

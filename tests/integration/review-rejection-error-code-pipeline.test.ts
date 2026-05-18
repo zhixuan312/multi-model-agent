@@ -8,7 +8,6 @@ import { recordTaskCompletedHandler } from '../../packages/core/src/lifecycle/ha
 function baseOpts() {
   return {
     toolMode: 'full' as const,
-    verifyCommandPresent: false,
     implementerModel: 'claude-haiku-4-5',
     implementerTier: 'standard' as const,
     mainModelFamily: 'claude',

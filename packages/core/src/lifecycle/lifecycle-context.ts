@@ -149,7 +149,6 @@ export interface ExecutionContext {
       client: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
-      verifyCommandPresent?: boolean;
     }) => void;
   };
 

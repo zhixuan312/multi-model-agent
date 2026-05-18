@@ -135,7 +135,6 @@ async function registerToolHandlers(
     consent: { decide: decideConsentForUploader },
     buildOpts: (env: any) => ({
       toolMode: 'full',                     // default
-      verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
       implementerModel: env.stages[0]?.model ?? env.mainModel,
       implementerTier: env.stages[0]?.tier ?? env.agentType,
       mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
@@ -229,7 +228,6 @@ async function registerControlHandlers(
       consent: { decide: decideConsentForUploader },
       buildOpts: (env: any) => ({
         toolMode: 'full',                     // default
-        verifyCommandPresent: false,          // default; refine post-T10 when seal carries this
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',

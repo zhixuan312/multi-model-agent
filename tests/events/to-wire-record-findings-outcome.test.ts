@@ -39,7 +39,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
@@ -83,7 +82,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
@@ -122,7 +120,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
@@ -147,7 +144,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      verifyCommandPresent: false,
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
       mainModelFamily: 'claude',
