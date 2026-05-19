@@ -1,42 +1,57 @@
+// packages/core/src/research/web-fetch.ts
+//
+// Replaces the previous IP-pinning dispatcher (which failed 100% of real
+// requests on Node 25 / undici current) with a connect-callback re-validation
+// SSRF guard: undici resolves the host normally; the connect callback compares
+// the resolved IP against ssrf-guard's public-IP classification and aborts
+// the connection if it's private/loopback/metadata. validateAndPinURL still
+// runs first as the pre-request defense.
+
 import { request, Agent } from 'undici';
 import type { ResearchConfig } from '../config/schema.js';
+import { USER_AGENT } from './user-agent.js';
 import { wrapFetchedContent } from './untrusted-content.js';
+import { classifyIP } from './ssrf-guard.js';
 import {
-  REDIRECT_ERR_CODE_MAP,
-  validateAndPinURL,
-  extractContentType,
-  isRedirect,
-  extractLocation,
-  extractBodyFromHTML,
-  stripCredentialsFromURL,
-  readBody,
-  drainBody,
-  closeDispatcher,
-  mapRequestError,
-  type ValidatedURL,
-  type ValidationFailed,
+  REDIRECT_ERR_CODE_MAP, validateAndPinURL, extractContentType, isRedirect,
+  extractLocation, extractBodyFromHTML, stripCredentialsFromURL, readBody,
+  drainBody, mapRequestError,
+  type ValidatedURL, type ValidationFailed,
 } from './web-fetch-helpers.js';
 
 export interface WebFetchInput {
-  url: string;
-  cfg: ResearchConfig['fetch'];
-  hostAllowlist: ReadonlySet<string>;
-  /** Hosts in this set may resolve to RFC1918 private addresses (still rejects loopback/metadata). */
+  url:                 string;
+  cfg:                 ResearchConfig['fetch'];
+  hostAllowlist:       ReadonlySet<string>;
   privateNetworkHosts?: ReadonlySet<string>;
-  /** Test seam — replaces DNS resolution. */
-  resolveIP?: (host: string) => Promise<string>;
-  /**
-   * Test seam — return undefined to let undici use the global dispatcher (so
-   * MockAgent intercepts in tests). Default in prod builds an IP-pinning Agent
-   * per spec §7.1.10 with TLS SNI on the original hostname.
-   *
-   * Ownership: dispatchers returned by this hook are caller-owned/shared and
-   * will not be closed or destroyed by webFetch. The default dispatcher created
-   * by webFetch is one-shot and is disposed after its request completes.
-   */
+  resolveIP?:          (host: string) => Promise<string>;
+  /** Test seam — when present, treated as the IP that the connect callback
+   *  "resolved" at request time. Production must not pass this. */
+  _testConnectResolvedIp?: string;
+  /** @deprecated kept for callers that explicitly opt out; unused in prod */
   createDispatcher?: (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) => import('undici').Dispatcher | undefined;
 }
 
+export type WebFetchOk = {
+  status: 'ok'; body: string; rawText: string; host: string;
+  bytesReturned: number; truncated: boolean; textTruncated: boolean;
+  credentialsStripped: boolean;
+};
+
+export type WebFetchErr = {
+  status: 'error'; reasonCode: string; host?: string; credentialsStripped: boolean;
+};
+
+export type WebFetchResult = WebFetchOk | WebFetchErr;
+
+const ALLOWED_CT = new Set([
+  'text/html', 'text/plain',
+  'application/xml', 'application/atom+xml', 'application/rss+xml',
+  'application/json',
+]);
+const RETURNED_TEXT_CAP = 64 * 1024;
+
+/** @deprecated — kept for test compatibility; no longer used in production. */
 export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) =>
   new Agent({
     connect: {
@@ -47,62 +62,59 @@ export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: 
     connectTimeout: cfg.connectTimeoutMs,
   });
 
-export type WebFetchOk = {
-  status: 'ok';
-  /** Worker-facing string: <external-content …>extracted-text</external-content> */
-  body: string;
-  /** Adapter-facing raw text (HTML stripped to main-text for HTML; raw bytes for XML/JSON). NOT wrapped. */
-  rawText: string;
-  host: string;
-  bytesReturned: number;
-  /** True if the wire-level read was capped by cfg.maxBodyBytes (raw response truncated). */
-  truncated: boolean;
-  /**
-   * True if the post-extraction text was capped by RETURNED_TEXT_CAP (default 64 KiB).
-   * Adapters that parse rawText (e.g. rss) MUST inspect this flag — a true value
-   * means the XML/JSON body may be syntactically incomplete and parsing should be skipped.
-   * This is independent of truncated; both can be true if both caps tripped.
-   */
-  textTruncated: boolean;
-  credentialsStripped: boolean;
-};
-
-export type WebFetchErr = {
-  status: 'error';
-  reasonCode: string;
-  host?: string;
-  credentialsStripped: boolean;
-};
-
-export type WebFetchResult = WebFetchOk | WebFetchErr;
-
-const ALLOWED_CT = new Set([
-  'text/html',
-  'text/plain',
-  'application/xml',
-  'application/atom+xml',
-  'application/rss+xml',
-  'application/json',
-]);
-
-/** Post-extraction text cap — default 64 KiB. */
-const RETURNED_TEXT_CAP = 64 * 1024;
+/** Build a shared agent that re-validates the resolved IP at connect time. */
+function makeConnectGuardAgent(
+  allowPrivateNetwork: boolean,
+  testResolvedIp: string | undefined,
+  connectTimeoutMs: number,
+): Agent {
+  return new Agent({
+    connect: {
+      lookup: (host: string, _opts, cb) => {
+        // If test seam present, return that IP; otherwise let Node resolve.
+        if (testResolvedIp) {
+          const fam = testResolvedIp.includes(':') ? 6 : 4;
+          // Re-validate test IP via ssrf-guard classification.
+          if (!allowPrivateNetwork) {
+            const klass = classifyIP(testResolvedIp);
+            if (klass !== 'public') {
+              cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
+              return;
+            }
+          }
+          cb(null, testResolvedIp, fam as 4 | 6);
+          return;
+        }
+        // Production path: defer to Node's default lookup then re-validate.
+        import('node:dns').then(({ lookup }) => {
+          lookup(host, (err, address, family) => {
+            if (err) { cb(err, '', 4); return; }
+            if (!allowPrivateNetwork) {
+              const klass = classifyIP(address);
+              if (klass !== 'public') {
+                cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
+                return;
+              }
+            }
+            cb(null, address, family as 4 | 6);
+          });
+        }).catch(e => cb(e as Error, '', 4));
+      },
+    },
+    connectTimeout: connectTimeoutMs,
+  });
+}
 
 export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
   const { cfg, hostAllowlist } = input;
   const privateNetworkHosts = input.privateNetworkHosts ?? new Set<string>();
   let credentialsStripped = false;
 
-  // Strip credentials BEFORE any logging. Mutate to avoid leaking via toString.
   let initial: URL;
-  try {
-    initial = new URL(input.url);
-  } catch {
-    return { status: 'error', reasonCode: 'web_fetch_invalid_url', credentialsStripped };
-  }
+  try { initial = new URL(input.url); }
+  catch { return { status: 'error', reasonCode: 'web_fetch_invalid_url', credentialsStripped }; }
   credentialsStripped = stripCredentialsFromURL(initial);
 
-  // Total-deadline AbortController scopes the entire op (including DNS, redirects, body reads).
   const totalCtrl = new AbortController();
   const totalTimer = setTimeout(() => totalCtrl.abort(), cfg.totalDeadlineMs);
 
@@ -111,16 +123,11 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
     let redirects = 0;
 
     while (true) {
-      // validateAndPinURL is raced against totalCtrl.signal so a hanging DNS
-      // resolver (including injected resolveIP) cannot exceed totalDeadlineMs.
       let v: ValidatedURL | ValidationFailed;
       try {
         v = await validateAndPinURL(
-          currentURL,
-          hostAllowlist,
-          privateNetworkHosts,
-          input.resolveIP,
-          totalCtrl.signal,
+          currentURL, hostAllowlist, privateNetworkHosts,
+          input.resolveIP, totalCtrl.signal,
         );
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') {
@@ -128,7 +135,6 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
         }
         return { status: 'error', reasonCode: 'web_fetch_dns_resolution_failed', credentialsStripped };
       }
-
       if (!v.ok) {
         if (redirects > 0) {
           const mapped = REDIRECT_ERR_CODE_MAP[v.reasonCode] ?? v.reasonCode;
@@ -137,86 +143,86 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
         return { status: 'error', reasonCode: v.reasonCode, host: v.host, credentialsStripped };
       }
 
-      // Build IP-pinning dispatcher. In tests createDispatcher returns undefined
-      // so undici falls back to the global dispatcher (MockAgent).
-      const usingDefaultDispatcher = input.createDispatcher === undefined;
-      const dispatcher = (input.createDispatcher ?? defaultIPPinningDispatcher)(
-        v.host,
-        v.pinnedIP,
-        cfg,
-      );
+      // Honor createDispatcher hook for tests: when present, use whatever it
+      // returns (or skip dispatcher entirely if undefined → MockAgent
+      // intercepts via global). In production, fall back to the connect-guard
+      // agent for post-resolve SSRF re-validation.
+      let agent: import('undici').Dispatcher | undefined;
+      if (input.createDispatcher !== undefined) {
+        agent = input.createDispatcher(v.host, v.pinnedIP, cfg);
+      } else {
+        agent = makeConnectGuardAgent(
+          cfg.allowPrivateNetwork ?? false,
+          input._testConnectResolvedIp,
+          cfg.connectTimeoutMs,
+        );
+      }
+      const closeAgent = async () => {
+        if (agent && typeof (agent as { close?: () => Promise<void> }).close === 'function') {
+          try { await (agent as { close: () => Promise<void> }).close(); } catch { /* ignore */ }
+        }
+      };
 
       let res;
       try {
-        // undici 8 `request()` does not follow redirects by default; we handle
-        // them manually below to re-validate against the per-task allowlist.
         res = await request(v.url.toString(), {
           method: 'GET',
           headersTimeout: cfg.connectTimeoutMs,
-          ...(dispatcher ? { dispatcher } : {}),
+          headers: { 'user-agent': USER_AGENT },
+          ...(agent ? { dispatcher: agent } : {}),
           signal: totalCtrl.signal,
         });
       } catch (e: unknown) {
-        if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+        await closeAgent();
+        // Map our connect-callback abort to a stable reasonCode.
+        const msg = (e as { message?: string })?.message ?? '';
+        if (msg.includes('web_fetch_ssrf_postresolve_block')) {
+          return { status: 'error', reasonCode: 'web_fetch_ssrf_postresolve_block', host: v.host, credentialsStripped };
+        }
         return { ...mapRequestError(e, totalCtrl.signal, v.host), credentialsStripped };
       }
 
-      // Handle redirects manually (maxRedirections: 0 on undici)
       if (isRedirect(res.statusCode)) {
         redirects++;
         if (redirects > cfg.maxRedirects) {
-          if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+          await closeAgent();
           return { status: 'error', reasonCode: 'web_fetch_too_many_redirects', host: v.host, credentialsStripped };
         }
         const location = extractLocation(res.headers as Record<string, string | string[]>);
         if (!location) {
-          if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+          await closeAgent();
           return { status: 'error', reasonCode: 'web_fetch_redirect_missing_location', host: v.host, credentialsStripped };
         }
-
         let nextURL: URL;
-        try {
-          nextURL = new URL(location, v.url);
-        } catch {
-          if (usingDefaultDispatcher) closeDispatcher(dispatcher);
-          return { status: 'error', reasonCode: 'web_fetch_redirect_invalid_url', host: v.host, credentialsStripped };
-        }
+        try { nextURL = new URL(location, v.url); }
+        catch { await closeAgent(); return { status: 'error', reasonCode: 'web_fetch_redirect_invalid_url', host: v.host, credentialsStripped }; }
         credentialsStripped = stripCredentialsFromURL(nextURL) || credentialsStripped;
         currentURL = nextURL.toString();
-
-        // Drain redirect body with cap to free connection
         await drainBody(res.body as AsyncIterable<unknown> | null, totalCtrl.signal);
-        if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+        await closeAgent();
         if (totalCtrl.signal.aborted) {
           return { status: 'error', reasonCode: 'web_fetch_timeout', host: v.host, credentialsStripped };
         }
         continue;
       }
 
-      // Check content type. Missing content-type (empty) is allowed through;
-      // only explicit unsupported types are rejected.
       const contentType = extractContentType(res.headers as Record<string, string | string[]>);
       if (contentType && !ALLOWED_CT.has(contentType)) {
         await drainBody(res.body as AsyncIterable<unknown> | null, totalCtrl.signal);
-        if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+        await closeAgent();
         if (totalCtrl.signal.aborted) {
           return { status: 'error', reasonCode: 'web_fetch_timeout', host: v.host, credentialsStripped };
         }
         return { status: 'error', reasonCode: 'web_fetch_unsupported_content_type', host: v.host, credentialsStripped };
       }
 
-      // Read body with size cap. Stream errors map to web_fetch_body_read_failed.
-      let rawText: string;
-      let bytesReturned: number;
-      let truncated: boolean;
+      let rawText: string; let bytesReturned: number; let truncated: boolean;
       try {
         const rawBody = res.body as AsyncIterable<Uint8Array> | null;
         const result = await readBody(rawBody, cfg.maxBodyBytes, totalCtrl.signal);
-        rawText = result.text;
-        bytesReturned = result.bytesReturned;
-        truncated = result.truncated;
+        rawText = result.text; bytesReturned = result.bytesReturned; truncated = result.truncated;
       } catch (e) {
-        if (usingDefaultDispatcher) closeDispatcher(dispatcher);
+        await closeAgent();
         if (e instanceof DOMException && e.name === 'AbortError') {
           return { status: 'error', reasonCode: 'web_fetch_timeout', host: v.host, credentialsStripped };
         }
@@ -225,16 +231,11 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
         }
         return { status: 'error', reasonCode: 'web_fetch_body_read_failed', host: v.host, credentialsStripped };
       }
+      await closeAgent();
 
-      if (usingDefaultDispatcher) closeDispatcher(dispatcher);
-
-      // Extract content for the worker-facing body
       let extracted = rawText;
-      if (contentType === 'text/html') {
-        extracted = extractBodyFromHTML(rawText);
-      }
+      if (contentType === 'text/html') extracted = extractBodyFromHTML(rawText);
 
-      // Apply post-extraction text cap
       let textTruncated = false;
       if (extracted.length > RETURNED_TEXT_CAP) {
         extracted = extracted.slice(0, RETURNED_TEXT_CAP);
@@ -242,20 +243,11 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
       }
 
       const wrapped = wrapFetchedContent({
-        url: v.url.toString(),
-        host: v.host,
-        content: extracted,
+        url: v.url.toString(), host: v.host, content: extracted,
       });
-
       return {
-        status: 'ok',
-        body: wrapped,
-        rawText,
-        host: v.host,
-        bytesReturned,
-        truncated,
-        textTruncated,
-        credentialsStripped,
+        status: 'ok', body: wrapped, rawText, host: v.host,
+        bytesReturned, truncated, textTruncated, credentialsStripped,
       };
     }
   } finally {

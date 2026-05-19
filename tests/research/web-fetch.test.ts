@@ -404,3 +404,64 @@ describe('webFetch — happy path', () => {
     expect(r.reasonCode).toBe('web_fetch_timeout');
   });
 });
+
+describe('web-fetch — connect-callback SSRF guard (A7)', () => {
+  it('aborts with web_fetch_ssrf_postresolve_block when DNS flips public→private', async () => {
+    // Simulated: validateAndPinURL sees a public IP (1.2.3.4); injected resolveIP
+    // returns a private 10.x at request time. The connect callback must abort.
+    const r = await webFetch({
+      url: 'https://example.com/path',
+      cfg,
+      hostAllowlist: new Set(['example.com']),
+      resolveIP: async () => '1.2.3.4',          // initial validation: public
+      // The actual private flip happens inside the dispatcher's connect callback;
+      // test seam: simulate by injecting a dispatcher that fakes private resolution.
+      _testConnectResolvedIp: '10.0.0.1',
+    } as unknown as Parameters<typeof webFetch>[0]);
+    expect(r.status).toBe('error');
+    if (r.status === 'error') {
+      expect(r.reasonCode).toBe('web_fetch_ssrf_postresolve_block');
+    }
+  });
+});
+
+describe('web-fetch — UA propagation', () => {
+  it('sends mma-research user-agent header', async () => {
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    let ua = '';
+    agent.get('https://example.com')
+      .intercept({ path: '/' })
+      .reply((opts) => {
+        ua = (opts.headers as Record<string,string>)['user-agent']!;
+        return { statusCode: 200, headers: { 'content-type': 'text/html' }, data: '<html></html>' };
+      });
+    const r = await webFetch({
+      url: 'https://example.com/',
+      cfg,
+      hostAllowlist: new Set(['example.com']),
+      resolveIP: async () => '8.8.8.8',
+      createDispatcher: () => undefined,   // let MockAgent intercept
+    });
+    await agent.close();
+    expect(ua).toMatch(/^mma-research\//);
+    expect(r.status).toBe('ok');
+  });
+});
+
+describe.skipIf(process.env.RUN_INTEGRATION_FETCH !== '1')(
+  'web-fetch — real-network smoke (A8)', () => {
+    it('fetches https://example.com/ successfully', async () => {
+      const r = await webFetch({
+        url: 'https://example.com/',
+        cfg,
+        hostAllowlist: new Set(['example.com']),
+      });
+      expect(r.status).toBe('ok');
+      if (r.status === 'ok') {
+        expect(r.bytesReturned).toBeGreaterThan(0);
+      }
+    });
+  }
+);
