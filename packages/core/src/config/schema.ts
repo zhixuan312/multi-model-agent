@@ -121,7 +121,7 @@ export const ResearchConfigSchema = z.object({
   }).strict().default(() => ({
     arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true,
   })),
-  userSources: z.array(TrimmedNonEmpty.max(2000)).max(50).default([]),
+  userSources: z.array(HostString).max(50).default([]),
   fetchAllowlistExtra: z.array(HostString)
                         .max(64)
                         .transform(arr => Array.from(new Set(arr)))
