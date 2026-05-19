@@ -1,7 +1,6 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
-import { qualityInvestigateTemplate } from '../../review/templates/quality-review-investigate.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { investigateReportSchema } from '../../reporting/report-parser-slots/investigate-report.js';
@@ -54,9 +53,6 @@ export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, 
   }),
   reportSchema: investigateReportSchema,
   headlineTemplate: investigateHeadlineTemplate,
-  reviewTemplates: {
-    qualityAP: qualityInvestigateTemplate,
-  },
   postProcessEnvelope: (envelope, _ctx) => {
     const report = envelope.structuredReport as InvestigateReportOutput | undefined;
     const investigation = report?.kind === 'structured_report' ? report.investigation : null;

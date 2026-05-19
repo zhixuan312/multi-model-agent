@@ -1,7 +1,6 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
-import { qualityReviewTemplate } from '../../review/templates/quality-review-review.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
@@ -180,7 +179,4 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   },
   reportSchema: reviewReportSchema,
   headlineTemplate: reviewHeadlineTemplate,
-  reviewTemplates: {
-    qualityAP: qualityReviewTemplate,
-  },
 };

@@ -1,7 +1,6 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
-import { qualityDebugTemplate } from '../../review/templates/quality-review-debug.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from './brief-slot.js';
@@ -122,7 +121,4 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
   },
   reportSchema: { parse: (_text) => { throw new Error('no structured report emitted by this executor'); } },
   headlineTemplate: debugHeadlineTemplate,
-  reviewTemplates: {
-    qualityAP: qualityDebugTemplate,
-  },
 };

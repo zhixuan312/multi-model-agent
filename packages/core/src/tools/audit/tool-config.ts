@@ -1,7 +1,6 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema, type Input } from './schema.js';
 import { auditBriefSlot, type AuditBrief } from './brief-slot.js';
-import { qualityAuditTemplate } from '../../review/templates/quality-review-audit.js';
 import { auditReportSchema, type AuditReport } from '../../reporting/report-parser-slots/audit-report.js';
 import { auditHeadlineTemplate } from '../../reporting/headline-templates/audit.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
@@ -145,7 +144,4 @@ export const toolConfig: ToolConfig<Input, AuditBrief, AuditReport> = {
   },
   reportSchema: auditReportSchema,
   headlineTemplate: auditHeadlineTemplate,
-  reviewTemplates: {
-    qualityAP: qualityAuditTemplate,
-  },
 };
