@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { qualityReviewPrompt, legalOutcomes } from '../../packages/core/src/review/templates/quality-review.js';
+import { qualityReviewPrompt } from '../../packages/core/src/review/templates/quality-review.js';
 
 describe('quality-review template', () => {
   it('prompt asks for canonical format with ## Finding N: blocks and ## Outcome section', () => {
@@ -18,10 +18,6 @@ describe('quality-review template', () => {
     });
     expect(prompt).toContain('- Evidence:');
     expect(prompt).not.toContain('- Issue:');
-  });
-
-  it('exports legalOutcomes constant', () => {
-    expect(legalOutcomes).toEqual(['found', 'clean']);
   });
 
   it('prompt includes all four severity definitions verbatim', () => {
