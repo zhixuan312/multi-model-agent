@@ -39,6 +39,26 @@ mean and which directions to pursue.
 
 @include _shared/auth.md
 
+## Configuration prerequisites
+
+The `mma-research` worker integrates with Semantic Scholar to search academic papers. This adapter is optional but recommended for comprehensive peer-reviewed source coverage.
+
+**Required environment variable:**
+
+```bash
+export SEMANTIC_SCHOLAR_API_KEY="your-key-from-semanticscholar.org"
+```
+
+Obtain a free API key from [Semantic Scholar API](https://www.semanticscholar.org/product/api).
+
+**Degraded behavior:**
+
+If the Semantic Scholar API key is not configured:
+- The worker continues with available adapters (arxiv, github_search, rss, brave-search)
+- Semantic Scholar queries are skipped without errors
+- Research completes successfully but may lack academic-paper coverage
+- No failure occurs; graceful fallback is automatic
+
 ## Request body
 
 ```json
