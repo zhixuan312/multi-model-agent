@@ -46,8 +46,15 @@ export function parseReviewReport(
   const result = parseFindings(findingsSection, 'reviewer', legalOutcomes, warnSink);
   const findings = result.findings;
 
-  // approved + findings → changes_required per design spec §4
-  if (verdict === 'approved' && findings.length > 0) {
+  // Severity-gated verdict override. The reviewer prompt is explicit that
+  // "approved" means ship-able and that medium/low findings are nice-to-fix,
+  // not blockers (see review/templates/quality-review.ts:23-24). A blanket
+  // "any finding flips approved → changes_required" rule contradicted that
+  // contract and triggered a full rework cycle for a single low-severity
+  // nit. Only critical/high findings are blockers, matching the ladder the
+  // LLM was instructed to use.
+  if (verdict === 'approved'
+      && findings.some(f => f.severity === 'critical' || f.severity === 'high')) {
     verdict = 'changes_required';
   }
 
