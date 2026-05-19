@@ -27,7 +27,7 @@ describe('TelemetryUploader', () => {
     const u = new TelemetryUploader({ recorder: { enqueue }, buildOpts });
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'm', tier: 'standard' });
-    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1, inputTokens: 0, outputTokens: 0 });
+    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1, inputTokens: 1, outputTokens: 1 });
     s.seal({ status: 'done', stopReason: 'ok', realFilesChanged: [] });
     const snap = s.snapshot();
     u.receive({ type: 'envelope', envelope: snap, reason: 'seal' });
@@ -40,7 +40,7 @@ describe('TelemetryUploader', () => {
     const u = new TelemetryUploader({ recorder: { enqueue }, consent: { decide: () => ({ enabled: false }) }, buildOpts });
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'm', tier: 'standard' });
-    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1, inputTokens: 0, outputTokens: 0 });
+    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1, inputTokens: 1, outputTokens: 1 });
     s.seal({ status: 'done', stopReason: 'ok', realFilesChanged: [] });
     u.receive({ type: 'envelope', envelope: s.snapshot(), reason: 'seal' });
     expect(enqueue).not.toHaveBeenCalled();

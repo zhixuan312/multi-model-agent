@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.9] - 2026-05-19
+
+Research route rebuild + telemetry attribution fixes + read-route completion bug. `/research` is now a deterministic two-turn pipeline (turn-1 produces a `QueryPlan`; turn-2 reasons over a pre-built `EvidencePack`) with `tools: 'none'` on the worker — workers never call native `WebSearch`/`WebFetch`. Adapters degrade cleanly when API keys are missing (Semantic Scholar skipped without key; GitHub search drops `kind=code` without PAT). Telemetry per-stage `model` field now records the actual reviewer/annotator model instead of the implementer's, non-LLM stages (committing, skipped stages) are filtered out of the wire `stages` array, and the reviewer parser's `approved → changes_required` override is severity-gated (only flips for `critical`/`high` findings). Pre-existing read-route completion bug fixed: every successful investigate/research/audit/debug/review used to seal as `terminal_status=error, worker_status=failed` because `criteriaSucceeded` was never populated on `lastRunResult`. 2159 tests pass, build green.
+
+### Added
+
+- **Research two-turn driver** (`packages/core/src/tools/research/two-turn-driver.ts`). Turn 1 emits a `QueryPlan` (Zod schema in `packages/core/src/research/query-plan-schema.ts`); turn 2 synthesises against the orchestrator-produced `EvidencePack`. Runner-agnostic — driver consumes only `Session.send` returning `TurnResult.output`, same shape on Claude and Codex.
+- **Deterministic Step-2 fan-out orchestrator** (`packages/core/src/research/orchestrator.ts`). Parallel fan-out over Brave + Arxiv + Semantic Scholar + GitHub Search + RSS adapters with timeouts, host allowlist, and an explicit query budget.
+- **`EvidencePack` types + dedup + budget enforcement** (`packages/core/src/research/evidence-pack.ts`).
+- **Adapter credentials block in config** (`packages/core/src/config/schema.ts:research.builtinAdapters.*` + `creds`) and `resolveEnabledAdapters(cfg, creds)` that silently skips Semantic Scholar when no API key.
+- **GitHub Search PAT support** (`packages/core/src/research/adapters/github-search.ts`). `kind: 'code'` queries gracefully degrade to issue/PR search when no PAT is configured.
+- **SSRF guard via connect-callback** (`packages/core/src/research/http-fetch.ts`). Replaces the broken IP-pinning dispatcher; preserves the host allowlist contract.
+- **User-Agent helper** (`packages/core/src/research/user-agent.ts`). Stamps `mma-research/<semver>` on every outbound HTTP request from research adapters.
+- **`runResearchPreLoop` in `perform-implementation`** — runs the turn-1 plan + orchestrator before the read-route N-criterion loop, attaches the resulting `EvidencePack` as the cached prefix so the 5 criterion turns synthesise against shared evidence.
+- **20+ acceptance tests** (`tests/research/acceptance/`) covering runner matrix, closed pipeline, budget enforcement, retry behaviour, adapter degradation, schema validation.
+- **`HostString` validator on `research.userSources`** — Zod-side check that operator-configured user sources are bare hostnames (not URLs).
+
+### Changed
+
+- **Per-stage `model` attribution** (`packages/core/src/events/to-wire-record.ts`, `packages/core/src/lifecycle/handlers/review-stage.ts`, `packages/core/src/lifecycle/handlers/annotate-stage.ts`). The reviewer stage previously hardcoded `model: null` on its `reviewerResult`, so the lifecycle driver's fallback stamped the implementer's model into the wire row — every inverted-tier review reported the wrong reviewer model. Annotate had the symmetric bug via `(r as any).model` reading a field that doesn't exist on `TurnResult`. Both stages now look up `ctx.providers[tier].config.model`, the same pattern rework-stage and `perform-implementation` already use.
+- **Non-LLM stages filtered from wire `stages` array** (`packages/core/src/events/to-wire-record.ts`). Drops stages with zero tokens + zero/null cost: `committing` always, skipped `review`/`rework`/`annotate` too. The in-memory envelope still carries every stage row; strip happens at wire serialization only. The `tierUsage` rollup applies the same filter so a zero-cost stage doesn't seed `bucket.model` from a stage that did no LLM work.
+- **Reviewer parser severity gate** (`packages/core/src/review/parse-review-report.ts`). The `approved + findings.length > 0 → changes_required` override is now gated to findings with severity in `critical`/`high`. A cooperative LLM that approves and lists only low/medium nice-to-fix nits keeps its approval; the engine still catches contradictions where a blocker finding is paired with `approved`.
+- **Worker UAs on Brave + Arxiv** (`packages/core/src/research/adapters/arxiv.ts`, `packages/core/src/research/brave-client.ts`).
+
+### Fixed
+
+- **`criteriaSucceeded` never populated on read-route `lastRunResult`** (`packages/core/src/lifecycle/perform-implementation.ts`). `deriveCompletion` for read-routes requires `criteriaSucceeded.length > 0` to consider a task completed; without this every successful investigate/research/audit/debug/review sealed as `worker_status=failed, terminal_status=error` despite producing real findings. Bug predated 4.7.9 (same code path in v4.7.8) but landed via the smoke harness. Fix populates `criteriaSucceeded` from `routeSpec.criteria` minus errored ids.
+- **Research worker no longer references native `WebSearch`/`WebFetch`** in prompts (`packages/core/src/tools/research/brief-slot.ts`, `packages/core/src/tools/research/implementer-criteria.ts`). Worker has `tools: 'none'`; criteria prose now references "whatever tool you have for this source" instead of naming tools the worker can't call.
+- **Two-turn driver JSON repair** (`packages/core/src/tools/research/two-turn-driver.ts`). When the first turn returns unparseable JSON, the retry's successful turn result is returned as `turn1Result` so downstream callers see the recovered output.
+- **Backfilled 553 historical wire rows** in production telemetry DB (`mma_telemetry.events_raw`) — stripped the `committing` entry from `event.stages` JSONB on rows where it existed, since post-4.7.9 wire output never includes it. Rows where stripping would have produced an empty stages array (R2.1 invariant) were left untouched (0 such rows). `recovered_at` timestamp set on each updated row.
+
+### Removed
+
+- **Dormant `customToolset` slot + `ResearchToolDefinition` type** (`packages/core/src/tools/research/`). 9-file substrate that was created but never wired into the lifecycle. Grep zero-hit confirmed.
+
+### Notes
+
+- **Worker `tools` setting for `/research` is locked to `'none'`** — the worker reasons over the pre-built `EvidencePack`; only the orchestrator hits external services. This is enforced at the tool-config level (`packages/core/src/tools/research/tool-config.ts`), not configurable per request.
+- **Adapter degradation is silent by design** — missing Semantic Scholar key or GitHub PAT does not fail the request; the orchestrator simply skips that source. Caller can detect via the `EvidencePack` `failedAttempts` list.
+- **`SCHEMA_VERSION` stays at 5** — same back-compat reasoning as 4.7.7/4.7.8 (bumping drops queued v5 records via `flusher.ts:143`). Wire shape unchanged.
+
 ## [4.7.8] - 2026-05-19
 
 Deterministic completion gate. The completion judgment that produces wire `terminal_status` / `worker_status` / `error_code` is now derived from objective lifecycle signals (review verdict, commit gate payload, rework state, implement outcome, criteria success) instead of worker self-assessment. Worker self-assessment is recorded in telemetry but no longer gates completion. Closes the bug class where 68% of worker structured outputs reported `completed: false` on 2026-05-18 despite the underlying work succeeding (analysis: review-approved + commit-landed but seal-gate downgraded). Schema version stays at 5.
@@ -531,7 +572,11 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.5...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...HEAD
+[4.7.9]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.8...v4.7.9
+[4.7.8]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.7...v4.7.8
+[4.7.7]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.6...v4.7.7
+[4.7.6]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.5...v4.7.6
 [4.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.4...v4.7.5
 [4.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.3...v4.7.4
 [4.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.2...v4.7.3

@@ -200,8 +200,14 @@ async function runReviewerWithRetries(
   turn: any;
 }> {
   const desired = invertedReviewerTier(implementerTier);
-  const providers = (state.executionContext as { providers?: Partial<Record<AgentType, unknown>> }).providers;
+  const providers = (state.executionContext as { providers?: Partial<Record<AgentType, { config?: { model?: string } }>> }).providers;
   const tierToUse: AgentType = providers && providers[desired] ? desired : implementerTier;
+  // Capture the actual reviewer model from the provider config for this tier
+  // — TurnResult doesn't carry model, and the session's getSession(tierToUse)
+  // is what determines which provider config is in use. Without this lookup,
+  // the wire row would attribute reviewer cost+tokens to a null model.
+  const reviewerModelFromConfig: string | null =
+    providers?.[tierToUse]?.config?.model ?? null;
   const session = (state.executionContext as any).getSession(tierToUse);
   let reviewerResult;
   try {
@@ -212,7 +218,7 @@ async function runReviewerWithRetries(
       costUSD: r.costUSD ?? null,
       turnsUsed: r.turns ?? 1,
       ms: 0, // (the wrapper measured this; if downstream needs it, capture Date.now())
-      model: null,
+      model: reviewerModelFromConfig,
       inputTokens: r.usage?.inputTokens ?? 0,
       outputTokens: r.usage?.outputTokens ?? 0,
       cachedReadTokens: r.usage?.cachedReadTokens ?? 0,
@@ -230,7 +236,7 @@ async function runReviewerWithRetries(
       parsed: { verdict: undefined, findings: [], parseError: reviewerResult.message } as any,
       costUSD: null,
       ms: reviewerResult.ms,
-      model: null,
+      model: reviewerModelFromConfig,
       inputTokens: 0,
       outputTokens: 0,
       cachedReadTokens: 0,

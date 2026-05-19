@@ -114,8 +114,22 @@ export function toWireRecord(
   // (regression introduced when event-builder.ts was deleted).
   const mainCard = resolveRateCard(env.mainModel);
 
-  // build stages with route-specific extras
-  const wireStages = env.stages.map((s) => {
+  // Build stages with route-specific extras.
+  //
+  // Non-LLM filter: drop stages that recorded no LLM activity (zero tokens AND
+  // zero/null cost). The committing stage always falls here (git commit only,
+  // no LLM call), and so do skipped review/rework/annotate stages. Including
+  // them in the wire payload was misleading — readers saw a "stage" row with
+  // nothing to attribute to a model. We keep them on the in-memory envelope
+  // (for completeStage's bookkeeping + duration roll-up) but strip them from
+  // the wire serialization.
+  const wireStages = env.stages
+    .filter((s) => {
+      const hasTokens = s.inputTokens > 0 || s.outputTokens > 0;
+      const hasCost = (s.costUSD ?? 0) > 0;
+      return hasTokens || hasCost;
+    })
+    .map((s) => {
     const name =
       s.name === 'implementing'
         ? 'implementing'
@@ -225,6 +239,13 @@ export function toWireRecord(
   const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket } = {};
   for (const s of env.stages) {
     if (s.tier !== 'standard' && s.tier !== 'complex') continue;
+    // Match the wire stages filter: only LLM-active stages contribute to the
+    // per-tier rollup. A committing or skipped stage with zero tokens and
+    // zero cost would otherwise seed bucket.model from a stage that did no
+    // LLM work, leaking the wrong model into the tier bucket.
+    const hasTokens = s.inputTokens > 0 || s.outputTokens > 0;
+    const hasCost = (s.costUSD ?? 0) > 0;
+    if (!hasTokens && !hasCost) continue;
     const bucket = tierUsageBuckets[s.tier] ?? {
       model: normalizeModel(s.model).canonical,
       costUSD: 0,

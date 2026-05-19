@@ -114,10 +114,14 @@ export const ResearchConfigSchema = z.object({
   builtinAdapters: z.object({
     arxiv: z.boolean().default(true),
     semanticScholar: z.boolean().default(true),
+    semanticScholarApiKey: z.string().min(1).optional(),
     githubSearch: z.boolean().default(true),
+    githubPat: z.string().min(1).optional(),
     genericRss: z.boolean().default(true),
-  }).strict().default(() => ({ arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true })),
-  userSources: z.array(TrimmedNonEmpty.max(2000)).max(50).default([]),
+  }).strict().default(() => ({
+    arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true,
+  })),
+  userSources: z.array(HostString).max(50).default([]),
   fetchAllowlistExtra: z.array(HostString)
                         .max(64)
                         .transform(arr => Array.from(new Set(arr)))

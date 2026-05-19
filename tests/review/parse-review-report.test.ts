@@ -109,6 +109,60 @@ changes_required
     expect(result.findings[0].category).toBe('correctness');
   });
 
+  it('keeps verdict=approved when only low/medium findings are present (severity gate)', () => {
+    // The reviewer prompt is explicit that medium/low findings do not block
+    // ship. A cooperative LLM that approves + lists nice-to-fix nits should
+    // stay approved — the parser must not override to changes_required and
+    // trigger a full rework cycle for a single low-severity nit.
+    const reviewerOutput = `## Verdict
+
+approved
+
+## Findings
+
+## Finding 1:
+- Severity: low
+- Category: style
+- Claim: Variable name could be more descriptive
+- Evidence: The local var \`x\` could be \`itemCount\`
+
+## Finding 2:
+- Severity: medium
+- Category: docs
+- Claim: Missing JSDoc on exported function
+- Evidence: foo() has no doc comment
+`;
+    const result = parseReviewReport(reviewerOutput);
+    expect(result.verdict).toBe('approved');
+    expect(result.findings).toHaveLength(2);
+  });
+
+  it('flips to changes_required when at least one critical/high finding is present', () => {
+    // Mixed bag: one high blocker + one low nit. The high blocker must
+    // flip the verdict; the low nit alone would not have.
+    const reviewerOutput = `## Verdict
+
+approved
+
+## Findings
+
+## Finding 1:
+- Severity: low
+- Category: style
+- Claim: Minor naming nit
+- Evidence: var \`x\`
+
+## Finding 2:
+- Severity: high
+- Category: correctness
+- Claim: Off-by-one in loop bound
+- Evidence: \`for (i=0; i<=n; i++)\` should be \`<\`
+`;
+    const result = parseReviewReport(reviewerOutput);
+    expect(result.verdict).toBe('changes_required');
+    expect(result.findings).toHaveLength(2);
+  });
+
   it('skips findings with [N/A] claim', () => {
     const reviewerOutput = `
 ## Verdict

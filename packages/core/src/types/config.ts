@@ -58,7 +58,9 @@ export interface ResearchConfig {
   builtinAdapters: {
     arxiv: boolean
     semanticScholar: boolean
+    semanticScholarApiKey?: string
     githubSearch: boolean
+    githubPat?: string
     genericRss: boolean
   }
   userSources: string[]

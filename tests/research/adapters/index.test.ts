@@ -1,13 +1,34 @@
-import { describe, expect, it } from 'vitest';
 import { resolveEnabledAdapters } from '../../../packages/core/src/research/adapters/index.js';
 
+const baseCfg = {
+  arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true,
+};
+
 describe('resolveEnabledAdapters', () => {
-  it('returns all four when all enabled', () => {
-    const ids = resolveEnabledAdapters({ arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true });
-    expect(ids).toEqual(['arxiv', 'semantic_scholar', 'github_search', 'rss']);
+  it('returns all four when every flag is true and no key gate', () => {
+    expect(resolveEnabledAdapters(baseCfg, {
+      semanticScholarApiKey: 'sk-test',
+    })).toEqual(
+      ['arxiv', 'semantic_scholar', 'github_search', 'rss']
+    );
   });
-  it('omits disabled adapters', () => {
-    const ids = resolveEnabledAdapters({ arxiv: false, semanticScholar: true, githubSearch: true, genericRss: false });
-    expect(ids).toEqual(['semantic_scholar', 'github_search']);
+
+  it('skips semantic_scholar when enabled but no apiKey provided', () => {
+    const out = resolveEnabledAdapters(baseCfg, {
+      semanticScholarApiKey: undefined,
+    });
+    expect(out).not.toContain('semantic_scholar');
+  });
+
+  it('includes semantic_scholar when apiKey is provided', () => {
+    const out = resolveEnabledAdapters(baseCfg, {
+      semanticScholarApiKey: 'sk-test',
+    });
+    expect(out).toContain('semantic_scholar');
+  });
+
+  it('always includes github_search (positive-path PAT is per-call, not per-adapter)', () => {
+    const out = resolveEnabledAdapters(baseCfg, { githubPat: undefined });
+    expect(out).toContain('github_search');
   });
 });

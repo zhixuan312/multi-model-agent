@@ -24,14 +24,14 @@ describe('semanticScholarSearch', () => {
 
   it('parses JSON into AdapterResult[]', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('regime detection');
+    const r = await semanticScholarSearch('regime detection', { apiKey: 'test-key' });
     expect(r.length).toBeGreaterThan(0);
     expect(r[0].adapterId).toBe('semantic_scholar');
   });
 
   it('maps fields correctly: recordId, title, url, snippet, publishedAt, raw', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('regime detection');
+    const r = await semanticScholarSearch('regime detection', { apiKey: 'test-key' });
     expect(r[0]).toMatchObject({
       adapterId: 'semantic_scholar',
       recordId: 'abc',
@@ -48,7 +48,7 @@ describe('semanticScholarSearch', () => {
       total: 1, offset: 0,
       data: [{ paperId: 'p1', title: 'T', abstract: 'A.' }],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r[0].publishedAt).toBeUndefined();
   });
 
@@ -58,7 +58,7 @@ describe('semanticScholarSearch', () => {
       total: 1, offset: 0,
       data: [{ paperId: 'p1', title: 'T', abstract: longAbstract }],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r[0].snippet.length).toBe(500);
   });
 
@@ -67,7 +67,7 @@ describe('semanticScholarSearch', () => {
       total: 1, offset: 0,
       data: [{ paperId: 'p1', title: 'T' }],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r[0].snippet).toBe('');
   });
 
@@ -78,7 +78,7 @@ describe('semanticScholarSearch', () => {
       total: 1, offset: 0,
       data: [{ paperId: 'abc123', title: 'T' }],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r[0].url).toBe('https://www.semanticscholar.org/paper/abc123');
   });
 
@@ -87,7 +87,7 @@ describe('semanticScholarSearch', () => {
       total: 1, offset: 0,
       data: [{ paperId: 'abc123', title: 'T', url: 'https://example.com/paper' }],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r[0].url).toBe('https://example.com/paper');
   });
 
@@ -95,25 +95,25 @@ describe('semanticScholarSearch', () => {
 
   it('caps results to maxResults', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('q', { maxResults: 1 });
+    const r = await semanticScholarSearch('q', { maxResults: 1, apiKey: 'test-key' });
     expect(r.length).toBeLessThanOrEqual(1);
   });
 
   it('clamps maxResults lower bound to 1', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('q', { maxResults: 0 });
+    const r = await semanticScholarSearch('q', { maxResults: 0, apiKey: 'test-key' });
     expect(r.length).toBeLessThanOrEqual(1);
   });
 
   it('clamps maxResults upper bound to 25', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('q', { maxResults: 100 });
+    const r = await semanticScholarSearch('q', { maxResults: 100, apiKey: 'test-key' });
     expect(r.length).toBeLessThanOrEqual(2);
   });
 
   it('defaults maxResults to 10 when not specified', async () => {
     intercept200(fixtureJson);
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r.length).toBe(2);
   });
 
@@ -121,19 +121,19 @@ describe('semanticScholarSearch', () => {
 
   it('returns [] for empty data array', async () => {
     intercept200(JSON.stringify({ total: 0, offset: 0, data: [] }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r).toEqual([]);
   });
 
   it('returns [] for missing data field', async () => {
     intercept200(JSON.stringify({ total: 0, offset: 0 }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r).toEqual([]);
   });
 
   it('returns [] for unexpected response shape', async () => {
     intercept200(JSON.stringify({ foo: 'bar' }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r).toEqual([]);
   });
 
@@ -147,7 +147,7 @@ describe('semanticScholarSearch', () => {
         { title: 'Drop' },
       ],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r.length).toBe(1);
     expect(r[0].recordId).toBe('good');
   });
@@ -160,7 +160,7 @@ describe('semanticScholarSearch', () => {
         { paperId: 'good', title: 'Keep' },
       ],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r.length).toBe(1);
   });
 
@@ -172,7 +172,7 @@ describe('semanticScholarSearch', () => {
         { paperId: 'p2' },
       ],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r.length).toBe(1);
   });
 
@@ -184,7 +184,7 @@ describe('semanticScholarSearch', () => {
         { paperId: 'p2', title: 'Keep' },
       ],
     }));
-    const r = await semanticScholarSearch('q');
+    const r = await semanticScholarSearch('q', { apiKey: 'test-key' });
     expect(r.length).toBe(1);
   });
 
@@ -192,34 +192,66 @@ describe('semanticScholarSearch', () => {
 
   it('handles 429 by throwing rate-limit error', async () => {
     interceptStatus(429);
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/semantic_scholar_rate_limited/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_rate_limited/);
   });
 
   it('handles 302 redirect by throwing redirect error', async () => {
     agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
       .reply(302, '', { headers: { location: 'https://other.com' } });
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/adapter_unexpected_redirect/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/adapter_unexpected_redirect/);
   });
 
   it('handles 500 by throwing http error', async () => {
     interceptStatus(500);
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/semantic_scholar_http_500/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_http_500/);
   });
 
   it('handles 503 by throwing http error', async () => {
     interceptStatus(503);
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/semantic_scholar_http_503/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_http_503/);
   });
 
   it('handles malformed JSON', async () => {
     agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
       .reply(200, 'not json', { headers: { 'content-type': 'application/json' } });
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/semantic_scholar_parse_error/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_parse_error/);
   });
 
   it('handles network failure with adapter context', async () => {
     agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
       .replyWithError(new Error('ECONNREFUSED'));
-    await expect(semanticScholarSearch('q')).rejects.toThrow(/semantic_scholar_request_failed.*ECONNREFUSED/);
+    await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_request_failed.*ECONNREFUSED/);
+  });
+
+  it('sends mma-research user-agent header', async () => {
+    let capturedUa: string | undefined;
+    agent.get('https://api.semanticscholar.org')
+      .intercept({ path: /graph\/v1\/paper\/search/ })
+      .reply((opts) => {
+        capturedUa = (opts.headers as Record<string,string>)['user-agent'];
+        return { statusCode: 200, data: JSON.stringify({ data: [] }) };
+      });
+
+    await semanticScholarSearch('test', { maxResults: 1, apiKey: 'k' });
+    expect(capturedUa).toMatch(/^mma-research\//);
+  });
+
+  it('sends x-api-key header when apiKey provided', async () => {
+    let capturedKey: string | undefined;
+    agent.get('https://api.semanticscholar.org')
+      .intercept({ path: /graph\/v1\/paper\/search/ })
+      .reply((opts) => {
+        capturedKey = (opts.headers as Record<string,string>)['x-api-key'];
+        return { statusCode: 200, data: JSON.stringify({ data: [] }) };
+      });
+
+    await semanticScholarSearch('test', { maxResults: 1, apiKey: 'my-key' });
+    expect(capturedKey).toBe('my-key');
+  });
+
+  it('throws semantic_scholar_no_api_key when no apiKey provided', async () => {
+    await expect(
+      semanticScholarSearch('test', { maxResults: 1 })
+    ).rejects.toThrow('semantic_scholar_no_api_key');
   });
 });

@@ -208,7 +208,17 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
 
     let proposed: AnnotatePayload = mechanical;
     const ctx = (state as { executionContext?: unknown }).executionContext as
-      { getSession?: (tier: 'standard' | 'complex') => { send: (p: string, o?: { stageLabel?: string }) => Promise<unknown> } } | undefined;
+      {
+        getSession?: (tier: 'standard' | 'complex') => { send: (p: string, o?: { stageLabel?: string }) => Promise<unknown> };
+        providers?: Partial<Record<'standard' | 'complex', { config?: { model?: string } }>>;
+      } | undefined;
+    // Annotator runs on the standard tier; capture its model from the provider
+    // config so the wire row attributes annotate cost+tokens to the real model.
+    // TurnResult does not carry model, so (r as any).model below is undefined
+    // for every provider — without this lookup the annotate stage's model was
+    // always null on the wire even when an LLM call actually fired.
+    const annotateModelFromConfig: string | null =
+      ctx?.providers?.['standard']?.config?.model ?? null;
     if (ctx && typeof ctx.getSession === 'function') {
       const prompt = isRead ? annotatePromptRead(state) : annotatePromptWrite(state);
       const session = ctx.getSession('standard');
@@ -248,7 +258,9 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
       }
       if (tres.kind === 'ok') {
         llmCostUSD = tres.costUSD ?? 0;
-        llmModel = tres.model;
+        // TurnResult does not carry model — fall back to the provider config
+        // we captured above (tres.model is undefined for every provider).
+        llmModel = tres.model ?? annotateModelFromConfig;
         llmDurationMs = tres.ms;
         llmTurnsUsed = tres.turnsUsed;
         llmInputTokens = tres.inputTokens;

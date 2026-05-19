@@ -7,8 +7,6 @@ import { researchHeadlineTemplate } from '../../reporting/headline-templates/res
 import { researchBriefSlot, type EnrichedResearchInput, type ResearchBrief } from './brief-slot.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
-// Re-export for external consumers (server handler imports these from this
-// module's path).
 export type { EnrichedResearchInput, ResearchBrief, ResolvedContextBlock } from './brief-slot.js';
 
 export function registerResearch(registry: ToolSurfaceRegistry): void {
@@ -30,17 +28,25 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
   category: 'read_only',
   agentType: 'complex',
   briefSlot: researchBriefSlot,
-  buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext) => ({
+  buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext, enriched?: EnrichedResearchInput) => ({
     prompt: brief.compiledPrompt,
     parallelTarget: brief.compiledPrompt,
     agentType: 'complex' as const,
     reviewPolicy: 'none' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     contextBlockIds: brief.contextBlockIds,
-    tools: 'readonly' as const,
+    tools: 'none' as const,
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
     mainModel: ctx.mainModel ?? undefined,
+    ...(enriched ? {
+      research: {
+        researchQuestion: enriched.researchQuestion,
+        background: enriched.background,
+        userSources: [...(enriched.userSources ?? [])],
+        resolvedContextBlocks: (enriched.resolvedContextBlocks ?? []).map(b => ({ id: b.id, content: b.content })),
+      },
+    } : {}),
   }),
   reportSchema: researchReportSchema,
   headlineTemplate: researchHeadlineTemplate,

@@ -36,3 +36,21 @@ describe('arxivSearch', () => {
     expect(r.length).toBeLessThanOrEqual(1);
   });
 });
+
+describe('arxiv UA header', () => {
+  it('sends mma-research user-agent', async () => {
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    let ua = '';
+    agent.get('https://export.arxiv.org')
+      .intercept({ path: /\/api\/query/ })
+      .reply((opts) => {
+        ua = (opts.headers as Record<string,string>)['user-agent']!;
+        return { statusCode: 200, data: '<feed></feed>' };
+      });
+    await arxivSearch('test', { maxResults: 1 });
+    await agent.close();
+    expect(ua).toMatch(/^mma-research\//);
+  });
+});
