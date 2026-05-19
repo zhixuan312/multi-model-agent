@@ -167,7 +167,7 @@ Step 2 — mma-debug
 ↓
 Step 3 — mma-delegate
   Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
-  fix, runs the failing test 20× to confirm the race is gone via `verifyCommand`.
+  fix; the reviewer verifies the failing test now passes 20× via its own shell tools.
 ↓
 Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the verdict.
 ```
