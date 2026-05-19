@@ -142,6 +142,11 @@ function trimToFitBudget(
     trimNote = '> _Note: background trimmed to fit prompt budget._';
     prefix = compose(question, trimmedBg, trimmedPack, trimmedBlocks);
   }
+  // 4. Hard guarantee: if still over budget, truncate prefix directly.
+  if (Buffer.byteLength(prefix, 'utf8') > TOTAL_PREFIX_BUDGET_BYTES) {
+    prefix = prefix.slice(0, TOTAL_PREFIX_BUDGET_BYTES);
+    trimNote = '> _Note: prefix truncated to fit prompt budget._';
+  }
   return { prefix, trimNote };
 }
 

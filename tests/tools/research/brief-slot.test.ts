@@ -117,9 +117,12 @@ describe('research brief-slot — turn-1 plan + implementer prefix', () => {
       researchQuestion: 'Q?',
       background: 'y'.repeat(20000),
       pack: fatPack,
-      contextBlocks: [],
+      contextBlocks: [
+        { id: 'ctx1', content: 'z'.repeat(15000) },
+        { id: 'ctx2', content: 'w'.repeat(15000) },
+      ],
     });
-    expect(out.length).toBeLessThanOrEqual(TOTAL_PREFIX_BUDGET_BYTES);
+    expect(Buffer.byteLength(out, 'utf8')).toBeLessThanOrEqual(TOTAL_PREFIX_BUDGET_BYTES);
   });
 
   it('TOTAL_PREFIX_BUDGET_BYTES is 96 KiB', () => {
