@@ -7,7 +7,7 @@ import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
 import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
 import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
-import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
+import { SEVERITY_LADDER } from '../shared/severity-ladder.js';
 import {
   REVIEW_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_REVIEW,

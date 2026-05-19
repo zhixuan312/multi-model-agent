@@ -6,7 +6,7 @@ import { auditHeadlineTemplate } from '../../reporting/headline-templates/audit.
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec } from '../../types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
-import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
+import { SEVERITY_LADDER } from '../shared/severity-ladder.js';
 import {
   AUDIT_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_AUDIT,
