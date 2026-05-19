@@ -6,6 +6,8 @@ export default defineConfig({
     globals: true,
     root: '.',
     exclude: ['.worktrees/**', '**/node_modules/**', 'tests/perf/**'],
+    pool: 'forks',
+    poolOptions: { forks: { maxForks: 2, minForks: 1 } },
   },
   resolve: {
     alias: [
