@@ -62,8 +62,7 @@ Gating reviews for **artifact-producing** tools (`delegate`, `execute-plan`). Ru
 Each method accepts a `RunnerShell` and a `ReviewerInput` (`{ workerOutput, brief, cwd, route?, fileContents?, toolCallLog?, filesWritten?, abortSignal?, deadlineMs? }`) and returns a typed result with parsed verdict, findings, and cost breakdown.
 
 ```ts
-import { ReviewerEngine, ReviewerPromptBuilder } from '@zhixuan92/multi-model-agent-core/review';
-import { specTemplate, qualityAPTemplate, diffTemplate } from '@zhixuan92/multi-model-agent-core/review';
+import { ReviewerEngine, ReviewerPromptBuilder, specTemplate, qualityAPTemplate, diffTemplate } from '@zhixuan92/multi-model-agent-core/lifecycle/handlers/review-stage';
 
 const engine = new ReviewerEngine(
   new ReviewerPromptBuilder(
@@ -85,7 +84,7 @@ const result = await engine.runSpec(shell, {
 Factory shortcut for the default template set:
 
 ```ts
-import { createDefaultReviewerEngine } from '@zhixuan92/multi-model-agent-core/review/default-engines';
+import { createDefaultReviewerEngine } from '@zhixuan92/multi-model-agent-core/lifecycle/handlers/review-stage';
 const engine = createDefaultReviewerEngine();
 ```
 
@@ -100,7 +99,7 @@ Read-only annotation pass for **non-artifact-producing** tools (`audit`, `review
 Accepts a `Session` (opened via the v4.4 provider boundary) and an `AnnotatorInput` (`{ workerOutput, brief, cwd, route, abortSignal?, deadlineMs? }`). Returns `AnnotatorCallResult` with parsed findings, raw assistant text, and cost breakdown.
 
 ```ts
-import { AnnotatorEngine } from '@zhixuan92/multi-model-agent-core/review';
+import { AnnotatorEngine } from '@zhixuan92/multi-model-agent-core/lifecycle/handlers/review-stage';
 
 const engine = new AnnotatorEngine();
 const result = await engine.annotate(shell, {
@@ -187,7 +186,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./telemetry/types` | `TelemetryEvent`, `UploadBatch`, `InstallMetadata` Zod schemas + `SCHEMA_VERSION` |
 | `./telemetry/event-builder` | `buildTaskCompletedEvent`, `buildSessionStartedEvent`, etc. — pure event constructors |
 | `./telemetry/consent-rules` | `decideConsent` — env / config / default precedence resolver |
-| `./review` | `ReviewerEngine`, `AnnotatorEngine` — v4 review surface (see Engine API below) |
+| `./lifecycle/handlers/review-stage` | `ReviewerEngine`, `AnnotatorEngine` — v4 review surface (see Engine API below) |
 | `./lifecycle/task-executor` | `executeTask` — generic per-tool orchestrator driven by a `ToolConfig` |
 | `./lifecycle/executor-output-types` | `ExecutorOutput`, `BatchTimings`, `BatchAggregateCost` |
 | `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, debug, investigate, research, execute-plan, retry, register-context-block) |
