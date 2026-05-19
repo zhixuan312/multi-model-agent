@@ -143,12 +143,6 @@ interface ToolConfig<Input, Brief, Report> {
   buildTaskSpec: (brief: Brief, ctx: ExecutionContext) => TaskSpec;
   reportSchema: ReportSchema<Report>;                        // Zod schema for structured output
   headlineTemplate: HeadlineTemplate;                        // compose headline from result
-  reviewTemplates?: {                                        // optional per-route review templates
-    spec?: ReviewTemplate;
-    qualityAP?: ReviewTemplate;
-    annotator?: ReviewTemplate;
-    diff?: ReviewTemplate;
-  };
   postProcessEnvelope?: (envelope, ctx) => any;              // optional envelope post-processing
 }
 ```
