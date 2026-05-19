@@ -13,7 +13,7 @@ import type { Provider, RuntimeRunResult, AgentType, TaskSpec } from '../../type
 import type { Session } from '../../types/run-result.js';
 import type { StageGate, ReworkPayload } from '../stage-io.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
-import { reworkPrompt } from '../../review/templates/rework.js';
+import { reworkPrompt } from './rework-prompt.js';
 import { buildWarmFollowupMessage } from '../warm-followup.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';

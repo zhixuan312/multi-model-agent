@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reworkPrompt } from '../../../packages/core/src/review/templates/rework.js';
+import { reworkPrompt } from '../../../packages/core/src/lifecycle/handlers/rework-prompt.js';
 
 const ctx = {
   workerOutput: 'IMPLEMENTER_OUTPUT_SENTINEL_43891',
