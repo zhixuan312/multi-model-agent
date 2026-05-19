@@ -7,8 +7,6 @@ import { researchHeadlineTemplate } from '../../reporting/headline-templates/res
 import { researchBriefSlot, type EnrichedResearchInput, type ResearchBrief } from './brief-slot.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
-// Re-export for external consumers (server handler imports these from this
-// module's path).
 export type { EnrichedResearchInput, ResearchBrief, ResolvedContextBlock } from './brief-slot.js';
 
 export function registerResearch(registry: ToolSurfaceRegistry): void {
@@ -37,7 +35,7 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
     reviewPolicy: 'none' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     contextBlockIds: brief.contextBlockIds,
-    tools: 'readonly' as const,
+    tools: 'none' as const,
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
     mainModel: ctx.mainModel ?? undefined,
