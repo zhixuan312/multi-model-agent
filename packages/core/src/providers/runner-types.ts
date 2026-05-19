@@ -7,7 +7,6 @@ import type {
   TaskSpec,
   ToolMode,
 } from '../types.js';
-import type { ResearchToolDefinition } from '../research/types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 
 export type RunStatus =
@@ -110,11 +109,6 @@ export interface RunOptions {
   /** Run mode: 'standard' for normal execution, 'review' for typed
    *  structured output review via Agent.outputType. Default 'standard'. */
   runMode?: 'standard' | 'review'
-  /** Optional task-specific tool injection. When present, runners merge
-   *  these tools into the worker's tool surface ON TOP OF whatever
-   *  `tools: ToolMode` would normally produce. Runners MUST treat
-   *  undefined as a no-op. */
-  customToolset?: ResearchToolDefinition[]
   /** Appended to Agent.instructions (or the equivalent system-level prompt
    *  in each runner) after the standard prevention-layer system prompt.
    *  Used by the reviewer path so the stable review rubric sits in the

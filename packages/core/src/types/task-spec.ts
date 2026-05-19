@@ -1,7 +1,6 @@
 // Per-task brief shape — what callers send to /delegate, /audit, etc.
 // Matches spec architecture.md `types/task-spec.ts` slot.
 import type { BriefQualityPolicy } from './brief-quality-policy.js';
-import type { ResearchToolDefinition } from '../research/types.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
@@ -36,15 +35,6 @@ export interface TaskSpec {
   autoCommit?: boolean
   planContext?: string
   outputTargets?: string[]
-  /**
-   * Optional task-specific tool injection. When present, runner adapters
-   * merge these tools into the worker's tool surface ON TOP of whatever
-   * `tools: ToolMode` would normally produce. Used by `/research` (and the
-   * `mma-explore` skill that orchestrates it) for the external researcher
-   * worker only; all other executors leave this undefined. Runners MUST
-   * treat `undefined` as a no-op.
-   */
-  customToolset?: ResearchToolDefinition[]
   /**
    * For read-only routes that go through the parallel-criteria dispatcher,
    * this is the user's pure question / work / problem text (route-specific
