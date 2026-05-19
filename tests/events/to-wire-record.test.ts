@@ -123,8 +123,12 @@ describe('toWireRecord', () => {
     s.completeStage('implementing', 1, {
       outcome: 'advance',
       durationMs: 1,
-      inputTokens: 0,
-      outputTokens: 0,
+      // A successful "done" task always has at least some LLM activity; the
+      // wire layer filters out stages with zero tokens + zero cost (non-LLM
+      // committing/skipped stages). Use 1 input + 1 output to keep this
+      // fixture in the "kept" path while still being a degenerate sample.
+      inputTokens: 1,
+      outputTokens: 1,
     });
     s.seal({ status: 'done', stopReason: 'ok', realFilesChanged: ['/secret/path'] });
     const wire = toWireRecord(s.snapshot(), {
