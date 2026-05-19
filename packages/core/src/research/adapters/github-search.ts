@@ -1,24 +1,15 @@
 import { request } from 'undici';
+import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
 
-export interface GitHubOpts { kind: 'repo' | 'code'; maxResults?: number; }
-
-interface GitHubRepoItem {
-  id?: unknown;
-  full_name?: unknown;
-  html_url?: unknown;
-  url?: unknown;
-  description?: unknown;
+export interface GitHubOpts {
+  kind: 'repo' | 'code';
+  maxResults?: number;
+  pat?: string;
 }
 
-interface GitHubCodeItem {
-  name?: unknown;
-  path?: unknown;
-  html_url?: unknown;
-  url?: unknown;
-  repository?: { full_name?: unknown; html_url?: unknown };
-  text_matches?: unknown;
-}
+interface GitHubRepoItem { id?: unknown; full_name?: unknown; html_url?: unknown; url?: unknown; description?: unknown; }
+interface GitHubCodeItem { name?: unknown; path?: unknown; html_url?: unknown; url?: unknown; repository?: { full_name?: unknown; html_url?: unknown }; text_matches?: unknown; }
 
 function isGitHubKind(kind: unknown): kind is GitHubOpts['kind'] {
   return kind === 'repo' || kind === 'code';
@@ -32,6 +23,9 @@ function firstTextMatchFragment(textMatches: unknown): string {
 
 export async function githubSearch(query: string, opts: GitHubOpts): Promise<AdapterResult[]> {
   if (!isGitHubKind(opts.kind)) throw new Error('github_invalid_kind');
+  if (opts.kind === 'code' && (!opts.pat || opts.pat.length === 0)) {
+    throw new Error('pat_required_for_code');
+  }
 
   const max = Math.min(25, Math.max(1, opts.maxResults ?? 10));
   const path = opts.kind === 'repo' ? '/search/repositories' : '/search/code';
@@ -43,11 +37,13 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
     ? 'application/vnd.github.v3.text-match+json'
     : 'application/vnd.github+json';
 
-  const res = await request(url.toString(), {
-    method: 'GET',
-    
-    headers: { accept, 'user-agent': 'mma-explore' },
-  });
+  const headers: Record<string, string> = {
+    accept,
+    'user-agent': USER_AGENT,
+  };
+  if (opts.pat && opts.pat.length > 0) headers['authorization'] = `Bearer ${opts.pat}`;
+
+  const res = await request(url.toString(), { method: 'GET', headers });
 
   if (res.statusCode === 403) {
     const remaining = res.headers['x-ratelimit-remaining'];
@@ -67,34 +63,26 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
     throw new Error(`github_http_${res.statusCode}`);
   }
 
-  if (res.statusCode >= 300 && res.statusCode < 400) {
-    throw new Error('adapter_unexpected_redirect: github_search');
-  }
+  if (res.statusCode >= 300 && res.statusCode < 400) throw new Error('adapter_unexpected_redirect: github_search');
   if (res.statusCode !== 200) throw new Error(`github_http_${res.statusCode}`);
 
   let body: unknown;
-  try {
-    body = await res.body.json();
-  } catch {
-    throw new Error('github_invalid_json');
-  }
+  try { body = await res.body.json(); } catch { throw new Error('github_invalid_json'); }
   const items = typeof body === 'object' && body !== null && 'items' in body && Array.isArray(body.items)
-    ? body.items
-    : [];
+    ? body.items : [];
 
   if (opts.kind === 'repo') {
     return items.slice(0, max).map((raw: unknown) => {
       const item = raw as GitHubRepoItem;
       const recordId = typeof item.full_name === 'string' && item.full_name.length > 0
-        ? item.full_name
-        : String(item.id ?? '');
+        ? item.full_name : String(item.id ?? '');
       return {
         adapterId: 'github_search' as const,
         recordId,
-        title: recordId,
-        url: String(item.html_url ?? item.url ?? ''),
-        snippet: String(item.description ?? '').slice(0, 500),
-        raw: item,
+        title:    recordId,
+        url:      String(item.html_url ?? item.url ?? ''),
+        snippet:  String(item.description ?? '').slice(0, 500),
+        raw:      item,
       };
     });
   }
@@ -105,15 +93,14 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
     const filePath = typeof item.path === 'string' ? item.path : '';
     const fallbackId = String(item.url ?? item.html_url ?? '');
     const recordId = repoName || filePath ? `${repoName}:${filePath}` : fallbackId;
-    const title = repoName || filePath ? `${repoName} — ${filePath}` : fallbackId;
-    const snippet = firstTextMatchFragment(item.text_matches);
+    const title    = repoName || filePath ? `${repoName} — ${filePath}` : fallbackId;
+    const snippet  = firstTextMatchFragment(item.text_matches);
     return {
       adapterId: 'github_search' as const,
-      recordId,
-      title,
-      url: String(item.html_url ?? item.url ?? ''),
+      recordId, title,
+      url:     String(item.html_url ?? item.url ?? ''),
       snippet: snippet.slice(0, 500),
-      raw: item,
+      raw:     item,
     };
   });
 }

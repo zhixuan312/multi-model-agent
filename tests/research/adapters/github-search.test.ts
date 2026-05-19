@@ -25,7 +25,7 @@ describe('githubSearch', () => {
     const json = readFileSync('tests/research/fixtures/adapters/github-search-code.json', 'utf8');
     agent.get('https://api.github.com').intercept({ path: /\/search\/code/ })
       .reply(200, json, { headers: { 'content-type': 'application/json' } });
-    const r = await githubSearch('momentum strategy', { kind: 'code' });
+    const r = await githubSearch('momentum strategy', { kind: 'code', pat: 'ghp_test' });
     expect(r).toHaveLength(1);
     expect(r[0].adapterId).toBe('github_search');
     expect(r[0].recordId).toBe('example/algo-trading:src/strategies/momentum.py');
@@ -124,7 +124,61 @@ describe('githubSearch', () => {
       headers: { accept: 'application/vnd.github.v3.text-match+json' },
     })
       .reply(200, '{"items":[]}', { headers: { 'content-type': 'application/json' } });
-    const r = await githubSearch('momentum strategy', { kind: 'code' });
+    const r = await githubSearch('momentum strategy', { kind: 'code', pat: 'ghp_test' });
     expect(r).toEqual([]);
+  });
+});
+
+describe('github-search adapter', () => {
+  let agent: MockAgent;
+  beforeEach(() => {
+    agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+  });
+  afterEach(() => agent.close());
+
+  function intercept(path: RegExp, capture: (h: Record<string,string>) => void) {
+    return agent.get('https://api.github.com')
+      .intercept({ path })
+      .reply((opts) => {
+        capture(opts.headers as Record<string,string>);
+        return { statusCode: 200, data: JSON.stringify({ items: [] }) };
+      });
+  }
+
+  it('sends mma-research user-agent header on repo search', async () => {
+    let ua = '';
+    intercept(/\/search\/repositories/, h => { ua = h['user-agent']!; });
+    await githubSearch('test', { kind: 'repo', maxResults: 1 });
+    expect(ua).toMatch(/^mma-research\//);
+  });
+
+  it('sends Authorization header when pat provided', async () => {
+    let auth = '';
+    intercept(/\/search\/repositories/, h => { auth = h['authorization']!; });
+    await githubSearch('test', { kind: 'repo', maxResults: 1, pat: 'ghp_test' });
+    expect(auth).toBe('Bearer ghp_test');
+  });
+
+  it('omits Authorization when no pat', async () => {
+    let auth: string | undefined;
+    intercept(/\/search\/repositories/, h => { auth = h['authorization']; });
+    await githubSearch('test', { kind: 'repo', maxResults: 1 });
+    expect(auth).toBeUndefined();
+  });
+
+  it('rejects kind=code when no pat with pat_required_for_code', async () => {
+    await expect(
+      githubSearch('test', { kind: 'code', maxResults: 1 })
+    ).rejects.toThrow('pat_required_for_code');
+  });
+
+  it('allows kind=code when pat provided', async () => {
+    let auth = '';
+    intercept(/\/search\/code/, h => { auth = h['authorization']!; });
+    const out = await githubSearch('test', { kind: 'code', maxResults: 1, pat: 'ghp_test' });
+    expect(auth).toBe('Bearer ghp_test');
+    expect(out).toEqual([]);
   });
 });
