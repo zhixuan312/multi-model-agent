@@ -134,6 +134,14 @@ export async function performImplementation(state: LifecycleState): Promise<void
       const failedCount = dispatchResult.criteriaErrors.length;
       const succeededCount = totalCriteria - failedCount;
       const majorityThreshold = Math.ceil(totalCriteria / 2);
+      // deriveCompletion for read-routes requires criteriaSucceeded.length > 0
+      // to consider a task completed. Surfaced via smoke: without this every
+      // read-route run sealed as worker_status=failed, terminal_status=error
+      // because lastRunResult.criteriaSucceeded was never populated.
+      const erroredCriterionIds = new Set(dispatchResult.criteriaErrors.map(e => e.criterionId));
+      const criteriaSucceeded: string[] = routeSpec.criteria
+        .filter(c => !erroredCriterionIds.has(c.id))
+        .map(c => c.id);
       const status = succeededCount === 0
         ? 'error'
         : succeededCount >= majorityThreshold ? 'ok' : 'incomplete';
@@ -164,6 +172,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         terminationReason,
         findings: dispatchResult.findings,
         criteriaErrors: dispatchResult.criteriaErrors,
+        criteriaSucceeded,
         findingsOutcome: dispatchResult.findingsOutcome,
         findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
         outcomeInferred: dispatchResult.outcomeInferred,
