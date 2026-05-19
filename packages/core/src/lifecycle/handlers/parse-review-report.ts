@@ -1,5 +1,5 @@
-import { parseFindings } from '../lifecycle/findings-parser.js';
-import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
+import { parseFindings } from '../findings-parser.js';
+import type { FindingsOutcomeKind } from '../../reporting/findings-outcome.js';
 
 export interface ParsedReviewReport {
   verdict: 'approved' | 'changes_required';

@@ -4,7 +4,7 @@ import { reviewHandler } from '../../packages/core/src/lifecycle/handlers/review
 let mockReviewerTurns: Array<ReturnType<typeof fakeReviewerTurn>> = [];
 let turnIndex = 0;
 
-vi.mock('../../packages/core/src/review/tier-policy.js', () => ({
+vi.mock('../../packages/core/src/lifecycle/handlers/tier-policy.js', () => ({
   invertedReviewerTier: vi.fn(() => 'complex'),
 }));
 

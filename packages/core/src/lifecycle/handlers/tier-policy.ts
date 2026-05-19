@@ -1,4 +1,4 @@
-import type { AgentType } from '../types.js';
+import type { AgentType } from '../../types.js';
 
 /**
  * Cross-tier inversion: reviewer runs on the OPPOSITE tier as a
