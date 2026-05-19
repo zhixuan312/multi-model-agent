@@ -48,7 +48,7 @@ export function parseReviewReport(
 
   // Severity-gated verdict override. The reviewer prompt is explicit that
   // "approved" means ship-able and that medium/low findings are nice-to-fix,
-  // not blockers (see review/templates/quality-review.ts:23-24). A blanket
+  // not blockers (see lifecycle/handlers/quality-review-prompt.ts:23-24). A blanket
   // "any finding flips approved → changes_required" rule contradicted that
   // contract and triggered a full rework cycle for a single low-severity
   // nit. Only critical/high findings are blockers, matching the ladder the
