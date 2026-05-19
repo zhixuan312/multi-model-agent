@@ -79,13 +79,14 @@ describe('reworkHandler — warm-followup contract', () => {
     expect(prompt).toContain('concern_one_sentinel_88');
   });
 
-  it('does not include the reworkTemplate.systemPrompt — it lives in the resumed thread already', async () => {
+  it('emits warm-followup preamble first, then the # Reviewer deviations to fix body — no system-prompt-style preamble', async () => {
     const send = vi.fn().mockResolvedValueOnce(fakeTurn(REWORK_WORKER_OUTPUT));
     const openSessionSpy = vi.fn();
     const { state } = makeState(send, openSessionSpy);
     await reworkHandler(state);
     const prompt = send.mock.calls[0][0] as string;
-    expect(prompt).not.toContain('You are the REWORK worker');
+    expect(prompt.split('\n\n')[0]).toBe(WARM_FOLLOWUP_PREAMBLE);
+    expect(prompt).toContain('\n\n# Reviewer deviations to fix');
   });
 
   it('resume-failure branch — when session.send throws, the handler surfaces the error and does NOT call provider.openSession again', async () => {

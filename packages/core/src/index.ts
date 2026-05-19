@@ -136,10 +136,6 @@ export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from './events/wire-schema.js';
 
 // Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
-export { specLintTemplate } from './review/templates/spec-review.js';
-export { qualityLintTemplate } from './review/templates/quality-review.js';
-export { reworkTemplate } from './review/templates/rework.js';
-export type { ReviewTemplate } from './review/templates/shared.js';
 
 
 // Reporting slots

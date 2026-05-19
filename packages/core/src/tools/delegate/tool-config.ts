@@ -5,8 +5,6 @@ import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { delegateHeadlineTemplate } from '../../reporting/headline-templates/delegate.js';
 import { delegateReportSchema } from '../../reporting/report-parser-slots/delegate-report.js';
 import { delegateBriefSlot, type DelegateBrief } from './brief-slot.js';
-import { specLintTemplate } from '../../review/templates/spec-review.js';
-import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 export function registerDelegate(registry: ToolSurfaceRegistry): void {
@@ -43,8 +41,4 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   }),
   reportSchema: delegateReportSchema,
   headlineTemplate: delegateHeadlineTemplate,
-  reviewTemplates: {
-    spec: specLintTemplate,
-    qualityAP: qualityLintTemplate,
-  },
 };
