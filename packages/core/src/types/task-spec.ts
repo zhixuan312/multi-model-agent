@@ -71,4 +71,15 @@ export interface TaskSpec {
    *   research:    'default'
    */
   subtype?: string
+  /**
+   * Research-specific metadata passed from the /research dispatcher to perform-implementation.
+   * Contains question, background, user sources, and resolved context blocks needed by the
+   * two-turn driver before the N-criterion synthesis loop begins. Only set for /research route.
+   */
+  research?: {
+    researchQuestion: string;
+    background?: string;
+    userSources?: string[];
+    resolvedContextBlocks?: Array<{ id: string; content: string }>;
+  }
 }

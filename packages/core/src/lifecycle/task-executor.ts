@@ -111,7 +111,7 @@ export async function executeTask<Input, Brief, Report>(
   // contextBlockIds from the returned task, so subsequent expansion calls
   // are a no-op (idempotent).
   const tasks: TaskSpec[] = briefs.map((brief) => {
-    const built = config.buildTaskSpec(brief, ctx);
+    const built = config.buildTaskSpec(brief, ctx, input);
     return ctx.contextBlockStore
       ? expandContextBlocks(built, ctx.contextBlockStore)
       : built;

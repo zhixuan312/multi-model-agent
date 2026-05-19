@@ -83,11 +83,33 @@ export async function performImplementation(state: LifecycleState): Promise<void
           : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
             ? taskWithTarget.document
             : task.prompt;
-      const cachedPrefix = routeSpec.buildPrefix({
-        document: targetContent,
-        preReadFiles,
-        filePaths,
-      });
+      // /research: replace the standard cachedPrefix with one built from a
+      // pre-loop plan turn + deterministic Step-2 fan-out. The N-criterion loop
+      // below then synthesises against the EvidencePack-bearing prefix.
+      let cachedPrefix: string;
+      if (route === 'research') {
+        // Pull research-specific task fields from the TaskSpec contract.
+        const r = task.research;
+        if (!r) throw new Error('research_route_missing_input');
+        const { runResearchPreLoop } = await import('./research-pre-loop.js');
+        const preLoop = await runResearchPreLoop({
+          session: ctx.getSession(decision.impl),
+          researchQuestion: r.researchQuestion,
+          background:       r.background,
+          resolvedContextBlocks: r.resolvedContextBlocks ?? [],
+          cfg: {
+            ...ctx.config.research,
+            userSources: r.userSources ?? [],
+          },
+        });
+        cachedPrefix = preLoop.cachedPrefix;
+      } else {
+        cachedPrefix = routeSpec.buildPrefix({
+          document: targetContent,
+          preReadFiles,
+          filePaths,
+        });
+      }
       // v4.4.x: single complex session per task, sequential for-loop over
       // criteria. Earlier criteria's tool results stay in the session
       // context so later criteria don't re-discover the same files.

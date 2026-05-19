@@ -28,7 +28,7 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
   category: 'read_only',
   agentType: 'complex',
   briefSlot: researchBriefSlot,
-  buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext) => ({
+  buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext, enriched?: EnrichedResearchInput) => ({
     prompt: brief.compiledPrompt,
     parallelTarget: brief.compiledPrompt,
     agentType: 'complex' as const,
@@ -39,6 +39,14 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
     mainModel: ctx.mainModel ?? undefined,
+    ...(enriched ? {
+      research: {
+        researchQuestion: enriched.researchQuestion,
+        background: enriched.background,
+        userSources: [...(enriched.userSources ?? [])],
+        resolvedContextBlocks: (enriched.resolvedContextBlocks ?? []).map(b => ({ id: b.id, content: b.content })),
+      },
+    } : {}),
   }),
   reportSchema: researchReportSchema,
   headlineTemplate: researchHeadlineTemplate,

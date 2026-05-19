@@ -29,7 +29,7 @@ export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> 
   agentType: AgentType;
   briefSlot: BriefSlotFiller<Input, Brief[]>;
   /** Converts a compiled brief into a TaskSpec. Called once per brief by the generic task executor. */
-  buildTaskSpec: (brief: Brief, ctx: ExecutionContext) => TaskSpec;
+  buildTaskSpec: (brief: Brief, ctx: ExecutionContext, enrichedInput?: Input) => TaskSpec;
   reportSchema: ReportSchema<Report>;
   headlineTemplate: HeadlineTemplate;
   reviewTemplates?: {
