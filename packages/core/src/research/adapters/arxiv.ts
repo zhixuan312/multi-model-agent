@@ -1,5 +1,6 @@
 import { request } from 'undici';
 import { XMLParser } from 'fast-xml-parser';
+import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
@@ -12,7 +13,10 @@ export async function arxivSearch(query: string, opts: ArxivOpts = {}): Promise<
   url.searchParams.set('search_query', `all:${query}`);
   url.searchParams.set('max_results', String(max));
 
-  const res = await request(url.toString(), { method: 'GET' });
+  const res = await request(url.toString(), {
+    method: 'GET',
+    headers: { 'user-agent': USER_AGENT },
+  });
   if (res.statusCode >= 300 && res.statusCode < 400) {
     throw new Error('adapter_unexpected_redirect: arxiv');
   }

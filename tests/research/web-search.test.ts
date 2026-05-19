@@ -203,3 +203,24 @@ describe('BraveClient', () => {
     expect(sleeps.length).toBe(2);
   });
 });
+
+describe('Brave UA header', () => {
+  it('sends mma-research user-agent', async () => {
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    let ua = '';
+    agent.get('https://api.search.brave.com')
+      .intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply((opts) => {
+        ua = (opts.headers as Record<string,string>)['user-agent']!;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }) };
+      });
+    const client = new BraveClient({
+      apiKeys: ['k1'], timeoutMs: 5000, maxResultsPerQuery: 5, perCallBackoffMs: 100,
+    });
+    await client.search('test');
+    await agent.close();
+    expect(ua).toMatch(/^mma-research\//);
+  });
+});

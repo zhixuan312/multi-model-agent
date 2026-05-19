@@ -1,4 +1,5 @@
 import { request } from 'undici';
+import { USER_AGENT } from './user-agent.js';
 import type { ResearchConfig } from '../config/schema.js';
 
 export interface BraveSearchResult { title: string; url: string; snippet: string; }
@@ -107,6 +108,7 @@ export class BraveClient {
           method: 'GET',
           headers: {
             'accept': 'application/json',
+            'user-agent': USER_AGENT,
             'x-subscription-token': key,
           },
           signal: ctrl.signal,
