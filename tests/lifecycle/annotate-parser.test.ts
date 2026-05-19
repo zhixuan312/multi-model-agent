@@ -39,22 +39,22 @@ describe('applyAnnotatePreconditions — write route', () => {
       route: 'delegate',
       reviewVerdict: 'approved',
       commits: [{ sha: 'abc', subject: 's' }],
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload({ completed: true }), state);
     expect(result.completed).toBe(true);
   });
 
-  it('overrides to false when worker self-assessed failed', () => {
+  it('worker self-assess "failed" no longer blocks when objective signals agree', () => {
     const state = mkState({
-      route: 'delegate',
       reviewVerdict: 'approved',
-      commits: [{ sha: 'abc' }],
-      lastRunResult: { workerStatus: 'failed', status: 'ok' },
-    } as Partial<LifecycleState>);
-    const result = applyAnnotatePreconditions(mkPayload({ completed: true }), state);
-    expect(result.completed).toBe(false);
-    expect(result.message).toMatch(/worker self-assessed as failed/);
+      commits: [{ sha: 'abc', subject: 's' }],
+      lastRunResult: { workerStatus: 'failed' } as any,
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
+    } as any);
+    const result = applyAnnotatePreconditions({ completed: true, message: '', findings: [] } as any, state);
+    expect(result.completed).toBe(true);
   });
 
   it('overrides to false when review=changes_required and rework did not run', () => {
@@ -63,6 +63,7 @@ describe('applyAnnotatePreconditions — write route', () => {
       reviewVerdict: 'changes_required',
       commits: [{ sha: 'abc' }],
       reworkApplied: false,
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);
@@ -77,6 +78,7 @@ describe('applyAnnotatePreconditions — write route', () => {
       reworkApplied: true,
       reworkError: undefined,
       commits: [{ sha: 'abc' }],
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'done', status: 'ok', unaddressedFindingIds: [] },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);
@@ -89,6 +91,7 @@ describe('applyAnnotatePreconditions — write route', () => {
       reviewVerdict: 'changes_required',
       reworkApplied: true,
       commits: [{ sha: 'abc' }],
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'done', status: 'ok', unaddressedFindingIds: ['F1', 'F2'] },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);
@@ -96,24 +99,34 @@ describe('applyAnnotatePreconditions — write route', () => {
     expect(result.message).toMatch(/F1, F2/);
   });
 
-  it('overrides to false when no commit landed and no clean no_op reason', () => {
+  it('missing commit gate blocks completion (write route)', () => {
     const state = mkState({
-      route: 'delegate',
       reviewVerdict: 'approved',
-      commits: [],
-      lastRunResult: { workerStatus: 'done', status: 'ok' },
-    } as Partial<LifecycleState>);
-    const result = applyAnnotatePreconditions(mkPayload(), state);
+      reviewPolicy: 'full',
+      gates: { implement: { outcome: 'advance' }, commit: undefined },
+      lastRunResult: { workerStatus: 'done' } as any,
+    } as any);
+    const result = applyAnnotatePreconditions({ completed: true, message: '', findings: [] } as any, state);
     expect(result.completed).toBe(false);
-    expect(result.message).toMatch(/no commit landed/);
+    expect(result.message).toMatch(/commit/i);
+  });
+
+  it('commit gate kind=no_op yields completed=true', () => {
+    const state = mkState({
+      reviewVerdict: 'approved',
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'no_op' } } },
+      lastRunResult: { workerStatus: 'done' } as any,
+    } as any);
+    const result = applyAnnotatePreconditions({ completed: true, message: '', findings: [] } as any, state);
+    expect(result.completed).toBe(true);
   });
 
   it('completes when autoCommit=false explains the absent commit', () => {
     const state = mkState({
       route: 'delegate',
       reviewVerdict: 'approved',
-      commits: [],
       autoCommit: false,
+      gates: { implement: { outcome: 'advance' }, commit: undefined },
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);
@@ -126,6 +139,7 @@ describe('applyAnnotatePreconditions — read route', () => {
     const state = mkState({
       route: 'investigate',
       reviewPolicy: 'quality_only',
+      gates: { implement: { outcome: 'advance' } },
       lastRunResult: {
         workerStatus: 'done',
         status: 'ok',
@@ -140,6 +154,7 @@ describe('applyAnnotatePreconditions — read route', () => {
   it('overrides to false when zero criteria succeeded', () => {
     const state = mkState({
       route: 'audit',
+      gates: { implement: { outcome: 'advance' } },
       lastRunResult: {
         workerStatus: 'done',
         status: 'ok',
@@ -169,6 +184,7 @@ describe('applyAnnotatePreconditions — recovery-message synthesis', () => {
       route: 'delegate',
       reviewVerdict: 'changes_required',
       commits: [{ sha: 'abc' }],
+      gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
       lastRunResult: { workerStatus: 'failed', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(
@@ -184,9 +200,12 @@ describe('applyAnnotatePreconditions — recovery-message synthesis', () => {
       route: 'delegate',
       reviewVerdict: 'approved',
       commits: [],
+      gates: { implement: { outcome: 'advance' }, commit: undefined },
+      autoCommit: true,
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload({ message: '' }), state);
+    expect(result.completed).toBe(false);
     expect(result.message).toMatch(/Recommend re-dispatch/);
   });
 });

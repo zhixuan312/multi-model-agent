@@ -11,8 +11,9 @@
 //   - Detached HEAD maps to kind: 'no_op', reason: 'no_repo'
 //   - Commit message includes 'rework left N findings unaddressed' annotation
 //     when applicable
-//   - Does NOT mutate state.lastRunResult or state.commits (those are retired
-//     from the new chain; compose reads state.gates instead)
+//   - Does NOT mutate state.lastRunResult or state.commits (those are retired from active use).
+//   - Downstream consumers (annotate-parser, annotate-prompts, seal handler) read state.gates.commit.payload.kind
+//     directly via deriveCompletion() — the legacy state.commits[] mirror is dead.
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';

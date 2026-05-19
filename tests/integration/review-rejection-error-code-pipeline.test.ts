@@ -52,6 +52,13 @@ describe('review-rejection → wire errorCode end-to-end', () => {
         },
         implementerToolMode: 'full',
       },
+      // 4.7.8: deriveCompletion reads gates.implement.outcome. Without it
+      // the seal falls back to workerStatus and produces a wire record
+      // that fails R1 (ok + errorCode). Review rejection means no commit
+      // stage fires (commit gate stays unset), which deriveCompletion
+      // correctly translates to completed=false.
+      gates: { implement: { outcome: 'advance' } },
+      autoCommit: true,
       taskCompletedRecorded: false,
     };
 
@@ -113,6 +120,13 @@ describe('review-rejection → wire errorCode end-to-end', () => {
         },
         implementerToolMode: 'full',
       },
+      // 4.7.8: deriveCompletion reads gates.implement.outcome. Without it
+      // the seal falls back to workerStatus and produces a wire record
+      // that fails R1 (ok + errorCode). Review rejection means no commit
+      // stage fires (commit gate stays unset), which deriveCompletion
+      // correctly translates to completed=false.
+      gates: { implement: { outcome: 'advance' } },
+      autoCommit: true,
       taskCompletedRecorded: false,
     };
 

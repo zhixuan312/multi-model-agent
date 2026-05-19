@@ -36,9 +36,9 @@ describe('annotatePromptWrite', () => {
       lastRunResult: { workerStatus: 'done', summary: 's', filesChanged: ['a.ts'] },
     });
     const prompt = annotatePromptWrite(state);
-    expect(prompt).toMatch(/worker self-assessment is ['"]?done/i);
+    expect(prompt).toMatch(/implement stage advanced/i);
     expect(prompt).toMatch(/review is approved/i);
-    expect(prompt).toMatch(/unaddressedFindingIds/);
+    expect(prompt).toMatch(/commit gate kind/i);
     expect(prompt).toMatch(/commit/i);
     expect(prompt).toMatch(/findings/);
     expect(prompt).toMatch(/JSON/);
