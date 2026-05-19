@@ -45,14 +45,14 @@ export async function runTwoTurnDriver(deps: TwoTurnDeps): Promise<TwoTurnResult
     background:       deps.background,
   });
   // TurnResult.output is the worker text; no .text field exists.
-  const turn1Result = await deps.session.send(turn1Prompt);
+  let turn1Result = await deps.session.send(turn1Prompt);
   let parsed = tryParse(turn1Result.output);
 
   if (!parsed.ok) {
     // Retry once with the schema error included.
     const retryPrompt = `Your previous output was not a valid QueryPlan: ${parsed.err}\n\n${turn1Prompt}`;
-    const retry = await deps.session.send(retryPrompt);
-    parsed = tryParse(retry.output);
+    turn1Result = await deps.session.send(retryPrompt);
+    parsed = tryParse(turn1Result.output);
     if (!parsed.ok) {
       throw new Error(`research_plan_invalid: ${parsed.err}`);
     }
