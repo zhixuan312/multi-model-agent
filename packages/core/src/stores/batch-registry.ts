@@ -57,7 +57,7 @@ export interface BatchEntry {
   // Core fields (required):
   batchId: string;
   state: BatchState;
-  // New envelope-driven fields (optional during migration):
+  // Envelope-driven fields (optional — set as the lifecycle progresses):
   route?: string;
   dispatchedAt?: number;
   startedAt: number;  // epoch ms — TaskEnvelope carries its own ISO startedAt
