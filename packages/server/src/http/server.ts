@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
@@ -325,22 +325,17 @@ export async function startServer(
     });
   }
 
-  const server = createServer((req, res) => {
-    void handleRequest(router, token, req, res, config, PIPELINE_CFG);
+  const listener = new HTTPListener({
+    bind: config.server.bind,
+    port: config.server.port,
+    handler: (req, res) => handleRequest(router, token, req, res, config, PIPELINE_CFG),
   });
-
-  await new Promise<void>((resolve) => {
-    server.listen(config.server.port, config.server.bind, resolve);
-  });
-
-  const addr = server.address();
-  const port = (addr as { port: number }).port;
-  const serverAddress = typeof addr === 'object' && addr !== null ? (addr as { address?: string }).address ?? null : null;
+  const { port, address: serverAddress } = await listener.start();
 
   return {
     port,
     serverAddress,
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    stop: () => listener.stop(),
     batchRegistry,
     projectRegistry,
     serverStartedAt,
