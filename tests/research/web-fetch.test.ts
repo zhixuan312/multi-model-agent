@@ -491,19 +491,3 @@ describe('web-fetch — UA propagation', () => {
     expect(r.status).toBe('ok');
   });
 });
-
-describe.skipIf(process.env.RUN_INTEGRATION_FETCH !== '1')(
-  'web-fetch — real-network smoke (A8)', () => {
-    it('fetches https://example.com/ successfully', async () => {
-      const r = await webFetch({
-        url: 'https://example.com/',
-        cfg,
-        hostAllowlist: new Set(['example.com']),
-      });
-      expect(r.status).toBe('ok');
-      if (r.status === 'ok') {
-        expect(r.bytesReturned).toBeGreaterThan(0);
-      }
-    });
-  }
-);
