@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.7.9",
+  "version": "4.7.10",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -275,10 +275,6 @@
     "./tool-surface/openapi-generator": {
       "types": "./dist/tool-surface/openapi-generator.d.ts",
       "import": "./dist/tool-surface/openapi-generator.js"
-    },
-    "./stores/context-block-project-cap": {
-      "types": "./dist/stores/context-block-project-cap.d.ts",
-      "import": "./dist/stores/context-block-project-cap.js"
     },
     "./events/wire-schema": {
       "types": "./dist/events/wire-schema.d.ts",

@@ -74,7 +74,6 @@ export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/b
 // Project context
 export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
-export { FileBackedContextBlockStore } from './stores/file-backed-context-block-store.js';
 
 // Run tasks
 export { runTasks } from './lifecycle/task-runner.js';
@@ -136,14 +135,6 @@ export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from './events/wire-schema.js';
 
 // Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
-export { specLintTemplate } from './review/templates/spec-review.js';
-export { qualityLintTemplate } from './review/templates/quality-review.js';
-export { qualityAuditTemplate } from './review/templates/quality-review-audit.js';
-export { qualityReviewTemplate } from './review/templates/quality-review-review.js';
-export { qualityDebugTemplate } from './review/templates/quality-review-debug.js';
-export { qualityInvestigateTemplate } from './review/templates/quality-review-investigate.js';
-export { reworkTemplate } from './review/templates/rework.js';
-export type { ReviewTemplate } from './review/templates/shared.js';
 
 
 // Reporting slots

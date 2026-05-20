@@ -62,7 +62,11 @@ export interface ToolCallRecord {
 export interface HeadlineSnapshot {
   prefix: string;
   stageLabel: string;
-  stageDone: number;
+  // 1-based ordinal of the stage named by stageLabel — i.e. how many visible
+  // stages have *started* (the running one counts). Mirrors the heartbeat's
+  // visibleRan, so `[stageIndex/stageTotal] stageLabel` reads as "stage N of
+  // M, currently <label>". Not a count of completed stages.
+  stageIndex: number;
   stageTotal: number;
   toolWrites: number;
   toolTotal: number;
@@ -86,6 +90,13 @@ export interface TaskEnvelope {
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  // Planned count of visible stages for this run, published by the lifecycle
+  // driver up front (and decremented as stages are skipped). The headline's
+  // stageTotal reads this so the batch progress denominator is stable
+  // (stages-planned) instead of a running tally of stages-recorded-so-far.
+  // 0 means "not published" (non-lifecycle envelopes) — headline then falls
+  // back to the recorded-stage count.
+  plannedStageTotal: number;
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
@@ -149,12 +160,13 @@ export class TaskEnvelopeStore {
       status: 'running', terminalAt: null, stopReason: null, structuredError: null,
       errorCode: null,
       reviewPolicy: seed.reviewPolicy,
+      plannedStageTotal: 0,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
       findings: [], escalationLog: [], validationWarnings: [],
-      headline: { prefix: '', stageLabel: 'queued', stageDone: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
+      headline: { prefix: '', stageLabel: 'queued', stageIndex: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
     };
     store = new TaskEnvelopeStore(env, notify);
     store.recomputeHeadline();
@@ -177,6 +189,22 @@ export class TaskEnvelopeStore {
     if (this.env.reviewPolicy === policy) return;
     this.env.reviewPolicy = policy;
     this.notify('setReviewPolicy');
+  }
+
+  /**
+   * Publish the planned count of visible stages for this run. The lifecycle
+   * driver knows this up front (count of plan rows applicable to the route)
+   * and lowers it as stages are skipped, mirroring the heartbeat's
+   * `stageCount`. Lets the headline report a stable denominator instead of
+   * counting stages as they get appended. No-ops when sealed (a late call
+   * after teardown is harmless).
+   */
+  setPlannedStageTotal(n: number): void {
+    if (this.sealed) return;
+    if (this.env.plannedStageTotal === n) return;
+    this.env.plannedStageTotal = n;
+    this.recomputeHeadline();
+    this.notify('setPlannedStageTotal');
   }
 
   startStage(name: StageName, init: { model: string; tier: AgentTier; startedAt?: string; round?: number }): void {
@@ -279,8 +307,15 @@ export class TaskEnvelopeStore {
   }
 
   private recomputeHeadline(): void {
-    const stageNames = this.env.stages.map(s => s.name);
     const lastStage = this.env.stages[this.env.stages.length - 1];
+    // Count only stages that actually RAN — exclude skipped ones. env.stages
+    // records every stage the driver touched, including stages skipped by the
+    // current route (e.g. read-only routes skip review/rework/commit; an
+    // artifact route skips commit when there's nothing to commit). A skipped
+    // stage must not advance the displayed ordinal or inflate the denominator.
+    // The currently-running stage has outcome null (started, not yet completed)
+    // and so counts; a skipped stage has outcome 'skipped' and does not.
+    const ran = this.env.stages.filter(s => s.outcome !== 'skipped').length;
     // toolTotal is the count of recorded tool calls (run_shell, edit_file, …),
     // NOT writes. Codex's run_shell commands pass empty file lists, so
     // computing toolTotal from file counts only would report zero through an
@@ -288,8 +323,14 @@ export class TaskEnvelopeStore {
     this.env.headline = {
       prefix: '',
       stageLabel: lastStage ? lastStage.name : 'queued',
-      stageDone: this.env.stages.filter(s => s.outcome !== null).length,
-      stageTotal: stageNames.length,
+      // 1-based ordinal of the currently-running stage among the stages that
+      // actually run (skipped stages don't count). Mirrors the heartbeat's
+      // visibleRan so `[stageIndex/stageTotal] stageLabel` reads "stage N of M".
+      stageIndex: ran,
+      // Driver-published planned total (already decremented per skip) keeps the
+      // denominator stable. max() guards the case where rework adds more rounds
+      // than planned, so the ran-count can exceed the original estimate.
+      stageTotal: Math.max(ran, this.env.plannedStageTotal),
       toolWrites: this.env.filesWritten.length, toolTotal: this.env.toolCalls.length,
     };
   }

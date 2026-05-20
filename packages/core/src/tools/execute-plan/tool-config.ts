@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
-import { specLintTemplate } from '../../review/templates/spec-review.js';
-import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { executePlanBriefSlot, type ExecutePlanBrief } from './brief-slot.js';
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';
@@ -144,8 +142,4 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
   }),
   reportSchema: executePlanReportSchema,
   headlineTemplate: executePlanHeadlineTemplate,
-  reviewTemplates: {
-    spec: specLintTemplate,
-    qualityAP: qualityLintTemplate,
-  },
 };

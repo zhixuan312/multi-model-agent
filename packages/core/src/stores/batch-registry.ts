@@ -1,4 +1,3 @@
-import type { ToolCategory } from '../lifecycle/rework-budget.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 
 export type BatchState = 'pending' | 'complete' | 'failed' | 'expired';
@@ -31,15 +30,6 @@ export interface HeadlineSnapshot {
   toolTotal?: number;
 }
 
-/** Lightweight task spec stored in BatchRegistry entries for retry lookups. */
-export interface RegistryTaskSpec {
-  brief: string;
-  cwd: string;
-  agentType: 'standard' | 'complex';
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
-  contextBlockIds: string[];
-}
-
 // Input accepted by register() — runningHeadlineSnapshot OPTIONAL here so existing callers don't break.
 export interface BatchEntryInput<Result = unknown> {
   batchId: string;
@@ -59,19 +49,15 @@ export interface BatchEntryInput<Result = unknown> {
   tasksCompleted?: number;
   lastHeartbeatAt?: number;
   running?: Array<{ worker: string; turn: number }>;
-  /** Tool category of the original request — populated for retry inheritance. */
-  toolCategory?: ToolCategory;
-  /** Original task specs — populated so retry slots can reconstruct briefs. */
-  tasks?: RegistryTaskSpec[];
 }
 
-// New envelope-driven shape. For backward compatibility with callers still using
-// the old interface during migration, includes all old fields as optional.
+// Envelope-driven entry shape. Carries both the envelope fields and the flat
+// progress/heartbeat/drain fields that the polling headline still reads directly.
 export interface BatchEntry {
   // Core fields (required):
   batchId: string;
   state: BatchState;
-  // New envelope-driven fields (optional during migration):
+  // Envelope-driven fields (optional — set as the lifecycle progresses):
   route?: string;
   dispatchedAt?: number;
   startedAt: number;  // epoch ms — TaskEnvelope carries its own ISO startedAt
@@ -86,7 +72,8 @@ export interface BatchEntry {
   stateChangedAt: number;
   blockIds: string[];
   blocksReleased: boolean;
-  // Legacy fields kept for downstream compatibility during migration (will be removed in T17 cleanup):
+  // Flat progress/heartbeat/drain fields. LIVE: read by the polling headline (batch.ts),
+  // written by heartbeat (execution-context.ts) and shutdown drain. Load-bearing — do not delete.
   result?: unknown;
   expiredAt?: number;
   runningHeadlineSnapshot?: HeadlineSnapshot;
@@ -95,8 +82,6 @@ export interface BatchEntry {
   tasksCompleted?: number;
   lastHeartbeatAt?: number;
   running?: Array<{ worker: string; turn: number }>;
-  toolCategory?: ToolCategory;
-  tasks?: RegistryTaskSpec[];
   executionContexts?: Map<number, import('../lifecycle/lifecycle-context.js').ExecutionContext>;
   perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
   terminalBlockIds?: Map<number, string>;
@@ -241,6 +226,8 @@ export class BatchRegistry {
     if (isTerminal(entry.state)) return; // idempotent
     entry.state = 'complete';
     entry.terminalAt = new Date().toISOString();
+    entry.stateChangedAt = Date.now();
+    this.release(entry);
   }
 
   fail(batchId: string, error: { code: string; message: string; stack?: string }): void {

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
-import { defaultIPPinningDispatcher, webFetch } from '../../packages/core/src/research/web-fetch.js';
+import { webFetch } from '../../packages/core/src/research/web-fetch.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
 
 const cfg = ResearchConfigSchema.parse({}).fetch;
@@ -561,23 +561,7 @@ describe('webFetch — security (redirect SSRF)', () => {
   });
 });
 
-describe('webFetch — default IP-pinning dispatcher', () => {
-  it('pins lookup to resolved IP', () => {
-    const dispatcher = defaultIPPinningDispatcher('example.com', '1.2.3.4', cfg) as unknown as {
-      [key: symbol]: { options?: { connect?: { lookup?: Function } } };
-    };
-    const state = Object.getOwnPropertySymbols(dispatcher)
-      .map((s) => dispatcher[s])
-      .find((value) => value?.options?.connect?.lookup);
-
-    state?.options?.connect?.lookup?.('example.com', {}, (err: Error | null, address: string, family: number) => {
-      expect(err).toBeNull();
-      expect(address).toBe('1.2.3.4');
-      expect(family).toBe(4);
-    });
-    void (dispatcher as unknown as { destroy?: () => void }).destroy?.();
-  });
-
+describe('webFetch — createDispatcher injection seam', () => {
   it('uses custom createDispatcher when provided', async () => {
     // This test verifies the factory is called with correct arguments.
     let capturedHost: string | undefined;

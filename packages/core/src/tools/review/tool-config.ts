@@ -1,14 +1,13 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
-import { qualityReviewTemplate } from '../../review/templates/quality-review-review.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
 import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
 import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
-import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
+import { SEVERITY_LADDER } from '../shared/severity-ladder.js';
 import {
   REVIEW_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_REVIEW,
@@ -180,7 +179,4 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   },
   reportSchema: reviewReportSchema,
   headlineTemplate: reviewHeadlineTemplate,
-  reviewTemplates: {
-    qualityAP: qualityReviewTemplate,
-  },
 };

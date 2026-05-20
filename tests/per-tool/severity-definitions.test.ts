@@ -4,8 +4,6 @@ import { REVIEW_SUBTYPES } from '../../packages/core/src/tools/review/subtypes.j
 import { DEBUG_SUBTYPES } from '../../packages/core/src/tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES } from '../../packages/core/src/tools/investigate/subtypes.js';
 import { RESEARCH_SUBTYPES } from '../../packages/core/src/tools/research/subtypes.js';
-import { qualityLintTemplate } from '../../packages/core/src/review/templates/quality-review.js';
-import { specLintTemplate } from '../../packages/core/src/review/templates/spec-review.js';
 import { buildReadOnlyCachedPrefix } from '../../packages/core/src/tools/parallel-criteria-prompt.js';
 
 describe('severity-definitions — all 7 routes/templates have spec §9 definitions verbatim', () => {
@@ -100,39 +98,4 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
       });
     });
   }
-
-  // LINT templates (spec-review, quality-review)
-  describe('spec-review LINT template', () => {
-    const expectedDefinitions = {
-      critical: 'Plan step missed/wrong such that feature won\'t work',
-      high: 'Plan step partially implemented',
-      medium: 'Diverges in non-essential ways',
-      low: 'Cosmetic drift',
-    };
-
-    it('has all 4 severity definitions verbatim in systemPrompt', () => {
-      const fullPrompt = specLintTemplate.systemPrompt;
-      expect(fullPrompt).toContain(expectedDefinitions.critical);
-      expect(fullPrompt).toContain(expectedDefinitions.high);
-      expect(fullPrompt).toContain(expectedDefinitions.medium);
-      expect(fullPrompt).toContain(expectedDefinitions.low);
-    });
-  });
-
-  describe('quality-review LINT template', () => {
-    const expectedDefinitions = {
-      critical: 'Will break in production',
-      high: 'Correctness gap in normal use',
-      medium: 'Maintainability/fragility',
-      low: 'Style',
-    };
-
-    it('has all 4 severity definitions verbatim in systemPrompt', () => {
-      const fullPrompt = qualityLintTemplate.systemPrompt;
-      expect(fullPrompt).toContain(expectedDefinitions.critical);
-      expect(fullPrompt).toContain(expectedDefinitions.high);
-      expect(fullPrompt).toContain(expectedDefinitions.medium);
-      expect(fullPrompt).toContain(expectedDefinitions.low);
-    });
-  });
 });

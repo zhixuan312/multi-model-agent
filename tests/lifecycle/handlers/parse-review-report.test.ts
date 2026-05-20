@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReviewReport } from '../../packages/core/src/review/parse-review-report.js';
+import { parseReviewReport } from '../../../packages/core/src/lifecycle/handlers/parse-review-report.js';
 
 describe('parse-review-report', () => {
   it('extracts ## Finding N: blocks + Verdict line', () => {

@@ -1,9 +1,9 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ReviewPayload, Finding } from '../stage-io.js';
-import { specReviewPrompt }    from '../../review/templates/spec-review.js';
-import { qualityReviewPrompt } from '../../review/templates/quality-review.js';
-import { parseReviewReport }   from '../../review/parse-review-report.js';
-import { invertedReviewerTier } from '../../review/tier-policy.js';
+import { specReviewPrompt }    from './spec-review-prompt.js';
+import { qualityReviewPrompt } from './quality-review-prompt.js';
+import { parseReviewReport }   from './parse-review-report.js';
+import { invertedReviewerTier } from './tier-policy.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
 import type { AgentType } from '../../types.js';

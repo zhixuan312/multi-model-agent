@@ -1,11 +1,9 @@
 import { InMemoryContextBlockStore, type ContextBlockStore } from './context-block-tool.js';
-import { FileBackedContextBlockStore } from './file-backed-context-block-store.js';
 import { BatchCache } from './batch-cache.js';
 
 export interface ProjectContext {
   readonly cwd: string;
-  /** 4.0.3+: store is the interface — concrete class chosen at
-   *  createProjectContext (file-backed by default, in-memory in tests). */
+  /** In-memory context-block store (the only implementation). */
   readonly contextBlocks: ContextBlockStore;
   /** Per-project terminal-only retention index; authoritative live-batch lookup is via BatchRegistry.countActiveForProject(cwd). */
   readonly batchCache: BatchCache;
@@ -14,18 +12,12 @@ export interface ProjectContext {
   lastActivityAt: number;
   /** HTTP requests currently in-flight for this cwd. */
   activeRequests: number;
-  // NOTE: no activeBatches field — derived from BatchRegistry via countActiveForProject(cwd)
   readonly activeSessions: Set<string>;
   pendingReservations: number;
 }
 
 export interface CreateProjectContextOptions {
-  /** Override the context-block store. When omitted, defaults to a
-   *  FileBackedContextBlockStore rooted at
-   *  `~/.multi-model-agent/context-blocks/<sha256(cwd)>/` so blocks
-   *  survive daemon restarts (Gap 4 fix) without polluting the project
-   *  tree. Tests pass an InMemoryContextBlockStore to avoid filesystem
-   *  side effects. */
+  /** Override the context-block store (tests may inject a pre-seeded instance). */
   contextBlockStore?: ContextBlockStore;
 }
 
@@ -36,7 +28,7 @@ export function createProjectContext(
   const now = Date.now();
   return {
     cwd,
-    contextBlocks: opts.contextBlockStore ?? new FileBackedContextBlockStore(cwd),
+    contextBlocks: opts.contextBlockStore ?? new InMemoryContextBlockStore(),
     batchCache: new BatchCache(),
     createdAt: now,
     lastActivityAt: now,
@@ -46,9 +38,8 @@ export function createProjectContext(
   };
 }
 
-/** Test-only convenience constructor that uses the in-memory store. Call
- *  sites that need filesystem isolation (and don't care about persistence)
- *  should use this instead of passing the option each time. */
+/** Alias retained for call sites that explicitly want an in-memory project
+ *  context. Identical to createProjectContext now that in-memory is the only store. */
 export function createInMemoryProjectContext(cwd: string): ProjectContext {
-  return createProjectContext(cwd, { contextBlockStore: new InMemoryContextBlockStore() });
+  return createProjectContext(cwd);
 }

@@ -46,22 +46,3 @@ export type {
 // caller importing the type set should be able to grab it from one place.
 export type { ErrorCode } from './error-codes.js';
 
-// A11.2 — per-task cost surface on RunResult.cost (CostBreakdown):
-//   costUSD              : sum of every stage's costUSD — the canonical total
-//   costDeltaVsMainUSD  : delta vs estimated main-tier cost
-// The three fields below are back-compat aliases on the task_completed event
-// envelope (terminal-handlers.ts). All three resolve to the same value at
-// emit-time; the aliases exist so existing callers (expecting costUSD or
-// totalCostUSD) and new callers (expecting actualCostUSD) both receive the
-// correct figure without migration.
-// @deprecated use costUSD directly; aliases will be removed in a future release
-export interface PerTaskCostSlots {
-  /** Canonical total cost for this task (sum of all stage costs). */
-  actualCostUSD: number | null;
-  /** @deprecated alias for actualCostUSD */
-  costUSD: number | null;
-  /** @deprecated alias for actualCostUSD */
-  totalCostUSD: number | null;
-  /** Delta vs estimated main-tier cost (from CostBreakdown.costDeltaVsMainUSD). */
-  costDeltaVsMainUSD: number | null;
-}

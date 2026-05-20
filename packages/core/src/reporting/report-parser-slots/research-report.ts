@@ -60,9 +60,3 @@ export const researchReportSchema: ReportSchema<ResearchReport> = {
     return { findings: [], sourcesUsed: parseSourcesUsed(text) };
   },
 };
-
-/** @deprecated kept for back-compat with any caller still importing the
- *  pre-v4.4.x function name; the body is just `researchReportSchema.parse`. */
-export function parseResearchReport(output: string): ResearchReport {
-  return researchReportSchema.parse(output);
-}

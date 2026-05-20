@@ -89,6 +89,14 @@ export async function runStagePlan(
      (s.applicableRoutes as readonly string[]).includes(route)),
   ).length;
 
+  // Publish the planned visible-stage total to the envelope so the batch
+  // progress headline reports a stable denominator (stages-planned) rather
+  // than a running tally of stages-recorded-so-far. Re-published on every
+  // skip below, mirroring how the heartbeat decrements visibleTotal.
+  const publishStageTotal = () =>
+    getEnvelope(state.executionContext as ExecutionContext | undefined)?.setPlannedStageTotal(visibleTotal);
+  publishStageTotal();
+
   for (const stage of plan) {
     if (state.halted && !stage.runOnHalt) continue;
 
@@ -105,7 +113,7 @@ export async function runStagePlan(
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
       recordStageOnEnvelope(state, stage.name, skipGate, 'not_applicable');
-      if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
+      if (isVisibleStage(stage.name)) { visibleTotal -= 1; publishStageTotal(); }
       continue;
     }
 
@@ -120,7 +128,7 @@ export async function runStagePlan(
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
       recordStageOnEnvelope(state, stage.name, skipGate, 'noop');
-      if (isVisibleStage(stage.name)) visibleTotal -= 1; // ADDED
+      if (isVisibleStage(stage.name)) { visibleTotal -= 1; publishStageTotal(); }
       continue;
     }
 

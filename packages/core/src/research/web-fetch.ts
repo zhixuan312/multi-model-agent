@@ -8,6 +8,8 @@
 // runs first as the pre-request defense.
 
 import { request, Agent } from 'undici';
+import type { LookupFunction } from 'node:net';
+import type { LookupAddress } from 'node:dns';
 import type { ResearchConfig } from '../config/schema.js';
 import { USER_AGENT } from './user-agent.js';
 import { wrapFetchedContent } from './untrusted-content.js';
@@ -28,7 +30,10 @@ export interface WebFetchInput {
   /** Test seam — when present, treated as the IP that the connect callback
    *  "resolved" at request time. Production must not pass this. */
   _testConnectResolvedIp?: string;
-  /** @deprecated kept for callers that explicitly opt out; unused in prod */
+  /** Test-only injection seam. When set, webFetch uses the returned dispatcher
+   *  (or, if it returns undefined, no dispatcher — so undici's global MockAgent
+   *  can intercept). Production never sets this: it always uses the connect-guard
+   *  agent built in webFetch(). */
   createDispatcher?: (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) => import('undici').Dispatcher | undefined;
 }
 
@@ -51,16 +56,62 @@ const ALLOWED_CT = new Set([
 ]);
 const RETURNED_TEXT_CAP = 64 * 1024;
 
-/** @deprecated — kept for test compatibility; no longer used in production. */
-export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) =>
-  new Agent({
-    connect: {
-      lookup: (_h: string, _o: unknown, cb: (err: Error | null, address: string, family: 4 | 6) => void) =>
-        cb(null, pinnedIP, pinnedIP.includes(':') ? 6 : 4),
-      servername: host,
-    },
-    connectTimeout: cfg.connectTimeoutMs,
-  });
+/**
+ * Build the SSRF-revalidating `connect.lookup` for the guard agent.
+ *
+ * undici invokes `connect.lookup` with `{ all: true }` and expects the callback
+ * to receive an ARRAY of `{ address, family }` entries — NOT the single-result
+ * `dns.lookup(host, (err, address, family) => ...)` form. Returning a bare
+ * address string makes undici read `addresses[0].address === undefined`, throw
+ * `ERR_INVALID_IP_ADDRESS`, and surface as `web_fetch_request_failed`. Every
+ * callback path here therefore returns the array form.
+ *
+ * Typed as `net.LookupFunction` — the exact type undici's `connect.lookup`
+ * field accepts. On error paths we pass an empty address array (undici reads
+ * `err` first and never consumes the addresses), which keeps the runtime
+ * contract while satisfying the callback's required address argument.
+ *
+ * Exported for unit testing — it locks the undici lookup contract without
+ * requiring real network (see tests/research/web-fetch.test.ts).
+ */
+export function makeConnectGuardLookup(
+  allowPrivateNetwork: boolean,
+  testResolvedIp: string | undefined,
+): LookupFunction {
+  return (host, opts, cb) => {
+    // If test seam present, return that IP; otherwise let Node resolve.
+    if (testResolvedIp) {
+      const fam = testResolvedIp.includes(':') ? 6 : 4;
+      // Re-validate test IP via ssrf-guard classification.
+      if (!allowPrivateNetwork) {
+        if (classifyIP(testResolvedIp) !== 'public') {
+          cb(new Error('web_fetch_ssrf_postresolve_block') as NodeJS.ErrnoException, []);
+          return;
+        }
+      }
+      cb(null, [{ address: testResolvedIp, family: fam }]);
+      return;
+    }
+    // Production path: forward undici's options (which carry `all: true`) to
+    // Node's resolver, re-validate EVERY resolved address via the SSRF
+    // classifier, then return the array form undici expects.
+    import('node:dns').then(({ lookup }) => {
+      lookup(host, { ...opts, all: true }, (err, addresses) => {
+        if (err) { cb(err, []); return; }
+        const list = addresses as LookupAddress[];
+        if (!allowPrivateNetwork) {
+          for (const a of list) {
+            if (classifyIP(a.address) !== 'public') {
+              cb(new Error('web_fetch_ssrf_postresolve_block') as NodeJS.ErrnoException, []);
+              return;
+            }
+          }
+        }
+        cb(null, list);
+      });
+    }).catch(e => cb(e as NodeJS.ErrnoException, []));
+  };
+}
 
 /** Build a shared agent that re-validates the resolved IP at connect time. */
 function makeConnectGuardAgent(
@@ -68,39 +119,9 @@ function makeConnectGuardAgent(
   testResolvedIp: string | undefined,
   connectTimeoutMs: number,
 ): Agent {
+  const lookup = makeConnectGuardLookup(allowPrivateNetwork, testResolvedIp);
   return new Agent({
-    connect: {
-      lookup: (host: string, _opts, cb) => {
-        // If test seam present, return that IP; otherwise let Node resolve.
-        if (testResolvedIp) {
-          const fam = testResolvedIp.includes(':') ? 6 : 4;
-          // Re-validate test IP via ssrf-guard classification.
-          if (!allowPrivateNetwork) {
-            const klass = classifyIP(testResolvedIp);
-            if (klass !== 'public') {
-              cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
-              return;
-            }
-          }
-          cb(null, testResolvedIp, fam as 4 | 6);
-          return;
-        }
-        // Production path: defer to Node's default lookup then re-validate.
-        import('node:dns').then(({ lookup }) => {
-          lookup(host, (err, address, family) => {
-            if (err) { cb(err, '', 4); return; }
-            if (!allowPrivateNetwork) {
-              const klass = classifyIP(address);
-              if (klass !== 'public') {
-                cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
-                return;
-              }
-            }
-            cb(null, address, family as 4 | 6);
-          });
-        }).catch(e => cb(e as Error, '', 4));
-      },
-    },
+    connect: { lookup },
     connectTimeout: connectTimeoutMs,
   });
 }

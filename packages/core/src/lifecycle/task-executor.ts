@@ -7,7 +7,7 @@ import { resolveAgent } from '../providers/agent-resolver.js';
 import { runTaskViaDispatcher } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
-import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
+import { mapReviewVerdicts } from './review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';

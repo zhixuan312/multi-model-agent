@@ -49,12 +49,10 @@ Stage 3 — DISPATCH  (pick agent, run implementer, supervise)
                           research substrate (see C.4)
 
 Stage 4 — REVIEW  (cross-agent verdict + rework)
-  4.1  Prompt build       core/src/review/{reviewer-prompt,quality-only-prompts}.ts
-  4.2  Reviewer execution core/src/review/{spec-reviewer,quality-reviewer,
-                          diff-review}.ts
-  4.3  Finding parsing    core/src/review/{parse-reviewer-findings,evidence}.ts
-  4.4  Aggregation+rework core/src/review/{aggregate-result,skipped-result,
-                          fallback-extraction}.ts
+  4.1  Prompt build       core/src/lifecycle/handlers/{spec-review-prompt,quality-review-prompt}.ts
+  4.2  Reviewer execution core/src/lifecycle/handlers/review-stage.ts
+  4.3  Finding parsing    core/src/lifecycle/handlers/parse-review-report.ts
+  4.4  Aggregation+rework core/src/lifecycle/handlers/{rework-stage,tier-policy}.ts
 
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
   5.1  Output parsing     core/src/reporting/{structured-report,

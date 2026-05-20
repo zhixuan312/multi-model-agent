@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { specReviewPrompt, legalOutcomes } from '../../packages/core/src/review/templates/spec-review.js';
+import { specReviewPrompt } from '../../../packages/core/src/lifecycle/handlers/spec-review-prompt.js';
 
-describe('spec-review template', () => {
+describe('specReviewPrompt', () => {
   it('assembled prompt contains canonical format with Verdict, Findings, and Outcome sections', () => {
     const prompt = specReviewPrompt({
       brief: 'Test brief',
@@ -29,10 +29,6 @@ describe('spec-review template', () => {
     expect(prompt).toContain('My task brief');
     expect(prompt).toContain('What the worker did');
     expect(prompt).toContain('src/foo.ts');
-  });
-
-  it('exports legalOutcomes constant', () => {
-    expect(legalOutcomes).toEqual(['found', 'clean']);
   });
 
   it('prompt includes all four severity definitions verbatim', () => {

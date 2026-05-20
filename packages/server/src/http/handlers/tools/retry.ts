@@ -1,8 +1,7 @@
 // packages/server/src/http/handlers/tools/retry.ts
 //
-// PUBLIC retry route — POST /retry. Goes through the LifecycleDispatcher
-// when the original batch's toolCategory is recoverable; missing-batch
-// and invalid-category cases return 202 and surface the error
+// PUBLIC retry route — POST /retry. Goes through the LifecycleDispatcher;
+// missing-batch and invalid task cases return 202 and surface the error
 // asynchronously inside the batch result. This is the route called by
 // the `mma-retry` skill and end-user clients.
 //
@@ -31,18 +30,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
 
     const input = parsed.data;
     const cwd = ctx.cwd!;
-
-    // Resolve original batch's toolCategory for dispatcher budget selection.
-    let originalToolCategory: 'artifact_producing' | 'read_only' | undefined;
-    const original = deps.batchRegistry.get(input.batchId);
-    if (
-      original
-      && original.toolCategory
-      && (original.toolCategory as string) !== 'assist'
-    ) {
-      originalToolCategory = original.toolCategory as typeof originalToolCategory;
-    }
-    void originalToolCategory;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
@@ -83,21 +70,14 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
           if (!executionCtx.batchId) throw new Error('retry requires batchId');
           const retryBatchId = batchCache.remember(executionCtx.batchId, subset);
 
-          let retryAborted = false;
-          let results: import('@zhixuan92/multi-model-agent-core').RuntimeRunResult[] = [];
           try {
             const result = await executeTask(toolConfig, executionCtx, input);
-            results = Array.isArray(result.results) ? result.results : [];
+            const results = Array.isArray(result.results) ? result.results : [];
+            try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
             return result;
           } catch (err) {
-            retryAborted = true;
+            try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
             throw err;
-          } finally {
-            if (retryAborted) {
-              try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
-            } else {
-              try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
-            }
           }
         };
 

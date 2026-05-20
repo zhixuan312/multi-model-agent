@@ -24,10 +24,6 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 // ShutdownCause: previously exported from http-server-log.ts (removed in events refactor).
 type ShutdownCause = 'sigterm' | 'sigint' | 'uncaught_exception' | 'unhandled_rejection' | 'stdout_epipe' | 'stdout_other_error' | 'uncaughtException' | 'unhandledRejection';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
-import { sweepProjectCap } from '@zhixuan92/multi-model-agent-core/stores/context-block-project-cap';
-import { migrateStorage } from '../migration/storage-migration.js';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { startServer } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { createRecorder } from '../telemetry/recorder.js';
@@ -157,29 +153,6 @@ export async function startServe(
 
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);
-
-  // Migrate context-block projects from ~/.multi-model-agent (old path) to
-  // ~/.multi-model/context-blocks (new path). Runs before the sweep so that
-  // the sweep sees all projects in one place. maxProjects lives at
-  // `server.limits.maxProjects` (per A1.1's Option-B config layout) — same
-  // path-correction as A1.6 step 5b.
-  const home = homedir();
-  const maxProjects = config.server?.limits?.maxProjects ?? 500;
-  const migrated = migrateStorage(home, maxProjects);
-  if (migrated.migrated > 0 || migrated.dropped > 0) {
-    console.log(`[mmagent] storage migration: moved ${migrated.migrated} projects, dropped ${migrated.dropped} (over ${maxProjects} cap), removed ~/.multi-model-agent/`);
-  }
-
-  // Sweep context-block projects to enforce maxProjects cap. The cap
-  // lives under `server.limits.maxProjects` (per A1.1's Option-B
-  // config layout — see spec §0); plan A1.6 step 5b had the wrong
-  // path (`defaults?.contextBlocks?.maxProjects`) inherited from an
-  // earlier draft. Fixed to read from the correct location.
-  const contextBlocksRoot = join(home, '.multi-model', 'context-blocks');
-  const swept = sweepProjectCap(contextBlocksRoot, maxProjects);
-  if (swept.evicted > 0) {
-    console.log(`[mmagent] context-block project sweep: kept ${swept.kept}, evicted ${swept.evicted}`);
-  }
 
   // Drift check — warn if installed skills don't match the canonical manifest.
   try {
