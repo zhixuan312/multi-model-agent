@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { WriteStream } from 'node:fs';
 
-import { installCursor, uninstallCursor } from '../../packages/core/src/tool-surface/skill-installers/cursor.js';
+import { installCursor, uninstallCursor } from '../../packages/server/src/skill-install/skill-installers/cursor.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

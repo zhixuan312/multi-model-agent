@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import { findMissingSkills } from '../../packages/server/src/skill-install/skill-installer-common.js';
 
 describe('findMissingSkills', () => {
   it('returns empty list when all SUPPORTED_SKILLS are in the manifest', () => {

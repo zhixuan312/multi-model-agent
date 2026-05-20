@@ -10,8 +10,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
-import { listEntries, appendEntry } from '../../packages/core/src/tool-surface/manifest.js';
-import { SUPPORTED_SKILLS } from '../../packages/core/src/tool-surface/discover.js';
+import { listEntries, appendEntry } from '../../packages/server/src/skill-install/manifest.js';
+import { SUPPORTED_SKILLS } from '../../packages/server/src/skill-install/discover.js';
 
 function makeFakeHome(): string {
   const home = mkdtempSync(path.join(tmpdir(), 'mma-sync-home-'));

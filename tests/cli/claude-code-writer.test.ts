@@ -36,7 +36,7 @@ import { tmpdir } from 'node:os';
 import {
   installClaudeCode,
   uninstallClaudeCode,
-} from '../../packages/core/src/tool-surface/skill-installers/claude-code.js';
+} from '../../packages/server/src/skill-install/skill-installers/claude-code.js';
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
