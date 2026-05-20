@@ -83,21 +83,14 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
           if (!executionCtx.batchId) throw new Error('retry requires batchId');
           const retryBatchId = batchCache.remember(executionCtx.batchId, subset);
 
-          let retryAborted = false;
-          let results: import('@zhixuan92/multi-model-agent-core').RuntimeRunResult[] = [];
           try {
             const result = await executeTask(toolConfig, executionCtx, input);
-            results = Array.isArray(result.results) ? result.results : [];
+            const results = Array.isArray(result.results) ? result.results : [];
+            try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
             return result;
           } catch (err) {
-            retryAborted = true;
+            try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
             throw err;
-          } finally {
-            if (retryAborted) {
-              try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
-            } else {
-              try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
-            }
           }
         };
 
