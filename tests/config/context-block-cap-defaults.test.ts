@@ -26,4 +26,11 @@ describe('server.limits cap defaults', () => {
     expect(parsed.server.limits.maxContextBlockBytes).toBe(524_288);
   });
 
+  it('rejects non-positive values', () => {
+    const r = multiModelConfigSchema.safeParse({
+      agents: { standard: { type: 'codex', model: 'x' }, complex: { type: 'codex', model: 'y' } },
+      server: { limits: { maxContextBlocksPerProject: 0 } },
+    });
+    expect(r.success).toBe(false);
+  });
 });
