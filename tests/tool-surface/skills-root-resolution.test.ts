@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { pickSkillsRoot, skillsRootCandidates } from '../../packages/core/src/tool-surface/discover.js';
+import { pickSkillsRoot, skillsRootCandidates } from '../../packages/server/src/skill-install/discover.js';
 
 // Regression for v4.0.1: install-skill broke globally because locateSkillsRoot
 // only knew the monorepo dev layout. These tests pin the candidate paths for

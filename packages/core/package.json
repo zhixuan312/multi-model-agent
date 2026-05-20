@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.7.10",
+  "version": "4.7.11",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -236,46 +236,6 @@
       "types": "./dist/events/consent-rules.d.ts",
       "import": "./dist/events/consent-rules.js"
     },
-    "./tool-surface/manifest": {
-      "types": "./dist/tool-surface/manifest.d.ts",
-      "import": "./dist/tool-surface/manifest.js"
-    },
-    "./tool-surface/discover": {
-      "types": "./dist/tool-surface/discover.d.ts",
-      "import": "./dist/tool-surface/discover.js"
-    },
-    "./tool-surface/include-utils": {
-      "types": "./dist/tool-surface/include-utils.d.ts",
-      "import": "./dist/tool-surface/include-utils.js"
-    },
-    "./tool-surface/skill-manifest-sync": {
-      "types": "./dist/tool-surface/skill-manifest-sync.d.ts",
-      "import": "./dist/tool-surface/skill-manifest-sync.js"
-    },
-    "./tool-surface/skill-installers/claude-code": {
-      "types": "./dist/tool-surface/skill-installers/claude-code.d.ts",
-      "import": "./dist/tool-surface/skill-installers/claude-code.js"
-    },
-    "./tool-surface/skill-installers/codex-cli": {
-      "types": "./dist/tool-surface/skill-installers/codex-cli.d.ts",
-      "import": "./dist/tool-surface/skill-installers/codex-cli.js"
-    },
-    "./tool-surface/skill-installers/cursor": {
-      "types": "./dist/tool-surface/skill-installers/cursor.d.ts",
-      "import": "./dist/tool-surface/skill-installers/cursor.js"
-    },
-    "./tool-surface/skill-installers/gemini-cli": {
-      "types": "./dist/tool-surface/skill-installers/gemini-cli.d.ts",
-      "import": "./dist/tool-surface/skill-installers/gemini-cli.js"
-    },
-    "./tool-surface/skill-installer": {
-      "types": "./dist/tool-surface/skill-installer.d.ts",
-      "import": "./dist/tool-surface/skill-installer.js"
-    },
-    "./tool-surface/openapi-generator": {
-      "types": "./dist/tool-surface/openapi-generator.d.ts",
-      "import": "./dist/tool-surface/openapi-generator.js"
-    },
     "./events/wire-schema": {
       "types": "./dist/events/wire-schema.d.ts",
       "import": "./dist/events/wire-schema.js"
@@ -289,16 +249,13 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.145",
     "@mozilla/readability": "^0.6.0",
     "cross-spawn": "^7.0.6",
     "fast-xml-parser": "^5.7.2",
     "jsdom": "^29.1.1",
     "undici": "^8.2.0",
     "zod": "^4.0.0"
-  },
-  "overrides": {
-    "@anthropic-ai/sdk": "0.81.0"
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",

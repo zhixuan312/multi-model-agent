@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.11] - 2026-05-20
+
+Structural cleanup release — dissolves the `tool-surface` component (two unrelated subsystems sharing one directory) into a runtime tool registry that stays in `core` and a skill-install lifecycle that moves to `server`. Removes the parallel OpenAPI route inventory (a second, hand-maintained tool list with no real consumer), deletes two dead code paths, and hardens the Gemini skill writer's include handling. Also bundles three independent fixes (codex spawn on Windows, stall-watchdog reset, dependency bump). Net −2000+ lines (mostly the deleted OpenAPI golden). No wire-schema changes. 2119 tests pass, build green.
+
+### Changed
+
+- **Skill-install lifecycle relocated from `core` to `server`** (`packages/core/src/tool-surface/` → `packages/server/src/skill-install/`). The 9 files `discover.ts`, `manifest.ts`, `skill-installer-common.ts`, `skill-manifest-sync.ts`, `include-utils.ts`, and the four `skill-installers/{claude-code,codex-cli,cursor,gemini-cli}.ts` move to where their only consumers live (`serve.ts`, `sync-skills.ts`, the `/health` drift bootstrap). The `skill-installer.ts` re-export barrel is deleted; consumers import the concrete modules directly. The `tool-surface/` directory now holds only the runtime registry (`tool-surface-registry.ts` + `register-all-tools.ts`).
+
+### Fixed
+
+- **Gemini skill writer's `@include` handling routed through the shared `include-utils.ts`** (`packages/server/src/skill-install/skill-installers/gemini-cli.ts`). It previously hand-rolled its own `inlineIncludes` that joined paths blindly with no `_shared/` prefix enforcement and no path-traversal guard, swallowing every read error as "file not found" — a path-traversal gap. It now uses the same hardened helper as Claude/Codex/Cursor (`_shared/` enforcement, traversal rejection, ENOENT-only suppression), covered by new security tests.
+- **Codex detached-spawn guard scoped to POSIX** (`packages/core/src/providers/codex-cli-session.ts`) so Windows stdin works.
+- **Stall-watchdog refreshes `lastEventAtMs` on provider progress events** (`packages/core/src/bounded-execution/`), preventing spurious idle-timeout aborts during long provider turns.
+
+### Removed
+
+- **Parallel OpenAPI route inventory deleted** (`packages/core/src/tool-surface/openapi-generator.ts`, `packages/server/src/http/handlers/introspection/tools-list.ts`, and the `GET /tools` + `GET /openapi` routes). The generator maintained a second hand-typed tool list parallel to the registry the server actually mounts from, with no internal runtime consumer (agents discover tools via installed `mma-*` SKILL.md files). Removed alongside its 3 tests, the 1,401-line `openapi.json` contract golden, and the `openapi-generator` package subpath export. **Anything fetching `GET /tools` or `GET /openapi` for API discovery now gets a 404.**
+- **Dead `tool-surface/index.ts` barrel deleted** — re-exported siblings but was imported nowhere.
+- **Dead `ManifestParseError` class deleted** (`manifest.ts`) — an exported error type that was never thrown (corrupt manifests self-heal by backing up + rebuilding empty).
+- **9 `./tool-surface/*` subpath exports removed from `@zhixuan92/multi-model-agent-core`** `package.json` (the moved skill-install modules + the deleted openapi-generator). **BREAKING for any external consumer importing `@zhixuan92/multi-model-agent-core/tool-surface/{manifest,discover,skill-installer,…}`** — those modules now live in the server package.
+
+### Dependencies
+
+- **`claude-agent-sdk` upgraded to 0.3.145**; dropped the stale `@anthropic-ai/sdk` override.
+
 ## [4.7.10] - 2026-05-20
 
 Cleanup release — two structural normalizations (review-component dissolution + stores normalization) plus a production web-fetch fix and a batch-progress correction. Net −2200 lines. No new features; no wire-schema changes (contract goldens unchanged except the architecture folder list). One latent production bug fixed: the research/explore SSRF connect-guard returned the wrong undici lookup shape and failed 100% of real fetches. 2122 tests pass, build green, zero skipped tests, zero `@deprecated` markers remain.
@@ -596,7 +621,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...HEAD
+[4.7.11]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...v4.7.11
 [4.7.10]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...v4.7.10
 [4.7.9]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.8...v4.7.9
 [4.7.8]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.7...v4.7.8

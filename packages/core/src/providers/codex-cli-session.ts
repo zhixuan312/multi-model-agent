@@ -120,12 +120,25 @@ export class CodexCliSession implements Session {
         cwd: this.args.opts.cwd,
         env: launch.env,
         stdio: ['pipe', 'pipe', 'pipe'],
-        // detached: true puts codex (and any helpers it spawns) into its
-        // own process group, so killGracefully can signal the whole tree
-        // via process.kill(-pid, ...). Without this, codex grandchildren
-        // survived SIGTERM to the leader — see 2026-05-16 leak (155 net
-        // orphans across the day, peak ~91 simultaneous at 02:00 UTC).
-        detached: true,
+        // detached puts codex (and any helpers it spawns) into its own
+        // process group, so killGracefully can signal the whole tree via
+        // process.kill(-pid, ...). Without it, codex grandchildren survived
+        // SIGTERM to the leader — see 2026-05-16 leak (155 net orphans
+        // across the day, peak ~91 simultaneous at 02:00 UTC).
+        //
+        // POSIX-only. On Windows `detached: true` is all cost, no benefit:
+        // process-group signals (process.kill(-pid, ...)) don't exist there,
+        // AND it severs the stdin pipe travelling the cmd.exe→codex.cmd→node
+        // →codex.exe shim chain, so codex never receives the prompt and exits
+        // 1. That regressed Windows between v4.5.4 (no detached → stdin
+        // worked) and v4.7.10 (commit 1e53ecee added it for the POSIX leak).
+        // Guarding to non-Windows restores 4.5.4 behavior on Windows while
+        // keeping the orphan-leak fix on Linux/Mac.
+        detached: process.platform !== 'win32',
+        // windowsHide suppresses the console window Windows opens per spawned
+        // console binary (only observable when MMAGENT_CODEX_BIN points at
+        // codex.exe directly). No-op on POSIX.
+        windowsHide: true,
       });
     } catch (err) {
       const e = err as { code?: string; message?: string };
@@ -208,8 +221,8 @@ export class CodexCliSession implements Session {
         const t = setTimeout(() => {
           if (settled) return;
           try {
-            // SIGKILL the whole process group (proc was spawned detached).
-            if (typeof proc.pid === 'number') process.kill(-proc.pid, 'SIGKILL');
+            // SIGKILL the whole subtree (POSIX: process group; Windows: leader).
+            signalProcessTree(proc, 'SIGKILL');
           } catch { /* ignore */ }
           settle();
         }, CLOSE_GRACE_MS);
@@ -333,22 +346,31 @@ function consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { va
   });
 }
 
+/** Signal codex's whole subtree. On POSIX the child is spawned detached into
+ *  its own process group, so we signal the group via negative pid — codex
+ *  spawns helpers sharing the leader's stdio and killing the leader alone
+ *  leaks them. On Windows detached is off (it breaks stdin through the .cmd
+ *  shim) so there is no group, and negative pids throw — signal the leader
+ *  directly, matching v4.5.4 teardown. Also falls back to leader-only kill
+ *  when pid is unavailable (e.g. spawn failed before a pid was assigned). */
+function signalProcessTree(proc: ChildProcess, signal: NodeJS.Signals): void {
+  const pid = proc.pid;
+  if (typeof pid === 'number' && process.platform !== 'win32') {
+    process.kill(-pid, signal);
+  } else {
+    proc.kill(signal);
+  }
+}
+
 function killGracefully(proc: ChildProcess): void {
   if (proc.exitCode !== null || proc.killed) return;
-  const pid = proc.pid;
-  // Signal the whole process group (negative pid). Codex spawns helpers
-  // that share the leader's stdio; killing the leader alone leaks them.
-  // Fall back to leader-only kill when pid is unavailable (e.g. spawn
-  // failed before a pid was assigned).
   try {
-    if (typeof pid === 'number') process.kill(-pid, 'SIGTERM');
-    else proc.kill('SIGTERM');
+    signalProcessTree(proc, 'SIGTERM');
   } catch { /* group may already be gone */ }
   const t = setTimeout(() => {
     if (proc.exitCode === null) {
       try {
-        if (typeof pid === 'number') process.kill(-pid, 'SIGKILL');
-        else proc.kill('SIGKILL');
+        signalProcessTree(proc, 'SIGKILL');
       } catch { /* group may already be gone */ }
     }
   }, SIGKILL_GRACE_MS);

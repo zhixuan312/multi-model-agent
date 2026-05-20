@@ -231,7 +231,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-14 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+13 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
@@ -248,7 +248,6 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
 | `GET /health` | Liveness probe (unauthenticated, loopback-only) |
 | `GET /status` | Server status (authenticated, loopback-only) |
-| `GET /tools` | OpenAPI 3 doc for all endpoints (authenticated) |
 
 All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 

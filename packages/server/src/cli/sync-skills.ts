@@ -35,17 +35,17 @@ import {
   FutureManifestError,
   type Client,
   type ManifestEntry,
-} from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
+} from '../skill-install/manifest.js';
 import {
   SUPPORTED_SKILLS,
   readSkillContent,
   getSkillsRoot,
-} from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
+} from '../skill-install/discover.js';
 import {
   writeSkillToClient,
   removeSkillFromClient,
   resolveClientInstallDir,
-} from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+} from '../skill-install/skill-installer-common.js';
 
 export const ExitCode = Object.freeze({
   SUCCESS: 0,

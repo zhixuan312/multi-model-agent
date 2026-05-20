@@ -11,7 +11,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 
-import { installCodexCli, uninstallCodexCli } from '../../packages/core/src/tool-surface/skill-installers/codex-cli.js';
+import { installCodexCli, uninstallCodexCli } from '../../packages/server/src/skill-install/skill-installers/codex-cli.js';
 
 function makeFakeHome(): string {
   return mkdtempSync(path.join(tmpdir(), 'mmagent-codex-home-'));

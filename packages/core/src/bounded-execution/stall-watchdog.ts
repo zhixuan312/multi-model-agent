@@ -70,10 +70,29 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
     });
   }
 
-  // Note: EnvelopeBus emits envelope snapshots and plain entries; we no longer
-  // subscribe to provider events for stall-watchdog detection. Provider event
-  // filtering will be handled by heartbeat tracking in execution-context.ts.
-  // This handler is a no-op for the new bus design.
+  // Subscribe to provider progress events on the bus and refresh
+  // `lastEventAtMs` on each one. Providers emit these as `provider_event`
+  // plain entries (see plain-log-entry.ts) tagged with batchId/taskIndex
+  // specifically so this watchdog can filter the process-wide bus by task.
+  // Without this reset, `lastEventAtMs` stays at task-start and the watchdog
+  // degenerates into a hard deadline that aborts actively-streaming tasks.
+  let unsubscribe: (() => void) | undefined;
+  if (typeof ctx.bus?.subscribe === 'function') {
+    unsubscribe = ctx.bus.subscribe({
+      name: 'stall-watchdog',
+      receive(msg) {
+        if (msg.type !== 'plain' || msg.entry.kind !== 'provider_event') return;
+        const fields = msg.entry.fields;
+        const eventName = typeof fields.event === 'string' ? fields.event : '';
+        if (!RESET_EVENTS.has(eventName)) return;
+        // Filter by task identity — the bus is process-wide, so without this
+        // a sibling task's events would mask a genuine stall here.
+        if (ctx.batchId !== undefined && fields.batchId !== ctx.batchId) return;
+        if (ctx.taskIndex !== undefined && fields.taskIndex !== ctx.taskIndex) return;
+        ctx.stall.lastEventAtMs = Date.now();
+      },
+    });
+  }
 
   // Poll interval: fine enough to fire promptly, coarse enough to avoid
   // burning CPU on idle batches. Clamped to [1s, 5s].
@@ -123,5 +142,6 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
 
   return () => {
     clearInterval(interval);
+    unsubscribe?.();
   };
 }

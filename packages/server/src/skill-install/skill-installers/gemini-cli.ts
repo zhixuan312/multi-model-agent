@@ -11,16 +11,16 @@
  * standardized; a minimal JSON schema is used.
  *
  * Before writing SKILL.md, any `@include _shared/<file>.md` directive lines
- * are replaced with the file content from `<skillsRoot>/_shared/<file>.md`.
- * Missing shared files → warning to stderr, line is dropped.
+ * are replaced via the shared `inlineIncludes` helper (the same one
+ * Claude/Codex/Cursor use). That helper enforces the `_shared/` prefix,
+ * rejects path traversal, suppresses only ENOENT (missing file → warn + drop),
+ * and re-throws other I/O errors.
  *
  * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
-
-/** Regex matching a line that starts with `@include ` followed by a relative path. */
-const INCLUDE_RE = /^@include\s+(.+)$/;
+import { inlineIncludes } from '../include-utils.js';
 
 /**
  * Options for installing a skill via the Gemini CLI writer.
@@ -47,52 +47,6 @@ export interface GeminiCliInstallOpts {
    * when inlining `@include` directives.
    */
   skillsRoot: string;
-}
-
-/**
- * Inline `@include _shared/<file>.md` directives in `content`.
- *
- * Each line matching `@include <path>` (space after `@include`) is replaced with
- * the full content of `<skillsRoot>/_shared/<path>`.
- *
- * If a shared file is missing:
- * - A warning is written to stderr.
- * - The include line is removed from the output (not preserved).
- * - Processing continues for remaining directives.
- *
- * @param content     Raw SKILL.md content (may contain @include directives).
- * @param skillsRoot  Root directory containing `_shared/` sub-directory.
- * @returns The content with directives inlined.
- */
-export function inlineIncludes(content: string, skillsRoot: string): string {
-  const lines = content.split('\n');
-  const result: string[] = [];
-
-  for (const line of lines) {
-    const match = INCLUDE_RE.exec(line);
-    if (!match) {
-      result.push(line);
-      continue;
-    }
-
-    const relativePath = match[1]!;
-    const sharedFilePath = path.join(skillsRoot, relativePath);
-
-    try {
-      const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
-      result.push(sharedContent);
-    } catch (err) {
-      // Log warning to stderr and drop the include line.
-      const detail = err instanceof Error ? err.message : String(err);
-      process.stderr.write(
-        `Warning: Gemini CLI skill writer: shared file not found: ` +
-        `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
-      );
-      // Line is dropped — do not push anything.
-    }
-  }
-
-  return result.join('\n');
 }
 
 /**
@@ -128,7 +82,7 @@ export function installGeminiCli(opts: GeminiCliInstallOpts): void {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
 
   // Write the skill content with @include directives inlined.
-  const finalContent = inlineIncludes(content, skillsRoot);
+  const finalContent = inlineIncludes('Gemini CLI skill writer', content, skillsRoot);
   const skillPath = path.join(extDir, 'SKILL.md');
   fs.writeFileSync(skillPath, finalContent, 'utf-8');
 }
