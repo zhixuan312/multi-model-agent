@@ -92,13 +92,11 @@ export {
   HTTPListener,
   type HTTPListenerOptions,
   type HTTPRequestHandler,
-  RouteDispatcher,
-  type RouteMetadata,
-  type ResponseShape,
   isLoopbackAddress,
   shouldRejectNonLoopback,
   isAllowedHostHeader,
 } from './transport/index.js';
+export { RouteDispatcher } from './transport/route-dispatcher.js';
 
 // Heartbeat
 export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
