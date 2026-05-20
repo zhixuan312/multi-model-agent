@@ -8,6 +8,8 @@
 // runs first as the pre-request defense.
 
 import { request, Agent } from 'undici';
+import type { LookupFunction } from 'node:net';
+import type { LookupAddress } from 'node:dns';
 import type { ResearchConfig } from '../config/schema.js';
 import { USER_AGENT } from './user-agent.js';
 import { wrapFetchedContent } from './untrusted-content.js';
@@ -62,15 +64,6 @@ export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: 
     connectTimeout: cfg.connectTimeoutMs,
   });
 
-/** Callback shape undici expects from a `connect.lookup` invoked with `{ all: true }`. */
-type GuardLookupCb = (
-  err: Error | null,
-  addresses?: Array<{ address: string; family: number }>,
-) => void;
-
-/** Runtime shape undici actually calls `connect.lookup` with (array-form, all:true). */
-type AgentConnectLookup = (host: string, opts: unknown, cb: GuardLookupCb) => void;
-
 /**
  * Build the SSRF-revalidating `connect.lookup` for the guard agent.
  *
@@ -81,13 +74,18 @@ type AgentConnectLookup = (host: string, opts: unknown, cb: GuardLookupCb) => vo
  * `ERR_INVALID_IP_ADDRESS`, and surface as `web_fetch_request_failed`. Every
  * callback path here therefore returns the array form.
  *
+ * Typed as `net.LookupFunction` — the exact type undici's `connect.lookup`
+ * field accepts. On error paths we pass an empty address array (undici reads
+ * `err` first and never consumes the addresses), which keeps the runtime
+ * contract while satisfying the callback's required address argument.
+ *
  * Exported for unit testing — it locks the undici lookup contract without
  * requiring real network (see tests/research/web-fetch.test.ts).
  */
 export function makeConnectGuardLookup(
   allowPrivateNetwork: boolean,
   testResolvedIp: string | undefined,
-): (host: string, opts: unknown, cb: GuardLookupCb) => void {
+): LookupFunction {
   return (host, opts, cb) => {
     // If test seam present, return that IP; otherwise let Node resolve.
     if (testResolvedIp) {
@@ -95,7 +93,7 @@ export function makeConnectGuardLookup(
       // Re-validate test IP via ssrf-guard classification.
       if (!allowPrivateNetwork) {
         if (classifyIP(testResolvedIp) !== 'public') {
-          cb(new Error('web_fetch_ssrf_postresolve_block'));
+          cb(new Error('web_fetch_ssrf_postresolve_block') as NodeJS.ErrnoException, []);
           return;
         }
       }
@@ -106,20 +104,20 @@ export function makeConnectGuardLookup(
     // Node's resolver, re-validate EVERY resolved address via the SSRF
     // classifier, then return the array form undici expects.
     import('node:dns').then(({ lookup }) => {
-      lookup(host, { ...(opts as object), all: true }, (err, addresses) => {
-        if (err) { cb(err); return; }
-        const list = addresses as unknown as Array<{ address: string; family: number }>;
+      lookup(host, { ...opts, all: true }, (err, addresses) => {
+        if (err) { cb(err, []); return; }
+        const list = addresses as LookupAddress[];
         if (!allowPrivateNetwork) {
           for (const a of list) {
             if (classifyIP(a.address) !== 'public') {
-              cb(new Error('web_fetch_ssrf_postresolve_block'));
+              cb(new Error('web_fetch_ssrf_postresolve_block') as NodeJS.ErrnoException, []);
               return;
             }
           }
         }
         cb(null, list);
       });
-    }).catch(e => cb(e as Error));
+    }).catch(e => cb(e as NodeJS.ErrnoException, []));
   };
 }
 
@@ -129,10 +127,7 @@ function makeConnectGuardAgent(
   testResolvedIp: string | undefined,
   connectTimeoutMs: number,
 ): Agent {
-  // Cast: undici's `connect.lookup` type models the single-result dns.lookup
-  // signature, but at runtime undici invokes it with `{ all: true }` and consumes
-  // the array form (see makeConnectGuardLookup). The cast bridges that type gap.
-  const lookup = makeConnectGuardLookup(allowPrivateNetwork, testResolvedIp) as unknown as AgentConnectLookup;
+  const lookup = makeConnectGuardLookup(allowPrivateNetwork, testResolvedIp);
   return new Agent({
     connect: { lookup },
     connectTimeout: connectTimeoutMs,
