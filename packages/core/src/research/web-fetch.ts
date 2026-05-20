@@ -30,7 +30,10 @@ export interface WebFetchInput {
   /** Test seam — when present, treated as the IP that the connect callback
    *  "resolved" at request time. Production must not pass this. */
   _testConnectResolvedIp?: string;
-  /** @deprecated kept for callers that explicitly opt out; unused in prod */
+  /** Test-only injection seam. When set, webFetch uses the returned dispatcher
+   *  (or, if it returns undefined, no dispatcher — so undici's global MockAgent
+   *  can intercept). Production never sets this: it always uses the connect-guard
+   *  agent built in webFetch(). */
   createDispatcher?: (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) => import('undici').Dispatcher | undefined;
 }
 
@@ -52,17 +55,6 @@ const ALLOWED_CT = new Set([
   'application/json',
 ]);
 const RETURNED_TEXT_CAP = 64 * 1024;
-
-/** @deprecated — kept for test compatibility; no longer used in production. */
-export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: ResearchConfig['fetch']) =>
-  new Agent({
-    connect: {
-      lookup: (_h: string, _o: unknown, cb: (err: Error | null, address: string, family: 4 | 6) => void) =>
-        cb(null, pinnedIP, pinnedIP.includes(':') ? 6 : 4),
-      servername: host,
-    },
-    connectTimeout: cfg.connectTimeoutMs,
-  });
 
 /**
  * Build the SSRF-revalidating `connect.lookup` for the guard agent.
