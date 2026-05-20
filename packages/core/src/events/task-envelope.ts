@@ -307,8 +307,15 @@ export class TaskEnvelopeStore {
   }
 
   private recomputeHeadline(): void {
-    const stageNames = this.env.stages.map(s => s.name);
     const lastStage = this.env.stages[this.env.stages.length - 1];
+    // Count only stages that actually RAN — exclude skipped ones. env.stages
+    // records every stage the driver touched, including stages skipped by the
+    // current route (e.g. read-only routes skip review/rework/commit; an
+    // artifact route skips commit when there's nothing to commit). A skipped
+    // stage must not advance the displayed ordinal or inflate the denominator.
+    // The currently-running stage has outcome null (started, not yet completed)
+    // and so counts; a skipped stage has outcome 'skipped' and does not.
+    const ran = this.env.stages.filter(s => s.outcome !== 'skipped').length;
     // toolTotal is the count of recorded tool calls (run_shell, edit_file, …),
     // NOT writes. Codex's run_shell commands pass empty file lists, so
     // computing toolTotal from file counts only would report zero through an
@@ -316,14 +323,14 @@ export class TaskEnvelopeStore {
     this.env.headline = {
       prefix: '',
       stageLabel: lastStage ? lastStage.name : 'queued',
-      // Ordinal of the currently-running (last-started) visible stage. The
-      // envelope only holds visible stages that have started, so the length is
-      // exactly that ordinal — the running stage counts toward N.
-      stageIndex: this.env.stages.length,
-      // Prefer the driver-published planned total so the denominator stays
-      // stable; max() guards the case where rework adds more rounds than
-      // planned (recorded stages then exceed the original estimate).
-      stageTotal: Math.max(stageNames.length, this.env.plannedStageTotal),
+      // 1-based ordinal of the currently-running stage among the stages that
+      // actually run (skipped stages don't count). Mirrors the heartbeat's
+      // visibleRan so `[stageIndex/stageTotal] stageLabel` reads "stage N of M".
+      stageIndex: ran,
+      // Driver-published planned total (already decremented per skip) keeps the
+      // denominator stable. max() guards the case where rework adds more rounds
+      // than planned, so the ran-count can exceed the original estimate.
+      stageTotal: Math.max(ran, this.env.plannedStageTotal),
       toolWrites: this.env.filesWritten.length, toolTotal: this.env.toolCalls.length,
     };
   }

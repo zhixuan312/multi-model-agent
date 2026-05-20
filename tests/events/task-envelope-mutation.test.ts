@@ -55,6 +55,28 @@ describe('TaskEnvelopeStore mutations', () => {
     expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 5, stageLabel: 'reviewing' });
   });
 
+  it('skipped stages do not advance stageIndex or inflate stageTotal (read-route shape)', () => {
+    // Regression: read-only routes skip review/rework/commit. Those skipped
+    // stages are still recorded in env.stages, but must NOT count toward the
+    // progress ordinal/denominator — otherwise the headline jumped from
+    // [1/2] to [5/5] as the skips were recorded.
+    const s = TaskEnvelopeStore.create(seed);
+    s.setPlannedStageTotal(2); // implement + annotate after the driver decrements skips
+    s.startStage('implementing', { model: 'm', tier: 'standard' });
+    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1 });
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
+    // review/rework/commit skipped on a read route
+    for (const name of ['reviewing', 'reworking', 'committing'] as const) {
+      s.startStage(name, { model: 'm', tier: 'standard' });
+      s.completeStage(name, 1, { outcome: 'skipped', durationMs: 0 });
+    }
+    // Denominator stays 2 and ordinal stays 1 — skips don't count.
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
+    // The one remaining real stage advances the ordinal to 2 of 2.
+    s.startStage('annotating', { model: 'm', tier: 'standard' });
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 2, stageLabel: 'annotating' });
+  });
+
   it('headline.stageTotal exceeds planned total when rework adds rounds', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.setPlannedStageTotal(2);
