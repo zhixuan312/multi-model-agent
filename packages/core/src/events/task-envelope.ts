@@ -86,6 +86,13 @@ export interface TaskEnvelope {
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  // Planned count of visible stages for this run, published by the lifecycle
+  // driver up front (and decremented as stages are skipped). The headline's
+  // stageTotal reads this so the batch progress denominator is stable
+  // (stages-planned) instead of a running tally of stages-recorded-so-far.
+  // 0 means "not published" (non-lifecycle envelopes) — headline then falls
+  // back to the recorded-stage count.
+  plannedStageTotal: number;
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
@@ -149,6 +156,7 @@ export class TaskEnvelopeStore {
       status: 'running', terminalAt: null, stopReason: null, structuredError: null,
       errorCode: null,
       reviewPolicy: seed.reviewPolicy,
+      plannedStageTotal: 0,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
@@ -177,6 +185,22 @@ export class TaskEnvelopeStore {
     if (this.env.reviewPolicy === policy) return;
     this.env.reviewPolicy = policy;
     this.notify('setReviewPolicy');
+  }
+
+  /**
+   * Publish the planned count of visible stages for this run. The lifecycle
+   * driver knows this up front (count of plan rows applicable to the route)
+   * and lowers it as stages are skipped, mirroring the heartbeat's
+   * `stageCount`. Lets the headline report a stable denominator instead of
+   * counting stages as they get appended. No-ops when sealed (a late call
+   * after teardown is harmless).
+   */
+  setPlannedStageTotal(n: number): void {
+    if (this.sealed) return;
+    if (this.env.plannedStageTotal === n) return;
+    this.env.plannedStageTotal = n;
+    this.recomputeHeadline();
+    this.notify('setPlannedStageTotal');
   }
 
   startStage(name: StageName, init: { model: string; tier: AgentTier; startedAt?: string; round?: number }): void {
@@ -289,7 +313,10 @@ export class TaskEnvelopeStore {
       prefix: '',
       stageLabel: lastStage ? lastStage.name : 'queued',
       stageDone: this.env.stages.filter(s => s.outcome !== null).length,
-      stageTotal: stageNames.length,
+      // Prefer the driver-published planned total so the denominator stays
+      // stable; max() guards the case where rework adds more rounds than
+      // planned (recorded stages then exceed the original estimate).
+      stageTotal: Math.max(stageNames.length, this.env.plannedStageTotal),
       toolWrites: this.env.filesWritten.length, toolTotal: this.env.toolCalls.length,
     };
   }

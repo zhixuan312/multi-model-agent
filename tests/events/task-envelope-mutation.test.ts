@@ -40,6 +40,37 @@ describe('TaskEnvelopeStore mutations', () => {
     expect(snap.headline.toolWrites).toBe(1); // /a
   });
 
+  it('setPlannedStageTotal stabilizes headline.stageTotal as stages append', () => {
+    const notify = vi.fn();
+    const s = TaskEnvelopeStore.create(seed, notify);
+    // Driver publishes the planned visible-stage total up front.
+    s.setPlannedStageTotal(5);
+    expect(notify).toHaveBeenCalledWith('setPlannedStageTotal');
+    // Only one stage recorded so far, but the denominator reflects the plan.
+    s.startStage('implementing', { model: 'm', tier: 'standard' });
+    expect(s.snapshot().headline.stageTotal).toBe(5);
+    s.startStage('reviewing', { model: 'm', tier: 'standard' });
+    expect(s.snapshot().headline.stageTotal).toBe(5);
+  });
+
+  it('headline.stageTotal exceeds planned total when rework adds rounds', () => {
+    const s = TaskEnvelopeStore.create(seed);
+    s.setPlannedStageTotal(2);
+    for (const name of ['implementing', 'reviewing', 'reworking'] as const) {
+      s.startStage(name, { model: 'm', tier: 'standard' });
+    }
+    // Three recorded stages outgrow the planned 2 → max() reports the truth.
+    expect(s.snapshot().headline.stageTotal).toBe(3);
+  });
+
+  it('headline.stageTotal falls back to recorded count when total unpublished', () => {
+    const s = TaskEnvelopeStore.create(seed);
+    s.startStage('implementing', { model: 'm', tier: 'standard' });
+    s.startStage('reviewing', { model: 'm', tier: 'standard' });
+    // plannedStageTotal stays 0 (non-lifecycle envelope) → recorded count.
+    expect(s.snapshot().headline.stageTotal).toBe(2);
+  });
+
   it('snapshot returns immutable deep clone', () => {
     const s = TaskEnvelopeStore.create(seed);
     const snap = s.snapshot();
