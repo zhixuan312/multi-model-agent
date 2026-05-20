@@ -270,7 +270,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 14 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
