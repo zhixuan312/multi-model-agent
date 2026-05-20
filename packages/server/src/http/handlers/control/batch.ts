@@ -91,7 +91,7 @@ function buildPendingHeadline(entry: { taskEnvelopes?: (TaskEnvelopeStore | null
   const statsParts = [`tools=${summed.total}`];
   if (summed.writes > 0) statsParts.push(`writes=${summed.writes}`);
   const stats = statsParts.join(' ');
-  return `[${repSnap.headline.stageDone}/${repSnap.headline.stageTotal}] ${repSnap.headline.stageLabel}${suffix} — ${stats}`;
+  return `[${repSnap.headline.stageIndex}/${repSnap.headline.stageTotal}] ${repSnap.headline.stageLabel}${suffix} — ${stats}`;
 }
 
 /**

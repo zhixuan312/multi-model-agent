@@ -62,7 +62,11 @@ export interface ToolCallRecord {
 export interface HeadlineSnapshot {
   prefix: string;
   stageLabel: string;
-  stageDone: number;
+  // 1-based ordinal of the stage named by stageLabel — i.e. how many visible
+  // stages have *started* (the running one counts). Mirrors the heartbeat's
+  // visibleRan, so `[stageIndex/stageTotal] stageLabel` reads as "stage N of
+  // M, currently <label>". Not a count of completed stages.
+  stageIndex: number;
   stageTotal: number;
   toolWrites: number;
   toolTotal: number;
@@ -162,7 +166,7 @@ export class TaskEnvelopeStore {
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
       findings: [], escalationLog: [], validationWarnings: [],
-      headline: { prefix: '', stageLabel: 'queued', stageDone: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
+      headline: { prefix: '', stageLabel: 'queued', stageIndex: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
     };
     store = new TaskEnvelopeStore(env, notify);
     store.recomputeHeadline();
@@ -312,7 +316,10 @@ export class TaskEnvelopeStore {
     this.env.headline = {
       prefix: '',
       stageLabel: lastStage ? lastStage.name : 'queued',
-      stageDone: this.env.stages.filter(s => s.outcome !== null).length,
+      // Ordinal of the currently-running (last-started) visible stage. The
+      // envelope only holds visible stages that have started, so the length is
+      // exactly that ordinal — the running stage counts toward N.
+      stageIndex: this.env.stages.length,
       // Prefer the driver-published planned total so the denominator stays
       // stable; max() guards the case where rework adds more rounds than
       // planned (recorded stages then exceed the original estimate).

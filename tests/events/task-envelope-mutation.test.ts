@@ -48,9 +48,11 @@ describe('TaskEnvelopeStore mutations', () => {
     expect(notify).toHaveBeenCalledWith('setPlannedStageTotal');
     // Only one stage recorded so far, but the denominator reflects the plan.
     s.startStage('implementing', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline.stageTotal).toBe(5);
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 5 });
+    // Reviewing started → ordinal advances to 2 even though implement is not
+    // yet completed; the running stage counts toward stageIndex.
     s.startStage('reviewing', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline.stageTotal).toBe(5);
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 5, stageLabel: 'reviewing' });
   });
 
   it('headline.stageTotal exceeds planned total when rework adds rounds', () => {
