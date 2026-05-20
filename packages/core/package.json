@@ -272,10 +272,6 @@
       "types": "./dist/tool-surface/skill-installer.d.ts",
       "import": "./dist/tool-surface/skill-installer.js"
     },
-    "./tool-surface/openapi-generator": {
-      "types": "./dist/tool-surface/openapi-generator.d.ts",
-      "import": "./dist/tool-surface/openapi-generator.js"
-    },
     "./events/wire-schema": {
       "types": "./dist/events/wire-schema.d.ts",
       "import": "./dist/events/wire-schema.js"
