@@ -13,9 +13,25 @@ import { tmpdir } from 'node:os';
 import {
   installGeminiCli,
   uninstallGeminiCli,
-} from '../../packages/core/src/tool-surface/skill-installers/gemini-cli.js';
+} from '../../packages/server/src/skill-install/skill-installers/gemini-cli.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function captureStderr(fn: () => void): string {
+  const chunks: string[] = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  // @ts-expect-error — test shim for process.stderr.write
+  process.stderr.write = (chunk: string | Uint8Array): boolean => {
+    if (typeof chunk === 'string') chunks.push(chunk);
+    return true;
+  };
+  try {
+    fn();
+  } finally {
+    process.stderr.write = orig;
+  }
+  return chunks.join('');
+}
 
 function makeFakeHome(): string {
   return mkdtempSync(path.join(tmpdir(), 'mmagent-gemini-cli-home-'));
@@ -120,6 +136,49 @@ describe('installGeminiCli', () => {
 
       const dest = skillPath$1(homeDir);
       expect(readFileSync(dest, 'utf-8')).toBe('# mma-review\n## Endpoints\n- GET /');
+    } finally {
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('warns and drops non-_shared/ @include directives', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({});
+    try {
+      const stderr = captureStderr(() => {
+        installGeminiCli({
+          skillName: 'mma-delegate',
+          content: '# Skill\n@include other/shared.md\nDone.',
+          skillVersion: '1.0.0',
+          homeDir,
+          skillsRoot,
+        });
+      });
+      expect(stderr).toContain('Warning');
+      expect(stderr).toContain('_shared/');
+      expect(readFileSync(skillPath$1(homeDir), 'utf-8')).toBe('# Skill\nDone.');
+    } finally {
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('rejects path traversal in @include directives', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({});
+    try {
+      const stderr = captureStderr(() => {
+        installGeminiCli({
+          skillName: 'mma-delegate',
+          content: '# Skill\n@include _shared/../../etc/passwd\nDone.',
+          skillVersion: '1.0.0',
+          homeDir,
+          skillsRoot,
+        });
+      });
+      expect(stderr).toContain('path traversal');
+      expect(readFileSync(skillPath$1(homeDir), 'utf-8')).toBe('# Skill\nDone.');
     } finally {
       cleanup(homeDir);
       cleanup(skillsRoot);
