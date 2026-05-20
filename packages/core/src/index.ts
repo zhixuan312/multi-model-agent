@@ -74,7 +74,6 @@ export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/b
 // Project context
 export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
-export { FileBackedContextBlockStore } from './stores/file-backed-context-block-store.js';
 
 // Run tasks
 export { runTasks } from './lifecycle/task-runner.js';
