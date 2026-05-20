@@ -70,13 +70,6 @@ export class FutureManifestError extends Error {
   }
 }
 
-/** Thrown when the manifest file exists but cannot be parsed as valid JSON. */
-export class ManifestParseError extends Error {
-  constructor(manifestPath: string, cause: string) {
-    super(`Manifest file is corrupt (${manifestPath}): ${cause}`);
-  }
-}
-
 /** Thrown when the manifest JSON parses but fails Zod structural validation. */
 export class ManifestSchemaValidationError extends Error {
   constructor(manifestPath: string, issues: z.ZodError) {
