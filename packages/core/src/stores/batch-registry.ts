@@ -241,6 +241,8 @@ export class BatchRegistry {
     if (isTerminal(entry.state)) return; // idempotent
     entry.state = 'complete';
     entry.terminalAt = new Date().toISOString();
+    entry.stateChangedAt = Date.now();
+    this.release(entry);
   }
 
   fail(batchId: string, error: { code: string; message: string; stack?: string }): void {

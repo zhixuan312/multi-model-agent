@@ -126,4 +126,57 @@ describe('BatchRegistry', () => {
       expect(reg.get('b1')!.state).toBe('pending');
     });
   });
+
+  describe('complete() releases pins symmetric with fail()', () => {
+    it('complete() transitions to terminal AND unpins context blocks', () => {
+      const pinned: string[] = [];
+      const unpinned: string[] = [];
+      const store = {
+        pin(id: string) { pinned.push(id); },
+        unpin(id: string) { unpinned.push(id); },
+      };
+      const reg = new BatchRegistry({}, { contextBlockStore: store });
+      reg.register({
+        batchId: 'b1',
+        projectCwd: '/tmp',
+        tool: 'delegate',
+        state: 'pending',
+        startedAt: Date.now(),
+        stateChangedAt: Date.now(),
+        blockIds: ['blk-1', 'blk-2'],
+        blocksReleased: false,
+      });
+      expect(pinned).toEqual(['blk-1', 'blk-2']);
+
+      reg.complete('b1');
+
+      const entry = reg.get('b1')!;
+      expect(entry.state).toBe('complete');
+      expect(entry.terminalAt).toBeTruthy();
+      expect(entry.blocksReleased).toBe(true);
+      expect(unpinned).toEqual(['blk-1', 'blk-2']);
+    });
+
+    it('complete() is idempotent — second call does not double-unpin', () => {
+      const unpinned: string[] = [];
+      const store = {
+        pin() {},
+        unpin(id: string) { unpinned.push(id); },
+      };
+      const reg = new BatchRegistry({}, { contextBlockStore: store });
+      reg.register({
+        batchId: 'b1',
+        projectCwd: '/tmp',
+        tool: 'delegate',
+        state: 'pending',
+        startedAt: Date.now(),
+        stateChangedAt: Date.now(),
+        blockIds: ['blk-1'],
+        blocksReleased: false,
+      });
+      reg.complete('b1');
+      reg.complete('b1');
+      expect(unpinned).toEqual(['blk-1']);
+    });
+  });
 });
