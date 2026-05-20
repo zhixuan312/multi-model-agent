@@ -62,45 +62,79 @@ export const defaultIPPinningDispatcher = (host: string, pinnedIP: string, cfg: 
     connectTimeout: cfg.connectTimeoutMs,
   });
 
+/** Callback shape undici expects from a `connect.lookup` invoked with `{ all: true }`. */
+type GuardLookupCb = (
+  err: Error | null,
+  addresses?: Array<{ address: string; family: number }>,
+) => void;
+
+/** Runtime shape undici actually calls `connect.lookup` with (array-form, all:true). */
+type AgentConnectLookup = (host: string, opts: unknown, cb: GuardLookupCb) => void;
+
+/**
+ * Build the SSRF-revalidating `connect.lookup` for the guard agent.
+ *
+ * undici invokes `connect.lookup` with `{ all: true }` and expects the callback
+ * to receive an ARRAY of `{ address, family }` entries — NOT the single-result
+ * `dns.lookup(host, (err, address, family) => ...)` form. Returning a bare
+ * address string makes undici read `addresses[0].address === undefined`, throw
+ * `ERR_INVALID_IP_ADDRESS`, and surface as `web_fetch_request_failed`. Every
+ * callback path here therefore returns the array form.
+ *
+ * Exported for unit testing — it locks the undici lookup contract without
+ * requiring real network (see tests/research/web-fetch.test.ts).
+ */
+export function makeConnectGuardLookup(
+  allowPrivateNetwork: boolean,
+  testResolvedIp: string | undefined,
+): (host: string, opts: unknown, cb: GuardLookupCb) => void {
+  return (host, opts, cb) => {
+    // If test seam present, return that IP; otherwise let Node resolve.
+    if (testResolvedIp) {
+      const fam = testResolvedIp.includes(':') ? 6 : 4;
+      // Re-validate test IP via ssrf-guard classification.
+      if (!allowPrivateNetwork) {
+        if (classifyIP(testResolvedIp) !== 'public') {
+          cb(new Error('web_fetch_ssrf_postresolve_block'));
+          return;
+        }
+      }
+      cb(null, [{ address: testResolvedIp, family: fam }]);
+      return;
+    }
+    // Production path: forward undici's options (which carry `all: true`) to
+    // Node's resolver, re-validate EVERY resolved address via the SSRF
+    // classifier, then return the array form undici expects.
+    import('node:dns').then(({ lookup }) => {
+      lookup(host, { ...(opts as object), all: true }, (err, addresses) => {
+        if (err) { cb(err); return; }
+        const list = addresses as unknown as Array<{ address: string; family: number }>;
+        if (!allowPrivateNetwork) {
+          for (const a of list) {
+            if (classifyIP(a.address) !== 'public') {
+              cb(new Error('web_fetch_ssrf_postresolve_block'));
+              return;
+            }
+          }
+        }
+        cb(null, list);
+      });
+    }).catch(e => cb(e as Error));
+  };
+}
+
 /** Build a shared agent that re-validates the resolved IP at connect time. */
 function makeConnectGuardAgent(
   allowPrivateNetwork: boolean,
   testResolvedIp: string | undefined,
   connectTimeoutMs: number,
 ): Agent {
+  // Cast: undici's `connect.lookup` type models the single-result dns.lookup
+  // signature, but at runtime undici invokes it with `{ all: true }` and consumes
+  // the array form (see makeConnectGuardLookup). The cast bridges that type gap.
+  const lookup = makeConnectGuardLookup(allowPrivateNetwork, testResolvedIp) as unknown as AgentConnectLookup;
   return new Agent({
-    connect: {
-      lookup: (host: string, _opts, cb) => {
-        // If test seam present, return that IP; otherwise let Node resolve.
-        if (testResolvedIp) {
-          const fam = testResolvedIp.includes(':') ? 6 : 4;
-          // Re-validate test IP via ssrf-guard classification.
-          if (!allowPrivateNetwork) {
-            const klass = classifyIP(testResolvedIp);
-            if (klass !== 'public') {
-              cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
-              return;
-            }
-          }
-          cb(null, testResolvedIp, fam as 4 | 6);
-          return;
-        }
-        // Production path: defer to Node's default lookup then re-validate.
-        import('node:dns').then(({ lookup }) => {
-          lookup(host, (err, address, family) => {
-            if (err) { cb(err, '', 4); return; }
-            if (!allowPrivateNetwork) {
-              const klass = classifyIP(address);
-              if (klass !== 'public') {
-                cb(new Error('web_fetch_ssrf_postresolve_block'), '', 4);
-                return;
-              }
-            }
-            cb(null, address, family as 4 | 6);
-          });
-        }).catch(e => cb(e as Error, '', 4));
-      },
-    },
+    connect: { lookup },
     connectTimeout: connectTimeoutMs,
   });
 }

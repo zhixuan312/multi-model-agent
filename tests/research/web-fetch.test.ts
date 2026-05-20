@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
-import { webFetch } from '../../packages/core/src/research/web-fetch.js';
+import { webFetch, makeConnectGuardLookup } from '../../packages/core/src/research/web-fetch.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
 
 const cfg = ResearchConfigSchema.parse({}).fetch;
@@ -402,6 +402,48 @@ describe('webFetch — happy path', () => {
     });
     expect(r.status).toBe('error');
     expect(r.reasonCode).toBe('web_fetch_timeout');
+  });
+});
+
+describe('web-fetch — connect-guard lookup contract (undici all:true array form)', () => {
+  // Regression guard: undici invokes connect.lookup with { all: true } and reads
+  // addresses[0].address. The lookup MUST call back with an array of
+  // { address, family }, not the single-result dns.lookup form. Returning a bare
+  // string made undici throw ERR_INVALID_IP_ADDRESS → web_fetch_request_failed,
+  // breaking every production webFetch that used the connect-guard agent.
+  it('test-seam success path returns the array form (not a bare string)', async () => {
+    const lookup = makeConnectGuardLookup(false, '8.8.8.8'); // public IP, allowed
+    const result = await new Promise<{ err: Error | null; addresses: unknown }>((resolve) => {
+      lookup('example.com', { all: true }, (err, addresses) => resolve({ err, addresses }));
+    });
+    expect(result.err).toBeNull();
+    expect(Array.isArray(result.addresses)).toBe(true);
+    expect(result.addresses).toEqual([{ address: '8.8.8.8', family: 4 }]);
+  });
+
+  it('production path returns the array form and re-validates every resolved IP', async () => {
+    // allowPrivateNetwork:true so loopback resolution is permitted — no real
+    // egress, just exercises the dns.lookup({ all:true }) → array passthrough.
+    const lookup = makeConnectGuardLookup(true, undefined);
+    const result = await new Promise<{ err: Error | null; addresses: any }>((resolve) => {
+      lookup('localhost', { all: true }, (err, addresses) => resolve({ err, addresses }));
+    });
+    expect(result.err).toBeNull();
+    expect(Array.isArray(result.addresses)).toBe(true);
+    expect(result.addresses.length).toBeGreaterThan(0);
+    for (const entry of result.addresses) {
+      expect(typeof entry.address).toBe('string');
+      expect([4, 6]).toContain(entry.family);
+    }
+  });
+
+  it('test-seam blocks a private IP via the SSRF classifier', async () => {
+    const lookup = makeConnectGuardLookup(false, '10.0.0.1'); // private, must block
+    const result = await new Promise<{ err: Error | null }>((resolve) => {
+      lookup('example.com', { all: true }, (err) => resolve({ err }));
+    });
+    expect(result.err).toBeInstanceOf(Error);
+    expect(result.err?.message).toBe('web_fetch_ssrf_postresolve_block');
   });
 });
 
