@@ -8,6 +8,13 @@ export default defineConfig({
     exclude: ['.worktrees/**', '**/node_modules/**', 'tests/perf/**'],
     pool: 'forks',
     poolOptions: { forks: { maxForks: 2, minForks: 1 } },
+    server: {
+      deps: {
+        // Inline so vi.mock() can intercept the SDK from source's transitive
+        // import; the 0.3.x bundled .mjs isn't mockable while externalized.
+        inline: ['@anthropic-ai/claude-agent-sdk'],
+      },
+    },
   },
   resolve: {
     alias: [
