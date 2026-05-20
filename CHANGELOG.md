@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.10] - 2026-05-20
+
+Cleanup release — two structural normalizations (review-component dissolution + stores normalization) plus a production web-fetch fix and a batch-progress correction. Net −2200 lines. No new features; no wire-schema changes (contract goldens unchanged except the architecture folder list). One latent production bug fixed: the research/explore SSRF connect-guard returned the wrong undici lookup shape and failed 100% of real fetches. 2122 tests pass, build green, zero skipped tests, zero `@deprecated` markers remain.
+
+### Changed
+
+- **Review prompts relocated to their lifecycle handlers** (`packages/core/src/lifecycle/handlers/`). `spec-review.ts` → `spec-review-prompt.ts`, `quality-review.ts` → `quality-review-prompt.ts`, plus `parse-review-report.ts` and `tier-policy.ts` moved out of the deleted `review/` directory to sit beside `review-stage.ts` (their sole caller). `rework.ts` → `rework-prompt.ts` beside `rework-stage.ts`; the `reworkTemplate` object collapsed to a plain `reworkPrompt(ctx)` function (the never-sent `systemPrompt` field was dead). `mapReviewVerdicts` moved to `packages/core/src/lifecycle/review-verdict-mapping.ts` beside `task-executor.ts`. Prompt output is byte-identical — pure relocation.
+- **`SEVERITY_LADDER` extracted to `packages/core/src/tools/shared/severity-ladder.ts`** from the deleted `review/templates/finding-criteria.ts`; its three tool-config consumers (audit/debug/review) import from the new path.
+- **In-memory context-block store is now unconditional** (`packages/core/src/stores/project-context-registry.ts`, `packages/server/src/http/project-registry.ts`). The storage-mode selection (disk vs memory) is gone.
+- **`BatchRegistry.complete()` now releases context-block pins**, symmetric with `fail()` (`packages/core/src/stores/batch-registry.ts`) — pins are released on successful completion, not just on failure.
+- **Batch-progress headline counts only stages that actually run.** The `[stageIndex/stageTotal]` display now shows the running stage's ordinal among non-skipped stages and uses the driver-published planned total as a stable denominator (`packages/core/src/events/task-envelope.ts`, `packages/core/src/lifecycle/lifecycle-driver.ts`). Read-only routes previously jumped `[1/2] → [5/5]` as skipped stages were recorded; they now show `[1/2] → [2/2]`.
+
+### Fixed
+
+- **Web-fetch SSRF connect-guard returned the wrong undici lookup shape** (`packages/core/src/research/web-fetch.ts`). undici invokes `connect.lookup` with `{ all: true }` and expects an array of `{ address, family }`; the guard called back with the single-result `dns.lookup` form, so undici read `addresses[0].address === undefined`, threw `ERR_INVALID_IP_ADDRESS`, and surfaced as `web_fetch_request_failed` — every production `webFetch` using the connect-guard agent failed at connect time. Invisible because the only test exercising the path was network-gated and off by default. Now forwards `opts` to `dns.lookup`, re-validates every resolved IP via the SSRF classifier, and returns the array form. Locked by three deterministic unit tests (`makeConnectGuardLookup`).
+- **Retry batch terminalization** (`packages/server/src/http/handlers/tools/retry.ts`). Restored the `batchCache.complete`/`abort` calls so retry batches reach a terminal state correctly.
+
+### Removed
+
+- **`packages/core/src/review/` directory deleted entirely.** 12 dead files removed (the `quality-review-{audit,debug,investigate,review}` + `annotator-*` templates, the `index.ts` barrel, `review-types.ts`, `skipped-result.ts`); the live pieces relocated (see Changed).
+- **`ToolConfig.reviewTemplates` property removed** (`packages/core/src/lifecycle/tool-config-types.ts`) — it was populated by six tool-configs but never read at runtime.
+- **File-backed context-block store + disk-only `maxProjects` + serve startup sweep/migration removed** (`packages/core/src/stores/file-backed-context-block-store.ts`, `context-block-project-cap.ts`, `packages/server/src/cli/serve.ts`, `packages/server/src/migration/storage-migration.ts`). Context blocks are in-memory only; the `MMAGENT_CONTEXT_BLOCK_STORAGE` env switch and the `.mma/context-blocks/` on-disk persistence added in 4.7.x are gone. **BREAKING for anyone relying on disk-backed context-block persistence across daemon restarts.**
+- **All `@deprecated` markers deleted.** Dead `PerTaskCostSlots` interface (zero importers — the live wire `costUSD`/`totalCostUSD` fields come from `terminal-handlers.ts` and are unchanged), dead `parseResearchReport` function, and dead `defaultIPPinningDispatcher` (the old broken IP-pinning dispatcher). Zero `@deprecated` markers remain in `packages/`.
+
 ## [4.7.9] - 2026-05-19
 
 Research route rebuild + telemetry attribution fixes + read-route completion bug. `/research` is now a deterministic two-turn pipeline (turn-1 produces a `QueryPlan`; turn-2 reasons over a pre-built `EvidencePack`) with `tools: 'none'` on the worker — workers never call native `WebSearch`/`WebFetch`. Adapters degrade cleanly when API keys are missing (Semantic Scholar skipped without key; GitHub search drops `kind=code` without PAT). Telemetry per-stage `model` field now records the actual reviewer/annotator model instead of the implementer's, non-LLM stages (committing, skipped stages) are filtered out of the wire `stages` array, and the reviewer parser's `approved → changes_required` override is severity-gated (only flips for `critical`/`high` findings). Pre-existing read-route completion bug fixed: every successful investigate/research/audit/debug/review used to seal as `terminal_status=error, worker_status=failed` because `criteriaSucceeded` was never populated on `lastRunResult`. 2159 tests pass, build green.
@@ -572,7 +596,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...HEAD
+[4.7.10]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...v4.7.10
 [4.7.9]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.8...v4.7.9
 [4.7.8]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.7...v4.7.8
 [4.7.7]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.6...v4.7.7
