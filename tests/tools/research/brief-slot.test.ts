@@ -7,10 +7,9 @@ import {
 } from '../../../packages/core/src/tools/research/brief-slot.js';
 import type { EvidencePack } from '../../../packages/core/src/research/evidence-pack.js';
 
-// All assertions go through the public slot (compileResearch is now a
-// private function inside brief-slot.ts). Each test runs the slot on an
-// enriched input and reads the resulting brief's compiledPrompt field —
-// the assembled worker prompt.
+// The legacy single-pass compiledPrompt was removed; the slot now carries
+// only researchQuestion + contextBlockIds. The actual worker input is the
+// two-turn pre-loop prefix (compileResearchImplementerPrefix), tested below.
 
 const baseInput = {
   researchQuestion: 'What approaches exist for streaming JSON parsing under 100KB?',
@@ -21,55 +20,11 @@ const baseInput = {
   hasBrave: false,
 };
 
-function run(overrides: Partial<typeof baseInput> = {}) {
-  const briefs = researchBriefSlot({ ...baseInput, ...overrides } as any);
-  return briefs[0].compiledPrompt;
-}
-
-describe('researchBriefSlot — compiled prompt content', () => {
-  it('embeds researchQuestion and background in the prompt', () => {
-    const out = run();
-    expect(out).toContain('streaming JSON');
-    expect(out).toContain('single-pass push parser');
-  });
-
-  it('lists user-described sources verbatim', () => {
-    const out = run({
-      userSources: ['arxiv:cs.PL', 'github:topic:json-parser'],
-      hasBrave: true,
-    });
-    expect(out).toContain('arxiv:cs.PL');
-    expect(out).toContain('github:topic:json-parser');
-  });
-
-  it('includes Brave-search guidance only when hasBrave', () => {
-    const withBrave = run({ hasBrave: true });
-    expect(withBrave).toMatch(/web_search/);
-
-    const withoutBrave = run({ hasBrave: false });
-    expect(withoutBrave).toMatch(/no Brave keys configured|no open-web search/);
-  });
-
-  it('includes the trust-boundary preamble', () => {
-    const out = run();
-    expect(out).toMatch(/untrusted external data/i);
-    expect(out).toMatch(/injection/i);
-  });
-
-  it('embeds context blocks at the top of the prompt', () => {
-    const out = run({
-      resolvedContextBlocks: [{ id: 'blk_1', content: 'PRIOR ROUND FINDINGS: …' }],
-    });
-    expect(out.indexOf('PRIOR ROUND FINDINGS')).toBeLessThan(
-      out.indexOf('streaming JSON'),
-    );
-  });
-});
-
 describe('researchBriefSlot — brief construction', () => {
-  it('returns one brief', () => {
+  it('returns one brief carrying the research question', () => {
     const briefs = researchBriefSlot({ ...baseInput } as any);
     expect(briefs).toHaveLength(1);
+    expect(briefs[0].researchQuestion).toBe(baseInput.researchQuestion);
   });
 
   it('forwards contextBlockIds onto the brief', () => {
