@@ -8,7 +8,6 @@
 //   - models (per-role model names)
 //   - implementationReport (fallback parse of last.output)
 //   - structuredReport (canonical from annotator, else fallback parser)
-//   - fileArtifactsMissing
 //   - reviewerNotes / errors / verdict slots
 //   - actualCostUSD (sum across entered stages)
 //   - status / errorCode / terminationReason (v5 M3/M4 fixes)
@@ -22,7 +21,6 @@ import type { RuntimeRunResult } from '../../types.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
 import { sumStageCosts } from '../shared-compute.js';
 
-const READ_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
 export function enrichRuntimeResult(state: LifecycleState): void {
   if (state.lastRunResult === undefined) return;
@@ -83,7 +81,6 @@ export function enrichRuntimeResult(state: LifecycleState): void {
     };
   }
 
-  if (e.fileArtifactsMissing === undefined) e.fileArtifactsMissing = false;
 
   // ── reviewReason text fields ────────────────────────────────────────────────
   if (e.specReviewReason === undefined) {
@@ -141,12 +138,6 @@ export function enrichRuntimeResult(state: LifecycleState): void {
       qualityReviewer: e.qualityReviewStatus === 'approved' || e.qualityReviewStatus === 'changes_required' ? otherModel : null,
     };
   }
-
-  // ── A4b: chain-failed and read-only routes are exempt from artifact downgrade
-  const chainAlreadyFailed = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
-  const route = typeof state.route === 'string' ? state.route : '';
-  const _isReadOnlyRoute = READ_ONLY_ROUTES.has(route);
-  void chainAlreadyFailed; void _isReadOnlyRoute;
 
   // ── envelope-level reviewer notes / verdicts / errors / rework state ────────
   if (state.specReviewerNotes !== undefined) (enriched as { specReviewerNotes?: string }).specReviewerNotes = state.specReviewerNotes;
