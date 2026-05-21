@@ -222,56 +222,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
               : snap.fallback;
           }
         }
-
-        // Group-aware suffix (4.6.0+): only applies when this batch was dispatched
-        // via serializeSameRepo and the dispatcher attached group metadata.
-        if (entry.groups && entry.groups.length > 0) {
-          const perTask = entry.perTaskHeadlineSnapshots;
-          type GroupRunning = { groupIdx: number; earliestDispatchedAt: number; inflightInGroup: number };
-          const runningByGroup: GroupRunning[] = [];
-          let totalInflight = 0;
-          entry.groups.forEach((g, gi) => {
-            let earliest = Infinity;
-            let inflight = 0;
-            for (const ti of g.taskIndices) {
-              const snap = perTask?.get(ti);
-              if (!snap) continue;
-              // Convention: presence of a snapshot on a pending batch === in-flight.
-              inflight++;
-              totalInflight++;
-              if (snap.dispatchedAt < earliest) earliest = snap.dispatchedAt;
-            }
-            if (inflight > 0) {
-              runningByGroup.push({ groupIdx: gi, earliestDispatchedAt: earliest, inflightInGroup: inflight });
-            }
-          });
-          // Pick leader by earliest dispatchedAt; ties break to smaller groupIdx.
-          runningByGroup.sort((a, b) =>
-            a.earliestDispatchedAt - b.earliestDispatchedAt || a.groupIdx - b.groupIdx,
-          );
-          const leader = runningByGroup[0];
-
-          if (entry.groups.length === 1) {
-            // Single-group batch: append (sequential); strip any +K suffix
-            // because there's never a concurrent sibling in a single group.
-            headline = headline.replace(/ \+\d+/, '') + ' (sequential)';
-          } else if (leader) {
-            // Multi-group batch: insert (group X/Y, sequential) before the
-            // " - <elapsed>" tail. +K now reflects only OTHER-group inflight.
-            const otherInflight = totalInflight - leader.inflightInGroup;
-            const groupSuffix = ` (group ${leader.groupIdx + 1}/${entry.groups.length}, sequential)`;
-            headline = headline.replace(/ \+\d+/, '');
-            if (otherInflight > 0) {
-              headline = headline.replace(/( - )/, `${groupSuffix} +${otherInflight}$1`);
-            } else {
-              headline = headline.replace(/( - )/, `${groupSuffix}$1`);
-            }
-          } else if (entry.groups.length > 1) {
-            // Multi-group batch with no in-flight task yet (pre-dispatch race
-            // window): still annotate so the user knows grouping is in play.
-            headline += ` (groups: ${entry.groups.length}, sequential)`;
-          }
-        }
       }
 
       res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });

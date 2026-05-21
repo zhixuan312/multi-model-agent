@@ -63,8 +63,6 @@ export interface BatchEntry {
   startedAt: number;  // epoch ms — TaskEnvelope carries its own ISO startedAt
   terminalAt?: string | null;
   taskEnvelopes?: (TaskEnvelopeStore | null)[];
-  groups?: Array<{ key: string; taskIndices: number[] }>;
-  groupingTelemetry?: { groupCount: number; groupSizes: number[]; serializationApplied: boolean };
   error?: { code: string; message: string; stack?: string };
   // Required infrastructure fields (always set by register()):
   projectCwd: string;
@@ -183,18 +181,6 @@ export class BatchRegistry {
       throw new Error(`BatchRegistry.attachEnvelope: double-attach at ${batchId}[${taskIndex}]`);
     }
     entry.taskEnvelopes[taskIndex] = env;
-  }
-
-  attachGroups(batchId: string, groups: Array<{ key: string; taskIndices: number[] }>): void {
-    const entry = this.map.get(batchId);
-    if (!entry) return;
-    entry.groups = groups;
-  }
-
-  setGroupingTelemetry(batchId: string, info: { groupCount: number; groupSizes: number[]; serializationApplied: boolean }): void {
-    const entry = this.map.get(batchId);
-    if (!entry) return;
-    entry.groupingTelemetry = info;
   }
 
   delete(batchId: string): boolean {

@@ -103,36 +103,6 @@ export interface ExecutionContext {
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
 
-  /**
-   * Number of repo-groups the current batch was split into by
-   * groupTasksByRepo. Set by task-executor immediately after grouping,
-   * BEFORE any dispatchOne fires. Consumed by task-runner.ts to gate
-   * PARALLEL_SAFETY_SUFFIX (suffix is only appended when this value > 1,
-   * because within a single group tasks run serially and full builds are
-   * safe).
-   */
-  batchGroupCount?: number;
-
-  /**
-   * Server-supplied callback that records the per-batch grouping snapshot
-   * onto the BatchRegistry entry. Optional (CLI/local clients don't have
-   * a BatchRegistry — same pattern as recordHeartbeat). Called once per
-   * batch by task-executor immediately after groupTasksByRepo resolves.
-   */
-  attachBatchGroups?: (groups: Array<{ key: string; taskIndices: number[] }>) => void;
-
-  /**
-   * Server-supplied callback that records grouping telemetry to be
-   * attached to the eventual batch_completed event. Optional — same
-   * pattern as recordHeartbeat / attachBatchGroups. Called once per
-   * batch by task-executor immediately after grouping resolves.
-   */
-  setBatchGroupingTelemetry?: (info: {
-    groupCount: number;
-    groupSizes: number[];
-    serializationApplied: boolean;
-  }) => void;
-
   /** Telemetry recorder — server-only, used at terminal to record task.completed. */
   recorder?: {
     recordTaskCompleted: (params: {
