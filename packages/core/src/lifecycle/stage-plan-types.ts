@@ -90,7 +90,6 @@ export interface LifecycleState {
   responseEnvelope?: unknown;
 
   // StagePlan row 5.2 gate inputs (typed; previously read via `(s as any)`):
-  autoCommit?: boolean;
   filesChanged?: string[];
   readOnlyTask?: boolean;
   contextBlockIds?: string[];

@@ -94,7 +94,6 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       contextBlockIds: brief.contextBlockIds,
       filePaths,
       mainModel: ctx.mainModel ?? undefined,
-      autoCommit: false,
     };
   },
   reportSchema: noStructuredReportSchema,

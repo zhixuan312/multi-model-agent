@@ -5,7 +5,6 @@ function baseState(overrides: any = {}) {
   return {
     route: 'delegate',
     reviewPolicy: 'full',
-    autoCommit: true,
     gates: {
       implement: { outcome: 'advance' },
       commit: { payload: { kind: 'committed' } },
@@ -53,14 +52,5 @@ describe('annotate-parser — deterministic gate (workerStatus no longer load-be
     }));
     expect(r.completed).toBe(false);
     expect(r.message).toMatch(/commit/i);
-  });
-
-  it('autoCommit=false + review approved + no commit gate → completed=true', () => {
-    const proposed: any = { completed: true, message: 'ok', findings: [] };
-    const r = applyAnnotatePreconditions(proposed, baseState({
-      autoCommit: false,
-      gates: { implement: { outcome: 'advance' }, commit: undefined },
-    }));
-    expect(r.completed).toBe(true);
   });
 });

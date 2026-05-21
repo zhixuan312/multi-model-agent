@@ -23,7 +23,6 @@ export interface CompletionInputs {
   reworkError: string | undefined;
   unaddressedFindingIds: string[] | undefined;
   commitKind: 'committed' | 'no_op' | undefined;
-  autoCommit: boolean;
   criteriaSucceeded: string[] | undefined;
 }
 
@@ -58,8 +57,7 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
 
   const commitOk =
     inputs.commitKind === 'committed' ||
-    inputs.commitKind === 'no_op' ||
-    inputs.autoCommit === false;
+    inputs.commitKind === 'no_op';
   if (!commitOk) reasons.push('commit did not complete');
 
   return { completed: implementOk && reviewOk && commitOk, reasons };
@@ -93,7 +91,6 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     reworkError: state.reworkError,
     unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds ?? last?.unaddressedFindingIds,
     commitKind,
-    autoCommit: state.autoCommit ?? true,
     criteriaSucceeded: last?.criteriaSucceeded,
   };
 }

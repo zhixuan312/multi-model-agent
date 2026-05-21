@@ -121,16 +121,17 @@ describe('applyAnnotatePreconditions — write route', () => {
     expect(result.completed).toBe(true);
   });
 
-  it('completes when autoCommit=false explains the absent commit', () => {
+  it('does NOT complete a write route when the commit gate is absent', () => {
+    // The autoCommit override that used to let a write route complete without a
+    // commit was removed; commit completion is now gated solely by commit kind.
     const state = mkState({
       route: 'delegate',
       reviewVerdict: 'approved',
-      autoCommit: false,
       gates: { implement: { outcome: 'advance' }, commit: undefined },
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload(), state);
-    expect(result.completed).toBe(true);
+    expect(result.completed).toBe(false);
   });
 });
 
@@ -201,7 +202,6 @@ describe('applyAnnotatePreconditions — recovery-message synthesis', () => {
       reviewVerdict: 'approved',
       commits: [],
       gates: { implement: { outcome: 'advance' }, commit: undefined },
-      autoCommit: true,
       lastRunResult: { workerStatus: 'done', status: 'ok' },
     } as Partial<LifecycleState>);
     const result = applyAnnotatePreconditions(mkPayload({ message: '' }), state);

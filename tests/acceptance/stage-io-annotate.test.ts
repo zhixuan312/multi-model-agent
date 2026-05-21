@@ -171,7 +171,6 @@ describe('AC-23: completed=false message names specific blocking gate or finding
         reworkApplied: false,
         gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
         lastRunResult: { workerStatus: 'failed' } as never,
-        autoCommit: true,
       } as never,
     );
     expect(result.completed).toBe(true);

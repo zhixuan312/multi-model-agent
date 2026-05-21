@@ -44,7 +44,6 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
       contextBlockIds: origTask?.contextBlockIds ?? [],
       mainModel: origTask?.mainModel,
       done: origTask?.done,
-      autoCommit: origTask?.autoCommit ?? false,
     };
   },
   reportSchema: noStructuredReportSchema,

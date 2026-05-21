@@ -47,7 +47,6 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
-      autoCommit: false,
       filePaths: brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined,
       mainModel: ctx.mainModel ?? undefined,
     };

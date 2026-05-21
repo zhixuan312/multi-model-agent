@@ -82,8 +82,8 @@ describe('AC-18: Layer-2 shouldRun decisions for representative stages', () => {
     expect(d.run).toBe(false);
   });
 
-  it('commit.shouldRun returns false when autoCommit=false', () => {
-    const state = { autoCommit: false, gates: {} } as unknown as LifecycleState;
+  it('commit.shouldRun returns false when no files changed', () => {
+    const state = { gates: {} } as unknown as LifecycleState;
     const d = commit.shouldRun(state);
     expect(d.run).toBe(false);
   });

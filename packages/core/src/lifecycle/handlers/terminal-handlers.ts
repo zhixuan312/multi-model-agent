@@ -119,7 +119,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
   }
   const completionInputs = extractCompletionInputs(state);
   // Use deriveCompletion when implement gate is populated. commitKind being
-  // undefined is legitimate (read routes; autoCommit=false routes) — deriveCompletion
+  // undefined is legitimate (read routes have no commit stage) — deriveCompletion
   // handles those branches internally. Only fall back to workerStatus when the
   // implement gate itself is missing (lifecycle never started, brief_too_vague paths).
   const hasGateInputs = completionInputs.implementOutcome !== undefined;

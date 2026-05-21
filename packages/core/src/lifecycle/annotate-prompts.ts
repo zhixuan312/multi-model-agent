@@ -21,7 +21,7 @@ Rules:
 2. Set completed=true ONLY IF (the system applies these gates after your proposal):
   - implement stage advanced; AND
   - review is approved OR (changes_required + rework applied + no unaddressed findings) OR reviewPolicy=none; AND
-  - commit gate kind is 'committed' or 'no_op' OR autoCommit=false.
+  - commit gate kind is 'committed' or 'no_op'.
 Worker self-assessment is recorded in telemetry but does not gate completion.
 3. If completed=false, message must name a specific blocking gate or finding ID AND suggest a recovery action.
 4. filesChanged and commitSha must come from commit.payload if it committed, else [] and null. Do not invent them.

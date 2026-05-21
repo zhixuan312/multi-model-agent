@@ -57,9 +57,7 @@ describe('review-rejection → wire errorCode end-to-end', () => {
       // that fails R1 (ok + errorCode). Review rejection means no commit
       // stage fires (commit gate stays unset), which deriveCompletion
       // correctly translates to completed=false.
-      gates: { implement: { outcome: 'advance' } },
-      autoCommit: true,
-      taskCompletedRecorded: false,
+      gates: { implement: { outcome: 'advance' } },      taskCompletedRecorded: false,
     };
 
     // Add a synthetic implementing stage so wire-schema R2.1 passes (empty
@@ -125,9 +123,7 @@ describe('review-rejection → wire errorCode end-to-end', () => {
       // that fails R1 (ok + errorCode). Review rejection means no commit
       // stage fires (commit gate stays unset), which deriveCompletion
       // correctly translates to completed=false.
-      gates: { implement: { outcome: 'advance' } },
-      autoCommit: true,
-      taskCompletedRecorded: false,
+      gates: { implement: { outcome: 'advance' } },      taskCompletedRecorded: false,
     };
 
     // Add a synthetic implementing stage so wire-schema R2.1 passes (empty
