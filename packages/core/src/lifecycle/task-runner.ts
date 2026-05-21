@@ -298,7 +298,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
     providers,
-    implementerIdentity: undefined,
     getSession,
     closeSessions,
     getActivePids,

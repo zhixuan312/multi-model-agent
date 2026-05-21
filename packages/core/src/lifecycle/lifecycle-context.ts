@@ -8,7 +8,6 @@ import type { Session } from '../types/run-result.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
-import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 
 import type { ProjectContext } from '../stores/project-context-registry.js';
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
@@ -42,7 +41,6 @@ export interface ExecutionContext {
   implementerProvider: Provider;
   /** Map of available tier → provider, keyed by AgentType. */
   providers: Partial<Record<AgentType, Provider>>;
-  implementerIdentity: CanonicalIdentity | undefined;
 
   /**
    * v4.4 session source-of-truth. Each call returns the (lazy-created)

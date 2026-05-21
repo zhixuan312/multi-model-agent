@@ -28,7 +28,6 @@ function makeCtx(): ExecutionContext {
     assignedTier: 'standard',
     implementerProvider: {} as ExecutionContext['implementerProvider'],
     providers: {},
-    implementerIdentity: undefined,
     timing: { startMs: Date.now(), timeoutMs: 60_000, deadlineMs: Date.now() + 60_000, stallTimeoutMs: 60_000 },
     stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
     implementerToolMode: 'full',

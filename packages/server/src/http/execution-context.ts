@@ -79,7 +79,6 @@ export function buildExecutionContext(
     assignedTier: 'standard',
     implementerProvider: undefined,
     providers: {},
-    implementerIdentity: undefined,
     timing: { startMs: now, timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },
     stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
     implementerToolMode: undefined,
