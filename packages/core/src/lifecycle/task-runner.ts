@@ -91,7 +91,6 @@ export interface RunTasksOptions {
   route?: string;
   client?: string;
   bus?: EnvelopeBus;
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   batchGroupCount?: number;
 }
 
@@ -157,7 +156,6 @@ export async function runTasks(
         ...(options.route !== undefined && { route: options.route }),
         ...(options.client !== undefined && { client: options.client }),
         ...(options.bus && { bus: options.bus }),
-        ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
       });
     }),
   );
@@ -183,7 +181,6 @@ export interface DispatchTaskInput {
    *  before dispatch. Without this, the worker LLM never sees the prior-round
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   /** Registry to attach/detach the per-task ExecutionContext on. When provided,
    *  shutdown drain in serve.ts can walk the registry and call closeSessions()
    *  on every in-flight task before the daemon exits. */
@@ -305,7 +302,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
-    ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
     heartbeat,
     logger: input.logger,

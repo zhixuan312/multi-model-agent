@@ -84,8 +84,6 @@ export interface ExecutionContext {
   // ── Implementer policy ──
   implementerToolMode: TaskSpec['tools'];
 
-  /** Per-task review prompt builder — quality reviewer route customizes this. Optional. */
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
 
   // ── Group B: Bus + heartbeat ──
   bus: EnvelopeBus | undefined;
