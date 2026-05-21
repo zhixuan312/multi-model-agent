@@ -167,9 +167,12 @@ describe('AC-23: completed=false message names specific blocking gate or finding
       {
         route: 'delegate',
         reviewPolicy: 'full',
-        reviewVerdict: 'approved',
         reworkApplied: false,
-        gates: { implement: { outcome: 'advance' }, commit: { payload: { kind: 'committed' } } },
+        gates: {
+          implement: { outcome: 'advance' },
+          review: { outcome: 'advance', payload: { verdict: 'approved', findings: [] } },
+          commit: { payload: { kind: 'committed' } },
+        },
         lastRunResult: { workerStatus: 'failed' } as never,
       } as never,
     );

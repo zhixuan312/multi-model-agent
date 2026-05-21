@@ -8,6 +8,7 @@
 // values; filesChanged is the union of both phases.
 
 import type { LifecycleState } from '../stage-plan-types.js';
+import { reviewPayload } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RuntimeRunResult, AgentType, TaskSpec } from '../../types.js';
 import type { Session } from '../../types/run-result.js';
@@ -44,7 +45,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   if (state.reworkApplied !== undefined || state.reworkError !== undefined) {
     return reworkSkip('rework already applied', t0);
   }
-  if (state.reviewVerdict !== 'changes_required') {
+  if (reviewPayload(state).verdict !== 'changes_required') {
     return reworkSkip('rework skipped: review verdict is not changes_required', t0);
   }
 
@@ -53,7 +54,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   const last = state.lastRunResult as RuntimeRunResult | undefined;
   if (!ctx || !task || !last) return reworkSkip('rework skipped: missing context', t0);
 
-  const findings = state.reviewFindings ?? [];
+  const findings = reviewPayload(state).findings;
   if (findings.length === 0) {
     state.reworkApplied = false;
     return reworkSkip('rework skipped: review produced no findings', t0);

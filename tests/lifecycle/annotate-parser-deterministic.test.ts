@@ -1,8 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { applyAnnotatePreconditions } from '../../packages/core/src/lifecycle/annotate-parser.js';
 
+// Mirror the review verdict/findings into the review gate payload — the
+// reviewPayload accessor (and thus the completion gate) reads gates.review.payload.
+function withReviewGate(s: any) {
+  if (s.reviewVerdict !== undefined && !s.gates?.review) {
+    s.gates = { ...(s.gates ?? {}), review: { outcome: 'advance', payload: { verdict: s.reviewVerdict, findings: s.reviewFindings ?? [] } } };
+  }
+  return s;
+}
+
 function baseState(overrides: any = {}) {
-  return {
+  return withReviewGate({
     route: 'delegate',
     reviewPolicy: 'full',
     gates: {
@@ -15,7 +24,7 @@ function baseState(overrides: any = {}) {
     unaddressedFindingIds: [],
     lastRunResult: { workerStatus: 'done', criteriaSucceeded: [] },
     ...overrides,
-  };
+  });
 }
 
 describe('annotate-parser — deterministic gate (workerStatus no longer load-bearing)', () => {

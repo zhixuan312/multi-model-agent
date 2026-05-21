@@ -21,8 +21,17 @@ function mkPayload(over: Partial<AnnotatePayload> = {}): AnnotatePayload {
   };
 }
 
+// Mirror the review verdict/findings into the review gate payload — the
+// reviewPayload accessor (and thus the completion gate) reads gates.review.payload.
+function withReviewGate(s: any) {
+  if (s.reviewVerdict !== undefined && !s.gates?.review) {
+    s.gates = { ...(s.gates ?? {}), review: { outcome: 'advance', payload: { verdict: s.reviewVerdict, findings: s.reviewFindings ?? [] } } };
+  }
+  return s;
+}
+
 function mkState(over: Partial<LifecycleState> & { route?: string; lastRunResult?: unknown } = {}): LifecycleState {
-  return {
+  return withReviewGate({
     terminal: false,
     attemptIndex: 0,
     attemptBudget: 1,
@@ -30,7 +39,7 @@ function mkState(over: Partial<LifecycleState> & { route?: string; lastRunResult
     shutdownInProgress: false,
     route: 'delegate',
     ...over,
-  } as unknown as LifecycleState;
+  }) as unknown as LifecycleState;
 }
 
 describe('applyAnnotatePreconditions — write route', () => {

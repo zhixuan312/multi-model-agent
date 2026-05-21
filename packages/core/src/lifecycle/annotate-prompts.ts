@@ -6,6 +6,7 @@
 // or secrets (spec §15.2).
 
 import type { LifecycleState } from './stage-plan-types.js';
+import { reviewPayload } from './stage-plan-types.js';
 
 export function annotatePromptWrite(state: LifecycleState): string {
   const ctx = serializeWriteContext(state);
@@ -60,8 +61,8 @@ export function serializeWriteContext(state: LifecycleState): unknown {
       filesChanged: last.filesChanged ?? [],
     } : null,
     review: {
-      verdict: (state as any).reviewVerdict ?? null,
-      findings: stripEvidence((state as any).reviewFindings ?? []),
+      verdict: reviewPayload(state).verdict ?? null,
+      findings: stripEvidence(reviewPayload(state).findings),
     },
     rework: {
       applied: (state as any).reworkApplied ?? false,

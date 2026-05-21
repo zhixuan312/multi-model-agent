@@ -68,6 +68,7 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
 // also use the same extraction logic when reconstructing state from
 // persisted wire-record stages JSONB.
 import type { LifecycleState } from './stage-plan-types.js';
+import { reviewPayload } from './stage-plan-types.js';
 
 export function extractCompletionInputs(state: LifecycleState): CompletionInputs {
   const last = state.lastRunResult as { criteriaSucceeded?: string[]; unaddressedFindingIds?: string[] } | undefined;
@@ -85,7 +86,7 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     route: state.route as RouteName,
     implementOutcome: state.gates?.implement?.outcome,
     reviewPolicy: state.reviewPolicy,
-    reviewVerdict: state.reviewVerdict,
+    reviewVerdict: reviewPayload(state).verdict,
     reviewSubResults: (state as { reviewSubResults?: Array<{ name: 'spec' | 'quality'; verdict: string }> }).reviewSubResults,
     reworkApplied: state.reworkApplied,
     reworkError: state.reworkError,

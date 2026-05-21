@@ -43,6 +43,7 @@ describe('worker self-assess "failed" no longer blocks the wire record', () => {
       },
       gates: {
         implement: { outcome: 'advance' },
+        review: { outcome: 'advance', payload: { verdict: 'approved', findings: [] } },
         commit: { payload: { kind: 'committed', commitSha: 'abc1234', commitMessage: 's', filesChanged: ['x.ts'] } },
       },      executionContext: {
         envelope: store,
@@ -90,6 +91,7 @@ describe('worker self-assess "failed" no longer blocks the wire record', () => {
       },
       gates: {
         implement: { outcome: 'advance' },
+        review: { outcome: 'advance', payload: { verdict: 'changes_required', findings: [{ source: 'reviewer', claim: 'rejected' }] } },
         commit: { payload: { kind: 'committed', commitSha: 'def', commitMessage: 's', filesChanged: [] } },
       },      executionContext: {
         envelope: store,
