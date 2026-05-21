@@ -64,7 +64,6 @@ export async function runResearchPreLoop(
     }),
     researchQuestion: inp.researchQuestion,
     background:       inp.background,
-    contextBlocks:    inp.resolvedContextBlocks,
   });
   const cachedPrefix = compileResearchImplementerPrefix({
     researchQuestion: inp.researchQuestion,

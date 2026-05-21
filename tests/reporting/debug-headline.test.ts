@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { debugHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/debug.js';
+import { makeFindingsHeadlineTemplate } from '../../packages/core/src/reporting/findings-headline.js';
+const debugHeadlineTemplate = makeFindingsHeadlineTemplate('debug', 'high');
 import type { RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 

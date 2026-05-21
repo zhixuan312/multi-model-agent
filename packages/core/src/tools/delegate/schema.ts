@@ -6,7 +6,7 @@ const taskSchema = z.object({
   prompt: z.string().describe(
     'The task instruction. Required.',
   ),
-  agentType: z.enum(['standard', 'complex']).optional().describe(
+  agentType: z.enum(['standard', 'complex']).optional().default('standard').describe(
     'How hard the task is. Default: standard (cost-effective). Set to complex for harder reasoning or ambiguous scope.',
   ),
   filePaths: z.array(z.string()).optional().describe(

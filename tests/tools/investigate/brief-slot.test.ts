@@ -7,25 +7,21 @@ const baseInput = {
   contextBlockIds: [] as string[],
   tools: 'readonly' as const,
   subtype: 'default',
-  // enriched fields
-  resolvedContextBlocks: [],
+  // enriched field
   canonicalizedFilePaths: [],
-  relativeFilePathsForPrompt: [],
 };
 
 describe('investigateBriefSlot', () => {
-  it('returns one brief carrying question + compiledPrompt', () => {
+  it('returns one brief carrying the question', () => {
     const briefs = investigateBriefSlot({ ...baseInput } as any);
     expect(briefs).toHaveLength(1);
     expect(briefs[0].question).toBe('How does X work?');
-    expect(briefs[0].compiledPrompt).toContain('How does X work?');
   });
 
   it('forwards canonicalizedFilePaths into brief.filePaths', () => {
     const briefs = investigateBriefSlot({
       ...baseInput,
       canonicalizedFilePaths: ['/abs/foo.ts'],
-      relativeFilePathsForPrompt: ['foo.ts'],
     } as any);
     expect(briefs[0].filePaths).toEqual(['/abs/foo.ts']);
   });

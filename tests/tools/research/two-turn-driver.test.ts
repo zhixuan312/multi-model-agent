@@ -24,7 +24,7 @@ const baseDeps = (responses: string[]): TwoTurnDeps => ({
     totalQueries: 1, budgetExceeded: false,
   }),
   researchQuestion: 'Q?',
-  background: undefined, contextBlocks: [],
+  background: undefined,
 });
 
 describe('two-turn-driver', () => {

@@ -86,30 +86,6 @@ export const DEBUG_FAILURE_MODES = [
   '- low: possible contributing factor or partial trace; weak evidence but worth surfacing for the maintainer to consider against other angles\' candidates.',
 ].join('\n');
 
-/**
- * Counter-balance to the SEVERITY_LADDER's anti-inflation hint.
- *
- * The shared severity ladder warns against inflation. For debug, the
- * common failure is the OPPOSITE — workers stop at the first plausible
- * explanation (over-confidence on a shallow trace) rather than tracing
- * to the actual cause. This block tells the worker the typical debug
- * failure is shallow root-cause, not noisy hypothesis lists.
- */
-export const THOROUGHNESS_REMINDER_DEBUG = [
-  'Thoroughness expectation for debug investigations:',
-  '- For non-trivial failures (test failure, runtime error, unexpected behavior), stopping at the first plausible explanation is the typical debug failure mode. Always check for SYMPTOM-NOT-CAUSE before filing a finding: ask "if I changed this line, would the failure still happen via a different path?"',
-  '- The SEVERITY_LADDER warns against inflation. That warning is calibrated for code reviews — for debug, the common failure is OVER-CONFIDENCE on a shallow trace (calling a symptom location the cause). Apply the failure-mode taxonomy first; THEN calibrate severity.',
-  '- Do not invent hypotheses to hit a quota. But if you have only one finding and the failure is non-trivial, double-check categories 1, 2, 3, and 5 (symptom-not-cause, scapegoat file, incomplete trace, parallel causes) — these are the ones investigators most often miss on first pass.',
-  '- Limit yourself to 3-5 most-likely hypotheses. Do NOT enumerate implausible ones to pad the list.',
-  '',
-  'Symptom → cause walk (REQUIRED on every investigation):',
-  '- Start at the SYMPTOM (where the failure surfaces — the error message, the failing assertion, the wrong output).',
-  '- Walk UPSTREAM in the call/data flow. At each step, check whether the state at that point is consistent with the failure or already wrong. The point where the state first becomes wrong is the cause.',
-  '- For each step in the walk, cite a file:line. If the walk crosses a function boundary, cite both sides (caller line + callee line).',
-  '- Worked example. A test fails with `TypeError: cannot read property "id" of undefined` at `tests/users.test.ts:42` (assertion on the response). The walk: assertion sees `response.user === undefined`; the route handler at `src/handlers/getUser.ts:18` returns `{ user: rows[0] }` from a DB call; the DB call at `src/db/users.ts:34` returns `[]` for the test fixture id; the fixture loader at `tests/fixtures/users.ts:12` writes to a different table than the handler reads. → CAUSE is `tests/fixtures/users.ts:12` (wrong table). The TypeError at `tests/users.test.ts:42` is the SYMPTOM. A finding that named `getUser.ts:18` as the cause would have shipped a fix that adds null-checking — masking the bug instead of fixing it.',
-  '- Most investigators miss findings of this shape on first pass because the failing line is loud and the upstream cause is quiet. The symptom → cause walk forces the trace.',
-].join('\n');
-
 export const ANNOTATOR_AWARENESS_DEBUG = [
   'After your output, an annotator validates each finding against this debug rubric:',
   '- Is each finding a hypothesis with a complete trace from symptom to cause (not a point observation at the symptom)?',

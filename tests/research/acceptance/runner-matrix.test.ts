@@ -59,7 +59,7 @@ describe('Acceptance — runner matrix + closed pipeline (A1, A2, A3, A4)', () =
     await runTwoTurnDriver({
       session: makeSession([validPlan]) as any,
       runOrchestrator: async () => { calls++; return { sources: [], failedAttempts: [], generatedAt: 'x', totalQueries: 0, budgetExceeded: false }; },
-      researchQuestion: 'Q?', background: undefined, contextBlocks: [],
+      researchQuestion: 'Q?', background: undefined,
     });
     expect(calls).toBe(1);
   });
@@ -67,7 +67,7 @@ describe('Acceptance — runner matrix + closed pipeline (A1, A2, A3, A4)', () =
   it('A4: tools/research/tool-config sets tools=none (no native tool surface)', async () => {
     const mod = await import('../../../packages/core/src/tools/research/tool-config.js');
     const fakeCtx: any = { config: { defaults: { timeoutMs: 1000, sandboxPolicy: 'cwd-only' } }, cwd: '/tmp', projectContext: undefined, mainModel: 'claude-opus-4-7' };
-    const spec = mod.toolConfig.buildTaskSpec({ compiledPrompt: 'p', contextBlockIds: [] } as any, fakeCtx);
+    const spec = mod.toolConfig.buildTaskSpec({ researchQuestion: 'Q?', contextBlockIds: [] } as any, fakeCtx);
     expect(spec.tools).toBe('none');
   });
 });

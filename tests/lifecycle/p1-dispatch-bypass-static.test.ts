@@ -9,24 +9,24 @@ function read(rel: string): string {
 }
 
 describe('Precondition P1 — read-route dispatch bypass (static-source verification)', () => {
-  it('perform-implementation.ts prefers parallelTarget over task.prompt for read routes', () => {
+  it('perform-implementation.ts prefers readTarget over task.prompt for read routes', () => {
     const src = read('packages/core/src/lifecycle/perform-implementation.ts');
-    // The bypass relies on: const targetContent = parallelTarget?.trim() ? parallelTarget : (document?.trim() ? document : task.prompt);
-    expect(src).toMatch(/parallelTarget/);
-    expect(src).toMatch(/parallelTarget.*\?.*parallelTarget.*:/s);
+    // The bypass relies on: const targetContent = readTarget?.trim() ? readTarget : (document?.trim() ? document : task.prompt);
+    expect(src).toMatch(/readTarget/);
+    expect(src).toMatch(/readTarget.*\?.*readTarget.*:/s);
   });
 
-  it('all 5 read-only tool-configs set parallelTarget in buildTaskSpec', () => {
+  it('all 5 read-only tool-configs set readTarget in buildTaskSpec', () => {
     for (const route of ['audit', 'review', 'debug', 'investigate', 'research']) {
       const path = `packages/core/src/tools/${route}/tool-config.ts`;
       const src = read(path);
-      // Each tool-config's buildTaskSpec must set parallelTarget so the dispatch bypass kicks in
-      expect(src, `${route} tool-config must set parallelTarget`).toMatch(/parallelTarget\s*:/);
+      // Each tool-config's buildTaskSpec must set readTarget so the dispatch bypass kicks in
+      expect(src, `${route} tool-config must set readTarget`).toMatch(/readTarget\s*:/);
     }
   });
 
-  it('parallel-criteria-routes.ts defines FINDING_FORMAT_SHARED', () => {
-    const src = read('packages/core/src/lifecycle/parallel-criteria-routes.ts');
+  it('read-route-criteria.ts defines FINDING_FORMAT_SHARED', () => {
+    const src = read('packages/core/src/lifecycle/read-route-criteria.ts');
     expect(src).toMatch(/FINDING_FORMAT_SHARED/);
   });
 });

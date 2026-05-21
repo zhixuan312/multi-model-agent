@@ -4,18 +4,9 @@ import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
-import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
-import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
+import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
+import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
-import { SEVERITY_LADDER } from '../shared/severity-ladder.js';
-import {
-  REVIEW_PURPOSE_ORIENTATION,
-  EVIDENCE_RULE_REVIEW,
-  SCOPE_RULE_REVIEW,
-  ANNOTATOR_AWARENESS_REVIEW,
-  CODE_REVIEW_FAILURE_MODES,
-  THOROUGHNESS_REMINDER_REVIEW,
-} from './implementer-criteria.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -67,88 +58,15 @@ function resolveReviewDoneCondition(focus: string[] | undefined, hasContextBlock
   return hasContextBlocks ? base + DELTA_REVIEW_SUFFIX : base;
 }
 
-function buildReviewPrompt(brief: ReviewBrief): string {
-  const { code, filePaths, focus, hasContextBlocks, filePath } = brief;
-  const parts: string[] = ['Review this code:'];
-
-  if (filePath) {
-    parts.push(`Read and analyze this file:\n- ${filePath}`);
-  } else {
-    if (code) parts.push(`\`\`\`\n${code}\n\`\`\``);
-    if (filePaths && filePaths.length > 0) {
-      parts.push(`Read and analyze these files:\n${filePaths.map(p => `- ${p}`).join('\n')}`);
-    }
-    if (focus && focus.length > 0) parts.push(`Focus areas: ${focus.join(', ')}.`);
-  }
-
-  // Tool sweep #11: emit format spec unconditionally (pre-fix the
-  // DELTA branch dropped it, breaking annotator parse on delta runs).
-  if (hasContextBlocks) {
-    parts.push(
-      'A prior review is in the context above. **Omit** addressed findings, **include** still-present ones (mark "unfixed from prior review"), **include** any new findings, and end with a **Fixed** summary.',
-    );
-  }
-  parts.push(FINDING_FORMAT_INSTRUCTIONS);
-
-  return parts.join('\n\n');
-}
-
-const FINDING_FORMAT_INSTRUCTIONS = [
-  // Orientation goes FIRST — the worker needs to know why this review
-  // exists (pre-merge gate, your verdict is authoritative, missing a
-  // regression here ships) before reading the format spec / taxonomy /
-  // evidence rules. Without it, workers do line-by-line proofreading and
-  // miss cross-file ripples and test gaps.
-  REVIEW_PURPOSE_ORIENTATION,
-  '',
-  'Produce a narrative code review. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
-  '',
-  '## Finding 1: <one-line title>',
-  '- Severity: critical | high | medium | low',
-  '- Location: file:line',
-  '- Issue: one-paragraph explanation',
-  '- Suggestion: one-line fix recommendation',
-  '',
-  '## Finding 2: <one-line title>',
-  '- Severity: ...',
-  '- ...',
-  '',
-  'Rules:',
-  '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
-  '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-  '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
-  '',
-  SEVERITY_LADDER,
-  '',
-  // Code-review failure-mode taxonomy. Without this block, workers
-  // calibrated on line-by-line proofreading miss the cross-file ripple,
-  // test gap, and implicit-contract findings that actually block merges.
-  CODE_REVIEW_FAILURE_MODES,
-  '',
-  // Counter-balances the SEVERITY_LADDER's anti-inflation hint and
-  // includes the cross-file pass with worked example.
-  THOROUGHNESS_REMINDER_REVIEW,
-  '',
-  EVIDENCE_RULE_REVIEW,
-  '',
-  SCOPE_RULE_REVIEW,
-  '',
-  ANNOTATOR_AWARENESS_REVIEW,
-].join('\n');
-
 export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   name: 'review',
   category: 'read_only',
   agentType: 'complex',
   briefSlot: reviewBriefSlot,
   buildTaskSpec: (brief, ctx) => {
-    const prompt = buildReviewPrompt(brief);
     // Propagate filePaths + mainModel onto the TaskSpec so the headline
     // composer can name the file in clean-review headlines and so the
-    // wire telemetry carries main_model attribution. Audit does this
-    // already; review missed it, producing "[ok] review completed"
-    // (no path) even when filePaths was provided. (Tool sweep #2 — gap surfaced
-    // by review batch c24353f6 on packages/core/src/reporting/severity.ts.)
+    // wire telemetry carries main_model attribution.
     const filePaths = brief.filePath
       ? [brief.filePath]
       : (brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined);
@@ -158,11 +76,13 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       targetParts.push(`Target files:\n${filePaths.map(p => `- ${p}`).join('\n')}`);
     }
     if (brief.focus) targetParts.push(`Focus: ${Array.isArray(brief.focus) ? brief.focus.join(', ') : brief.focus}`);
+    // The read-route dispatcher builds the worker prefix from this pure target
+    // + FINDING_FORMAT_SHARED + review RouteSemantics; `prompt` mirrors it
+    // (required field / telemetry, not the read-route worker input).
+    const target = targetParts.join('\n\n');
     return {
-      prompt,
-      // Pure user code/files for the parallel-criteria dispatcher's cached
-      // prefix; bypasses the legacy ## Finding format spec embedded in `prompt`.
-      parallelTarget: targetParts.join('\n\n'),
+      prompt: target,
+      readTarget: target,
       agentType: 'complex',
       reviewPolicy: 'none',
       briefQualityPolicy: 'off',
@@ -177,6 +97,6 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       autoCommit: false,
     };
   },
-  reportSchema: reviewReportSchema,
-  headlineTemplate: reviewHeadlineTemplate,
+  reportSchema: noStructuredReportSchema,
+  headlineTemplate: makeFindingsHeadlineTemplate('review', 'blocking'),
 };

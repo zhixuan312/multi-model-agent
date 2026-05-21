@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { inputSchema as delegateSchema } from '../../packages/core/src/tools/delegate/schema.js';
-import { inputSchema as executePlanSchema } from '../../packages/core/src/tools/execute-plan/schema.js';
+import { executePlanInputSchema as executePlanSchema } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 
 describe('delegate schema rejects verifyCommand (strict mode regression guard)', () => {
   it('rejects task with verifyCommand', () => {
@@ -28,7 +28,8 @@ describe('delegate schema rejects verifyCommand (strict mode regression guard)',
 describe('execute-plan schema rejects verifyCommand (strict mode regression guard)', () => {
   it('rejects top-level verifyCommand', () => {
     const result = executePlanSchema.safeParse({
-      tasks: ['1. Setup'],
+      filePaths: ['plan.md'],
+      taskDescriptors: ['1. Setup'],
       verifyCommand: ['npm', 'test'],
     });
     expect(result.success).toBe(false);
@@ -39,7 +40,8 @@ describe('execute-plan schema rejects verifyCommand (strict mode regression guar
 
   it('accepts valid input without verifyCommand', () => {
     const result = executePlanSchema.safeParse({
-      tasks: ['1. Setup'],
+      filePaths: ['plan.md'],
+      taskDescriptors: ['1. Setup'],
     });
     expect(result.success).toBe(true);
   });

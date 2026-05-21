@@ -34,6 +34,7 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
     done: brief.done,
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
+    outputTargets: brief.outputTargets,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     tools: ctx.config.defaults?.tools ?? 'full',
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,

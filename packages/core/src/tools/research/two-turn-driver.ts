@@ -15,7 +15,6 @@ export interface TwoTurnDeps {
   runOrchestrator:   (plan: QueryPlan) => Promise<EvidencePack>;
   researchQuestion:  string;
   background?:       string;
-  contextBlocks:     Array<{ id: string; content: string }>;
 }
 
 // Returns turn-1 + EvidencePack. Synthesis turns are run BY THE EXISTING

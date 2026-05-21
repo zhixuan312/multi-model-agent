@@ -4,7 +4,7 @@ import { REVIEW_SUBTYPES } from '../../packages/core/src/tools/review/subtypes.j
 import { DEBUG_SUBTYPES } from '../../packages/core/src/tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES } from '../../packages/core/src/tools/investigate/subtypes.js';
 import { RESEARCH_SUBTYPES } from '../../packages/core/src/tools/research/subtypes.js';
-import { buildReadOnlyCachedPrefix } from '../../packages/core/src/tools/parallel-criteria-prompt.js';
+import { buildReadOnlyCachedPrefix } from '../../packages/core/src/tools/read-route-prompt.js';
 
 describe('severity-definitions — all 7 routes/templates have spec §9 definitions verbatim', () => {
   // Severity definitions per spec §9:

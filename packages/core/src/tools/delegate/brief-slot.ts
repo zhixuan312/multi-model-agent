@@ -16,6 +16,7 @@ export interface DelegateBrief {
   agentType: 'standard' | 'complex';
   reviewPolicy: ReviewPolicy;
   contextBlockIds?: string[];
+  outputTargets?: string[];
 }
 
 /**
@@ -64,7 +65,10 @@ export const delegateBriefSlot = (input: Input): DelegateBrief[] =>
     prompt: compileDelegatePrompt({ prompt: t.prompt, filePaths: t.filePaths }),
     done: t.done,
     filePaths: t.filePaths,
-    agentType: t.agentType ?? 'standard',
-    reviewPolicy: t.reviewPolicy ?? 'full',
+    // Defaults are applied authoritatively by the Zod schema (.default()),
+    // so the parsed input always carries agentType/reviewPolicy.
+    agentType: t.agentType,
+    reviewPolicy: t.reviewPolicy,
     contextBlockIds: t.contextBlockIds,
+    outputTargets: t.outputTargets,
   }));

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.13] - 2026-05-21
+
+`tools/` component cleanup release — reduces `packages/core/src/tools/` and its coupled read-route stack to one design with one implementation per responsibility. Removes provably-dead modules, collapses the duplicated prompt and report/headline paths, wires the dormant `outputTargets` artifact check in delegate, reconciles execute-plan's two divergent input schemas to the live one, and renames the misleading `parallel-criteria-*` identifiers to `read-route-*` (the execution model is sequential criteria over one resumed session, not parallel fan-out). investigate's and research's distinct report parsers/headlines are kept — they are not duplicates. 2093 tests pass, build green, contract goldens unchanged.
+
+### Added
+
+- **`outputTargets` wired end-to-end in delegate** (`packages/core/src/tools/delegate/{schema,brief-slot,tool-config}.ts`). The post-task artifact check (`task-runner` → `implement-stage` → `file-artifact-check`) was fully built but delegate dropped the field before the `TaskSpec`, so it never ran. The field now flows input → brief → `TaskSpec`; a missing output target surfaces as a structured finding.
+- **Shared read-route report/headline primitives** (`packages/core/src/reporting/findings-headline.ts`, `report-parser-slots/no-structured-report.ts`). `makeFindingsHeadlineTemplate(route, countLabel)` collapses the byte-identical audit/review/debug headline templates into one factory; `noStructuredReportSchema` is the shared throwing fallback slot (the annotator builds the canonical report).
+- **`read_route_missing_target` assertion** (`packages/core/src/lifecycle/perform-implementation.ts`). A non-research read route that reaches dispatch with an empty target now throws before any session work, instead of silently falling back to `task.prompt`.
+- **Subtype-enum ↔ `*_SUBTYPES` lockstep test** (`tests/tools/subtype-lockstep.test.ts`) — exact set-equality guard so a schema/route drift fails fast.
+
+### Changed
+
+- **Single read-route prompt path** (`packages/core/src/tools/{audit,review,debug,investigate,research}/tool-config.ts`). Each route sets `prompt` and `readTarget` to the same pure target; the worker prefix is built solely by the read-route dispatcher from `readTarget` + `FINDING_FORMAT_SHARED` + the route's `RouteSemantics` (`subtypes.ts`).
+- **`execute-plan` has one input schema** — the live `executePlanInputSchema` (`tools/execute-plan/tool-config.ts`). The barrel re-exports it via a thin `barrel.ts`; the orphaned divergent `schema.ts` (object task form) is deleted.
+- **delegate `agentType` defaulted in the Zod schema** (`.default('standard')`); the redundant `?? 'standard'` / `?? 'full'` fallbacks in `delegate/brief-slot.ts` are removed — the schema is the single defaulter.
+- **`tools/index.ts` barrel** now exports exactly the seven output-envelope tools (delegate, audit, review, debug, executePlan, retry, investigate); `registerContextBlock` (no output envelope) is dropped.
+- **Renamed `parallel-criteria-*` → `read-route-*`** (`tools/read-route-prompt.ts`, `lifecycle/read-route-criteria.ts`) and `TaskSpec.parallelTarget` → `readTarget`, matching the sequential execution model. No aliases.
+
+### Removed
+
+- **Dead modules** — `execute-plan/draft-id.ts`, `audit/plan-audit-verdict.ts`, and `lifecycle/plan-extraction.ts` (superseded by `execute-plan/plan-extractor.ts`), each with zero production callers, plus their tests.
+- **Legacy prompt scaffolding** — the per-tool `FINDING_FORMAT_INSTRUCTIONS` / `buildPrompt` / `buildReviewPrompt` builders in audit/review/debug, the static `tools/shared/severity-ladder.ts` (`SEVERITY_LADDER`; severity is rendered route-specifically via `renderSeverityLadder`), and the orphaned `THOROUGHNESS_REMINDER_*` / `CONFIDENCE_REMINDER_INVESTIGATE` constants.
+- **Dead per-tool reporting** — the fenced-JSON report parsers `report-parser-slots/{audit,review,retry}-report.ts` and the headline templates `headline-templates/{audit,review,debug,retry}.ts`, replaced by the shared factory + no-structured-report schema.
+- **Dead single-pass research/investigate prompt builders** — research `compileResearchPrompt`/`compiledPrompt` and investigate `compiledPrompt` (the dispatcher uses `readTarget` / the two-turn pre-loop, never these), the unused `TwoTurnDeps.contextBlocks` param, and the now-dead investigate enriched-input fields `resolvedContextBlocks` / `relativeFilePathsForPrompt`.
+
 ## [4.7.12] - 2026-05-21
 
 Transport-component cleanup release — reduces `packages/core/src/transport/` to one design with one implementation. `HTTPListener` becomes the sole HTTP listener (the server no longer creates `node:http` inline), the dormant `RouteDispatcher` response-shape metadata is removed, and the previously-unwired Host-header rebinding guard is now live. Bundles an independent set of type/config cleanups (config types derived from Zod, dead enums/types deleted) and a Windows console-flashing fix on git spawns. 2134 tests pass, build green, contract goldens unchanged.
@@ -649,7 +675,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...HEAD
+[4.7.13]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...v4.7.13
 [4.7.12]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...v4.7.12
 [4.7.11]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...v4.7.11
 [4.7.10]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...v4.7.10

@@ -36,20 +36,22 @@ export interface TaskSpec {
   planContext?: string
   outputTargets?: string[]
   /**
-   * For read-only routes that go through the parallel-criteria dispatcher,
-   * this is the user's pure question / work / problem text (route-specific
-   * shape). Used as the "target" content embedded in the cached prefix so
-   * sub-workers see ONLY the user's request — not the legacy monolithic
-   * format spec that lives in `prompt`. When absent, the dispatcher falls
-   * back to `document` then `prompt`. Audit: the inlined document. Review:
-   * the code snippet + filePaths. Verify: work + checklist. Debug: problem
-   * statement. Investigate: question.
+   * For read-only routes that go through the read-route dispatcher, this is
+   * the user's pure question / work / problem text (route-specific shape),
+   * set by each route's buildTaskSpec. Used as the "target" content embedded
+   * in the cached prefix so sub-workers see ONLY the user's request — not a
+   * legacy monolithic format spec. The dispatcher uses this then `document`;
+   * there is NO `prompt` fallback (a non-research read route with an empty
+   * target throws `read_route_missing_target`). Audit: the inlined document /
+   * file targets. Review: the code snippet + filePaths. Debug: problem
+   * statement. Investigate: question. Research: the research question (the
+   * actual worker input is built from `research`).
    */
-  parallelTarget?: string
+  readTarget?: string
   /**
    * v4.4.x: subtype field for read-only tools. Set by each tool's
    * buildTaskSpec from the input schema's `subtype` field. The lifecycle's
-   * parallel-criteria dispatcher reads this to look up the per-tool
+   * read-route dispatcher reads this to look up the per-tool
    * SUBTYPES map and select the matching criteria / orientation /
    * semantics block. Defaults to 'default' when undefined.
    *

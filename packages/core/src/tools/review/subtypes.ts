@@ -1,5 +1,5 @@
 import type { ReadOnlySubtypeSpec } from '../../lifecycle/read-only-subtype-spec.js';
-import type { RouteSemantics } from '../parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../read-route-prompt.js';
 import {
   REVIEW_PURPOSE_ORIENTATION, EVIDENCE_RULE_REVIEW, SCOPE_RULE_REVIEW,
   ANNOTATOR_AWARENESS_REVIEW, REVIEW_CRITERIA,
@@ -8,7 +8,7 @@ import {
 export type ReviewSubtype = 'default';
 
 // Copied verbatim from ROUTE_SEMANTICS.review in
-// packages/core/src/lifecycle/parallel-criteria-routes.ts (removed in Task 8).
+// packages/core/src/lifecycle/read-route-criteria.ts (removed in Task 8).
 const SEMANTICS_DEFAULT: RouteSemantics = {
   goalLine: 'Find ALL issues of THIS specific kind in the diff / source above.',
   emptyOutcomeLine: 'If none exist, respond with the literal text "No findings for this criterion." — that is a fully valid outcome. Do NOT pad to avoid returning empty.',

@@ -163,8 +163,6 @@ export async function runTasks(
   );
 }
 
-export { extractPlanSection } from './plan-extraction.js';
-
 export interface DispatchTaskInput {
   task: TaskSpec;
   resolved: ResolvedAgent;

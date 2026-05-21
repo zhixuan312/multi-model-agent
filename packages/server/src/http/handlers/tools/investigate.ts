@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-import { realpathSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as investigate from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
@@ -32,18 +30,10 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    // Resolve context blocks.
+    // Validate context block IDs exist (content reaches the worker via the
+    // dispatch-time prepend keyed on TaskSpec.contextBlockIds).
     const blockIds = input.contextBlockIds ?? [];
-    const resolvedContextBlocks: Array<{ id: string; content: string }> = [];
-    const missingBlocks: string[] = [];
-    for (const id of blockIds) {
-      const content = pc.contextBlocks.get(id);
-      if (content === undefined) {
-        missingBlocks.push(id);
-      } else {
-        resolvedContextBlocks.push({ id, content });
-      }
-    }
+    const missingBlocks = blockIds.filter(id => pc.contextBlocks.get(id) === undefined);
     if (missingBlocks.length > 0) {
       sendError(res, 400, 'context_block_not_found', 'one or more context block IDs do not exist', { missingBlocks });
       return;
@@ -58,19 +48,10 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     }
     const canonicalizedFilePaths = canonResult;
 
-    // Pre-compute relative paths for prompt.
-    const realCwd = realpathSync(cwd);
-    const relativeFilePathsForPrompt = canonicalizedFilePaths.map(p => {
-      const rel = path.relative(realCwd, p);
-      return rel === '' ? '.' : rel;
-    });
-
     // Build enriched input for the generic task executor.
     const enrichedInput: EnrichedInvestigateInput = {
       ...input,
-      resolvedContextBlocks,
       canonicalizedFilePaths,
-      relativeFilePathsForPrompt,
     };
 
     const { batchId, statusUrl } = asyncDispatch({

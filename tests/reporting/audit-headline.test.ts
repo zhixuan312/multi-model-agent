@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { auditHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/audit.ts';
-import { reviewHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/review.ts';
+import { makeFindingsHeadlineTemplate } from '../../packages/core/src/reporting/findings-headline.js';
+const auditHeadlineTemplate = makeFindingsHeadlineTemplate('audit', 'high');
+const reviewHeadlineTemplate = makeFindingsHeadlineTemplate('review', 'blocking');
 import type { RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 

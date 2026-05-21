@@ -72,7 +72,7 @@ found — 1 critical finding`);
     });
 
     const task: TaskSpec = {
-      prompt: 'audit this code', cwd: os.tmpdir(),
+      prompt: 'audit this code', readTarget: 'audit this code', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 
@@ -110,7 +110,7 @@ found — security issue found`);
     });
 
     const task: TaskSpec = {
-      prompt: 'audit security', cwd: os.tmpdir(),
+      prompt: 'audit security', readTarget: 'audit security', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 
@@ -151,7 +151,7 @@ found — style issue`);
     });
 
     const task: TaskSpec = {
-      prompt: 'audit code style', cwd: os.tmpdir(),
+      prompt: 'audit code style', readTarget: 'audit code style', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 

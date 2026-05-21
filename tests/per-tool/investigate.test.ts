@@ -7,24 +7,17 @@ import type {
 
 // Per-tool integration coverage for investigate.
 //
-// Replaces the previous test file that exercised the legacy
-// `compileInvestigate` / `investigateSlot` helpers in
-// brief-compiler-slots/investigate.ts. Those helpers had no production
-// callers (verified by grep across packages/) and were deleted under
-// dev-mode rule "delete unused code". The active production path is
-// toolConfig.briefSlot + toolConfig.buildTaskSpec, defined inline in
-// tools/investigate/tool-config.ts. These tests pin its observable
-// shape so the path-coverage.test.ts coverage check stays green and
-// the tool sweep #5 fix (renaming brief.prompt → brief.compiledPrompt
-// so the headline reads the user's question, not the prompt template)
-// can't regress silently.
+// The active production path is toolConfig.briefSlot + toolConfig.buildTaskSpec.
+// The legacy `compiledPrompt` (a full investigate-specific prompt forwarded as
+// TaskSpec.prompt) was removed: the worker input is built by the read-route
+// dispatcher from `readTarget` (`Question: <q>`) + FINDING_FORMAT_SHARED,
+// so the brief now carries only `question` (which also drives the headline via
+// the task-executor's taskBrief `?? .question` fallback).
 
 function makeInput(overrides: Partial<EnrichedInvestigateInput> = {}): EnrichedInvestigateInput {
   return {
     question: 'How does X work?',
-    resolvedContextBlocks: [],
     canonicalizedFilePaths: [],
-    relativeFilePathsForPrompt: [],
     ...overrides,
   } as EnrichedInvestigateInput;
 }
@@ -32,10 +25,7 @@ function makeInput(overrides: Partial<EnrichedInvestigateInput> = {}): EnrichedI
 describe('investigate toolConfig.briefSlot', () => {
   it('produces exactly one brief regardless of file count', () => {
     const briefs = toolConfig.briefSlot(
-      makeInput({
-        canonicalizedFilePaths: ['/x/a.ts', '/x/b.ts'],
-        relativeFilePathsForPrompt: ['a.ts', 'b.ts'],
-      }),
+      makeInput({ canonicalizedFilePaths: ['/x/a.ts', '/x/b.ts'] }),
     );
     expect(briefs).toHaveLength(1);
   });
@@ -45,43 +35,24 @@ describe('investigate toolConfig.briefSlot', () => {
     expect(briefs[0].question).toBe('How does the auth-token rule work?');
   });
 
-  it('renders the compiled prompt under `compiledPrompt` (NOT `prompt`)', () => {
-    // Sweep #5 fix: a `prompt` field on the brief would cause the
-    // task-executor's taskBrief chain to leak the prompt template
-    // text into the headline instead of the question.
-    const briefs = toolConfig.briefSlot(makeInput({ question: 'q' }));
-    const brief = briefs[0] as InvestigateBrief & { prompt?: unknown };
-    expect(brief.compiledPrompt).toContain('Question: q');
-    expect(brief.compiledPrompt).toContain('## Summary');
-    expect(brief.compiledPrompt).toContain('## Finding 1:');
-    expect(brief.compiledPrompt).toContain('## Confidence');
+  it('does NOT put a `prompt`/`compiledPrompt` field on the brief', () => {
+    // A `prompt`/`brief` field would make the task-executor's taskBrief chain
+    // leak prompt text into the headline instead of the question.
+    const brief = toolConfig.briefSlot(makeInput({ question: 'q' }))[0] as InvestigateBrief & {
+      prompt?: unknown;
+      compiledPrompt?: unknown;
+    };
     expect(brief.prompt).toBeUndefined();
+    expect(brief.compiledPrompt).toBeUndefined();
+    expect(brief.question).toBe('q');
   });
 
-  it('embeds anchor paths into the compiled prompt', () => {
+  it('forwards filePaths + contextBlockIds onto the brief', () => {
     const briefs = toolConfig.briefSlot(
-      makeInput({
-        canonicalizedFilePaths: ['/cwd/src/auth.ts'],
-        relativeFilePathsForPrompt: ['src/auth.ts'],
-      }),
+      makeInput({ canonicalizedFilePaths: ['/cwd/src/auth.ts'], contextBlockIds: ['cb-1'] }),
     );
-    expect(briefs[0].compiledPrompt).toContain('- src/auth.ts');
-    expect(briefs[0].compiledPrompt).not.toContain('/cwd/src/auth.ts');
-  });
-
-  it('embeds resolved context blocks before the question', () => {
-    const briefs = toolConfig.briefSlot(
-      makeInput({
-        resolvedContextBlocks: [{ id: 'ctx-1', content: 'PRIOR REPORT BODY' }],
-        question: 'follow-up?',
-      }),
-    );
-    expect(briefs[0].compiledPrompt).toContain('PRIOR REPORT BODY');
-    expect(briefs[0].compiledPrompt).toContain('Refine or extend');
-    // Question must come AFTER the prior context block.
-    const idxCtx = briefs[0].compiledPrompt.indexOf('PRIOR REPORT BODY');
-    const idxQ = briefs[0].compiledPrompt.indexOf('Question: follow-up?');
-    expect(idxCtx).toBeLessThan(idxQ);
+    expect(briefs[0].filePaths).toEqual(['/cwd/src/auth.ts']);
+    expect(briefs[0].contextBlockIds).toEqual(['cb-1']);
   });
 
   it('forwards tools=readonly default and respects caller tools=none', () => {
@@ -93,7 +64,7 @@ describe('investigate toolConfig.briefSlot', () => {
 });
 
 describe('investigate toolConfig.buildTaskSpec', () => {
-  it('forwards brief.compiledPrompt as TaskSpec.prompt', () => {
+  it('sets TaskSpec.prompt + readTarget from the question', () => {
     const briefs = toolConfig.briefSlot(makeInput({ question: 'q1' }));
     const ctx = {
       cwd: '/cwd',

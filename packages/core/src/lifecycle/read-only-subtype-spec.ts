@@ -1,5 +1,5 @@
 import type { CriterionEntry } from '../tools/criteria-types.js';
-import type { RouteSemantics } from '../tools/parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../tools/read-route-prompt.js';
 
 /**
  * One subtype's full prompt-policy package. Five read-only tools each own

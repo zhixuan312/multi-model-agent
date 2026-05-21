@@ -95,30 +95,6 @@ export const INVESTIGATE_FAILURE_MODES = [
   '- Do not pad — but absent total impossibility, every perspective should produce at least one candidate (even low confidence). The merge annotator will dedup and rank.',
 ].join('\n');
 
-/**
- * Confidence-discipline reminder.
- *
- * The shared SEVERITY_LADDER does not apply to investigate (findings
- * are citations, not severity-rated). Instead, confidence is the
- * calibration dial. The common failure mode is over-confidence —
- * stating "high confidence" because the worker sounds certain,
- * not because the evidence is strong. This block tells the worker
- * confidence reflects evidence strength only.
- */
-export const CONFIDENCE_REMINDER_INVESTIGATE = [
-  'Confidence-discipline reminder:',
-  '- Confidence reflects EVIDENCE STRENGTH (how completely the citation chain supports the answer), not ASSERTION STRENGTH (how certain you sound).',
-  '- For each load-bearing claim, ask: "if the caller followed this citation and re-read the file themselves, would they reach the same conclusion?" If yes for every claim → `high`. If yes for most but inference fills the gaps → `medium`. If significant gaps remain → `low`.',
-  '- Do NOT use confidence to communicate certainty about the question being answered. Use it to communicate certainty that your answer is CORRECT given your evidence.',
-  '- A short investigation that found a clean answer can legitimately be `high`. A long investigation that found a partial answer is `medium` or `low`, no matter how thorough it felt.',
-  '',
-  'Citation-chain walk (REQUIRED on every load-bearing claim):',
-  '- Before writing the Summary, list every claim that drives the answer. For each, ask: "do I have a file:line for this, and did I read the file in this session?"',
-  '- If the answer to either is no, the claim is inference. Either downgrade Confidence, or add the citation by reading the file now.',
-  '- Worked example. Question: "how does the audit prompt assemble the failure-mode taxonomy?" Naive answer: "The audit tool config imports DOC_AUDIT_FAILURE_MODES from implementer-criteria.ts and joins it into the prompt — confidence: high." Better answer: cite the import line (e.g. `tool-config.ts:14 — import { DOC_AUDIT_FAILURE_MODES, ... }`) AND the consumer line where it is joined into the prompt (e.g. `tool-config.ts:152 — DOC_AUDIT_FAILURE_MODES,` inside the FINDING_FORMAT_INSTRUCTIONS array). Two citations, both verified by reading the file → high confidence is now backed. The naive version asserts the same conclusion but with no actual file:line; if the file has been refactored, the answer is silently wrong.',
-  '- Most workers miss findings of this shape on first pass because the answer "feels right". The citation-chain walk forces the file-system check.',
-].join('\n');
-
 export const ANNOTATOR_AWARENESS_INVESTIGATE = [
   'After your output, an annotator validates each finding against this investigate rubric:',
   '- Does each citation answer some part of the question (not an adjacent question)?',
