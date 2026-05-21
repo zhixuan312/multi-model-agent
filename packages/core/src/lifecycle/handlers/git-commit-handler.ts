@@ -21,6 +21,8 @@ import { isAbsolute, join, relative } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, CommitPayload } from '../stage-io.js';
+import { withRepoCommitLock } from '../repo-commit-lock.js';
+import { resolveGitToplevel } from '../git-toplevel.js';
 
 const execFileP = promisify(execFile);
 
@@ -173,63 +175,70 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
   }
   const filesChanged = ownFiles;
 
-  // Stage ONLY this worker's files.
-  const addR = await gitC(cwd, ['add', '--', ...ownFiles]);
-  if (addR.code !== 0) {
-    return advanceNoOp('hook_failed', t0, addR.stderr || 'git add failed');
-  }
+  // Per-repo commit mutex: serialize the staging+commit section against any
+  // other worker committing to the SAME repo so concurrent same-repo tasks
+  // never collide on `.git/index.lock`. Distinct repos run concurrently.
+  // Read-only probes above (worktree check, HEAD) run outside the lock.
+  const repoKey = (await resolveGitToplevel(cwd)) ?? cwd;
+  return withRepoCommitLock(repoKey, async (): Promise<StageGate<CommitPayload>> => {
+    // Stage ONLY this worker's files.
+    const addR = await gitC(cwd, ['add', '--', ...ownFiles]);
+    if (addR.code !== 0) {
+      return advanceNoOp('hook_failed', t0, addR.stderr || 'git add failed');
+    }
 
-  // Confirm THESE paths have staged changes (scoped — ignores anything a
-  // concurrent worker may have staged). Exits 0 when nothing staged for them.
-  const diffR = await gitC(cwd, ['diff', '--cached', '--quiet', '--', ...ownFiles]);
-  if (diffR.code === 0) {
-    return advanceNoOp('no_diff', t0);
-  }
+    // Confirm THESE paths have staged changes (scoped — ignores anything a
+    // concurrent worker may have staged). Exits 0 when nothing staged for them.
+    const diffR = await gitC(cwd, ['diff', '--cached', '--quiet', '--', ...ownFiles]);
+    if (diffR.code === 0) {
+      return advanceNoOp('no_diff', t0);
+    }
 
-  const commitMessage = composeCommitMessage(state);
+    const commitMessage = composeCommitMessage(state);
 
-  try {
-    // Pathspec-scoped commit: commits ONLY ownFiles, even if a concurrent
-    // worker has other paths staged in the same index.
-    const commitR = await gitC(cwd, ['commit', '-m', commitMessage, '--', ...ownFiles]);
-    if (commitR.code !== 0) {
-      // Hook failure is the dominant case: we've already validated repo,
-      // diff, and HEAD; if `git commit` still fails, the most likely cause
-      // is a pre-commit hook (or other policy hook) rejecting the commit.
-      // We treat non-zero exit as hook_failed unless the stderr indicates
-      // something structurally worse (corrupted index, fs errors).
-      const stderr = commitR.stderr ?? '';
-      const looksStructural = /index|object|corrupt|permission denied|read-only/i.test(stderr);
-      if (!looksStructural) {
-        return advanceNoOp('hook_failed', t0, stderr || 'commit rejected (likely pre-commit hook)');
+    try {
+      // Pathspec-scoped commit: commits ONLY ownFiles, even if a concurrent
+      // worker has other paths staged in the same index.
+      const commitR = await gitC(cwd, ['commit', '-m', commitMessage, '--', ...ownFiles]);
+      if (commitR.code !== 0) {
+        // Hook failure is the dominant case: we've already validated repo,
+        // diff, and HEAD; if `git commit` still fails, the most likely cause
+        // is a pre-commit hook (or other policy hook) rejecting the commit.
+        // We treat non-zero exit as hook_failed unless the stderr indicates
+        // something structurally worse (corrupted index, fs errors).
+        const stderr = commitR.stderr ?? '';
+        const looksStructural = /index|object|corrupt|permission denied|read-only/i.test(stderr);
+        if (!looksStructural) {
+          return advanceNoOp('hook_failed', t0, stderr || 'commit rejected (likely pre-commit hook)');
+        }
+        return haltCommit(`commit_failed: ${stderr || 'unknown error'}`, t0);
       }
-      return haltCommit(`commit_failed: ${stderr || 'unknown error'}`, t0);
+      const sha = (await currentHead(cwd)) ?? '';
+      const authoredAt = new Date().toISOString();
+      return {
+        outcome: 'advance',
+        payload: {
+          kind: 'committed',
+          commitSha: sha,
+          commitMessage,
+          filesChanged,
+          authoredAt,
+        },
+        telemetry: {
+          stageLabel: 'committing',
+          durationMs: Date.now() - t0,
+          costUSD: 0,
+          turnsUsed: 0,
+          stopReason: 'normal',
+        },
+      };
+    } catch (err) {
+      if (isHookFailure(err)) {
+        return advanceNoOp('hook_failed', t0, err instanceof Error ? err.message : String(err));
+      }
+      return haltCommit(`commit_failed: ${err instanceof Error ? err.message : String(err)}`, t0);
     }
-    const sha = (await currentHead(cwd)) ?? '';
-    const authoredAt = new Date().toISOString();
-    return {
-      outcome: 'advance',
-      payload: {
-        kind: 'committed',
-        commitSha: sha,
-        commitMessage,
-        filesChanged,
-        authoredAt,
-      },
-      telemetry: {
-        stageLabel: 'committing',
-        durationMs: Date.now() - t0,
-        costUSD: 0,
-        turnsUsed: 0,
-        stopReason: 'normal',
-      },
-    };
-  } catch (err) {
-    if (isHookFailure(err)) {
-      return advanceNoOp('hook_failed', t0, err instanceof Error ? err.message : String(err));
-    }
-    return haltCommit(`commit_failed: ${err instanceof Error ? err.message : String(err)}`, t0);
-  }
+  });
 }
 
 // ─── Exports (backwards compatibility alias) ─────────────────────────────────

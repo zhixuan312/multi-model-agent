@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { commitHandler } from '../../../packages/core/src/lifecycle/handlers/git-commit-handler.js';
@@ -320,5 +320,45 @@ describe('commitHandler', () => {
     const gate = await commitHandler(state);
     expect(gate.payload.kind).toBe('committed');
     expect(gate.payload.commitMessage).not.toContain('Rework left');
+  });
+});
+
+describe('commitHandler concurrency (per-repo mutex)', () => {
+  function initRepo(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-commitlock-'));
+    execFileSync('git', ['-C', dir, 'init', '-q']);
+    execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t']);
+    execFileSync('git', ['-C', dir, 'config', 'user.name', 't']);
+    writeFileSync(join(dir, 'seed.txt'), 'seed');
+    execFileSync('git', ['-C', dir, 'add', '.']);
+    execFileSync('git', ['-C', dir, 'commit', '-qm', 'seed']);
+    return dir;
+  }
+
+  function stateFor(dir: string, file: string): any {
+    writeFileSync(join(dir, file), `export const X = '${file}';\n`);
+    return {
+      cwd: dir,
+      lastRunResult: { filesWritten: [file] },
+      gates: { implement: { payload: { summary: `add ${file}` } } },
+    };
+  }
+
+  it('two concurrent same-repo commits each contain only their own file (no index.lock error)', async () => {
+    const dir = initRepo();
+    const [a, b] = await Promise.all([
+      commitHandler(stateFor(dir, 'a.ts')),
+      commitHandler(stateFor(dir, 'b.ts')),
+    ]);
+    expect(a.outcome).toBe('advance');
+    expect(b.outcome).toBe('advance');
+    const shaA = (a.payload as any).commitSha as string;
+    const shaB = (b.payload as any).commitSha as string;
+    expect(shaA).toBeTruthy();
+    expect(shaB).toBeTruthy();
+    const filesIn = (sha: string) =>
+      execFileSync('git', ['-C', dir, 'show', '--name-only', '--format=', sha]).toString().trim().split('\n');
+    expect(filesIn(shaA)).toEqual(['a.ts']);
+    expect(filesIn(shaB)).toEqual(['b.ts']);
   });
 });
