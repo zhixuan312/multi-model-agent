@@ -92,13 +92,11 @@ export {
   HTTPListener,
   type HTTPListenerOptions,
   type HTTPRequestHandler,
-  RouteDispatcher,
-  type RouteMetadata,
-  type ResponseShape,
   isLoopbackAddress,
   shouldRejectNonLoopback,
   isAllowedHostHeader,
 } from './transport/index.js';
+export { RouteDispatcher } from './transport/route-dispatcher.js';
 
 // Heartbeat
 export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
@@ -114,9 +112,6 @@ export { resolveAgent } from './providers/agent-resolver.js';
 export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 
-export type {
-  DraftTask,
-} from './types/draft-task.js';
 
 // Batch registry
 export * from './stores/batch-registry.js';

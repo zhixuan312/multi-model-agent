@@ -364,7 +364,7 @@ async function tryGitDiff(cwd: string): Promise<string | null> {
   try {
     // Confirm we're in a git work tree. exitCode 0 + stdout 'true' = yes.
     const { stdout: insideOut } = await execFileP('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd, encoding: 'utf-8', timeout: 5000,
+      cwd, encoding: 'utf-8', timeout: 5000, windowsHide: true,
     });
     if (insideOut.trim() !== 'true') return null;
   } catch {
@@ -375,7 +375,7 @@ async function tryGitDiff(cwd: string): Promise<string | null> {
   let trackedDiff = '';
   try {
     const { stdout } = await execFileP('git', ['diff', 'HEAD'], {
-      cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4,
+      cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4, windowsHide: true,
     });
     trackedDiff = stdout;
   } catch {
@@ -383,7 +383,7 @@ async function tryGitDiff(cwd: string): Promise<string | null> {
     // Try plain `git diff` (working tree vs index) as a softer fallback.
     try {
       const { stdout } = await execFileP('git', ['diff'], {
-        cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4,
+        cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4, windowsHide: true,
       });
       trackedDiff = stdout;
     } catch {
@@ -396,7 +396,7 @@ async function tryGitDiff(cwd: string): Promise<string | null> {
   let untrackedDiff = '';
   try {
     const { stdout } = await execFileP('git', ['ls-files', '--others', '--exclude-standard'], {
-      cwd, encoding: 'utf-8', timeout: 5000,
+      cwd, encoding: 'utf-8', timeout: 5000, windowsHide: true,
     });
     const paths = stdout.split('\n').map(p => p.trim()).filter(p => p.length > 0);
     for (const rel of paths) {

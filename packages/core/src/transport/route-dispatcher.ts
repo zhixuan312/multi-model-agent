@@ -1,33 +1,19 @@
 /**
- * Spec C1 RouteDispatcher — match incoming method+path to a handler.
- *
- * Routes declare their response shape (sync vs async-with-batchId) at
- * registration time via metadata; the dispatcher reads from registration
- * metadata, not from handler return shape. This lets the request pipeline
- * branch on shape without interpreting handler internals.
- *
- * Generic over the handler type so server and core both reuse the same
- * dispatcher mechanism with their own context types.
+ * RouteDispatcher — match an incoming method+path to a registered handler.
+ * Generic over the handler type so server and core reuse the same dispatcher
+ * with their own context types.
  */
-
-export type ResponseShape = 'sync' | 'async-batch';
-
-export interface RouteMetadata {
-  /** Declared response shape for this route. Defaults to 'sync'. */
-  responseShape?: ResponseShape;
-}
 
 interface RouteEntry<H> {
   handler: H;
   paramNames: string[];
   regex: RegExp;
-  metadata: RouteMetadata;
 }
 
 export class RouteDispatcher<H> {
   private routes = new Map<string, Map<string, RouteEntry<H>>>();
 
-  register(method: string, path: string, handler: H, metadata: RouteMetadata = {}): void {
+  register(method: string, path: string, handler: H): void {
     const paramNames: string[] = [];
     const regexStr = path.replace(/:(\w+)/g, (_, name: string) => {
       paramNames.push(name);
@@ -35,17 +21,17 @@ export class RouteDispatcher<H> {
     });
     const regex = new RegExp('^' + regexStr + '$');
     if (!this.routes.has(method)) this.routes.set(method, new Map());
-    this.routes.get(method)!.set(path, { handler, paramNames, regex, metadata });
+    this.routes.get(method)!.set(path, { handler, paramNames, regex });
   }
 
-  match(method: string, url: string): { handler: H; params: Record<string, string>; metadata: RouteMetadata } | null {
+  match(method: string, url: string): { handler: H; params: Record<string, string> } | null {
     const pathname = url.split('?')[0];
     for (const [, entry] of this.routes.get(method) ?? new Map<string, RouteEntry<H>>()) {
       const m = pathname.match(entry.regex);
       if (m) {
         const params: Record<string, string> = {};
         entry.paramNames.forEach((n, i) => { params[n] = m[i + 1]; });
-        return { handler: entry.handler, params, metadata: entry.metadata };
+        return { handler: entry.handler, params };
       }
     }
     return null;
@@ -67,11 +53,11 @@ export class RouteDispatcher<H> {
   }
 
   /** Returns the full registered route manifest as method/path pairs. */
-  listRoutes(): Array<{ method: string; path: string; metadata: RouteMetadata }> {
-    const manifest: Array<{ method: string; path: string; metadata: RouteMetadata }> = [];
+  listRoutes(): Array<{ method: string; path: string }> {
+    const manifest: Array<{ method: string; path: string }> = [];
     for (const [method, entries] of this.routes) {
-      for (const [path, entry] of entries) {
-        manifest.push({ method, path, metadata: entry.metadata });
+      for (const [path] of entries) {
+        manifest.push({ method, path });
       }
     }
     return manifest;

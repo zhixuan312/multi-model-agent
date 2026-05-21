@@ -36,6 +36,7 @@ export async function getRealFilesChanged(state: LifecycleState): Promise<RealFi
     const diffResult = spawnSync('git', ['diff', '--name-only', preSha], {
       cwd,
       encoding: 'utf8',
+      windowsHide: true,
     });
     if (diffResult.status !== 0) {
       return { files: [], source: 'git_error' };
@@ -48,6 +49,7 @@ export async function getRealFilesChanged(state: LifecycleState): Promise<RealFi
     const lsResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
       cwd,
       encoding: 'utf8',
+      windowsHide: true,
     });
     if (lsResult.status !== 0) {
       return { files: [], source: 'git_error' };

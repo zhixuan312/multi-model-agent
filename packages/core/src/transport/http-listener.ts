@@ -1,13 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 
 /**
- * Spec C1 HTTPListener — bind loopback, accept HTTP. Supports a graceful
- * shutdown state where new requests are rejected with 503 while in-flight
- * async batches complete and TelemetryUploader drains.
- *
- * The listener owns the socket lifecycle. Routing and request pipeline are
- * separate (RouteDispatcher + RequestPipeline). Wire them together in the
- * server boot, not here.
+ * HTTPListener — owns the HTTP socket lifecycle: bind a loopback interface,
+ * accept connections, close on shutdown. Routing, draining policy, auth, and
+ * request parsing live elsewhere (RouteDispatcher + request-pipeline). The
+ * listener's only request-time responsibility is to convert a rejected handler
+ * promise into a 500 (when the response is still writable) or a log line.
  */
 
 export type HTTPRequestHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
@@ -17,51 +15,36 @@ export interface HTTPListenerOptions {
   bind: string;
   /** Listening port. Pass 0 for ephemeral allocation. */
   port: number;
-  /** Application handler. Called for every accepted request unless draining. */
+  /** Application handler. Called for every accepted request. */
   handler: HTTPRequestHandler;
 }
 
 export class HTTPListener {
   private server: Server | null = null;
-  private draining = false;
-  private startedAt = 0;
 
   constructor(private readonly options: HTTPListenerOptions) {}
 
   async start(): Promise<{ port: number; address: string | null }> {
     const server = createServer((req, res) => {
-      if (this.draining) {
-        res.statusCode = 503;
-        res.setHeader('Retry-After', '5');
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: { code: 'shutting_down', message: 'Server is shutting down' } }));
-        return;
-      }
-      void this.options.handler(req, res);
+      Promise.resolve(this.options.handler(req, res)).catch((err: unknown) => {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        process.stderr.write(`[mmagent] listener handler rejected: ${msg}\n`);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 'internal_error', message: 'Internal server error' } }));
+        } else if (!res.writableEnded) {
+          res.end();
+        }
+      });
     });
     await new Promise<void>((resolve) => {
       server.listen(this.options.port, this.options.bind, resolve);
     });
     this.server = server;
-    this.startedAt = Date.now();
     const addr = server.address();
     const port = typeof addr === 'object' && addr !== null ? (addr as { port: number }).port : this.options.port;
     const address = typeof addr === 'object' && addr !== null ? ((addr as { address?: string }).address ?? null) : null;
     return { port, address };
-  }
-
-  /** Begin graceful shutdown — new requests get 503; existing ones complete. */
-  beginDraining(): void {
-    this.draining = true;
-  }
-
-  isDraining(): boolean {
-    return this.draining;
-  }
-
-  /** Wall-clock ms when the listener started. Zero if never started. */
-  getStartedAt(): number {
-    return this.startedAt;
   }
 
   async stop(): Promise<void> {

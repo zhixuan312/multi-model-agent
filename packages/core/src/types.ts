@@ -23,7 +23,6 @@ export type {
 
 export type {
   AgentConfig,
-  FallbackOverride,
   CodexProviderConfig,
   ClaudeProviderConfig,
   ProviderConfig,

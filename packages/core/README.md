@@ -157,12 +157,11 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.7.8
+## What's new in 4.7.12
 
-- **Deterministic completion gate.** Wire `terminal_status` / `worker_status` / `error_code` is derived from objective lifecycle signals (review verdict, commit gate, rework state, implement outcome) via a single `deriveCompletion()` pure function. Worker self-assessment is recorded in telemetry but no longer gates completion — closes the bug class where review-approved + commit-landed tasks falsely sealed as `terminal_status='error'` because the worker reported `failed` (e.g., couldn't run a verify command in a sandboxed environment).
-- **Worker prompts updated.** `execute-plan`, `delegate`, and the rework template now explicitly tell workers "inability to verify is not failure — the system verifies via reviewer + commit-stage signals." Stops the self-sabotage pattern where workers marked themselves `failed` simply because they couldn't execute a verification command.
-- **Blast-radius regression guard.** New contract test pins the wire diff to exactly 5 fields (`terminal_status`, `worker_status`, `error_code`, annotating `outcome` / `skipReason`); any other field drift fails the test.
-- **From 4.7.7:** complete `verifyCommand` removal end-to-end; per-task `reviewPolicy` distinguished from actual stage outcome; `errorCode` preserved through the seal path for reviewer-rejected runs.
+- **Transport component reduced to one implementation.** `HTTPListener` is now the sole HTTP listener (the server no longer creates `node:http` inline) and owns only the socket lifecycle; drain authority lives solely in the request pipeline. A rejected request-handler promise is now logged and answered with `500` instead of being silently swallowed.
+- **Host-header rebinding guard is live.** Every request's `Host` header must be a literal loopback form; a foreign host (DNS-rebinding attempt) is rejected with `403 forbidden_host`.
+- **Dead surface removed.** `RouteDispatcher` response-shape metadata (`RouteMetadata`/`ResponseShape`), `HTTPListener` drain/start-time methods, 15 unused enums, `draft-task.ts`, and `FallbackOverride` are gone; config types are now derived from the Zod schema.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

@@ -40,9 +40,9 @@ describe('autoCommitFiles', () => {
       commit: { type: 'feat', subject: 'implemented auth' },
       cwd: '/project',
     });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts', 'src/b.ts'], { cwd: '/project' });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'feat: implemented auth', '--', 'src/a.ts', 'src/b.ts'], { cwd: '/project' });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['rev-parse', 'HEAD'], { cwd: '/project' });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts', 'src/b.ts'], { cwd: '/project', windowsHide: true });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'feat: implemented auth', '--', 'src/a.ts', 'src/b.ts'], { cwd: '/project', windowsHide: true });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['rev-parse', 'HEAD'], { cwd: '/project', windowsHide: true });
     expect(result).toEqual({ sha: 'abc1234' });
   });
 
@@ -52,7 +52,7 @@ describe('autoCommitFiles', () => {
       commit: { type: 'chore', subject: 'done' },
       cwd: '/project',
     });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project', windowsHide: true });
     expect(result).toEqual({ sha: 'abc1234' });
   });
 
@@ -73,7 +73,7 @@ describe('autoCommitFiles', () => {
       cwd: '/project',
     });
     // src/a.ts resolves to /project/src/a.ts which is inside /project
-    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project', windowsHide: true });
   });
 
   it('skips relative paths that escape cwd', () => {
@@ -82,7 +82,7 @@ describe('autoCommitFiles', () => {
       commit: { type: 'chore', subject: 'done' },
       cwd: '/project',
     });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project', windowsHide: true });
     expect(result).toEqual({ sha: 'abc1234' });
   });
 

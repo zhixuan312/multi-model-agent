@@ -27,6 +27,9 @@ export async function resolveGitToplevel(
     try {
       child = spawn('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        // windowsHide: suppress the console window Windows opens per spawned
+        // console binary when the daemon has no attached console. No-op on POSIX.
+        windowsHide: true,
       });
     } catch {
       settle(null);

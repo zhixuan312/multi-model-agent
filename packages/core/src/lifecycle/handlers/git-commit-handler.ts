@@ -25,7 +25,7 @@ const execFileP = promisify(execFile);
 
 async function gitC(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
-    const { stdout, stderr } = await execFileP('git', ['-C', cwd, ...args]);
+    const { stdout, stderr } = await execFileP('git', ['-C', cwd, ...args], { windowsHide: true });
     return { stdout, stderr, code: 0 };
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };

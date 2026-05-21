@@ -27,7 +27,7 @@ async function gitDiffNameOnly(cwd: string, preSha: string): Promise<string[]> {
     let out = '';
     let settled = false;
     const done = (v: string[]) => { if (!settled) { settled = true; resolve(v); } };
-    const child = spawn('git', ['diff', '--name-only', `${preSha}..`], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('git', ['diff', '--name-only', `${preSha}..`], { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     child.stdout.on('data', (b: Buffer) => { out += b.toString('utf8'); });
     child.on('error', () => done([]));
     child.on('exit', (code) => {

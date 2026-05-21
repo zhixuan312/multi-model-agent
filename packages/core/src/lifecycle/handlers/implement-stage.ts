@@ -18,11 +18,11 @@ export function capturePreTaskState(state: LifecycleState): void {
   const cwd = state.cwd as string | undefined;
   if (!cwd) return;
 
-  const headResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' });
+  const headResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8', windowsHide: true });
   if (headResult.status !== 0) return;
   (state as { preTaskHeadSha?: string }).preTaskHeadSha = headResult.stdout.trim();
 
-  const lsResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], { cwd, encoding: 'utf8' });
+  const lsResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], { cwd, encoding: 'utf8', windowsHide: true });
   if (lsResult.status !== 0) {
     (state as { preTaskUntrackedFiles?: Set<string> }).preTaskUntrackedFiles = new Set();
     return;

@@ -40,9 +40,9 @@ export function autoCommitFiles({ filesWritten, commit, cwd }: AutoCommitOptions
   try {
     // Use git add + git commit with explicit pathspec to avoid committing
     // unrelated pre-existing staged changes from the working tree
-    execFileSync('git', ['add', ...contained], { cwd });
-    execFileSync('git', ['commit', '-m', message, '--', ...contained], { cwd });
-    const shaOut = execFileSync('git', ['rev-parse', 'HEAD'], { cwd });
+    execFileSync('git', ['add', ...contained], { cwd, windowsHide: true });
+    execFileSync('git', ['commit', '-m', message, '--', ...contained], { cwd, windowsHide: true });
+    const shaOut = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, windowsHide: true });
     return { sha: shaOut.toString().trim() };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);

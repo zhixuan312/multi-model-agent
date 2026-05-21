@@ -18,6 +18,7 @@
 
 export type { ComposePayload as RunResult } from '../lifecycle/stage-io.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
+import type { StageStatsMap } from './stage-stats.js';
 
 // ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
 // `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
@@ -137,7 +138,7 @@ export interface RuntimeRunResult {
     fallbackOverrides?: Array<{ role: string; assigned: string }>;
     [key: string]: unknown;
   };
-  stageStats?: StageStatsShape;
+  stageStats?: Partial<StageStatsMap>;
   reviewVerdict?: string;
   qualityReviewStatus?: string;
   specReviewStatus?: string;
@@ -197,31 +198,3 @@ export interface ReviewRunOptions {
   abortSignal?: AbortSignal;
 }
 
-/** Minimal shape for stageStats — enough for event-builder.ts to access
- *  stageStats.implementing, stageStats.review, etc. without TS errors.
- *  The full StageStatsMap lives in types/stage-stats.ts. */
-export interface StageStatsShape {
-  implementing?: RawStageStatsShape;
-  review?: RawStageStatsShape & { roundsUsed?: number };
-  rework?: RawStageStatsShape;
-  annotating?: RawStageStatsShape & { outcome?: string; skipReason?: string };
-  committing?: RawStageStatsShape;
-}
-
-export interface RawStageStatsShape {
-  entered?: boolean;
-  durationMs?: number | null;
-  costUSD?: number | null;
-  agentTier?: string | null;
-  modelFamily?: string | null;
-  model?: string | null;
-  maxIdleMs?: number | null;
-  totalIdleMs?: number | null;
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  cachedReadTokens?: number | null;
-  cachedNonReadTokens?: number | null;
-  turnCount?: number | null;
-  filesWrittenCount?: number | null;
-  activityEvents?: number | null;
-}

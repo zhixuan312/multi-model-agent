@@ -8,7 +8,7 @@ import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
-import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
+import { isLoopbackAddress, isAllowedHostHeader } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext, RawHandler } from './types.js';
 
@@ -78,8 +78,16 @@ export async function handleRequest(
     return;
   }
 
-  // ── Step 3: Loopback guard ─────────────────────────────────────────────────
+  // ── Step 3: Loopback & rebinding guard ─────────────────────────────────────
   const pathname = rawUrl.split('?')[0]!;
+  // (a) Host-header rebinding check — ALL routes. Defends against DNS rebinding:
+  // the connection is loopback (IP check passes) but the Host header is an
+  // attacker-controlled domain. Only literal loopback host forms are allowed.
+  if (!isAllowedHostHeader(req.headers.host)) {
+    sendError(res, 403, 'forbidden_host', 'Request Host header is not an allowed loopback host');
+    return;
+  }
+  // (b) IP-level loopback check — loopbackOnlyPaths only.
   if (pipelineCfg.loopbackOnlyPaths.has(pathname)) {
     const remoteAddr = req.socket?.remoteAddress;
     if (!isLoopbackAddress(remoteAddr)) {

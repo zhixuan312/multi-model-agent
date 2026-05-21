@@ -18,6 +18,9 @@ export async function getDirtyFiles(
     try {
       child = spawn('git', ['-C', cwd, 'status', '--porcelain'], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        // windowsHide: suppress the console window Windows opens per spawned
+        // console binary when the daemon has no attached console. No-op on POSIX.
+        windowsHide: true,
       });
     } catch {
       done([]); return;
