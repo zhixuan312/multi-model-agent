@@ -99,30 +99,6 @@ export const CODE_REVIEW_FAILURE_MODES = [
   '- low: stylistic / naming / dead-code / minor-refactor opportunity. Does not change merge safety.',
 ].join('\n');
 
-/**
- * Counter-balance to the SEVERITY_LADDER's anti-inflation hint.
- *
- * The shared severity ladder ends with "Workers commonly inflate —
- * resist the urge." That bias is correct in the limit (no, the missing
- * comma is not critical) but produces UNDER-finding when combined with
- * a thin per-tool rubric. For code review specifically, the typical
- * failure is missing the cross-file ripple or test gap because the
- * worker only looked at the diff in the named file. This block tells
- * the worker that under-finding is the more common review failure.
- */
-export const THOROUGHNESS_REMINDER_REVIEW = [
-  'Thoroughness expectation for code reviews:',
-  '- For non-trivial diffs (>30 changed lines OR a public symbol changed), zero or 1-2 findings is unusual and usually indicates the rubric was applied too narrowly. Sweep the full failure-mode taxonomy above before declaring "no findings."',
-  '- The SEVERITY_LADDER warns against inflation. That warning is calibrated — but the typical UNDER-finding in code review is missing the cross-file ripple or test gap because the worker only looked at the diff in the named file. Apply the failure-mode taxonomy thoroughly first; THEN calibrate severity downward where the impact is small.',
-  '- Do not invent findings to hit a quota. But if you have applied all 10 failure modes and still have only stylistic nits, double-check categories 1, 2, 4, and 10 (test gap, cross-file ripple, missing edge case, implicit-contract assumption) — these are the ones reviewers most often miss on first pass and the ones most likely to ship a regression.',
-  '',
-  'Cross-file pass (REQUIRED when the named files change a public symbol — exported function, exported type, route handler, or wire-schema field):',
-  '- Make ONE explicit pass: identify the changed public symbols, grep for their call sites in the rest of the repo, and check whether each call site is consistent with the new signature/return-shape/contract.',
-  '- For each (changed symbol, call site) pair, ask: does the call site as currently written still work after this change?',
-  '- Worked example. A diff in `src/foo.ts` renames `getUserById(id)` to `getUserById(id, opts)` and makes `opts` required. The grep finds 3 call sites in `src/handlers/auth.ts`, `src/handlers/billing.ts`, `tests/integration/users.test.ts`. None pass `opts`. Flag this as HIGH (or CRITICAL if `auth.ts` would no-op silently rather than error). The fact that `src/foo.ts` looks clean in isolation is exactly the kind of false-clean that ships regressions.',
-  '- Most reviewers miss findings of this shape on first pass because they only read the named files. The cross-file pass forces the grep.',
-].join('\n');
-
 export const ANNOTATOR_AWARENESS_REVIEW = [
   'After your output, an annotator validates each finding against this code-review rubric:',
   '- Is the finding within the requested focus area (or universally applicable: security, performance, correctness apply to every review)?',

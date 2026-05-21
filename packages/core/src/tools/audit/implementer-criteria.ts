@@ -110,29 +110,6 @@ export const DOC_AUDIT_FAILURE_MODES = [
   '- low: stylistic, labeling, or formatting issues; missing metadata; minor cross-reference fixes.',
 ].join('\n');
 
-/**
- * Counter-balance to the SEVERITY_LADDER's anti-inflation hint.
- *
- * The shared severity ladder ends with "Workers commonly inflate — resist
- * the urge." That bias is correct for code reviews, where over-flagging
- * stylistic preferences is the common failure. For prose-document audits
- * the opposite is true: workers UNDER-find because they have nothing to
- * pattern-match against in their training. This block tells the worker
- * the doc-audit failure mode is silence, not noise.
- */
-export const THOROUGHNESS_REMINDER_AUDIT = [
-  'Thoroughness expectation for prose-document audits:',
-  '- For non-trivial documents (>500 words), zero or 1-2 findings is unusual and usually indicates the rubric was applied too narrowly. Sweep the full failure-mode taxonomy above before declaring "no findings."',
-  '- The SEVERITY_LADDER warns against inflation. That warning is calibrated for code reviews — for prose audits the typical failure mode is the opposite (under-finding because the worker only looked for surface nits). Apply the failure-mode taxonomy thoroughly first; THEN calibrate severity downward where the impact is small.',
-  '- Do not invent findings to hit a quota. But if you have applied all 11 failure modes and still have only stylistic nits, double-check categories 1, 2, 5, 6, and 8 (recommendation-coherence, internal contradiction, argument soundness, completeness against constraints, drift) — these are the ones workers most often miss on first pass.',
-  '',
-  'Principle-mapping pass (REQUIRED when the doc has a principles / constraints / "what we won\'t do" section):',
-  '- Make ONE explicit pass walking each recommendation against each principle/constraint listed in the doc.',
-  '- For each (recommendation, constraint) pair, ask: does this recommendation, as written, require something the constraint forbids? Or rely on something the constraint says is unavailable?',
-  '- Worked example (illustrative — DO NOT match this verbatim against the doc you are auditing). Suppose a doc states Principle X: "Operations must be deterministic — no random sources." Suppose recommendation R proposes: "On request collision, generate a fresh tiebreaker using the system entropy pool." Chain: the tiebreaker uses entropy; entropy is non-deterministic; Principle X forbids non-determinism; therefore R is unimplementable as written without breaking Principle X. → File this as a HIGH-severity recommendation-coherence finding. The general pattern: a fix that REQUIRES something a constraint FORBIDS, or RELIES ON something a constraint says is UNAVAILABLE, is a load-bearing finding regardless of how clean the fix\'s prose reads.',
-  '- Most workers miss findings of this shape on first pass because the chain spans two non-adjacent sections. The principle-mapping pass forces you to make the chain.',
-].join('\n');
-
 export const ANNOTATOR_AWARENESS_AUDIT = [
   'After your output, an annotator validates each finding against this audit-specific rubric:',
   '- Is the finding about the document (contradiction / absence / ambiguity / wrong claim / scope gap / recommendation-coherence / argument-soundness)?',
