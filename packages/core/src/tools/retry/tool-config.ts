@@ -4,8 +4,8 @@ import type { Input } from './schema.js';
 import { retryBriefSlot, type RetryBrief } from './brief-slot.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec, RuntimeRunResult } from '../../types.js';
-import { retryReportSchema } from '../../reporting/report-parser-slots/retry-report.js';
-import { retryHeadlineTemplate } from '../../reporting/headline-templates/retry.js';
+import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
+import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 
 export function registerRetry(registry: ToolSurfaceRegistry): void {
@@ -47,8 +47,8 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
       autoCommit: origTask?.autoCommit ?? false,
     };
   },
-  reportSchema: retryReportSchema,
-  headlineTemplate: retryHeadlineTemplate,
+  reportSchema: noStructuredReportSchema,
+  headlineTemplate: makeFindingsHeadlineTemplate('retry', 'high'),
   postProcessEnvelope: (envelope, ctx) => {
     const results = (Array.isArray(envelope.results) ? envelope.results : []) as RuntimeRunResult[];
     const total = results.length;

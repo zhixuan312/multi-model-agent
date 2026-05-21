@@ -4,7 +4,8 @@ import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from './brief-slot.js';
-import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.js';
+import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
+import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 export function registerDebug(registry: ToolSurfaceRegistry): void {
@@ -51,6 +52,6 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       mainModel: ctx.mainModel ?? undefined,
     };
   },
-  reportSchema: { parse: (_text) => { throw new Error('no structured report emitted by this executor'); } },
-  headlineTemplate: debugHeadlineTemplate,
+  reportSchema: noStructuredReportSchema,
+  headlineTemplate: makeFindingsHeadlineTemplate('debug', 'high'),
 };

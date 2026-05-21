@@ -4,8 +4,8 @@ import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
-import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
-import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
+import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
+import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
@@ -97,6 +97,6 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       autoCommit: false,
     };
   },
-  reportSchema: reviewReportSchema,
-  headlineTemplate: reviewHeadlineTemplate,
+  reportSchema: noStructuredReportSchema,
+  headlineTemplate: makeFindingsHeadlineTemplate('review', 'blocking'),
 };

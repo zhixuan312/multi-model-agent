@@ -1,8 +1,8 @@
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema, type Input } from './schema.js';
 import { auditBriefSlot, type AuditBrief } from './brief-slot.js';
-import { auditReportSchema } from '../../reporting/report-parser-slots/audit-report.js';
-import { auditHeadlineTemplate } from '../../reporting/headline-templates/audit.js';
+import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
+import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec } from '../../types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
@@ -56,6 +56,6 @@ export const toolConfig: ToolConfig<Input, AuditBrief, unknown> = {
       subtype: brief.subtype,
     } as TaskSpec;
   },
-  reportSchema: auditReportSchema,
-  headlineTemplate: auditHeadlineTemplate,
+  reportSchema: noStructuredReportSchema,
+  headlineTemplate: makeFindingsHeadlineTemplate('audit', 'high'),
 };
