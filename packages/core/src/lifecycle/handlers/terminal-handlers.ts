@@ -63,89 +63,11 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   if (state.taskTerminalEmitted) return;
   const ctx = state.executionContext;
   if (!ctx) return;
-  const bus = ctx.bus;
-  if (!bus) {
-    state.taskTerminalEmitted = true; // mark even when bus absent so re-runs are noops
-    return;
-  }
-  const last = state.lastRunResult as RuntimeRunResult | undefined;
-
-  // Sum tokens / counts across every recorded stage so the local task_completed
-  // event carries the FULL cost (implementer + reviewer + annotator + rework
-  // + diff). Previously this read last.usage directly which only carried the
-  // implementer tokens — reviewer / annotator costs were dropped.
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cachedReadTokens = 0;
-  let cachedNonReadTokens = 0;
-  let turnsTotal = 0;
-  let filesWrittenTotal = 0;
-  const ss = (last as { stageStats?: Record<string, Record<string, unknown>> } | undefined)?.stageStats;
-
-  // A11.2: compute actualCostUSD as the sum of every stage's costUSD.
-  // costUSD and totalCostUSD are back-compat aliases for the same value.
-  // costDeltaVsMainUSD comes from the top-level cost field on RuntimeRunResult.
-  let actualCostUSD: number | null = null;
-  let costDeltaVsMainUSD: number | null = null;
-
-  if (ss) {
-    for (const stage of Object.values(ss)) {
-      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
-      inputTokens += (stage['inputTokens'] as number | null | undefined) ?? 0;
-      outputTokens += (stage['outputTokens'] as number | null | undefined) ?? 0;
-      cachedReadTokens += (stage['cachedReadTokens'] as number | null | undefined) ?? 0;
-      cachedNonReadTokens += (stage['cachedNonReadTokens'] as number | null | undefined) ?? 0;
-      turnsTotal += (stage['turnCount'] as number | null | undefined) ?? 0;
-      filesWrittenTotal += (stage['filesWrittenCount'] as number | null | undefined) ?? 0;
-      const stageCost = stage['costUSD'] as number | null | undefined;
-      if (stageCost !== null && stageCost !== undefined) {
-        actualCostUSD = (actualCostUSD ?? 0) + stageCost;
-      }
-    }
-    costDeltaVsMainUSD = (last as { cost?: { costDeltaVsMainUSD?: number | null } })?.cost?.costDeltaVsMainUSD ?? null;
-  }
-  // Fallback to last.usage when stageStats wasn't populated (legacy paths).
-  if (inputTokens === 0 && outputTokens === 0 && last?.usage) {
-    inputTokens = last.usage.inputTokens ?? 0;
-    outputTokens = last.usage.outputTokens ?? 0;
-    cachedReadTokens = last.usage.cachedReadTokens ?? 0;
-    cachedNonReadTokens = last.usage.cachedNonReadTokens ?? 0;
-  }
-  if (turnsTotal === 0) turnsTotal = last?.turns ?? 0;
-  if (filesWrittenTotal === 0) filesWrittenTotal = Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0;
-
-  // Emit a per-stage map so consumers see the breakdown without unpacking
-  // RuntimeRunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
-  // turnCount, durationMs, tier, model, verdict? }.
-  const stagesMap: Record<string, Record<string, unknown>> = {};
-  if (ss) {
-    for (const [name, stage] of Object.entries(ss)) {
-      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
-      stagesMap[name] = {
-        inputTokens: stage['inputTokens'] ?? 0,
-        outputTokens: stage['outputTokens'] ?? 0,
-        cachedReadTokens: stage['cachedReadTokens'] ?? 0,
-        cachedNonReadTokens: stage['cachedNonReadTokens'] ?? 0,
-        costUSD: stage['costUSD'] ?? null,
-        turnCount: stage['turnCount'] ?? 0,
-        durationMs: stage['durationMs'] ?? null,
-        agentTier: stage['agentTier'] ?? null,
-        model: stage['model'] ?? null,
-        ...(stage['verdict'] !== undefined && { verdict: stage['verdict'] }),
-        ...(stage['roundsUsed'] !== undefined && { roundsUsed: stage['roundsUsed'] }),
-      };
-    }
-  }
-  const stages = JSON.stringify(stagesMap);
-
-  // The old `task_completed` named event is replaced by the sealed-envelope snapshot
-  // push that happens inside envelope.seal() (see recordTaskCompletedHandler). The
-  // TelemetryUploader subscriber picks up the sealed snapshot and runs toWireRecord.
-  // No equivalent bus.emit needed here — the envelope IS the event.
-  void stages; void actualCostUSD; void costDeltaVsMainUSD; void turnsTotal;
-  void filesWrittenTotal;
-  void inputTokens; void outputTokens; void cachedReadTokens; void cachedNonReadTokens;
-  void last; void bus;
+  // The old `task_completed` named event was replaced by the sealed-envelope
+  // snapshot push inside envelope.seal() (see recordTaskCompletedHandler); the
+  // TelemetryUploader subscriber picks up that snapshot and runs toWireRecord.
+  // No bus.emit happens here — the envelope IS the event. This handler now only
+  // marks the idempotency flag so re-runs are no-ops.
   state.taskTerminalEmitted = true;
 }
 
