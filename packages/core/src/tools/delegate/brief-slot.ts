@@ -16,6 +16,7 @@ export interface DelegateBrief {
   agentType: 'standard' | 'complex';
   reviewPolicy: ReviewPolicy;
   contextBlockIds?: string[];
+  outputTargets?: string[];
 }
 
 /**
@@ -67,4 +68,5 @@ export const delegateBriefSlot = (input: Input): DelegateBrief[] =>
     agentType: t.agentType ?? 'standard',
     reviewPolicy: t.reviewPolicy ?? 'full',
     contextBlockIds: t.contextBlockIds,
+    outputTargets: t.outputTargets,
   }));
