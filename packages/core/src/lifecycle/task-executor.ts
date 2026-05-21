@@ -1,75 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import type { ToolConfig } from './tool-config-types.js';
+import type { ToolConfig, DispatchMode } from './tool-config-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { ExecutorOutput } from './executor-output-types.js';
 import type { TaskSpec, RuntimeRunResult } from '../types.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
-import { runTaskViaDispatcher } from './task-runner.js';
+import { runTaskViaDispatcher, applyParallelSafetySuffixIfNeeded } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from './review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
-import { groupTasksByRepo, type TaskGroup } from './task-grouping.js';
 import { buildCancelledResult } from './build-cancelled-result.js';
-import { getDirtyFiles, formatHygieneAdvisory } from './repo-hygiene.js';
 import { TaskEnvelopeStore } from '../events/task-envelope.js';
-
-/**
- * Inner loop for grouped dispatch. Runs each group in parallel; within
- * each group runs tasks sequentially in caller input order. Aborted
- * not-yet-started tasks receive a cancelled-result envelope.
- * Failures within a group are caught by dispatchOne (RuntimeRunResult
- * with workerStatus='failed') and DO NOT halt subsequent group members.
- *
- * Returns results indexed by original task order.
- */
-export async function dispatchGroupedWithPrecomputedGroups(
-  tasks: TaskSpec[],
-  groups: TaskGroup[],
-  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
-  opts: { abortSignal?: AbortSignal },
-): Promise<RuntimeRunResult[]> {
-  const results: RuntimeRunResult[] = new Array(tasks.length);
-  await Promise.all(
-    groups.map(async (group) => {
-      let isFirstInGroup = true;
-      for (const { task, originalIndex } of group.tasks) {
-        if (opts.abortSignal?.aborted) {
-          results[originalIndex] = buildCancelledResult();
-          continue;
-        }
-        let effectiveTask = task;
-        if (!isFirstInGroup && group.tasks.length > 1) {
-          const dirty = await getDirtyFiles(group.key);
-          if (dirty.length > 0) {
-            const advisory = formatHygieneAdvisory(dirty);
-            effectiveTask = { ...task, prompt: advisory + task.prompt };
-          }
-        }
-        results[originalIndex] = await dispatchOne(effectiveTask, originalIndex);
-        isFirstInGroup = false;
-      }
-    }),
-  );
-  return results;
-}
-
-/**
- * Convenience wrapper that resolves the grouping internally. Used by
- * tests; production callers use the precomputed-groups variant so they
- * can also set ctx.batchGroupCount and call ctx.attachBatchGroups before
- * dispatch begins.
- */
-export async function dispatchGrouped(
-  tasks: TaskSpec[],
-  dispatchOne: (task: TaskSpec, originalIndex: number) => Promise<RuntimeRunResult>,
-  opts: { abortSignal?: AbortSignal },
-): Promise<RuntimeRunResult[]> {
-  const groups = await groupTasksByRepo(tasks);
-  return dispatchGroupedWithPrecomputedGroups(tasks, groups, dispatchOne, opts);
-}
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
@@ -264,36 +207,35 @@ export async function executeTask<Input, Brief, Report>(
     }
   };
 
+  // Effective dispatch mode: route default unless the route allows a caller
+  // override AND the request carried one. (execute-plan: not overridable, so
+  // always serial; delegate: parallel by default, overridable to serial.)
+  const requestedMode = (input as { execution?: DispatchMode }).execution;
+  const mode: DispatchMode =
+    config.dispatchModeOverridable && requestedMode ? requestedMode : config.dispatchMode;
+  const concurrent = mode === 'parallel' && tasks.length > 1;
+
+  // Append the parallel-safety reminder only when tasks actually run
+  // concurrently (parallel mode + >1 task). The original tasks[] (stored in
+  // the batch cache for retry) is left unsuffixed.
+  const dispatchTasks = applyParallelSafetySuffixIfNeeded(tasks, concurrent);
+
   let results: RuntimeRunResult[];
-  if (config.serializeSameRepo && tasks.length > 1) {
-    // Compute groups once so we can both:
-    //   - set ctx.batchGroupCount BEFORE dispatch (task-runner reads this
-    //     to gate PARALLEL_SAFETY_SUFFIX), and
-    //   - call ctx.attachBatchGroups so the 202 headline composer can
-    //     describe active groups.
-    const groups = await groupTasksByRepo(tasks);
-    (ctx as { batchGroupCount?: number }).batchGroupCount = groups.length;
-    ctx.attachBatchGroups?.(
-      groups.map((g) => ({
-        key: g.key,
-        taskIndices: g.tasks.map((t) => t.originalIndex),
-      })),
-    );
-    ctx.setBatchGroupingTelemetry?.({
-      groupCount: groups.length,
-      groupSizes: groups.map((g) => g.tasks.length),
-      serializationApplied: groups.some((g) => g.tasks.length > 1),
-    });
-    results = await dispatchGroupedWithPrecomputedGroups(
-      tasks,
-      groups,
-      (task, i) => dispatchOne(task, i),
-      { abortSignal: ctx.stall.controller.signal },
-    );
-  } else if (tasks.length === 1) {
+  if (tasks.length === 1) {
+    // Single-task fast path — identical to pre-change behavior, no suffix.
     results = [await dispatchOne(tasks[0]!, 0)];
+  } else if (mode === 'parallel') {
+    results = await Promise.all(dispatchTasks.map((task, i) => dispatchOne(task, i)));
   } else {
-    results = await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
+    // Serial: input order; stop issuing new work once the batch abort fires.
+    results = new Array(dispatchTasks.length);
+    for (let i = 0; i < dispatchTasks.length; i++) {
+      if (ctx.stall.controller.signal.aborted) {
+        results[i] = buildCancelledResult();
+        continue;
+      }
+      results[i] = await dispatchOne(dispatchTasks[i]!, i);
+    }
   }
   const wallClockMs = Date.now() - startMs;
 
@@ -370,6 +312,7 @@ export async function executeTask<Input, Brief, Report>(
     batchId: ctx.batchId ?? randomUUID(),
     wallClockMs,
     mainModel,
+    dispatchMode: mode,
     specReviewVerdict: verdicts.specReviewVerdict,
     qualityReviewVerdict: verdicts.qualityReviewVerdict,
     roundsUsed: verdicts.roundsUsed,
