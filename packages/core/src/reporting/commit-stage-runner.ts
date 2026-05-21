@@ -6,8 +6,8 @@ export class CommitStageRunner {
   run(opts: { cwd: string; message: string; expectedFiles: string[] }): CommitResult {
     try {
       // argv form: paths are individual array elements, no quoting needed
-      execFileSync('git', ['add', '--', ...opts.expectedFiles], { cwd: opts.cwd });
-      const status = execFileSync('git', ['status', '--porcelain'], { cwd: opts.cwd }).toString();
+      execFileSync('git', ['add', '--', ...opts.expectedFiles], { cwd: opts.cwd, windowsHide: true });
+      const status = execFileSync('git', ['status', '--porcelain'], { cwd: opts.cwd, windowsHide: true }).toString();
 
       // porcelain v1 prefixes are TWO chars [XY] where X = staged, Y = unstaged.
       // Treat any non-empty line whose staged-half (first char) is NOT a known clean staged
@@ -28,8 +28,8 @@ export class CommitStageRunner {
       if (dirty > 0) return { errorCode: 'validator_dirty_worktree' };
 
       // -m takes the literal message as an argv element — no escape ladder
-      execFileSync('git', ['commit', '-m', opts.message], { cwd: opts.cwd });
-      const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: opts.cwd }).toString().trim();
+      execFileSync('git', ['commit', '-m', opts.message], { cwd: opts.cwd, windowsHide: true });
+      const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: opts.cwd, windowsHide: true }).toString().trim();
       return { commitSha: sha };
     } catch (e: any) {
       if (e.message?.includes('nothing to commit')) return { errorCode: 'validator_no_changes' };

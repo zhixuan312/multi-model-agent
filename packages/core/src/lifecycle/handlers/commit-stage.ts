@@ -45,10 +45,10 @@ function validatePaths(cwd: string, paths: string[]): string[] {
 }
 
 export async function readbackCommit(sha: string, cwd: string): Promise<CommitStageResult> {
-  const { stdout: meta } = await exec('git', ['log', '-1', sha, '--format=%H%n%cI%n%s%n%b'], { cwd });
+  const { stdout: meta } = await exec('git', ['log', '-1', sha, '--format=%H%n%cI%n%s%n%b'], { cwd, windowsHide: true });
   const lines = meta.split('\n');
   const [shaOut, isoCi, subject, ...bodyLines] = lines;
-  const { stdout: names } = await exec('git', ['log', '-1', sha, '--name-only', '--format='], { cwd });
+  const { stdout: names } = await exec('git', ['log', '-1', sha, '--name-only', '--format='], { cwd, windowsHide: true });
   const filesChanged = names.split('\n').map(s => s.trim()).filter(Boolean);
   const authoredAt = new Date(isoCi).toISOString();
   return { sha: shaOut, subject, body: bodyLines.join('\n').trimEnd(), filesChanged, authoredAt };
@@ -59,13 +59,13 @@ export async function runCommitStage(input: CommitStageInput): Promise<CommitSta
     throw new Error('commit-stage: filesWritten must not be empty (call only when treeDirty)');
   }
   const safePaths = validatePaths(input.cwd, input.filesWritten);
-  await exec('git', ['add', '--', ...safePaths], { cwd: input.cwd });
+  await exec('git', ['add', '--', ...safePaths], { cwd: input.cwd, windowsHide: true });
 
   const message = composeCommitMessage(input.commit);
   const [subjectFull, body] = message.split(/\n\n([\s\S]*)/, 2);
   const commitArgs = ['commit', '-q', '-m', subjectFull, ...(body ? ['-m', body] : [])];
-  await exec('git', commitArgs, { cwd: input.cwd });
+  await exec('git', commitArgs, { cwd: input.cwd, windowsHide: true });
 
-  const { stdout: head } = await exec('git', ['rev-parse', 'HEAD'], { cwd: input.cwd });
+  const { stdout: head } = await exec('git', ['rev-parse', 'HEAD'], { cwd: input.cwd, windowsHide: true });
   return readbackCommit(head.trim(), input.cwd);
 }
