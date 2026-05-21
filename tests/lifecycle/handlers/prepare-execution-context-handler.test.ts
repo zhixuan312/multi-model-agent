@@ -27,7 +27,6 @@ function makeCtx(): ExecutionContext {
     mainModel: null,
     assignedTier: 'standard',
     implementerProvider: {} as ExecutionContext['implementerProvider'],
-    escalationProvider: undefined,
     providers: {},
     implementerIdentity: undefined,
     timing: { startMs: Date.now(), timeoutMs: 60_000, deadlineMs: Date.now() + 60_000, stallTimeoutMs: 60_000 },

@@ -78,7 +78,6 @@ export function buildExecutionContext(
     cwd: pc.cwd,
     assignedTier: 'standard',
     implementerProvider: undefined,
-    escalationProvider: undefined,
     providers: {},
     implementerIdentity: undefined,
     timing: { startMs: now, timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },

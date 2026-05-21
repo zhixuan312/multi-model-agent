@@ -40,9 +40,7 @@ export interface ExecutionContext {
   /** Tier the dispatcher assigned to this task. Stays fixed; rotation lives in per-round handlers via pickReviewer/pickEscalation. */
   assignedTier: AgentType;
   implementerProvider: Provider;
-  /** Other-tier provider for fallback / reviewer separation. May be undefined when only one tier is configured. */
-  escalationProvider: Provider | undefined;
-  /** Map of available tier → provider. Built from {assignedTier, escalationProvider}. */
+  /** Map of available tier → provider, keyed by AgentType. */
   providers: Partial<Record<AgentType, Provider>>;
   implementerIdentity: CanonicalIdentity | undefined;
 

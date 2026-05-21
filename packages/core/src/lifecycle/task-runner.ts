@@ -297,7 +297,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.contextBlockStore && { contextBlockStore: input.contextBlockStore }),
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
-    escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
     providers,
     implementerIdentity: undefined,
     getSession,
