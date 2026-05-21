@@ -39,7 +39,7 @@ export const toolConfig: ToolConfig<Input, AuditBrief, unknown> = {
     const target = targetParts.join('\n\n');
     return {
       prompt: target,
-      parallelTarget: target,
+      readTarget: target,
       agentType: 'complex',
       reviewPolicy: 'none',
       briefQualityPolicy: 'off',

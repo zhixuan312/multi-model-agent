@@ -10,7 +10,7 @@ import type {
 // The active production path is toolConfig.briefSlot + toolConfig.buildTaskSpec.
 // The legacy `compiledPrompt` (a full investigate-specific prompt forwarded as
 // TaskSpec.prompt) was removed: the worker input is built by the read-route
-// dispatcher from `parallelTarget` (`Question: <q>`) + FINDING_FORMAT_SHARED,
+// dispatcher from `readTarget` (`Question: <q>`) + FINDING_FORMAT_SHARED,
 // so the brief now carries only `question` (which also drives the headline via
 // the task-executor's taskBrief `?? .question` fallback).
 
@@ -64,7 +64,7 @@ describe('investigate toolConfig.briefSlot', () => {
 });
 
 describe('investigate toolConfig.buildTaskSpec', () => {
-  it('sets TaskSpec.prompt + parallelTarget from the question', () => {
+  it('sets TaskSpec.prompt + readTarget from the question', () => {
     const briefs = toolConfig.briefSlot(makeInput({ question: 'q1' }));
     const ctx = {
       cwd: '/cwd',

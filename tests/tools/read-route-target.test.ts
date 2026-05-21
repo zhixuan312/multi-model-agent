@@ -5,7 +5,7 @@ import { toolConfig as debug } from '../../packages/core/src/tools/debug/tool-co
 import { toolConfig as investigate } from '../../packages/core/src/tools/investigate/tool-config.js';
 
 // Invariant (positive half): every read-only route's buildTaskSpec sets a
-// non-empty parallelTarget. perform-implementation throws
+// non-empty readTarget. perform-implementation throws
 // `read_route_missing_target` if a non-research read route reaches dispatch
 // with an empty target (the negative half — the silent task.prompt fallback
 // was removed in plan task 5).
@@ -18,7 +18,7 @@ const ctx = {
 } as any;
 
 function target(spec: any): string {
-  return (spec.parallelTarget ?? spec.readTarget ?? '') as string;
+  return (spec.readTarget ?? spec.readTarget ?? '') as string;
 }
 
 describe('read-route buildTaskSpec sets a non-empty target', () => {

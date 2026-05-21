@@ -30,7 +30,7 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
   briefSlot: researchBriefSlot,
   buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext, enriched?: EnrichedResearchInput) => ({
     prompt: `Research: ${brief.researchQuestion}`,
-    parallelTarget: `Research: ${brief.researchQuestion}`,
+    readTarget: `Research: ${brief.researchQuestion}`,
     agentType: 'complex' as const,
     reviewPolicy: 'none' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,

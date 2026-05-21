@@ -69,17 +69,17 @@ export async function performImplementation(state: LifecycleState): Promise<void
         }
       }
       // Target content for the cached prefix. Preference order:
-      //   1. parallelTarget — pure user question/work/problem (set by the
+      //   1. readTarget — pure user question/work/problem (set by the
       //      route's buildTaskSpec). Every read route sets this.
       //   2. document — inlined doc (audit's primary input shape).
       // There is intentionally NO task.prompt fallback: read-route prompts
       // carry only the pure target now, and /research builds its prefix from
       // task.research instead. An empty target on a non-research read route is
       // a wiring bug — fail loud rather than dispatch an empty prefix.
-      const taskWithTarget = task as TaskSpec & { parallelTarget?: string; document?: string };
+      const taskWithTarget = task as TaskSpec & { readTarget?: string; document?: string };
       const targetContent =
-        (taskWithTarget.parallelTarget && taskWithTarget.parallelTarget.trim().length > 0)
-          ? taskWithTarget.parallelTarget
+        (taskWithTarget.readTarget && taskWithTarget.readTarget.trim().length > 0)
+          ? taskWithTarget.readTarget
           : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
             ? taskWithTarget.document
             : '';

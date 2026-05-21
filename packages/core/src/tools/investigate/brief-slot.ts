@@ -10,7 +10,7 @@ export interface EnrichedInvestigateInput extends Input {
 export interface InvestigateBrief {
   /** The user's original question — drives both the headline text and the
    *  read-route target (the worker's prompt comes from the dispatcher's
-   *  cached prefix built from `parallelTarget`, not from this brief). */
+   *  cached prefix built from `readTarget`, not from this brief). */
   question: string;
   filePaths: string[];
   contextBlockIds: string[];
