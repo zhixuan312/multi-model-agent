@@ -112,9 +112,6 @@ export { resolveAgent } from './providers/agent-resolver.js';
 export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 
-export type {
-  DraftTask,
-} from './types/draft-task.js';
 
 // Batch registry
 export * from './stores/batch-registry.js';
