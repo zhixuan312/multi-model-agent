@@ -69,20 +69,23 @@ export async function performImplementation(state: LifecycleState): Promise<void
         }
       }
       // Target content for the cached prefix. Preference order:
-      //   1. parallelTarget — pure user question/work/problem, no
-      //      legacy format spec (set by the route's buildTaskSpec).
+      //   1. parallelTarget — pure user question/work/problem (set by the
+      //      route's buildTaskSpec). Every read route sets this.
       //   2. document — inlined doc (audit's primary input shape).
-      //   3. task.prompt — last-resort fallback. AVOID: it embeds the
-      //      legacy monolithic format spec (## Summary / ## Citations
-      //      for investigate, etc.), which competes with our `## Finding
-      //      N:` shape and confuses the worker about output format.
+      // There is intentionally NO task.prompt fallback: read-route prompts
+      // carry only the pure target now, and /research builds its prefix from
+      // task.research instead. An empty target on a non-research read route is
+      // a wiring bug — fail loud rather than dispatch an empty prefix.
       const taskWithTarget = task as TaskSpec & { parallelTarget?: string; document?: string };
       const targetContent =
         (taskWithTarget.parallelTarget && taskWithTarget.parallelTarget.trim().length > 0)
           ? taskWithTarget.parallelTarget
           : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
             ? taskWithTarget.document
-            : task.prompt;
+            : '';
+      if (route !== 'research' && targetContent.trim().length === 0) {
+        throw new Error('read_route_missing_target');
+      }
       // /research: replace the standard cachedPrefix with one built from a
       // pre-loop plan turn + deterministic Step-2 fan-out. The N-criterion loop
       // below then synthesises against the EvidencePack-bearing prefix.
