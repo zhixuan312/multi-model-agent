@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { StageDefinition, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import { reviewPayload } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 
 function approvingReview(): StageDefinition<unknown> {
   return {
@@ -95,29 +96,28 @@ describe('lifecycle driver — review payload hoist (4.7.3 regression)', () => {
     const state = emptyState();
     await runStagePlan([changesRequiredReview()], state);
 
-    expect((state as { reviewVerdict?: string }).reviewVerdict).toBe('changes_required');
-    const findings = (state as { reviewFindings?: Array<{ source: string; text: string }> }).reviewFindings;
-    expect(findings).toBeDefined();
+    expect(reviewPayload(state).verdict).toBe('changes_required');
+    const findings = reviewPayload(state).findings;
     expect(findings).toHaveLength(1);
-    expect(findings![0].source).toBe('reviewer');
-    expect(findings![0].text).toContain('leaks file handle');
-    expect(findings![0].text).toContain('evidence:');
-    expect(findings![0].text).toContain('fix:');
+    expect(findings[0].source).toBe('reviewer');
+    expect(findings[0].text).toContain('leaks file handle');
+    expect(findings[0].text).toContain('evidence:');
+    expect(findings[0].text).toContain('fix:');
   });
 
   it('promotes verdict=approved with empty findings array', async () => {
     const state = emptyState();
     await runStagePlan([approvingReview()], state);
 
-    expect((state as { reviewVerdict?: string }).reviewVerdict).toBe('approved');
-    expect((state as { reviewFindings?: unknown[] }).reviewFindings).toEqual([]);
+    expect(reviewPayload(state).verdict).toBe('approved');
+    expect(reviewPayload(state).findings).toEqual([]);
   });
 
-  it('does not write state.reviewVerdict when review skips', async () => {
+  it('reviewPayload reports no verdict + empty findings when review skips', async () => {
     const state = emptyState();
     await runStagePlan([noopReview()], state);
 
-    expect((state as { reviewVerdict?: string }).reviewVerdict).toBeUndefined();
-    expect((state as { reviewFindings?: unknown[] }).reviewFindings).toBeUndefined();
+    expect(reviewPayload(state).verdict).toBeUndefined();
+    expect(reviewPayload(state).findings).toEqual([]);
   });
 });

@@ -38,7 +38,6 @@ export interface LifecycleState {
   /** v5: halted flag set when any stage returns outcome:'halt'. Driver-only. */
   halted?: boolean;
   workerStatus?: string;
-  reviewVerdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
   attemptIndex: number;
   attemptBudget: number;
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
@@ -137,13 +136,6 @@ export interface LifecycleState {
   specReviewError?: string;
   /** Quality lint-reviewer transport/return error. */
   qualityReviewError?: string;
-  /** Merged deviations from spec + quality reviewers. `source` carries
-   *  the sub-reviewer name when known ('spec' | 'quality'); modern
-   *  review-stage merges both reviewers into a single Finding[] with
-   *  `source: 'reviewer'`, so we accept any string. The driver hoists
-   *  review payload here so rework-stage's gate (state.reviewVerdict ===
-   *  'changes_required' && state.reviewFindings.length > 0) can fire. */
-  reviewFindings?: Array<{ source: string; text: string }>;
   /** Review-stage overall error (used when neither reviewer returned a usable verdict). */
   reviewError?: string;
   /** Rework stage applied edits (true) or skipped (false). undefined = stage never ran. */
