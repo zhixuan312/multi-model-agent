@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.12] - 2026-05-21
+
+Transport-component cleanup release — reduces `packages/core/src/transport/` to one design with one implementation. `HTTPListener` becomes the sole HTTP listener (the server no longer creates `node:http` inline), the dormant `RouteDispatcher` response-shape metadata is removed, and the previously-unwired Host-header rebinding guard is now live. Bundles an independent set of type/config cleanups (config types derived from Zod, dead enums/types deleted) and a Windows console-flashing fix on git spawns. 2134 tests pass, build green, contract goldens unchanged.
+
+### Added
+
+- **Host-header rebinding guard wired into the request pipeline** (`packages/server/src/http/request-pipeline.ts`). Completes `LoopbackEnforcer`'s documented two-check defense: in addition to the IP-level loopback check, every request's `Host` header must be a literal loopback form (`localhost` / `127.0.0.1` / `[::1]`, with or without port). A foreign `Host` (DNS-rebinding attempt) is rejected with `403 forbidden_host`. The `isAllowedHostHeader` helper was previously exported but never called.
+
+### Changed
+
+- **`server.ts` uses `HTTPListener` instead of inline `node:http`** (`packages/server/src/http/server.ts`, `packages/core/src/transport/http-listener.ts`). The listener is now the single owner of the socket lifecycle; `RunningServer.stop` delegates to `listener.stop()`. Drain authority stays solely in `request-pipeline` (`setDraining`/`isDraining`).
+- **Config types derived from the Zod schema** (`packages/core/src/types/config.ts`, `packages/core/src/config/schema.ts`). `MultiModelConfig`/`AgentConfig`/`ResearchConfig` are inferred from the schema rather than hand-mirrored; `RuntimeRunResult.stageStats` uses `Partial<StageStatsMap>` and `merge-stage-stats` imports the canonical `StageName`.
+
+### Fixed
+
+- **Swallowed async handler rejections now surface** (`packages/core/src/transport/http-listener.ts`). A rejected request-handler promise is logged to stderr and, when the response is still writable, answered with `500 internal_error` instead of being silently dropped (the latent bug existed in both the old `HTTPListener` stub and the inline `void handleRequest(...)` path).
+- **`windowsHide` set on all git spawns** (`packages/core/src/lifecycle/`, `packages/core/src/reporting/commit-stage-runner.ts`, `packages/core/src/bounded-execution/progress-watchdog.ts`) to stop console-window flashing on Windows during commit/diff/toplevel operations.
+
+### Removed
+
+- **`RouteDispatcher` response-shape metadata** (`packages/core/src/transport/route-dispatcher.ts`). The `RouteMetadata` / `ResponseShape` types and the `metadata` parameter/field on `register`/`match`/`listRoutes` are deleted — they had no runtime consumer and had drifted from their docstring.
+- **`HTTPListener` drain/start-time methods** — `beginDraining()`, `isDraining()`, and `getStartedAt()` removed; those responsibilities live in `request-pipeline` and `server.ts` respectively.
+- **Dead type surfaces** — 15 unused closed enums (keeping `ReviewVerdictEnum` + `ConcernCategory`), the dead `draft-task.ts`, the unused `BriefQualityWarning`, and the `FallbackOverride` config type.
+
+### BREAKING
+
+- **Public type exports removed** — `RouteMetadata` and `ResponseShape` are no longer exported from `@zhixuan92/multi-model-agent-core`. `HTTPListener` no longer exposes `beginDraining`/`isDraining`/`getStartedAt`. Internal consumers in this repo are unaffected; external code depending on these would break (none expected — they had no in-repo callers).
+
 ## [4.7.11] - 2026-05-20
 
 Structural cleanup release — dissolves the `tool-surface` component (two unrelated subsystems sharing one directory) into a runtime tool registry that stays in `core` and a skill-install lifecycle that moves to `server`. Removes the parallel OpenAPI route inventory (a second, hand-maintained tool list with no real consumer), deletes two dead code paths, and hardens the Gemini skill writer's include handling. Also bundles three independent fixes (codex spawn on Windows, stall-watchdog reset, dependency bump). Net −2000+ lines (mostly the deleted OpenAPI golden). No wire-schema changes. 2119 tests pass, build green.
@@ -621,7 +649,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...HEAD
+[4.7.12]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...v4.7.12
 [4.7.11]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...v4.7.11
 [4.7.10]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.9...v4.7.10
 [4.7.9]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.8...v4.7.9
