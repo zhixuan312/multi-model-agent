@@ -119,9 +119,6 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
     runOnHalt: false,
     applicableRoutes: WRITE_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
     shouldRun: (state) => {
-      if (state.autoCommit === false) {
-        return { run: false, comment: 'commit skipped because autoCommit disabled' };
-      }
       const work = currentWork({ gates: (state.gates ?? {}) as Record<string, import('./stage-io.js').StageGate<unknown>> });
       if (!work || (work as { filesChanged?: string[] }).filesChanged?.length === 0) {
         return { run: false, comment: 'commit skipped because no files changed' };
