@@ -35,11 +35,7 @@ export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, 
   agentType: 'complex',
   briefSlot: investigateBriefSlot,
   buildTaskSpec: (brief: InvestigateBrief, ctx: ExecutionContext) => ({
-    prompt: brief.compiledPrompt,
-    // Pure user question for the parallel-criteria dispatcher's cached
-    // prefix — avoids embedding the legacy ## Summary/## Citations format
-    // spec from compiledPrompt, which would compete with the per-sub-worker
-    // ## Finding N: format the dispatcher uses.
+    prompt: `Question: ${brief.question}`,
     parallelTarget: `Question: ${brief.question}`,
     agentType: 'complex' as const,
     reviewPolicy: 'none' as const,
