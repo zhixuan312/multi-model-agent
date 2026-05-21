@@ -7,7 +7,7 @@ export * as delegate from './delegate/schema.js';
 export * as audit from './audit/schema.js';
 export * as review from './review/schema.js';
 export * as debug from './debug/schema.js';
-export * as executePlan from './execute-plan/schema.js';
+export * as executePlan from './execute-plan/barrel.js';
 export * as retry from './retry/schema.js';
 export * as investigate from './investigate/schema.js';
 export * as registerContextBlock from './register-context-block/schema.js';

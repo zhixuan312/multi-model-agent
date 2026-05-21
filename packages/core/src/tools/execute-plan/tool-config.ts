@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { buildOutputEnvelopeSchema } from '../shared-output.js';
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { executePlanBriefSlot, type ExecutePlanBrief } from './brief-slot.js';
@@ -23,6 +24,10 @@ export const executePlanInputSchema = z.object({
 }).strict();
 
 export type ExecutePlanWireInput = z.infer<typeof executePlanInputSchema>;
+
+/** Output envelope schema — the single source for the public `executePlan`
+ *  barrel namespace (was duplicated in the now-deleted execute-plan/schema.ts). */
+export const outputSchema = buildOutputEnvelopeSchema();
 
 export function registerExecutePlan(registry: ToolSurfaceRegistry): void {
   registry.register({
