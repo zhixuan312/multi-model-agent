@@ -29,7 +29,7 @@ type QualityRoundVerdict =
 type DiffEnvelopeVerdict = 'approved' | 'changes_required' | 'error' | 'skipped';
 type DiffReviewKind = 'approve' | 'concerns' | 'reject' | 'transport_failure';
 
-import type { StageGate } from './stage-io.js';
+import type { StageGate, ReviewPayload } from './stage-io.js';
 
 export interface LifecycleState {
   terminal: boolean;
@@ -197,4 +197,33 @@ export interface LifecycleState {
   guardFires?: string[];
   terminalStatus?: string;
   terminationReason?: string | null;
+}
+
+/**
+ * Canonical accessor for the review stage's verdict + findings, read straight
+ * from `state.gates.review.payload` (the v5 single source of truth). Replaces
+ * the old `state.reviewVerdict` / `state.reviewFindings` hoist: it applies the
+ * same `Finding[] -> { source, text }` mapping the hoist used, so downstream
+ * consumers (rework, annotate, enrich) see an identical shape. When the review
+ * gate is absent (review skipped / read route), returns `{ verdict: undefined,
+ * findings: [] }` — matching the prior mirror's undefined/empty-array semantics.
+ */
+export function reviewPayload(state: LifecycleState): {
+  verdict: ReviewPayload['verdict'] | undefined;
+  findings: Array<{ source: string; text: string }>;
+} {
+  const p = state.gates?.['review']?.payload as ReviewPayload | null | undefined;
+  const verdict =
+    p?.verdict === 'approved' || p?.verdict === 'changes_required' ? p.verdict : undefined;
+  const findings = Array.isArray(p?.findings)
+    ? p!.findings.map((f: { source?: string; claim?: string; evidence?: string; suggestion?: string; text?: string }) => {
+        const parts: string[] = [];
+        if (f.claim) parts.push(f.claim);
+        if (f.evidence) parts.push(`(evidence: ${f.evidence})`);
+        if (f.suggestion) parts.push(`(fix: ${f.suggestion})`);
+        const text = parts.length > 0 ? parts.join(' ') : (f.text ?? '');
+        return { source: f.source ?? 'reviewer', text };
+      })
+    : [];
+  return { verdict, findings };
 }
