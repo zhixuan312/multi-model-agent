@@ -1,7 +1,4 @@
 import { z } from 'zod';
-import type {
-  MultiModelConfig,
-} from '../types.js';
 
 /** Total wall-clock cap per task — 60 min. Bumped from 30 min in v3.9.0
  * after the 32-min hang on batch 1574b3a2 showed reviewers had no cap
@@ -280,6 +277,13 @@ export const multiModelConfigSchema = z.object({
   }).optional(),
   research: ResearchConfigSchema,
 }).strict();
+
+/** Canonical config types — inferred from the Zod schemas above so the
+ *  validated shape and the TypeScript type can never drift. Provider configs
+ *  (ClaudeProviderConfig / CodexProviderConfig / ProviderConfig) have no Zod
+ *  schema and remain hand-written in types/config.ts. */
+export type MultiModelConfig = z.infer<typeof multiModelConfigSchema>;
+export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
 /** Inferred type for the standalone server configuration block. */
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
