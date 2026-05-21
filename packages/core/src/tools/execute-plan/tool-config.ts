@@ -125,6 +125,8 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
   name: 'execute_plan',
   category: 'artifact_producing',
   serializeSameRepo: true,
+  dispatchMode: 'serial',
+  dispatchModeOverridable: false,
   agentType: 'standard',
   briefSlot: executePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({

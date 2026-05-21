@@ -25,6 +25,8 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   name: 'delegate',
   category: 'artifact_producing',
   serializeSameRepo: true,
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: true,
   agentType: 'standard',
   briefSlot: delegateBriefSlot,
   buildTaskSpec: (brief, ctx) => ({

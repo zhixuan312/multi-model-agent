@@ -26,7 +26,10 @@ const taskSchema = z.object({
 }).strict();
 
 export const inputSchema = z.object({
-  tasks: z.array(taskSchema).describe('Array of tasks to execute in parallel'),
+  tasks: z.array(taskSchema).describe('Array of tasks to execute (parallel by default)'),
+  execution: z.enum(['parallel', 'serial']).optional().describe(
+    'Override dispatch scheduling for this batch. Default: parallel (tasks run concurrently). Set "serial" to run tasks one-at-a-time in array order.',
+  ),
 }).strict();
 
 export type Input = z.infer<typeof inputSchema>;

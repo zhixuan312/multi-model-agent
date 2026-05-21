@@ -12,9 +12,16 @@ import type { ExecutionContext } from './lifecycle-context.js';
  */
 export type BriefSlotFiller<TInput, TBrief> = (input: TInput) => TBrief;
 
+/** Per-dispatch scheduling axis. Caller-chosen, not derived from repo membership. */
+export type DispatchMode = 'serial' | 'parallel';
+
 export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> {
   name: string;
   category: 'artifact_producing' | 'read_only' | 'assist';
+  /** Default dispatch mode for this route's multi-task batches. */
+  dispatchMode: DispatchMode;
+  /** When true, a per-dispatch caller override (request `execution` field) wins over `dispatchMode`. */
+  dispatchModeOverridable: boolean;
   /**
    * When true, tasks in the batch that share the same git toplevel (or
    * raw cwd when not in a git repo) run sequentially in caller input
