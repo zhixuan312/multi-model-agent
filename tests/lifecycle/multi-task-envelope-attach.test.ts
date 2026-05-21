@@ -29,6 +29,7 @@ const mockRunTask = vi.fn(async (input: {
 
 vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
   runTaskViaDispatcher: (input: any) => mockRunTask(input),
+  applyParallelSafetySuffixIfNeeded: (tasks: any[], _concurrent: boolean) => tasks.slice(),
 }));
 
 // Stub the agent resolver so resolution doesn't fail when no real config exists.
@@ -54,8 +55,8 @@ function buildContext(batchId: string, bus: EnvelopeBus, registry: BatchRegistry
     mainModel: 'claude-opus-4-7',
     contextBlockStore: undefined,
     logger: { info: () => {}, warn: () => {}, error: () => {}, log: () => {} },
-    // Multi-task path uses dispatchGroupedWithPrecomputedGroups which reads
-    // ctx.stall.controller.signal for cooperative cancellation.
+    // Serial dispatch reads ctx.stall.controller.signal for cooperative
+    // cancellation; parallel dispatch ignores it. Either way it must exist.
     stall: { controller: new AbortController() },
   } as any;
 }
