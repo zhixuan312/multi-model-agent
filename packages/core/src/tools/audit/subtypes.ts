@@ -1,7 +1,7 @@
 // Audit subtypes — per-subtype prompt-policy packages keyed by AuditSubtype.
 // Adding a new audit subtype = one new entry here + one enum literal in schema.ts.
 import type { ReadOnlySubtypeSpec } from '../../lifecycle/read-only-subtype-spec.js';
-import type { RouteSemantics } from '../parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../read-route-prompt.js';
 import {
   AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_AUDIT, SCOPE_RULE_AUDIT,
   ANNOTATOR_AWARENESS_AUDIT, AUDIT_CRITERIA,
@@ -16,7 +16,7 @@ import { SKILL_AUDIT_CRITERIA, SKILL_AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_SK
 export type AuditSubtype = 'default' | 'plan' | 'spec' | 'skill';
 
 // Copied verbatim from ROUTE_SEMANTICS.audit in
-// packages/core/src/lifecycle/parallel-criteria-routes.ts (the legacy
+// packages/core/src/lifecycle/read-route-criteria.ts (the legacy
 // private const there is removed in Task 8 once dispatch reads from here).
 const SEMANTICS_DEFAULT: RouteSemantics = {
   goalLine: 'Find ALL issues of THIS specific kind in the artifact above.',

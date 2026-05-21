@@ -1,5 +1,5 @@
 import type { ReadOnlySubtypeSpec } from '../../lifecycle/read-only-subtype-spec.js';
-import type { RouteSemantics } from '../parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../read-route-prompt.js';
 import {
   INVESTIGATE_PURPOSE_ORIENTATION, EVIDENCE_RULE_INVESTIGATE, SCOPE_RULE_INVESTIGATE,
   ANNOTATOR_AWARENESS_INVESTIGATE, INVESTIGATE_CRITERIA,

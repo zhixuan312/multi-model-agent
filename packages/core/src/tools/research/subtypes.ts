@@ -1,5 +1,5 @@
 import type { ReadOnlySubtypeSpec } from '../../lifecycle/read-only-subtype-spec.js';
-import type { RouteSemantics } from '../parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../read-route-prompt.js';
 import {
   RESEARCH_CRITERIA, RESEARCH_PURPOSE_ORIENTATION, EVIDENCE_RULE_RESEARCH_COMPOSED,
   SCOPE_RULE_RESEARCH, ANNOTATOR_AWARENESS_RESEARCH,

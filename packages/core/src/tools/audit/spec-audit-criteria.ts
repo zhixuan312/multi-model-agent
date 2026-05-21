@@ -3,7 +3,7 @@
 // produce the wrong outcome or paralyze a downstream worker.
 import type { CriterionEntry } from '../criteria-types.js';
 import { parseCriteria } from '../criteria-types.js';
-import type { RouteSemantics } from '../parallel-criteria-prompt.js';
+import type { RouteSemantics } from '../read-route-prompt.js';
 
 export const SPEC_AUDIT_PURPOSE_ORIENTATION = [
   'Why this audit exists:',

@@ -11,7 +11,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { parseFindings } from './findings-parser.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
-import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from './read-route-criteria.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
