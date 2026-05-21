@@ -82,9 +82,17 @@ describe('AC-18: Layer-2 shouldRun decisions for representative stages', () => {
     expect(d.run).toBe(false);
   });
 
-  it('commit.shouldRun returns false when no files changed', () => {
+  it('commit.shouldRun returns false when no implementation work advanced', () => {
     const state = { gates: {} } as unknown as LifecycleState;
     const d = commit.shouldRun(state);
     expect(d.run).toBe(false);
+  });
+
+  it('commit.shouldRun runs when work advanced even if the worker self-reported zero files (the handler is the authority on commit-vs-no_op via getRealFilesChanged)', () => {
+    const state = {
+      gates: { implement: { outcome: 'advance', payload: { filesChanged: [] } } },
+    } as unknown as LifecycleState;
+    const d = commit.shouldRun(state);
+    expect(d.run).toBe(true);
   });
 });
