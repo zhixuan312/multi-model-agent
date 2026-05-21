@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { delegateBriefSlot } from '../../../packages/core/src/tools/delegate/brief-slot.js';
+import { inputSchema } from '../../../packages/core/src/tools/delegate/schema.js';
 
 // All assertions go through the public slot (compileDelegatePrompt is now
 // private inside brief-slot.ts). Each test runs the slot on a one-task input
@@ -82,10 +83,10 @@ describe('delegateBriefSlot — brief construction', () => {
     expect(briefs).toHaveLength(2);
   });
 
-  it('defaults agentType and reviewPolicy', () => {
-    const briefs = delegateBriefSlot({
-      tasks: [{ prompt: 'x' }],
-    } as any);
+  it('defaults agentType and reviewPolicy (applied by the schema)', () => {
+    // Defaulting is authoritative in the Zod schema; the handler parses
+    // before calling the slot, so parse here to mirror production.
+    const briefs = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'x' }] }));
     expect(briefs[0].agentType).toBe('standard');
     expect(briefs[0].reviewPolicy).toBe('full');
   });
