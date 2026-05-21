@@ -34,7 +34,6 @@ export async function dispatchGroupedWithPrecomputedGroups(
   const results: RuntimeRunResult[] = new Array(tasks.length);
   await Promise.all(
     groups.map(async (group) => {
-      const isGitRepo = !group.key.startsWith('/') || true; // group.key is always either a toplevel or realpath
       let isFirstInGroup = true;
       for (const { task, originalIndex } of group.tasks) {
         if (opts.abortSignal?.aborted) {
