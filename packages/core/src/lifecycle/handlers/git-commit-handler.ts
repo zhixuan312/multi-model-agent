@@ -17,11 +17,40 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { isAbsolute, join, relative } from 'node:path';
+import { existsSync } from 'node:fs';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, CommitPayload } from '../stage-io.js';
-import { getRealFilesChanged } from '../real-diff.js';
 
 const execFileP = promisify(execFile);
+
+/**
+ * The files THIS worker actually wrote, resolved to absolute paths inside cwd.
+ *
+ * Source is the harness-tracked tool writes (lastRunResult.filesWritten — unioned
+ * across implement+rework by replaceLastRunResultPreservingTrackers), NOT a
+ * repo-wide `git diff`. Under concurrency (multiple workers in the same repo at
+ * once) a git diff would see every worker's changes; sourcing from this worker's
+ * own tracked writes guarantees we commit only its own work. Paths the worker
+ * passed that fall outside cwd or never landed on disk (e.g. a hallucinated
+ * `/workspace/x` or `/x`) are dropped.
+ */
+function workerWrittenFiles(state: LifecycleState, cwd: string): string[] {
+  const raw = ((state.lastRunResult as { filesWritten?: string[] } | undefined)?.filesWritten) ?? [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const w of raw) {
+    if (!w || typeof w !== 'string') continue;
+    const abs = isAbsolute(w) ? w : join(cwd, w);
+    const rel = relative(cwd, abs);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) continue; // outside cwd
+    if (!existsSync(abs)) continue; // bogus path or never written
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    out.push(abs);
+  }
+  return out;
+}
 
 async function gitC(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
@@ -135,40 +164,24 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
     return advanceNoOp('no_repo', t0, 'detached HEAD or no branch');
   }
 
-  // Use the existing getRealFilesChanged() helper (lifecycle/real-diff.ts).
-  // Reconciliation: plan said `realChange.method === 'git_error'`; the actual
-  // field on RealFilesChanged is `realChange.source === 'git_error'`.
-  const realChange = await getRealFilesChanged(state);
-  if (realChange.source === 'git_error' || realChange.files.length === 0) {
+  // Concurrency-safe attribution: commit ONLY the files THIS worker wrote,
+  // resolved to cwd from the harness-tracked tool writes. A repo-wide git diff
+  // would, under concurrent same-repo tasks, sweep in other workers' changes.
+  const ownFiles = workerWrittenFiles(state, cwd);
+  if (ownFiles.length === 0) {
     return advanceNoOp('no_diff', t0);
   }
-  const filesChanged = realChange.files;
+  const filesChanged = ownFiles;
 
-  // Gate 3: worker out-of-band commit detection
-  const preSha = (state as { preTaskHeadSha?: string }).preTaskHeadSha;
-  if (preSha && head !== preSha && realChange.source === 'self_report') {
-    return advanceNoOp('worker_committed_out_of_band', t0);
-  }
-
-  // Stage: git add
-  // Always run `git add` on the files we know about from getRealFilesChanged.
-  // If getRealFilesChanged returned empty (no preTaskHeadSha/preTaskUntrackedFiles),
-  // fall back to staging the files the worker reported. This ensures untracked
-  // files are staged so `git diff --cached` can detect them.
-  const filesToStage = filesChanged.length > 0 ? filesChanged : (
-    ((state.lastRunResult as { filesChanged?: string[] } | undefined)?.filesChanged) ?? []
-  );
-  if (filesToStage.length === 0) {
-    return advanceNoOp('no_diff', t0);
-  }
-  const addR = await gitC(cwd, ['add', '--', ...filesToStage]);
+  // Stage ONLY this worker's files.
+  const addR = await gitC(cwd, ['add', '--', ...ownFiles]);
   if (addR.code !== 0) {
     return advanceNoOp('hook_failed', t0, addR.stderr || 'git add failed');
   }
 
-  // Post-stage: confirm staged diff is non-empty.
-  // `git diff --cached --quiet` exits 0 when nothing is staged; 1 when staged.
-  const diffR = await gitC(cwd, ['diff', '--cached', '--quiet', '--', '.']);
+  // Confirm THESE paths have staged changes (scoped — ignores anything a
+  // concurrent worker may have staged). Exits 0 when nothing staged for them.
+  const diffR = await gitC(cwd, ['diff', '--cached', '--quiet', '--', ...ownFiles]);
   if (diffR.code === 0) {
     return advanceNoOp('no_diff', t0);
   }
@@ -176,7 +189,9 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
   const commitMessage = composeCommitMessage(state);
 
   try {
-    const commitR = await gitC(cwd, ['commit', '-m', commitMessage]);
+    // Pathspec-scoped commit: commits ONLY ownFiles, even if a concurrent
+    // worker has other paths staged in the same index.
+    const commitR = await gitC(cwd, ['commit', '-m', commitMessage, '--', ...ownFiles]);
     if (commitR.code !== 0) {
       // Hook failure is the dominant case: we've already validated repo,
       // diff, and HEAD; if `git commit` still fails, the most likely cause
