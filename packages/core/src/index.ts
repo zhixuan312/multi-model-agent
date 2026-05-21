@@ -25,7 +25,6 @@ export type {
   RunStatus,
   TokenUsage,
   RunOptions,
-  RunTasksRuntime,
   ProgressEvent,
   InternalRunnerEvent,
 } from './providers/runner-types.js';
@@ -74,10 +73,6 @@ export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/b
 // Project context
 export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
-
-// Run tasks
-export { runTasks } from './lifecycle/task-runner.js';
-export type { RunTasksOptions } from './lifecycle/task-runner.js';
 
 // Lifecycle
 export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';

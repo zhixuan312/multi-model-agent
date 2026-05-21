@@ -1,4 +1,3 @@
-import type { ContextBlockStore } from '../stores/context-block-tool.js';
 import type {
   AgentType,
   Effort,
@@ -136,11 +135,6 @@ export interface RunOptions {
   /** Lifecycle stage label (e.g. `'Implementing'`, `'Spec review'`). Forwarded
    *  to the runner-shell so its emitted events carry the current stage. */
   stageLabel?: string
-}
-
-/** Runtime dependencies for `runTasks`. */
-export interface RunTasksRuntime {
-  contextBlockStore?: ContextBlockStore
 }
 
 /** Internal progress events emitted by runners and the escalation orchestrator. */

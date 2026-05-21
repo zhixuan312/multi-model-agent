@@ -5,7 +5,7 @@ import type {
   Provider,
   AgentType,
 } from '../types.js';
-import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
+import type { ProgressEvent } from '../providers/runner-types.js';
 import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 
@@ -61,104 +61,6 @@ export function applyParallelSafetySuffixIfNeeded<T extends { prompt: string; te
     prompt: t.prompt + PARALLEL_SAFETY_SUFFIX +
       (t.testCommand ? `\nTo verify your work, run: \`${t.testCommand}\`` : ''),
   }));
-}
-
-export type ResolvedTask =
-  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider } }
-  | { task: TaskSpec; error: string; errorCode: string };
-
-export type RunTasksProgressCallback = (
-  taskIndex: number,
-  event: ProgressEvent,
-) => void;
-
-export interface RunTasksOptions {
-  onProgress?: RunTasksProgressCallback;
-  runtime?: RunTasksRuntime;
-  batchId?: string;
-  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  logger?: { error: (kind: string, err: unknown) => void };
-  recorder?: {
-    recordTaskCompleted: (ctx: {
-      route: string;
-      taskSpec: TaskSpec;
-      runResult: RuntimeRunResult;
-      client: string;
-      mainModel: string | null;
-      reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
-    }) => void;
-  };
-  route?: string;
-  client?: string;
-  bus?: EnvelopeBus;
-  batchGroupCount?: number;
-}
-
-export async function runTasks(
-  tasks: TaskSpec[],
-  config: MultiModelConfig,
-  options: RunTasksOptions = {},
-): Promise<RuntimeRunResult[]> {
-  if (tasks.length === 0) return [];
-
-  const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
-    try {
-      return expandContextBlocks(task, options.runtime?.contextBlockStore);
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
-  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
-    if ('error' in entry) {
-      return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
-    }
-    const task = entry;
-    const agentType: AgentType = task.agentType ?? 'standard';
-    try {
-      const resolved_agent = resolveAgent(agentType, config);
-      return { task, resolved: resolved_agent };
-    } catch (err) {
-      return {
-        task,
-        error: err instanceof Error ? err.message : String(err),
-        errorCode: 'agent_not_configured',
-      };
-    }
-  });
-
-  const tasksWithSuffix = applyParallelSafetySuffixIfNeeded(
-    resolved.filter((r): r is Exclude<typeof r, { error: string }> => !('error' in r)).map((r) => r.task),
-    { batchGroupCount: options.batchGroupCount },
-  );
-  // Reattach mutated tasks back to resolved entries.
-  let suffixIdx = 0;
-  for (const r of resolved) {
-    if ('error' in r) continue;
-    r.task = tasksWithSuffix[suffixIdx++]!;
-  }
-
-  return Promise.all(
-    resolved.map((r, index): Promise<RuntimeRunResult> => {
-      if ('error' in r) {
-        return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
-      }
-      return runTaskViaDispatcher({
-        task: r.task,
-        resolved: r.resolved,
-        config,
-        taskIndex: index,
-        ...(options.onProgress && { onProgress: options.onProgress }),
-        ...(options.batchId !== undefined && { batchId: options.batchId }),
-        ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
-        ...(options.logger && { logger: options.logger }),
-        ...(options.recorder && { recorder: options.recorder }),
-        ...(options.route !== undefined && { route: options.route }),
-        ...(options.client !== undefined && { client: options.client }),
-        ...(options.bus && { bus: options.bus }),
-      });
-    }),
-  );
 }
 
 export interface DispatchTaskInput {
