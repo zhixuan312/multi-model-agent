@@ -45,17 +45,19 @@ const PARALLEL_SAFETY_SUFFIX =
 
 /**
  * Conditionally appends PARALLEL_SAFETY_SUFFIX to each task's prompt.
- * Suffix is appended ONLY when ctx.batchGroupCount > 1, i.e., the batch
- * spans multiple repos. Within a single group, tasks run serially and
- * full builds are safe.
+ * Appended ONLY when `concurrent` is true — i.e. the batch runs in parallel
+ * mode with more than one task. Within serial dispatch (or single-task
+ * batches) tasks don't race, so the reminder is omitted. The suffix
+ * reinforces per-worker commit attribution: stay in your lane, touch only
+ * your own files.
  *
  * Pure function — returns shallow-cloned tasks; original array unchanged.
  */
 export function applyParallelSafetySuffixIfNeeded<T extends { prompt: string; testCommand?: string }>(
   tasks: T[],
-  ctx: { batchGroupCount?: number },
+  concurrent: boolean,
 ): T[] {
-  if (!ctx.batchGroupCount || ctx.batchGroupCount <= 1) return tasks.slice();
+  if (!concurrent) return tasks.slice();
   return tasks.map((t) => ({
     ...t,
     prompt: t.prompt + PARALLEL_SAFETY_SUFFIX +
