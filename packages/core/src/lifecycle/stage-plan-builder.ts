@@ -85,7 +85,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
         return { run: false, comment: 'review skipped because implement did not advance' };
       }
       if (state.reviewPolicy === 'none') {
-        return { run: false, comment: 'review skipped because reviewPolicy=none' };
+        return { run: false, comment: 'review skipped because reviewPolicy=none', skipReason: 'reviewPolicy_none' };
       }
       return { run: true };
     },

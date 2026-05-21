@@ -127,7 +127,7 @@ export async function runStagePlan(
       };
       state.gates![stage.name] = skipGate;
       emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
-      recordStageOnEnvelope(state, stage.name, skipGate, 'noop');
+      recordStageOnEnvelope(state, stage.name, skipGate, decision.skipReason ?? 'noop');
       if (isVisibleStage(stage.name)) { visibleTotal -= 1; publishStageTotal(); }
       continue;
     }
