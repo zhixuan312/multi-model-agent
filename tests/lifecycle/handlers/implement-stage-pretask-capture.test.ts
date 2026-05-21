@@ -33,4 +33,16 @@ describe('task-executor preTask capture', () => {
     expect(state.preTaskHeadSha).toBeUndefined();
     expect(state.preTaskUntrackedFiles).toBeUndefined();
   });
+
+  it('resolves cwd from executionContext when state.cwd is unset (production wiring)', async () => {
+    // Production sets the cwd on state.executionContext.cwd, not state.cwd.
+    // Without the fallback, capturePreTaskState early-returns and the whole
+    // real-diff safety net (getRealFilesChanged) goes inert.
+    const state: any = { executionContext: { cwd } };
+    await capturePreTaskState(state);
+    expect(state.preTaskHeadSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(state.preTaskUntrackedFiles).toBeInstanceOf(Set);
+    expect(state.preTaskUntrackedFiles.has(join(cwd, 'untracked.txt'))).toBe(true);
+    expect(state.cwd).toBe(cwd); // also wires state.cwd for downstream readers
+  });
 });
