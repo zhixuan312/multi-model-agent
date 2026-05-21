@@ -13,15 +13,8 @@
 // reflecting the total number of rounds executed.
 
 import type { LifecycleState } from './stage-plan-types.js';
-import type { RuntimeRunResult } from '../types.js';
+import type { RuntimeRunResult, StageName } from '../types.js';
 import type { FindingsOutcomeKind } from '../reporting/findings-outcome.js';
-
-export type StageName =
-  | 'implementing'
-  | 'review'
-  | 'rework'
-  | 'annotating'
-  | 'committing';
 
 interface StageDelta {
   inputTokens: number;
