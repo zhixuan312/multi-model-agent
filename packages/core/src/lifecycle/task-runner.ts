@@ -16,7 +16,7 @@ import type { ResolvedAgent } from '../providers/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
-import { ATTEMPT_BUDGETS, type ToolCategory } from './rework-budget.js';
+import type { ToolCategory } from './rework-budget.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
 import { releaseTask } from '../providers/provider-factory.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
@@ -334,8 +334,6 @@ export async function runTaskViaDispatcher(
   const executionContext = buildExecutionContext({ ...input, task: expandedTask });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
-
-  void ATTEMPT_BUDGETS[toolCategory];
 
   // Register this task's ExecutionContext on the BatchRegistry so shutdown
   // drain (serve.ts cleanupSignal) can find every in-flight task and call
