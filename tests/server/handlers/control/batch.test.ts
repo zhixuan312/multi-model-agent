@@ -352,4 +352,43 @@ describe('GET /batch/:batchId', () => {
       await s.stop();
     }
   });
+
+  it('terminal structuredReport surfaces commit fields from the executor result (not hardcoded null)', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const { TaskEnvelopeStore } = await import('@zhixuan92/multi-model-agent-core/events/task-envelope');
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false, tasksTotal: 1,
+      });
+      const env = TaskEnvelopeStore.create({
+        taskId: `${batchId}:0`, batchId, taskIndex: 0,
+        route: 'delegate', agentType: 'standard',
+        client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test',
+        reviewPolicy: 'none' as const,
+      });
+      env.startStage('implementing', { model: 'claude-haiku-4-5', tier: 'standard' });
+      const sha = 'a'.repeat(40);
+      // Commit outcome is sealed onto the envelope (terminal-handlers does this
+      // from the commit gate); the response reads it from the snapshot.
+      env.seal({
+        status: 'done', stopReason: 'normal', realFilesChanged: [],
+        commitSha: sha, commitMessage: 'implement: add x', commitSkipReason: null,
+      });
+      s.batchRegistry.attachEnvelope(batchId, 0, env);
+      s.batchRegistry.complete(batchId);
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { structuredReport: Record<string, unknown> };
+      expect(body.structuredReport.commitSha).toBe(sha);
+      expect(body.structuredReport.commitMessage).toBe('implement: add x');
+    } finally {
+      await s.stop();
+    }
+  });
 });

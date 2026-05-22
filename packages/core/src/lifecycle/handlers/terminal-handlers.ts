@@ -135,6 +135,15 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     sealStatus = ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed';
   }
 
+  // Carry commit outcome onto the envelope so the response's structuredReport
+  // surfaces the real SHA/message (the response is built from envelope
+  // snapshots, not from state.lastRunResult). Sourced from the commit gate
+  // payload — authoritative and per-worker pathspec-scoped.
+  const commitGate = state.gates?.['commit'];
+  const commitPayload = (commitGate?.outcome === 'advance' ? commitGate.payload : null) as
+    { kind?: string; commitSha?: string; commitMessage?: string; reason?: string } | null;
+  const didCommit = commitPayload?.kind === 'committed';
+
   envelope.seal({
     status: sealStatus,
     terminalAt: new Date().toISOString(),
@@ -142,6 +151,9 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     structuredError: last?.structuredError ?? null,
     errorCode: (last as { errorCode?: import('../../error-codes.js').ErrorCode | null } | undefined)?.errorCode ?? null,
     realFilesChanged: real.files,
+    commitSha: didCommit ? (commitPayload?.commitSha ?? null) : null,
+    commitMessage: didCommit ? (commitPayload?.commitMessage ?? null) : null,
+    commitSkipReason: commitPayload?.kind === 'no_op' ? (commitPayload?.reason ?? null) : null,
   });
   state.taskCompletedRecorded = true;
 }

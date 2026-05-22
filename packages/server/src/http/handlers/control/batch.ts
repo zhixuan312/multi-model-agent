@@ -274,6 +274,14 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           : stageOutcomes.includes('found') ? 'found'
           : stageOutcomes.includes('not_applicable') ? 'not_applicable'
           : 'clean';
+        // Commit fields come from the per-task envelope (sealed from the commit
+        // gate payload — see terminal-handlers.ts). The aggregate report uses
+        // the first task's commit outcome, consistent with the single-aggregate
+        // shape. A committed task surfaces its real SHA/message; a skipped commit
+        // surfaces its reason; read routes / no-commit are null.
+        const firstSnap = snapshots[0] as (TaskEnvelope & {
+          commitSha?: string | null; commitMessage?: string | null; commitSkipReason?: string | null;
+        }) | undefined;
         const structuredReport = {
           summary: allFindings.length > 0 ? `${allFindings.length} finding(s)` : 'No findings',
           workerStatus: snapshots.length > 0 ? snapshots[0].status : 'unknown',
@@ -284,9 +292,9 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           reviewVerdict: null,
           reviewConcerns: [] as unknown[],
           reworkApplied: false,
-          commitSha: null,
-          commitMessage: null,
-          commitSkipReason: null,
+          commitSha: firstSnap?.commitSha ?? null,
+          commitMessage: firstSnap?.commitMessage ?? null,
+          commitSkipReason: firstSnap?.commitSkipReason ?? null,
           findings: allFindings.map(f => ({
             severity: f.severity, category: f.category, claim: f.claim,
             ...((f as any).evidence !== undefined && (f as any).evidence !== '' && { evidence: (f as any).evidence }),
