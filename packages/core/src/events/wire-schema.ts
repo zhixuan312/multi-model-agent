@@ -213,16 +213,6 @@ export const TaskCompletedEventSchema = z.object({
 
 // ── Upload batch ─────────────────────────────────────────────────────────
 
-export const UploadBatchSchema = z.object({
-  schemaVersion: z.literal(5),
-  installId: z.string().uuid(),
-  mmagentVersion: VersionString,
-  os: Os,
-  nodeMajor: z.number().int().min(22).max(99),
-  generation: z.number().int().min(0).optional(),
-  events: z.array(TaskCompletedEventSchema).min(1).max(500),
-}).strict();
-
 // ── Super-refinement: R1–R15 (§3.4) ──────────────────────────────────────
 
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate']);
@@ -340,8 +330,6 @@ export const WireTelemetryRecordSchema = z.object({
 }).passthrough();
 
 // ── Inferred TS types ────────────────────────────────────────────────────
-
-export type StageEntryType = z.infer<typeof StageEntrySchema>;
 
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
 export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;

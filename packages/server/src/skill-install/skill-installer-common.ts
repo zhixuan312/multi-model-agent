@@ -174,15 +174,6 @@ export function removeSkillFromClient(
 
 // ── Orchestration (was server/src/install/orchestrate.ts) ───────────────────
 
-export interface InstallResult {
-  skill: string;
-  action: 'installed' | 'uninstalled';
-  targets: Client[];
-  skipped: Client[];
-  dryRun: boolean;
-  orphanedSkills?: Partial<Record<Client, string[]>>;
-}
-
 export function activeCleanup(installDir: string, canonicalSkills: readonly string[]): string[] {
   let entries: string[];
   try {

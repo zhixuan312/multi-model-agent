@@ -288,16 +288,6 @@ export type AgentConfig = z.infer<typeof agentConfigSchema>;
 /** Inferred type for the standalone server configuration block. */
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 
-export interface ParsedConfigSuccess {
-  config: MultiModelConfig
-  success: true
-}
-
-export interface ParsedConfigFailure {
-  success: false
-  error: string
-}
-
 /**
  * Parse a raw config object — validates schema, no side effects.
  * Does NOT load from disk.
