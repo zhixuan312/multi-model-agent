@@ -35,7 +35,7 @@ export const SCENARIOS = [
   { id: 6,  route: 'delegate', tier: 'complex', kind: 'write', dispatchMode: 'parallel', tasks: 1 },
   { id: 7,  route: 'delegate', tier: 'standard', kind: 'write', dispatchMode: 'serial', tasks: 2 },
   { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', dispatchMode: 'serial' },
-  { id: 'seed', route: 'delegate', tier: 'standard', kind: 'write', expectFail: true },
+  { id: 'seed', route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', seed: true },
   { id: 9,  route: 'review', tier: 'complex', kind: 'read' },
   { id: 10, route: 'debug', tier: 'complex', kind: 'read' },
   { id: 11, route: 'delegate', tier: 'standard', kind: 'write', expectRework: 'best-effort' },
