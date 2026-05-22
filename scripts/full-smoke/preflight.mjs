@@ -59,12 +59,17 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
     const dbUrl = resolveDatabaseUrl();
     if (!dbUrl) throw new AbortError('database-url', 'DATABASE_URL unresolved',
       'set SMOKE_DATABASE_URL or place the backend repo beside this one, or use --skip-backend');
-    if (!dbHostApproved(dbUrl)) throw new AbortError('approved-env',
-      `DB host ${new URL(dbUrl).hostname} not approved`,
-      'point at a local/dev DB; the harness refuses to delete from non-approved DBs');
     try { execFileSync('psql', [dbUrl, '-c', 'select 1'], { stdio: 'pipe' }); }
     catch (e) { throw new AbortError('db-connect', String(e.stderr || e.message || e), 'check DATABASE_URL + that Postgres is up'); }
-    ctx.databaseUrl = dbUrl; ctx.dbApproved = true;
+    ctx.databaseUrl = dbUrl;
+    // Approved-env gates DELETION, not the run. A reachable non-local DB (e.g. a
+    // remote/shared backend) is read for verification, but teardown will NOT
+    // delete from it — auto-deleting from a non-local backend is unsafe.
+    ctx.dbApproved = dbHostApproved(dbUrl);
+    if (!ctx.dbApproved) {
+      const host = (() => { try { return new URL(dbUrl).hostname; } catch { return '?'; } })();
+      console.error(`[preflight] WARNING: DB host ${host} is not local/approved — backend verification will READ only; teardown will NOT delete rows (clean up manually if desired).`);
+    }
   }
   return ctx;
 }
