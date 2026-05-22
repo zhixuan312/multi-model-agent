@@ -4,18 +4,21 @@ import { preflight, AbortError } from './preflight.mjs';
 import { createProject } from './fixtures.mjs';
 import { SCENARIOS } from './config.mjs';
 import { runDispatch, pollBatch } from './dispatch.mjs';
-import { collectResponse, collectDiagnostics, collectQueue, collectBackend } from './collectors.mjs';
+import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
 
 const argv = process.argv.slice(2);
+const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const opts = {
   skipBackend: argv.includes('--skip-backend'),
   strict: argv.includes('--strict'),
   expectBranch: (argv.find((a) => a.startsWith('--branch=')) || '').split('=')[1] || null,
   allowMismatch: argv.includes('--allow-mismatch'),
+  // --only=1,13 limits the run to a subset of scenario ids (for quick checks).
+  only: onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null,
 };
 
 let ctx;
@@ -36,8 +39,10 @@ try {
   ctx.dir = dir;
   ctx.specMd = readFileSync(`${dir}/spec.md`, 'utf8');
 
-  for (const spec of SCENARIOS) {
+  const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
+  for (const spec of scenarios) {
     try {
+      const queueBefore = queueLineCount();
       const res = await runDispatch(spec, ctx);
       if (res.blockId) {
         ctx.blockId = res.blockId;
@@ -53,7 +58,7 @@ try {
         const idx = results.findIndex((t) => t.status && t.status !== 'done' && t.status !== 'ok');
         ctx.seedFailIdx = idx >= 0 ? idx : 0;
       }
-      const queue = collectQueue(res.batchId);
+      const queue = collectQueue(queueBefore);
       const backend = opts.skipBackend ? null
         : await collectBackend(ctx.databaseUrl, queue.eventIds, ctx.installId, ctx.runStartTs);
       const rec = normalize(spec, {

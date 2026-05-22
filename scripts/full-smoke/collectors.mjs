@@ -35,12 +35,20 @@ export function collectDiagnostics(batchId) {
            terminalKind: completed?.kind ?? null };
 }
 
-// ③ queue: wire records for a batchId (snapshot now — drains on flush)
-export function collectQueue(batchId) {
+// ③ queue: wire records since `prevCount` lines (append-window correlation —
+// the wire record carries NO batchId, only eventId, so per-dispatch isolation
+// uses the append window on an idle server; the flusher may drain mid-run, so
+// this is best-effort and ④ is the durable truth).
+export function queueLineCount() {
+  if (!existsSync(QUEUE_FILE)) return 0;
+  return readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean).length;
+}
+export function collectQueue(prevCount = 0) {
   if (!existsSync(QUEUE_FILE)) return { records: [], eventIds: [] };
-  const recs = readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
-    .filter((r) => JSON.stringify(r).includes(batchId));
+  const all = readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean);
+  // If the file shrank (flush rewrote it), fall back to the whole file.
+  const slice = all.length >= prevCount ? all.slice(prevCount) : all;
+  const recs = slice.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   return { records: recs, eventIds: recs.map((r) => r.eventId).filter(Boolean) };
 }
 

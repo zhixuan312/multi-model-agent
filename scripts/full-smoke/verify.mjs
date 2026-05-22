@@ -49,10 +49,16 @@ export function verify(rec) {
   // ② diagnostics
   if (d && d.events.length) {
     const kinds = [...new Set(d.events.map((x) => x.kind))];
-    out.push(C('diag-events', kinds.includes('batch_created') && kinds.includes('executor_started') ? 'PASS' : 'FAIL', `kinds=${kinds}`));
+    const terminal = kinds.includes('batch_completed') || kinds.includes('batch_failed');
+    out.push(C('diag-events', kinds.includes('batch_created') && terminal ? 'PASS' : 'FAIL', `kinds=${kinds}`));
     if (e.dispatchMode) out.push(C('dispatch_mode', d.dispatchMode === e.dispatchMode ? 'PASS' : 'FAIL', `got=${d.dispatchMode} want=${e.dispatchMode}`));
+    // sessionId IS present in diagnostics. A task uses 2 sessions only when the
+    // implementer tier differs from the reviewer/annotate tier; same-tier no-review
+    // tasks legitimately use 1. Report the count; PASS for 1-2, WARN for 0 or >2.
     const sessionIds = new Set(d.events.flatMap((x) => (x.fields?.sessionId ? [x.fields.sessionId] : [])));
-    out.push(C('2-sessions', sessionIds.size === 0 ? 'NA' : (sessionIds.size === 2 ? 'PASS' : 'WARN'), `distinct sessionIds=${sessionIds.size} (NA = diagnostics expose no session ids)`));
+    const ok2 = sessionIds.size >= 1 && sessionIds.size <= 2;
+    out.push(C('sessions', sessionIds.size === 0 ? 'WARN' : (ok2 ? 'PASS' : 'WARN'),
+      `distinct sessionIds=${sessionIds.size} (2 = cross-tier task; 1 = same-tier/no-review)`));
   } else {
     out.push(C('diag-events', 'WARN', 'no diagnostics events found for batch'));
   }
