@@ -27,14 +27,21 @@ export function verify(rec) {
   }
 
   if (e.kind === 'write' && !e.expectFail) {
+    // The aggregate structuredReport reflects TASK 0 only. For multi-task batches
+    // (parallel/serial delegate with >1 task, execute-plan), a null aggregate
+    // commitSha is a WARN (task 0 may have no-op'd while siblings committed), not
+    // a hard FAIL — per-task commit isn't exposed on the response results[].
+    const multiTask = (e.tasks && e.tasks > 1) || e.route === 'execute-plan';
+    const commitVerdict = SHA40.test(sr.commitSha ?? '') ? 'PASS' : (multiTask ? 'WARN' : 'FAIL');
+    const commitDetail = `commitSha=${sr.commitSha}${multiTask ? ' (aggregate = task 0 only)' : ''}`;
     if (e.expectCommitSkip) {
       out.push(C('commit-skip', sr.commitSkipReason === e.expectCommitSkip ? 'PASS' : 'FAIL', `commitSkipReason=${sr.commitSkipReason} commitSha=${sr.commitSha}`));
     } else if (e.reviewPolicy === 'none') {
       const skipped = ['reviewing', 'reworking'].every((n) => !names.includes(n) || outcomeOf(n) === 'skipped');
       out.push(C('review-skipped', skipped ? 'PASS' : 'FAIL', `stages=${JSON.stringify(stages.map((s) => [s.name, s.outcome]))}`));
-      out.push(C('commitSha', SHA40.test(sr.commitSha ?? '') ? 'PASS' : 'FAIL', `commitSha=${sr.commitSha}`));
+      out.push(C('commitSha', commitVerdict, commitDetail));
     } else {
-      out.push(C('commitSha', SHA40.test(sr.commitSha ?? '') ? 'PASS' : 'FAIL', `commitSha=${sr.commitSha}`));
+      out.push(C('commitSha', commitVerdict, commitDetail));
       out.push(C('review-ran', names.includes('reviewing') ? 'PASS' : 'FAIL', `stages=${names}`));
       if (e.expectRework === 'best-effort') {
         out.push(C('rework', outcomeOf('reworking') === 'advance' ? 'PASS' : 'WARN', `rework outcome=${outcomeOf('reworking')} (best-effort)`));
@@ -65,19 +72,10 @@ export function verify(rec) {
     out.push(C('diag-events', 'WARN', 'no diagnostics events found for batch'));
   }
 
-  // ③/④ telemetry presence + correlation
+  // ③ queue (per-dispatch, best-effort — flusher may drain before we read; the
+  // durable telemetry check is run-level against the backend, see report.mjs).
   const inQueue = (q?.records?.length ?? 0) > 0;
-  if (b === null) {
-    out.push(C('queue', inQueue ? 'PASS' : 'WARN', `③ snapshot records=${q?.records?.length ?? 0}`));
-    out.push(C('backend', 'NA', '--skip-backend'));
-  } else {
-    const inBackend = (b.byEvent?.length ?? 0) > 0 || (b.windowCount ?? 0) > 0;
-    // Remote/async ingestion lag means an early dispatch's row may not have landed
-    // within the per-dispatch poll window — that's a WARN (best-effort), not a hard
-    // FAIL. A run-level backend check (all rows after a final settle) is the proper
-    // verification; per-dispatch is indicative only. See known-limitation note.
-    out.push(C('telemetry-record', inQueue || inBackend ? 'PASS' : 'WARN', `queue=${inQueue} backend(rows=${b.byEvent?.length},window=${b.windowCount}) — WARN may be ingestion lag`));
-  }
+  out.push(C('queue', inQueue ? 'PASS' : 'NA', `③ records=${q?.records?.length ?? 0} (best-effort; flush may drain → verified run-level in backend)`));
   if (inQueue) {
     const sv = q.records[0].schemaVersion ?? q.records[0].schema_version;
     out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'WARN', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));

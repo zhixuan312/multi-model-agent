@@ -49,34 +49,31 @@ export function collectQueue(prevCount = 0) {
   // If the file shrank (flush rewrote it), fall back to the whole file.
   const slice = all.length >= prevCount ? all.slice(prevCount) : all;
   const recs = slice.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-  return { records: recs, eventIds: recs.map((r) => r.eventId).filter(Boolean) };
+  // Each queue line is a BATCH WRAPPER: { events:[{eventId,...}], installId, schemaVersion, ... }.
+  const eventIds = recs.flatMap((r) =>
+    Array.isArray(r.events) ? r.events.map((e) => e.eventId).filter(Boolean)
+      : (r.eventId ? [r.eventId] : []));
+  return { records: recs, eventIds };
 }
 
-// ④ backend: per-event rows (event JSONB parsed) + completeness count by install+window
-export async function collectBackend(databaseUrl, eventIds, installId, runStartTs) {
-  if (!databaseUrl) return { byEvent: [], windowCount: null };
-  const q = (sql) => execFileSync('psql', [databaseUrl, '-t', '-A', '-c', sql], { encoding: 'utf8' }).trim();
-  const windowSql = `SELECT count(*) FROM events_raw WHERE install_id='${installId}' AND received_at >= '${runStartTs}'`;
-  const start = Date.now(); let windowCount = 0;
-  for (;;) {
-    try { windowCount = parseInt(q(windowSql) || '0', 10); } catch { windowCount = 0; }
-    if (windowCount > 0 || Date.now() - start >= POLL.backendMaxMs) break;
-    await new Promise((r) => setTimeout(r, POLL.backendEveryMs));
-  }
-  let byEvent = [];
-  if (eventIds.length) {
-    const inList = eventIds.filter((e) => /^[0-9a-f-]{36}$/i.test(e)).map((e) => `'${e}'`).join(',');
-    if (inList) {
-      const cols = EVENTS_RAW_COLUMNS.join(', ');
-      const rows = q(`SELECT ${cols}, event::text FROM events_raw WHERE event_id IN (${inList})`);
-      byEvent = rows ? rows.split('\n').filter(Boolean).map((line) => {
-        const parts = line.split('|');
-        const evJson = parts.slice(EVENTS_RAW_COLUMNS.length).join('|');
-        let event = {}; try { event = JSON.parse(evJson); } catch { /* */ }
-        const row = {}; EVENTS_RAW_COLUMNS.forEach((c, i) => { row[c] = parts[i]; });
-        row.event = event; return row;
-      }) : [];
-    }
-  }
-  return { byEvent, windowCount };
+// ④ backend: rows in events_raw correlated by event_id (= the queue record's
+// eventId). Unambiguous (no install_id-source guessing). NOTE: the server's
+// flusher uploads only every 5 minutes, so without --wait-flush these rows
+// won't have landed yet — that's why the run-level check is queue-first.
+export function collectBackend(databaseUrl, eventIds) {
+  const ids = (eventIds || []).filter((e) => /^[0-9a-f-]{36}$/i.test(e));
+  if (!databaseUrl || !ids.length) return { matched: [], queried: ids.length };
+  const cols = EVENTS_RAW_COLUMNS.join(', ');
+  const inList = ids.map((e) => `'${e}'`).join(',');
+  let rows = '';
+  try { rows = execFileSync('psql', [databaseUrl, '-t', '-A', '-c',
+    `SELECT ${cols}, event::text FROM events_raw WHERE event_id IN (${inList})`], { encoding: 'utf8' }).trim(); }
+  catch { return { matched: [], queried: ids.length }; }
+  const matched = rows ? rows.split('\n').filter(Boolean).map((line) => {
+    const parts = line.split('|');
+    let event = {}; try { event = JSON.parse(parts.slice(EVENTS_RAW_COLUMNS.length).join('|')); } catch { /* */ }
+    const row = {}; EVENTS_RAW_COLUMNS.forEach((c, i) => { row[c] = parts[i]; });
+    row.event = event; return row;
+  }) : [];
+  return { matched, queried: ids.length };
 }

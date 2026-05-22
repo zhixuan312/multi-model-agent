@@ -19,6 +19,9 @@ const opts = {
   allowMismatch: argv.includes('--allow-mismatch'),
   // --only=1,13 limits the run to a subset of scenario ids (for quick checks).
   only: onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null,
+  // --wait-flush waits out the server's 5-min telemetry flush, then verifies the
+  // run's events actually landed in events_raw (the mma→backend→DB leg).
+  waitFlush: argv.includes('--wait-flush'),
 };
 
 let ctx;
@@ -32,7 +35,10 @@ try {
 ctx.contextBlockIds = [];
 const records = [];
 const checksByScenario = {};
+const allEventIds = [];
 let totalCostUSD = 0;
+let batchTaskCount = 0;
+let backendSummary = null;
 
 try {
   const { dir } = createProject();
@@ -59,21 +65,33 @@ try {
         ctx.seedFailIdx = idx >= 0 ? idx : 0;
       }
       const queue = collectQueue(queueBefore);
-      const backend = opts.skipBackend ? null
-        : await collectBackend(ctx.databaseUrl, queue.eventIds, ctx.installId, ctx.runStartTs);
+      allEventIds.push(...queue.eventIds);
       const rec = normalize(spec, {
         response: collectResponse(envelope),
         diagnostics: collectDiagnostics(res.batchId),
-        queue, backend,
+        queue, backend: null, // ④ verified run-level after the loop
       });
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
+      batchTaskCount += Array.isArray(envelope.results) ? envelope.results.length : 1;
       totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
         ?? envelope.costSummary?.totalActualCostUSD ?? 0;
     } catch (err) {
       records.push(normalize(spec, {}));
       checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];
     }
+  }
+
+  // Run-level backend (④): correlate by event_id (= queue eventId). The flusher
+  // uploads every 5 min, so without --wait-flush these rows won't have landed yet
+  // — the durable local proof is the queue (③); --wait-flush verifies DB landing.
+  ctx.allEventIds = allEventIds;
+  if (!opts.skipBackend) {
+    if (opts.waitFlush) {
+      console.error('[smoke] --wait-flush: waiting ~5.5m for the 5-min telemetry flusher before the backend DB check...');
+      await new Promise((r) => setTimeout(r, 330000));
+    }
+    backendSummary = collectBackend(ctx.databaseUrl, allEventIds);
   }
 } finally {
   await teardown(ctx);
@@ -83,5 +101,7 @@ const exitCode = report(records, checksByScenario, {
   serverVersion: ctx.serverVersion, bootId: ctx.bootId,
   mode: opts.skipBackend ? 'REDUCED (--skip-backend)' : 'FULL',
   strict: opts.strict, totalCostUSD,
+  backend: backendSummary, queueEventCount: allEventIds.length, expectedRows: batchTaskCount,
+  waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved,
 });
 process.exit(exitCode);
