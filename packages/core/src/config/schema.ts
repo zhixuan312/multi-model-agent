@@ -298,8 +298,6 @@ export interface ParsedConfigFailure {
   error: string
 }
 
-export type ParseConfigResult = ParsedConfigSuccess | ParsedConfigFailure
-
 /**
  * Parse a raw config object — validates schema, no side effects.
  * Does NOT load from disk.

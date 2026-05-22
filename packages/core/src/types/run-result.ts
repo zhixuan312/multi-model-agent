@@ -44,9 +44,6 @@ export type _TerminationCause =
   | 'brief_too_vague'
   | 'error';
 
-/** Used inside TurnResult (internal); exported for runner-types.ts alignment. */
-export type TurnTerminationReason = _TerminationCause;
-
 export interface TurnResult {
   output: string;
   usage: TokenUsage;

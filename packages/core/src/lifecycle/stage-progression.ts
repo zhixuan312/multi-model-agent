@@ -119,7 +119,3 @@ export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy
     },
   },
 ) as Record<string, readonly string[]>;
-
-export function normalizeStageLabel(label: string): string {
-  return label;
-}

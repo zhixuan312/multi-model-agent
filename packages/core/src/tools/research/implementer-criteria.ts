@@ -47,17 +47,6 @@ export const QUERY_PHRASING_RESEARCH = [
   '**Query phrasing:** Phrase Brave/adapter queries as topical keywords, not full sentences from the user. Do NOT include verbatim multi-sentence excerpts from `background` or `researchQuestion`.',
 ].join('\n');
 
-export function strategyRuleResearch(hasBrave: boolean): string {
-  return [
-    '**Strategy:**',
-    '1. Start with built-in adapters (`arxiv`, `semantic_scholar`, `github_search`, `rss`) and any user sources you can interpret.',
-    hasBrave
-      ? '2. If coverage is thin (<3 substantive sources), escalate to `web_search` with `site:` filters across allowlisted hosts; drop the site filter only if still thin.'
-      : '2. (no open-web search is available — no Brave keys configured. Use the configured source adapters and any user sources only.)',
-    '3. Stop when you have enough to support 3–5 distinct directions.',
-  ].join('\n');
-}
-
 export const RESEARCH_PURPOSE_ORIENTATION = [
   'Why this research exists:',
   'You are answering the user\'s research question against external sources (arxiv, semantic_scholar, github_search, rss, brave). Each finding is a candidate insight from one cited external source, viewed through the perspective the criterion names.',

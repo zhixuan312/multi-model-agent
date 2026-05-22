@@ -19,10 +19,6 @@ export interface SurfaceEntry {
   agentTypeDefault: 'standard' | 'complex';
   agentTypeOverridable: boolean;
   responseShapeName: string;
-  /** Handler builder — set by server-side wiring via registerHandlerBuilder.
-   * Accepts a dependency bag and returns an HTTP handler. Typed loosely to avoid
-   * core→server package dependency. */
-  buildHandler?: (deps: Record<string, unknown>) => unknown;
 }
 
 export class ToolSurfaceRegistry {
@@ -41,12 +37,5 @@ export class ToolSurfaceRegistry {
 
   list(): SurfaceEntry[] {
     return [...this.entries.values()];
-  }
-
-  /** Attach a handler builder to an already-registered entry. */
-  setHandler(routeName: string, builder: (deps: Record<string, unknown>) => unknown): void {
-    const entry = this.entries.get(routeName);
-    if (!entry) throw new Error(`cannot set handler: route '${routeName}' not registered`);
-    entry.buildHandler = builder;
   }
 }
