@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.17] - 2026-05-22
+
+Behavior-neutral cleanup baseline. A verified, iterative dead-code + duplication sweep across `packages/core` and `packages/server` to consolidate the v4 codebase into one-implementation-per-concept shape before the next features land. **Nothing observable changes** — telemetry wire data (`SCHEMA_VERSION` stays 5, emitted events unchanged), logs, stage names/order, tools, routes, and agent-facing output are all identical before and after. Each removal was confirmed zero-reference repo-wide (core + server + tests) and gated on a clean `npm run build --workspaces` + full Vitest run; the full-pipeline smoke (`npm run smoke:full --wait-flush`) passed 15/15 with the backend DB landing 18/18 on the built artifact.
+
+### Removed
+
+- **Orphaned files (core).** `lifecycle/stage-stats.ts` (zero importers — the lifecycle uses `merge-stage-stats.ts`), the dead report-parser slots `reporting/report-parser-slots/{debug-report,register-context-block-report}.ts` (their tool-configs use `noStructuredReportSchema` / an inline parser, not these schemas), and `reporting/headline-templates/register-context-block.ts`.
+- **Dead exported symbols (core).** `ParsedConfigSuccess` / `ParsedConfigFailure` / `ParseConfigResult` (`config/schema.ts`), `PlainLogKind` (`events/plain-log-entry.ts`), `clampToolCallCount` / `clampFilesReadCount` (`events/to-wire-record.ts`), the unused wire-schema declarations `Os` / `SeverityBin` / `UploadBatchSchema` / `StageEntryType` / `StageEntryInternal` / `UploadBatchType` / `ErrorCodeType` / `FindingsBySeverity` (`events/wire-schema.ts` — none emitted; `SCHEMA_VERSION` unchanged), `normalizeStageLabel` (`lifecycle/stage-progression.ts`, orphaned by 4.7.16's `stageProgress` removal), `AdapterCallContext` (`research/adapters/types.ts`), `closeDispatcher` / `_ResearchFetchCfg` (`research/web-fetch-helpers.ts`), `strategyRuleResearch` (`tools/research/implementer-criteria.ts`), `TurnTerminationReason` (`types/run-result.ts`), and the unused `ToolSurfaceRegistry.buildHandler` field + `setHandler` method (`tool-surface/tool-surface-registry.ts`).
+- **Dead exported helpers (server).** `doInstall` / `doUninstall` (`skill-install/skill-installer-common.ts` — the install flow calls `writeSkillToClient` / `removeSkillFromClient` directly), `isInstalled` + the now-orphaned `getEntry` (`skill-install/manifest.ts`), the orphaned `InstallResult` interface, and `setRecorderForTest` (`telemetry/recorder.ts`).
+
+### Changed
+
+- **Single `SLICE_CAP_BYTES` (core).** `tools/execute-plan/brief-slot.ts` now imports the constant from `plan-extractor.ts` instead of redefining it.
+- **Single `TokenUsage` (core).** Canonical definition lives in `types/run-result.ts`; `providers/runner-types.ts` re-exports it (type-only, runtime-erased) instead of declaring an identical copy.
+
 ## [4.7.16] - 2026-05-22
 
 Server + core cleanup: removes verified dead code, retires stale `core` package exports, consolidates two real duplications, and collapses the duplicate `/control/retry` route into `/retry` (the one breaking change). Plus two robustness fixes to the full-pipeline smoke harness. Per `development-mode.md` (no back-compat). Build green; 2074 tests pass; full-pipeline smoke verified 15/15 across all four telemetry sinks.
@@ -750,7 +765,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.16...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.17...HEAD
+[4.7.17]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.16...v4.7.17
 [4.7.16]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.15...v4.7.16
 [4.7.15]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...v4.7.15
 [4.7.14]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...v4.7.14
