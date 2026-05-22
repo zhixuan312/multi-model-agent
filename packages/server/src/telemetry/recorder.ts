@@ -98,10 +98,6 @@ export function getRecorder(): Recorder {
   return _recorder;
 }
 
-export function setRecorderForTest(r: Recorder): void {
-  _recorder = r;
-}
-
 export function createRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
   const recorder = _buildRecorder(opts);
   _recorder = recorder;
