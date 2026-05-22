@@ -33,6 +33,7 @@
     "test:perf": "MMAGENT_PERF_CHECK=1 vitest run tests/perf/",
     "test:perf:baseline": "MMAGENT_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
     "serve": "node packages/server/dist/cli/index.js serve",
+    "smoke:full": "node scripts/full-smoke/index.mjs",
     "regen:observability-golden": "npx tsx tests/contract/regen-observability-golden.ts",
     "lint": "eslint packages",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages"
