@@ -391,4 +391,45 @@ describe('GET /batch/:batchId', () => {
       await s.stop();
     }
   });
+
+  it('multi-task aggregate commitSha reflects the first COMMITTED task, not just task 0', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const { TaskEnvelopeStore } = await import('@zhixuan92/multi-model-agent-core/events/task-envelope');
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false, tasksTotal: 2,
+      });
+      // Task 0 NO-OPs (no commit, skip reason); task 1 commits with a real SHA.
+      const sha1 = 'b'.repeat(40);
+      const env0 = TaskEnvelopeStore.create({
+        taskId: `${batchId}:0`, batchId, taskIndex: 0, route: 'delegate', agentType: 'standard',
+        client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test', reviewPolicy: 'none' as const,
+      });
+      env0.startStage('implementing', { model: 'claude-haiku-4-5', tier: 'standard' });
+      env0.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [], commitSha: null, commitMessage: null, commitSkipReason: 'no_diff' });
+      const env1 = TaskEnvelopeStore.create({
+        taskId: `${batchId}:1`, batchId, taskIndex: 1, route: 'delegate', agentType: 'standard',
+        client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test', reviewPolicy: 'none' as const,
+      });
+      env1.startStage('implementing', { model: 'claude-haiku-4-5', tier: 'standard' });
+      env1.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [], commitSha: sha1, commitMessage: 'implement: add y', commitSkipReason: null });
+      s.batchRegistry.attachEnvelope(batchId, 0, env0);
+      s.batchRegistry.attachEnvelope(batchId, 1, env1);
+      s.batchRegistry.complete(batchId);
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { structuredReport: Record<string, unknown> };
+      expect(body.structuredReport.commitSha).toBe(sha1);            // task 1's, not task 0's null
+      expect(body.structuredReport.commitMessage).toBe('implement: add y');
+      expect(body.structuredReport.commitSkipReason).toBeNull();     // something committed → no skip reason
+    } finally {
+      await s.stop();
+    }
+  });
 });
