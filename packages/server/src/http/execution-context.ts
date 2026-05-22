@@ -33,10 +33,6 @@ export function buildExecutionContext(
     envelope.recordHeartbeat({ stallIdleMs: 0 });
   };
 
-  function capitalizeStage(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
     recorder = getRecorder() as unknown as ExecutionContext['recorder'];

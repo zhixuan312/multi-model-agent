@@ -55,12 +55,3 @@ export function validateAuthHeader(
   if (!timingSafeEqual(presented, expectedBuf)) return { ok: false, reason: 'mismatch' };
   return { ok: true };
 }
-
-/**
- * Convenience wrapper with boolean return — used by the server pipeline.
- * Accepts the raw Authorization header value (e.g. "Bearer abc123") and
- * the expected token string (without "Bearer " prefix).
- */
-export function validateBearerHeader(header: string | undefined, expectedToken: string): boolean {
-  return validateAuthHeader(header, expectedToken).ok;
-}
