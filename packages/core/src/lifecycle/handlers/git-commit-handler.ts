@@ -240,7 +240,3 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
     }
   });
 }
-
-// ─── Exports (backwards compatibility alias) ─────────────────────────────────
-// The old export name from v4.4.x; new code should use commitHandler.
-export { commitHandler as gitCommitHandler };

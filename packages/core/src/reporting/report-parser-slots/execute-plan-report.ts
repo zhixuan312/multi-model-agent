@@ -1,4 +1,5 @@
 import type { ReportSchema } from '../structured-report-parser.js';
+import { extractFencedJson } from '../extract-fenced-json.js';
 
 export interface ExecutePlanReport {
   summary: string;
@@ -8,8 +9,6 @@ export interface ExecutePlanReport {
 
 export const executePlanReportSchema: ReportSchema<ExecutePlanReport> = {
   parse(text: string) {
-    const m = text.match(/```json\n([\s\S]+?)\n```/);
-    if (!m) throw new Error('execute_plan report missing JSON block');
-    return JSON.parse(m[1]);
+    return extractFencedJson(text, 'execute-plan') as ExecutePlanReport;
   },
 };

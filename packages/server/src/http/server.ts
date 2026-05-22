@@ -55,16 +55,15 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
-  '/control/retry', '/control/batch-slice', '/context-blocks',
+  '/control/batch-slice', '/context-blocks',
 ]);
 
 /** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
  *  so wire telemetry's main_model column is never null for billed runs. The
- *  9 tool routes + /control/retry (which dispatches a real run) need it; the
- *  introspection / batch-polling / context-block utility routes do not. */
+ *  tool routes need it; the introspection / batch-polling / context-block
+ *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
-  '/control/retry',
 ]);
 
 /**
@@ -190,7 +189,6 @@ async function registerControlHandlers(
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
   const { buildBatchHandler } = await import('./handlers/control/batch.js');
-  const { buildRetryHandler } = await import('./handlers/control/retry.js');
   const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
 
@@ -236,7 +234,6 @@ async function registerControlHandlers(
     bus.subscribe(uploader);
 
     const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
-    router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
       projectRegistry,
@@ -245,9 +242,6 @@ async function registerControlHandlers(
     }));
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
-    router.register('POST', '/control/retry', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-    });
     router.register('POST', '/control/batch-slice', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });

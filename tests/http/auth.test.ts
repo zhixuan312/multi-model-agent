@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadToken, validateAuthHeader, validateBearerHeader } from '../../packages/server/src/http/auth.js';
+import { loadToken, validateAuthHeader } from '../../packages/server/src/http/auth.js';
 
 describe('loadToken', () => {
   let tmp: string;
@@ -99,17 +99,5 @@ describe('validateAuthHeader', () => {
   });
   it('uses timingSafeEqual (tokens of different length → mismatch, not throw)', () => {
     expect(validateAuthHeader('Bearer short', 'a-much-longer-expected-token').ok).toBe(false);
-  });
-});
-
-describe('validateBearerHeader', () => {
-  it('returns true for valid bearer token', () => {
-    expect(validateBearerHeader('Bearer mytoken', 'mytoken')).toBe(true);
-  });
-  it('returns false for wrong token', () => {
-    expect(validateBearerHeader('Bearer bad', 'mytoken')).toBe(false);
-  });
-  it('returns false for missing header', () => {
-    expect(validateBearerHeader(undefined, 'mytoken')).toBe(false);
   });
 });

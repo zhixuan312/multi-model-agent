@@ -19,7 +19,7 @@ export interface SurfaceEntry {
   agentTypeDefault: 'standard' | 'complex';
   agentTypeOverridable: boolean;
   responseShapeName: string;
-  /** Handler builder — set by server-side wiring (wire/register-all-handlers.ts).
+  /** Handler builder — set by server-side wiring via registerHandlerBuilder.
    * Accepts a dependency bag and returns an HTTP handler. Typed loosely to avoid
    * core→server package dependency. */
   buildHandler?: (deps: Record<string, unknown>) => unknown;

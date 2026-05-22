@@ -31,9 +31,17 @@ export function verify(rec) {
     // (parallel/serial delegate with >1 task, execute-plan), a null aggregate
     // commitSha is a WARN (task 0 may have no-op'd while siblings committed), not
     // a hard FAIL — per-task commit isn't exposed on the response results[].
+    //
+    // A null commitSha WITH a commitSkipReason (e.g. no_diff) is a legitimate
+    // worker outcome — the LLM may non-deterministically produce content
+    // identical to the seed, leaving nothing to commit. That's PASS (reason
+    // shown). Only a null commitSha with NO skip reason is the real "lost
+    // commit" bug class → FAIL (or WARN for multi-task aggregates).
     const multiTask = (e.tasks && e.tasks > 1) || e.route === 'execute-plan';
-    const commitVerdict = SHA40.test(sr.commitSha ?? '') ? 'PASS' : (multiTask ? 'WARN' : 'FAIL');
-    const commitDetail = `commitSha=${sr.commitSha}${multiTask ? ' (aggregate = task 0 only)' : ''}`;
+    const committed = SHA40.test(sr.commitSha ?? '');
+    const labeledSkip = !committed && typeof sr.commitSkipReason === 'string' && sr.commitSkipReason.length > 0;
+    const commitVerdict = committed || labeledSkip ? 'PASS' : (multiTask ? 'WARN' : 'FAIL');
+    const commitDetail = `commitSha=${sr.commitSha}${labeledSkip ? ` (skipped: ${sr.commitSkipReason})` : ''}${multiTask ? ' (aggregate = task 0 only)' : ''}`;
     if (e.expectCommitSkip) {
       out.push(C('commit-skip', sr.commitSkipReason === e.expectCommitSkip ? 'PASS' : 'FAIL', `commitSkipReason=${sr.commitSkipReason} commitSha=${sr.commitSha}`));
     } else if (e.reviewPolicy === 'none') {

@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent",
-  "version": "4.7.15",
+  "version": "4.7.16",
   "type": "module",
   "license": "MIT",
   "description": "Standalone HTTP server for multi-model-agent. Routes tool-invocation work to Claude, Codex, or OpenAI-compatible sub-agents with async-polling REST dispatch and installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.",
@@ -26,16 +26,16 @@
     "dist",
     "scripts/postinstall.js"
   ],
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/http/server.js",
+  "types": "dist/http/server.d.ts",
   "bin": {
     "mmagent": "dist/cli/index.js",
     "multi-model-agent": "dist/cli/index.js"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/http/server.d.ts",
+      "import": "./dist/http/server.js"
     },
     "./server": {
       "types": "./dist/http/server.d.ts",
@@ -53,7 +53,7 @@
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@zhixuan92/multi-model-agent-core": "^4.7.15",
+    "@zhixuan92/multi-model-agent-core": "^4.7.16",
     "gray-matter": "^4.0.3",
     "minimist": "^1.2.8",
     "proper-lockfile": "^4.1.2",

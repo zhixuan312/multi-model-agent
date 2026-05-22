@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.16] - 2026-05-22
+
+Server + core cleanup: removes verified dead code, retires stale `core` package exports, consolidates two real duplications, and collapses the duplicate `/control/retry` route into `/retry` (the one breaking change). Plus two robustness fixes to the full-pipeline smoke harness. Per `development-mode.md` (no back-compat). Build green; 2074 tests pass; full-pipeline smoke verified 15/15 across all four telemetry sinks.
+
+### BREAKING
+
+- **`/control/retry` removed** (`packages/server/src/http/handlers/control/retry.ts` deleted; `packages/server/src/http/server.ts` wiring + route-enum entries removed; `tests/contract/goldens/routes.json` updated). The protocol-level retry twin is gone — use the public **`POST /retry`** route, which is functionally equivalent (same executor, async-dispatch path) and is what the `mma-retry` skill already calls. No client that uses `/retry` is affected.
+
+### Removed
+
+- **Dead code across core + server.** `READ_ONLY_TOOL_NAMES`, `extractWorkerStatus` (whole module), the `gitCommitHandler` back-compat alias, `CostBreakdown`, the unused `lifecycle/index.ts` + `reporting/index.ts` barrels, `wire/register-all-handlers.ts`, `capitalizeStage`, `validateBearerHeader`, the uninvoked first-run `telemetry/notice.ts` module (+ its tests), the dead `blockRegistration` state shim, `normalizeLegacyStageLabel`, `stageProgress`, `errorResult`, and the empty `packages/server/src/index.ts` barrel. Each was confirmed zero-caller before removal.
+- **10 stale `@zhixuan92/multi-model-agent-core` package exports** (`packages/core/package.json`) that pointed at `dist/` paths whose `src/` no longer exists (e.g. `./escalation/agent-resolver`, `./lifecycle/handlers/commit-stage`, `./tools/verify/schema`).
+
+### Changed
+
+- **Single fenced-JSON extractor** (`packages/core/src/reporting/extract-fenced-json.ts`). The four report-parser slots (`delegate`, `debug`, `register-context-block`, `execute-plan`) now route their fenced ` ```json ` block parse through one shared `extractFencedJson(text, label)` helper instead of four inline regex + `JSON.parse` copies; each keeps its route-specific error label and downstream schema-shaping.
+- **Single shared `UnknownTargetError`** (`packages/server/src/skill-install/skill-installer-common.ts`). `cli/sync-skills.ts` no longer declares its own copy — it imports the canonical class, so `instanceof` checks across the two files agree.
+- **Server root barrel** (`packages/server/package.json`). `main` / `types` / the `.` export now point at `./dist/http/server.js` (the real entry) instead of the deleted empty `index.js` barrel. The `./server` subpath is unchanged.
+- **Annotate-stage docs** (`packages/core`). Corrected the annotate stage header + `reviewPolicy` doc comments to reflect the LLM-judge layer.
+
+### Fixed
+
+- **Cross-`instanceof` `UnknownTargetError`** (`install`). The duplicate class definitions meant a `UnknownTargetError` thrown from `skill-installer-common` was not caught by `sync-skills`'s `instanceof UnknownTargetError`; consolidating to one class fixes the missed catch.
+
+### Tooling
+
+- **Smoke harness — accurate per-task telemetry count + flush-robust capture** (`scripts/full-smoke/`). The run-level wire-record tally was `sum(results.length)` captured via a per-scenario queue slice, which over-counted (`execute-plan` internal outcomes, `research`) and under-captured (the wire write lands async after the batch returns terminal; the 5-min flusher drains the queue mid-run, breaking the slice). Each scenario now declares expected emissions (`emits` = one per sealed task), and capture unions full-file queue `eventId`s into a baseline-excluded set with a bounded per-scenario settle.
+- **Smoke harness — accept labeled commit-skip.** A delegate worker may non-deterministically produce content identical to the seed, so the commit stage legitimately skips with `commitSkipReason=no_diff` and a null `commitSha`. The harness now treats a null `commitSha` *with* a labeled skip reason as PASS; a null `commitSha` with *no* reason still FAILs (the real lost-commit class).
+
 ## [4.7.15] - 2026-05-22
 
 Fixes multi-task commit reporting (surfaced by a new full-pipeline smoke harness) and adds that harness as reusable verification tooling. Build green; 2092 tests pass.
@@ -721,7 +750,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.15...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.16...HEAD
+[4.7.16]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.15...v4.7.16
 [4.7.15]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...v4.7.15
 [4.7.14]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...v4.7.14
 [4.7.13]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...v4.7.13

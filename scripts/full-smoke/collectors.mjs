@@ -43,6 +43,17 @@ export function queueLineCount() {
   if (!existsSync(QUEUE_FILE)) return 0;
   return readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean).length;
 }
+// Every eventId currently present in the queue file (full read — NOT a slice).
+// The run-level tally unions these into a baseline-excluded Set, so the 5-min
+// flusher draining the file mid-run cannot lose ids we've already captured.
+export function allQueueEventIds() {
+  if (!existsSync(QUEUE_FILE)) return [];
+  const recs = readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  return recs.flatMap((r) =>
+    Array.isArray(r.events) ? r.events.map((e) => e.eventId).filter(Boolean)
+      : (r.eventId ? [r.eventId] : []));
+}
 export function collectQueue(prevCount = 0) {
   if (!existsSync(QUEUE_FILE)) return { records: [], eventIds: [] };
   const all = readFileSync(QUEUE_FILE, 'utf8').split('\n').filter(Boolean);

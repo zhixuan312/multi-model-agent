@@ -107,8 +107,8 @@ export function resolveClientInstallDir(target: Client, homeDir: string): string
 
 export class UnknownTargetError extends Error {
   readonly code = 'unknown_target' as const;
-  constructor(target: string, valid: readonly Client[]) {
-    super(`Unknown target: ${target}. Valid: ${valid.join(', ')}`);
+  constructor(target: string, valid: readonly string[]) {
+    super(`Unknown target '${target}'. Valid: ${valid.join(', ')}`);
   }
 }
 

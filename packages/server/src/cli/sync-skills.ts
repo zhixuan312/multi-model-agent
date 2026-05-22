@@ -45,6 +45,7 @@ import {
   writeSkillToClient,
   removeSkillFromClient,
   resolveClientInstallDir,
+  UnknownTargetError,
 } from '../skill-install/skill-installer-common.js';
 
 export const ExitCode = Object.freeze({
@@ -93,13 +94,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     dryRun: args['dry-run'] === true,
     json: args['json'] === true,
   };
-}
-
-export class UnknownTargetError extends Error {
-  readonly code = 'unknown_target' as const;
-  constructor(target: string, valid: readonly string[]) {
-    super(`Unknown target '${target}'. Valid: ${valid.join(', ')}`);
-  }
 }
 
 export function resolveTargets(

@@ -7,7 +7,6 @@
   "POST /audit",
   "POST /context-blocks",
   "POST /control/batch-slice",
-  "POST /control/retry",
   "POST /debug",
   "POST /delegate",
   "POST /execute-plan",

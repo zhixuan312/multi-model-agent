@@ -20,9 +20,10 @@ export function report(records, checksByScenario, meta) {
   // Run-level telemetry: local queue (③, flush-independent) + backend DB landing (④).
   lines.push('');
   const qCount = meta.queueEventCount ?? 0;
-  const localOK = qCount >= (meta.expectedRows ?? 1);
-  lines.push(`local telemetry (queue): ${GLYPH[localOK ? 'PASS' : 'WARN']} ${qCount} wire records enqueued (expected >=${meta.expectedRows ?? '?'})`);
-  if (!localOK) { warns++; gaps.push(`WARN  local-telemetry: only ${qCount} wire records enqueued vs expected ${meta.expectedRows}`); }
+  const exp = meta.expectedRows ?? 1;
+  const localOK = qCount >= exp;
+  lines.push(`local telemetry (queue): ${GLYPH[localOK ? 'PASS' : 'WARN']} ${qCount}/${exp} wire records captured (one per sealed task; sum of scenario emits)`);
+  if (!localOK) { warns++; gaps.push(`WARN  local-telemetry: captured ${qCount} wire records vs expected ${exp} (one per task) — a record was lost or arrived after its settle window`); }
 
   if (meta.backend) {
     const matched = meta.backend.matched?.length ?? 0;

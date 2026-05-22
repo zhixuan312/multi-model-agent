@@ -44,14 +44,6 @@ export interface TokenUsage {
   cachedNonReadTokens: number
 }
 
-/** Cost fields kept separate from TokenUsage. These are NOT token counts;
- *  they live on RuntimeRunResult alongside usage. */
-export interface CostBreakdown {
-  costUSD: number | null
-  /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
-  costDeltaVsMainUSD: number | null
-}
-
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
