@@ -14,8 +14,6 @@ const VersionString = z
   )
   .max(64);
 
-export const Os = z.enum(['darwin', 'linux', 'win32', 'other']);
-
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
