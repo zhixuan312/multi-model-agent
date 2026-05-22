@@ -228,20 +228,6 @@ export function isUndiciTimeout(err: unknown): boolean {
       || code === 'UND_ERR_BODY_TIMEOUT';
 }
 
-/** Close/destroy a dispatcher if it supports it (Agent instances do). */
-export function closeDispatcher(d: import('undici').Dispatcher | undefined): void {
-  if (!d) return;
-  try {
-    if (typeof (d as { destroy?: () => void }).destroy === 'function') {
-      (d as { destroy: () => void }).destroy();
-    } else if (typeof (d as { close?: () => Promise<void> }).close === 'function') {
-      (d as { close: () => Promise<void> }).close().catch(() => {});
-    }
-  } catch {
-    // best-effort cleanup
-  }
-}
-
 export function mapRequestError(err: unknown, signal: AbortSignal, host: string): WebFetchErr {
   if (signal.aborted) {
     return { status: 'error', reasonCode: 'web_fetch_timeout', host, credentialsStripped: false };
@@ -254,6 +240,3 @@ export function mapRequestError(err: unknown, signal: AbortSignal, host: string)
   }
   return { status: 'error', reasonCode: 'web_fetch_request_failed', host, credentialsStripped: false };
 }
-
-// Used by ResearchConfig['fetch'] callers (re-exported by web-fetch.ts).
-export type _ResearchFetchCfg = ResearchConfig['fetch'];

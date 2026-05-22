@@ -10,7 +10,6 @@ export const PlainLogKindEnum = z.enum([
   'provider_event',
   'server_error',
 ]);
-export type PlainLogKind = z.infer<typeof PlainLogKindEnum>;
 
 const FieldValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export const PlainLogEntrySchema = z.object({

@@ -174,15 +174,6 @@ export function removeSkillFromClient(
 
 // ── Orchestration (was server/src/install/orchestrate.ts) ───────────────────
 
-export interface InstallResult {
-  skill: string;
-  action: 'installed' | 'uninstalled';
-  targets: Client[];
-  skipped: Client[];
-  dryRun: boolean;
-  orphanedSkills?: Partial<Record<Client, string[]>>;
-}
-
 export function activeCleanup(installDir: string, canonicalSkills: readonly string[]): string[] {
   let entries: string[];
   try {
@@ -197,82 +188,4 @@ export function activeCleanup(installDir: string, canonicalSkills: readonly stri
     fs.rmSync(dirPath, { recursive: true, force: true });
   }
   return orphaned;
-}
-
-export function doInstall(
-  skillName: string,
-  targets: Client[],
-  opts: {
-    dryRun: boolean;
-    homeDir: string;
-    skillsRoot?: string;
-    version?: string;
-    cwd?: string;
-    force?: boolean;
-    cleanupOrphans?: boolean;
-  },
-): InstallResult {
-  const checkedPath = path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md');
-  const content = readSkillContent(skillName, opts.skillsRoot);
-  if (!content) {
-    throw new SkillNotFoundError(skillName, checkedPath);
-  }
-
-  const skillsRoot = getSkillsRoot(opts.skillsRoot);
-  const version = opts.version ?? '0.0.0';
-  const cwd = opts.cwd ?? process.cwd();
-
-  const installed: Client[] = [];
-  const skipped: Client[] = [];
-
-  for (const target of targets) {
-    if (opts.dryRun) {
-      skipped.push(target);
-    } else {
-      writeSkillToClient(skillName, content, target, opts.homeDir, skillsRoot, version, cwd, opts.force);
-      installed.push(target);
-    }
-  }
-
-  let orphanedSkills: Partial<Record<Client, string[]>> | undefined;
-  if (opts.cleanupOrphans && !opts.dryRun) {
-    orphanedSkills = {};
-    for (const target of targets) {
-      const installDir = resolveClientInstallDir(target, opts.homeDir);
-      if (installDir !== null) {
-        const removed = activeCleanup(installDir, SUPPORTED_SKILLS);
-        if (removed.length > 0) orphanedSkills[target] = removed;
-      }
-    }
-  }
-
-  return {
-    skill: skillName,
-    action: 'installed',
-    targets: installed,
-    skipped,
-    dryRun: opts.dryRun,
-    ...(orphanedSkills ? { orphanedSkills } : {}),
-  };
-}
-
-export function doUninstall(
-  skillName: string,
-  targets: Client[],
-  opts: { dryRun: boolean; homeDir: string; cwd?: string },
-): InstallResult {
-  const cwd = opts.cwd ?? process.cwd();
-  const installed: Client[] = [];
-  const skipped: Client[] = [];
-
-  for (const target of targets) {
-    if (opts.dryRun) {
-      skipped.push(target);
-    } else {
-      removeSkillFromClient(skillName, target, opts.homeDir, cwd);
-      installed.push(target);
-    }
-  }
-
-  return { skill: skillName, action: 'uninstalled', targets: installed, skipped, dryRun: opts.dryRun };
 }

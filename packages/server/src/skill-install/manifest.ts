@@ -169,13 +169,6 @@ export function listEntries(homeDir?: string): ManifestEntry[] {
 }
 
 /**
- * Find the entry for `skillName`, or undefined if not installed.
- */
-export function getEntry(skillName: string, homeDir?: string): ManifestEntry | undefined {
-  return readManifest(homeDir).entries.find((e) => e.name === skillName);
-}
-
-/**
  * Append (or update) the entry for `skillName`.
  *
  * - New entry: creates with de-duplicated `newTargets`.
@@ -257,12 +250,4 @@ export function removeEntry(
   }
   writeManifest(manifest, homeDir);
   return removed;
-}
-
-/**
- * Returns true when `skillName` is recorded in the manifest with at least one target.
- */
-export function isInstalled(skillName: string, homeDir?: string): boolean {
-  const e = getEntry(skillName, homeDir);
-  return e !== undefined && e.targets.length > 0;
 }

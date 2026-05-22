@@ -14,8 +14,6 @@ const VersionString = z
   )
   .max(64);
 
-export const Os = z.enum(['darwin', 'linux', 'win32', 'other']);
-
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
@@ -29,8 +27,6 @@ import { ConcernCategory as _ConcernCategory } from '../types/enums.js';
 
 import { ErrorCodeSchema } from '../error-codes.js';
 export const ErrorCode = ErrorCodeSchema;
-
-export const SeverityBin = z.enum(['critical', 'high', 'medium', 'low']);
 
 export const FindingsBySeveritySchema = z.object({
   critical: z.number().int().min(0).max(200),
@@ -215,16 +211,6 @@ export const TaskCompletedEventSchema = z.object({
 
 // ── Upload batch ─────────────────────────────────────────────────────────
 
-export const UploadBatchSchema = z.object({
-  schemaVersion: z.literal(5),
-  installId: z.string().uuid(),
-  mmagentVersion: VersionString,
-  os: Os,
-  nodeMajor: z.number().int().min(22).max(99),
-  generation: z.number().int().min(0).optional(),
-  events: z.array(TaskCompletedEventSchema).min(1).max(500),
-}).strict();
-
 // ── Super-refinement: R1–R15 (§3.4) ──────────────────────────────────────
 
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate']);
@@ -343,22 +329,6 @@ export const WireTelemetryRecordSchema = z.object({
 
 // ── Inferred TS types ────────────────────────────────────────────────────
 
-export type StageEntryType = z.infer<typeof StageEntrySchema>;
-
-/**
- * Producer-internal stage entry shape. Adds `isLlmStage` which is REQUIRED
- * with no default — any new stage builder that fails to set it is a
- * TypeScript compile error (per spec D8). This field is producer-internal
- * and MUST be stripped before wire emission (handled in event-builder.ts
- * via a toWire projection — see Task A4).
- */
-export type StageEntryInternal = StageEntryType & {
-  isLlmStage: boolean;
-};
-
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
-export type UploadBatchType = z.infer<typeof UploadBatchSchema>;
 export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
 export type { ConcernCategoryType } from '../types/enums.js';
-export type ErrorCodeType = z.infer<typeof ErrorCode>;
-export type FindingsBySeverity = z.infer<typeof FindingsBySeveritySchema>;

@@ -9,9 +9,3 @@ export interface AdapterResult {
   publishedAt?: string;            // ISO 8601 if known
   raw: unknown;                    // adapter-specific payload, opaque to callers
 }
-
-export interface AdapterCallContext {
-  abortSignal: AbortSignal;
-  // populated by ssrf-guard / web-fetch when the adapter goes through web_fetch
-  hostAllowlist?: ReadonlySet<string>;
-}

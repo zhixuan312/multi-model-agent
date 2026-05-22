@@ -10,7 +10,7 @@ import { resolve, sep } from 'node:path';
 // context budget. Observed 2026-05-11: A9.1 section is 15 KB → truncated
 // at 10 KB mid-Step-5a → reviewers reported "plan incomplete after Step
 // 4" and bailed. With 30 KB cap, the section fits whole.
-const SLICE_CAP_BYTES = 30 * 1024;
+export const SLICE_CAP_BYTES = 30 * 1024;
 
 export class PlanExtractionError extends Error {
   constructor(public descriptor: string, public reason: string) {

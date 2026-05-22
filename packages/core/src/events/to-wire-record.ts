@@ -26,12 +26,6 @@ export const clampOutputTokens = (n: number): number =>
 export const clampCachedTokens = (n: number): number =>
   Math.min(Math.max(0, n), 100_000_000);
 
-export const clampToolCallCount = (n: number): number =>
-  Math.min(Math.max(0, n), 5000);
-
-export const clampFilesReadCount = (n: number): number =>
-  Math.min(Math.max(0, n), 5000);
-
 export const clampFilesWrittenCount = (n: number): number =>
   Math.min(Math.max(0, n), 5000);
 
