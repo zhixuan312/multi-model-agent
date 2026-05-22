@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.15] - 2026-05-22
+
+Fixes multi-task commit reporting (surfaced by a new full-pipeline smoke harness) and adds that harness as reusable verification tooling. Build green; 2092 tests pass.
+
+### Fixed
+
+- **Multi-task aggregate `commitSha`** (`packages/server/src/http/handlers/control/batch.ts`). The `GET /batch` aggregate `structuredReport` sourced `commitSha` / `commitMessage` from task 0's envelope only, so a multi-task batch whose first task no-op'd (e.g. `execute-plan`, or a `delegate` task that wrote nothing) reported `commitSha: null` even when sibling tasks committed. It now reads from the **first task that actually committed**, and surfaces `commitSkipReason` only when *nothing* committed. (`filesChanged` already unions across tasks.)
+
+### Added
+
+- **Full-pipeline smoke harness** (`scripts/full-smoke/`, `npm run smoke:full`). A reusable, on-demand verification harness that drives a throwaway git mini-project through every route and lifecycle stage against the live server, then checks stages + telemetry across all four sinks — HTTP response, diagnostics JSONL, `telemetry-queue.ndjson`, and the backend Postgres `events_raw` (correlated by `event_id`) — and tears everything down. Flags: `--skip-backend`, `--only=<ids>`, `--strict`, `--wait-flush` (waits out the 5-min telemetry flush to verify backend DB landing). Not part of `npm test`; run by a human on demand.
+
 ## [4.7.14] - 2026-05-22
 
 `lifecycle/` component release in two parts. **(1) Per-dispatch parallel execution.** Multi-task dispatch concurrency is now a simple per-dispatch caller choice — `parallel` or `serial` — instead of being derived from whether tasks share a git repo. The 2026-05-16 same-repo serialization and its grouping machinery are retired; git is the safeguard instead, via the already-shipped per-worker commit attribution plus a new per-repo commit mutex that keeps two concurrent same-repo commits from colliding on `.git/index.lock`. **(2) Lifecycle consolidation.** Removes a large body of dead/dormant code across the lifecycle layer, makes the commit gate the single source of commit truth (retiring the `state.commits[]` / `reviewVerdict` mirrors), and fixes commit attribution and commit reporting under concurrent dispatch. Build green; full vitest suite passing.
@@ -709,7 +721,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.15...HEAD
+[4.7.15]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...v4.7.15
 [4.7.14]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...v4.7.14
 [4.7.13]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...v4.7.13
 [4.7.12]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...v4.7.12
