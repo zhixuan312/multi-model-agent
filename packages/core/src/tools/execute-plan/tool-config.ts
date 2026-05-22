@@ -124,7 +124,8 @@ function buildExecutePlanPrompt(
 export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
   name: 'execute_plan',
   category: 'artifact_producing',
-  serializeSameRepo: true,
+  dispatchMode: 'serial',
+  dispatchModeOverridable: false,
   agentType: 'standard',
   briefSlot: executePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
@@ -142,7 +143,6 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
     cwd: ctx.cwd ?? brief.cwd,
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
-    autoCommit: true,
     ...(brief.sectionBody ? { planContext: brief.sectionBody } : {}),
   }),
   reportSchema: executePlanReportSchema,

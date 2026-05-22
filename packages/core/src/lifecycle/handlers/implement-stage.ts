@@ -15,8 +15,13 @@ import { join } from 'node:path';
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
 export function capturePreTaskState(state: LifecycleState): void {
-  const cwd = state.cwd as string | undefined;
+  // Production wires the cwd onto state.executionContext.cwd, not state.cwd —
+  // resolve the fallback (same as git-commit-handler) and persist it onto
+  // state.cwd so the downstream getRealFilesChanged() reads the real cwd
+  // instead of going inert and falling back to the worker's self-report.
+  const cwd = (state.cwd as string | undefined) ?? (state.executionContext as { cwd?: string } | undefined)?.cwd;
   if (!cwd) return;
+  (state as { cwd?: string }).cwd = cwd;
 
   const headResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8', windowsHide: true });
   if (headResult.status !== 0) return;

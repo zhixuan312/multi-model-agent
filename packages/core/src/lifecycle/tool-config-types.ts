@@ -12,18 +12,16 @@ import type { ExecutionContext } from './lifecycle-context.js';
  */
 export type BriefSlotFiller<TInput, TBrief> = (input: TInput) => TBrief;
 
+/** Per-dispatch scheduling axis. Caller-chosen, not derived from repo membership. */
+export type DispatchMode = 'serial' | 'parallel';
+
 export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> {
   name: string;
   category: 'artifact_producing' | 'read_only' | 'assist';
-  /**
-   * When true, tasks in the batch that share the same git toplevel (or
-   * raw cwd when not in a git repo) run sequentially in caller input
-   * order. Tasks in different repos still run in parallel across groups.
-   * Defaults to false. Only write routes (delegate, execute-plan) opt in;
-   * read-only routes leave it unset and keep full Promise.all fan-out.
-   * See spec docs/superpowers/specs/2026-05-16-sequential-same-repo-dispatch-design.md.
-   */
-  serializeSameRepo?: boolean;
+  /** Default dispatch mode for this route's multi-task batches. */
+  dispatchMode: DispatchMode;
+  /** When true, a per-dispatch caller override (request `execution` field) wins over `dispatchMode`. */
+  dispatchModeOverridable: boolean;
   /** Agent tier to use when dispatching tasks for this tool. */
   agentType: AgentType;
   briefSlot: BriefSlotFiller<Input, Brief[]>;

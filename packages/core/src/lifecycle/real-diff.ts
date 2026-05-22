@@ -19,7 +19,10 @@ export interface RealFilesChanged {
 }
 
 export async function getRealFilesChanged(state: LifecycleState): Promise<RealFilesChanged> {
-  const cwd = state.cwd;
+  // Defense in depth: prefer state.cwd, fall back to executionContext.cwd —
+  // production wires it on the latter. Without this the helper goes inert
+  // (self_report) and the git-truth safety net never engages.
+  const cwd = state.cwd ?? (state.executionContext as { cwd?: string } | undefined)?.cwd;
   const preSha = state.preTaskHeadSha;
   const preUntracked = state.preTaskUntrackedFiles;
 

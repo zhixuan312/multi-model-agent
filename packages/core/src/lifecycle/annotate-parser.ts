@@ -65,8 +65,7 @@ export function applyAnnotatePreconditions(
 
     const commitClean =
       inputs.commitKind === 'committed' ||
-      inputs.commitKind === 'no_op' ||
-      inputs.autoCommit === false;
+      inputs.commitKind === 'no_op';
     if (!commitClean) {
       reasons.push('no commit landed and no clean no_op reason');
     }

@@ -102,6 +102,12 @@ export interface TaskEnvelope {
   toolCalls: ToolCallRecord[];
   filesWritten: string[];
   realFilesChanged: string[];
+  // commit outcome (write routes) — set at seal() from the commit gate payload.
+  // The response's structuredReport reads these so committed tasks surface their
+  // real SHA/message; null on read routes and skipped commits.
+  commitSha: string | null;
+  commitMessage: string | null;
+  commitSkipReason: string | null;
   // totals
   totalCostUSD: number;
   totalInputTokens: number;
@@ -162,6 +168,7 @@ export class TaskEnvelopeStore {
       reviewPolicy: seed.reviewPolicy,
       plannedStageTotal: 0,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
+      commitSha: null, commitMessage: null, commitSkipReason: null,
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
@@ -275,7 +282,7 @@ export class TaskEnvelopeStore {
     this.notify('recordHeartbeat');
   }
 
-  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; errorCode?: ErrorCode | null; realFilesChanged: string[] }): void {
+  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; errorCode?: ErrorCode | null; realFilesChanged: string[]; commitSha?: string | null; commitMessage?: string | null; commitSkipReason?: string | null }): void {
     this.guard('seal');
     this.env.status = terminal.status;
     this.env.terminalAt = terminal.terminalAt ?? new Date().toISOString();
@@ -283,6 +290,9 @@ export class TaskEnvelopeStore {
     this.env.structuredError = terminal.structuredError ?? null;
     this.env.errorCode = terminal.errorCode ?? null;
     this.env.realFilesChanged = [...terminal.realFilesChanged];
+    this.env.commitSha = terminal.commitSha ?? null;
+    this.env.commitMessage = terminal.commitMessage ?? null;
+    this.env.commitSkipReason = terminal.commitSkipReason ?? null;
     this.recomputeTotals();
     this.recomputeHeadline();
     this.sealed = true;

@@ -42,6 +42,7 @@ const mockRunTask = vi.fn(async () => ({
 
 vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
   runTaskViaDispatcher: (input: any) => mockRunTask(input),
+  applyParallelSafetySuffixIfNeeded: (tasks: any[], _concurrent: boolean) => tasks.slice(),
 }));
 
 vi.mock('../../packages/core/src/providers/agent-resolver.js', () => ({

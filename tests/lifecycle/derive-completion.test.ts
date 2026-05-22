@@ -12,7 +12,6 @@ function base(overrides: Partial<CompletionInputs> = {}): CompletionInputs {
     reworkError: undefined,
     unaddressedFindingIds: undefined,
     commitKind: undefined,
-    autoCommit: true,
     criteriaSucceeded: undefined,
     ...overrides,
   };
@@ -91,13 +90,13 @@ describe('deriveCompletion', () => {
     expect(r.completed).toBe(true);
   });
 
-  it('case 10: write route, autoCommit=false + review approved + commit missing → completed=true', () => {
+  it('case 10: write route, review approved + commit missing → completed=false', () => {
     const r = deriveCompletion(base({
       reviewVerdict: 'approved',
       commitKind: undefined,
-      autoCommit: false,
     }));
-    expect(r.completed).toBe(true);
+    expect(r.completed).toBe(false);
+    expect(r.reasons).toContain('commit did not complete');
   });
 
   it('case 11: read route (investigate), criteriaSucceeded non-empty → completed=true', () => {

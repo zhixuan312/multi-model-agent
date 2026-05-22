@@ -8,7 +8,6 @@ import type { Session } from '../types/run-result.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
-import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 
 import type { ProjectContext } from '../stores/project-context-registry.js';
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
@@ -40,11 +39,8 @@ export interface ExecutionContext {
   /** Tier the dispatcher assigned to this task. Stays fixed; rotation lives in per-round handlers via pickReviewer/pickEscalation. */
   assignedTier: AgentType;
   implementerProvider: Provider;
-  /** Other-tier provider for fallback / reviewer separation. May be undefined when only one tier is configured. */
-  escalationProvider: Provider | undefined;
-  /** Map of available tier → provider. Built from {assignedTier, escalationProvider}. */
+  /** Map of available tier → provider, keyed by AgentType. */
   providers: Partial<Record<AgentType, Provider>>;
-  implementerIdentity: CanonicalIdentity | undefined;
 
   /**
    * v4.4 session source-of-truth. Each call returns the (lazy-created)
@@ -88,8 +84,6 @@ export interface ExecutionContext {
   // ── Implementer policy ──
   implementerToolMode: TaskSpec['tools'];
 
-  /** Per-task review prompt builder — quality reviewer route customizes this. Optional. */
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
 
   // ── Group B: Bus + heartbeat ──
   bus: EnvelopeBus | undefined;
@@ -108,36 +102,6 @@ export interface ExecutionContext {
    * Optional (CLI/local clients don't have a BatchRegistry).
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-
-  /**
-   * Number of repo-groups the current batch was split into by
-   * groupTasksByRepo. Set by task-executor immediately after grouping,
-   * BEFORE any dispatchOne fires. Consumed by task-runner.ts to gate
-   * PARALLEL_SAFETY_SUFFIX (suffix is only appended when this value > 1,
-   * because within a single group tasks run serially and full builds are
-   * safe).
-   */
-  batchGroupCount?: number;
-
-  /**
-   * Server-supplied callback that records the per-batch grouping snapshot
-   * onto the BatchRegistry entry. Optional (CLI/local clients don't have
-   * a BatchRegistry — same pattern as recordHeartbeat). Called once per
-   * batch by task-executor immediately after groupTasksByRepo resolves.
-   */
-  attachBatchGroups?: (groups: Array<{ key: string; taskIndices: number[] }>) => void;
-
-  /**
-   * Server-supplied callback that records grouping telemetry to be
-   * attached to the eventual batch_completed event. Optional — same
-   * pattern as recordHeartbeat / attachBatchGroups. Called once per
-   * batch by task-executor immediately after grouping resolves.
-   */
-  setBatchGroupingTelemetry?: (info: {
-    groupCount: number;
-    groupSizes: number[];
-    serializationApplied: boolean;
-  }) => void;
 
   /** Telemetry recorder — server-only, used at terminal to record task.completed. */
   recorder?: {

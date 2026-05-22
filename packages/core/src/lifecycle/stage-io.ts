@@ -151,7 +151,9 @@ export type StageGate<TPayload = unknown> = {
   };
 };
 
-export type EntryDecision = { run: true } | { run: false; comment: string };
+export type EntryDecision =
+  | { run: true }
+  | { run: false; comment: string; skipReason?: 'noop' | 'no_command' | 'not_applicable' | 'reviewPolicy_none' };
 
 // LifecycleState is defined in stage-plan-types.ts; we re-import here for the
 // StageDefinition signature.

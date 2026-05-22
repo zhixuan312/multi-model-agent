@@ -43,10 +43,9 @@ describe('worker self-assess "failed" no longer blocks the wire record', () => {
       },
       gates: {
         implement: { outcome: 'advance' },
+        review: { outcome: 'advance', payload: { verdict: 'approved', findings: [] } },
         commit: { payload: { kind: 'committed', commitSha: 'abc1234', commitMessage: 's', filesChanged: ['x.ts'] } },
-      },
-      autoCommit: true,
-      executionContext: {
+      },      executionContext: {
         envelope: store,
         assignedTier: 'standard',
         implementerProvider: { config: { model: 'claude-haiku-4-5' } },
@@ -92,10 +91,9 @@ describe('worker self-assess "failed" no longer blocks the wire record', () => {
       },
       gates: {
         implement: { outcome: 'advance' },
+        review: { outcome: 'advance', payload: { verdict: 'changes_required', findings: [{ source: 'reviewer', claim: 'rejected' }] } },
         commit: { payload: { kind: 'committed', commitSha: 'def', commitMessage: 's', filesChanged: [] } },
-      },
-      autoCommit: true,
-      executionContext: {
+      },      executionContext: {
         envelope: store,
         assignedTier: 'standard',
         implementerProvider: { config: { model: 'claude-haiku-4-5' } },

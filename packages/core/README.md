@@ -14,31 +14,32 @@ Requires Node >= 22. ESM only.
 
 ## Quick example
 
+The primary way to run tasks is the standalone HTTP service
+([`@zhixuan92/multi-model-agent`](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)),
+which wraps this library and exposes `delegate`, `audit`, `review`, `debug`, etc. over HTTP
+with client-installable skills.
+
+To embed the pipeline directly, load the shared config and drive a tool through `executeTask`
+(see "v4 Engine API" below — it takes the tool's `ToolConfig`, an `ExecutionContext`, and the
+tool input, and returns the uniform `ExecutorOutput` envelope):
+
 ```ts
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 
 // Uses the same ~/.multi-model/config.json as the standalone daemon —
 // agents.standard, agents.complex, etc.
 const config = await loadConfigFromFile();
-
-const results = await runTasks([
-  { prompt: 'Refactor auth.ts to use JWT.',         agentType: 'complex', mainModel: 'claude-opus-4-7' },
-  { prompt: 'Write unit tests for auth module.',    agentType: 'standard', mainModel: 'claude-opus-4-7' },
-], config);
-
-for (const r of results) {
-  console.log(r.status, r.cost?.costUSD, r.cost?.costDeltaVsMainUSD, r.output);
-}
 ```
 
-`costDeltaVsMainUSD` is populated when `mainModel` is set on the TaskSpec — it's `actualCost − mainCost` (negative = worker cheaper/savings). Use it to surface a `$X saved (Y× ROI)` figure in your own UI. (4.0.3 rename: was `costDeltaVsParentUSD`.)
+Each per-task result carries `cost.costDeltaVsMainUSD` when `mainModel` is set on the task —
+it's `actualCost − mainCost` (negative = worker cheaper/savings). Use it to surface a
+`$X saved (Y× ROI)` figure in your own UI. (4.0.3 rename: was `costDeltaVsParentUSD`.)
 
 ## What's inside
 
 - **Provider runners** — Claude, Codex, and any OpenAI-compatible endpoint
 - **Routing engine** — capability filter → agent type → cheapest qualifier
-- **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
+- **`executeTask`** — drives a tool (delegate, audit, review, …) end-to-end: brief compilation, parallel dispatch, review/rework, and a uniform per-task result envelope with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — parallel spec + quality lint review by a different tier, conditional rework when verdicts demand changes, annotator-scored commit gate, file artifact verification
 - **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, debug, execute-plan, retry, investigate, research (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
@@ -106,7 +107,6 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./routing/resolve-agent` | `resolveAgent` — resolves agent type to provider |
 | `./routing/model-profiles` | Model cost/tier profiles |
 | `./provider` | `createProvider` factory |
-| `./run-tasks` | `runTasks` parallel dispatcher, `RunTasksOptions` |
 | `./heartbeat` | `HeartbeatTimer` — periodic progress heartbeat emitter |
 | `./types` | All shared types |
 | `./executors` | Pure `execute<Tool>(ctx, input)` functions and `ExecutionContext` type |

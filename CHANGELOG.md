@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.14] - 2026-05-22
+
+`lifecycle/` component release in two parts. **(1) Per-dispatch parallel execution.** Multi-task dispatch concurrency is now a simple per-dispatch caller choice — `parallel` or `serial` — instead of being derived from whether tasks share a git repo. The 2026-05-16 same-repo serialization and its grouping machinery are retired; git is the safeguard instead, via the already-shipped per-worker commit attribution plus a new per-repo commit mutex that keeps two concurrent same-repo commits from colliding on `.git/index.lock`. **(2) Lifecycle consolidation.** Removes a large body of dead/dormant code across the lifecycle layer, makes the commit gate the single source of commit truth (retiring the `state.commits[]` / `reviewVerdict` mirrors), and fixes commit attribution and commit reporting under concurrent dispatch. Build green; full vitest suite passing.
+
+### Added
+
+- **Per-dispatch `DispatchMode`** (`packages/core/src/lifecycle/tool-config-types.ts`). New `DispatchMode = 'serial' | 'parallel'` plus `dispatchMode` + `dispatchModeOverridable` on `ToolConfig`. `delegate` defaults to `parallel` and accepts a per-request `execution: 'parallel' | 'serial'` override (`tools/delegate/schema.ts`); `execute-plan` is hardcoded `serial` (ordered plan steps) and rejects an `execution` field via its strict schema. Read/assist routes are `parallel`, non-overridable — preserving their existing `Promise.all` fan-out.
+- **Per-repo commit mutex** (`packages/core/src/lifecycle/repo-commit-lock.ts`). Process-global `withRepoCommitLock(repoKey, fn)` keyed by git toplevel; serializes the stage+commit section for one repo while letting distinct repos run concurrently. Always releases on throw; idle keys are evicted.
+- **`dispatch_mode` on `batch_completed`** (`packages/server/src/http/async-dispatch.ts`). The effective dispatch mode (`serial` | `parallel`) and `task_count` are emitted so operators can diagnose scheduling without the retired group fields.
+- **`reviewPayload(state)` accessor** (`packages/core/src/lifecycle/stage-plan-types.ts`) — single read path over `gates.review.payload`, replacing the hoisted `state.reviewVerdict` / `state.reviewFindings` mirrors.
+- **`reviewPolicy_none` skip reason** — explicit skip reason instead of a generic `noop` when review is disabled.
+
+### Changed
+
+- **Mode-based scheduler** (`packages/core/src/lifecycle/task-executor.ts`). The dispatch branch now resolves the effective mode and runs either `Promise.all` (parallel) or a serial input-order loop that stops on the batch abort signal — replacing the per-repo grouped-dispatch path. `PARALLEL_SAFETY_SUFFIX` is re-gated on "runs concurrently with siblings" (parallel + >1 task) instead of cross-repo group count, and is now actually wired into dispatch (it was previously orphaned).
+- **Commit fields are sourced from the commit gate, end to end.** The annotator builds `structuredReport`'s `commitSha` / `commitMessage` / `commitSkipReason` / `filesChanged` from the committed gate payload (`handlers/annotate-stage.ts`), and the commit outcome is carried onto the per-task envelope at `seal()` (`handlers/terminal-handlers.ts`, `events/task-envelope.ts`) so the GET `/batch` response surfaces the real SHA — the response is built from envelope snapshots, not the (never-populated) executor result.
+
+### Fixed
+
+- **Concurrency-safe commit attribution** (`packages/core/src/lifecycle/handlers/git-commit-handler.ts`). Each worker commits only its own written files via pathspec-scoped `git add -- <files>` / `git commit -- <files>`, sourced from harness-tracked writes rather than a repo-wide diff — so concurrent same-repo workers never sweep in each other's changes.
+- **`commitSha` / `commitMessage` were always null in responses.** The batch handler hardcoded them to null (and `entry.result` is never populated); committed tasks now report their real SHA and message. Regression test added.
+- **`dispatchMode` missing on 7 tool-configs** — the new required fields were only set on delegate + execute-plan, breaking a clean (`rm -rf dist`) workspace build on audit/review/debug/investigate/research/register-context-block/retry. Also dropped a `stripEvidence()` call in `annotate-prompts.ts` that no longer type-checks.
+- **Real `cwd` wired into the pre-task snapshot** so `getRealFilesChanged` (git-truth diff) is no longer inert, and the commit gate no longer pre-skips on worker self-reported `filesChanged`.
+
+### Removed
+
+- **Same-repo grouping machinery** — `lifecycle/task-grouping.ts` (`groupTasksByRepo`/`TaskGroup`), `lifecycle/repo-hygiene.ts` (the sequential prior-task advisory), `ExecutionContext.batchGroupCount` / `attachBatchGroups` / `setBatchGroupingTelemetry`, the `BatchRegistry` `groups` / `groupingTelemetry` state + methods, the 202 pending-headline group composer, and the `group_count` / `group_sizes` / `serialization_applied` event fields. The `serializeSameRepo` `ToolConfig` flag is gone.
+- **`runTasks()` test-only public API** — `executeTask` is the single entry point (the delegate test was migrated). **See BREAKING.**
+- **Dead lifecycle code** — `autoCommit` field/config/override branch, `qualityReviewPromptBuilder` hook, `escalationProvider`, `implementerIdentity`, the A4b artifact-downgrade guard + `fileArtifactsMissing`, `fallback-report.ts`, the test-only `commit-stage.ts` / `task-completion-summary`, dead telemetry aggregation in `emitTaskTerminalHandler`, and the `reviewVerdict` / `reviewFindings` state mirrors — all zero-caller or superseded paths.
+
+### BREAKING
+
+- **`runTasks()` removed** (`packages/core/src/lifecycle`). It was a test-only public entry point; production and tests now go through `executeTask`. Any external caller of `runTasks()` must switch to `executeTask`.
+
 ## [4.7.13] - 2026-05-21
 
 `tools/` component cleanup release — reduces `packages/core/src/tools/` and its coupled read-route stack to one design with one implementation per responsibility. Removes provably-dead modules, collapses the duplicated prompt and report/headline paths, wires the dormant `outputTargets` artifact check in delegate, reconciles execute-plan's two divergent input schemas to the live one, and renames the misleading `parallel-criteria-*` identifiers to `read-route-*` (the execution model is sequential criteria over one resumed session, not parallel fan-out). investigate's and research's distinct report parsers/headlines are kept — they are not duplicates. 2093 tests pass, build green, contract goldens unchanged.
@@ -675,7 +709,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...HEAD
+[4.7.14]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.13...v4.7.14
 [4.7.13]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.12...v4.7.13
 [4.7.12]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.11...v4.7.12
 [4.7.11]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.10...v4.7.11

@@ -51,17 +51,28 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   const summary = (last.summary as string | undefined)
     ?? (isRead ? `produced ${findings.length} findings` : ((last.output as string | undefined) ?? '').slice(0, 200));
 
+  // Commit fields are authoritative from the commit GATE payload — the commit
+  // handler writes the SHA/message/files THERE, not into state.lastRunResult
+  // (see git-commit-handler.ts header). Sourcing them from `last` left them
+  // perpetually null on the user-facing report, and `last.filesChanged` (a
+  // repo-wide diff) leaked sibling workers' files under concurrent dispatch.
+  // The committed gate's filesChanged is this worker's own pathspec.
+  const commitGate = state.gates?.['commit'];
+  const commitPayload = (commitGate?.payload ?? null) as
+    { kind?: string; commitSha?: string; commitMessage?: string; filesChanged?: string[]; reason?: string } | null;
+  const committed = commitGate?.outcome === 'advance' && commitPayload?.kind === 'committed';
+
   const report: StructuredReport = {
     summary,
     workerStatus: (last.workerStatus as StructuredReport['workerStatus'] | undefined) ?? (isRead ? 'done' : 'failed'),
     unresolved: (last.unresolved as string[] | undefined) ?? [],
-    filesChanged: isRead ? [] : ((last.filesChanged as string[] | undefined) ?? []),
+    filesChanged: isRead ? [] : (committed ? (commitPayload?.filesChanged ?? []) : ((last.filesChanged as string[] | undefined) ?? [])),
     reviewVerdict: isRead ? null : (((state as { reviewVerdict?: StructuredReport['reviewVerdict'] }).reviewVerdict) ?? null),
     reviewConcerns: isRead ? [] : (((state as { reviewConcerns?: string[] }).reviewConcerns) ?? []),
     reworkApplied: isRead ? false : Boolean((state as { reworkApplied?: boolean }).reworkApplied),
-    commitSha: isRead ? null : ((last.commitSha as string | null | undefined) ?? null),
-    commitMessage: isRead ? null : ((last.commitMessage as string | null | undefined) ?? null),
-    commitSkipReason: isRead ? null : ((last.commitSkipReason as string | null | undefined) ?? null),
+    commitSha: isRead ? null : (committed ? (commitPayload?.commitSha ?? null) : null),
+    commitMessage: isRead ? null : (committed ? (commitPayload?.commitMessage ?? null) : null),
+    commitSkipReason: isRead || committed ? null : (commitPayload?.kind === 'no_op' ? (commitPayload?.reason ?? null) : null),
     findings: isRead ? findings : [],
     criteriaErrors: isRead ? ((last.criteriaErrors as StructuredReport['criteriaErrors'] | undefined) ?? []) : [],
   };
@@ -111,8 +122,8 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     dedupedFindings.push(f);
   }
 
-  // Mechanical filesChanged + commitSha derivation (spec §5.7 rule 4)
-  const commitGate = state.gates?.['commit'];
+  // Mechanical filesChanged + commitSha derivation (spec §5.7 rule 4).
+  // Reuses the `commitGate` resolved above.
   const mechanicalFilesChanged: string[] =
     commitGate?.outcome === 'advance' &&
     (commitGate.payload as { kind?: string } | null)?.kind === 'committed'

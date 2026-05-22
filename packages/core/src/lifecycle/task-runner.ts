@@ -5,7 +5,7 @@ import type {
   Provider,
   AgentType,
 } from '../types.js';
-import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
+import type { ProgressEvent } from '../providers/runner-types.js';
 import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 
@@ -16,7 +16,7 @@ import type { ResolvedAgent } from '../providers/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
-import { ATTEMPT_BUDGETS, type ToolCategory } from './rework-budget.js';
+import type { ToolCategory } from './rework-budget.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
 import { releaseTask } from '../providers/provider-factory.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
@@ -45,122 +45,24 @@ const PARALLEL_SAFETY_SUFFIX =
 
 /**
  * Conditionally appends PARALLEL_SAFETY_SUFFIX to each task's prompt.
- * Suffix is appended ONLY when ctx.batchGroupCount > 1, i.e., the batch
- * spans multiple repos. Within a single group, tasks run serially and
- * full builds are safe.
+ * Appended ONLY when `concurrent` is true — i.e. the batch runs in parallel
+ * mode with more than one task. Within serial dispatch (or single-task
+ * batches) tasks don't race, so the reminder is omitted. The suffix
+ * reinforces per-worker commit attribution: stay in your lane, touch only
+ * your own files.
  *
  * Pure function — returns shallow-cloned tasks; original array unchanged.
  */
 export function applyParallelSafetySuffixIfNeeded<T extends { prompt: string; testCommand?: string }>(
   tasks: T[],
-  ctx: { batchGroupCount?: number },
+  concurrent: boolean,
 ): T[] {
-  if (!ctx.batchGroupCount || ctx.batchGroupCount <= 1) return tasks.slice();
+  if (!concurrent) return tasks.slice();
   return tasks.map((t) => ({
     ...t,
     prompt: t.prompt + PARALLEL_SAFETY_SUFFIX +
       (t.testCommand ? `\nTo verify your work, run: \`${t.testCommand}\`` : ''),
   }));
-}
-
-export type ResolvedTask =
-  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider } }
-  | { task: TaskSpec; error: string; errorCode: string };
-
-export type RunTasksProgressCallback = (
-  taskIndex: number,
-  event: ProgressEvent,
-) => void;
-
-export interface RunTasksOptions {
-  onProgress?: RunTasksProgressCallback;
-  runtime?: RunTasksRuntime;
-  batchId?: string;
-  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  logger?: { error: (kind: string, err: unknown) => void };
-  recorder?: {
-    recordTaskCompleted: (ctx: {
-      route: string;
-      taskSpec: TaskSpec;
-      runResult: RuntimeRunResult;
-      client: string;
-      mainModel: string | null;
-      reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
-    }) => void;
-  };
-  route?: string;
-  client?: string;
-  bus?: EnvelopeBus;
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  batchGroupCount?: number;
-}
-
-export async function runTasks(
-  tasks: TaskSpec[],
-  config: MultiModelConfig,
-  options: RunTasksOptions = {},
-): Promise<RuntimeRunResult[]> {
-  if (tasks.length === 0) return [];
-
-  const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
-    try {
-      return expandContextBlocks(task, options.runtime?.contextBlockStore);
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
-  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
-    if ('error' in entry) {
-      return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
-    }
-    const task = entry;
-    const agentType: AgentType = task.agentType ?? 'standard';
-    try {
-      const resolved_agent = resolveAgent(agentType, config);
-      return { task, resolved: resolved_agent };
-    } catch (err) {
-      return {
-        task,
-        error: err instanceof Error ? err.message : String(err),
-        errorCode: 'agent_not_configured',
-      };
-    }
-  });
-
-  const tasksWithSuffix = applyParallelSafetySuffixIfNeeded(
-    resolved.filter((r): r is Exclude<typeof r, { error: string }> => !('error' in r)).map((r) => r.task),
-    { batchGroupCount: options.batchGroupCount },
-  );
-  // Reattach mutated tasks back to resolved entries.
-  let suffixIdx = 0;
-  for (const r of resolved) {
-    if ('error' in r) continue;
-    r.task = tasksWithSuffix[suffixIdx++]!;
-  }
-
-  return Promise.all(
-    resolved.map((r, index): Promise<RuntimeRunResult> => {
-      if ('error' in r) {
-        return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
-      }
-      return runTaskViaDispatcher({
-        task: r.task,
-        resolved: r.resolved,
-        config,
-        taskIndex: index,
-        ...(options.onProgress && { onProgress: options.onProgress }),
-        ...(options.batchId !== undefined && { batchId: options.batchId }),
-        ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
-        ...(options.logger && { logger: options.logger }),
-        ...(options.recorder && { recorder: options.recorder }),
-        ...(options.route !== undefined && { route: options.route }),
-        ...(options.client !== undefined && { client: options.client }),
-        ...(options.bus && { bus: options.bus }),
-        ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
-      });
-    }),
-  );
 }
 
 export interface DispatchTaskInput {
@@ -183,7 +85,6 @@ export interface DispatchTaskInput {
    *  before dispatch. Without this, the worker LLM never sees the prior-round
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   /** Registry to attach/detach the per-task ExecutionContext on. When provided,
    *  shutdown drain in serve.ts can walk the registry and call closeSessions()
    *  on every in-flight task before the daemon exits. */
@@ -297,9 +198,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.contextBlockStore && { contextBlockStore: input.contextBlockStore }),
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
-    escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
     providers,
-    implementerIdentity: undefined,
     getSession,
     closeSessions,
     getActivePids,
@@ -307,7 +206,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
-    ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
     heartbeat,
     logger: input.logger,
@@ -334,8 +232,6 @@ export async function runTaskViaDispatcher(
   const executionContext = buildExecutionContext({ ...input, task: expandedTask });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
-
-  void ATTEMPT_BUDGETS[toolCategory];
 
   // Register this task's ExecutionContext on the BatchRegistry so shutdown
   // drain (serve.ts cleanupSignal) can find every in-flight task and call

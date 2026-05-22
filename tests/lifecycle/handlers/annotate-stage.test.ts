@@ -10,10 +10,14 @@ describe('annotator (unified)', () => {
         summary: 'did the thing', workerStatus: 'done',
         filesChanged: ['a.ts'],
         unresolved: [],
-        committed: true,
-        commitSha: 'a'.repeat(40),
-        commitMessage: 'feat: add x',
-        commitSkipReason: null,
+      },
+      // Commit data is authoritative from the commit GATE payload (the commit
+      // handler writes it there, not into lastRunResult).
+      gates: {
+        commit: {
+          outcome: 'advance',
+          payload: { kind: 'committed', commitSha: 'a'.repeat(40), commitMessage: 'feat: add x', filesChanged: ['a.ts'] },
+        },
       },
       reviewVerdict: 'approved',
       reviewConcerns: [],
@@ -51,7 +55,10 @@ describe('annotator (unified)', () => {
       lastRunResult: {
         summary: 'no changes', workerStatus: 'done',
         filesChanged: [], unresolved: [],
-        committed: false, commitSha: null, commitMessage: null, commitSkipReason: 'no_diff',
+      },
+      // Skipped commit surfaces via the gate's no_op payload reason.
+      gates: {
+        commit: { outcome: 'advance', payload: { kind: 'no_op', reason: 'no_diff' } },
       },
       reviewVerdict: 'approved', reviewConcerns: [],
     };

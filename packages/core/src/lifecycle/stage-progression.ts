@@ -61,7 +61,6 @@ function simulatedState(
     shutdownInProgress: false,
     route,
     toolCategory: category,
-    autoCommit: category === 'artifact_producing',
     readOnlyTask: category === 'read_only',
     reviewVerdict: 'changes_required',
     gates: {

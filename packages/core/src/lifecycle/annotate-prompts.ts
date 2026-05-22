@@ -6,6 +6,7 @@
 // or secrets (spec §15.2).
 
 import type { LifecycleState } from './stage-plan-types.js';
+import { reviewPayload } from './stage-plan-types.js';
 
 export function annotatePromptWrite(state: LifecycleState): string {
   const ctx = serializeWriteContext(state);
@@ -21,7 +22,7 @@ Rules:
 2. Set completed=true ONLY IF (the system applies these gates after your proposal):
   - implement stage advanced; AND
   - review is approved OR (changes_required + rework applied + no unaddressed findings) OR reviewPolicy=none; AND
-  - commit gate kind is 'committed' or 'no_op' OR autoCommit=false.
+  - commit gate kind is 'committed' or 'no_op'.
 Worker self-assessment is recorded in telemetry but does not gate completion.
 3. If completed=false, message must name a specific blocking gate or finding ID AND suggest a recovery action.
 4. filesChanged and commitSha must come from commit.payload if it committed, else [] and null. Do not invent them.
@@ -60,8 +61,10 @@ export function serializeWriteContext(state: LifecycleState): unknown {
       filesChanged: last.filesChanged ?? [],
     } : null,
     review: {
-      verdict: (state as any).reviewVerdict ?? null,
-      findings: stripEvidence((state as any).reviewFindings ?? []),
+      verdict: reviewPayload(state).verdict ?? null,
+      // reviewPayload already folds evidence into each finding's `text`, so the
+      // returned shape is { source, text } with no `evidence` field to strip.
+      findings: reviewPayload(state).findings,
     },
     rework: {
       applied: (state as any).reworkApplied ?? false,

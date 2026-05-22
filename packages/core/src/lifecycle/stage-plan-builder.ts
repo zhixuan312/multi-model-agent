@@ -85,7 +85,7 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
         return { run: false, comment: 'review skipped because implement did not advance' };
       }
       if (state.reviewPolicy === 'none') {
-        return { run: false, comment: 'review skipped because reviewPolicy=none' };
+        return { run: false, comment: 'review skipped because reviewPolicy=none', skipReason: 'reviewPolicy_none' };
       }
       return { run: true };
     },
@@ -119,12 +119,16 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
     runOnHalt: false,
     applicableRoutes: WRITE_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
     shouldRun: (state) => {
-      if (state.autoCommit === false) {
-        return { run: false, comment: 'commit skipped because autoCommit disabled' };
-      }
+      // Run whenever implementation work advanced. We deliberately do NOT
+      // pre-skip on the worker's self-reported filesChanged (currentWork) —
+      // cheap workers under-report their writes, which previously caused the
+      // gate to skip while git actually had changes, so real work went
+      // uncommitted. The commit handler is the single authority on
+      // commit-vs-no_op: it uses getRealFilesChanged() (git diff + untracked)
+      // and returns no_op:no_diff when nothing genuinely changed.
       const work = currentWork({ gates: (state.gates ?? {}) as Record<string, import('./stage-io.js').StageGate<unknown>> });
-      if (!work || (work as { filesChanged?: string[] }).filesChanged?.length === 0) {
-        return { run: false, comment: 'commit skipped because no files changed' };
+      if (!work) {
+        return { run: false, comment: 'commit skipped because no implementation work advanced' };
       }
       return { run: true };
     },

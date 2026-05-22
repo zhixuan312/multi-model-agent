@@ -12,7 +12,6 @@ const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   reviewPolicy: 'full',
   effort: undefined,
   mainModel: undefined,
-  autoCommit: true,
 } as TaskSpec));
 
 const result = (status: RuntimeRunResult['status'] = 'ok'): RuntimeRunResult => ({

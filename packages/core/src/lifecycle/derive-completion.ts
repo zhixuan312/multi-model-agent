@@ -23,7 +23,6 @@ export interface CompletionInputs {
   reworkError: string | undefined;
   unaddressedFindingIds: string[] | undefined;
   commitKind: 'committed' | 'no_op' | undefined;
-  autoCommit: boolean;
   criteriaSucceeded: string[] | undefined;
 }
 
@@ -58,8 +57,7 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
 
   const commitOk =
     inputs.commitKind === 'committed' ||
-    inputs.commitKind === 'no_op' ||
-    inputs.autoCommit === false;
+    inputs.commitKind === 'no_op';
   if (!commitOk) reasons.push('commit did not complete');
 
   return { completed: implementOk && reviewOk && commitOk, reasons };
@@ -70,6 +68,7 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
 // also use the same extraction logic when reconstructing state from
 // persisted wire-record stages JSONB.
 import type { LifecycleState } from './stage-plan-types.js';
+import { reviewPayload } from './stage-plan-types.js';
 
 export function extractCompletionInputs(state: LifecycleState): CompletionInputs {
   const last = state.lastRunResult as { criteriaSucceeded?: string[]; unaddressedFindingIds?: string[] } | undefined;
@@ -87,13 +86,12 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     route: state.route as RouteName,
     implementOutcome: state.gates?.implement?.outcome,
     reviewPolicy: state.reviewPolicy,
-    reviewVerdict: state.reviewVerdict,
+    reviewVerdict: reviewPayload(state).verdict,
     reviewSubResults: (state as { reviewSubResults?: Array<{ name: 'spec' | 'quality'; verdict: string }> }).reviewSubResults,
     reworkApplied: state.reworkApplied,
     reworkError: state.reworkError,
     unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds ?? last?.unaddressedFindingIds,
     commitKind,
-    autoCommit: state.autoCommit ?? true,
     criteriaSucceeded: last?.criteriaSucceeded,
   };
 }

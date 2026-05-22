@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { commitHandler } from '../../../packages/core/src/lifecycle/handlers/git-commit-handler.js';
@@ -39,6 +39,7 @@ describe('commitHandler', () => {
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
       gates: {},
+      lastRunResult: { filesWritten: [join(cwd, 'a.txt')] },
     };
     const gate = await commitHandler(state);
     expect(gate.outcome).toBe('advance');
@@ -61,6 +62,57 @@ describe('commitHandler', () => {
     };
     const gate = await commitHandler(state);
     expect(gate.outcome).toBe('advance');
+    expect(gate.payload.kind).toBe('no_op');
+    expect(gate.payload.reason).toBe('no_diff');
+  });
+
+  // ── Concurrency attribution: commit ONLY this worker's own writes ─────────
+
+  it('commits ONLY this worker\'s own written files, never a concurrent worker\'s change in the same repo', async () => {
+    writeFileSync(join(cwd, 'own.txt'), 'mine');
+    writeFileSync(join(cwd, 'other.txt'), 'a concurrent worker wrote this'); // NOT in my filesWritten
+    const state: any = {
+      cwd,
+      preTaskHeadSha: preSha(),
+      preTaskUntrackedFiles: preUntracked(),
+      executionContext: {},
+      gates: {},
+      lastRunResult: { filesWritten: [join(cwd, 'own.txt')] },
+    };
+    const gate = await commitHandler(state);
+    expect(gate.payload.kind).toBe('committed');
+    expect(gate.payload.filesChanged).toEqual([join(cwd, 'own.txt')]);
+    const tracked = execSync('git ls-files', { cwd }).toString();
+    expect(tracked).toContain('own.txt');
+    expect(tracked).not.toContain('other.txt'); // concurrent worker's file untouched
+  });
+
+  it('ignores bogus out-of-cwd write paths and commits only the cwd-contained file', async () => {
+    writeFileSync(join(cwd, 'real.txt'), 'x');
+    const state: any = {
+      cwd,
+      preTaskHeadSha: preSha(),
+      preTaskUntrackedFiles: preUntracked(),
+      executionContext: {},
+      gates: {},
+      lastRunResult: { filesWritten: ['/workspace/real.txt', '/etc/hosts', 'real.txt'] },
+    };
+    const gate = await commitHandler(state);
+    expect(gate.payload.kind).toBe('committed');
+    expect(gate.payload.filesChanged).toEqual([join(cwd, 'real.txt')]);
+  });
+
+  it('no_op:no_diff when this worker wrote nothing (even if other files are dirty in the repo)', async () => {
+    writeFileSync(join(cwd, 'someone-elses.txt'), 'concurrent');
+    const state: any = {
+      cwd,
+      preTaskHeadSha: preSha(),
+      preTaskUntrackedFiles: preUntracked(),
+      executionContext: {},
+      gates: {},
+      lastRunResult: { filesWritten: [] },
+    };
+    const gate = await commitHandler(state);
     expect(gate.payload.kind).toBe('no_op');
     expect(gate.payload.reason).toBe('no_diff');
   });
@@ -115,6 +167,7 @@ describe('commitHandler', () => {
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
       gates: {},
+      lastRunResult: { filesWritten: [join(cwd, 'b.txt')] },
     };
     const gate = await commitHandler(state);
     expect(gate.outcome).toBe('advance');
@@ -170,6 +223,7 @@ describe('commitHandler', () => {
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
+      lastRunResult: { filesWritten: [join(cwd, 'e.txt')] },
       gates: {
         implement: {
           outcome: 'advance',
@@ -190,6 +244,7 @@ describe('commitHandler', () => {
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
+      lastRunResult: { filesWritten: [join(cwd, 'f.txt')] },
       gates: {
         implement: {
           outcome: 'advance',
@@ -223,6 +278,7 @@ describe('commitHandler', () => {
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
+      lastRunResult: { filesWritten: [join(cwd, 'g.txt')] },
       gates: {
         implement: {
           outcome: 'advance',
@@ -254,6 +310,7 @@ describe('commitHandler', () => {
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
+      lastRunResult: { filesWritten: [join(cwd, 'h.txt')] },
       gates: {
         implement: { outcome: 'advance', payload: { summary: 'final fix' } },
         review: { outcome: 'advance', payload: { verdict: 'approved' } },
@@ -263,5 +320,45 @@ describe('commitHandler', () => {
     const gate = await commitHandler(state);
     expect(gate.payload.kind).toBe('committed');
     expect(gate.payload.commitMessage).not.toContain('Rework left');
+  });
+});
+
+describe('commitHandler concurrency (per-repo mutex)', () => {
+  function initRepo(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-commitlock-'));
+    execFileSync('git', ['-C', dir, 'init', '-q']);
+    execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t']);
+    execFileSync('git', ['-C', dir, 'config', 'user.name', 't']);
+    writeFileSync(join(dir, 'seed.txt'), 'seed');
+    execFileSync('git', ['-C', dir, 'add', '.']);
+    execFileSync('git', ['-C', dir, 'commit', '-qm', 'seed']);
+    return dir;
+  }
+
+  function stateFor(dir: string, file: string): any {
+    writeFileSync(join(dir, file), `export const X = '${file}';\n`);
+    return {
+      cwd: dir,
+      lastRunResult: { filesWritten: [file] },
+      gates: { implement: { payload: { summary: `add ${file}` } } },
+    };
+  }
+
+  it('two concurrent same-repo commits each contain only their own file (no index.lock error)', async () => {
+    const dir = initRepo();
+    const [a, b] = await Promise.all([
+      commitHandler(stateFor(dir, 'a.ts')),
+      commitHandler(stateFor(dir, 'b.ts')),
+    ]);
+    expect(a.outcome).toBe('advance');
+    expect(b.outcome).toBe('advance');
+    const shaA = (a.payload as any).commitSha as string;
+    const shaB = (b.payload as any).commitSha as string;
+    expect(shaA).toBeTruthy();
+    expect(shaB).toBeTruthy();
+    const filesIn = (sha: string) =>
+      execFileSync('git', ['-C', dir, 'show', '--name-only', '--format=', sha]).toString().trim().split('\n');
+    expect(filesIn(shaA)).toEqual(['a.ts']);
+    expect(filesIn(shaB)).toEqual(['b.ts']);
   });
 });

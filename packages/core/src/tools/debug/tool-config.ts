@@ -25,6 +25,8 @@ export function registerDebug(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
   name: 'debug',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: debugBriefSlot,
   buildTaskSpec: (brief, ctx) => {
@@ -47,7 +49,6 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
-      autoCommit: false,
       filePaths: brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined,
       mainModel: ctx.mainModel ?? undefined,
     };

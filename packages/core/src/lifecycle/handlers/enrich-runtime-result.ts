@@ -8,7 +8,6 @@
 //   - models (per-role model names)
 //   - implementationReport (fallback parse of last.output)
 //   - structuredReport (canonical from annotator, else fallback parser)
-//   - fileArtifactsMissing
 //   - reviewerNotes / errors / verdict slots
 //   - actualCostUSD (sum across entered stages)
 //   - status / errorCode / terminationReason (v5 M3/M4 fixes)
@@ -18,11 +17,11 @@
 // runtime mirror exactly as the legacy composeResponse did.
 
 import type { LifecycleState } from '../stage-plan-types.js';
+import { reviewPayload } from '../stage-plan-types.js';
 import type { RuntimeRunResult } from '../../types.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
 import { sumStageCosts } from '../shared-compute.js';
 
-const READ_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
 export function enrichRuntimeResult(state: LifecycleState): void {
   if (state.lastRunResult === undefined) return;
@@ -83,7 +82,6 @@ export function enrichRuntimeResult(state: LifecycleState): void {
     };
   }
 
-  if (e.fileArtifactsMissing === undefined) e.fileArtifactsMissing = false;
 
   // ── reviewReason text fields ────────────────────────────────────────────────
   if (e.specReviewReason === undefined) {
@@ -142,17 +140,14 @@ export function enrichRuntimeResult(state: LifecycleState): void {
     };
   }
 
-  // ── A4b: chain-failed and read-only routes are exempt from artifact downgrade
-  const chainAlreadyFailed = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
-  const route = typeof state.route === 'string' ? state.route : '';
-  const _isReadOnlyRoute = READ_ONLY_ROUTES.has(route);
-  void chainAlreadyFailed; void _isReadOnlyRoute;
-
   // ── envelope-level reviewer notes / verdicts / errors / rework state ────────
   if (state.specReviewerNotes !== undefined) (enriched as { specReviewerNotes?: string }).specReviewerNotes = state.specReviewerNotes;
   if (state.qualityReviewerNotes !== undefined) (enriched as { qualityReviewerNotes?: string }).qualityReviewerNotes = state.qualityReviewerNotes;
-  if (state.reviewVerdict !== undefined) (enriched as { reviewVerdict?: string }).reviewVerdict = state.reviewVerdict;
-  if (state.reviewFindings !== undefined) (enriched as { reviewFindings?: unknown }).reviewFindings = state.reviewFindings;
+  const reviewRp = reviewPayload(state);
+  if (reviewRp.verdict !== undefined) {
+    (enriched as { reviewVerdict?: string }).reviewVerdict = reviewRp.verdict;
+    (enriched as { reviewFindings?: unknown }).reviewFindings = reviewRp.findings;
+  }
   if (state.specReviewError !== undefined) (enriched as { specReviewError?: string }).specReviewError = state.specReviewError;
   if (state.qualityReviewError !== undefined) (enriched as { qualityReviewError?: string }).qualityReviewError = state.qualityReviewError;
   if (state.reviewError !== undefined) (enriched as { reviewError?: string }).reviewError = state.reviewError;
@@ -165,7 +160,7 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
   const reworkCleanedUp = state.reworkApplied === true && state.reworkError === undefined;
   const reviewRejected =
-    state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required' && !reworkCleanedUp;
+    state.reviewPolicy !== 'none' && reviewRp.verdict === 'changes_required' && !reworkCleanedUp;
 
   if (last.status === 'error') {
     enriched.status = 'error';

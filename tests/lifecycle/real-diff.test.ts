@@ -41,6 +41,23 @@ describe('getRealFilesChanged', () => {
     expect(r.files).not.toContain(join(cwd, 'pre.txt'));
   });
 
+  it('resolves cwd from executionContext when state.cwd is unset (production wiring)', async () => {
+    // Production puts the cwd on state.executionContext.cwd, NOT state.cwd.
+    // Without the fallback, getRealFilesChanged goes inert and falls back to
+    // the (possibly empty) worker self_report.
+    const { cwd, sha } = makeRepo();
+    writeFileSync(join(cwd, 'new.txt'), 'new');
+    const state: any = {
+      executionContext: { cwd },
+      preTaskHeadSha: sha,
+      preTaskUntrackedFiles: new Set(),
+      lastRunResult: { filesChanged: [] }, // worker under-reported → self_report would be empty
+    };
+    const r = await getRealFilesChanged(state);
+    expect(r.source).toBe('git_diff');
+    expect(r.files).toContain(join(cwd, 'new.txt'));
+  });
+
   it('falls back to self_report for non-git cwd', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'mma-realdiff-nongit-'));
     const state: any = {

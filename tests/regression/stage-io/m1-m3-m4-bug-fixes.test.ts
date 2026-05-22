@@ -17,8 +17,8 @@ function noop() {
   // Handler removed - composeHandler is now called directly on state
 }
 
-function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVerdict?: any; reviewPolicy?: any; commits?: any[]; reworkApplied?: boolean; reworkError?: string; }): LifecycleState {
-  return {
+function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVerdict?: any; reviewFindings?: any; reviewPolicy?: any; commits?: any[]; reworkApplied?: boolean; reworkError?: string; }): LifecycleState {
+  const s: any = {
     terminal: false,
     attemptIndex: 0,
     attemptBudget: 1,
@@ -26,7 +26,12 @@ function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVe
     shutdownInProgress: false,
     route: 'delegate',
     ...over,
-  } as any;
+  };
+  // The reviewPayload accessor reads gates.review.payload; mirror the verdict/findings there.
+  if (s.reviewVerdict !== undefined && !s.gates?.review) {
+    s.gates = { ...(s.gates ?? {}), review: { outcome: 'advance', payload: { verdict: s.reviewVerdict, findings: s.reviewFindings ?? [] } } };
+  }
+  return s as any;
 }
 
 describe('M3 fix — AC-16 — truthful workerSelfAssessment in compose', () => {
@@ -47,7 +52,9 @@ describe('M3 fix — AC-16 — truthful workerSelfAssessment in compose', () => 
         terminationReason: { cause: 'incomplete', turnsUsed: 5, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
       },
     });
-    state.gates = {};
+    // Review rejected: the verdict now lives on the review gate payload
+    // (the old state.reviewVerdict mirror was removed).
+    state.gates = { review: { outcome: 'advance', payload: { verdict: 'changes_required', findings: [{ source: 'quality', claim: 'concern' }] } } };
     await composeHandler(state);
     const env = (state as any).responseEnvelope;
     expect(env.errorCode).toBe('review_quality_findings_unresolved');
@@ -104,7 +111,9 @@ describe('M4 fix — AC-17 — rework that cleared findings yields ok, not revie
         terminationReason: { cause: 'incomplete', turnsUsed: 8, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
       },
     });
-    state.gates = {};
+    // Review rejected: the verdict now lives on the review gate payload
+    // (the old state.reviewVerdict mirror was removed).
+    state.gates = { review: { outcome: 'advance', payload: { verdict: 'changes_required', findings: [{ source: 'quality', claim: 'concern' }] } } };
     await composeHandler(state);
     const env = (state as any).responseEnvelope;
     expect(env.status).toBe('incomplete');

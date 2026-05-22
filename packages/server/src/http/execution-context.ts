@@ -37,14 +37,6 @@ export function buildExecutionContext(
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
-  const attachBatchGroups: ExecutionContext['attachBatchGroups'] = (groups) => {
-    deps.batchRegistry.attachGroups(batchId, groups);
-  };
-
-  const setBatchGroupingTelemetry: ExecutionContext['setBatchGroupingTelemetry'] = (info) => {
-    deps.batchRegistry.setGroupingTelemetry(batchId, info);
-  };
-
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
     recorder = getRecorder() as unknown as ExecutionContext['recorder'];
@@ -65,8 +57,6 @@ export function buildExecutionContext(
     client: caller?.client ?? 'other',
     batchId,
     recordHeartbeat,
-    attachBatchGroups,
-    setBatchGroupingTelemetry,
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,
@@ -78,9 +68,7 @@ export function buildExecutionContext(
     cwd: pc.cwd,
     assignedTier: 'standard',
     implementerProvider: undefined,
-    escalationProvider: undefined,
     providers: {},
-    implementerIdentity: undefined,
     timing: { startMs: now, timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },
     stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
     implementerToolMode: undefined,

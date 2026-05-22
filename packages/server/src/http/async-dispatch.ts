@@ -145,11 +145,8 @@ export function asyncDispatch<TResult>(
           );
         } else {
           batchRegistry.complete(batchId);
-          const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
-          const groupCount = groupingInfo?.groupCount;
-          const groupSizes = groupingInfo?.groupSizes;
-          const serializationApplied = groupingInfo?.serializationApplied;
-          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { batch_id: batchId, tool, duration_ms: durationMs, task_count: taskCount, ...(groupCount !== undefined ? { group_count: groupCount, group_sizes: JSON.stringify(groupSizes), serialization_applied: serializationApplied } : {}) } });
+          const dispatchMode = (resultObj as { dispatchMode?: string } | undefined)?.dispatchMode;
+          deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { batch_id: batchId, tool, duration_ms: durationMs, task_count: taskCount, ...(dispatchMode !== undefined ? { dispatch_mode: dispatchMode } : {}) } });
           process.stderr.write(
             `[mmagent] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
           );

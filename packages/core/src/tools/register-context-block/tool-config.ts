@@ -20,6 +20,8 @@ export function registerContextBlock(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<RegisterContextBlockInput> = {
   name: 'register_context_block',
   category: 'assist',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'standard',
   briefSlot: (input) => [{ type: input.type, description: input.description, body: input.body }],
   buildTaskSpec: (brief, ctx) => ({

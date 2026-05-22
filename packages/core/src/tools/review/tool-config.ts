@@ -61,6 +61,8 @@ function resolveReviewDoneCondition(focus: string[] | undefined, hasContextBlock
 export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   name: 'review',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: reviewBriefSlot,
   buildTaskSpec: (brief, ctx) => {
@@ -94,7 +96,6 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       contextBlockIds: brief.contextBlockIds,
       filePaths,
       mainModel: ctx.mainModel ?? undefined,
-      autoCommit: false,
     };
   },
   reportSchema: noStructuredReportSchema,
