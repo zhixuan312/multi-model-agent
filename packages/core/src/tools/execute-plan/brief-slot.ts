@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
-import { extractPlanSection } from './plan-extractor.js';
+import { extractPlanSection, SLICE_CAP_BYTES } from './plan-extractor.js';
 import type { ReviewPolicy } from '../../types/review-policy.js';
 
 // ── Brief slot for the execute-plan route ──
@@ -92,9 +92,6 @@ function readPlanSectionRaw(
   }
 
   let body = lines.slice(startIdx, endIdx).join('\n');
-  // 30 KB — mirrors plan-extractor.ts (4.3.0+, raised from 10 KB so plan
-  // sections like A9.1's 15 KB fit whole instead of truncating mid-step).
-  const SLICE_CAP_BYTES = 30 * 1024;
   let truncated = false;
   if (Buffer.byteLength(body, 'utf8') > SLICE_CAP_BYTES) {
     const buf = Buffer.from(body, 'utf8');
