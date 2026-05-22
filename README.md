@@ -290,10 +290,11 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.7.14
+## What's new in 4.7.15
 
-- **Dispatch is parallel or serial, your choice.** `mma-delegate` runs its tasks in parallel by default; pass `execution: "serial"` to force input-order, one-at-a-time execution. `mma-execute-plan` stays serial (ordered steps). The same-repo serialization from 4.6.0 is retired — concurrent same-repo workers are now safe because each commits **only its own files** (pathspec-scoped) behind a per-repo commit mutex, so they can't race on `.git/index.lock`.
-- **Leaner execution lifecycle.** A large body of dead/dormant code was removed and the commit gate is now the single source of commit truth — which also fixes `commitSha`/`commitMessage` reporting under concurrent dispatch.
+- **Truthful multi-task commit reporting.** A multi-task batch (`mma-execute-plan`, or parallel `mma-delegate`) now reports the `commitSha` of the **first task that actually committed**, instead of task 0 only — so a no-op first task no longer hides sibling commits.
+- **Dispatch is parallel or serial, your choice.** `mma-delegate` runs its tasks in parallel by default; pass `execution: "serial"` to force input-order, one-at-a-time execution. `mma-execute-plan` stays serial (ordered steps). Concurrent same-repo workers are safe — each commits **only its own files** (pathspec-scoped) behind a per-repo commit mutex, so they can't race on `.git/index.lock`.
+- **Leaner execution lifecycle.** A large body of dead/dormant code was removed and the commit gate is the single source of commit truth.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

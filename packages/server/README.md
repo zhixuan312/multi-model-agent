@@ -285,10 +285,10 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.7.14
+## What's new in 4.7.15
 
-- **Per-dispatch parallel/serial.** `POST /delegate` runs its tasks in parallel by default; send `"execution": "serial"` to run them one-at-a-time in array order. `POST /execute-plan` stays serial. The 4.6.0 same-repo serialization is retired — concurrent same-repo workers each commit **only their own files** (pathspec-scoped `git commit -- <files>`) behind a per-repo commit mutex, so they can't collide on `.git/index.lock`. `batch_completed` now carries `dispatch_mode`.
-- **Leaner lifecycle + truthful commit reporting.** Dead lifecycle code removed; the commit gate is the single source of commit truth, so a committed task's `structuredReport.commitSha` / `commitMessage` are no longer null.
+- **Truthful multi-task commit reporting.** The `GET /batch` aggregate `structuredReport.commitSha` now reflects the **first task that actually committed** (not task 0 only), so a multi-task batch — `execute-plan`, or parallel `delegate` — whose first task no-op'd no longer reports `commitSha: null` while siblings committed.
+- **Per-dispatch parallel/serial.** `POST /delegate` runs its tasks in parallel by default; send `"execution": "serial"` to run them one-at-a-time in array order. `POST /execute-plan` stays serial. Concurrent same-repo workers each commit **only their own files** (pathspec-scoped `git commit -- <files>`) behind a per-repo commit mutex. `batch_completed` carries `dispatch_mode`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
