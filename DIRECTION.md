@@ -1,8 +1,6 @@
-# multi-model-agent — Product Direction
+# multi-model-agent
 
-**The north star for what we build, why, and what we refuse.**
-
-This document is the canonical source for product principles. Proposals, specs, and design decisions reference it — not the other way around. When a feature debate needs settling, the answer is here or it gets added here.
+multi-model-agent is the **horizontal harness** for AI engineering: it routes the **right agent to the right task**, enforces quality with **cross-agent review**, and caps spend with **bounded execution**. The bet — **harness quality ≥ a single frontier model, at a fraction of the cost**. It ships as a **public npm package**: install it, bring your own keys, serve it in minutes. **Models go deep; we connect them wide** — and the engineer always keeps the judgment.
 
 ---
 
@@ -26,53 +24,96 @@ We're the layer that makes the second and third tiers work — so the first tier
 
 ---
 
+## The Bet
+
+A reviewed multi-agent harness matches or beats a single frontier model — at a fraction of the cost, and we measure it.
+
+Everything here rests on one falsifiable claim:
+
+**A reviewed multi-agent harness delivers quality as good as — or better than — a single frontier model running alone, at a fraction of the cost.**
+
+The reasoning: a solo frontier run is one model, one pass, no independent check. The harness adds structure a single run structurally cannot give itself — the right agent on each task, an independent cross-agent review, and audit gates over the spec and the plan. Running that full harness *on* a frontier model would be ruinously token-expensive. So the harness routes: routine execution to lean standard-tier agents, deep reasoning and review to complex-tier agents, and cross-validates where it matters. The result is controlled quality at a fraction of frontier-alone spend.
+
+This is a bet we hold ourselves to, not a slogan. We **measure** it — savings against a real baseline, issues caught before they ship, quality outcomes — and we report it honestly (see *Evidence and economics are first-class*). If the bet stops being true for a task class, we say so and route that class differently.
+
+---
+
+## The Lifecycle We Harness
+
+We instrument and guard every stage of the development lifecycle; the engineer keeps the judgment — and the lifecycle keeps widening.
+
+The work isn't a flat stream of isolated tasks. It's a **software development lifecycle**, and the harness instruments and guards it end to end. Today that lifecycle looks like:
+
+> investigate / research → spec → plan → execute → review → debug / retry — with **audit** gating the spec and the plan, and a failure loop back to plan.
+
+Each specialized tool is a **rod in the harness** — a gate over one stage of that lifecycle. `investigate` and `research` feed the front; `audit` gates the spec and plan before code is written; `execute_plan` / `delegate` do the building; `review_code` and `verify_work` guard the output; `debug_task` and `retry_tasks` close the loop. Together they make the lifecycle *observed and defensible* rather than a single uninspected leap from prompt to merge.
+
+**We harness the lifecycle; we do not author it.** The harness enforces evaluation, review, and audit at each gate — but the engineer, through their own agent, makes every call: what to build, which approach, whether to merge. We are the rails and the gates, never the driver. This is the synthesis of "right agent for the right task" and "we help, we don't replace": maximum lifecycle coverage, zero erosion of the engineer's judgment.
+
+**This lifecycle is today's snapshot, not the boundary.** The stages and rods described here are the coverage we have *now*. The platform exists precisely so that coverage keeps widening: new rods (new gates, new task classes), new stages, and richer lifecycle phases get added as the practice of AI software engineering matures. We do not hard-code the lifecycle into the architecture — generic primitives underneath, an open and growing set of rods on top. Whatever the lifecycle of AI-assisted engineering becomes, the harness's job is to instrument and guard more of it over time. The set of rods is meant to grow; the principle that each one is a thin gate over generic machinery does not.
+
+---
+
 ## Principles
 
-These are the rules that protect the insight. Each one has been tested against real usage.
+Nine rules that protect the insight — the right agent per task, structural quality, honest evidence, bounded cost, and platform over models. Each has been tested against real usage.
 
-### 1. The platform is the product, models are configuration
+### 1. Right agent for the right task
 
-A new model appears, you drop it into a slot. The system — routing, supervision, review, cost ceilings, structured reporting — makes it productive immediately. We never optimize for a specific model. We optimize the system around models. Providers go deeper vertically; we get better at connecting them horizontally.
+Not every task needs the most capable model. Not every task can be handled by the cheapest. Routine execution — implementation, file writes, mechanical work — runs on lean standard-tier agents; deep reasoning, review, and audit run on complex-tier agents. The caller declares intent (`agentType`), the system enforces capability floors silently and infers effort from task shape. The caller's judgment about task complexity is respected; the system ensures the chosen agent can actually do it and is configured to work efficiently. This routing is the engine of The Bet: it is how full-harness quality stays affordable.
 
-### 2. Right agent for the right task
+### 2. We help, we don't replace
 
-Not every task needs the most capable model. Not every task can be handled by the cheapest. The caller declares intent (`agentType`), the system enforces capability floors silently and infers effort from task shape. The caller's judgment about task complexity is respected; the system ensures the chosen agent can actually do it and is configured to work efficiently.
+The engineer does judgment. We do labor and gating. We don't make architectural decisions, we don't choose what to build, we don't merge code. We execute what we're told, review it structurally, audit against the spec and plan, and report back with evidence. The engineer stays in control.
 
 ### 3. Quality is structural, not aspirational
 
-Self-review has constitutional blind spots. A model cannot reliably catch what it's constitutionally bad at, no matter how many rounds you give it. Quality comes from structure: a different agent reviews the work, checking both spec compliance and code quality. For tasks that produce file artifacts, cross-agent review is the structural default — it's the mechanism that makes our output trustable. Tasks that produce no file artifacts (audits, analyses, read-only investigations) skip the review topology because there are no artifacts to review; their quality comes from the specialized preset's prompt engineering and output contract instead. The topology may evolve (more review slots, richer routing), but the requirement that artifact-producing implementation and review run on different agents is the structural default. Callers may disable review for task classes where a single model is genuinely sufficient — we make that easy, but the default is always cross-agent.
+Self-review has constitutional blind spots. A model cannot reliably catch what it's constitutionally bad at, no matter how many rounds you give it. Quality comes from structure: a *different* agent reviews the work, checking both spec compliance and code quality. This is what makes The Bet real — cross-agent review is the mechanism that makes cheap-tier output trustable to a frontier-alone standard. For tasks that produce file artifacts, cross-agent review is the structural default. Tasks that produce no file artifacts (audits, analyses, read-only investigations) skip the review topology because there are no artifacts to review; their quality comes from the specialized preset's prompt engineering and output contract instead.
 
-### 4. Bounded execution, no surprises
+Findings are **advisory signal for the engineer, not pass/fail gates**. A task can complete cleanly while carrying open concerns — even serious ones — because surfacing a concern is the harness doing its job, not the task failing. The only true failure is a terminal error. We report findings faithfully and let the engineer judge; we never inflate a finding into a failure or bury one to look clean.
+
+The topology may evolve (more review slots, richer routing), but the requirement that artifact-producing implementation and review run on different agents is the structural default. Callers may disable review for task classes where a single model is genuinely sufficient — we make that easy, but the default is always cross-agent.
+
+### 4. Evidence and economics are first-class
+
+We don't just do the labor — we **prove it was worth it**. The economics of the harness must be legible: cost saved against a real frontier-alone baseline, issues caught before shipping, where each task was routed and why, and the quality outcomes. Observability is part of the product, not a reporting afterthought. And the evidence is **honest**: real savings against a real baseline, advisory findings shown as advisory, no vanity metrics that flatter the layer. If a number would mislead, we don't show it. The Bet is only credible if the proof is trustworthy.
+
+### 5. Bounded execution, no surprises
 
 Every task has a cost ceiling and a wall-clock timeout. We never spend more than declared. Within a call, the system owns iterative loops (supervision retries, review rework). Between calls, the engineer orchestrates. No autonomous sessions, no runaway costs, no "the agent decided to refactor your entire codebase."
 
-### 5. We should not make agents fail at tasks they can do
+### 6. The platform is the product, models are configuration
+
+A new model appears, you drop it into a slot. The system — routing, supervision, review, cost ceilings, structured reporting — makes it productive immediately. We never optimize for a specific model. We optimize the system around models. Providers go deeper vertically; we get better at connecting them horizontally.
+
+### 7. Generic works for everyone, specialized works better — and the rod set grows
+
+The core is a generic task dispatcher. Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) are opinionated presets — rods — over the same machinery: they set good defaults so callers don't construct full task specs for common patterns. Every rod maps to the same platform primitives; specialization is convenience, not divergence. The set of rods is deliberately **open and expected to grow** as the lifecycle we harness widens — but each new rod earns its place by proving a pattern is universal, and it stays a thin gate over generic primitives. We add rods; we do not accumulate domain logic inside them.
+
+### 8. We should not make agents fail at tasks they can do
 
 If the agent wrote the files and the work evidence is there, the status should reflect that. If a task needs a 2-line edit, the agent has an edit tool. If parallel tasks share a filesystem, they get targeted test commands instead of full-project builds. We trust completion evidence — worker self-assessment backed by file artifacts contributes to status determination alongside review verdicts and validation signals. Platform failures are our failures, not the model's.
 
-### 6. Every tool call is a self-contained unit
+### 9. Every tool call is a self-contained unit
 
 Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`register_context_block`, batch polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
-
-### 7. Generic works for everyone, specialized works better
-
-The core is a generic task dispatcher. Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) are opinionated presets over the same machinery — they set good defaults so callers don't construct full task specs for common patterns. The intake pipeline interprets requests and infers missing details, but every specialized tool maps to the same platform primitives. Specialization is convenience, not divergence.
-
-### 8. We help, we don't replace
-
-The engineer does judgment. We do labor. We don't make architectural decisions, we don't choose what to build, we don't merge code. We execute what we're told, review it structurally, and report back with evidence. The engineer stays in control.
 
 ---
 
 ## What We Are
 
-multi-model-agent is a horizontal connection layer delivered as a local HTTP service. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent sync-skills`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
+A public npm package you install and serve locally in minutes — a horizontal labor layer any agent client can call.
+
+multi-model-agent ships as a **public npm package** — `@zhixuan92/multi-model-agent`. Any engineer can install it (`npm install -g @zhixuan92/multi-model-agent`, or run it with `npx`) and have the entire layer running locally in minutes. No accounts to provision, no service to sign up for: you bring your own provider keys, install the package, and serve it.
+
+It is a horizontal connection layer delivered as a **local HTTP service**. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent sync-skills`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
 
 ### Delivery model
 
 ```
-mmagent serve               # daemon, stays running
-mmagent sync-skills         # writes (and reconciles) skill files in detected clients
+npm install -g @zhixuan92/multi-model-agent   # public npm package — get it, install it, serve it
+mmagent serve                                  # daemon, stays running on loopback
+mmagent sync-skills                            # writes (and reconciles) skill files in detected clients
 ```
 
 The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache) survive.
@@ -83,7 +124,7 @@ Users configure two labor agents:
 
 | Slot | Purpose | Examples |
 |---|---|---|
-| `standard` | Heavy implementation work — file writes, test runs, mechanical tasks | DeepSeek-R1, MiniMax, Claude Haiku |
+| `standard` | Heavy implementation work — file writes, test runs, mechanical tasks | DeepSeek, MiniMax, Claude Haiku |
 | `complex` | Advanced labor — code review, plan auditing, spec verification, security analysis | Claude Opus, GPT-5, Claude Sonnet |
 
 These are labor categories, not intelligence tiers. The user decides what "standard" and "complex" mean for their workflow and budget. The engineer's own agent (whatever they're talking to) stays on architecture, design, and final decisions — it never enters our slots.
@@ -99,11 +140,13 @@ Every task goes through intake and implementation. Artifact-producing tasks also
 
 Non-artifact tasks (audits, analyses, read-only investigations) skip stages 3 and 4 — their quality comes from the specialized preset's prompt engineering and output contract.
 
-### Ten tools, three categories
+### The rods, today
 
-**Generic**: `delegate_tasks` — the power tool. Batch of tasks, parallel execution, full lifecycle. General-purpose fallback when no specialized route fits.
+The specialized tools are the harness's current rods over the lifecycle — this is the set we ship now, and it is expected to grow:
 
-**Specialized presets**: `audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan` — opinionated defaults for common workflows. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed. We create the content block; the caller controls when and whether to use it.
+**Generic**: `delegate_tasks` — the power tool. Batch of tasks, parallel execution, full lifecycle. General-purpose fallback when no specialized rod fits.
+
+**Specialized rods**: `audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan` — opinionated gates for common lifecycle stages. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed.
 
 **Orchestration**: `register_context_block`, `retry_tasks`, `get_batch_slice` — context management and batch operations. These help the caller manage state across calls without us maintaining workflow state.
 
@@ -115,56 +158,66 @@ Structured reports with: status, worker self-assessment, spec review verdict, qu
 
 ## Where We're Going
 
+Seamless protocol, ever-wider lifecycle coverage, undeniable economics — the reviewed harness becomes the unit of AI software engineering.
+
 ### Perfect the protocol
 
 The horizontal layer works. But "works" isn't the bar — **seamless** is. The calling agent should delegate to multi-model-agent as naturally as it uses its own built-in tools. No friction, no ceremony, no overhead the engineer has to manage.
 
-What this means concretely:
+- **Intake intelligence** — Understand what the caller wants from minimal input. A terse prompt with file paths should be enough.
+- **Response clarity** — Every response gives the caller exactly what it needs to make the next decision. Headlines, structured verdicts, cost evidence. No post-processing, no parsing, no arithmetic.
+- **Reliability at scale** — Parallel fan-out across files, graceful handling of provider failures, automatic retry with escalation, bounded execution that never surprises.
+- **Provider expansion** — As new providers emerge and existing ones deepen, adding them is configuration, not code.
 
-- **Intake intelligence** — We should understand what the caller wants from minimal input. A terse prompt with file paths should be enough. The intake pipeline interprets, infers, and executes immediately — never forces the caller to construct elaborate task specs for straightforward work.
-- **Response clarity** — Every response should give the caller exactly what it needs to make the next decision. Headlines, structured verdicts, cost evidence. No post-processing, no parsing, no arithmetic. The caller quotes the result and moves on.
-- **Reliability at scale** — Parallel fan-out across files, graceful handling of provider failures, automatic retry with escalation, bounded execution that never surprises. multi-model-agent should be the most predictable thing in the stack.
-- **Provider expansion** — As new providers emerge and existing ones deepen, adding them should be configuration, not code. The routing layer, tool adapters, and model profiles absorb new providers without platform changes.
+### Widen the lifecycle
 
-### Deepen the connection
+The rods we ship today gate part of the development lifecycle. The roadmap is to **cover more of it** — more rods, more gates, more stages — without ever hard-coding the lifecycle into the platform:
 
-Once the protocol is seamless, go deeper into the ecosystems we connect:
+- **More rods** — New specialized gates as patterns prove universal: richer audit types, security and compliance gates, migration and refactor harnesses, release and rollout checks. Each is a thin preset over the same primitives.
+- **Caller-defined rods** — Let teams register their own gates at runtime. The shipped presets become seed examples, not the full vocabulary. Teams define their own audit types, review checklists, verification and gating patterns.
+- **Provider-aware routing** — Surface which agents handle which task shapes well ("this provider succeeds 95% on TypeScript implementation, 40% on complex refactors"). The caller decides; we inform.
+- **Runtime integration** — Embed into client ecosystems as they open extension points: hooks, plugins, IDE extensions. multi-model-agent becomes invisible infrastructure — always available, never in the way.
 
-- **Provider-aware routing** — Track which agents handle which task shapes well. Not to replace the caller's judgment, but to surface patterns: "this provider succeeds 95% on TypeScript implementation tasks, 40% on complex refactors." The caller decides; we inform.
-- **Workflow templates** — Let callers register custom task templates at runtime. The specialized presets become seed examples, not the full vocabulary. Teams define their own audit types, review checklists, verification patterns.
-- **Runtime integration** — Embed into client ecosystems as they open extension points. Claude Code hooks, Codex plugins, IDE extensions. multi-model-agent becomes invisible infrastructure — always available, never in the way.
+### Make the economics undeniable
+
+The Bet is only as strong as the proof. We deepen the evidence layer: per-task and fleet-level savings against real baselines, quality-caught accounting, routing transparency, and trend over time — so a team can see, at a glance, that the harness delivers frontier-grade outcomes at a fraction of frontier cost, and can defend that claim to anyone.
 
 ### The horizontal layer matures
 
-Models will keep getting deeper — better reasoning, longer context, richer tool use. Each generation makes the vertical providers more capable individually. What won't emerge from any single provider is the horizontal layer that makes a fleet of them behave like one system.
+Models will keep getting deeper — better reasoning, longer context, richer tool use. Each generation makes the vertical providers more capable individually. What won't emerge from any single provider is the horizontal layer that makes a fleet of them behave like one system, nor the harness that gates a whole development lifecycle.
 
-**multi-model-agent becomes the engineer's runtime.** Tasks flow in from the engineer's agent, get routed, executed, reviewed, and reported. The engineer sees structured results, not raw model output. We handle retry, escalation, cost control, and quality assurance autonomously within declared bounds.
+**The reviewed multi-agent harness becomes the unit of AI software engineering.** The way no production system ships without CI/CD, no serious AI-assisted workflow will ship without a routed, reviewed, audited harness. The question shifts from "which model should I use?" to "how is my harness configured, and how wide is its lifecycle coverage?" — an engineering problem, not a model-selection problem.
 
-**Multi-agent development becomes the default.** The same way no production system runs on a single server, no serious AI-assisted development workflow will run on a single model. The question shifts from "which model should I use?" to "how is my multi-model setup configured?" — and that's an engineering problem, not a model selection problem.
+**The economics compound.** As frontier capability gets more expensive per unit of work, the value of routing the right agent to the right task — and proving the savings — only grows. The layer that connects wide outlives every model generation it works with.
 
-**Providers go deep. We connect wide.** The bet is that the horizontal layer outlives every model generation it works with. We're building that layer.
+**Providers go deep. We connect wide — and we keep widening.** The bet is that the horizontal harness, and the lifecycle it covers, outlives every model it routes to. We're building that harness.
 
 ---
 
 ## What We Won't Do
 
+No model-specific hacks, no decisions for you, no hidden state, no autonomy theater, no dressed-up numbers.
+
 **We won't optimize for a specific model.**
-When a model has a quirk, the fix goes in the platform (better tools, better supervision, better prompts) — not in model-specific branches. If a workaround only helps one model, it doesn't belong in the platform. Providers go deep on their own; we stay horizontal.
+When a model has a quirk, the fix goes in the platform (better tools, better supervision, better prompts) — not in model-specific branches. If a workaround only helps one model, it doesn't belong in the platform.
 
 **We won't make decisions for the engineer.**
-We execute, review, and report. We don't decide what to build, which approach to take, or whether to merge. We may interpret a terse request into a concrete plan, but the caller controls the intent. Cost ceilings are set by the caller, not suggested. The engineer's judgment is input; our output is evidence.
+We execute, review, audit, and report. We don't decide what to build, which approach to take, or whether to merge. We may interpret a terse request into a concrete plan, but the caller controls the intent. The engineer's judgment is input; our output is evidence.
 
 **We won't accumulate domain logic.**
-Specialized tools are thin presets over generic primitives. If a workflow can be achieved by combining existing primitives (prompt text + `contextBlockIds` + tool mode), it doesn't become a parameter. New presets earn their place by proving a pattern is universal enough to warrant a default, not by anticipating hypothetical needs.
+Rods are thin presets over generic primitives. The set of rods grows, but each one stays a thin gate — if a workflow can be achieved by combining existing primitives, it doesn't become a parameter. New rods earn their place by proving a pattern is universal, not by anticipating hypothetical needs.
 
 **We won't maintain workflow state.**
-Each request is a self-contained unit — everything it needs comes in, the result goes out. We provide tools that help the caller manage its own state across calls (`register_context_block`, batch polling). We may persist explicit content blobs and return system-generated IDs for them, but we never infer workflow continuity from them — there is no implicit session, no conversation memory, no "the system remembers what you asked last time." The caller owns the workflow. We own individual task execution. This boundary is what makes multi-model-agent predictable and the cost model honest.
+Each request is a self-contained unit — everything it needs comes in, the result goes out. We provide tools that help the caller manage its own state across calls. We never infer workflow continuity: no implicit session, no conversation memory. The caller owns the workflow. We own individual task execution.
 
 **We won't chase autonomy.**
-The industry is racing toward fully autonomous agents that run for hours. We're building the opposite: bounded execution with structured checkpoints. We run a task, review it, and return. The engineer decides what happens next. Autonomy is the caller's problem — we provide the reliable labor substrate they orchestrate.
+The industry is racing toward fully autonomous agents that run for hours. We're building the opposite: bounded execution with structured checkpoints. We run a task, review it, and return. The engineer decides what happens next.
 
 **We won't compete with models.**
-When models get better at self-review, our cross-agent review still adds value — different training data, different failure modes, different constitutional biases. But if a single model genuinely becomes sufficient for a task class, we don't fight that. We make it easy to route that task to one agent with review turned off. We adapt to what models can do, not to what we wish they couldn't.
+When models get better at self-review, our cross-agent review still adds value — different training data, different failure modes, different constitutional biases. But if a single model genuinely becomes sufficient for a task class, we make it easy to route that task to one agent with review turned off. We adapt to what models can do, not to what we wish they couldn't.
+
+**We won't dress up the numbers.**
+The economics are the proof, so the proof must be honest. Real savings against a real baseline. Advisory findings shown as advisory, not inflated into failures or hidden to look clean. No vanity metrics that flatter the layer. If a number would mislead the engineer, we don't show it — a north star built on a flattering chart isn't a north star.
 
 ---
 
