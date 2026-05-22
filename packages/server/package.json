@@ -26,16 +26,16 @@
     "dist",
     "scripts/postinstall.js"
   ],
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/http/server.js",
+  "types": "dist/http/server.d.ts",
   "bin": {
     "mmagent": "dist/cli/index.js",
     "multi-model-agent": "dist/cli/index.js"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/http/server.d.ts",
+      "import": "./dist/http/server.js"
     },
     "./server": {
       "types": "./dist/http/server.d.ts",
