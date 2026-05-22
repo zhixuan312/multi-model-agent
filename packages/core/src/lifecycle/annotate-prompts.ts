@@ -62,7 +62,9 @@ export function serializeWriteContext(state: LifecycleState): unknown {
     } : null,
     review: {
       verdict: reviewPayload(state).verdict ?? null,
-      findings: stripEvidence(reviewPayload(state).findings),
+      // reviewPayload already folds evidence into each finding's `text`, so the
+      // returned shape is { source, text } with no `evidence` field to strip.
+      findings: reviewPayload(state).findings,
     },
     rework: {
       applied: (state as any).reworkApplied ?? false,

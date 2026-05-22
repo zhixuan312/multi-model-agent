@@ -25,6 +25,8 @@ export function registerDebug(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
   name: 'debug',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: debugBriefSlot,
   buildTaskSpec: (brief, ctx) => {

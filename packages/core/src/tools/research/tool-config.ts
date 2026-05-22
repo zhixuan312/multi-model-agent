@@ -26,6 +26,8 @@ export function registerResearch(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, ResearchReport> = {
   name: 'research',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: researchBriefSlot,
   buildTaskSpec: (brief: ResearchBrief, ctx: ExecutionContext, enriched?: EnrichedResearchInput) => ({

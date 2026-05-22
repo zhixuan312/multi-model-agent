@@ -25,6 +25,8 @@ export function registerRetry(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   name: 'retry',
   category: 'assist',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'standard',
   briefSlot: retryBriefSlot,
   buildTaskSpec: (brief, ctx) => {

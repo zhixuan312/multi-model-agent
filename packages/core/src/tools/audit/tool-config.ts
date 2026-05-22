@@ -24,6 +24,8 @@ export function registerAudit(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input, AuditBrief, unknown> = {
   name: 'audit',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: auditBriefSlot,
   buildTaskSpec: (brief, ctx) => {

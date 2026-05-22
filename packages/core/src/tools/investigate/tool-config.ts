@@ -32,6 +32,8 @@ export function registerInvestigate(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, InvestigateReportOutput> = {
   name: 'investigate',
   category: 'read_only',
+  dispatchMode: 'parallel',
+  dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: investigateBriefSlot,
   buildTaskSpec: (brief: InvestigateBrief, ctx: ExecutionContext) => ({
