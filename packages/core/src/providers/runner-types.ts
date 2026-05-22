@@ -7,6 +7,7 @@ import type {
   ToolMode,
 } from '../types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
+export type { TokenUsage } from '../types/run-result.js';
 
 export type RunStatus =
   | 'ok'
@@ -37,13 +38,6 @@ export type RunStatus =
  *  `cached_input_tokens` as a subset; adapters MUST subtract cached from
  *  gross before populating `inputTokens` here. See
  *  `providers/codex-cli-session.ts:absorbUsage` for the normalization. */
-export interface TokenUsage {
-  inputTokens: number
-  outputTokens: number
-  cachedReadTokens: number
-  cachedNonReadTokens: number
-}
-
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
