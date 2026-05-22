@@ -47,6 +47,7 @@ import {
   resolveClientInstallDir,
   UnknownTargetError,
 } from '../skill-install/skill-installer-common.js';
+import { disabledTargets } from '../skill-install/disabled-state.js';
 
 export const ExitCode = Object.freeze({
   SUCCESS: 0,
@@ -167,6 +168,28 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       return bestEffort ? 0 : ExitCode.ERR_UNKNOWN_TARGET;
     }
     throw err;
+  }
+
+  // Honor the disable sentinel: drop any client the user turned off via
+  // `mmagent disable`. This is what makes disable sticky — the npm postinstall
+  // hook shells out to this command, so without the filter every upgrade would
+  // silently reinstall skills the user deliberately removed. `mmagent enable`
+  // clears the sentinel before it calls back in here.
+  const disabled = disabledTargets(homeDir);
+  if (disabled.length > 0) {
+    const active = targets.filter((t) => !disabled.includes(t));
+    if (active.length === 0) {
+      if (parsed.json) {
+        stdout(JSON.stringify({ targets: [], outcome: 'skills-disabled', disabled }) + '\n');
+      } else {
+        log(
+          `MMA skills are disabled for ${disabled.join(', ')}. ` +
+          `Run \`mmagent enable\` to restore. Skipping sync.\n`,
+        );
+      }
+      return ExitCode.SUCCESS;
+    }
+    targets = active;
   }
 
   if (targets.length === 0) {
