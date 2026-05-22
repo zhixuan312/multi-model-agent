@@ -4,10 +4,6 @@
 // missing-batch and invalid task cases return 202 and surface the error
 // asynchronously inside the batch result. This is the route called by
 // the `mma-retry` skill and end-user clients.
-//
-// SEE ALSO: handlers/control/retry.ts is the protocol-level twin
-// registered at /control/retry — same executor, but synchronous batch
-// validation (404s when the batchId is unknown) and no dispatcher path.
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
