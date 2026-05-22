@@ -1,10 +1,21 @@
 // v4.4.x — unified Annotating stage.
 //
-// Pure transform: builds the canonical StructuredReport from
-// state.lastRunResult, the Review stage's verdict + concerns, the
-// Rework flag, and the Committing stage's outcome. Same handler for
-// read and write routes — route-specific fields hold empty arrays /
-// nulls on the other side so the orchestrator parses one shape.
+// LLM judge layer (spec §5.7.2), NOT a pure transform: this stage fires a
+// real LLM turn on the standard tier (see getSession('standard') below) for
+// both read and write routes. The LLM is the PROPOSER — it may set
+// completed/message/summary — while the deterministic parser
+// (applyAnnotatePreconditions) is the ENFORCER and the mechanical fields
+// (findings, filesChanged, commitSha) are always overridden from upstream
+// gates. It judges/summarizes the worker's emitted report; it does NOT
+// independently re-read the codebase to find defects (that is the Review
+// stage, which is write-routes-only). Falls back to mechanical synthesis only
+// on tier-3 prompt-budget truncation or after all transport retries fail.
+//
+// It assembles the canonical StructuredReport from state.lastRunResult, the
+// Review stage's verdict + concerns, the Rework flag, and the Committing
+// stage's outcome. Same handler for read and write routes — route-specific
+// fields hold empty arrays / nulls on the other side so the orchestrator
+// parses one shape.
 
 import type { LifecycleState } from '../stage-plan-types.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
