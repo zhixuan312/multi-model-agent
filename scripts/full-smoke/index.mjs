@@ -4,7 +4,7 @@ import { preflight, AbortError } from './preflight.mjs';
 import { createProject } from './fixtures.mjs';
 import { SCENARIOS } from './config.mjs';
 import { runDispatch, pollBatch } from './dispatch.mjs';
-import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount } from './collectors.mjs';
+import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
 import { report } from './report.mjs';
@@ -35,9 +35,14 @@ try {
 ctx.contextBlockIds = [];
 const records = [];
 const checksByScenario = {};
-const allEventIds = [];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Run-level wire-record tally: ids already in the queue at run start are the
+// baseline (prior runs / unrelated activity) and excluded; seenIds accumulates
+// THIS run's ids via full-file reads, so a flusher drain can't lose them.
+const baselineIds = new Set(allQueueEventIds());
+const seenIds = new Set();
 let totalCostUSD = 0;
-let batchTaskCount = 0;
+let expectedEmits = 0;
 let backendSummary = null;
 
 try {
@@ -47,6 +52,7 @@ try {
 
   const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
   for (const spec of scenarios) {
+    expectedEmits += spec.emits ?? 0;
     try {
       const queueBefore = queueLineCount();
       const res = await runDispatch(spec, ctx);
@@ -65,7 +71,18 @@ try {
         ctx.seedFailIdx = idx >= 0 ? idx : 0;
       }
       const queue = collectQueue(queueBefore);
-      allEventIds.push(...queue.eventIds);
+      // Run-level capture: the wire write lands async AFTER the batch returns
+      // terminal, so settle until this scenario's expected `emits` new ids
+      // appear (or time out) before moving on — a lagging record then can't be
+      // misattributed to the next scenario or dropped from the tally.
+      const want = spec.emits ?? 0;
+      const startSeen = seenIds.size;
+      const settleUntil = Date.now() + 8000;
+      for (;;) {
+        for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
+        if (seenIds.size - startSeen >= want || Date.now() >= settleUntil) break;
+        await sleep(300);
+      }
       const rec = normalize(spec, {
         response: collectResponse(envelope),
         diagnostics: collectDiagnostics(res.batchId),
@@ -73,7 +90,6 @@ try {
       });
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      batchTaskCount += Array.isArray(envelope.results) ? envelope.results.length : 1;
       totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
         ?? envelope.costSummary?.totalActualCostUSD ?? 0;
     } catch (err) {
@@ -85,6 +101,7 @@ try {
   // Run-level backend (④): correlate by event_id (= queue eventId). The flusher
   // uploads every 5 min, so without --wait-flush these rows won't have landed yet
   // — the durable local proof is the queue (③); --wait-flush verifies DB landing.
+  const allEventIds = [...seenIds];
   ctx.allEventIds = allEventIds;
   if (!opts.skipBackend) {
     if (opts.waitFlush) {
@@ -101,7 +118,7 @@ const exitCode = report(records, checksByScenario, {
   serverVersion: ctx.serverVersion, bootId: ctx.bootId,
   mode: opts.skipBackend ? 'REDUCED (--skip-backend)' : 'FULL',
   strict: opts.strict, totalCostUSD,
-  backend: backendSummary, queueEventCount: allEventIds.length, expectedRows: batchTaskCount,
+  backend: backendSummary, queueEventCount: seenIds.size, expectedRows: expectedEmits,
   waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved,
 });
 process.exit(exitCode);
