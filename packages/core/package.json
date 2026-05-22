@@ -44,10 +44,6 @@
       "types": "./dist/config/model-profile-registry.d.ts",
       "import": "./dist/config/model-profile-registry.js"
     },
-    "./escalation/agent-resolver": {
-      "types": "./dist/escalation/agent-resolver.d.ts",
-      "import": "./dist/escalation/agent-resolver.js"
-    },
     "./providers/provider-factory": {
       "types": "./dist/providers/provider-factory.d.ts",
       "import": "./dist/providers/provider-factory.js"
@@ -64,18 +60,6 @@
       "types": "./dist/lifecycle/stage-labels.d.ts",
       "import": "./dist/lifecycle/stage-labels.js"
     },
-    "./lifecycle/handlers/commit-stage": {
-      "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
-      "import": "./dist/lifecycle/handlers/commit-stage.js"
-    },
-    "./lifecycle/handlers/verify-stage": {
-      "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
-      "import": "./dist/lifecycle/handlers/verify-stage.js"
-    },
-    "./lifecycle/metadata-repair": {
-      "types": "./dist/lifecycle/metadata-repair.d.ts",
-      "import": "./dist/lifecycle/metadata-repair.js"
-    },
     "./bounded-execution/activity-tracker": {
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
@@ -91,18 +75,6 @@
     "./error-codes": {
       "types": "./dist/error-codes.d.ts",
       "import": "./dist/error-codes.js"
-    },
-    "./bounded-execution/cost-meter": {
-      "types": "./dist/bounded-execution/cost-meter.d.ts",
-      "import": "./dist/bounded-execution/cost-meter.js"
-    },
-    "./providers/call-cache": {
-      "types": "./dist/providers/call-cache.d.ts",
-      "import": "./dist/providers/call-cache.js"
-    },
-    "./intake/brief-compiler-slots/delegate": {
-      "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/delegate.js"
     },
     "./events/jsonl-writer": {
       "types": "./dist/events/jsonl-writer.d.ts",
@@ -184,10 +156,6 @@
       "types": "./dist/tools/review/tool-config.d.ts",
       "import": "./dist/tools/review/tool-config.js"
     },
-    "./tools/verify/tool-config": {
-      "types": "./dist/tools/verify/tool-config.d.ts",
-      "import": "./dist/tools/verify/tool-config.js"
-    },
     "./tools/delegate/schema": {
       "types": "./dist/tools/delegate/schema.d.ts",
       "import": "./dist/tools/delegate/schema.js"
@@ -212,17 +180,9 @@
       "types": "./dist/tools/review/schema.d.ts",
       "import": "./dist/tools/review/schema.js"
     },
-    "./tools/verify/schema": {
-      "types": "./dist/tools/verify/schema.d.ts",
-      "import": "./dist/tools/verify/schema.js"
-    },
     "./tools/debug/schema": {
       "types": "./dist/tools/debug/schema.d.ts",
       "import": "./dist/tools/debug/schema.js"
-    },
-    "./tools/execute-plan/schema": {
-      "types": "./dist/tools/execute-plan/schema.d.ts",
-      "import": "./dist/tools/execute-plan/schema.js"
     },
     "./tools/retry/schema": {
       "types": "./dist/tools/retry/schema.d.ts",
