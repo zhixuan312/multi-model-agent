@@ -4,10 +4,6 @@
 import type { StageStatsMap, ReviewVerdict } from '../types.js';
 import { findModelProfile } from '../config/model-profile-registry.js';
 
-export const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
-  'audit', 'review', 'investigate', 'debug',
-]);
-
 const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, turnCount: null, filesWrittenCount: null } as const;
 
 export function emptyStats(): StageStatsMap {
