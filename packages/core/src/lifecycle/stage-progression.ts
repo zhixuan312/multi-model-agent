@@ -123,14 +123,3 @@ export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy
 export function normalizeStageLabel(label: string): string {
   return label;
 }
-
-export function stageProgress(route: string, stageLabel: string | undefined): string {
-  const order = STAGE_ORDER_BY_ROUTE[route];
-  if (!order || order.length === 0) return '1/1';
-  const total = order.length;
-  if (!stageLabel) return `1/${total}`;
-  const normalized = normalizeStageLabel(stageLabel);
-  const idx = order.indexOf(normalized);
-  const oneBased = idx === -1 ? 1 : idx + 1;
-  return `${oneBased}/${total}`;
-}

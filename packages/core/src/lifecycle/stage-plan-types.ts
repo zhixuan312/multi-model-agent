@@ -159,9 +159,6 @@ export interface LifecycleState {
   // context without reaching through ExecutionContext.
   projectContext?: ProjectContext;
 
-  // Block registration result set by register_to_block_store stage handler.
-  blockRegistration?: { id: string; size: number; ttlMs: number };
-
   // Slots used by existing pre-#45 handlers (execution-context-builder,
   // task-executor, derive-terminal-status). Typed as `unknown` until the
   // owning step (Step 1 / Step 5 / Step 6) firms them up.

@@ -23,20 +23,6 @@ import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { startProgressEventsSubscriber } from '../bounded-execution/progress-events-subscriber.js';
 import { normalizeOutputTargets } from './normalize-output-targets.js';
-export function errorResult(error: string): RuntimeRunResult {
-  return {
-    output: `Sub-agent error: ${error}`,
-    status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    turns: 0,
-    filesWritten: [],
-    outputIsDiagnostic: true,
-    escalationLog: [],
-    error,
-    actualCostUSD: 0,
-    directoriesListed: [],
-  };
-}
 
 const PARALLEL_SAFETY_SUFFIX =
   '\n\nYou are running in parallel with other tasks. ' +

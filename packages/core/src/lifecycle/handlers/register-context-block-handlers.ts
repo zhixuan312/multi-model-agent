@@ -23,10 +23,6 @@ export async function registerToBlockStoreHandler(state: LifecycleState): Promis
     // and packages/core/src/stores/context-block-tool.ts:23 for the interface.
     const pc = state.projectContext as any;
     const registered = pc.contextBlocks.register(req?.content ?? '');
-    // v4 back-compat: compose_response reads state.blockRegistration to detect
-    // the register-context-block route. v5 emits the same data via the gate's
-    // payload; we keep this state slot populated for the existing compose path.
-    (state as any).blockRegistration = { id: registered.id, size: bytes, ttlMs: pc.contextBlocks.ttlMs };
     return {
       outcome: 'advance',
       payload: { blockId: registered.id, bytes },
