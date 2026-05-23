@@ -260,6 +260,8 @@ mmagent status [--json]                          # health + stats from a running
 mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
 mmagent print-token                              # print the current auth token
 mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
+mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
+mmagent enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
 mmagent telemetry status                         # show consent state + source
 mmagent telemetry enable                         # opt in
 mmagent telemetry disable                        # opt out + delete local queue
