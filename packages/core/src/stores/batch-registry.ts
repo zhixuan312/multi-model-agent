@@ -82,7 +82,7 @@ export interface BatchEntry {
   running?: Array<{ worker: string; turn: number }>;
   executionContexts?: Map<number, import('../lifecycle/lifecycle-context.js').ExecutionContext>;
   perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
-  terminalBlockIds?: Map<number, string>;
+  contextBlockIds?: Map<number, string>;
 }
 
 export interface BatchRegistryOptions {
@@ -190,12 +190,12 @@ export class BatchRegistry {
   recordTerminalBlock(batchId: string, taskIndex: number, blockId: string): void {
     const entry = this.map.get(batchId);
     if (!entry) throw new Error(`unknown batchId: ${batchId}`);
-    if (!entry.terminalBlockIds) entry.terminalBlockIds = new Map();
-    entry.terminalBlockIds.set(taskIndex, blockId);
+    if (!entry.contextBlockIds) entry.contextBlockIds = new Map();
+    entry.contextBlockIds.set(taskIndex, blockId);
   }
 
   getTerminalBlock(batchId: string, taskIndex: number): string | undefined {
-    return this.map.get(batchId)?.terminalBlockIds?.get(taskIndex);
+    return this.map.get(batchId)?.contextBlockIds?.get(taskIndex);
   }
 
   size(): number {
