@@ -86,22 +86,4 @@ describe('LifecycleDispatcher', () => {
 
     expect(out.finalState?.reviewPolicy).toBe('full');
   });
-
-  it('sets attemptBudget from tool category', async () => {
-    const dispatcher = new LifecycleDispatcher();
-
-    const out = await dispatcher.dispatch({
-      route: 'delegate',
-      toolCategory: 'read_only',
-      rawRequest: {},
-      context: {
-        executionContext: {
-          bus: { emit: () => {} },
-          wallClockGuard: { checkOrThrow: () => {} },
-        },
-      },
-    });
-
-    expect(out.finalState?.attemptBudget).toBe(2);
-  });
 });

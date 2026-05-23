@@ -35,8 +35,6 @@ function halt(stage: string, comment: string): StageGate<null> {
 function mkState(over: Partial<LifecycleState> & Record<string, unknown> = {}): LifecycleState {
   return {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'full',
     shutdownInProgress: false,
     route: 'delegate',

@@ -18,8 +18,6 @@ import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-pla
 function mkState(over: Partial<LifecycleState> & Record<string, unknown> = {}): LifecycleState {
   return {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'full',
     shutdownInProgress: false,
     route: 'delegate',

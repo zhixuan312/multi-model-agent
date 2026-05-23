@@ -20,8 +20,6 @@ function noop() {
 function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVerdict?: any; reviewFindings?: any; reviewPolicy?: any; commits?: any[]; reworkApplied?: boolean; reworkError?: string; }): LifecycleState {
   const s: any = {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'none',
     shutdownInProgress: false,
     route: 'delegate',

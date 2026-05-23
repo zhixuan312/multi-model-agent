@@ -15,8 +15,6 @@ function makeTestPlan(stages: StageDefinition<unknown>[]): StageDefinition<unkno
 function makeMinimalState(overrides: Partial<LifecycleState> = {}): LifecycleState {
   return {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'none',
     shutdownInProgress: false,
     gates: {},

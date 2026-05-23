@@ -26,7 +26,7 @@ const SECRET_PATTERNS: RegExp[] = [
 
 function mkState(over: Partial<LifecycleState> & Record<string, unknown> = {}): LifecycleState {
   return {
-    terminal: false, attemptIndex: 0, attemptBudget: 1, reviewPolicy: 'full',
+    terminal: false, reviewPolicy: 'full',
     shutdownInProgress: false, route: 'delegate',
     task: { id: 't1', prompt: 'do', brief: { title: 'T', body: 'b' } },
     ...over,

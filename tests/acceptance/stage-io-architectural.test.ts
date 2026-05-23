@@ -72,8 +72,6 @@ describe('AC-6: composeHandler is pure (same gates → same payload)', () => {
     const { composeHandler } = await import('../../packages/core/src/lifecycle/handlers/baseline-handlers.js');
     const makeState = (): LifecycleState => ({
       terminal: false,
-      attemptIndex: 0,
-      attemptBudget: 1,
       reviewPolicy: 'full',
       shutdownInProgress: false,
       route: 'delegate',
@@ -138,7 +136,7 @@ describe('AC-7 + AC-8: runStagePlan halt containment', () => {
       },
     ];
     const state = {
-      terminal: false, attemptIndex: 0, attemptBudget: 1, reviewPolicy: 'full',
+      terminal: false, reviewPolicy: 'full',
       shutdownInProgress: false, route: 'delegate' as const, gates: {}, halted: false,
     } as unknown as LifecycleState;
     const out = await runStagePlan(fakePlan, state);
@@ -169,7 +167,7 @@ describe('AC-7 + AC-8: runStagePlan halt containment', () => {
       },
     ];
     const state = {
-      terminal: false, attemptIndex: 0, attemptBudget: 1, reviewPolicy: 'full',
+      terminal: false, reviewPolicy: 'full',
       shutdownInProgress: false, route: 'delegate' as const, gates: {}, halted: false,
     } as unknown as LifecycleState;
     const out = await runStagePlan(fakePlan, state);

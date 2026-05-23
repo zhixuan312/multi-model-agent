@@ -1,5 +1,5 @@
 import type { ZodSchema } from 'zod';
-import type { ToolCategory } from '../lifecycle/rework-budget.js';
+import type { ToolCategory } from '../lifecycle/tool-category.js';
 
 export interface SurfaceEntry {
   routeName: string;

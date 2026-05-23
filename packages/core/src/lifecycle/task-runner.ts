@@ -16,7 +16,7 @@ import type { ResolvedAgent } from '../providers/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ActivityTracker } from '../bounded-execution/activity-tracker.js';
-import type { ToolCategory } from './rework-budget.js';
+import type { ToolCategory } from './tool-category.js';
 import { resolveAgent } from '../providers/agent-resolver.js';
 import { releaseTask } from '../providers/provider-factory.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
