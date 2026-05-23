@@ -182,6 +182,11 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     client: input.client ?? '',
     mainModel: input.mainModel ?? null,
     ...(input.contextBlockStore && { contextBlockStore: input.contextBlockStore }),
+    // Thread the BatchRegistry onto the lifecycle ctx so the terminal stage can
+    // register the read-route terminal context block (recordTerminalBlock keys
+    // by batchId/taskIndex). Without this, registerTerminalBlockHandler's guard
+    // returns early and contextBlockId is silently null on read routes.
+    ...(input.batchRegistry && { batchRegistry: input.batchRegistry }),
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
     providers,
