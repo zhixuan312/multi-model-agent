@@ -57,4 +57,9 @@ export const SCENARIOS = [
   { id: 12, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
   { id: 13, route: 'delegate', tier: 'standard', kind: 'write', expectCommitSkip: 'no_diff', emits: 1 },
   { id: 14, route: 'retry', kind: 'assist', emits: 1 },
+  // 4.7.20 universal terminal context block: re-audit the plan passing a prior
+  // read-route task's `contextBlockId` as delta context. Proves the worker-
+  // registered terminal block actually RESOLVES (no ContextBlockNotFoundError)
+  // — the round-trip the unit tests assert, now exercised over real HTTP.
+  { id: 15, route: 'audit', tier: 'complex', kind: 'read', delta: true, emits: 1 },
 ];

@@ -88,8 +88,18 @@ try {
         diagnostics: collectDiagnostics(res.batchId),
         queue, backend: null, // ④ verified run-level after the loop
       });
+      // For the delta scenario, record whether a prior read-route contextBlockId
+      // was actually available to pass — verify() distinguishes "resolved" from
+      // "nothing to resolve".
+      if (spec.delta) rec.deltaBlockIdPassed = !!ctx.readContextBlockId;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
+      // Capture the first read-route terminal contextBlockId so the delta
+      // scenario (id 15) can pass it back and prove resolution over HTTP.
+      const t0cb = envelope.results?.[0]?.contextBlockId;
+      if (!ctx.readContextBlockId && spec.kind === 'read' && !spec.delta && typeof t0cb === 'string' && t0cb) {
+        ctx.readContextBlockId = t0cb;
+      }
       totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
         ?? envelope.costSummary?.totalActualCostUSD ?? 0;
     } catch (err) {

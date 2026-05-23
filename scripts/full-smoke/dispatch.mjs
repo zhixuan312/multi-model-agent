@@ -26,6 +26,9 @@ export function buildRequest(spec, ctx) {
     case 12: return { route: 'delegate', body: { tasks: [ T('Create file src/f.ts with exactly: export const F=6. Only that file. Do not run git.', { filePaths: ['src/f.ts'], reviewPolicy: 'none' }) ] } };
     case 13: return { route: 'delegate', body: { tasks: [ T('Report what src/math.ts exports. Do NOT create or modify any file. Do not run git.', { filePaths: ['src/math.ts'] }) ] } };
     case 14: return { route: 'retry', body: { batchId: ctx.seedBatchId, taskIndices: [ctx.seedFailIdx ?? 0] } };
+    case 15: return { route: 'audit', body: { subtype: 'plan', filePaths: [`${cwd}/plan.md`],
+               // delta context: a prior read-route task's terminal contextBlockId.
+               contextBlockIds: ctx.readContextBlockId ? [ctx.readContextBlockId] : [] } };
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }
