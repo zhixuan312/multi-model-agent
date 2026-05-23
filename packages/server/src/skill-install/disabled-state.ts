@@ -19,11 +19,15 @@ import { ALL_CLIENTS, manifestDir, type Client } from './manifest.js';
 
 const DISABLED_NAME = 'skills-disabled.json';
 
+// Derive the client enum from ALL_CLIENTS so a new client never silently
+// fails sentinel validation. z.enum needs a non-empty literal tuple.
+const clientEnum = z.enum(ALL_CLIENTS as unknown as [Client, ...Client[]]);
+
 const disabledStateSchema = z.object({
   version: z.literal(1),
   disabledAt: z.number().int().nonnegative(),
   cliVersion: z.string(),
-  targets: z.array(z.enum(['claude-code', 'gemini', 'codex', 'cursor'])),
+  targets: z.array(clientEnum),
 });
 
 export type DisabledState = z.infer<typeof disabledStateSchema>;

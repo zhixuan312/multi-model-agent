@@ -121,7 +121,9 @@ mmagent disable        # removes the skills from every detected client; your AI 
 mmagent enable         # restores them
 ```
 
-`disable` is **sticky**: it records a sentinel at `~/.multi-model/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert. The daemon itself is untouched — disabling just removes the skill adapters the client reads, which is the only path MMA is ever invoked through.
+`disable` is **sticky**: it records a sentinel at `~/.multi-model/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
+
+A bare `mmagent disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
 
 ## Skills
 

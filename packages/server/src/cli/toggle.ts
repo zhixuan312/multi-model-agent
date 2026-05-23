@@ -180,12 +180,13 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
   }
 
   const wasDisabled = disabledTargets(homeDir);
+  const bare = parsed.targets === null && !parsed.allTargets;
 
   // Clear the sentinel BEFORE syncing — otherwise sync-skills would see the
   // targets as still-disabled and skip them. On --dry-run, leave it intact.
   if (!parsed.dryRun) {
     // No explicit --target means "re-enable everything", so clear the whole set.
-    const toClear = parsed.targets === null && !parsed.allTargets ? [...ALL_CLIENTS] : targets;
+    const toClear = bare ? [...ALL_CLIENTS] : targets;
     clearDisabledTargets(homeDir, toClear);
   }
 
@@ -193,10 +194,21 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
     stdout('MMA skills were not disabled; syncing to ensure they are installed.\n');
   }
 
-  // Reinstall via the canonical upsert. Pass the same argv so --target /
-  // --dry-run / --json flow straight through to sync-skills' own parser.
+  // Reinstall via the canonical upsert. For a bare `enable`, sync-skills would
+  // otherwise touch only auto-detected clients (claude-code / codex) and skip
+  // a previously `disable --target=cursor` — un-pinning it without restoring
+  // it. So when no explicit target is given, sync the union of detected
+  // clients and whatever was pinned off, making `enable` actually restore what
+  // `disable` removed. Explicit --target / --all-targets pass straight through.
+  let syncArgv = argv;
+  if (bare && wasDisabled.length > 0) {
+    const detected = resolveTargets(null, false, homeDir);
+    const union = ALL_CLIENTS.filter((c) => detected.includes(c) || wasDisabled.includes(c));
+    syncArgv = [...argv, ...union.map((c) => `--target=${c}`)];
+  }
+
   return runSyncSkills({
-    argv,
+    argv: syncArgv,
     homeDir,
     skillsRoot: deps.skillsRoot,
     stdout: deps.stdout,

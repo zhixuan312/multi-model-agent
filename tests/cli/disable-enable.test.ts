@@ -215,6 +215,25 @@ describe('enable', () => {
     expect(existsSync(disabledStatePath(home))).toBe(false);
   });
 
+  it('bare enable restores a client that was scoped-disabled, not just un-pins it', async () => {
+    await runSyncSkills({ argv: [], homeDir: home, skillsRoot });
+    expect(allSkillsPresent(home)).toBe(true);
+
+    // Scope-disable a single auto-detected client.
+    await runDisable({ argv: ['--target=codex'], homeDir: home, stdout: () => true });
+    for (const s of SUPPORTED_SKILLS) {
+      expect(existsSync(codexSkillPath(home, s)), `codex/${s} off`).toBe(false);
+      expect(existsSync(claudeSkillPath(home, s)), `claude/${s} on`).toBe(true);
+    }
+    expect(readDisabledState(home)!.targets).toEqual(['codex']);
+
+    // Bare enable must reinstall codex AND clear the sentinel entirely.
+    const code = await runEnable({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
+    expect(code).toBe(0);
+    expect(allSkillsPresent(home)).toBe(true);
+    expect(existsSync(disabledStatePath(home))).toBe(false);
+  });
+
   it('is a plain sync when nothing was disabled', async () => {
     const out = captureOutput();
     const code = await runEnable({
