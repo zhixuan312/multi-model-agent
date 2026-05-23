@@ -125,7 +125,7 @@ export type ComposePayload = {
 };
 
 export type TerminalPayload = {
-  terminalBlockId: string | null;
+  contextBlockId: string | null;
   telemetryFlushed: boolean;
   batchRegistryPersisted: boolean;
   taskTerminalEmitted: boolean;

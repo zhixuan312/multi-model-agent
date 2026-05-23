@@ -146,7 +146,7 @@ export interface LifecycleState {
   // Terminal-handler idempotency slots. Each terminal handler skips when
   // its slot is set, so re-runs (e.g. retry) and inter-handler ordering
   // remain idempotent without duplicate work.
-  terminalBlockId?: string;
+  contextBlockId?: string;
   taskTerminalEmitted?: boolean;
   batchRegistryPersisted?: boolean;
   taskCompletedRecorded?: boolean;
