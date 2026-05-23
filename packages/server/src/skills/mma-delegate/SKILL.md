@@ -155,7 +155,7 @@ Each task result is the per-task wire object (`ComposePayload`):
 | `filesChanged` | File paths modified (empty for read-only routes). |
 | `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
 
-`blockId` is not used for the delegate route — it is always `null`. To chain results, use the `terminalBlockId` from the batch's `contextBlockIds` field instead.
+`blockId` is not used for the delegate route — it is always `null`, as is `contextBlockId` (write routes register no terminal block). To carry inputs forward, register them explicitly via `mma-context-blocks` and pass `contextBlockIds`.
 
 **The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
 - `advance` — stage ran and produced its payload
@@ -201,13 +201,7 @@ The reviewer sees the full diff with the original prompt as context. Reading inl
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report (headline, structured report, per-file diffs, and findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (`commitSha` + changed files). The per-task result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
-**Use cases:**
-- Pass a prior task's report to a follow-up task via `contextBlockIds`
-- Chain delegate → review → verify without re-inlining findings
-- Accumulate round-N findings for round N+1 in iterative workflows
-
-The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
 @include _shared/error-handling.md
