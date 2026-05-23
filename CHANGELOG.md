@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.19] - 2026-05-23
+
+Behavior-neutral dead-code removal. The attempt/rework budget machinery (`ATTEMPT_BUDGETS` plus the `attemptBudget` / `attemptIndex` fields on `LifecycleState`) was set-but-never-read state: the v5 lifecycle bounds its review→rework loop via the linear `STAGE_PLAN` walk, not a budget counter, so removing it changes nothing observable. Telemetry (`SCHEMA_VERSION` stays 5), stage names/order, routes, tools, and agent-facing output are identical before and after. Verified on a clean `npm run build` + full Vitest run (2081/2081) and a full-pipeline real-dispatch smoke (`npm run smoke:full`) that passed 15/15, exercising the review→rework path end-to-end.
+
+### Removed
+
+- **lifecycle (core).** Deleted the `ATTEMPT_BUDGETS` constant and the dead `attemptBudget` / `attemptIndex` fields from `LifecycleState`, along with their write sites in the dispatcher and the stage-progression simulator. Loop termination is unchanged — it comes from the finite `STAGE_PLAN`, never from these counters.
+
+### Changed
+
+- **lifecycle (core).** Renamed `rework-budget.ts` → `tool-category.ts`; the file now holds only the still-used `ToolCategory` type, and its five importers were repointed.
+
 ## [4.7.18] - 2026-05-23
 
 Adds a first-class off switch for MMA: `mmagent disable` / `mmagent enable`. Disabling MMA previously meant manually deleting skill files — which the `npm install` postinstall hook silently undid on the next upgrade. This release makes turning MMA off a supported, upgrade-surviving operation.
@@ -780,7 +792,9 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.17...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...HEAD
+[4.7.19]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.18...v4.7.19
+[4.7.18]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.17...v4.7.18
 [4.7.17]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.16...v4.7.17
 [4.7.16]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.15...v4.7.16
 [4.7.15]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.14...v4.7.15
