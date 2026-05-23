@@ -11,7 +11,7 @@ export interface BatchHandlerDeps {
 }
 
 // envelopeToPublicResult converts a TaskEnvelope to the public-safe per-task result shape.
-function envelopeToPublicResult(env: TaskEnvelope) {
+export function envelopeToPublicResult(env: TaskEnvelope) {
   // 4.7.4+ standardization: findings/outcome summary fields live ONLY at
   // the top level of the per-task result. Per-stage rows carry stage
   // mechanics (durationMs, costUSD, verdict, etc.) but NOT findings
@@ -72,6 +72,8 @@ function envelopeToPublicResult(env: TaskEnvelope) {
     // expected. recordValidationWarning() on the envelope pushes here; without
     // this projection the data was invisible to /batch callers.
     validationWarnings: env.validationWarnings,
+    // terminal context block id for read routes (null on write routes / failure)
+    contextBlockId: env.contextBlockId,
   };
 }
 
