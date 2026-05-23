@@ -34,6 +34,7 @@ import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { runInfo } from './info.js';
 import { runSyncSkills } from './sync-skills.js';
+import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 
@@ -178,6 +179,8 @@ Commands:
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   sync-skills      Install + update + reconcile all shipped skills (single upsert command, replaces 4.0.x install-skill / update-skills)
+  disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
+  enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
 
@@ -327,6 +330,23 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         ifExists: opts['if-exists'] === true,
         silent: opts['silent'] === true,
         bestEffort: opts['best-effort'] === true,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'enable':
+    case 'disable': {
+      // Forward argv tokens after the subcommand name so toggle's own minimist
+      // sees --target=, --all-targets, --dry-run, --json.
+      const subCmdIdx = argv.indexOf(subcommand);
+      const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
+      const run = subcommand === 'disable' ? runDisable : runEnable;
+      const code = await run({
+        argv: subArgv,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        cliVersion: readServerVersion(),
         stdout: deps.stdout,
         stderr: deps.stderr,
       });

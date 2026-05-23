@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.18] - 2026-05-23
+
+Adds a first-class off switch for MMA: `mmagent disable` / `mmagent enable`. Disabling MMA previously meant manually deleting skill files — which the `npm install` postinstall hook silently undid on the next upgrade. This release makes turning MMA off a supported, upgrade-surviving operation.
+
+### Added
+
+- **`mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]`** — removes every shipped skill from the resolved clients, drops their manifest entries, and writes a sticky sentinel at `~/.multi-model/skills-disabled.json`.
+- **`mmagent enable [...]`** — clears the sentinel and reinstalls via the existing `sync-skills` upsert. A bare `enable` restores every client that was turned off, including ones scoped with `--target` (e.g. a prior `disable --target=cursor`).
+- **`sync-skills` honors the sentinel** — the `npm install` postinstall path no longer re-enables skills the user deliberately removed. The sentinel is target-aware, so `disable --target=cursor` still lets claude-code sync normally.
+
+### Notes
+
+- The daemon is untouched — disabling only removes the skill adapters the client reads, the sole path MMA is invoked through (per DIRECTION.md).
+- Cursor skills are project-local: `disable --target=cursor` removes them from the current directory, but the off-pin is global. See the README "Disabling / re-enabling" section.
+
 ## [4.7.17] - 2026-05-22
 
 Behavior-neutral cleanup baseline. A verified, iterative dead-code + duplication sweep across `packages/core` and `packages/server` to consolidate the v4 codebase into one-implementation-per-concept shape before the next features land. **Nothing observable changes** — telemetry wire data (`SCHEMA_VERSION` stays 5, emitted events unchanged), logs, stage names/order, tools, routes, and agent-facing output are all identical before and after. Each removal was confirmed zero-reference repo-wide (core + server + tests) and gated on a clean `npm run build --workspaces` + full Vitest run; the full-pipeline smoke (`npm run smoke:full --wait-flush`) passed 15/15 with the backend DB landing 18/18 on the built artifact.

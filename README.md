@@ -112,6 +112,19 @@ mmagent sync-skills                 # reconcile installed skills with the new bu
 
 A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve` (a new token is regenerated on boot).
 
+## Disabling / re-enabling
+
+To turn MMA off without uninstalling the package — e.g. for a sensitive repo you don't want delegated to external models, or to compare behaviour with and without it:
+
+```bash
+mmagent disable        # removes the skills from every detected client; your AI stops routing to MMA
+mmagent enable         # restores them
+```
+
+`disable` is **sticky**: it records a sentinel at `~/.multi-model/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
+
+A bare `mmagent disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
+
 ## Skills
 
 Skills are the surface your AI client sees. `mmagent sync-skills` writes the table below into the client's skill index and keeps it reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
@@ -261,6 +274,8 @@ mmagent status [--json]                          # health + stats from a running
 mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
 mmagent print-token                              # print the current auth token
 mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
+mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
+mmagent enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
 mmagent telemetry status                         # show consent state + source (env / config / default)
 mmagent telemetry enable                         # opt in (writes ~/.multi-model/config.json)
 mmagent telemetry disable                       # opt out + delete local queue
