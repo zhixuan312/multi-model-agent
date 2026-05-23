@@ -7,9 +7,8 @@
 import { runStagePlan } from './lifecycle-driver.js';
 import { STAGE_PLAN } from './stage-plan-builder.js';
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ToolCategory } from './rework-budget.js';
+import type { ToolCategory } from './tool-category.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
-import { ATTEMPT_BUDGETS } from './rework-budget.js';
 import type { ComposePayload } from './stage-io.js';
 
 export interface DispatchInput {
@@ -78,8 +77,6 @@ export class LifecycleDispatcher {
   private initialState(input: DispatchInput): LifecycleState {
     return {
       terminal: false,
-      attemptIndex: 0,
-      attemptBudget: ATTEMPT_BUDGETS[input.toolCategory],
       reviewPolicy: (input.rawRequest as { reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none' })?.reviewPolicy ?? 'full',
       shutdownInProgress: false,
       route: input.route,

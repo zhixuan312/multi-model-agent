@@ -20,8 +20,6 @@ describe('STAGE_PLAN integrity (v5)', () => {
   it('shouldRun is deterministic on a fixed state', () => {
     const state: LifecycleState = {
       terminal: false,
-      attemptIndex: 0,
-      attemptBudget: 7,
       reviewPolicy: 'full',
       shutdownInProgress: false,
       route: 'delegate',

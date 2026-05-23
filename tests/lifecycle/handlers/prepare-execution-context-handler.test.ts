@@ -8,8 +8,6 @@ import type { TaskSpec } from '../../../packages/core/src/types.js';
 function makeState(overrides: Partial<LifecycleState> = {}): LifecycleState {
   return {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'full',
     shutdownInProgress: false,
     ...overrides,

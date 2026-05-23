@@ -1,4 +1,4 @@
-import type { ToolCategory } from './rework-budget.js';
+import type { ToolCategory } from './tool-category.js';
 import type { ProjectContext } from '../stores/project-context-registry.js';
 
 // `StagePlan` / `StageRow` deleted in v5 — the canonical plan is the flat
@@ -38,8 +38,6 @@ export interface LifecycleState {
   /** v5: halted flag set when any stage returns outcome:'halt'. Driver-only. */
   halted?: boolean;
   workerStatus?: string;
-  attemptIndex: number;
-  attemptBudget: number;
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
   shutdownInProgress: boolean;
   route?: string;
@@ -75,8 +73,8 @@ export interface LifecycleState {
 
   // Per-chain attempt counters for telemetry. Populated by review-round
   // handlers when they call pickEscalation. Quality starts at 1 because
-  // attemptIndex 0 has impl: null in the quality loop and pickEscalation
-  // would throw.
+  // the first attempt (index 0) has impl: null in the quality loop and
+  // pickEscalation would throw.
   specChainAttemptIndex?: number;
   qualityChainAttemptIndex?: number;
 

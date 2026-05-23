@@ -33,8 +33,6 @@ function withReviewGate(s: any) {
 function mkState(over: Partial<LifecycleState> & { route?: string; lastRunResult?: unknown } = {}): LifecycleState {
   return withReviewGate({
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'full',
     shutdownInProgress: false,
     route: 'delegate',

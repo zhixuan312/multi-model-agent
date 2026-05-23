@@ -8,8 +8,6 @@ import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-pla
 function makeAnnotatorState(overrides: Partial<LifecycleState> = {}): LifecycleState {
   const baseState = {
     terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
     reviewPolicy: 'full',
     shutdownInProgress: false,
     route: 'delegate',

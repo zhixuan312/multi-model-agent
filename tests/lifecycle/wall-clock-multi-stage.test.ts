@@ -82,8 +82,6 @@ describe('A10.4 wall-clock guard end-to-end through lifecycle driver', () => {
     const state = {
       terminal: false,
       reviewPolicy: 'full',
-      attemptIndex: 0,
-      attemptBudget: 1,
       shutdownInProgress: false,
       route: 'delegate',
       executionContext: { wallClockGuard: guard, bus: { emit: () => {} } },
@@ -97,8 +95,6 @@ describe('A10.4 wall-clock guard end-to-end through lifecycle driver', () => {
     const state2 = {
       terminal: false,
       reviewPolicy: 'full',
-      attemptIndex: 0,
-      attemptBudget: 1,
       shutdownInProgress: false,
       route: 'delegate',
       executionContext: { wallClockGuard: guard, bus: { emit: () => {} } },
