@@ -18,3 +18,4 @@
 | 0016 | 2026-05-24 | adopted | Track file activity only from provider-proven events | observability, headline, honesty, file-tracking, no-heuristics, provider-events |
 | 0017 | 2026-05-24 | adopted | Treat disabled network tests as missing critical-path coverage | testing, ssrf, network-gated, ci, regression, deterministic-tests, web-fetch, dns |
 | 0018 | 2026-05-24 | adopted | Confine by default, canonicalize paths, and fail before allocation | security, sandbox, cwd-only, path-traversal, realpath, resource-limits, symlinks, loopback, dns-rebinding |
+| 0019 | 2026-05-24 | adopted | Treat runtime imports as shipping dependencies and validate from a clean published artifact | packaging, dependencies, peer-deps, npm, publishing, clean-install, hoisting, npx, bins |
