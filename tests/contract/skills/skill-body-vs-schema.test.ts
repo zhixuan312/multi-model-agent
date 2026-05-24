@@ -17,6 +17,7 @@ import { inputSchema as registerContextBlockSchema } from '@zhixuan92/multi-mode
 import { inputSchema as retrySchema } from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
 import { inputSchema as researchSchema } from '@zhixuan92/multi-model-agent-core/tools/research/schema';
 import { inputSchema as journalRecordSchema } from '@zhixuan92/multi-model-agent-core/tools/journal/record/schema';
+import { inputSchema as journalRecallSchema } from '@zhixuan92/multi-model-agent-core/tools/journal/recall/schema';
 
 const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/audit': auditSchema,
@@ -29,6 +30,7 @@ const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/retry': retrySchema,
   '/research': researchSchema,
   '/journal': journalRecordSchema,
+  '/journal/recall': journalRecallSchema,
 };
 
 /**
