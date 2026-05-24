@@ -33,11 +33,13 @@ describe('contract: POST /journal handler-level', () => {
     const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learning: 'short' }) });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toBe('invalid_request');
+    expect(body.error.code).toBe('invalid_request');
   });
 
   it('3. extra bogus field → 400 (strict schema)', async () => {
     const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learning: 'x'.repeat(25), bogus: 1 }) });
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('invalid_request');
   });
 });
