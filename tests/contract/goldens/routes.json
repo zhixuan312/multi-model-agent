@@ -12,6 +12,7 @@
   "POST /execute-plan",
   "POST /investigate",
   "POST /journal",
+  "POST /journal/recall",
   "POST /research",
   "POST /retry",
   "POST /review"

@@ -43,6 +43,13 @@
       "responseShapeName": "BatchResponse"
     },
     {
+      "routeName": "journal-recall",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
       "routeName": "register_context_block",
       "toolCategory": "assist",
       "agentTypeDefault": "standard",
@@ -96,7 +103,8 @@
         "investigate",
         "explore",
         "research",
-        "journal"
+        "journal",
+        "journal-recall"
       ],
       "runOnHalt": false
     },
@@ -142,7 +150,8 @@
         "investigate",
         "explore",
         "research",
-        "journal"
+        "journal",
+        "journal-recall"
       ],
       "runOnHalt": false
     },
