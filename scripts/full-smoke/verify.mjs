@@ -99,10 +99,19 @@ export function verify(rec) {
     // actually carry evidence, AND a sources table showing ≥1 source was
     // used (proves the evidence pack was non-empty, i.e. adapters were healthy).
     if (e.route === 'research') {
-      const withEvidence = Array.isArray(findings) && findings.length > 0
-        && findings.some((f) => typeof f?.evidence === 'string' && f.evidence.trim().length > 0);
-      out.push(C('research-evidence', withEvidence ? 'PASS' : 'FAIL',
-        `findings=${findings.length}; ${findings.filter((f) => f?.evidence?.trim()).length} carry evidence`));
+      // Empty findings is a LEGITIMATE outcome per the mma-research contract
+      // (empty ≠ failure) — synthesis is content-dependent and can be low-yield
+      // on a given run even when the route worked (status done, sources fetched).
+      // So research-evidence only hard-FAILs the structural bug: findings that
+      // EXIST but carry no evidence (the fabricated/empty-evidence mode). Zero
+      // findings is a WARN — visible, promotable under --strict. Adapter health
+      // is proven independently by research-sources below.
+      const withEvidence = findings.some((f) => typeof f?.evidence === 'string' && f.evidence.trim().length > 0);
+      const evidenceVerdict = findings.length === 0 ? 'WARN' : (withEvidence ? 'PASS' : 'FAIL');
+      out.push(C('research-evidence', evidenceVerdict,
+        findings.length === 0
+          ? 'worker synthesized 0 findings (empty ≠ failure per contract; sources were fetched)'
+          : `findings=${findings.length}; ${findings.filter((f) => f?.evidence?.trim()).length} carry evidence`));
 
       const sourcesUsed = sr.sourcesUsed ?? task0.sourcesUsed ?? [];
       const used = Array.isArray(sourcesUsed) ? sourcesUsed.filter((s) => s?.used === true) : [];
