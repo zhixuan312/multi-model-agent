@@ -4,3 +4,4 @@
 | 0002 | 2026-05-24 | adopted | Enforce no backward compatibility in greenfield development | development-mode, no-backward-compat, cleanup, dead-code, one-implementation-per-concept |
 | 0003 | 2026-05-24 | adopted | Close caller-facing enums at the HTTP boundary | enums, zod, validation, api-contract, drift-detection |
 | 0004 | 2026-05-24 | adopted | Centralize cost accounting in one pure pricing function | cost, pricing, tokens, telemetry, pure-function, normalization |
+| 0005 | 2026-05-24 | adopted | Preserve unknown values as null in telemetry | telemetry, honest-null, cost-attribution, data-integrity, pricing |
