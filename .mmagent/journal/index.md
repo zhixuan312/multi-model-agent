@@ -11,4 +11,5 @@
 | 0009 | 2026-05-24 | adopted | Enforce reviewer and implementer separation by tier | code-review, cross-tier, reviewer-separation, tiers, quality |
 | 0010 | 2026-05-24 | adopted | Gate reviewer verdict overrides on severity | code-review, reviewer-verdict, severity, fail-safe, parsing |
 | 0011 | 2026-05-24 | adopted | Share one structured-output contract and surface parser drops | findings-format, structured-output, parsing, prompts, observability, validation-warnings, read-routes |
-| 0012 | 2026-05-24 | adopted | Serialize same-repo write dispatch to protect shared worktrees | concurrency, dispatch, same-repo, serialization, data-loss, git, write-routes |
+| 0012 | 2026-05-24 | superseded | Serialize same-repo write dispatch to protect shared worktrees | concurrency, dispatch, same-repo, serialization, data-loss, git, write-routes |
+| 0013 | 2026-05-24 | adopted | Prefer same-repo parallel dispatch with scoped git commits | concurrency, dispatch, parallel, commit-mutex, git-attribution, pathspec, same-repo, git |

@@ -1,7 +1,7 @@
 ---
 id: "0012"
 title: "Serialize same-repo write dispatch to protect shared worktrees"
-status: "adopted"
+status: "superseded"
 tags:
   - concurrency
   - dispatch
@@ -18,7 +18,7 @@ links:
     target: "0008"
   - type: "relates"
     target: "0011"
-supersededBy: null
+supersededBy: "0013"
 ---
 
 ## Context
