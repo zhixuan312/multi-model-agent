@@ -28,7 +28,7 @@ import { applyAnnotatePreconditions } from '../annotate-parser.js';
 import { annotatePromptWrite, annotatePromptRead } from '../annotate-prompts.js';
 import type { AnnotatePayload, StageGate } from '../stage-io.js';
 
-const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
+const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research', 'journal-recall']);
 
 export interface StructuredReport {
   summary: string;

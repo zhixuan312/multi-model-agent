@@ -43,6 +43,7 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   debug:                    { category: 'read_only',          reviewPolicy: 'none' },
   investigate:              { category: 'read_only',          reviewPolicy: 'none' },
   research:                 { category: 'read_only',          reviewPolicy: 'none' },
+  'journal-recall':         { category: 'read_only',          reviewPolicy: 'none' },
   'register-context-block': { category: 'assist',             reviewPolicy: 'none' },
 };
 

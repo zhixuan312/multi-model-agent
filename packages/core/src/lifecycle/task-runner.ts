@@ -80,7 +80,7 @@ export interface DispatchTaskInput {
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
-  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'research') return 'read_only';
+  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'research' || route === 'journal-recall') return 'read_only';
   if (route === 'register-context-block') return 'assist';
   return 'artifact_producing';
 }
