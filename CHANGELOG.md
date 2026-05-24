@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-05-24
+
+Adds a project-scoped, cross-agent **learnings journal** (the Karpathy "WikiLLM" pattern) plus a deterministic-commit / diff-grounded-review hardening of the write lifecycle. Two new routes — `journal-record` (write) and `journal-recall` (read) — let any agent durably record what was learned and recall it later as a connected graph of markdown ADR nodes under `.mmagent/journal/`. `SCHEMA_VERSION` stays 5; the only wire change is two additive `route` enum values, disclosed in PRIVACY.md in lockstep. Build green, full Vitest suite passing, and a 16-scenario live full-pipeline smoke clean (0 hard-fails).
+
+### Added
+
+- **Journal routes (core + server).** `journal-record` (write route) integrates ONE learning into the existing journal graph — choosing create / refine / supersede / merge with typed edges (`supersedes`, `refines`, `relates`, `depends-on`, `contradicts`, `parent`) — and `journal-recall` (read route) answers a natural-language query against the graph. Nodes are markdown files with YAML frontmatter (id, title, status, tags, date, links, supersededBy) plus `## Context` / `## Consequences`, stored under `.mmagent/journal/` with an `index.md` catalog and append-only `log.md`. Wired into every closed route set (Route union, wire-schema enum, stage-io, tier policy, completion derivation, read-route criteria).
+- **Journal skills (server).** `mma-journal-record` and `mma-journal-recall` ship as installable skills — 13 skills now install (overview + 12 `mma-*`).
+- **Journal-fit cross-agent review (core).** `journal-record` runs a dedicated node-validation reviewer (`journal-review-prompt.ts`) — checking frontmatter, edge vocabulary, schema, `.mmagent/journal/` confinement, and dedup integrity — instead of the code-oriented spec/quality reviewers, reusing the shared verdict/findings output format. Fixes the spurious `changes_required` + zero-findings → `failed` outcome a code reviewer produced on a valid markdown node.
+- **Deterministic commit-message composer (core).** Write-route commit subjects are composed deterministically from the task descriptor (Fix A), producing clean conventional subjects with no chain-of-thought or orientation-prompt leakage.
+
+### Changed
+
+- **Diff-grounded first-pass review (core).** The reviewer receives the actual cumulative diff (truncated to a byte cap) as ground truth, with guardrails against claiming files are missing/untracked (Fix B).
+- **Completion reconciled against objective signals (core).** Worker self-assessment is reconciled with the commit-gate payload kind and the review verdict before sealing terminal status, extending the 4.7.8 deterministic completion gate (Fix C).
+- **Research pipeline (core).** `/research` now surfaces the sources-used table on the per-task report, throttles Brave requests, and removes the `rss` / `web_fetch` adapters — the adapter surface is now `arxiv`, `semantic_scholar`, `github_repo`, `github_code`, `brave`.
+
+### Notes
+
+- **`SCHEMA_VERSION` stays 5.** The only wire-schema change is two additive `route` enum values (`journal-record`, `journal-recall`) plus their entries in the reviewed/quality-only route sets. PRIVACY.md updated in lockstep to disclose the two new route names. No new telemetry field; no new kind of data collected.
+
 ## [4.7.20] - 2026-05-24
 
 Read-route workers now register their terminal report as a reusable context block, surfaced on each `/batch` per-task result as `contextBlockId`. This lets the calling agent run delta follow-ups (e.g. "round 1 found these N things — are they resolved?") by passing a prior result's `contextBlockId` straight into the next call's `contextBlockIds`, with no manual block registration. Write routes return `contextBlockId: null` — their durable record is the commit, not a prose block. This finishes the v4-phase-3 "universal terminal block registration" design that was added but never wired. Verified on a clean `npm run build` + full Vitest run (2094/2094) and a live full-pipeline smoke confirming non-null `contextBlockId` on every read route and `null` on every write route. `SCHEMA_VERSION` stays 5 — the telemetry wire schema is unchanged; the new field rides only on the `/batch` per-task response.
@@ -810,7 +831,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...HEAD
+[4.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...v4.8.0
 [4.7.20]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...v4.7.20
 [4.7.19]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.18...v4.7.19
 [4.7.18]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.17...v4.7.18
