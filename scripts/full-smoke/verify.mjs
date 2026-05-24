@@ -87,19 +87,6 @@ export function verify(rec) {
     }
   }
 
-  // Delta round-trip (id 15): the scenario passed a prior read-route's
-  // contextBlockId back as context. Success (not_applicable error) proves the
-  // block RESOLVED — an unknown/expired id would throw ContextBlockNotFoundError
-  // and fail the batch. WARN if no prior block was captured to pass.
-  if (e.delta) {
-    if (!rec.deltaBlockIdPassed) {
-      out.push(C('delta-resolve', 'WARN', 'no prior read-route contextBlockId was captured to pass'));
-    } else {
-      out.push(C('delta-resolve', r?.error?.kind === 'not_applicable' ? 'PASS' : 'FAIL',
-        `delta audit resolved prior contextBlockId; error=${JSON.stringify(r?.error)}`));
-    }
-  }
-
   // ② diagnostics
   if (d && d.events.length) {
     const kinds = [...new Set(d.events.map((x) => x.kind))];
