@@ -20,3 +20,4 @@
 | 0018 | 2026-05-24 | adopted | Confine by default, canonicalize paths, and fail before allocation | security, sandbox, cwd-only, path-traversal, realpath, resource-limits, symlinks, loopback, dns-rebinding |
 | 0019 | 2026-05-24 | adopted | Treat runtime imports as shipping dependencies and validate from a clean published artifact | packaging, dependencies, peer-deps, npm, publishing, clean-install, hoisting, npx, bins |
 | 0020 | 2026-05-24 | adopted | Route all lifecycle control through the single invocation surface | architecture, product, invocation-path, mcp, skills, disable, adapters, daemon |
+| 0021 | 2026-05-24 | adopted | Bound delegation spend with per-task maxCostUSD ceilings | cost, budgets, max-cost-usd, cost-caps, guards, lifecycle, delegation-spend |

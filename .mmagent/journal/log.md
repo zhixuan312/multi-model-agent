@@ -20,3 +20,4 @@
 2026-05-24T21:50:20+08:00  refine  0001  Derive completion from objective lifecycle signals
 2026-05-24T00:00:00+08:00  create  0019  Treat runtime imports as shipping dependencies and validate from a clean published artifact
 2026-05-24T21:54:27+08:00  create  0020  Route all lifecycle control through the single invocation surface
+2026-05-24T00:00:00+08:00  create  0021  Bound delegation spend with per-task maxCostUSD ceilings
