@@ -2,6 +2,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ReviewPayload, Finding } from '../stage-io.js';
 import { specReviewPrompt }    from './spec-review-prompt.js';
 import { qualityReviewPrompt } from './quality-review-prompt.js';
+import { journalReviewPrompt } from './journal-review-prompt.js';
 import { parseReviewReport }   from './parse-review-report.js';
 import { invertedReviewerTier } from './tier-policy.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
@@ -91,6 +92,20 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     ?? 'standard';
   const resolvedReviewerTier: AgentType = invertedReviewerTier(implementerTier);
 
+  // journal-record produces markdown ADR nodes, not code — a single
+  // node-validation review (frontmatter/edges/schema/confinement/dedup)
+  // replaces the code-oriented spec+quality pair, which mis-fits markdown.
+  if (state.route === 'journal-record') {
+    const r = await runReviewerWithRetries(state, journalReviewPrompt(context), 'quality', implementerTier);
+    subResults.push({
+      name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
+      model: r.model,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+      cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
+      turnsUsed: r.turnsUsed,
+      turn: r.turn,
+    });
+  } else {
   if (runSpec) {
     const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec', implementerTier);
     subResults.push({
@@ -112,6 +127,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       turnsUsed: r.turnsUsed,
       turn: r.turn,
     });
+  }
   }
 
   const succeeded = subResults.filter(s => s.result.verdict).map(s => s.name);

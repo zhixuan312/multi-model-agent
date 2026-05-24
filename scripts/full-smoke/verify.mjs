@@ -63,6 +63,21 @@ export function verify(rec) {
       }
     }
   }
+  // Fix A (4.8.0): commit subject is clean conventional (`type(scope): …`),
+  // NOT a chain-of-thought leak or prompt-orientation boilerplate.
+  if (e.kind === 'write' && !e.expectFail && SHA40.test(sr.commitSha ?? '') && typeof sr.commitMessage === 'string') {
+    const subj = sr.commitMessage.split('\n')[0];
+    const conventional = /^(feat|fix|chore|refactor|test|docs|chore)(\([^)]+\))?: \S/.test(subj);
+    const leak = /(i'?ll\b|i will\b|let me\b|looking at\b|you maintain\b|your job\b|i need to\b)/i.test(subj);
+    out.push(C('commit-msg-format', conventional && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
+  }
+  // Fix C (4.8.0): a successful write task reaches a done terminal status —
+  // not a spurious `failed` (parse-miss reconciliation / review fit).
+  if (e.kind === 'write' && !e.expectFail) {
+    const st = task0.status;
+    out.push(C('terminal-status', (st === 'done' || st === 'done_with_concerns') ? 'PASS' : 'FAIL', `status=${st}`));
+  }
+
   if (e.kind === 'read') {
     const findings = sr.findings ?? task0.findings ?? [];
     out.push(C('findings', Array.isArray(findings) ? 'PASS' : 'FAIL', `n=${findings.length}`));
