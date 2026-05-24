@@ -148,6 +148,10 @@
       "types": "./dist/tools/journal/record/tool-config.d.ts",
       "import": "./dist/tools/journal/record/tool-config.js"
     },
+    "./tools/journal/recall/tool-config": {
+      "types": "./dist/tools/journal/recall/tool-config.d.ts",
+      "import": "./dist/tools/journal/recall/tool-config.js"
+    },
     "./tools/register-context-block/tool-config": {
       "types": "./dist/tools/register-context-block/tool-config.d.ts",
       "import": "./dist/tools/register-context-block/tool-config.js"
@@ -175,6 +179,10 @@
     "./tools/journal/record/schema": {
       "types": "./dist/tools/journal/record/schema.d.ts",
       "import": "./dist/tools/journal/record/schema.js"
+    },
+    "./tools/journal/recall/schema": {
+      "types": "./dist/tools/journal/recall/schema.d.ts",
+      "import": "./dist/tools/journal/recall/schema.js"
     },
     "./tools/research/schema": {
       "types": "./dist/tools/research/schema.d.ts",

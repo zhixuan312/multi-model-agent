@@ -14,6 +14,7 @@ import { registerInvestigate } from '../tools/investigate/tool-config.js';
 import { registerResearch } from '../tools/research/tool-config.js';
 import { registerContextBlock } from '../tools/register-context-block/tool-config.js';
 import { registerJournalRecord } from '../tools/journal/record/tool-config.js';
+import { registerJournalRecall } from '../tools/journal/recall/tool-config.js';
 
 export function registerAllTools(registry: ToolSurfaceRegistry): void {
   registerDelegate(registry);
@@ -26,6 +27,7 @@ export function registerAllTools(registry: ToolSurfaceRegistry): void {
   registerResearch(registry);
   registerContextBlock(registry);
   registerJournalRecord(registry);
+  registerJournalRecall(registry);
 }
 
 export function buildToolSurfaceRegistry(): ToolSurfaceRegistry {
