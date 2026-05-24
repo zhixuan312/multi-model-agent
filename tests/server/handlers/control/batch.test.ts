@@ -375,7 +375,7 @@ describe('GET /batch/:batchId', () => {
       // from the commit gate); the response reads it from the snapshot.
       env.seal({
         status: 'done', stopReason: 'normal', realFilesChanged: [],
-        commitSha: sha, commitMessage: 'implement: add x', commitSkipReason: null,
+        commitSha: sha, commitMessage: 'feat: add x', commitSkipReason: null,
       });
       s.batchRegistry.attachEnvelope(batchId, 0, env);
       s.batchRegistry.complete(batchId);
@@ -386,7 +386,7 @@ describe('GET /batch/:batchId', () => {
       expect(res.status).toBe(200);
       const body = await res.json() as { structuredReport: Record<string, unknown> };
       expect(body.structuredReport.commitSha).toBe(sha);
-      expect(body.structuredReport.commitMessage).toBe('implement: add x');
+      expect(body.structuredReport.commitMessage).toBe('feat: add x');
     } finally {
       await s.stop();
     }
@@ -415,7 +415,7 @@ describe('GET /batch/:batchId', () => {
         client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp/test', reviewPolicy: 'none' as const,
       });
       env1.startStage('implementing', { model: 'claude-haiku-4-5', tier: 'standard' });
-      env1.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [], commitSha: sha1, commitMessage: 'implement: add y', commitSkipReason: null });
+      env1.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [], commitSha: sha1, commitMessage: 'feat: add y', commitSkipReason: null });
       s.batchRegistry.attachEnvelope(batchId, 0, env0);
       s.batchRegistry.attachEnvelope(batchId, 1, env1);
       s.batchRegistry.complete(batchId);
@@ -426,7 +426,7 @@ describe('GET /batch/:batchId', () => {
       expect(res.status).toBe(200);
       const body = await res.json() as { structuredReport: Record<string, unknown> };
       expect(body.structuredReport.commitSha).toBe(sha1);            // task 1's, not task 0's null
-      expect(body.structuredReport.commitMessage).toBe('implement: add y');
+      expect(body.structuredReport.commitMessage).toBe('feat: add y');
       expect(body.structuredReport.commitSkipReason).toBeNull();     // something committed → no skip reason
     } finally {
       await s.stop();
