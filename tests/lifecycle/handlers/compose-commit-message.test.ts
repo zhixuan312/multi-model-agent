@@ -12,6 +12,38 @@ function makeState(overrides: Partial<LifecycleState> = {}): LifecycleState {
 }
 
 describe('composeCommitMessage', () => {
+  // ── taskDescriptor is the subject source for NON-execute-plan routes too ──
+  // Regression: delegate/retry/journal-record TaskSpec.prompt is a COMPILED
+  // prompt that leads with orientation boilerplate. The subject must come from
+  // taskDescriptor (raw task intent), not the orientation line.
+
+  it('delegate: subject derives from taskDescriptor, not the orientation-led prompt', () => {
+    const state = makeState({
+      route: 'delegate',
+      task: {
+        taskDescriptor: 'Create file src/a.ts with exactly: export const A=1',
+        prompt: 'Your job: produce the SMALLEST COMPLETE CHANGE that satisfies the brief.\n\nBrief from the caller:\n\nCreate file src/a.ts ...',
+      },
+    });
+    const msg = composeCommitMessage(state, ['packages/core/src/a.ts'], '/repo');
+    expect(msg.split('\n')[0].toLowerCase()).toContain('create file src/a.ts');
+    expect(msg.toLowerCase()).not.toContain('your job');
+    expect(msg).not.toContain('(Task'); // no Task-N trailer off execute-plan
+  });
+
+  it('journal-record: subject derives from the learning, not the journal orientation', () => {
+    const state = makeState({
+      route: 'journal-record',
+      task: {
+        taskDescriptor: 'record learning: divide() lacks a zero-divisor guard; add an explicit throw',
+        prompt: "You maintain a project's learnings journal at `.mmagent/journal/`. Integrate ONE new learning ...",
+      },
+    });
+    const msg = composeCommitMessage(state, ['packages/core/src/journal/x.ts'], '/repo');
+    expect(msg.toLowerCase()).toContain('record learning');
+    expect(msg.toLowerCase()).not.toContain('you maintain');
+  });
+
   // ── Type inference from leading verb ──────────────────────────────────────
 
   it('infers type "feat" from add/implement/create verbs', () => {

@@ -30,6 +30,7 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   briefSlot: delegateBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
     prompt: brief.prompt,
+    taskDescriptor: brief.taskDescriptor,
     agentType: brief.agentType,
     reviewPolicy: brief.reviewPolicy,
     done: brief.done,

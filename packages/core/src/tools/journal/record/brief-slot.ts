@@ -7,6 +7,10 @@ import {
 
 export interface JournalRecordBrief {
   prompt: string;
+  /** Clean subject source for the deterministic commit (compose-commit-message),
+   *  derived from the learning — NOT the compiled prompt (which leads with
+   *  orientation boilerplate). */
+  taskDescriptor: string;
   agentType: 'standard' | 'complex';
   reviewPolicy: ReviewPolicy;
   contextBlockIds?: string[];
@@ -24,6 +28,7 @@ function compile(learning: string, tagHints?: string[]): string {
 
 export const journalRecordBriefSlot = (input: Input): JournalRecordBrief[] => [{
   prompt: compile(input.learning, input.tagHints),
+  taskDescriptor: `record learning: ${input.learning}`,
   agentType: 'complex',
   reviewPolicy: 'full',
   contextBlockIds: input.contextBlockIds,

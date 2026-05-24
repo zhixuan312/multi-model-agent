@@ -28,9 +28,15 @@ export function composeCommitMessage(
   let sourceText = '';
   let taskNumber: string | null = null;
 
-  if (isExecutePlan && task?.taskDescriptor) {
+  // taskDescriptor is the clean subject source for ANY write route (it carries
+  // the raw task intent — plan heading for execute-plan, the caller's task text
+  // for delegate, the learning for journal-record). Falling back to task.prompt
+  // is wrong for routes whose prompt is a COMPILED prompt led by orientation
+  // boilerplate (delegate/retry/journal-record), so prefer taskDescriptor first.
+  if (task?.taskDescriptor) {
     sourceText = task.taskDescriptor;
-    // Extract Task N if present
+    // Extract Task N if present (only execute-plan headings carry it; the
+    // trailer below is still execute-plan-gated regardless).
     const taskMatch = sourceText.match(/Task\s+(\d+)/i);
     if (taskMatch) {
       taskNumber = taskMatch[1];

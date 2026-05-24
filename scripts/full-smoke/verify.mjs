@@ -66,6 +66,25 @@ export function verify(rec) {
   if (e.kind === 'read') {
     const findings = sr.findings ?? task0.findings ?? [];
     out.push(C('findings', Array.isArray(findings) ? 'PASS' : 'FAIL', `n=${findings.length}`));
+
+    // research delivers EVIDENCE, not just a well-formed shell. The empty-
+    // evidence failure mode — worker emits N `## Finding` blocks with no
+    // Evidence bullet because the Step-2 orchestrator's bibliographic adapters
+    // (arxiv/SS/Brave/rss) returned nothing — sails through the Array.isArray
+    // check above. Assert the deliverable is real: non-empty findings that
+    // actually carry evidence, AND a sources table showing ≥1 source was
+    // used (proves the evidence pack was non-empty, i.e. adapters were healthy).
+    if (e.route === 'research') {
+      const withEvidence = Array.isArray(findings) && findings.length > 0
+        && findings.some((f) => typeof f?.evidence === 'string' && f.evidence.trim().length > 0);
+      out.push(C('research-evidence', withEvidence ? 'PASS' : 'FAIL',
+        `findings=${findings.length}; ${findings.filter((f) => f?.evidence?.trim()).length} carry evidence`));
+
+      const sourcesUsed = sr.sourcesUsed ?? task0.sourcesUsed ?? [];
+      const used = Array.isArray(sourcesUsed) ? sourcesUsed.filter((s) => s?.used === true) : [];
+      out.push(C('research-sources', used.length > 0 ? 'PASS' : 'FAIL',
+        `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack'}`));
+    }
   }
 
   // contextBlockId surfacing — universal terminal context block (4.7.20).

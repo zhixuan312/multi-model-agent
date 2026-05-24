@@ -30,6 +30,7 @@ export const toolConfig: ToolConfig<Input, JournalRecordBrief, unknown> = {
   briefSlot: journalRecordBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
     prompt: brief.prompt,
+    taskDescriptor: brief.taskDescriptor,
     agentType: brief.agentType,
     reviewPolicy: brief.reviewPolicy,
     contextBlockIds: brief.contextBlockIds,
