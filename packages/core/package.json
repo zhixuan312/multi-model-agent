@@ -144,6 +144,10 @@
       "types": "./dist/tools/investigate/tool-config.d.ts",
       "import": "./dist/tools/investigate/tool-config.js"
     },
+    "./tools/journal/record/tool-config": {
+      "types": "./dist/tools/journal/record/tool-config.d.ts",
+      "import": "./dist/tools/journal/record/tool-config.js"
+    },
     "./tools/register-context-block/tool-config": {
       "types": "./dist/tools/register-context-block/tool-config.d.ts",
       "import": "./dist/tools/register-context-block/tool-config.js"
@@ -167,6 +171,10 @@
     "./tools/investigate/schema": {
       "types": "./dist/tools/investigate/schema.d.ts",
       "import": "./dist/tools/investigate/schema.js"
+    },
+    "./tools/journal/record/schema": {
+      "types": "./dist/tools/journal/record/schema.d.ts",
+      "import": "./dist/tools/journal/record/schema.js"
     },
     "./tools/research/schema": {
       "types": "./dist/tools/research/schema.d.ts",
