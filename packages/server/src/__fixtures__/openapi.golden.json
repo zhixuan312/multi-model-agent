@@ -1190,7 +1190,7 @@
             "description": "Missing or invalid Bearer token"
           }
         },
-        "summary": "External multi-source research with citations (arxiv, semantic_scholar, github_search, rss, brave-with-site:-filters)",
+        "summary": "External multi-source research with citations (arxiv, semantic_scholar, github_search, brave-with-site:-filters)",
         "tags": [
           "Tools"
         ]

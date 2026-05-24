@@ -54,7 +54,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
+  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
   '/control/batch-slice', '/context-blocks',
 ]);
 
@@ -63,7 +63,7 @@ const CWD_REQUIRED_PATHS = new Set([
  *  tool routes need it; the introspection / batch-polling / context-block
  *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
+  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
 ]);
 
 /**
@@ -154,6 +154,8 @@ async function registerToolHandlers(
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
   const { buildResearchHandler } = await import('./handlers/tools/research.js');
+  const { buildJournalRecordHandler } = await import('./handlers/tools/journal-record.js');
+  const { buildJournalRecallHandler } = await import('./handlers/tools/journal-recall.js');
 
   const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
     delegate: buildDelegateHandler,
@@ -164,6 +166,8 @@ async function registerToolHandlers(
     retry_tasks: buildRetryHandler,
     investigate: buildInvestigateHandler,
     research: buildResearchHandler,
+    'journal-record': buildJournalRecordHandler,
+    'journal-recall': buildJournalRecallHandler,
   };
 
   for (const entry of surface.list()) {

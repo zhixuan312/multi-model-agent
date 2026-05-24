@@ -115,11 +115,13 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
 | `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
-| `mma-research` | `POST /research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question. |
+| `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-research` | `POST /research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
+| `mma-journal-record` | `POST /journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
+| `mma-journal-recall` | `POST /journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
 ### Plumbing skills
 
@@ -231,7 +233,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-13 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+15 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
@@ -242,7 +244,9 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
 | `POST /investigate?cwd=<abs>` | Codebase Q&A — structured answer with file:line citations + confidence |
-| `POST /research?cwd=<abs>` | External multi-source research — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question |
+| `POST /research?cwd=<abs>` | External multi-source research — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question |
+| `POST /journal-record?cwd=<abs>` | Record one learning into the project's cross-agent journal graph (`.mmagent/journal/`) — create / refine / supersede / merge |
+| `POST /journal-recall?cwd=<abs>` | Recall relevant prior learnings from the journal graph for a question or situation |
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |

@@ -11,6 +11,9 @@ import {
 
 export interface DelegateBrief {
   prompt: string;
+  /** Raw caller task text (NOT the compiled prompt) — the clean source for the
+   *  deterministic commit subject (compose-commit-message). */
+  taskDescriptor: string;
   done?: string;
   filePaths?: string[];
   agentType: 'standard' | 'complex';
@@ -63,6 +66,7 @@ function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }):
 export const delegateBriefSlot = (input: Input): DelegateBrief[] =>
   input.tasks.map((t) => ({
     prompt: compileDelegatePrompt({ prompt: t.prompt, filePaths: t.filePaths }),
+    taskDescriptor: t.prompt, // raw caller text → clean commit subject
     done: t.done,
     filePaths: t.filePaths,
     // Defaults are applied authoritatively by the Zod schema (.default()),

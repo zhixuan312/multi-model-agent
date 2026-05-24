@@ -54,7 +54,7 @@ digraph picker {
 | `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
-| `mma-explore` | Divergent ideation from codebase + web research — use before `superpowers:brainstorming` |
+| `mma-explore` | Divergent ideation from codebase + web research + prior-learnings recall — use before `superpowers:brainstorming` |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous batch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |

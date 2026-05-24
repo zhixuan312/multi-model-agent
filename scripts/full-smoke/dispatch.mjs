@@ -26,6 +26,8 @@ export function buildRequest(spec, ctx) {
     case 12: return { route: 'delegate', body: { tasks: [ T('Create file src/f.ts with exactly: export const F=6. Only that file. Do not run git.', { filePaths: ['src/f.ts'], reviewPolicy: 'none' }) ] } };
     case 13: return { route: 'delegate', body: { tasks: [ T('Report what src/math.ts exports. Do NOT create or modify any file. Do not run git.', { filePaths: ['src/math.ts'] }) ] } };
     case 14: return { route: 'retry', body: { batchId: ctx.seedBatchId, taskIndices: [ctx.seedFailIdx ?? 0] } };
+    case 15: return { route: 'journal-record', body: { learning: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', tagHints: ['math', 'validation'] } };
+    case 16: return { route: 'journal-recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }

@@ -55,6 +55,35 @@ describe('BraveClient', () => {
     expect(used.filter(k => k === 'k3').length).toBe(2);
   });
 
+  // ---- per-key spacing (1 req/s/token burst guard) ----
+
+  it('spaces repeat requests on the same key by minPerKeyIntervalMs', async () => {
+    const sleeps: number[] = [];
+    for (let i = 0; i < 6; i++) stubSuccess(agent);
+    const c = new BraveClient(
+      { ...cfg, minPerKeyIntervalMs: 1100 },
+      { sleep: (ms) => { sleeps.push(ms); return Promise.resolve(); }, random: fixedRandom },
+    );
+    // 6 calls over 3 keys: calls 1-3 use fresh keys (no wait); calls 4-6 reuse
+    // k1/k2/k3 and must wait ~the full interval (the no-op sleep advances no
+    // real clock, so `last + interval` stays ~interval ahead of now).
+    for (let i = 0; i < 6; i++) await c.search('q' + i);
+    const spacingWaits = sleeps.filter((ms) => ms > 0);
+    expect(spacingWaits.length).toBe(3);
+    for (const w of spacingWaits) expect(w).toBeGreaterThan(1000);
+  });
+
+  it('minPerKeyIntervalMs=0 disables the spacing gate', async () => {
+    const sleeps: number[] = [];
+    for (let i = 0; i < 6; i++) stubSuccess(agent);
+    const c = new BraveClient(
+      { ...cfg, minPerKeyIntervalMs: 0 },
+      { sleep: (ms) => { sleeps.push(ms); return Promise.resolve(); }, random: fixedRandom },
+    );
+    for (let i = 0; i < 6; i++) await c.search('q' + i);
+    expect(sleeps.filter((ms) => ms > 0).length).toBe(0);
+  });
+
   // ---- 429 escalation ----
 
   it('on 429 advances to next key (within the per-call attempt budget)', async () => {

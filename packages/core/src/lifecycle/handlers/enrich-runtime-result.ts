@@ -157,7 +157,38 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   if (state.verifyResult !== undefined) (enriched as { verifyResult?: unknown }).verifyResult = state.verifyResult;
 
   // ── v5 M3 / M4 fixes: truthful workerSelfAssessment and rework-clears-up promo ─
-  const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
+  // ── workerSelfAssessment reconciliation (Fix C): objective-signal truth table ───
+  const parsedCleanly = (last as any)?.parsedCleanly ?? false;
+  // Objective signals — read the CANONICAL sources (same as deriveCompletion):
+  // the commit-gate payload kind and the review-gate verdict. Not state.commits
+  // (the result's commit array) nor a non-existent state.diffReviewVerdict.
+  const commitGate = state.gates?.commit as { payload?: { kind?: 'committed' | 'no_op' } } | undefined;
+  const commitKind = commitGate?.payload?.kind;
+  const reviewVerdict = reviewRp.verdict; // canonical helper (line ~146), same source as reviewVerdict above
+  const commitSignalPresent = commitKind !== undefined;
+  const verdictSignalPresent = reviewVerdict !== undefined;
+  const isCommitted = commitKind === 'committed';
+  // Separate (pre-existing) status signal: did the worker produce commit entries on the result?
+  const commitsExist = Array.isArray(state.commits) && (state.commits as unknown[]).length > 0;
+
+  // Apply truth table: reconcile workerSelfAssessment against objective signals.
+  // Only when BOTH signals are present; otherwise preserve the parsed value.
+  if (commitSignalPresent && verdictSignalPresent && !parsedCleanly) {
+    if (isCommitted && reviewVerdict === 'approved') {
+      // false + committed + approved → done (reconciled)
+      enriched.workerStatus = 'done';
+      (enriched as any).selfAssessmentReconciled = true;
+    } else if (isCommitted && reviewVerdict === 'changes_required') {
+      // false + committed + changes_required → failed (review owns this)
+      enriched.workerStatus = 'failed';
+    } else if (!isCommitted) {
+      // false + no-commit (kind: 'no_op') → failed
+      enriched.workerStatus = 'failed';
+    }
+  }
+  // parsedCleanly: true → preserve parsed value (no change)
+  // missing-signal (commits absent or verdict absent) → preserve parsed value (no change)
+
   const reworkCleanedUp = state.reworkApplied === true && state.reworkError === undefined;
   const reviewRejected =
     state.reviewPolicy !== 'none' && reviewRp.verdict === 'changes_required' && !reworkCleanedUp;

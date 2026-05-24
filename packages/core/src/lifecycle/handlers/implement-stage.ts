@@ -12,7 +12,7 @@ import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
+const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore', 'journal-recall'];
 
 export function capturePreTaskState(state: LifecycleState): void {
   // Production wires the cwd onto state.executionContext.cwd, not state.cwd —
@@ -145,6 +145,8 @@ export async function implementHandler(
     // Transform lastRunResult into ImplementPayload for the stage gate.
     // Note: parseWorkerOutput extracts filesChanged from the structured output JSON.
     const parsed = parseWorkerOutput(result.output ?? '');
+    // Persist parsedCleanly so enrichRuntimeResult can access it
+    (result as any).parsedCleanly = parsed.parsedCleanly;
     const findings: Finding[] = [...(result.findings ?? [])];
     const outputTargets = (ctx as { outputTargets?: string[] }).outputTargets ?? [];
     if (outputTargets.length > 0) {
@@ -190,6 +192,7 @@ export async function implementHandler(
       criteriaSucceeded: result.criteriaSucceeded ?? parsed.criteriaSucceeded ?? [],
       criteriaErrors: result.criteriaErrors ?? parsed.criteriaErrors ?? [],
       sourcesUsed: result.sourcesUsed ?? parsed.sourcesUsed ?? [],
+      parsedCleanly: parsed.parsedCleanly,
       ...(result.findingsOutcome !== undefined && { findingsOutcome: result.findingsOutcome }),
       ...(result.findingsOutcomeReason !== undefined && { findingsOutcomeReason: result.findingsOutcomeReason }),
       ...(result.outcomeInferred !== undefined && { outcomeInferred: result.outcomeInferred }),

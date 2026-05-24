@@ -1,9 +1,7 @@
 //
 // Step 2 of the /research pipeline. Deterministic Node-only fan-out across
-// enabled adapters + Brave + webFetch + RSS, with per-adapter timeout,
-// concurrency cap scoped to this single call, allowlist enforcement on
-// every outbound hop (directFetches + rssFeeds), and post-budget evidence
-// pack assembly.
+// enabled adapters + Brave, with per-adapter timeout, concurrency cap scoped
+// to this single call, and post-budget evidence pack assembly.
 
 import type { QueryPlan } from './query-plan.js';
 import {
@@ -12,7 +10,6 @@ import {
 } from './evidence-pack.js';
 import type { AdapterId, AdapterResult } from './adapters/types.js';
 import type { BraveSearchResponse } from './web-search.js';
-import type { WebFetchResult } from './web-fetch.js';
 
 export interface OrchestratorDeps {
   enabledAdapters: AdapterId[];
@@ -21,10 +18,7 @@ export interface OrchestratorDeps {
     arxiv:           (query: string)                         => Promise<AdapterResult[]>;
     semanticScholar: (query: string)                         => Promise<AdapterResult[]>;
     github:          (query: string, kind: 'repo' | 'code') => Promise<AdapterResult[]>;
-    rss:             (url: string)                            => Promise<AdapterResult[]>;
   };
-  webFetch: (url: string) => Promise<WebFetchResult>;
-  hostAllowlist:        Set<string>;
   perAdapterTimeoutMs:  number;
   totalDeadlineMs:      number;
   concurrencyCap:       number;
@@ -35,9 +29,7 @@ type Task =
   | { kind: 'arxiv';     query: string }
   | { kind: 'ss';        query: string }
   | { kind: 'gh_repo';   query: string }
-  | { kind: 'gh_code';   query: string }
-  | { kind: 'rss';       url:   string }
-  | { kind: 'fetch';     url:   string };
+  | { kind: 'gh_code';   query: string };
 
 const TASK_TO_GROUP: Record<Task['kind'], SourceGroup> = {
   brave:   'brave',
@@ -45,8 +37,6 @@ const TASK_TO_GROUP: Record<Task['kind'], SourceGroup> = {
   ss:      'semantic_scholar',
   gh_repo: 'github_repo',
   gh_code: 'github_code',
-  rss:     'rss',
-  fetch:   'web_fetch',
 };
 
 function buildTasks(plan: QueryPlan): Task[] {
@@ -56,8 +46,6 @@ function buildTasks(plan: QueryPlan): Task[] {
   for (const q of plan.semanticScholarQueries) tasks.push({ kind: 'ss',      query: q });
   for (const g of plan.githubQueries)
     tasks.push({ kind: g.kind === 'repo' ? 'gh_repo' : 'gh_code', query: g.q });
-  for (const u of plan.rssFeeds)               tasks.push({ kind: 'rss',     url:   u });
-  for (const u of plan.directFetches)          tasks.push({ kind: 'fetch',   url:   u });
   return tasks;
 }
 
@@ -67,9 +55,7 @@ function isAdapterEnabled(kind: Task['kind'], enabled: AdapterId[]): boolean {
     case 'ss':              return enabled.includes('semantic_scholar');
     case 'gh_repo':
     case 'gh_code':         return enabled.includes('github_search');
-    case 'rss':             return enabled.includes('rss');
     case 'brave':           return true;
-    case 'fetch':           return true;
   }
 }
 
@@ -81,13 +67,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-function isHostAllowed(url: string, allowlist: Set<string>): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return allowlist.has(host);
-  } catch { return false; }
-}
-
 async function runOne(
   task: Task, deps: OrchestratorDeps,
   sources: EvidenceSource[], fails: FailedAttempt[],
@@ -95,35 +74,21 @@ async function runOne(
   if (!isAdapterEnabled(task.kind, deps.enabledAdapters)) {
     fails.push({
       source: TASK_TO_GROUP[task.kind],
-      query:  'query' in task ? task.query : task.url,
+      query:  task.query,
       reason: 'no_api_key_configured',
     });
     return;
   }
 
-  // Allowlist enforcement on outbound hops.
-  if (task.kind === 'rss' || task.kind === 'fetch') {
-    if (!isHostAllowed(task.url, deps.hostAllowlist)) {
-      fails.push({
-        source: TASK_TO_GROUP[task.kind],
-        query:  task.url,
-        reason: 'host_not_allowlisted',
-      });
-      return;
-    }
-  }
-
-  const queryStr = 'query' in task ? task.query : task.url;
+  const queryStr = task.query;
   try {
-    let raw: AdapterResult[] | BraveSearchResponse | WebFetchResult;
+    let raw: AdapterResult[] | BraveSearchResponse;
     switch (task.kind) {
       case 'brave':   raw = await withTimeout(deps.brave.search(task.query), deps.perAdapterTimeoutMs); break;
       case 'arxiv':   raw = await withTimeout(deps.adapters.arxiv(task.query), deps.perAdapterTimeoutMs); break;
       case 'ss':      raw = await withTimeout(deps.adapters.semanticScholar(task.query), deps.perAdapterTimeoutMs); break;
       case 'gh_repo': raw = await withTimeout(deps.adapters.github(task.query, 'repo'), deps.perAdapterTimeoutMs); break;
       case 'gh_code': raw = await withTimeout(deps.adapters.github(task.query, 'code'), deps.perAdapterTimeoutMs); break;
-      case 'rss':     raw = await withTimeout(deps.adapters.rss(task.url), deps.perAdapterTimeoutMs); break;
-      case 'fetch':   raw = await withTimeout(deps.webFetch(task.url), deps.perAdapterTimeoutMs); break;
     }
     // Normalize each task's result to EvidenceSource[].
     if (task.kind === 'brave') {
@@ -132,17 +97,6 @@ async function runOne(
         source: 'brave', query: queryStr,
         title: r.title, url: r.url, snippet: r.snippet, rank: i,
       }));
-    } else if (task.kind === 'fetch') {
-      const r = raw as WebFetchResult;
-      if (r.status === 'ok') {
-        sources.push({
-          source: 'web_fetch', query: queryStr,
-          title: `[fetched ${r.host}]`, url: queryStr,
-          snippet: r.rawText.slice(0, 500), rank: 0,
-        });
-      } else {
-        fails.push({ source: 'web_fetch', query: queryStr, reason: r.reasonCode });
-      }
     } else {
       const arr = raw as AdapterResult[];
       arr.forEach((a, i) => sources.push({

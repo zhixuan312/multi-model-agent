@@ -1,5 +1,5 @@
 // Single source of truth for the User-Agent header sent by every outbound
-// adapter, brave, and webFetch HTTP request from this package.
+// adapter and Brave HTTP request from this package.
 import pkg from '../../package.json' with { type: 'json' };
 
 const SEMVER_RE = /^\d+\.\d+\.\d+/;

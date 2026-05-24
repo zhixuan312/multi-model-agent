@@ -70,7 +70,8 @@ export interface TaskSpec {
   research?: {
     researchQuestion: string;
     background?: string;
-    userSources?: string[];
     resolvedContextBlocks?: Array<{ id: string; content: string }>;
   }
+  taskDescriptor?: string
+  planBasename?: string
 }

@@ -31,9 +31,15 @@ function validateBraveResults(body: unknown): BraveSearchResult[] {
 
 export class BraveClient {
   private nextKeyIndex = 0;
+  // Wall-clock of the last request dispatched on each key (by index), used to
+  // enforce minPerKeyIntervalMs. Brave's free tier is 1 req/s/token; the
+  // orchestrator fans out queries concurrently, so without per-key spacing a
+  // round-robin burst hits the same key within milliseconds → 429.
+  private lastRequestAt: number[] = [];
   // Promise-chain critical-section lock: each caller waits for its
-  // predecessor, then atomically reads+advances nextKeyIndex.
-  // try/finally is load-bearing — without it an exception in the
+  // predecessor, then atomically reads+advances nextKeyIndex AND records the
+  // key's dispatch time, so concurrent callers serialize through the spacing
+  // gate. try/finally is load-bearing — without it an exception in the
   // critical section would stall the chain permanently, hanging every
   // subsequent search() call.
   private lockChain: Promise<void> = Promise.resolve();
@@ -50,7 +56,13 @@ export class BraveClient {
     this._random = opts?.random ?? (() => Math.random());
   }
 
-  private async takeNextKeyIndex(): Promise<number> {
+  // Atomically pick the next round-robin key AND reserve its dispatch slot:
+  // returns the key index plus how long the caller must wait so this key's
+  // requests stay ≥ minPerKeyIntervalMs apart. The reservation (advancing
+  // lastRequestAt to the reserved time) happens inside the lock; the actual
+  // wait is done by the caller OUTSIDE the lock, so spacing one key never
+  // blocks dispatch on the other keys.
+  private async takeKeySlot(): Promise<{ idx: number; waitMs: number }> {
     let release!: () => void;
     const next = new Promise<void>((r) => (release = r));
     const prev = this.lockChain;
@@ -63,7 +75,15 @@ export class BraveClient {
       }
       const idx = this.nextKeyIndex;
       this.nextKeyIndex = (this.nextKeyIndex + 1) % n;
-      return idx;
+
+      const interval = this.cfg.minPerKeyIntervalMs ?? 0;
+      const now = Date.now();
+      const last = this.lastRequestAt[idx] ?? 0;
+      // Earliest this key may fire again. Reserve it now so a concurrent
+      // sibling grabbing the same key next round queues behind this slot.
+      const dispatchAt = interval > 0 ? Math.max(now, last + interval) : now;
+      this.lastRequestAt[idx] = dispatchAt;
+      return { idx, waitMs: Math.max(0, dispatchAt - now) };
     } finally {
       release();
     }
@@ -86,11 +106,17 @@ export class BraveClient {
       if (Date.now() > deadline) {
         throw new Error('brave_deadline_exceeded');
       }
-      const idx = await this.takeNextKeyIndex();
+      const { idx, waitMs } = await this.takeKeySlot();
       lastIndex = idx;
 
-      // Re-check deadline after lock acquisition — takeNextKeyIndex() may
-      // have waited behind a slow predecessor.
+      // Honor the per-key spacing reservation. Skip the wait if it would blow
+      // the deadline — fall through to the deadline check below.
+      if (waitMs > 0 && Date.now() + waitMs <= deadline) {
+        await this._sleep(waitMs);
+      }
+
+      // Re-check deadline after lock acquisition + spacing wait — either may
+      // have waited behind a slow predecessor / the 1 req/s gate.
       if (Date.now() > deadline) {
         throw new Error('brave_deadline_exceeded');
       }

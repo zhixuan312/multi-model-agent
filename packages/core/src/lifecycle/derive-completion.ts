@@ -10,7 +10,7 @@
 import type { RouteName } from '../lifecycle/stage-io.js';
 
 const READ_ROUTES: ReadonlySet<RouteName> = new Set([
-  'audit', 'review', 'debug', 'investigate', 'explore', 'research',
+  'audit', 'review', 'debug', 'investigate', 'explore', 'research', 'journal-recall',
 ] as RouteName[]);
 
 export interface CompletionInputs {

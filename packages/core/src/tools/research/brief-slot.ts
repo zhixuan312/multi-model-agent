@@ -7,8 +7,6 @@ export interface ResolvedContextBlock { id: string; content: string; }
 
 export interface EnrichedResearchInput extends Input {
   resolvedContextBlocks: ResolvedContextBlock[];
-  /** Operator-configured source descriptors (research.userSources). */
-  userSources: readonly string[];
   /** True iff research.brave.apiKeys is non-empty (drives the prompt branch
    *  that says "escalate to web_search"). */
   hasBrave: boolean;

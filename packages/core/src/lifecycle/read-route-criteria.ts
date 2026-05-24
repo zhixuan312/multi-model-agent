@@ -11,8 +11,9 @@ import { REVIEW_SUBTYPES, type ReviewSubtype } from '../tools/review/subtypes.js
 import { DEBUG_SUBTYPES, type DebugSubtype } from '../tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES, type InvestigateSubtype } from '../tools/investigate/subtypes.js';
 import { RESEARCH_SUBTYPES, type ResearchSubtype } from '../tools/research/subtypes.js';
+import { JOURNAL_RECALL_SUBTYPES, type JournalRecallSubtype } from '../tools/journal/recall/subtypes.js';
 
-export type ReadOnlyRouteName = 'audit' | 'review' | 'debug' | 'investigate' | 'research';
+export type ReadOnlyRouteName = 'audit' | 'review' | 'debug' | 'investigate' | 'research' | 'journal-recall';
 
 /** Standard finding-format spec — uniform `## Finding N:` shape across
  *  all read-only routes so the downstream parser/annotator only reads
@@ -49,6 +50,7 @@ export const READ_ONLY_ROUTES: Record<ReadOnlyRouteName, RouteEntry> = {
   debug:       { subtypeMap: DEBUG_SUBTYPES       as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
   investigate: { subtypeMap: INVESTIGATE_SUBTYPES as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
   research:    { subtypeMap: RESEARCH_SUBTYPES    as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
+  'journal-recall': { subtypeMap: JOURNAL_RECALL_SUBTYPES as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
 };
 
 /** Per-subtype builders consumed by the read-route implementer. */
@@ -97,4 +99,4 @@ export function isReadOnlyRoute(route: string): route is ReadOnlyRouteName {
 }
 
 // Re-export per-tool subtype types for callers that need the literal union.
-export type { AuditSubtype, ReviewSubtype, DebugSubtype, InvestigateSubtype, ResearchSubtype };
+export type { AuditSubtype, ReviewSubtype, DebugSubtype, InvestigateSubtype, ResearchSubtype, JournalRecallSubtype };

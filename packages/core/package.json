@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.7.20",
+  "version": "4.8.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -144,6 +144,14 @@
       "types": "./dist/tools/investigate/tool-config.d.ts",
       "import": "./dist/tools/investigate/tool-config.js"
     },
+    "./tools/journal/record/tool-config": {
+      "types": "./dist/tools/journal/record/tool-config.d.ts",
+      "import": "./dist/tools/journal/record/tool-config.js"
+    },
+    "./tools/journal/recall/tool-config": {
+      "types": "./dist/tools/journal/recall/tool-config.d.ts",
+      "import": "./dist/tools/journal/recall/tool-config.js"
+    },
     "./tools/register-context-block/tool-config": {
       "types": "./dist/tools/register-context-block/tool-config.d.ts",
       "import": "./dist/tools/register-context-block/tool-config.js"
@@ -167,6 +175,14 @@
     "./tools/investigate/schema": {
       "types": "./dist/tools/investigate/schema.d.ts",
       "import": "./dist/tools/investigate/schema.js"
+    },
+    "./tools/journal/record/schema": {
+      "types": "./dist/tools/journal/record/schema.d.ts",
+      "import": "./dist/tools/journal/record/schema.js"
+    },
+    "./tools/journal/recall/schema": {
+      "types": "./dist/tools/journal/recall/schema.d.ts",
+      "import": "./dist/tools/journal/recall/schema.js"
     },
     "./tools/research/schema": {
       "types": "./dist/tools/research/schema.d.ts",

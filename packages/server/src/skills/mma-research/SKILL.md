@@ -1,6 +1,6 @@
 ---
 name: mma-research
-description: Use when you need external multi-source research with citations — arxiv, semantic_scholar, github_search, rss, brave-with-site:-filters — for a focused question. Worker is bibliographic, not opinionated. Pair with mma-investigate (internal) under mma-explore for divergent landscape scans.
+description: Use when you need external multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-site:-filters — for a focused question. Worker is bibliographic, not opinionated. Pair with mma-investigate (internal) under mma-explore for divergent landscape scans.
 when_to_use: An external-research question has surfaced (state of the art, prior art, what others do, what published methods exist) AND mmagent is running. Delegate the multi-source web/adapter research to a worker so the main context stays on judgment. NOT for codebase questions — those are mma-investigate.
 version: "0.0.0-unreleased"
 ---
@@ -10,8 +10,8 @@ version: "0.0.0-unreleased"
 ## Overview
 
 Run external multi-source research via a single mmagent worker. The worker
-consults configured adapters (arxiv, semantic_scholar, github_search, rss) and
-— when Brave keys are configured — escalates to `web_search` with `site:`
+consults configured adapters (arxiv, semantic_scholar, github_search) and
+— when Brave keys are configured — escalates to Brave web search with `site:`
 filters. The worker is bibliographic: it returns a numbered narrative with a
 `## Sources used` table. It does not opinion or rank.
 
@@ -54,7 +54,7 @@ Obtain a free API key from [Semantic Scholar API](https://www.semanticscholar.or
 **Degraded behavior:**
 
 If the Semantic Scholar API key is not configured:
-- The worker continues with available adapters (arxiv, github_search, rss, brave-search)
+- The worker continues with available adapters (arxiv, github_search, brave-search)
 - Semantic Scholar queries are skipped without errors
 - Research completes successfully but may lack academic-paper coverage
 - No failure occurs; graceful fallback is automatic

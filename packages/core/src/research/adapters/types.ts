@@ -1,4 +1,4 @@
-export type AdapterId = 'arxiv' | 'semantic_scholar' | 'github_search' | 'rss';
+export type AdapterId = 'arxiv' | 'semantic_scholar' | 'github_search';
 
 export interface AdapterResult {
   adapterId: AdapterId;

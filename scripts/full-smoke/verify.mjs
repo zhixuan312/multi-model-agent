@@ -63,9 +63,70 @@ export function verify(rec) {
       }
     }
   }
+  // Fix A (4.8.0): commit subject is clean conventional (`type(scope): …`),
+  // NOT a chain-of-thought leak or prompt-orientation boilerplate.
+  if (e.kind === 'write' && !e.expectFail && SHA40.test(sr.commitSha ?? '') && typeof sr.commitMessage === 'string') {
+    const subj = sr.commitMessage.split('\n')[0];
+    const conventional = /^(feat|fix|chore|refactor|test|docs|chore)(\([^)]+\))?: \S/.test(subj);
+    const leak = /(i'?ll\b|i will\b|let me\b|looking at\b|you maintain\b|your job\b|i need to\b)/i.test(subj);
+    out.push(C('commit-msg-format', conventional && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
+  }
+  // Fix C (4.8.0): a successful write task reaches a done terminal status —
+  // not a spurious `failed` (parse-miss reconciliation / review fit). The
+  // `expectRework` scenario is the one DELIBERATELY-contradictory prompt
+  // ("you may skip the tests" vs done="implemented AND unit-tested") — its
+  // worker may honestly self-assess `failed` and the reviewer may return no
+  // parseable verdict (so Fix C correctly preserves the self-report rather
+  // than reconciling). That's a legitimate outcome, not the spurious-failure
+  // bug, so it's a WARN there (same rationale as its best-effort rework check)
+  // and a hard FAIL on every unambiguous write task.
+  if (e.kind === 'write' && !e.expectFail) {
+    const st = task0.status;
+    const ok = st === 'done' || st === 'done_with_concerns';
+    out.push(C('terminal-status', ok ? 'PASS' : (e.expectRework ? 'WARN' : 'FAIL'),
+      `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
+  }
+
   if (e.kind === 'read') {
     const findings = sr.findings ?? task0.findings ?? [];
     out.push(C('findings', Array.isArray(findings) ? 'PASS' : 'FAIL', `n=${findings.length}`));
+
+    // research delivers EVIDENCE, not just a well-formed shell. The empty-
+    // evidence failure mode — worker emits N `## Finding` blocks with no
+    // Evidence bullet because the Step-2 orchestrator's bibliographic adapters
+    // (arxiv/SS/Brave) returned nothing — sails through the Array.isArray
+    // check above. Assert the deliverable is real: non-empty findings that
+    // actually carry evidence, AND a sources table showing ≥1 source was
+    // used (proves the evidence pack was non-empty, i.e. adapters were healthy).
+    if (e.route === 'research') {
+      // Empty findings is a LEGITIMATE outcome per the mma-research contract
+      // (empty ≠ failure) — synthesis is content-dependent and can be low-yield
+      // on a given run even when the route worked (status done, sources fetched).
+      // So research-evidence only hard-FAILs the structural bug: findings that
+      // EXIST but carry no evidence (the fabricated/empty-evidence mode). Zero
+      // findings is a WARN — visible, promotable under --strict. Adapter health
+      // is proven independently by research-sources below.
+      const withEvidence = findings.some((f) => typeof f?.evidence === 'string' && f.evidence.trim().length > 0);
+      const evidenceVerdict = findings.length === 0 ? 'WARN' : (withEvidence ? 'PASS' : 'FAIL');
+      out.push(C('research-evidence', evidenceVerdict,
+        findings.length === 0
+          ? 'worker synthesized 0 findings (empty ≠ failure per contract; sources were fetched)'
+          : `findings=${findings.length}; ${findings.filter((f) => f?.evidence?.trim()).length} carry evidence`));
+
+      const sourcesUsed = sr.sourcesUsed ?? task0.sourcesUsed ?? [];
+      const used = Array.isArray(sourcesUsed) ? sourcesUsed.filter((s) => s?.used === true) : [];
+      out.push(C('research-sources', used.length > 0 ? 'PASS' : 'FAIL',
+        `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack'}`));
+
+      // The sources table must report ONLY the supported adapter groups. rss /
+      // web_fetch were removed from the pipeline — their reappearance here (or
+      // any unknown group) is a regression. Covers the full adapter surface.
+      const ALLOWED_GROUPS = new Set(['arxiv', 'semantic_scholar', 'github_repo', 'github_code', 'brave']);
+      const stray = (Array.isArray(sourcesUsed) ? sourcesUsed : [])
+        .map((s) => s?.source).filter((g) => !ALLOWED_GROUPS.has(g));
+      out.push(C('research-adapter-surface', stray.length === 0 ? 'PASS' : 'FAIL',
+        stray.length ? `unexpected source groups: ${[...new Set(stray)].join(',')}` : `groups ⊆ {${[...ALLOWED_GROUPS].join(',')}}`));
+    }
   }
 
   // contextBlockId surfacing — universal terminal context block (4.7.20).

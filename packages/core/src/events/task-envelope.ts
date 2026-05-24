@@ -12,7 +12,7 @@ export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low
 export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
 export interface ValidationWarning { rule: string; path: string }
 
-export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research';
+export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research' | 'journal-record' | 'journal-recall';
 export type EnvelopeStatus = 'running' | 'done' | 'done_with_concerns' | 'failed';
 export type StageName = 'implementing' | 'reviewing' | 'reworking' | 'annotating' | 'committing';
 export type AgentTier = 'standard' | 'complex';
@@ -124,6 +124,10 @@ export interface TaskEnvelope {
   taskMaxIdleMs: number;
   // findings/diagnostics
   findings: Finding[];
+  // research-only: the `## Sources used` table (which adapter groups were
+  // queried and which returned data), set at compose from the EvidencePack.
+  // Empty on every non-research route.
+  sourcesUsed: { source: string; attempted: boolean; used: boolean; note?: string }[];
   escalationLog: EscalationEntry[];
   validationWarnings: ValidationWarning[];
   // derived
@@ -176,7 +180,7 @@ export class TaskEnvelopeStore {
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
-      findings: [], escalationLog: [], validationWarnings: [],
+      findings: [], sourcesUsed: [], escalationLog: [], validationWarnings: [],
       headline: { prefix: '', stageLabel: 'queued', stageIndex: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
     };
     store = new TaskEnvelopeStore(env, notify);
@@ -275,6 +279,7 @@ export class TaskEnvelopeStore {
   }
 
   recordFinding(f: Finding): void { this.guard('recordFinding'); this.env.findings.push(f); this.notify('recordFinding'); }
+  recordSourcesUsed(rows: TaskEnvelope['sourcesUsed']): void { this.guard('recordSourcesUsed'); this.env.sourcesUsed = rows; this.notify('recordSourcesUsed'); }
   recordValidationWarning(w: ValidationWarning): void { this.guard('recordValidationWarning'); this.env.validationWarnings.push(w); this.notify('recordValidationWarning'); }
   recordHeartbeat(_state: { stallIdleMs: number }): void {
     // Heartbeats fire on a periodic timer that can race past seal(). Silently

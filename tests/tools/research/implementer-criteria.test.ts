@@ -23,12 +23,15 @@ describe('research implementer-criteria — 2-turn rewrite', () => {
     }
   });
 
-  it('TURN1 template names the structured-JSON requirement and the 6 query fields', () => {
+  it('TURN1 template names the structured-JSON requirement and the 4 query fields', () => {
     const t = TURN1_PLAN_PROMPT_TEMPLATE;
     expect(t).toMatch(/JSON/);
-    for (const field of ['braveQueries','arxivQueries','semanticScholarQueries','githubQueries','rssFeeds','directFetches']) {
+    for (const field of ['braveQueries','arxivQueries','semanticScholarQueries','githubQueries']) {
       expect(t).toContain(field);
     }
+    // rss / web_fetch were removed from the research pipeline.
+    expect(t).not.toContain('rssFeeds');
+    expect(t).not.toContain('directFetches');
   });
 
   it('TURN1 template includes per-adapter cheatsheet hints', () => {

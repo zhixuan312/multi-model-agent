@@ -32,9 +32,10 @@ describe('mma-explore SKILL.md', () => {
     expect(content).toMatch(/MUST[\s\S]{0,80}3.?5 threads/);
   });
 
-  it('contains both sentinel literals for greenfield + research-empty', () => {
+  it('contains the sentinel literals for greenfield + research-empty + journal-empty', () => {
     expect(content).toContain('(no internal anchor — fully greenfield)');
     expect(content).toContain('(no external source found)');
+    expect(content).toContain('(no prior learning)');
   });
 
   it('mandates the Recommended next step header', () => {
@@ -45,8 +46,14 @@ describe('mma-explore SKILL.md', () => {
     expect(content).toMatch(/Do(?:n't| NOT|\snot)\s+dump/i);
   });
 
-  it('references both sub-skills by name (delegates via skill, not raw HTTP)', () => {
+  it('references all three sub-skills by name (delegates via skill, not raw HTTP)', () => {
     expect(content).toContain('mma-investigate');
     expect(content).toContain('mma-research');
+    expect(content).toContain('mma-journal-recall');
+  });
+
+  it('declares the journal leg as a third source in frontmatter + body', () => {
+    expect(data.description).toMatch(/journal|prior.learning/i);
+    expect(content).toMatch(/ALL THREE|three delegated|three legs/i);
   });
 });

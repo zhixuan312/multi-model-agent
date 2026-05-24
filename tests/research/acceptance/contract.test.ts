@@ -1,46 +1,19 @@
 // tests/research/acceptance/contract.test.ts
 import { describe, it, expect, vi } from 'vitest';
-import { runOrchestrator } from '../../../packages/core/src/research/orchestrator.js';
 import { runTwoTurnDriver } from '../../../packages/core/src/tools/research/two-turn-driver.js';
 import { applyBudget, EVIDENCE_PACK_LIMITS } from '../../../packages/core/src/research/evidence-pack.js';
 import { resolveEnabledAdapters } from '../../../packages/core/src/research/adapters/index.js';
-import { ResearchConfigSchema } from '../../../packages/core/src/config/schema.js';
 
 const validPlan = JSON.stringify({
   braveQueries: ['q'], arxivQueries: [], semanticScholarQueries: [],
-  githubQueries: [], rssFeeds: [], directFetches: [],
+  githubQueries: [],
 });
-
-const baseAdapters = {
-  arxiv:           async () => [],
-  semanticScholar: async () => [],
-  github:          async () => [],
-  rss:             async () => [],
-};
 
 describe('A5 — missing credentials degrade gracefully', () => {
   it('resolveEnabledAdapters skips semantic_scholar without apiKey, includes when provided', () => {
-    const cfg = { arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true };
+    const cfg = { arxiv: true, semanticScholar: true, githubSearch: true };
     expect(resolveEnabledAdapters(cfg, {})).not.toContain('semantic_scholar');
     expect(resolveEnabledAdapters(cfg, { semanticScholarApiKey: 'k' })).toContain('semantic_scholar');
-  });
-});
-
-describe('A6 — directFetches allowlist enforcement', () => {
-  it('rejects directFetches host not on allowlist with host_not_allowlisted', async () => {
-    const pack = await runOrchestrator(
-      { braveQueries: [], arxivQueries: [], semanticScholarQueries: [], githubQueries: [], rssFeeds: [], directFetches: ['https://evil.com/x'] },
-      {
-        enabledAdapters: ['arxiv','semantic_scholar','github_search','rss'],
-        brave: { search: async () => ({ results: [], keyIndex: 0, attempts: [] }) as any },
-        adapters: baseAdapters as any,
-        webFetch: async () => { throw new Error('should-not-be-called'); },
-        hostAllowlist: new Set(['only-this.com']),
-        perAdapterTimeoutMs: 1000, totalDeadlineMs: 5000, concurrencyCap: 4,
-      }
-    );
-    expect(pack.failedAttempts.some(f => f.reason === 'host_not_allowlisted')).toBe(true);
-    expect(pack.sources.length).toBe(0);
   });
 });
 
@@ -60,7 +33,7 @@ describe('A11 — mma-explore consumption contract', () => {
 
 describe('A12 — evidence-pack budget enforcement', () => {
   it('caps per-group, total sources, and total bytes; sets budgetExceeded', () => {
-    const groups = ['arxiv','semantic_scholar','github_repo','github_code','web_fetch','rss','brave'] as const;
+    const groups = ['arxiv','semantic_scholar','github_repo','github_code','brave'] as const;
     const sources = [];
     for (const g of groups) {
       for (let i = 0; i < 15; i++) {
@@ -146,26 +119,3 @@ describe('A15 — parser-compatible implementer-prefix output (structural smoke)
   });
 });
 
-describe('A17 — userSources schema and matching', () => {
-  it('Format: rejects URLs in userSources at Zod-validation layer', () => {
-    const r = ResearchConfigSchema.safeParse({
-      userSources: ['https://www.bis.org'],
-    });
-    // userSources entries must be host strings per HostString validator;
-    // URLs do not satisfy the DNS-label canonicalization and are rejected.
-    expect(r.success).toBe(false);
-  });
-
-  it('Matching: bis.org and www.bis.org are distinct in the allowlist set', () => {
-    const allow = new Set(['bis.org']);
-    expect(allow.has('www.bis.org')).toBe(false);
-    expect(allow.has('bis.org')).toBe(true);
-  });
-
-  it('Union: directFetches passes when host is in fetchAllowlistExtra ∪ userSources', () => {
-    const allow = new Set(['arxiv.org', 'bis.org']);
-    expect(allow.has('arxiv.org')).toBe(true);
-    expect(allow.has('bis.org')).toBe(true);
-    expect(allow.has('other.com')).toBe(false);
-  });
-});

@@ -2,10 +2,12 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ReviewPayload, Finding } from '../stage-io.js';
 import { specReviewPrompt }    from './spec-review-prompt.js';
 import { qualityReviewPrompt } from './quality-review-prompt.js';
+import { journalReviewPrompt } from './journal-review-prompt.js';
 import { parseReviewReport }   from './parse-review-report.js';
 import { invertedReviewerTier } from './tier-policy.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
+import { SLICE_CAP_BYTES } from '../../tools/execute-plan/plan-extractor.js';
 import type { AgentType } from '../../types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 
@@ -33,10 +35,36 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
   const impl = (state.gates?.['implement']?.payload ?? {}) as { summary?: string; filesChanged?: string[] };
   const briefObj = (state.task ?? {}) as { brief?: string };
   const briefStr = briefObj.brief ?? '';
+
+  let cumulativeDiff = '';
+  if (state.diffTracker) {
+    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
+  }
+
+  // Truncate diff to SLICE_CAP_BYTES by UTF-8 byte length, reserving space for the truncation marker
+  const truncationMarker = '[diff truncated]';
+  const diffBytes = Buffer.byteLength(cumulativeDiff, 'utf8');
+  if (diffBytes > SLICE_CAP_BYTES) {
+    const markerBytes = Buffer.byteLength(truncationMarker, 'utf8');
+    const availableBytes = SLICE_CAP_BYTES - markerBytes;
+
+    // Truncate by finding the right position in UTF-8
+    let truncated = '';
+    let byteCount = 0;
+    for (const char of cumulativeDiff) {
+      const charBytes = Buffer.byteLength(char, 'utf8');
+      if (byteCount + charBytes > availableBytes) break;
+      truncated += char;
+      byteCount += charBytes;
+    }
+    cumulativeDiff = truncated + truncationMarker;
+  }
+
   const context = {
     brief: briefStr,
     workerSummary: (impl?.summary ?? "") as string,
     filesChanged: impl.filesChanged ?? [],
+    diff: cumulativeDiff,
   };
 
   type SubResult = {
@@ -64,6 +92,20 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     ?? 'standard';
   const resolvedReviewerTier: AgentType = invertedReviewerTier(implementerTier);
 
+  // journal-record produces markdown ADR nodes, not code — a single
+  // node-validation review (frontmatter/edges/schema/confinement/dedup)
+  // replaces the code-oriented spec+quality pair, which mis-fits markdown.
+  if (state.route === 'journal-record') {
+    const r = await runReviewerWithRetries(state, journalReviewPrompt(context), 'quality', implementerTier);
+    subResults.push({
+      name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
+      model: r.model,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+      cachedReadTokens: r.cachedReadTokens, cachedNonReadTokens: r.cachedNonReadTokens,
+      turnsUsed: r.turnsUsed,
+      turn: r.turn,
+    });
+  } else {
   if (runSpec) {
     const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec', implementerTier);
     subResults.push({
@@ -85,6 +127,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
       turnsUsed: r.turnsUsed,
       turn: r.turn,
     });
+  }
   }
 
   const succeeded = subResults.filter(s => s.result.verdict).map(s => s.name);

@@ -30,7 +30,7 @@ const baseDeps = (responses: string[]): TwoTurnDeps => ({
 describe('two-turn-driver', () => {
   const validJson = JSON.stringify({
     braveQueries: ['q'], arxivQueries: [], semanticScholarQueries: [],
-    githubQueries: [], rssFeeds: [], directFetches: [],
+    githubQueries: [],
   });
 
   it('happy path — valid JSON turn-1 returns plan + orchestrator pack', async () => {

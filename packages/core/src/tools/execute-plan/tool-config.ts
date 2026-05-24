@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { basename } from 'node:path';
 import { buildOutputEnvelopeSchema } from '../shared-output.js';
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
@@ -143,6 +144,8 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
     cwd: ctx.cwd ?? brief.cwd,
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
+    taskDescriptor: brief.taskDescriptor,
+    planBasename: basename(brief.filePaths[0]!),
     ...(brief.sectionBody ? { planContext: brief.sectionBody } : {}),
   }),
   reportSchema: executePlanReportSchema,

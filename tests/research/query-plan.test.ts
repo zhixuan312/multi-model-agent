@@ -7,8 +7,6 @@ describe('QueryPlan schema', () => {
       arxivQueries: ['stablecoin'],
       semanticScholarQueries: ['CBDC'],
       githubQueries: [{ q: 'topic:stablecoin', kind: 'repo' }],
-      rssFeeds: ['https://hnrss.org/newest?q=stablecoin'],
-      directFetches: ['https://www.bis.org/publ/work1356.htm'],
     });
     expect(ok.success).toBe(true);
   });
@@ -16,7 +14,7 @@ describe('QueryPlan schema', () => {
   it('accepts an empty plan (all arrays empty)', () => {
     const ok = QueryPlanSchema.safeParse({
       braveQueries: [], arxivQueries: [], semanticScholarQueries: [],
-      githubQueries: [], rssFeeds: [], directFetches: [],
+      githubQueries: [],
     });
     expect(ok.success).toBe(true);
   });
@@ -25,7 +23,7 @@ describe('QueryPlan schema', () => {
     const bad = QueryPlanSchema.safeParse({
       braveQueries: Array(9).fill('q'),
       arxivQueries: [], semanticScholarQueries: [],
-      githubQueries: [], rssFeeds: [], directFetches: [],
+      githubQueries: [],
     });
     expect(bad.success).toBe(false);
   });
@@ -34,7 +32,7 @@ describe('QueryPlan schema', () => {
     const bad = QueryPlanSchema.safeParse({
       braveQueries: ['x'.repeat(201)],
       arxivQueries: [], semanticScholarQueries: [],
-      githubQueries: [], rssFeeds: [], directFetches: [],
+      githubQueries: [],
     });
     expect(bad.success).toBe(false);
   });
@@ -46,7 +44,7 @@ describe('QueryPlan schema', () => {
   it('parseQueryPlan returns the parsed object on good JSON', () => {
     const json = JSON.stringify({
       braveQueries: ['q'], arxivQueries: [], semanticScholarQueries: [],
-      githubQueries: [], rssFeeds: [], directFetches: [],
+      githubQueries: [],
     });
     const parsed = parseQueryPlan(json);
     expect(parsed.braveQueries).toEqual(['q']);

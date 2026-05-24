@@ -1,15 +1,15 @@
 import { resolveEnabledAdapters } from '../../../packages/core/src/research/adapters/index.js';
 
 const baseCfg = {
-  arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true,
+  arxiv: true, semanticScholar: true, githubSearch: true,
 };
 
 describe('resolveEnabledAdapters', () => {
-  it('returns all four when every flag is true and no key gate', () => {
+  it('returns all three when every flag is true and the SS key is present', () => {
     expect(resolveEnabledAdapters(baseCfg, {
       semanticScholarApiKey: 'sk-test',
     })).toEqual(
-      ['arxiv', 'semantic_scholar', 'github_search', 'rss']
+      ['arxiv', 'semantic_scholar', 'github_search']
     );
   });
 

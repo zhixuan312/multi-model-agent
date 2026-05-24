@@ -28,7 +28,7 @@ export function applyAnnotatePreconditions(
   // Synthesize a specific, gate-naming message. Read concrete details
   // from state for richer wording than deriveCompletion's generic reasons.
   const last = (state as { lastRunResult?: { unaddressedFindingIds?: string[]; criteriaSucceeded?: string[]; criteriaErrors?: unknown[] } }).lastRunResult ?? null;
-  const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'explore', 'research']);
+  const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'explore', 'research', 'journal-recall']);
   const isRead = READ_ROUTES.has(inputs.route as string);
 
   const reasons: string[] = [];

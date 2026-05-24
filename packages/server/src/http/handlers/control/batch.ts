@@ -304,6 +304,19 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
           })),
           findingsOutcome: rollupOutcome,
           criteriaErrors: [] as unknown[],
+          // research-only: the `## Sources used` table, deduped by source group
+          // across tasks. Empty on every non-research route.
+          sourcesUsed: (() => {
+            const seen = new Map<string, { source: string; attempted: boolean; used: boolean; note?: string }>();
+            for (const s of snapshots) {
+              for (const row of ((s as { sourcesUsed?: { source: string; attempted: boolean; used: boolean; note?: string }[] }).sourcesUsed ?? [])) {
+                const prev = seen.get(row.source);
+                // Prefer a `used:true` row over an attempted-but-failed one.
+                if (!prev || (row.used && !prev.used)) seen.set(row.source, row);
+              }
+            }
+            return [...seen.values()];
+          })(),
         };
 
         // Build headline

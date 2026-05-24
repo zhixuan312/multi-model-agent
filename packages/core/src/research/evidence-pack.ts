@@ -2,7 +2,7 @@
 
 export type SourceGroup =
   | 'arxiv' | 'semantic_scholar' | 'github_repo' | 'github_code'
-  | 'web_fetch' | 'rss' | 'brave';
+  | 'brave';
 
 export interface EvidenceSource {
   source:       SourceGroup;
@@ -29,6 +29,50 @@ export interface EvidencePack {
   budgetExceeded: boolean;
 }
 
+/** One row of the `## Sources used` table: which adapter group was queried,
+ *  whether it returned usable data, and a short note (result count or failure
+ *  reason). Mirrors the report-parser-slot's ResearchSourcesUsedEntry shape. */
+export interface SourceUsage {
+  source:    string;
+  attempted: boolean;
+  used:      boolean;
+  note?:     string;
+}
+
+/**
+ * Deterministic `## Sources used` table built straight from the EvidencePack —
+ * the ground truth for which adapter groups were queried and which returned
+ * data. This replaces parsing a worker-emitted markdown table: the /research
+ * synthesis runs as a per-criterion loop where no single turn is the designated
+ * "emit the sources table" turn, so the worker never reliably produces one and
+ * the parsed table was always empty.
+ */
+export function summarizeSourcesUsed(pack: EvidencePack): SourceUsage[] {
+  const usedCounts = new Map<SourceGroup, number>();
+  for (const s of pack.sources) usedCounts.set(s.source, (usedCounts.get(s.source) ?? 0) + 1);
+
+  const failedReasons = new Map<SourceGroup, Set<string>>();
+  for (const f of pack.failedAttempts) {
+    if (!failedReasons.has(f.source)) failedReasons.set(f.source, new Set());
+    failedReasons.get(f.source)!.add(f.reason);
+  }
+
+  const groups = new Set<SourceGroup>([...usedCounts.keys(), ...failedReasons.keys()]);
+  const out: SourceUsage[] = [];
+  for (const g of groups) {
+    const n = usedCounts.get(g) ?? 0;
+    const used = n > 0;
+    const noteParts: string[] = [];
+    if (used) noteParts.push(`${n} result${n === 1 ? '' : 's'}`);
+    const reasons = failedReasons.get(g);
+    if (reasons && reasons.size > 0) noteParts.push([...reasons].join('; '));
+    out.push({ source: g, attempted: true, used, ...(noteParts.length ? { note: noteParts.join(' — ') } : {}) });
+  }
+  // Stable order: used groups first, then alphabetical — deterministic output.
+  out.sort((a, b) => (Number(b.used) - Number(a.used)) || a.source.localeCompare(b.source));
+  return out;
+}
+
 export const EVIDENCE_PACK_LIMITS = Object.freeze({
   MAX_TOTAL_BYTES:   48 * 1024,
   MAX_PER_GROUP:     10,
@@ -38,7 +82,7 @@ export const EVIDENCE_PACK_LIMITS = Object.freeze({
 
 // Drop priority: lowest-priority group dropped first.
 const DROP_PRIORITY: SourceGroup[] = [
-  'brave', 'rss', 'web_fetch',
+  'brave',
   'github_code', 'github_repo', 'semantic_scholar', 'arxiv',
 ];
 

@@ -28,7 +28,7 @@ import { applyAnnotatePreconditions } from '../annotate-parser.js';
 import { annotatePromptWrite, annotatePromptRead } from '../annotate-prompts.js';
 import type { AnnotatePayload, StageGate } from '../stage-io.js';
 
-const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
+const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research', 'journal-recall']);
 
 export interface StructuredReport {
   summary: string;
@@ -89,8 +89,14 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   };
 
   if (route === 'research') {
-    const lastOutput = (last.output as string | undefined) ?? '';
-    report.sourcesUsed = parseSourcesUsed(lastOutput);
+    // Prefer the deterministic table derived from the EvidencePack (threaded
+    // onto lastRunResult by perform-implementation). The worker-emitted
+    // `## Sources used` markdown is an unreliable fallback — the per-criterion
+    // synthesis loop has no designated turn that emits it.
+    const fromPack = last.sourcesUsed as ResearchSourcesUsedEntry[] | undefined;
+    report.sourcesUsed = (Array.isArray(fromPack) && fromPack.length > 0)
+      ? fromPack
+      : parseSourcesUsed((last.output as string | undefined) ?? '');
   }
 
   report.findingsOutcome = (last.findingsOutcome as StructuredReport['findingsOutcome'] | undefined);

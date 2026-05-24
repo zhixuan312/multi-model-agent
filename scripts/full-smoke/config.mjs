@@ -34,6 +34,9 @@ export const POLL = {
 //   - execute-plan        → 1 (a single worker session runs the whole plan;
 //                              its multiple taskOutcomes are NOT separate runs)
 //   - investigate/audit/review/debug → 1 (single read run)
+//   - journal-record      → 1 (write route; one worker writes the journal nodes)
+//   - journal-recall      → 1 (read route, investigate-shaped; multi-criteria
+//                              fan-out is sub-runs within one sealed envelope)
 //   - retry               → 1 (re-runs the one seeded failed task)
 //   - context-blocks      → 0 (synchronous state op, no worker run)
 //   - research            → 0 (aggregation fan-out; emits no per-task wire
@@ -57,6 +60,10 @@ export const SCENARIOS = [
   { id: 12, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
   { id: 13, route: 'delegate', tier: 'standard', kind: 'write', expectCommitSkip: 'no_diff', emits: 1 },
   { id: 14, route: 'retry', kind: 'assist', emits: 1 },
+  // Journal (4.8.0). Record (write) must run before recall (read) so the recall
+  // worker has populated .mmagent/journal/ to read. Both complex-tier.
+  { id: 15, route: 'journal-record', tier: 'complex', kind: 'write', emits: 1 },
+  { id: 16, route: 'journal-recall', tier: 'complex', kind: 'read', emits: 1 },
 ];
 
 // 4.7.20 universal terminal context block: the per-route `context-block` check in

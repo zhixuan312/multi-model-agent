@@ -13,24 +13,26 @@ import { runTwoTurnDriver } from '../tools/research/two-turn-driver.js';
 import { runOrchestrator } from '../research/orchestrator.js';
 import {
   resolveEnabledAdapters,
-  arxivSearch, semanticScholarSearch, githubSearch, rssAdapter,
+  arxivSearch, semanticScholarSearch, githubSearch,
 } from '../research/adapters/index.js';
 import { BraveClient } from '../research/web-search.js';
-import { webFetch } from '../research/web-fetch.js';
 import { compileResearchImplementerPrefix } from '../tools/research/brief-slot.js';
-import type { EvidencePack } from '../research/evidence-pack.js';
+import { summarizeSourcesUsed, type EvidencePack, type SourceUsage } from '../research/evidence-pack.js';
 
 export interface ResearchPreLoopInput {
   session:               Pick<Session, 'send'>;
   researchQuestion:      string;
   background?:           string;
   resolvedContextBlocks: Array<{ id: string; content: string }>;
-  cfg:                   ResearchConfig & { userSources: string[] };
+  cfg:                   ResearchConfig;
 }
 
 export interface ResearchPreLoopResult {
   cachedPrefix: string;
   pack:         EvidencePack;
+  /** Deterministic `## Sources used` table, derived from the pack rather than
+   *  parsed from worker markdown (which the per-criterion loop never emits). */
+  sourcesUsed:  SourceUsage[];
 }
 
 export async function runResearchPreLoop(
@@ -41,10 +43,6 @@ export async function runResearchPreLoop(
     semanticScholarApiKey: inp.cfg.builtinAdapters.semanticScholarApiKey,
     githubPat:             inp.cfg.builtinAdapters.githubPat,
   });
-  const hostAllowlist = new Set<string>([
-    ...inp.cfg.fetchAllowlistExtra,
-    ...(inp.cfg.userSources ?? []).map(h => h.toLowerCase()),
-  ]);
   const driverResult = await runTwoTurnDriver({
     session: inp.session,
     runOrchestrator: (plan) => runOrchestrator(plan, {
@@ -54,10 +52,7 @@ export async function runResearchPreLoop(
         arxiv:           (q) => arxivSearch(q, { maxResults: 5 }),
         semanticScholar: (q) => semanticScholarSearch(q, { maxResults: 5, apiKey: inp.cfg.builtinAdapters.semanticScholarApiKey }),
         github:          (q, kind) => githubSearch(q, { kind, maxResults: 5, pat: inp.cfg.builtinAdapters.githubPat }),
-        rss:             (u) => rssAdapter(u, { webFetch: (url) => webFetch({ url, cfg: inp.cfg.fetch, hostAllowlist }), maxResults: 10 }),
       },
-      webFetch: (u) => webFetch({ url: u, cfg: inp.cfg.fetch, hostAllowlist }),
-      hostAllowlist,
       perAdapterTimeoutMs: 8000,
       totalDeadlineMs:     20000,
       concurrencyCap:      8,
@@ -71,5 +66,9 @@ export async function runResearchPreLoop(
     pack:             driverResult.pack,
     contextBlocks:    inp.resolvedContextBlocks,
   });
-  return { cachedPrefix, pack: driverResult.pack };
+  return {
+    cachedPrefix,
+    pack:        driverResult.pack,
+    sourcesUsed: summarizeSourcesUsed(driverResult.pack),
+  };
 }

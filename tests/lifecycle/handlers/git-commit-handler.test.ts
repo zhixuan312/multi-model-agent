@@ -220,6 +220,8 @@ describe('commitHandler', () => {
     writeFileSync(join(cwd, 'e.txt'), 'from implement');
     const state: any = {
       cwd,
+      route: 'delegate',
+      task: { prompt: 'fix correct off-by-one error in parser' },
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
@@ -227,13 +229,14 @@ describe('commitHandler', () => {
       gates: {
         implement: {
           outcome: 'advance',
-          payload: { summary: 'fix: correct off-by-one error in parser' },
+          payload: { summary: 'correct off-by-one error in parser', summaryTrustworthy: true },
         },
       },
     };
     const gate = await commitHandler(state);
     expect(gate.payload.kind).toBe('committed');
-    expect(gate.payload.commitMessage).toContain('fix: correct off-by-one error in parser');
+    expect(gate.payload.commitMessage).toMatch(/^fix:/);
+    expect(gate.payload.commitMessage).toContain('correct off-by-one error in parser');
   });
 
   it('commitMessage uses rework summary when rework ran', async () => {
@@ -241,6 +244,8 @@ describe('commitHandler', () => {
     writeFileSync(join(cwd, 'f.txt'), 'from rework');
     const state: any = {
       cwd,
+      route: 'delegate',
+      task: { prompt: 'fix parser edge case' },
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
@@ -253,8 +258,9 @@ describe('commitHandler', () => {
         rework: {
           outcome: 'advance',
           payload: {
-            summary: 'rework: addressed reviewer feedback on parser edge case',
+            summary: 'addressed reviewer feedback on parser edge case',
             unaddressedFindingIds: [],
+            summaryTrustworthy: true,
           },
         },
         review: {
@@ -265,7 +271,8 @@ describe('commitHandler', () => {
     };
     const gate = await commitHandler(state);
     expect(gate.payload.kind).toBe('committed');
-    expect(gate.payload.commitMessage).toContain('rework: addressed reviewer feedback on parser edge case');
+    expect(gate.payload.commitMessage).toMatch(/^fix:/);
+    expect(gate.payload.commitMessage).toContain('addressed reviewer feedback on parser edge case');
     // No unaddressed findings → no annotation
     expect(gate.payload.commitMessage).not.toContain('Rework left');
   });
@@ -275,6 +282,8 @@ describe('commitHandler', () => {
     writeFileSync(join(cwd, 'g.txt'), 'from rework');
     const state: any = {
       cwd,
+      route: 'delegate',
+      task: { prompt: 'address findings' },
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
@@ -287,8 +296,9 @@ describe('commitHandler', () => {
         rework: {
           outcome: 'advance',
           payload: {
-            summary: 'rework: addressed F1, F2, F3',
+            summary: 'addressed F1, F2, F3',
             unaddressedFindingIds: ['F1', 'F3'],
+            summaryTrustworthy: true,
           },
         },
         review: {
@@ -307,6 +317,8 @@ describe('commitHandler', () => {
     writeFileSync(join(cwd, 'h.txt'), 'approved path');
     const state: any = {
       cwd,
+      route: 'delegate',
+      task: { prompt: 'add final fix' },
       preTaskHeadSha: _preTaskSha,
       preTaskUntrackedFiles: _preTaskUntracked,
       executionContext: {},
@@ -314,7 +326,7 @@ describe('commitHandler', () => {
       gates: {
         implement: { outcome: 'advance', payload: { summary: 'final fix' } },
         review: { outcome: 'advance', payload: { verdict: 'approved' } },
-        rework: { outcome: 'advance', payload: { summary: 'r', unaddressedFindingIds: ['F1'] } },
+        rework: { outcome: 'advance', payload: { summary: 'r', unaddressedFindingIds: ['F1'], summaryTrustworthy: true } },
       },
     };
     const gate = await commitHandler(state);

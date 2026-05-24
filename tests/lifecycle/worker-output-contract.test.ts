@@ -29,4 +29,31 @@ describe('parseWorkerOutput (v5)', () => {
     // v5: salvage path emits 'failed' (no done_with_concerns hedging state).
     expect(out.workerSelfAssessment).toBe('failed');
   });
+
+  describe('parsedCleanly flag', () => {
+    it('returns parsedCleanly: true for a valid JSON block with valid schema', () => {
+      const text = '```json\n{"summary":"success","workerSelfAssessment":"done","filesChanged":["file.ts"]}\n```';
+      const out = parseWorkerOutput(text);
+      expect(out.parsedCleanly).toBe(true);
+      expect(out.workerSelfAssessment).toBe('done');
+    });
+
+    it('returns parsedCleanly: false when no JSON block present', () => {
+      const out = parseWorkerOutput('just chat, no JSON');
+      expect(out.parsedCleanly).toBe(false);
+      expect(out.workerSelfAssessment).toBe('failed');
+    });
+
+    it('returns parsedCleanly: false when JSON.parse throws', () => {
+      const out = parseWorkerOutput('```json\n{"summary": "broken",\n```');
+      expect(out.parsedCleanly).toBe(false);
+      expect(out.workerSelfAssessment).toBe('failed');
+    });
+
+    it('returns parsedCleanly: false when schema-invalid but summary present', () => {
+      const out = parseWorkerOutput('```json\n{"summary":"some text"}\n```');
+      expect(out.parsedCleanly).toBe(false);
+      expect(out.workerSelfAssessment).toBe('failed');
+    });
+  });
 });

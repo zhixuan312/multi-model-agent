@@ -45,7 +45,6 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
       research: {
         researchQuestion: enriched.researchQuestion,
         background: enriched.background,
-        userSources: [...(enriched.userSources ?? [])],
         resolvedContextBlocks: (enriched.resolvedContextBlocks ?? []).map(b => ({ id: b.id, content: b.content })),
       },
     } : {}),
