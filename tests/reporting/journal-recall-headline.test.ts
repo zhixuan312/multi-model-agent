@@ -30,7 +30,7 @@ describe('journalRecallHeadlineTemplate', () => {
   });
 
   it('emits journal-recall:-prefixed headline with truncated summary', () => {
-    const longOutput = 'This is a very long output that should be truncated at the first sentence boundary. This is the second sentence.';
+    const longOutput = 'This is a long output that contains useful information. This is the second sentence that should not appear.';
     const headline = journalRecallHeadlineTemplate.compose({
       taskBrief: 'recall context',
       task: baseTask,
@@ -38,7 +38,7 @@ describe('journalRecallHeadlineTemplate', () => {
       runResult: { ...baseRun, output: longOutput } as unknown as RuntimeRunResult,
       status: 'ok',
     });
-    expect(headline).toBe('[ok] journal-recall: This is a very long output that should be truncated at the first sentence boundary.');
+    expect(headline).toBe('[ok] journal-recall: This is a long output that contains useful information.');
   });
 
   it('emits journal-recall:-prefixed headline with error status', () => {
