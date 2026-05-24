@@ -50,6 +50,8 @@ export type ImplementPayload = {
   findingsOutcomeReason?: string | null;
   outcomeInferred?: boolean;
   outcomeMalformed?: boolean;
+  summaryTrustworthy?: boolean;
+  parsedCleanly?: boolean;
 };
 
 export type ReviewPayload = {
@@ -68,6 +70,8 @@ export type ReworkPayload = {
   summary: string;
   filesChanged: string[];
   unaddressedFindingIds: string[];
+  summaryTrustworthy?: boolean;
+  parsedCleanly?: boolean;
 };
 
 export type CommitPayload =

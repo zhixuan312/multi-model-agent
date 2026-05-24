@@ -73,4 +73,6 @@ export interface TaskSpec {
     userSources?: string[];
     resolvedContextBlocks?: Array<{ id: string; content: string }>;
   }
+  taskDescriptor?: string
+  planBasename?: string
 }
