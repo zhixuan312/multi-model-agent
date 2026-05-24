@@ -8,3 +8,4 @@
 | 0006 | 2026-05-24 | adopted | Treat telemetry schema version as a data-loss switch | telemetry, schema-version, wire-schema, data-loss, greenfield |
 | 0007 | 2026-05-24 | adopted | Attribute stage model and cost to the tier that ran it | telemetry, cost-attribution, per-stage, model-attribution, tiers |
 | 0008 | 2026-05-24 | adopted | Keep one canonical read path per lifecycle fact | lifecycle, commit-gate, review-gate, single-source-of-truth, state-mirrors |
+| 0009 | 2026-05-24 | adopted | Enforce reviewer and implementer separation by tier | code-review, cross-tier, reviewer-separation, tiers, quality |
