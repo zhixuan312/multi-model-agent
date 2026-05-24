@@ -14,3 +14,4 @@
 | 0012 | 2026-05-24 | superseded | Serialize same-repo write dispatch to protect shared worktrees | concurrency, dispatch, same-repo, serialization, data-loss, git, write-routes |
 | 0013 | 2026-05-24 | adopted | Prefer same-repo parallel dispatch with scoped git commits | concurrency, dispatch, parallel, commit-mutex, git-attribution, pathspec, same-repo, git |
 | 0014 | 2026-05-24 | adopted | Accumulate provider token usage incrementally during streaming turns | providers, token-usage, telemetry, streaming, partial-runs, claude, openai-compatible |
+| 0015 | 2026-05-24 | adopted | Separate labor from judgment with a deterministic research orchestrator | research, labor-vs-judgment, two-turn, orchestrator, determinism, query-plan, evidence-pack |
