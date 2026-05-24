@@ -5,3 +5,4 @@
 2026-05-24T00:00:00+08:00  refine  0005  Preserve unknown values as null in telemetry
 2026-05-24T00:00:00+08:00  refine  0006  Treat telemetry schema version as a data-loss switch
 2026-05-24T00:00:00+08:00  create  0007  Attribute stage model and cost to the tier that ran it
+2026-05-24T21:08:46+08:00  create  0008  Keep one canonical read path per lifecycle fact
