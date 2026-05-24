@@ -152,7 +152,7 @@ Each task result is the per-task wire object (`ComposePayload`):
 | `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
 | `filesChanged` | File paths modified (empty for read-only routes). |
 | `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-| `blockId` | `terminalBlockId` — pass to `contextBlockIds` in a follow-up task to chain results without re-inlining. |
+| `blockId` | Always `null` (execute-plan is a write route; `contextBlockId` is `null` too — no terminal block). |
 
 **The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
 - `advance` — stage ran and produced its payload
@@ -200,13 +200,7 @@ Task 5 depends on Task 4's output → workers race; Task 5 might run before Task
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report (headline, structured report, per-file diffs, and findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (`commitSha` + changed files). The per-task result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
-**Use cases:**
-- Pass a prior task's report to a follow-up task via `contextBlockIds`
-- Chain execute-plan → review → retry without re-inlining results
-- Accumulate round-N findings for round N+1 in iterative workflows
-
-The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
 @include _shared/error-handling.md

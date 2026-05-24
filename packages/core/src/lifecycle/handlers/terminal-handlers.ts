@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { RuntimeRunResult, TaskSpec } from '../../types.js';
@@ -6,6 +5,9 @@ import type { StageGate, TerminalPayload } from '../stage-io.js';
 import { findModelProfile } from '../../config/model-profile-registry.js';
 import { getRealFilesChanged } from '../real-diff.js';
 import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
+import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
+import { renderTerminalReportMarkdown } from '../../reporting/terminal-report-markdown.js';
+import { WRITE_ROUTES } from '../stage-io.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -22,7 +24,7 @@ import { deriveCompletion, extractCompletionInputs } from '../derive-completion.
  *     events are persisted before the per-task terminal stage exits.
  *
  * Each handler is idempotent on its state-slot guard:
- *   - state.terminalBlockId
+ *   - state.contextBlockId
  *   - state.taskTerminalEmitted
  *   - state.batchRegistryPersisted
  *   - state.telemetryFlushed
@@ -32,30 +34,30 @@ import { deriveCompletion, extractCompletionInputs } from '../derive-completion.
  * StagePlan, so they fire even on hard-fail paths.
  */
 
-interface TerminalContextBlockStore {
-  register?(payload: { id: string; content: string }): void;
-}
-
 export function registerTerminalBlockHandler(state: LifecycleState): void {
-  if (state.terminalBlockId) return;
-  const ctx = state.executionContext as
-    | (ExecutionContext & { contextBlockStore?: TerminalContextBlockStore })
-    | undefined;
-  if (!ctx) return;
-  const last = state.lastRunResult as RuntimeRunResult | undefined;
-  if (!last) return;
-
-  const id = `terminal-${randomUUID()}`;
-  state.terminalBlockId = id;
-
-  const store = ctx.contextBlockStore;
-  if (store && typeof store.register === 'function') {
-    try {
-      store.register({ id, content: last.output ?? '' });
-    } catch {
-      // Best-effort: terminal-block registration is advisory; failure must
-      // not block emit_task_terminal or batch-registry persistence.
-    }
+  if (state.contextBlockId) return;
+  const ctx = state.executionContext;
+  const envelope = ctx?.envelope;
+  const store = ctx?.contextBlockStore;
+  const registry = ctx?.batchRegistry;
+  if (!envelope || !store || !registry) return;
+  const snap = envelope.snapshot();
+  // Write routes (delegate / execute-plan / retry) produce code + a commit;
+  // their durable record is the diff, not a prose block. No registration.
+  if ((WRITE_ROUTES as readonly string[]).includes(snap.route)) return;
+  try {
+    const markdown = renderTerminalReportMarkdown(snap);
+    const registrar = new TerminalBlockRegistrar(store, registry);
+    const id = registrar.register({
+      batchId: snap.batchId, taskIndex: snap.taskIndex, route: snap.route, markdown,
+    });
+    if (id) state.contextBlockId = id;
+  } catch {
+    // Best-effort: registration is advisory and must not block seal/flush/persist.
+    envelope.recordValidationWarning({
+      rule: 'TerminalBlockRegisterFailed',
+      path: `${snap.route}:${snap.batchId}:${snap.taskIndex}`,
+    });
   }
 }
 
@@ -154,6 +156,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     commitSha: didCommit ? (commitPayload?.commitSha ?? null) : null,
     commitMessage: didCommit ? (commitPayload?.commitMessage ?? null) : null,
     commitSkipReason: commitPayload?.kind === 'no_op' ? (commitPayload?.reason ?? null) : null,
+    contextBlockId: state.contextBlockId ?? null,
   });
   state.taskCompletedRecorded = true;
 }
@@ -262,12 +265,12 @@ export async function flushTelemetryHandler(state: LifecycleState): Promise<void
  * missing.
  *
  * Idempotency: re-invocation MUST be safe and return the same payload (each
- * sub-handler short-circuits on its state-slot guard, e.g. `state.terminalBlockId`).
+ * sub-handler short-circuits on its state-slot guard, e.g. `state.contextBlockId`).
  */
 export async function terminalHandler(state: LifecycleState): Promise<StageGate<TerminalPayload>> {
   const t0 = Date.now();
   const flags: TerminalPayload = {
-    terminalBlockId: null,
+    contextBlockId: null,
     telemetryFlushed: false,
     batchRegistryPersisted: false,
     taskTerminalEmitted: false,
@@ -276,7 +279,7 @@ export async function terminalHandler(state: LifecycleState): Promise<StageGate<
 
   try {
     registerTerminalBlockHandler(state);
-    flags.terminalBlockId = (state as { terminalBlockId?: string | null }).terminalBlockId ?? null;
+    flags.contextBlockId = (state as { contextBlockId?: string | null }).contextBlockId ?? null;
   } catch {
     /* leave null on failure */
   }

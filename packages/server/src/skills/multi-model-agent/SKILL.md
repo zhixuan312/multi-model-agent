@@ -172,7 +172,11 @@ Context blocks are immutable after creation. To update content, register a new b
 
 ## Terminal context block
 
-Every completed task across all routes automatically registers a terminal markdown context block with the full task report. The `blockId` is in each task result as `terminalBlockId`. This block is immutable, lives for the session duration (or idle-evicts after 24 h), and counts against the `maxEntries` quota. Use `terminalBlockId` values in downstream `contextBlockIds` to chain findings across workflow steps without re-inlining report content. No caller action needed — blocks are registered server-side at task completion.
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
+
+    contextBlockIds: priorResults.map(r => r.contextBlockId).filter((id) => id !== null)
 
 ## General flow
 

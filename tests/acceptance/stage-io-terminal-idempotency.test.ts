@@ -25,12 +25,12 @@ function makeMinimalState(overrides: Partial<LifecycleState> = {}): LifecycleSta
 // AC-28: terminal is idempotent on re-entry
 //
 // The current terminal-handler functions (registerTerminalBlockHandler, etc.)
-// each guard with state slot booleans (terminalBlockId, taskTerminalEmitted,
+// each guard with state slot booleans (contextBlockId, taskTerminalEmitted,
 // batchRegistryPersisted, telemetryFlushed) preventing duplicate work on re-entry.
 // Tests here verify the guard behavior directly via handler overrides.
 
 describe('AC-28: terminal is idempotent on re-entry', () => {
-  it('second call produces same terminalBlockId', async () => {
+  it('second call produces same contextBlockId', async () => {
     const state = makeMinimalState({ route: 'delegate' });
     state.gates!['compose'] = {
       outcome: 'advance',
@@ -66,20 +66,20 @@ describe('AC-28: terminal is idempotent on re-entry', () => {
         runOnHalt: true,
         shouldRun: (s) => s.route !== 'register-context-block' ? { run: true } : { run: false, comment: 'register-context-block route' },
         handler: async (s) => {
-          if ((s as { terminalBlockId?: string }).terminalBlockId) {
+          if ((s as { contextBlockId?: string }).contextBlockId) {
             return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'register_terminal_block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
           }
           const id = 'terminal-fixed-id-42';
-          (s as { terminalBlockId?: string }).terminalBlockId = id;
+          (s as { contextBlockId?: string }).contextBlockId = id;
           return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'register_terminal_block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
         },
       },
     ]);
     await runStagePlan(plan1, state);
-    const firstId = (state as { terminalBlockId?: string }).terminalBlockId;
+    const firstId = (state as { contextBlockId?: string }).contextBlockId;
     expect(firstId).toBe('terminal-fixed-id-42');
 
-    // Second run — terminalBlockId is already set; handler should recognize and not overwrite
+    // Second run — contextBlockId is already set; handler should recognize and not overwrite
     const plan2 = makeTestPlan([
       {
         name: 'register_terminal_block',
@@ -87,18 +87,18 @@ describe('AC-28: terminal is idempotent on re-entry', () => {
         runOnHalt: true,
         shouldRun: (s) => s.route !== 'register-context-block' ? { run: true } : { run: false, comment: 'register-context-block route' },
         handler: async (s) => {
-          const existing = (s as { terminalBlockId?: string }).terminalBlockId;
+          const existing = (s as { contextBlockId?: string }).contextBlockId;
           if (existing) {
             return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'register_terminal_block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
           }
           const id = 'terminal-different-id';
-          (s as { terminalBlockId?: string }).terminalBlockId = id;
+          (s as { contextBlockId?: string }).contextBlockId = id;
           return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'register_terminal_block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
         },
       },
     ]);
     await runStagePlan(plan2, state);
-    const secondId = (state as { terminalBlockId?: string }).terminalBlockId;
+    const secondId = (state as { contextBlockId?: string }).contextBlockId;
     expect(secondId).toBe(firstId); // Same blockId on re-entry
   });
 

@@ -108,6 +108,9 @@ export interface TaskEnvelope {
   commitSha: string | null;
   commitMessage: string | null;
   commitSkipReason: string | null;
+  // terminal context block (read routes) — set at seal() from the registered
+  // terminal-report block id; null on write routes and on registration failure.
+  contextBlockId: string | null;
   // totals
   totalCostUSD: number;
   totalInputTokens: number;
@@ -169,6 +172,7 @@ export class TaskEnvelopeStore {
       plannedStageTotal: 0,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       commitSha: null, commitMessage: null, commitSkipReason: null,
+      contextBlockId: null,
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
       totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
@@ -282,7 +286,7 @@ export class TaskEnvelopeStore {
     this.notify('recordHeartbeat');
   }
 
-  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; errorCode?: ErrorCode | null; realFilesChanged: string[]; commitSha?: string | null; commitMessage?: string | null; commitSkipReason?: string | null }): void {
+  seal(terminal: { status: 'done' | 'done_with_concerns' | 'failed'; terminalAt?: string; stopReason: string | null; structuredError?: StructuredError | null; errorCode?: ErrorCode | null; realFilesChanged: string[]; commitSha?: string | null; commitMessage?: string | null; commitSkipReason?: string | null; contextBlockId?: string | null }): void {
     this.guard('seal');
     this.env.status = terminal.status;
     this.env.terminalAt = terminal.terminalAt ?? new Date().toISOString();
@@ -293,6 +297,7 @@ export class TaskEnvelopeStore {
     this.env.commitSha = terminal.commitSha ?? null;
     this.env.commitMessage = terminal.commitMessage ?? null;
     this.env.commitSkipReason = terminal.commitSkipReason ?? null;
+    this.env.contextBlockId = terminal.contextBlockId ?? null;
     this.recomputeTotals();
     this.recomputeHeadline();
     this.sealed = true;

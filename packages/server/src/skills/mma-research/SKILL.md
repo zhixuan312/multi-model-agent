@@ -149,6 +149,7 @@ Each `results[N]` is the v5 `ComposePayload`:
 | `findings` | The deliverable. `source: 'implementer'`. Empty `findings` on a research route means "no signal found" — still a valid completion. |
 | `workerSelfAssessment` | `'done'` or `'failed'` — never `done_with_concerns`. |
 | `blockId` | Always `null` — research is a task route, not register-context-block. |
+| `contextBlockId` | The terminal context block id for this read-route task (its report as a reusable block). Pass it into a later call's `contextBlockIds` for delta follow-ups. |
 
 Legacy aliases (still emitted for back-compat):
 
@@ -157,6 +158,14 @@ results[0].structuredReport.findings[]    // mirror of findings above
 results[0].structuredReport.sourcesUsed[] // table of sources tried
 results[0].output                          // raw narrative report
 ```
+
+## Terminal context block
+
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
+
+    contextBlockIds: priorResults.map(r => r.contextBlockId).filter((id) => id !== null)
 
 ## Best practices
 

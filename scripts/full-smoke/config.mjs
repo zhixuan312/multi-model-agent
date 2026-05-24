@@ -58,3 +58,11 @@ export const SCENARIOS = [
   { id: 13, route: 'delegate', tier: 'standard', kind: 'write', expectCommitSkip: 'no_diff', emits: 1 },
   { id: 14, route: 'retry', kind: 'assist', emits: 1 },
 ];
+
+// 4.7.20 universal terminal context block: the per-route `context-block` check in
+// verify.mjs asserts read routes surface a non-null `contextBlockId` and write
+// routes surface exactly `null`. Resolution of a passed-in contextBlockId is
+// already exercised live by scenario 4 (audit with `contextBlockIds`), and the
+// byte-for-byte terminal-block expansion is covered by the unit test
+// tests/lifecycle/terminal-block-delta.test.ts — so no separate (slow, complex-
+// tier) delta scenario is run here.

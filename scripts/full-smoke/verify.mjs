@@ -10,6 +10,13 @@ export function verify(rec) {
   // Assist routes (register/retry): minimal envelope check.
   if (e.kind === 'assist') {
     out.push(C('response', r && (r.error?.kind === 'not_applicable' || r.results?.length) ? 'PASS' : 'WARN', JSON.stringify(r?.error)));
+    // retry re-runs a write-route (delegate) task → its terminal contextBlockId
+    // must be null (write routes register no block). register-context-block has
+    // no task result (returns { id }), so only check when results are present.
+    if (e.route === 'retry' && r?.results?.length) {
+      const cb = r.results[0]?.contextBlockId;
+      out.push(C('context-block', cb === null ? 'PASS' : 'WARN', `contextBlockId=${cb} (retry of a write task → expect null)`));
+    }
     return out;
   }
 
@@ -59,6 +66,25 @@ export function verify(rec) {
   if (e.kind === 'read') {
     const findings = sr.findings ?? task0.findings ?? [];
     out.push(C('findings', Array.isArray(findings) ? 'PASS' : 'FAIL', `n=${findings.length}`));
+  }
+
+  // contextBlockId surfacing — universal terminal context block (4.7.20).
+  // Read routes auto-register a terminal block → non-null contextBlockId on the
+  // per-task result. Write routes register none → contextBlockId is exactly null.
+  // `undefined` means the field was not projected onto /batch (the pre-4.7.20 bug)
+  // → FAIL. This is the direct regression guard for the feature.
+  if (!e.expectFail && (e.kind === 'read' || e.kind === 'write')) {
+    const cb = task0.contextBlockId;
+    if (e.kind === 'read') {
+      const ok = typeof cb === 'string' && cb.length > 0;
+      // research is a network aggregation route; a null here is a soft WARN
+      // (worker may not have completed), not a hard regression signal.
+      out.push(C('context-block', ok ? 'PASS' : (e.route === 'research' ? 'WARN' : 'FAIL'),
+        `contextBlockId=${cb} (read route → expect non-null id)`));
+    } else {
+      out.push(C('context-block', cb === null ? 'PASS' : 'FAIL',
+        `contextBlockId=${cb} (write route → expect exactly null; undefined = not projected)`));
+    }
   }
 
   // ② diagnostics

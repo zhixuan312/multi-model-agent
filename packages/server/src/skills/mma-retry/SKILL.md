@@ -159,7 +159,7 @@ Each task result is the per-task wire object (`ComposePayload`):
 | `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
 | `filesChanged` | File paths modified (empty for read-only routes). |
 | `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-| `blockId` | `terminalBlockId` — pass to `contextBlockIds` in a follow-up task to chain results without re-inlining. |
+| `blockId` | Always `null` (retry replays write tasks; `contextBlockId` is `null` too — no terminal block). |
 
 **The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
 - `advance` — stage ran and produced its payload
@@ -206,8 +206,8 @@ Retry preserves the ORIGINAL config (prompt, agentType, filePaths, reviewPolicy)
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report. The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (`commitSha` + changed files). The per-task result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
-Note: the retry batch produces its own terminal context blocks for each re-run task. The original batch's terminal context blocks remain intact and are not overwritten.
+Note: a re-run **read-route** task registers its own terminal context block (`contextBlockId`); re-run write tasks register none. Original-batch blocks remain intact and are not overwritten.
 
 @include _shared/error-handling.md

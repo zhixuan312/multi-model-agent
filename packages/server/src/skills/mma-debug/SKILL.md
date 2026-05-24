@@ -154,7 +154,11 @@ Often the obvious cause isn't the real one. **Fix:** a 30-second debug pass cost
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report (headline, root-cause analysis, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
+
+    contextBlockIds: priorResults.map(r => r.contextBlockId).filter((id) => id !== null)
 
 **Use cases:**
 - Pass debug findings to a downstream `mma-delegate` fix step
