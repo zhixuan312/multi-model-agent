@@ -14,3 +14,4 @@
 2026-05-24T21:36:06+08:00  supersede  0013  Prefer same-repo parallel dispatch with scoped git commits
 2026-05-24T22:00:00+08:00  create  0014  Accumulate provider token usage incrementally during streaming turns
 2026-05-24T21:40:57+08:00  create  0015  Separate labor from judgment with a deterministic research orchestrator
+2026-05-24T21:43:20+08:00  create  0016  Track file activity only from provider-proven events
