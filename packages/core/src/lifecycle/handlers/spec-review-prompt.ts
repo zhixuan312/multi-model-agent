@@ -26,7 +26,8 @@ found | clean
 - **low:** Cosmetic drift
 `.trim();
 
-export function specReviewPrompt(ctx: { brief: string; workerSummary: string; filesChanged: string[] }): string {
+export function specReviewPrompt(ctx: { brief: string; workerSummary: string; filesChanged: string[]; diff?: string }): string {
+  const diffContent = ctx.diff && ctx.diff.trim() ? ctx.diff : '(no diff available)';
   return `You are the spec reviewer for this task.
 
 Brief: ${ctx.brief}
@@ -34,6 +35,13 @@ Brief: ${ctx.brief}
 Worker said: ${ctx.workerSummary}
 
 Files changed: ${ctx.filesChanged.join(', ') || '(none)'}
+
+Diff (authoritative — what actually changed on disk):
+${diffContent}
+
+Guardrails:
+- do NOT claim files missing/untracked — the diff is authoritative
+- test status is in Worker said; don't infer skipped from diff
 
 ${OUTPUT_FORMAT}`;
 }
