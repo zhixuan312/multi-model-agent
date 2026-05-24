@@ -2,7 +2,7 @@ import type { ReadOnlySubtypeSpec } from '../../../lifecycle/read-only-subtype-s
 import type { RouteSemantics } from '../../read-route-prompt.js';
 import {
   JOURNAL_RECALL_ORIENTATION, JOURNAL_RECALL_PROCEDURE, JOURNAL_RECALL_SEVERITY,
-  JOURNAL_RECALL_UNTRUSTED, JOURNAL_RECALL_EMPTY,
+  JOURNAL_RECALL_UNTRUSTED, JOURNAL_RECALL_CRITERIA,
 } from './implementer-criteria.js';
 
 export type JournalRecallSubtype = 'default';
@@ -23,7 +23,7 @@ const SEMANTICS_DEFAULT: RouteSemantics = {
 
 export const JOURNAL_RECALL_SUBTYPES: Record<JournalRecallSubtype, ReadOnlySubtypeSpec> = {
   default: {
-    criteria: [],
+    criteria: JOURNAL_RECALL_CRITERIA,
     orientation: JOURNAL_RECALL_ORIENTATION,
     evidenceRule: JOURNAL_RECALL_PROCEDURE,
     scopeRule: JOURNAL_RECALL_SEVERITY,
