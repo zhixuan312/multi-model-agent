@@ -5,3 +5,4 @@
 | 0003 | 2026-05-24 | adopted | Close caller-facing enums at the HTTP boundary | enums, zod, validation, api-contract, drift-detection |
 | 0004 | 2026-05-24 | adopted | Centralize cost accounting in one pure pricing function | cost, pricing, tokens, telemetry, pure-function, normalization |
 | 0005 | 2026-05-24 | adopted | Preserve unknown values as null in telemetry | telemetry, honest-null, cost-attribution, data-integrity, pricing |
+| 0006 | 2026-05-24 | adopted | Treat telemetry schema version as a data-loss switch | telemetry, schema-version, wire-schema, data-loss, greenfield |
