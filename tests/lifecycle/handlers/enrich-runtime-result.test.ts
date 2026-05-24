@@ -12,25 +12,27 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
       assignmentId: 'test-id',
       executionContext: undefined,
       lastRunResult: { ...lastRunResult } as RuntimeRunResult,
+      reviewPolicy: 'full',
     } as LifecycleState;
   }
+
+  // Canonical objective signals (same sources as deriveCompletion):
+  //   commit → state.gates.commit.payload.kind ; verdict → state.gates.review.payload.verdict
+  const setGates = (state: any, commitKind?: 'committed' | 'no_op', verdict?: string) => {
+    state.gates = {
+      ...(commitKind ? { commit: { outcome: 'advance', payload: { kind: commitKind } } } : {}),
+      ...(verdict ? { review: { outcome: 'advance', payload: { verdict, findings: [] } } } : {}),
+    };
+  };
 
   describe('parsedCleanly: false with commit gate + verdict', () => {
     it('false + committed + approved → done (with selfAssessmentReconciled)', () => {
       const state = makeState({
-        parsedCleanly: false,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = [{
-        kind: 'committed',
-        commitSha: 'abc123',
-        commitMessage: 'test commit',
-        filesChanged: [],
-        authoredAt: '2024-01-01T00:00:00Z',
-      } as CommitPayload];
-      state.reviewPolicy = 'full';
-      state.diffReviewVerdict = 'approved';
+      (state.lastRunResult as any).parsedCleanly = false;
+      setGates(state, 'committed', 'approved');
 
       enrichRuntimeResult(state);
 
@@ -41,19 +43,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
 
     it('false + committed + changes_required → failed (preserved)', () => {
       const state = makeState({
-        parsedCleanly: false,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = [{
-        kind: 'committed',
-        commitSha: 'abc123',
-        commitMessage: 'test commit',
-        filesChanged: [],
-        authoredAt: '2024-01-01T00:00:00Z',
-      } as CommitPayload];
-      state.reviewPolicy = 'full';
-      state.diffReviewVerdict = 'changes_required';
+      (state.lastRunResult as any).parsedCleanly = false;
+      setGates(state, 'committed', 'changes_required');
 
       enrichRuntimeResult(state);
 
@@ -63,15 +57,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
 
     it('false + no-commit → failed', () => {
       const state = makeState({
-        parsedCleanly: false,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = [{
-        kind: 'no_op',
-        reason: 'no_diff',
-      } as CommitPayload];
-      state.reviewPolicy = 'none';
+      (state.lastRunResult as any).parsedCleanly = false;
+      setGates(state, 'no_op', 'approved');
 
       enrichRuntimeResult(state);
 
@@ -83,11 +73,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
   describe('parsedCleanly: true → preserve parsed value', () => {
     it('parsedCleanly: true with done → stays done', () => {
       const state = makeState({
-        parsedCleanly: true,
         workerStatus: 'done',
         output: '```json\n{"summary":"test","workerSelfAssessment":"done"}\n```',
       });
-      state.commits = [];
+      (state.lastRunResult as any).parsedCleanly = true;
+      setGates(state, 'committed', 'approved');
 
       enrichRuntimeResult(state);
 
@@ -97,11 +87,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
 
     it('parsedCleanly: true with failed → stays failed', () => {
       const state = makeState({
-        parsedCleanly: true,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = [];
+      (state.lastRunResult as any).parsedCleanly = true;
+      setGates(state, 'committed', 'approved');
 
       enrichRuntimeResult(state);
 
@@ -113,12 +103,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
   describe('missing-signal guard → preserve parsed value', () => {
     it('no commit gate → preserve parsed value', () => {
       const state = makeState({
-        parsedCleanly: false,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = undefined;
-      state.reviewPolicy = 'none';
+      (state.lastRunResult as any).parsedCleanly = false;
+      setGates(state, undefined, 'approved'); // verdict present, commit gate absent
 
       enrichRuntimeResult(state);
 
@@ -128,19 +117,11 @@ describe('enrichRuntimeResult — workerSelfAssessment reconciliation truth tabl
 
     it('no verdict → preserve parsed value', () => {
       const state = makeState({
-        parsedCleanly: false,
         workerStatus: 'failed',
         output: '```json\n{"summary":"test","workerSelfAssessment":"failed"}\n```',
       });
-      state.commits = [{
-        kind: 'committed',
-        commitSha: 'abc123',
-        commitMessage: 'test commit',
-        filesChanged: [],
-        authoredAt: '2024-01-01T00:00:00Z',
-      } as CommitPayload];
-      state.reviewPolicy = 'none';
-      state.diffReviewVerdict = undefined;
+      (state.lastRunResult as any).parsedCleanly = false;
+      setGates(state, 'committed', undefined); // commit present, verdict absent
 
       enrichRuntimeResult(state);
 

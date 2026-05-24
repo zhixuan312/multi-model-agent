@@ -159,25 +159,30 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   // ── v5 M3 / M4 fixes: truthful workerSelfAssessment and rework-clears-up promo ─
   // ── workerSelfAssessment reconciliation (Fix C): objective-signal truth table ───
   const parsedCleanly = (last as any)?.parsedCleanly ?? false;
-  const commitsFieldPresent = state.commits !== undefined;
-  const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
-  const commitKind = commitsExist ? (state.commits[0] as any)?.kind : undefined;
+  // Objective signals — read the CANONICAL sources (same as deriveCompletion):
+  // the commit-gate payload kind and the review-gate verdict. Not state.commits
+  // (the result's commit array) nor a non-existent state.diffReviewVerdict.
+  const commitGate = state.gates?.commit as { payload?: { kind?: 'committed' | 'no_op' } } | undefined;
+  const commitKind = commitGate?.payload?.kind;
+  const reviewVerdict = reviewRp.verdict; // canonical helper (line ~146), same source as reviewVerdict above
+  const commitSignalPresent = commitKind !== undefined;
+  const verdictSignalPresent = reviewVerdict !== undefined;
   const isCommitted = commitKind === 'committed';
-  const verdictFieldPresent = reviewRp.verdict !== undefined;
+  // Separate (pre-existing) status signal: did the worker produce commit entries on the result?
+  const commitsExist = Array.isArray(state.commits) && (state.commits as unknown[]).length > 0;
 
   // Apply truth table: reconcile workerSelfAssessment against objective signals.
-  // Only apply if both signals are present (commits field and verdict field set).
-  // If either signal is absent, preserve parsed value.
-  if (commitsFieldPresent && verdictFieldPresent && !parsedCleanly) {
-    if (isCommitted && reviewRp.verdict === 'approved') {
-      // false + committed + approved → done (with selfAssessmentReconciled)
+  // Only when BOTH signals are present; otherwise preserve the parsed value.
+  if (commitSignalPresent && verdictSignalPresent && !parsedCleanly) {
+    if (isCommitted && reviewVerdict === 'approved') {
+      // false + committed + approved → done (reconciled)
       enriched.workerStatus = 'done';
       (enriched as any).selfAssessmentReconciled = true;
-    } else if (isCommitted && reviewRp.verdict === 'changes_required') {
-      // false + committed + changes_required → failed (preserved)
+    } else if (isCommitted && reviewVerdict === 'changes_required') {
+      // false + committed + changes_required → failed (review owns this)
       enriched.workerStatus = 'failed';
     } else if (!isCommitted) {
-      // false + no-commit (kind: 'no_op' or empty array) → failed
+      // false + no-commit (kind: 'no_op') → failed
       enriched.workerStatus = 'failed';
     }
   }

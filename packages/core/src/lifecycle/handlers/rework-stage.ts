@@ -168,6 +168,8 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     // v5: unresolved, commitMessage removed from worker output schema
     merged.unresolved = (reworked as any).unresolved ?? [];
     if ((reworked as any).commitMessage) merged.commitMessage = (reworked as any).commitMessage;
+    // Persist parsedCleanly from rework so enrichRuntimeResult can access it
+    merged.parsedCleanly = reworked.parsedCleanly;
   }
 
   mergeStageStats(state, 'rework', {
@@ -194,6 +196,7 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
     summary: reworked.summary ?? '',
     filesChanged: (state.lastRunResult as { filesChanged?: string[] } | undefined)?.filesChanged ?? [],
     unaddressedFindingIds: [],
+    parsedCleanly: reworked.parsedCleanly,
   };
   return {
     outcome: 'advance',

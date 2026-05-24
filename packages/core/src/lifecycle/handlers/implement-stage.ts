@@ -145,6 +145,8 @@ export async function implementHandler(
     // Transform lastRunResult into ImplementPayload for the stage gate.
     // Note: parseWorkerOutput extracts filesChanged from the structured output JSON.
     const parsed = parseWorkerOutput(result.output ?? '');
+    // Persist parsedCleanly so enrichRuntimeResult can access it
+    (result as any).parsedCleanly = parsed.parsedCleanly;
     const findings: Finding[] = [...(result.findings ?? [])];
     const outputTargets = (ctx as { outputTargets?: string[] }).outputTargets ?? [];
     if (outputTargets.length > 0) {
