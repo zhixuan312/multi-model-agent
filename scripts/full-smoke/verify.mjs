@@ -72,10 +72,19 @@ export function verify(rec) {
     out.push(C('commit-msg-format', conventional && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
   }
   // Fix C (4.8.0): a successful write task reaches a done terminal status —
-  // not a spurious `failed` (parse-miss reconciliation / review fit).
+  // not a spurious `failed` (parse-miss reconciliation / review fit). The
+  // `expectRework` scenario is the one DELIBERATELY-contradictory prompt
+  // ("you may skip the tests" vs done="implemented AND unit-tested") — its
+  // worker may honestly self-assess `failed` and the reviewer may return no
+  // parseable verdict (so Fix C correctly preserves the self-report rather
+  // than reconciling). That's a legitimate outcome, not the spurious-failure
+  // bug, so it's a WARN there (same rationale as its best-effort rework check)
+  // and a hard FAIL on every unambiguous write task.
   if (e.kind === 'write' && !e.expectFail) {
     const st = task0.status;
-    out.push(C('terminal-status', (st === 'done' || st === 'done_with_concerns') ? 'PASS' : 'FAIL', `status=${st}`));
+    const ok = st === 'done' || st === 'done_with_concerns';
+    out.push(C('terminal-status', ok ? 'PASS' : (e.expectRework ? 'WARN' : 'FAIL'),
+      `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
   }
 
   if (e.kind === 'read') {
