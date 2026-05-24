@@ -136,7 +136,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
 | `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | Orchestrator playbook — fans out `mma-investigate` + `mma-research` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-explore` | Orchestrator playbook — fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
