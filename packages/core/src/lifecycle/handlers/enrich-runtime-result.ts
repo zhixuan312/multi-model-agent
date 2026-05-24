@@ -157,7 +157,33 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   if (state.verifyResult !== undefined) (enriched as { verifyResult?: unknown }).verifyResult = state.verifyResult;
 
   // ── v5 M3 / M4 fixes: truthful workerSelfAssessment and rework-clears-up promo ─
+  // ── workerSelfAssessment reconciliation (Fix C): objective-signal truth table ───
+  const parsedCleanly = (last as any)?.parsedCleanly ?? false;
+  const commitsFieldPresent = state.commits !== undefined;
   const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
+  const commitKind = commitsExist ? (state.commits[0] as any)?.kind : undefined;
+  const isCommitted = commitKind === 'committed';
+  const verdictFieldPresent = reviewRp.verdict !== undefined;
+
+  // Apply truth table: reconcile workerSelfAssessment against objective signals.
+  // Only apply if both signals are present (commits field and verdict field set).
+  // If either signal is absent, preserve parsed value.
+  if (commitsFieldPresent && verdictFieldPresent && !parsedCleanly) {
+    if (isCommitted && reviewRp.verdict === 'approved') {
+      // false + committed + approved → done (with selfAssessmentReconciled)
+      enriched.workerStatus = 'done';
+      (enriched as any).selfAssessmentReconciled = true;
+    } else if (isCommitted && reviewRp.verdict === 'changes_required') {
+      // false + committed + changes_required → failed (preserved)
+      enriched.workerStatus = 'failed';
+    } else if (!isCommitted) {
+      // false + no-commit (kind: 'no_op' or empty array) → failed
+      enriched.workerStatus = 'failed';
+    }
+  }
+  // parsedCleanly: true → preserve parsed value (no change)
+  // missing-signal (commits absent or verdict absent) → preserve parsed value (no change)
+
   const reworkCleanedUp = state.reworkApplied === true && state.reworkError === undefined;
   const reviewRejected =
     state.reviewPolicy !== 'none' && reviewRp.verdict === 'changes_required' && !reworkCleanedUp;

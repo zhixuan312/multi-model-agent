@@ -21,7 +21,9 @@ export const WorkerOutputSchema = z.object({
   sourcesUsed: z.array(z.string()).default([]),
 });
 
-export type WorkerOutput = z.infer<typeof WorkerOutputSchema>;
+export type WorkerOutput = z.infer<typeof WorkerOutputSchema> & {
+  parsedCleanly: boolean;
+};
 
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)\n```/g;
 
@@ -44,6 +46,7 @@ export function parseWorkerOutput(workerText: string): WorkerOutput {
       criteriaSucceeded: [],
       criteriaErrors: [],
       sourcesUsed: [],
+      parsedCleanly: false,
     };
   }
   let raw: unknown;
@@ -60,10 +63,11 @@ export function parseWorkerOutput(workerText: string): WorkerOutput {
       criteriaSucceeded: [],
       criteriaErrors: [],
       sourcesUsed: [],
+      parsedCleanly: false,
     };
   }
   const parsed = WorkerOutputSchema.safeParse(raw);
-  if (parsed.success) return parsed.data;
+  if (parsed.success) return { ...parsed.data, parsedCleanly: true };
 
   // Schema-invalid but has summary: return failed with salvaged fields.
   const obj = (typeof raw === 'object' && raw !== null) ? (raw as Record<string, unknown>) : {};
@@ -92,5 +96,6 @@ export function parseWorkerOutput(workerText: string): WorkerOutput {
     sourcesUsed: Array.isArray(obj.sourcesUsed)
       ? obj.sourcesUsed.filter((x): x is string => typeof x === 'string')
       : [],
+    parsedCleanly: false,
   };
 }

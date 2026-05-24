@@ -190,6 +190,7 @@ export async function implementHandler(
       criteriaSucceeded: result.criteriaSucceeded ?? parsed.criteriaSucceeded ?? [],
       criteriaErrors: result.criteriaErrors ?? parsed.criteriaErrors ?? [],
       sourcesUsed: result.sourcesUsed ?? parsed.sourcesUsed ?? [],
+      parsedCleanly: parsed.parsedCleanly,
       ...(result.findingsOutcome !== undefined && { findingsOutcome: result.findingsOutcome }),
       ...(result.findingsOutcomeReason !== undefined && { findingsOutcomeReason: result.findingsOutcomeReason }),
       ...(result.outcomeInferred !== undefined && { outcomeInferred: result.outcomeInferred }),
