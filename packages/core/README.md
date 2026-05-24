@@ -157,11 +157,11 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.7.12
+## What's new in 4.7.20
 
-- **Transport component reduced to one implementation.** `HTTPListener` is now the sole HTTP listener (the server no longer creates `node:http` inline) and owns only the socket lifecycle; drain authority lives solely in the request pipeline. A rejected request-handler promise is now logged and answered with `500` instead of being silently swallowed.
-- **Host-header rebinding guard is live.** Every request's `Host` header must be a literal loopback form; a foreign host (DNS-rebinding attempt) is rejected with `403 forbidden_host`.
-- **Dead surface removed.** `RouteDispatcher` response-shape metadata (`RouteMetadata`/`ResponseShape`), `HTTPListener` drain/start-time methods, 15 unused enums, `draft-task.ts`, and `FallbackOverride` are gone; config types are now derived from the Zod schema.
+- **Terminal context block for read routes.** The lifecycle now registers each read-route task's sealed report (headline + findings) as a reusable context block via `TerminalBlockRegistrar`, carried on `TaskEnvelope.contextBlockId` and projected onto the `/batch` per-task result. Write routes stay `null`.
+- **`batchRegistry` reaches the worker context.** `buildExecutionContext` now threads `batchRegistry` (not just `contextBlockStore`) onto the lifecycle execution context, so terminal-block registration works end-to-end.
+- **Field rename.** The internal `terminalBlockId` (on `TerminalPayload` / `LifecycleState`) is now `contextBlockId`; the unrelated `register-context-block` route field `blockId` is unchanged.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

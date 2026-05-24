@@ -287,10 +287,9 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.7.15
+## What's new in 4.7.20
 
-- **Truthful multi-task commit reporting.** The `GET /batch` aggregate `structuredReport.commitSha` now reflects the **first task that actually committed** (not task 0 only), so a multi-task batch — `execute-plan`, or parallel `delegate` — whose first task no-op'd no longer reports `commitSha: null` while siblings committed.
-- **Per-dispatch parallel/serial.** `POST /delegate` runs its tasks in parallel by default; send `"execution": "serial"` to run them one-at-a-time in array order. `POST /execute-plan` stays serial. Concurrent same-repo workers each commit **only their own files** (pathspec-scoped `git commit -- <files>`) behind a per-repo commit mutex. `batch_completed` carries `dispatch_mode`.
+- **`contextBlockId` on read-route results.** `GET /batch` per-task results from read routes (`audit` / `review` / `debug` / `investigate` / `research`) now carry a non-null `contextBlockId` — the sealed report auto-registered as a reusable context block. Pass it into a later call's `contextBlockIds` for delta follow-ups; write routes (`delegate` / `execute-plan` / `retry`) return `null`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
