@@ -8,6 +8,9 @@ tags:
   - lifecycle
   - worker-self-assessment
   - objective-signals
+  - read-routes
+  - criteria
+  - smoke-testing
 date: "2026-05-24"
 links: []
 supersededBy: null
@@ -20,9 +23,15 @@ The adopted fix was to centralize completion judgment in a single pure function,
 
 This keeps recurring across routes. The same class resurfaced in v4.8.0 on the journal-record path when a code reviewer returned `changes_required` with zero findings on a valid markdown node. The durable lesson is to trust what objectively happened in the lifecycle over what the worker says about itself.
 
+The read routes exposed a second half of the same rule: the derived signal itself is load-bearing, so the lifecycle has to populate it before the seal gate reads it. For a period, successful investigate, audit, debug, review, and research runs all produced real findings but still sealed as `worker_status=failed` and `terminal_status=error` because read-route `lastRunResult` never populated `criteriaSucceeded`. `deriveCompletion(state)` correctly required `criteriaSucceeded.length > 0` for read-route success, but that input was always empty. The repair was to populate `criteriaSucceeded` from `routeSpec.criteria` minus the errored ids so the gate read the route's actual succeeded criteria rather than an uninitialized field.
+
 ## Consequences
 Completion gates must be driven by authoritative lifecycle signals rather than worker narration or self-assessment fields. Review approval, successful commit outcomes, and satisfied criteria are higher-trust signals than a worker's confidence report.
 
 Worker self-assessment should still be preserved in telemetry so the system can measure how often workers assess themselves accurately, but that field must remain observational. It is useful for analysis, not control flow.
 
 When future completion or seal-gate regressions appear, first inspect whether any gating path has reintroduced subjective worker output as an authority signal. If it has, route that logic back through objective lifecycle state instead.
+
+Any derived signal that a gate depends on must be treated as part of the control path, not as optional bookkeeping. A gate that reads an always-empty success field will fail silently and deterministically even when the underlying work succeeded.
+
+This class is best caught with an end-to-end smoke that exercises the real seal path. Unit tests that construct lifecycle state by hand can prove the gate logic in isolation, but they will miss "the field was never populated" regressions in the production wiring.
