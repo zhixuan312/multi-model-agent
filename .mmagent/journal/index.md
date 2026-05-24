@@ -10,3 +10,4 @@
 | 0008 | 2026-05-24 | adopted | Keep one canonical read path per lifecycle fact | lifecycle, commit-gate, review-gate, single-source-of-truth, state-mirrors |
 | 0009 | 2026-05-24 | adopted | Enforce reviewer and implementer separation by tier | code-review, cross-tier, reviewer-separation, tiers, quality |
 | 0010 | 2026-05-24 | adopted | Gate reviewer verdict overrides on severity | code-review, reviewer-verdict, severity, fail-safe, parsing |
+| 0011 | 2026-05-24 | adopted | Share one structured-output contract and surface parser drops | findings-format, structured-output, parsing, prompts, observability, validation-warnings, read-routes |
