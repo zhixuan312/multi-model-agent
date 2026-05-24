@@ -29,7 +29,7 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ## Endpoint
 
-`POST /journal?cwd=<abs-path>`
+`POST /journal-record?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -68,7 +68,7 @@ BATCH=$(curl -f --show-error -s -X POST \
     "learning": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
     "tagHints": ["dispatch", "cancellation"]
   }' \
-  "http://localhost:$PORT/journal?cwd=/project")
+  "http://localhost:$PORT/journal-record?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

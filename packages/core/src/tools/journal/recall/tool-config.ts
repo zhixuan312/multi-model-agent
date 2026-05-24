@@ -18,7 +18,7 @@ export function registerJournalRecall(registry: ToolSurfaceRegistry): void {
   registry.register({
     routeName: 'journal-recall',
     httpMethod: 'POST',
-    httpPath: '/journal/recall',
+    httpPath: '/journal-recall',
     surface: 'tool',
     schema: inputSchema,
     toolCategory: 'read_only',

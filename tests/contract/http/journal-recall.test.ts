@@ -16,7 +16,7 @@ describe('contract: POST /journal/recall lifecycle', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'journal-recall-lifecycle-'));
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd });
     try {
-      const res = await fetch(`${h.baseUrl}/journal/recall?cwd=${encodeURIComponent(cwd)}`, {
+      const res = await fetch(`${h.baseUrl}/journal-recall?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

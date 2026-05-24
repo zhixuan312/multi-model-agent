@@ -37,7 +37,7 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   delegate:                 { category: 'artifact_producing', reviewPolicy: 'full' },
   'execute-plan':           { category: 'artifact_producing', reviewPolicy: 'full' },
   retry:                    { category: 'artifact_producing', reviewPolicy: 'full' },
-  journal:                  { category: 'artifact_producing', reviewPolicy: 'full' },
+  'journal-record':                { category: 'artifact_producing', reviewPolicy: 'full' },
   audit:                    { category: 'read_only',          reviewPolicy: 'none' },
   review:                   { category: 'read_only',          reviewPolicy: 'none' },
   debug:                    { category: 'read_only',          reviewPolicy: 'none' },

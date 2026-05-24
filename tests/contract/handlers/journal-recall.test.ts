@@ -15,7 +15,7 @@ beforeAll(async () => {
   writeFileSync(join(cwd, 'src/auth/refresh.ts'), '');
   server = await startTestServer({ cwd });
   token = server.token;
-  url = `${server.baseUrl}/journal/recall?cwd=${encodeURIComponent(cwd)}`;
+  url = `${server.baseUrl}/journal-recall?cwd=${encodeURIComponent(cwd)}`;
 });
 afterAll(async () => { await server.close(); });
 

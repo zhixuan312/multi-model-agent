@@ -29,8 +29,8 @@ const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/context-blocks': registerContextBlockSchema,
   '/retry': retrySchema,
   '/research': researchSchema,
-  '/journal': journalRecordSchema,
-  '/journal/recall': journalRecallSchema,
+  '/journal-record': journalRecordSchema,
+  '/journal-recall': journalRecallSchema,
 };
 
 /**

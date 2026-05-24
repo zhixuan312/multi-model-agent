@@ -36,15 +36,15 @@
       "responseShapeName": "BatchResponse"
     },
     {
-      "routeName": "journal",
-      "toolCategory": "artifact_producing",
+      "routeName": "journal-recall",
+      "toolCategory": "read_only",
       "agentTypeDefault": "complex",
       "agentTypeOverridable": false,
       "responseShapeName": "BatchResponse"
     },
     {
-      "routeName": "journal-recall",
-      "toolCategory": "read_only",
+      "routeName": "journal-record",
+      "toolCategory": "artifact_producing",
       "agentTypeDefault": "complex",
       "agentTypeOverridable": false,
       "responseShapeName": "BatchResponse"
@@ -103,7 +103,7 @@
         "investigate",
         "explore",
         "research",
-        "journal",
+        "journal-record",
         "journal-recall"
       ],
       "runOnHalt": false
@@ -114,7 +114,7 @@
         "delegate",
         "execute-plan",
         "retry",
-        "journal"
+        "journal-record"
       ],
       "runOnHalt": false
     },
@@ -124,7 +124,7 @@
         "delegate",
         "execute-plan",
         "retry",
-        "journal"
+        "journal-record"
       ],
       "runOnHalt": false
     },
@@ -134,7 +134,7 @@
         "delegate",
         "execute-plan",
         "retry",
-        "journal"
+        "journal-record"
       ],
       "runOnHalt": false
     },
@@ -150,7 +150,7 @@
         "investigate",
         "explore",
         "research",
-        "journal",
+        "journal-record",
         "journal-recall"
       ],
       "runOnHalt": false

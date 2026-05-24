@@ -9,9 +9,9 @@ import { DEFAULT_TASK_TIMEOUT_MS } from '../../../config/schema.js';
 
 export function registerJournalRecord(registry: ToolSurfaceRegistry): void {
   registry.register({
-    routeName: 'journal',
+    routeName: 'journal-record',
     httpMethod: 'POST',
-    httpPath: '/journal',
+    httpPath: '/journal-record',
     surface: 'tool',
     schema: inputSchema,
     toolCategory: 'artifact_producing',
@@ -22,7 +22,7 @@ export function registerJournalRecord(registry: ToolSurfaceRegistry): void {
 }
 
 export const toolConfig: ToolConfig<Input, JournalRecordBrief, unknown> = {
-  name: 'journal',
+  name: 'journal-record',
   category: 'artifact_producing',
   dispatchMode: 'serial',
   dispatchModeOverridable: false,

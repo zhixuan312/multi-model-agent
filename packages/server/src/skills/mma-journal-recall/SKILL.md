@@ -29,7 +29,7 @@ Recall relevant project learnings from the journal via a read-only mmagent worke
 
 ## Endpoint
 
-`POST /journal/recall?cwd=<abs-path>`
+`POST /journal-recall?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -66,7 +66,7 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"what have we learned about dispatch cancellation reliability?"}' \
-  "http://localhost:$PORT/journal/recall?cwd=/project")
+  "http://localhost:$PORT/journal-recall?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

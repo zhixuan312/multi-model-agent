@@ -14,6 +14,6 @@ export const journalHeadlineTemplate: HeadlineTemplate = {
       ? r.summary : (typeof runResult?.output === 'string' ? runResult.output : '');
     const summary = firstSentenceOrTruncate(rawSummary);
     const clause = summary.length > 0 ? ` ${summary}` : '';
-    return `[${status}] journal:${clause} (${fileCount} file${fileCount === 1 ? '' : 's'})`;
+    return `[${status}] journal-record:${clause} (${fileCount} file${fileCount === 1 ? '' : 's'})`;
   },
 };

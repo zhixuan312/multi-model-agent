@@ -16,7 +16,7 @@ describe('contract: POST /journal lifecycle', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'journal-lifecycle-'));
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd });
     try {
-      const res = await fetch(`${h.baseUrl}/journal?cwd=${encodeURIComponent(cwd)}`, {
+      const res = await fetch(`${h.baseUrl}/journal-record?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +49,7 @@ describe('contract: POST /journal lifecycle', () => {
       expect((body!.error as { kind?: string }).kind).toBe('not_applicable');
       const results = body!.results as Array<Record<string, unknown>>;
       expect(results).toHaveLength(1);
-      expect(results[0].route).toBe('journal');
+      expect(results[0].route).toBe('journal-record');
       // journal is a write route → never registers a terminal context block.
       expect(results[0].contextBlockId).toBeNull();
       // Reaches a valid terminal status. (The mock 'ok' provider emits generic

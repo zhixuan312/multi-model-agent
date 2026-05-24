@@ -8,7 +8,7 @@ import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
 
-export function buildJournalHandler(deps: HandlerDeps): RawHandler {
+export function buildJournalRecordHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = journal.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
@@ -25,7 +25,7 @@ export function buildJournalHandler(deps: HandlerDeps): RawHandler {
 
     const blockIds = input.contextBlockIds ?? [];
     const { batchId, statusUrl } = asyncDispatch({
-      tool: 'journal', projectCwd: cwd, blockIds,
+      tool: 'journal-record', projectCwd: cwd, blockIds,
       batchRegistry: deps.batchRegistry, projectContext: pc, deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => executeTask(toolConfig, executionCtx, input),
