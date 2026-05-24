@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.20] - 2026-05-24
+
+Read-route workers now register their terminal report as a reusable context block, surfaced on each `/batch` per-task result as `contextBlockId`. This lets the calling agent run delta follow-ups (e.g. "round 1 found these N things — are they resolved?") by passing a prior result's `contextBlockId` straight into the next call's `contextBlockIds`, with no manual block registration. Write routes return `contextBlockId: null` — their durable record is the commit, not a prose block. This finishes the v4-phase-3 "universal terminal block registration" design that was added but never wired. Verified on a clean `npm run build` + full Vitest run (2094/2094) and a live full-pipeline smoke confirming non-null `contextBlockId` on every read route and `null` on every write route. `SCHEMA_VERSION` stays 5 — the telemetry wire schema is unchanged; the new field rides only on the `/batch` per-task response.
+
+### Added
+
+- **lifecycle (core).** Read routes (`audit` / `review` / `debug` / `investigate` / `research`) auto-register a per-task terminal context block — the sealed report (headline + findings) rendered to markdown — via the now-wired `TerminalBlockRegistrar`. The block id is recorded in `BatchRegistry` and carried on `TaskEnvelope.contextBlockId`.
+- **server.** `GET /batch/:id` per-task results now project `contextBlockId`: a non-null block id on read routes, `null` on write routes. New `renderTerminalReportMarkdown` helper produces the block content.
+
+### Fixed
+
+- **lifecycle (core).** `buildExecutionContext` now threads `batchRegistry` onto the worker execution context. Previously only `contextBlockStore` was threaded, so the terminal stage's registration guard returned early and `contextBlockId` was silently `null` on every read route. Caught by the live full-pipeline smoke, not unit tests.
+
+### Changed
+
+- **lifecycle (core).** Renamed the internal terminal-block field `terminalBlockId` → `contextBlockId` across `TerminalPayload`, `LifecycleState`, and the terminal handlers. The unrelated `register-context-block` route field `blockId` is untouched. Deleted the broken inline `store.register({id,content})` path (wrong signature, swallowed) in favor of the registrar.
+- **skills.** Reconciled the terminal-block field name to `contextBlockId` across all skills: read skills document the non-null id + the null-filtered delta recipe; write/retry skills (`delegate` / `execute-plan` / `retry`) state `contextBlockId` is `null`. Removed the contradictory `blockId` wording in `mma-investigate`.
+
 ## [4.7.19] - 2026-05-23
 
 Behavior-neutral dead-code removal. The attempt/rework budget machinery (`ATTEMPT_BUDGETS` plus the `attemptBudget` / `attemptIndex` fields on `LifecycleState`) was set-but-never-read state: the v5 lifecycle bounds its review→rework loop via the linear `STAGE_PLAN` walk, not a budget counter, so removing it changes nothing observable. Telemetry (`SCHEMA_VERSION` stays 5), stage names/order, routes, tools, and agent-facing output are identical before and after. Verified on a clean `npm run build` + full Vitest run (2081/2081) and a full-pipeline real-dispatch smoke (`npm run smoke:full`) that passed 15/15, exercising the review→rework path end-to-end.
@@ -792,7 +810,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...HEAD
+[4.7.20]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...v4.7.20
 [4.7.19]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.18...v4.7.19
 [4.7.18]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.17...v4.7.18
 [4.7.17]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.16...v4.7.17
