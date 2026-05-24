@@ -16,3 +16,4 @@
 2026-05-24T21:40:57+08:00  create  0015  Separate labor from judgment with a deterministic research orchestrator
 2026-05-24T21:43:20+08:00  create  0016  Track file activity only from provider-proven events
 2026-05-24T21:45:56+08:00  create  0017  Treat disabled network tests as missing critical-path coverage
+2026-05-24T22:15:00+08:00  create  0018  Confine by default, canonicalize paths, and fail before allocation
