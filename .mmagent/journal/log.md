@@ -10,3 +10,4 @@
 2026-05-24T21:23:57+08:00  create  0010  Gate reviewer verdict overrides on severity
 2026-05-24T00:00:00+08:00  refine  0001  Derive completion from objective lifecycle signals
 2026-05-24T21:31:01+08:00  create  0011  Share one structured-output contract and surface parser drops
+2026-05-24T21:33:31+08:00  create  0012  Serialize same-repo write dispatch to protect shared worktrees
