@@ -11,6 +11,7 @@
   "POST /delegate",
   "POST /execute-plan",
   "POST /investigate",
+  "POST /journal",
   "POST /research",
   "POST /retry",
   "POST /review"
