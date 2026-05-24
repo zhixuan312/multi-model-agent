@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-white.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/logo-navy.svg">
+    <img src="./assets/logo-navy.svg" alt="MMA Logo" width="120">
+  </picture>
+</p>
+
 # multi-model-agent
 
 [![npm: @zhixuan92/multi-model-agent](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=%40zhixuan92%2Fmulti-model-agent)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
