@@ -3,7 +3,7 @@ import { runResearchPreLoop } from '../../packages/core/src/lifecycle/research-p
 
 const validPlan = JSON.stringify({
   braveQueries: [], arxivQueries: [], semanticScholarQueries: [],
-  githubQueries: [], rssFeeds: [], directFetches: [],
+  githubQueries: [],
 });
 
 const mkTurn = (output: string) => ({

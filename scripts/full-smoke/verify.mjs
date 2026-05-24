@@ -70,7 +70,7 @@ export function verify(rec) {
     // research delivers EVIDENCE, not just a well-formed shell. The empty-
     // evidence failure mode — worker emits N `## Finding` blocks with no
     // Evidence bullet because the Step-2 orchestrator's bibliographic adapters
-    // (arxiv/SS/Brave/rss) returned nothing — sails through the Array.isArray
+    // (arxiv/SS/Brave) returned nothing — sails through the Array.isArray
     // check above. Assert the deliverable is real: non-empty findings that
     // actually carry evidence, AND a sources table showing ≥1 source was
     // used (proves the evidence pack was non-empty, i.e. adapters were healthy).
@@ -84,6 +84,15 @@ export function verify(rec) {
       const used = Array.isArray(sourcesUsed) ? sourcesUsed.filter((s) => s?.used === true) : [];
       out.push(C('research-sources', used.length > 0 ? 'PASS' : 'FAIL',
         `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack'}`));
+
+      // The sources table must report ONLY the supported adapter groups. rss /
+      // web_fetch were removed from the pipeline — their reappearance here (or
+      // any unknown group) is a regression. Covers the full adapter surface.
+      const ALLOWED_GROUPS = new Set(['arxiv', 'semantic_scholar', 'github_repo', 'github_code', 'brave']);
+      const stray = (Array.isArray(sourcesUsed) ? sourcesUsed : [])
+        .map((s) => s?.source).filter((g) => !ALLOWED_GROUPS.has(g));
+      out.push(C('research-adapter-surface', stray.length === 0 ? 'PASS' : 'FAIL',
+        stray.length ? `unexpected source groups: ${[...new Set(stray)].join(',')}` : `groups ⊆ {${[...ALLOWED_GROUPS].join(',')}}`));
     }
   }
 

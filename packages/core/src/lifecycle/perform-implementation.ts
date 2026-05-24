@@ -90,6 +90,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
       // pre-loop plan turn + deterministic Step-2 fan-out. The N-criterion loop
       // below then synthesises against the EvidencePack-bearing prefix.
       let cachedPrefix: string;
+      // /research: the deterministic `## Sources used` table, derived from the
+      // pre-loop's EvidencePack and threaded onto lastRunResult so the compose
+      // → envelope → batch path surfaces it (the worker never emits the table).
+      let researchSourcesUsed: import('../research/evidence-pack.js').SourceUsage[] | undefined;
       if (route === 'research') {
         // Pull research-specific task fields from the TaskSpec contract.
         const r = task.research;
@@ -100,12 +104,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
           researchQuestion: r.researchQuestion,
           background:       r.background,
           resolvedContextBlocks: r.resolvedContextBlocks ?? [],
-          cfg: {
-            ...ctx.config.research,
-            userSources: r.userSources ?? [],
-          },
+          cfg: ctx.config.research,
         });
         cachedPrefix = preLoop.cachedPrefix;
+        researchSourcesUsed = preLoop.sourcesUsed;
       } else {
         cachedPrefix = routeSpec.buildPrefix({
           document: targetContent,
@@ -181,6 +183,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         outcomeInferred: dispatchResult.outcomeInferred,
         outcomeMalformed: dispatchResult.outcomeMalformed,
         ...(incompleteReason && { incompleteReason }),
+        ...(researchSourcesUsed && { sourcesUsed: researchSourcesUsed }),
       } as unknown as RuntimeRunResult;
 
       mergeStageStats(state, 'implementing', {

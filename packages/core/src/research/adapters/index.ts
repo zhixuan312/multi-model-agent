@@ -19,11 +19,9 @@ export function resolveEnabledAdapters(
     // If enabled but no key, silently skip; caller logs warning at startup.
   }
   if (cfg.githubSearch) out.push('github_search');
-  if (cfg.genericRss) out.push('rss');
   return out;
 }
 
 export { arxivSearch } from './arxiv.js';
 export { semanticScholarSearch } from './semantic-scholar.js';
 export { githubSearch } from './github-search.js';
-export { rssAdapter } from './generic-rss.js';

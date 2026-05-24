@@ -49,7 +49,6 @@ export function buildResearchHandler(deps: HandlerDeps): RawHandler {
     const enrichedInput: EnrichedResearchInput = {
       ...input,
       resolvedContextBlocks,
-      userSources: researchCfg?.userSources ?? [],
       hasBrave: (researchCfg?.brave?.apiKeys?.length ?? 0) > 0,
     };
 

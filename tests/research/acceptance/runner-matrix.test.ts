@@ -17,7 +17,7 @@ const makeSession = (responses: string[]) => {
 
 const validPlan = JSON.stringify({
   braveQueries: ['q'], arxivQueries: ['a'], semanticScholarQueries: [],
-  githubQueries: [], rssFeeds: [], directFetches: [],
+  githubQueries: [],
 });
 
 describe('Acceptance — runner matrix + closed pipeline (A1, A2, A3, A4)', () => {

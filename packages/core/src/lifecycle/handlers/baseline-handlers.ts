@@ -257,8 +257,15 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
   // emitted or the parser extracted. recordFinding exists on the envelope API
   // but had no producer until now. Normalize required envelope fields (id,
   // evidence, source) since parser-emitted findings only set them when present.
-  const ctx = state.executionContext as { envelope?: { recordFinding?: (f: unknown) => void; isSealed?: () => boolean } } | undefined;
+  const ctx = state.executionContext as { envelope?: { recordFinding?: (f: unknown) => void; recordSourcesUsed?: (rows: unknown) => void; isSealed?: () => boolean } } | undefined;
   const envelope = ctx?.envelope;
+  // research-only: bridge the pack-derived `## Sources used` table (set on
+  // lastRunResult by perform-implementation) onto the envelope so the batch
+  // handler can surface it in structuredReport.sourcesUsed.
+  const sourcesUsed = (state.lastRunResult as { sourcesUsed?: unknown } | undefined)?.sourcesUsed;
+  if (envelope?.recordSourcesUsed && !envelope.isSealed?.() && Array.isArray(sourcesUsed) && sourcesUsed.length > 0) {
+    try { envelope.recordSourcesUsed(sourcesUsed); } catch { /* sealed mid-call → harmless */ }
+  }
   if (envelope?.recordFinding && !envelope.isSealed?.() && Array.isArray(payload.findings)) {
     payload.findings.forEach((f, i) => {
       const fin = f as Partial<{ id: string; severity: string; category: string; claim: string; evidence: string; suggestion: string; source: 'implementer' | 'reviewer' }>;
