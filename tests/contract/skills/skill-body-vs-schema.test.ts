@@ -16,6 +16,7 @@ import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/
 import { inputSchema as registerContextBlockSchema } from '@zhixuan92/multi-model-agent-core/tools/register-context-block/schema';
 import { inputSchema as retrySchema } from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
 import { inputSchema as researchSchema } from '@zhixuan92/multi-model-agent-core/tools/research/schema';
+import { inputSchema as journalRecordSchema } from '@zhixuan92/multi-model-agent-core/tools/journal/record/schema';
 
 const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/audit': auditSchema,
@@ -27,6 +28,7 @@ const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/context-blocks': registerContextBlockSchema,
   '/retry': retrySchema,
   '/research': researchSchema,
+  '/journal': journalRecordSchema,
 };
 
 /**
