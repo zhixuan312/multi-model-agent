@@ -23,6 +23,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, CommitPayload } from '../stage-io.js';
 import { withRepoCommitLock } from '../repo-commit-lock.js';
 import { resolveGitToplevel } from '../git-toplevel.js';
+import { composeCommitMessage } from './compose-commit-message.js';
 
 const execFileP = promisify(execFile);
 
@@ -113,24 +114,6 @@ function haltCommit(comment: string, t0: number): StageGate<CommitPayload> {
   };
 }
 
-function composeCommitMessage(state: LifecycleState): string {
-  const summary =
-    (state.gates?.['rework']?.payload as { summary?: string } | undefined)?.summary ??
-    (state.gates?.['implement']?.payload as { summary?: string } | undefined)?.summary ??
-    '(no summary)';
-  const firstLine = summary.split('\n')[0].slice(0, 72);
-  const reviewVerdict = (state.gates?.['review']?.payload as { verdict?: string } | undefined)?.verdict;
-  const unaddressed = (
-    (state.gates?.['rework']?.payload as { unaddressedFindingIds?: string[] } | undefined)?.unaddressedFindingIds ??
-    []
-  );
-
-  let msg = `implement: ${firstLine}\n\n${summary}`;
-  if (reviewVerdict === 'changes_required' && unaddressed.length > 0) {
-    msg += `\n\nRework left ${unaddressed.length} findings unaddressed: ${unaddressed.join(', ')}.`;
-  }
-  return msg;
-}
 
 function isHookFailure(err: unknown): boolean {
   if (err instanceof Error) {
@@ -194,7 +177,7 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
       return advanceNoOp('no_diff', t0);
     }
 
-    const commitMessage = composeCommitMessage(state);
+    const commitMessage = composeCommitMessage(state, filesChanged, cwd);
 
     try {
       // Pathspec-scoped commit: commits ONLY ownFiles, even if a concurrent
