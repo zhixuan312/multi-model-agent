@@ -260,7 +260,24 @@ export async function runTaskViaDispatcher(
     batchId: String(input.batchId ?? 'nobatch'),
     taskIndex: input.taskIndex,
   });
-  if (skillResolution.failure) return skillResolution.failure;
+  if (skillResolution.failure) {
+    // The short-circuit returns before the lifecycle runs, so the terminal
+    // stage never seals this task's envelope — GET /batch would project a
+    // stuck `status: "running"` row. Seal it here to a terminal failed state
+    // so the per-task result is correct (batch-level error.code is lifted
+    // separately by detectFailure from the returned RuntimeRunResult).
+    // structuredError.code is a free string, so the typed skill code reaches
+    // results[i].error.code without widening the ErrorCode wire enum.
+    const fc = skillResolution.failure;
+    input.envelope?.seal({
+      status: 'failed',
+      stopReason: 'skill_resolution_failed',
+      structuredError: { code: fc.errorCode ?? 'skill_resolution_failed', message: fc.error ?? 'skill resolution failed' },
+      errorCode: null,
+      realFilesChanged: [],
+    });
+    return fc;
+  }
 
   // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
   // so the SAME expanded task object reaches BOTH state.task AND
