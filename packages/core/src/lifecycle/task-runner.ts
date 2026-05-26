@@ -6,8 +6,9 @@ import type {
   AgentType,
 } from '../types.js';
 import type { ProgressEvent } from '../providers/runner-types.js';
-import type { Session } from '../types/run-result.js';
+import type { Session, ResolvedSkillBundle } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
+import { resolveAndStageSkills, cleanupSkillStaging, SkillResolutionError } from '../providers/skill-resolver.js';
 
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ExecutionContext } from './lifecycle-context.js';
@@ -205,6 +206,46 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     outputTargets: normalizeOutputTargets(task.outputTargets, cwd),
     ...(input.envelope && { envelope: input.envelope }),
   } as unknown as ExecutionContext;
+}
+
+export async function resolveSkillsForTask(args: {
+  task: { prompt: string; skills?: string[] };
+  client: string;
+  batchId: string;
+  taskIndex: number;
+}): Promise<{ bundle?: ResolvedSkillBundle; failure?: RuntimeRunResult }> {
+  const names = args.task.skills;
+  if (!names || names.length === 0) return {};
+  try {
+    const bundle = await resolveAndStageSkills({
+      client: args.client, names, batchId: args.batchId, taskIndex: args.taskIndex,
+    });
+    return { bundle };
+  } catch (err) {
+    if (err instanceof SkillResolutionError) {
+      // Shape mirrors the existing "dispatcher produced no RuntimeRunResult"
+      // fallback literal at the bottom of runTaskViaDispatcher in this same
+      // file — include the required RuntimeRunResult fields (actualCostUSD,
+      // directoriesListed) so the cast is faithful, not just compiler-silencing.
+      return {
+        failure: {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          actualCostUSD: 0,
+          turns: 0,
+          filesWritten: [],
+          directoriesListed: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          error: err.message,
+          errorCode: err.code,
+          workerStatus: 'failed',
+        } as unknown as RuntimeRunResult,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function runTaskViaDispatcher(
