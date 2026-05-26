@@ -23,6 +23,7 @@ import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
+import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
 
 interface BusLike { emitPlainEntry(entry: unknown): void }
 
@@ -40,6 +41,7 @@ export class ClaudeSession implements Session {
   private closed = false;
   private turns = 0;
   private sessionId?: string;
+  private skillPluginReady = false;
   private readonly bus: BusLike | undefined;
   private readonly envelope: TaskEnvelopeStore | undefined;
   /** Active SDK query handle for the in-flight turn. Captured so close() can
@@ -96,6 +98,13 @@ export class ClaudeSession implements Session {
       } as SDKUserMessage;
     }
 
+    const skillBundle = this.args.opts.skills;
+    if (skillBundle && !this.skillPluginReady) {
+      await writeClaudePluginWrapper(skillBundle.stagedRoot, skillBundle.names);
+      this.skillPluginReady = true;
+    }
+    const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
+
     const q = query({
       prompt: promptIterable(),
       options: {
@@ -108,6 +117,7 @@ export class ClaudeSession implements Session {
           ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
           ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),
         },
+        ...skillOptions,
         ...(this.sessionId && { resume: this.sessionId }),
       } as Parameters<typeof query>[0]['options'],
     });
