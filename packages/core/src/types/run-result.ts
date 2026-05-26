@@ -56,6 +56,14 @@ export interface TurnResult {
   usedShell: boolean;
 }
 
+/** Resolved + staged skills for a worker session. `stagedRoot` contains a
+ *  `skills/<name>/` subtree per requested skill (the same layout Codex reads
+ *  at `$CODEX_HOME/skills` and the Claude plugin references as `./skills/<name>`). */
+export interface ResolvedSkillBundle {
+  stagedRoot: string;
+  names: string[];
+}
+
 export interface SessionOpts {
   cwd?: string;
   wallClockDeadline: number;
@@ -70,6 +78,8 @@ export interface SessionOpts {
   taskIndex?: number;
   /** Per-task event envelope for recording provider mutations. Optional during wiring phase. */
   envelope?: TaskEnvelopeStore;
+  /** Present only when the task requested skills and resolution succeeded. */
+  skills?: ResolvedSkillBundle;
 }
 
 export interface TurnOpts {

@@ -34,6 +34,7 @@ import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
+import { prepareCodexSkillHome, codexAuthMode } from './codex-skill-home.js';
 
 const SIGKILL_GRACE_MS = 3000;
 /** Grace window during session.close() between SIGTERM and SIGKILL. Keeps
@@ -67,6 +68,8 @@ export class CodexCliSession implements Session {
     cachedReadTokens: 0,
     cachedNonReadTokens: 0,
   };
+  private codexSkillHomeReady = false;
+  private skillHomePath: string | undefined;
 
   constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {}
 
@@ -87,11 +90,22 @@ export class CodexCliSession implements Session {
     if (!this.tempDir) this.tempDir = await mkdtemp(join(tmpdir(), 'mma-codex-'));
     const outputFile = join(this.tempDir, `out-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
 
+    let codexHome: string | undefined = this.skillHomePath;
+    if (this.args.opts.skills && !this.codexSkillHomeReady) {
+      this.skillHomePath = await prepareCodexSkillHome({
+        stagedRoot: this.args.opts.skills.stagedRoot,
+        authMode: codexAuthMode(this.args.cfg),
+      });
+      this.codexSkillHomeReady = true;
+      codexHome = this.skillHomePath;
+    }
+
     const launch = buildCodexCliLaunch({
       cfg: this.args.cfg,
       opts: { cwd: this.args.opts.cwd },
       outputFile,
       ...(this.threadId && { resumeSessionId: this.threadId }),
+      ...(codexHome && { codexHome }),
     });
 
     const bus = busOf(this.args.opts);

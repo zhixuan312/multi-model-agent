@@ -25,6 +25,8 @@ export interface BuildLaunchInput {
   schemaFile?: string;
   /** When set, the launch is a `codex exec resume <id>` (subsequent turn). */
   resumeSessionId?: string;
+  /** When set, becomes the subprocess `CODEX_HOME` (ephemeral skills home). */
+  codexHome?: string;
 }
 
 export interface CodexCliLaunch {
@@ -36,7 +38,7 @@ export interface CodexCliLaunch {
 const CUSTOM_PROVIDER_NAME = 'mma-custom';
 
 export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
-  const { cfg, opts, outputFile, schemaFile, resumeSessionId } = input;
+  const { cfg, opts, outputFile, schemaFile, resumeSessionId, codexHome } = input;
 
   const args: string[] = ['exec'];
   if (resumeSessionId) args.push('resume', resumeSessionId);
@@ -80,6 +82,7 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
     if (typeof v === 'string') env[k] = v;
   }
   if (cfg.apiKey) env[cfg.apiKeyEnv ?? 'OPENAI_API_KEY'] = cfg.apiKey;
+  if (codexHome) env.CODEX_HOME = codexHome;
 
   return {
     command: process.env.MMAGENT_CODEX_BIN ?? 'codex',

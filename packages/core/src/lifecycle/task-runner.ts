@@ -6,8 +6,9 @@ import type {
   AgentType,
 } from '../types.js';
 import type { ProgressEvent } from '../providers/runner-types.js';
-import type { Session } from '../types/run-result.js';
+import type { Session, ResolvedSkillBundle } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
+import { resolveAndStageSkills, cleanupSkillStaging, SkillResolutionError } from '../providers/skill-resolver.js';
 
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ExecutionContext } from './lifecycle-context.js';
@@ -77,6 +78,7 @@ export interface DispatchTaskInput {
   batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
   /** Per-task event envelope for recording lifecycle mutations. Optional during migration. */
   envelope?: import('../events/task-envelope.js').TaskEnvelopeStore;
+  resolvedSkills?: ResolvedSkillBundle;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -135,6 +137,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
       ...(input.envelope && { envelope: input.envelope }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
       ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.resolvedSkills && { skills: input.resolvedSkills }),
     });
     sessions.set(tier, session);
     return session;
@@ -207,10 +210,75 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+export async function resolveSkillsForTask(args: {
+  task: { prompt: string; skills?: string[] };
+  client: string;
+  batchId: string;
+  taskIndex: number;
+}): Promise<{ bundle?: ResolvedSkillBundle; failure?: RuntimeRunResult }> {
+  const names = args.task.skills;
+  if (!names || names.length === 0) return {};
+  try {
+    const bundle = await resolveAndStageSkills({
+      client: args.client, names, batchId: args.batchId, taskIndex: args.taskIndex,
+    });
+    return { bundle };
+  } catch (err) {
+    if (err instanceof SkillResolutionError) {
+      // Shape mirrors the existing "dispatcher produced no RuntimeRunResult"
+      // fallback literal at the bottom of runTaskViaDispatcher in this same
+      // file — include the required RuntimeRunResult fields (actualCostUSD,
+      // directoriesListed) so the cast is faithful, not just compiler-silencing.
+      return {
+        failure: {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          actualCostUSD: 0,
+          turns: 0,
+          filesWritten: [],
+          directoriesListed: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          error: err.message,
+          errorCode: err.code,
+          workerStatus: 'failed',
+        } as unknown as RuntimeRunResult,
+      };
+    }
+    throw err;
+  }
+}
+
 export async function runTaskViaDispatcher(
   input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
 ): Promise<RuntimeRunResult> {
+  const skillResolution = await resolveSkillsForTask({
+    task: input.task as { prompt: string; skills?: string[] },
+    client: input.client ?? '',
+    batchId: String(input.batchId ?? 'nobatch'),
+    taskIndex: input.taskIndex,
+  });
+  if (skillResolution.failure) {
+    // The short-circuit returns before the lifecycle runs, so the terminal
+    // stage never seals this task's envelope — GET /batch would project a
+    // stuck `status: "running"` row. Seal it here to a terminal failed state
+    // so the per-task result is correct (batch-level error.code is lifted
+    // separately by detectFailure from the returned RuntimeRunResult).
+    // structuredError.code is a free string, so the typed skill code reaches
+    // results[i].error.code without widening the ErrorCode wire enum.
+    const fc = skillResolution.failure;
+    input.envelope?.seal({
+      status: 'failed',
+      stopReason: 'skill_resolution_failed',
+      structuredError: { code: fc.errorCode ?? 'skill_resolution_failed', message: fc.error ?? 'skill resolution failed' },
+      errorCode: null,
+      realFilesChanged: [],
+    });
+    return fc;
+  }
+
   // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
   // so the SAME expanded task object reaches BOTH state.task AND
   // executionContext.task (single source of truth — no two references).
@@ -220,7 +288,11 @@ export async function runTaskViaDispatcher(
     ? expandContextBlocks(input.task, input.contextBlockStore)
     : input.task;
 
-  const executionContext = buildExecutionContext({ ...input, task: expandedTask });
+  const executionContext = buildExecutionContext({
+    ...input,
+    task: expandedTask,
+    ...(skillResolution.bundle && { resolvedSkills: skillResolution.bundle }),
+  });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
 
@@ -273,6 +345,9 @@ export async function runTaskViaDispatcher(
       // query handles release. Errors swallowed so disposal can't mask
       // the task's real result.
       await executionContext.closeSessions().catch(() => { /* idempotent */ });
+      if (skillResolution.bundle) {
+        await cleanupSkillStaging(skillResolution.bundle.stagedRoot).catch(() => { /* best-effort */ });
+      }
       // Detach from BatchRegistry — closeSessions already ran, so shutdown
       // drain shouldn't re-close.
       if (input.batchRegistry && input.batchId !== undefined) {

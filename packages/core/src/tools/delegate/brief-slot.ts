@@ -20,6 +20,7 @@ export interface DelegateBrief {
   reviewPolicy: ReviewPolicy;
   contextBlockIds?: string[];
   outputTargets?: string[];
+  skills?: string[];
 }
 
 /**
@@ -75,4 +76,5 @@ export const delegateBriefSlot = (input: Input): DelegateBrief[] =>
     reviewPolicy: t.reviewPolicy,
     contextBlockIds: t.contextBlockIds,
     outputTargets: t.outputTargets,
+    skills: t.skills,
   }));

@@ -291,9 +291,9 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.7.20
+## What's new in 4.9.0
 
-- **`contextBlockId` on read-route results.** `GET /batch` per-task results from read routes (`audit` / `review` / `debug` / `investigate` / `research`) now carry a non-null `contextBlockId` — the sealed report auto-registered as a reusable context block. Pass it into a later call's `contextBlockIds` for delta follow-ups; write routes (`delegate` / `execute-plan` / `retry`) return `null`.
+- **Delegate skill passthrough.** `POST /delegate` tasks accept an optional `skills: string[]`. Each name is resolved from the caller's skill store (by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively — Claude workers via a local SDK plugin, Codex workers via an ephemeral `CODEX_HOME`. Unknown names hard-fail just that task; omitting `skills` is byte-for-byte the previous behavior.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

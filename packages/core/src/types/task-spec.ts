@@ -34,6 +34,9 @@ export interface TaskSpec {
   testCommand?: string
   planContext?: string
   outputTargets?: string[]
+  /** Skill names the worker should be equipped with (delegate route only).
+   *  Resolved + staged before the session opens; see providers/skill-resolver.ts. */
+  skills?: string[]
   /**
    * For read-only routes that go through the read-route dispatcher, this is
    * the user's pure question / work / problem text (route-specific shape),

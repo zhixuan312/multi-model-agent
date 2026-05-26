@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-05-26
+
+Adds **delegate skill passthrough**: a `/delegate` task can now name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those skills — resolved from the *main agent's* store (selected by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively to whichever provider runs the task. Default is unchanged (no `skills` → today's behavior, byte-for-byte). `SCHEMA_VERSION` stays 5; no wire-schema or telemetry change. Build green, full Vitest suite 2103/2103, and a live 18-scenario full-pipeline smoke clean (0 hard-fails) including the two new skill-passthrough scenarios.
+
+### Added
+
+- **Delegate `skills` field (core + server).** The `/delegate` per-task schema accepts an optional `skills: string[]`. A new runner-agnostic `skill-resolver` (`packages/core/src/providers/skill-resolver.ts`) maps the caller's `X-MMA-Client` to its skill store (`claude-code` → `~/.claude/skills`, `codex-cli` → `~/.codex/skills`), validates each name, and copies the requested skills into an ephemeral per-task staging root (`<tmp>/mma-skills/<batchId>/<taskIndex>/`, owner-only `0700`/`0600`). The bundle threads through `TaskSpec.skills` → `SessionOpts.skills` (`ResolvedSkillBundle`) and is cleaned up on task teardown. Delegate-only by design — other routes keep their existing flow.
+- **Native per-runner delivery (core).** Claude workers load the staged skills as a local SDK plugin (`plugins:[{type:'local'}]` + `skills:[…]` + `settingSources:[]` isolation) via `claude-skill-plugin.ts`; Codex workers get an ephemeral `CODEX_HOME` pointed at the staged `skills/` (with an `auth.json` symlink for OAuth) via `codex-skill-home.ts`. The worker sees only the named skills — no other user settings leak.
+
+### Fixed
+
+- **Per-task envelope sealed on skill-resolution failure (core).** A bad/unknown skill name hard-fails *that* task with a typed code (`skill_not_found`, `skill_store_unsupported`, `skill_payload_too_large`, `skill_staging_failed`, `skill_isolation_unsupported`); sibling tasks proceed. The failure path now seals the per-task envelope to terminal `failed` (with the skill code on `results[i].error.code`) instead of leaving `GET /batch` showing a stuck `status: "running"` row — caught by the new full-smoke scenario 18.
+
+### Notes
+
+- **`SCHEMA_VERSION` stays 5.** Skill passthrough adds no telemetry field and no wire-schema change — PRIVACY.md is unaffected. The skill code surfaces via the per-task `structuredError.code` (a free string), so the `ErrorCode` wire enum is not widened.
+
 ## [4.8.0] - 2026-05-24
 
 Adds a project-scoped, cross-agent **learnings journal** (the Karpathy "WikiLLM" pattern) plus a deterministic-commit / diff-grounded-review hardening of the write lifecycle. Two new routes — `journal-record` (write) and `journal-recall` (read) — let any agent durably record what was learned and recall it later as a connected graph of markdown ADR nodes under `.mmagent/journal/`. `SCHEMA_VERSION` stays 5; the only wire change is two additive `route` enum values, disclosed in PRIVACY.md in lockstep. Build green, full Vitest suite passing, and a 16-scenario live full-pipeline smoke clean (0 hard-fails).
@@ -832,7 +849,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...HEAD
+[4.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...v4.8.0
 [4.7.20]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...v4.7.20
 [4.7.19]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.18...v4.7.19

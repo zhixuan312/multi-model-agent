@@ -28,6 +28,8 @@ export function buildRequest(spec, ctx) {
     case 14: return { route: 'retry', body: { batchId: ctx.seedBatchId, taskIndices: [ctx.seedFailIdx ?? 0] } };
     case 15: return { route: 'journal-record', body: { learning: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', tagHints: ['math', 'validation'] } };
     case 16: return { route: 'journal-recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
+    case 17: return { route: 'delegate', body: { tasks: [ T('Create file src/g.ts with exactly: export const G=7. Only that file. Do not run git.', { filePaths: ['src/g.ts'], reviewPolicy: 'none', skills: ['mma-smoke-skill'] }) ] } };
+    case 18: return { route: 'delegate', body: { tasks: [ T('Create file src/h.ts with exactly: export const H=8. Only that file. Do not run git.', { filePaths: ['src/h.ts'], reviewPolicy: 'none', skills: ['__mma_nonexistent_skill__'] }) ] } };
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }

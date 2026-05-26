@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { destroyProject } from './fixtures.mjs';
+import { destroyProject, removeSmokeSkill } from './fixtures.mjs';
 import { deleteContextBlock } from './http.mjs';
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export async function teardown(ctx) {
   const errors = [];
   try { destroyProject(ctx.dir); } catch (e) { errors.push(`repo: ${e.message || e}`); }
+  try { removeSmokeSkill(); } catch (e) { errors.push(`smoke-skill: ${e.message || e}`); }
   for (const id of ctx.contextBlockIds ?? []) {
     try { await deleteContextBlock(ctx.token, id, ctx.dir); } catch (e) { errors.push(`block ${id}: ${e.message || e}`); }
   }
