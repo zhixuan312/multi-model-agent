@@ -64,6 +64,16 @@ export const SCENARIOS = [
   // worker has populated .mmagent/journal/ to read. Both complex-tier.
   { id: 15, route: 'journal-record', tier: 'complex', kind: 'write', emits: 1 },
   { id: 16, route: 'journal-recall', tier: 'complex', kind: 'read', emits: 1 },
+  // Delegate skill passthrough (4.9.0). 17 = happy path: a delegate task that
+  // names an installed skill resolves it from the main-agent store, stages it,
+  // and the worker launches + completes normally (proves resolve→stage→native
+  // delivery doesn't break the session, on whichever provider `standard` maps
+  // to). 18 = hard-fail path: an unknown skill name must fail THAT task with
+  // `skill_not_found` (proves the skills field reaches live resolution and the
+  // failure is clean per-task). 18 bypasses the lifecycle (short-circuit) so it
+  // seals no wire envelope → emits 0.
+  { id: 17, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', skills: ['mma-smoke-skill'], emits: 1 },
+  { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 0 },
 ];
 
 // 4.7.20 universal terminal context block: the per-route `context-block` check in

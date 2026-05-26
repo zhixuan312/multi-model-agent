@@ -26,6 +26,21 @@ export function verify(rec) {
   const names = stages.map((s) => s.name);
   const outcomeOf = (n) => stages.find((s) => s.name === n)?.outcome;
 
+  // Skill passthrough — negative path (scenario 18): the batch itself completes
+  // (error.kind = not_applicable) but the single task must hard-fail because its
+  // named skill can't be resolved. Assert the task did NOT succeed AND the
+  // expected typed code surfaces somewhere on the task result. Early-return so
+  // the normal write checks (commit/terminal) don't run on a deliberately-failed
+  // task.
+  if (e.expectSkillError) {
+    const st = task0.status;
+    const failed = st && st !== 'done' && st !== 'ok' && st !== 'done_with_concerns';
+    const hasCode = JSON.stringify(task0).includes(e.expectSkillError);
+    out.push(C('skill-error', failed && hasCode ? 'PASS' : 'FAIL',
+      `status=${st}; result carries '${e.expectSkillError}'=${hasCode}`));
+    return out;
+  }
+
   // ① response
   if (e.expectFail) {
     out.push(C('response', r?.error && r.error.code ? 'PASS' : 'FAIL', `expected failure; error=${JSON.stringify(r?.error)}`));
@@ -85,6 +100,19 @@ export function verify(rec) {
     const ok = st === 'done' || st === 'done_with_concerns';
     out.push(C('terminal-status', ok ? 'PASS' : (e.expectRework ? 'WARN' : 'FAIL'),
       `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
+  }
+
+  // Skill passthrough — positive path (scenario 17): the worker launched and
+  // completed WITH a resolved+staged skill. Completion is itself the proof that
+  // resolve→stage→native delivery did not break session startup (a staging
+  // failure would have short-circuited the task to a hard fail). Carries no
+  // skill_* error code on the result.
+  if (e.skills && !e.expectSkillError) {
+    const st = task0.status;
+    const ok = st === 'done' || st === 'done_with_concerns';
+    const noSkillErr = !JSON.stringify(task0).includes('skill_');
+    out.push(C('skill-equipped', ok && noSkillErr ? 'PASS' : 'FAIL',
+      `skills=${JSON.stringify(e.skills)} status=${st} noSkillError=${noSkillErr}`));
   }
 
   if (e.kind === 'read') {
