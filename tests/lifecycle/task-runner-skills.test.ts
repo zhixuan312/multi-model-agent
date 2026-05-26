@@ -43,6 +43,11 @@ describe('runTaskViaDispatcher — skill resolution failure seals the envelope',
     const snap = env.snapshot();
     expect(snap.status).toBe('failed');
     expect(snap.terminalAt).not.toBeNull();
+    // Precise code on structuredError (surfaces on results[i].error.code)...
     expect(snap.structuredError?.code).toBe('skill_store_unsupported');
+    // ...but the enum-validated errorCode stays wire-safe so the telemetry
+    // record passes Zod validation on upload (regression guard for the
+    // telemetry_upload_error caught live on 4.9.0).
+    expect(snap.errorCode).toBe('other');
   });
 });

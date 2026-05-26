@@ -272,8 +272,14 @@ export async function runTaskViaDispatcher(
     input.envelope?.seal({
       status: 'failed',
       stopReason: 'skill_resolution_failed',
+      // The precise skill code rides on structuredError.code (a free string)
+      // so it surfaces on results[i].error.code. errorCode MUST stay within the
+      // wire ErrorCode enum: to-wire-record falls back to structuredError.code
+      // when errorCode is null, and a non-enum value there makes the telemetry
+      // record fail Zod validation on upload (telemetry_upload_error). 'other'
+      // is the catch-all bucket for these rare pre-flight resolution failures.
       structuredError: { code: fc.errorCode ?? 'skill_resolution_failed', message: fc.error ?? 'skill resolution failed' },
-      errorCode: null,
+      errorCode: 'other',
       realFilesChanged: [],
     });
     return fc;
