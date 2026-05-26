@@ -78,6 +78,7 @@ export interface DispatchTaskInput {
   batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
   /** Per-task event envelope for recording lifecycle mutations. Optional during migration. */
   envelope?: import('../events/task-envelope.js').TaskEnvelopeStore;
+  resolvedSkills?: ResolvedSkillBundle;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -136,6 +137,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
       ...(input.envelope && { envelope: input.envelope }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
       ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.resolvedSkills && { skills: input.resolvedSkills }),
     });
     sessions.set(tier, session);
     return session;
@@ -252,6 +254,14 @@ export async function runTaskViaDispatcher(
   input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
 ): Promise<RuntimeRunResult> {
+  const skillResolution = await resolveSkillsForTask({
+    task: input.task as { prompt: string; skills?: string[] },
+    client: input.client ?? '',
+    batchId: String(input.batchId ?? 'nobatch'),
+    taskIndex: input.taskIndex,
+  });
+  if (skillResolution.failure) return skillResolution.failure;
+
   // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
   // so the SAME expanded task object reaches BOTH state.task AND
   // executionContext.task (single source of truth — no two references).
@@ -261,7 +271,11 @@ export async function runTaskViaDispatcher(
     ? expandContextBlocks(input.task, input.contextBlockStore)
     : input.task;
 
-  const executionContext = buildExecutionContext({ ...input, task: expandedTask });
+  const executionContext = buildExecutionContext({
+    ...input,
+    task: expandedTask,
+    ...(skillResolution.bundle && { resolvedSkills: skillResolution.bundle }),
+  });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
 
@@ -314,6 +328,9 @@ export async function runTaskViaDispatcher(
       // query handles release. Errors swallowed so disposal can't mask
       // the task's real result.
       await executionContext.closeSessions().catch(() => { /* idempotent */ });
+      if (skillResolution.bundle) {
+        await cleanupSkillStaging(skillResolution.bundle.stagedRoot).catch(() => { /* best-effort */ });
+      }
       // Detach from BatchRegistry — closeSessions already ran, so shutdown
       // drain shouldn't re-close.
       if (input.batchRegistry && input.batchId !== undefined) {
