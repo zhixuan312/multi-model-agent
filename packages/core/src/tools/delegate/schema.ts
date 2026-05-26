@@ -25,7 +25,8 @@ const taskSchema = z.object({
   ),
   skills: z.array(z.string().min(1)).optional().describe(
     'Skill names to equip this worker with, resolved from the main agent\'s skill store ' +
-    '(selected by X-MMA-Client). Names match the SKILL.md name / directory, or "plugin:skill". ' +
+    '(selected by X-MMA-Client). Each name matches a SKILL.md name / top-level directory in ' +
+    'that store. Plugin-qualified "plugin:skill" names are not yet supported and are rejected. ' +
     'Default: none. Unknown names hard-fail this task.',
   ),
 }).strict();
