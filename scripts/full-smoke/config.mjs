@@ -31,8 +31,9 @@ export const POLL = {
 // expected to produce. The wire pipeline emits ONE record per sealed task
 // envelope (telemetry-uploader dedups by taskId), so:
 //   - delegate            → one per task  (`tasks`, default 1)
-//   - execute-plan        → 1 (a single worker session runs the whole plan;
-//                              its multiple taskOutcomes are NOT separate runs)
+//   - execute-plan        → one per task descriptor (each descriptor seals its
+//                              own task envelope → its own wire record). Scenario
+//                              8 dispatches 2 descriptors, so emits 2.
 //   - investigate/audit/review/debug → 1 (single read run)
 //   - journal-record      → 1 (write route; one worker writes the journal nodes)
 //   - journal-recall      → 1 (read route, investigate-shaped; multi-criteria
@@ -52,7 +53,7 @@ export const SCENARIOS = [
   { id: 5,  route: 'delegate', tier: 'standard', kind: 'write', dispatchMode: 'parallel', tasks: 2, emits: 2 },
   { id: 6,  route: 'delegate', tier: 'complex', kind: 'write', dispatchMode: 'parallel', tasks: 1, emits: 1 },
   { id: 7,  route: 'delegate', tier: 'standard', kind: 'write', dispatchMode: 'serial', tasks: 2, emits: 2 },
-  { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', dispatchMode: 'serial', emits: 1 },
+  { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', dispatchMode: 'serial', emits: 2 },
   { id: 'seed', route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', seed: true, emits: 1 },
   { id: 9,  route: 'review', tier: 'complex', kind: 'read', emits: 1 },
   { id: 10, route: 'debug', tier: 'complex', kind: 'read', emits: 1 },
@@ -71,9 +72,11 @@ export const SCENARIOS = [
   // to). 18 = hard-fail path: an unknown skill name must fail THAT task with
   // `skill_not_found` (proves the skills field reaches live resolution and the
   // failure is clean per-task). 18 bypasses the lifecycle (short-circuit) so it
-  // seals no wire envelope → emits 0.
+  // seals a terminal-failed envelope whose telemetry record uploads cleanly
+  // (errorCode bucketed as 'other'; the precise skill code rides structuredError)
+  // → emits 1.
   { id: 17, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', skills: ['mma-smoke-skill'], emits: 1 },
-  { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 0 },
+  { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 1 },
 ];
 
 // 4.7.20 universal terminal context block: the per-route `context-block` check in

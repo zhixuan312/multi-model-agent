@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.1] - 2026-05-26
+
+Patch fixing telemetry on the delegate skill-passthrough failure path (4.9.0). A skill-resolution failure correctly hard-fails the task, but its telemetry wire record carried a non-enum `errorCode` (`skill_not_found`), which failed Zod validation on upload — the failed-task event was silently dropped (`telemetry_upload_error`). `SCHEMA_VERSION` stays 5. Build green, full Vitest 2103/2103, live 18-scenario full-pipeline smoke clean (0 hard-fails) with the failed-task telemetry record now landing in the queue.
+
+### Fixed
+
+- **Wire-safe errorCode on skill-resolution failure (core).** The per-task envelope is now sealed with a valid wire `ErrorCode` (`'other'`) instead of `null`; the precise skill code rides on `structuredError.code` (a free string) so it still surfaces on `results[i].error.code` and the batch-level `error.code`. Prevents the dropped-telemetry bug: `to-wire-record` falls back to `structuredError.code` when `errorCode` is null, and a non-enum value there fails wire validation.
+
+### Notes
+
+- **`SCHEMA_VERSION` stays 5.** No wire-schema or `ErrorCode` enum change — the fix keeps skill failures within the existing `'other'` bucket. PRIVACY.md unaffected.
+- **Full-smoke accuracy.** Scenario 18's expected `emits` is now `1` (the failed-task record uploads) and execute-plan's is `2` (one wire record per task descriptor); the run-level telemetry tally is now an exact 20/20.
+
 ## [4.9.0] - 2026-05-26
 
 Adds **delegate skill passthrough**: a `/delegate` task can now name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those skills — resolved from the *main agent's* store (selected by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively to whichever provider runs the task. Default is unchanged (no `skills` → today's behavior, byte-for-byte). `SCHEMA_VERSION` stays 5; no wire-schema or telemetry change. Build green, full Vitest suite 2103/2103, and a live 18-scenario full-pipeline smoke clean (0 hard-fails) including the two new skill-passthrough scenarios.
@@ -849,7 +862,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.1...HEAD
+[4.9.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...v4.9.1
 [4.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...v4.8.0
 [4.7.20]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...v4.7.20
