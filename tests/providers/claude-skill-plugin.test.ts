@@ -21,4 +21,10 @@ describe('claude skill plugin', () => {
       settingSources: [],
     });
   });
+
+  it('build options are empty-spread when no skills (default-off contract)', () => {
+    // buildClaudeSkillOptions is only called when a bundle exists; with no
+    // bundle the session spreads {} — assert the helper is pure and side-effect free.
+    expect(Object.keys(buildClaudeSkillOptions('/r', []))).toEqual(['plugins', 'skills', 'settingSources']);
+  });
 });
