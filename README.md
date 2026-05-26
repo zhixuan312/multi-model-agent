@@ -315,9 +315,9 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.7.20
+## What's new in 4.9.0
 
-- **Delta-ready read results.** Read tools (`mma-audit` / `mma-review` / `mma-debug` / `mma-investigate` / `mma-research`) now return a reusable `contextBlockId` — the worker's report auto-registered as a context block. Feed a prior result's id into the next call's `contextBlockIds` to run delta follow-ups ("are round-1 findings fixed?") with no manual registration. Write tools return `contextBlockId: null` — their record is the commit.
+- **Delegate skill passthrough.** A `/delegate` task can name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those — resolved from your own skill store, staged in isolation, and delivered natively to the Claude or Codex worker. Default is unchanged: no `skills`, no behavior change.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
