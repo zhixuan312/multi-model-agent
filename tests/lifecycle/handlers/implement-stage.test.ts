@@ -10,8 +10,8 @@ import type { TurnResult } from '../../../packages/core/src/types/run-result.js'
 // so tests just set those on the state instead of mocking the deleted module.
 vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js');
 vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
-vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../packages/core/src/lifecycle/read-route-criteria.js')>();
+vi.mock('../../../packages/core/src/routing/read-route-criteria.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../packages/core/src/routing/read-route-criteria.js')>();
   return {
     ...actual,
     resolveSubtypeSpec: () => ({

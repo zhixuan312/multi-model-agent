@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
-import { getRealFilesChanged } from '../../packages/core/src/lifecycle/real-diff.js';
+import { getRealFilesChanged } from '../../packages/core/src/bounded-execution/real-diff.js';
 
 function makeRepo(): { cwd: string; sha: string } {
   const cwd = mkdtempSync(join(tmpdir(), 'mma-realdiff-'));

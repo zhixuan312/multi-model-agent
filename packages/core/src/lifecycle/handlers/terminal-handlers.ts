@@ -3,7 +3,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { RuntimeRunResult, TaskSpec } from '../../types.js';
 import type { StageGate, TerminalPayload } from '../stage-io.js';
 import { findModelProfile } from '../../config/model-profile-registry.js';
-import { getRealFilesChanged } from '../real-diff.js';
+import { getRealFilesChanged } from '../../bounded-execution/real-diff.js';
 import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
 import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
 import { renderTerminalReportMarkdown } from '../../reporting/terminal-report-markdown.js';

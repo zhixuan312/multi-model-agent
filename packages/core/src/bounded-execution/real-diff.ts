@@ -11,14 +11,25 @@
 
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import type { LifecycleState } from './stage-plan-types.js';
 
 export interface RealFilesChanged {
   files: string[];
   source: 'git_diff' | 'self_report' | 'git_error';
 }
 
-export async function getRealFilesChanged(state: LifecycleState): Promise<RealFilesChanged> {
+/** Structural subset of LifecycleState that getRealFilesChanged reads. Declared
+ *  here so this substrate-layer git primitive carries no dependency on the
+ *  lifecycle/pipeline layer (enforced by .dependency-cruiser.cjs's
+ *  no-substrate-to-pipeline rule). LifecycleState satisfies it structurally. */
+export interface RealDiffInputs {
+  cwd?: string;
+  executionContext?: unknown;
+  preTaskHeadSha?: string;
+  preTaskUntrackedFiles?: Set<string>;
+  lastRunResult?: unknown;
+}
+
+export async function getRealFilesChanged(state: RealDiffInputs): Promise<RealFilesChanged> {
   // Defense in depth: prefer state.cwd, fall back to executionContext.cwd —
   // production wires it on the latter. Without this the helper goes inert
   // (self_report) and the git-truth safety net never engages.

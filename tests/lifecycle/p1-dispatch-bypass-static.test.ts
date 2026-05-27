@@ -26,7 +26,7 @@ describe('Precondition P1 — read-route dispatch bypass (static-source verifica
   });
 
   it('read-route-criteria.ts defines FINDING_FORMAT_SHARED', () => {
-    const src = read('packages/core/src/lifecycle/read-route-criteria.ts');
+    const src = read('packages/core/src/routing/read-route-criteria.ts');
     expect(src).toMatch(/FINDING_FORMAT_SHARED/);
   });
 });
