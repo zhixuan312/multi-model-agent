@@ -34,22 +34,24 @@
   },
   "exports": {
     ".": {
+      "bun": "./src/http/server.ts",
       "types": "./dist/http/server.d.ts",
       "import": "./dist/http/server.js"
     },
     "./server": {
+      "bun": "./src/http/server.ts",
       "types": "./dist/http/server.d.ts",
       "import": "./dist/http/server.js"
     }
   },
   "scripts": {
     "prebuild": "rm -rf dist",
-    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && node scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
-    "postinstall": "node scripts/postinstall.js",
-    "prepublishOnly": "npm run build"
+    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && bun scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
+    "postinstall": "bun scripts/postinstall.js",
+    "prepublishOnly": "bun run build"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "bun": ">=1.3.0"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",

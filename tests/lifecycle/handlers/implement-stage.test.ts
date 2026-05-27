@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
+// Import the real read-route-criteria BEFORE mock.module so the factory can spread
+// it (Bun's mock.module factory receives no importOriginal helper).
+import * as readRouteCriteriaActual from '../../../packages/core/src/lifecycle/read-route-criteria.js';
 
 // v0.5: the implement stage now calls ctx.getSession(tier).send(prompt, opts)
 // directly — no delegateWithEscalation wrapper. The lifecycle-state fixture
 // already plumbs ctx.getSession through __mockSessionResponse / __llmAlwaysFails,
 // so tests just set those on the state instead of mocking the deleted module.
-vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
-vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../packages/core/src/lifecycle/read-route-criteria.js')>();
+// Bun's mock.module requires an explicit factory (no auto-mock).
+vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js', () => ({ startProgressWatchdog: vi.fn(), recordPostHocSignals: vi.fn() }));
+vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js', () => ({ runReadRouteImplementer: vi.fn() }));
+vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', () => {
+  const actual = readRouteCriteriaActual;
   return {
     ...actual,
     resolveSubtypeSpec: () => ({
@@ -30,6 +33,9 @@ vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', async (im
     isReadOnlyRoute: (route: string) => ['audit', 'review', 'debug', 'investigate', 'explore'].includes(route),
   };
 });
+
+// Import the SUT AFTER the mocks register (Bun does not hoist mock.module above imports).
+const { implementHandler } = await import('../../../packages/core/src/lifecycle/handlers/implement-stage.js');
 
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { ClaudeSession } from '../../packages/core/src/providers/claude-session.js';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => {
   const capturedQueries: Array<{ env?: Record<string, string> }> = [];
@@ -24,6 +23,9 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => {
     __capturedQueries: capturedQueries,
   };
 });
+
+// Import the SUT AFTER the mock registers (Bun does not hoist mock.module above imports).
+const { ClaudeSession } = await import('../../packages/core/src/providers/claude-session.js');
 
 describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
   let envSnapshot: Record<string, string | undefined>;
