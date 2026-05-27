@@ -1,4 +1,3 @@
-import { request } from 'undici';
 import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
 
@@ -43,13 +42,13 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
   };
   if (opts.pat && opts.pat.length > 0) headers['authorization'] = `Bearer ${opts.pat}`;
 
-  const res = await request(url.toString(), { method: 'GET', headers });
+  const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual', headers });
 
-  if (res.statusCode === 403) {
-    const remaining = res.headers['x-ratelimit-remaining'];
+  if (res.status === 403) {
+    const remaining = res.headers.get('x-ratelimit-remaining');
     if (remaining === '0') throw new Error('github_rate_limited');
     try {
-      const text = await res.body.text();
+      const text = await res.text();
       const body = JSON.parse(text) as { message?: string };
       if (typeof body.message === 'string') {
         const msg = body.message.toLowerCase();
@@ -60,14 +59,14 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'github_rate_limited') throw err;
     }
-    throw new Error(`github_http_${res.statusCode}`);
+    throw new Error(`github_http_${res.status}`);
   }
 
-  if (res.statusCode >= 300 && res.statusCode < 400) throw new Error('adapter_unexpected_redirect: github_search');
-  if (res.statusCode !== 200) throw new Error(`github_http_${res.statusCode}`);
+  if (res.status >= 300 && res.status < 400) throw new Error('adapter_unexpected_redirect: github_search');
+  if (res.status !== 200) throw new Error(`github_http_${res.status}`);
 
   let body: unknown;
-  try { body = await res.body.json(); } catch { throw new Error('github_invalid_json'); }
+  try { body = await res.json(); } catch { throw new Error('github_invalid_json'); }
   const items = typeof body === 'object' && body !== null && 'items' in body && Array.isArray(body.items)
     ? body.items : [];
 

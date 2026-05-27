@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { MockAgent, setGlobalDispatcher } from 'undici';
+import { saveFetch, restoreFetch, stubFetch, resp } from './fixtures/mock-fetch.js';
 import { BraveClient } from '../../packages/core/src/research/web-search.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
 
@@ -9,14 +9,11 @@ const instantSleep = () => Promise.resolve();
 const fixedRandom = () => 0.5;
 
 describe('BraveClient — key leak prevention', () => {
-  let agent: MockAgent;
-  beforeEach(() => { agent = new MockAgent(); agent.disableNetConnect(); setGlobalDispatcher(agent); });
-  afterEach(async () => { await agent.close(); });
+  beforeEach(() => { saveFetch(); });
+  afterEach(() => { restoreFetch(); });
 
   it('error messages never include the key value', async () => {
-    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
-      .reply(500, '{"error":"oops with SECRET-K1 in body"}',
-             { headers: { 'content-type': 'application/json' } }).times(20);
+    stubFetch(() => resp(500, '{"error":"oops with SECRET-K1 in body"}'));
     const c = new BraveClient(cfg, { sleep: instantSleep, random: fixedRandom });
     let caught: unknown;
     try { await c.search('q'); } catch (e) { caught = e; }
@@ -24,8 +21,7 @@ describe('BraveClient — key leak prevention', () => {
   });
 
   it('exhausted error only includes key indices, not key values', async () => {
-    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
-      .reply(429, '{}', { headers: { 'content-type': 'application/json' } }).times(20);
+    stubFetch(() => resp(429, '{}'));
     const c = new BraveClient(cfg, { sleep: instantSleep, random: fixedRandom });
     let caught: unknown;
     try { await c.search('q'); } catch (e) { caught = e; }
