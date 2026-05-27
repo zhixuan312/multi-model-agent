@@ -56,6 +56,14 @@ describe('GET /status', () => {
 
       const body = await res.json() as Record<string, unknown>;
 
+      // Capture scalar values BEFORE toMatchObject: Bun's toMatchObject mutates
+      // the received object in place, replacing asymmetric-matcher-matched fields
+      // (expect.any) with {}, so re-reading them afterward would see {}.
+      const version = body['version'];
+      const uptimeMs = body['uptimeMs'] as number;
+      const pid = body['pid'];
+      const authEnabled = (body['auth'] as { enabled: boolean }).enabled;
+
       // Top-level shape check (toMatchObject for stability against version bumps)
       expect(body).toMatchObject({
         pid: expect.any(Number),
@@ -73,17 +81,17 @@ describe('GET /status', () => {
       });
 
       // version must be a semver string
-      expect(typeof body['version']).toBe('string');
-      expect((body['version'] as string).length).toBeGreaterThan(0);
+      expect(typeof version).toBe('string');
+      expect((version as string).length).toBeGreaterThan(0);
 
       // uptimeMs must be non-negative
-      expect(body['uptimeMs'] as number).toBeGreaterThanOrEqual(0);
+      expect(uptimeMs).toBeGreaterThanOrEqual(0);
 
       // pid must match the current process
-      expect(body['pid']).toBe(process.pid);
+      expect(pid).toBe(process.pid);
 
       // auth is always enabled in 3.0.0
-      expect((body['auth'] as { enabled: boolean }).enabled).toBe(true);
+      expect(authEnabled).toBe(true);
     } finally {
       await s.stop();
     }
