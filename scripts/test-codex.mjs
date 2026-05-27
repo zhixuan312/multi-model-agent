@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Standalone test: calls runCodex directly and dumps the full RunResult.
 // Usage: CODEX_DEBUG=1 node scripts/test-codex.mjs
 import { runCodex } from '../packages/core/dist/runners/codex-runner.js';

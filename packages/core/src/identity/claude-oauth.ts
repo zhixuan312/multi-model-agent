@@ -6,7 +6,7 @@
 // `packages/core/src/providers/codex.ts:9`), not here — by design. Token
 // refresh is not implemented; expired tokens cause this function to
 // return `null` and the provider falls back to other auth paths.
-import { execFileSync } from 'child_process';
+import { execFileSync } from 'node:child_process';
 
 export interface ClaudeOAuthCredentials {
   accessToken: string;

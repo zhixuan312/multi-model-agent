@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Local 3.10.1 telemetry smoke — builds a V3 task.completed event from the
 // local source tree using the real `buildTaskCompletedEvent` so the values
 // match what production-mma will emit, then POSTs it to a backend you point

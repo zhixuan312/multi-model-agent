@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { readFileSync } from 'node:fs';
 import { preflight, AbortError } from './preflight.mjs';
 import { createProject } from './fixtures.mjs';

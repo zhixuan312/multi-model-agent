@@ -14,7 +14,7 @@ import { startProgressWatchdog, recordPostHocSignals } from '../bounded-executio
 import { resolveSubtypeSpec, isReadOnlyRoute } from './read-route-criteria.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
-import { readFile as fsReadFile } from 'fs/promises';
+import { readFile as fsReadFile } from 'node:fs/promises';
 
 function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
   try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
