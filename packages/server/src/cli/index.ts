@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import minimist, { type ParsedArgs } from 'minimist';
+import { resolveServerVersion } from '../version.js';
 import {
   loadConfigFromFile,
   type MultiModelConfig,
@@ -191,20 +192,6 @@ Global options:
 `;
 
 /**
- * Read the server package version from package.json, walking up from this file.
- */
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
-
-/**
  * Main entry point — exported so it can be unit-tested without subprocess spawning.
  *
  * @param deps  I/O dependencies (defaults to real process globals).
@@ -226,7 +213,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   }
 
   if (opts['version']) {
-    stdout(readServerVersion() + '\n');
+    stdout(resolveServerVersion() + '\n');
     return;
   }
 
@@ -289,7 +276,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         break;
       }
       const code = await runInfo({
-        cliVersion: readServerVersion(),
+        cliVersion: resolveServerVersion(),
         bind: config.server.bind,
         port: config.server.port,
         tokenFile: config.server.auth.tokenFile,
@@ -346,7 +333,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const code = await run({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
-        cliVersion: readServerVersion(),
+        cliVersion: resolveServerVersion(),
         stdout: deps.stdout,
         stderr: deps.stderr,
       });

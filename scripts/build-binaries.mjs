@@ -53,7 +53,14 @@ for (const t of targets) {
   const outfile = join(outDir, binFile);
   process.stderr.write(`\n=== compiling ${t} -> ${manifest.name} ===\n`);
   const proc = Bun.spawnSync(
-    ['bun', 'build', '--compile', `--target=${t}`, ENTRY, '--outfile', outfile],
+    [
+      'bun', 'build', '--compile', `--target=${t}`,
+      // Standalone binaries carry no package.json on disk, so the runtime
+      // version read fails. Bake the version in (resolveServerVersion in
+      // packages/server/src/version.ts reads this define first).
+      `--define=MMAGENT_VERSION=${JSON.stringify(VERSION)}`,
+      ENTRY, '--outfile', outfile,
+    ],
     { cwd: ROOT, stdout: 'inherit', stderr: 'inherit' },
   );
   if (proc.exitCode !== 0) {
