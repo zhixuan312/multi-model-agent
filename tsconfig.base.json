@@ -10,6 +10,11 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "@zhixuan92/multi-model-agent-core": ["./packages/core/src/index.ts"],
+      "@zhixuan92/multi-model-agent-core/*": ["./packages/core/src/*"],
+      "@zhixuan92/multi-model-agent/server": ["./packages/server/src/http/server.ts"]
+    }
   }
 }
