@@ -9,12 +9,17 @@ import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
+import { runBuildChecks } from './build-checks.mjs';
 
 const argv = process.argv.slice(2);
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const opts = {
   skipBackend: argv.includes('--skip-backend'),
   strict: argv.includes('--strict'),
+  // Build/packaging phase (Bun toolchain + standalone-binary distribution).
+  skipBuild: argv.includes('--skip-build'),
+  skipTests: argv.includes('--skip-tests'),
+  buildOnly: argv.includes('--build-only'),
   expectBranch: (argv.find((a) => a.startsWith('--branch=')) || '').split('=')[1] || null,
   allowMismatch: argv.includes('--allow-mismatch'),
   // --only=1,13 limits the run to a subset of scenario ids (for quick checks).
@@ -23,6 +28,23 @@ const opts = {
   // run's events actually landed in events_raw (the mma→backend→DB leg).
   waitFlush: argv.includes('--wait-flush'),
 };
+
+// ── Build + packaging phase (no running server required) ──────────────────
+// Validates the Bun toolchain + standalone-binary distribution that the live
+// runtime scenarios cannot see. Runs first so a broken build fails fast.
+const buildChecks = await runBuildChecks(opts);
+
+if (opts.buildOnly) {
+  let fails = 0;
+  console.log('Full-smoke — BUILD/PACKAGING phase only\n');
+  for (const c of buildChecks) {
+    const g = { PASS: '✓', FAIL: '✗', SKIP: '—' }[c.status] ?? c.status;
+    console.log(`  ${g} ${c.checkId.padEnd(24)} ${c.detail}`);
+    if (c.status === 'FAIL') fails++;
+  }
+  console.log(`\nbuild/packaging: ${fails === 0 ? 'all checks passed' : `${fails} FAILED`}`);
+  process.exit(fails > 0 ? 1 : 0);
+}
 
 let ctx;
 try {
@@ -113,6 +135,10 @@ try {
 } finally {
   await teardown(ctx);
 }
+
+// Prepend the build/packaging phase so its checks appear in the report + tally.
+records.unshift({ scenarioId: 'build', route: 'build-phase' });
+checksByScenario['build'] = buildChecks;
 
 const exitCode = report(records, checksByScenario, {
   serverVersion: ctx.serverVersion, bootId: ctx.bootId,
