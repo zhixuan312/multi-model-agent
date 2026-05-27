@@ -11,7 +11,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { parseFindings } from './findings-parser.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
-import { resolveSubtypeSpec, isReadOnlyRoute } from './read-route-criteria.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from '../routing/read-route-criteria.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'node:fs/promises';
@@ -98,7 +98,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         // Pull research-specific task fields from the TaskSpec contract.
         const r = task.research;
         if (!r) throw new Error('research_route_missing_input');
-        const { runResearchPreLoop } = await import('./research-pre-loop.js');
+        const { runResearchPreLoop } = await import('../research/research-pre-loop.js');
         const preLoop = await runResearchPreLoop({
           session: ctx.getSession(decision.impl),
           researchQuestion: r.researchQuestion,

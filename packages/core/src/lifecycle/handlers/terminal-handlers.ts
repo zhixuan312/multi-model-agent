@@ -2,7 +2,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { RuntimeRunResult } from '../../types.js';
 import type { StageGate, TerminalPayload } from '../stage-io.js';
-import { getRealFilesChanged } from '../real-diff.js';
+import { getRealFilesChanged } from '../../bounded-execution/real-diff.js';
 import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
 import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
 import { renderTerminalReportMarkdown } from '../../reporting/terminal-report-markdown.js';

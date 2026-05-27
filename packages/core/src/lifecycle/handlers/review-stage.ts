@@ -7,8 +7,13 @@ import { parseReviewReport }   from './parse-review-report.js';
 import { invertedReviewerTier } from './tier-policy.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
-import { SLICE_CAP_BYTES } from '../../tools/execute-plan/plan-extractor.js';
 import type { AgentType } from '../../types.js';
+
+// Max UTF-8 bytes of cumulative diff fed to the reviewer prompt. An independent
+// review-stage concern — kept local rather than borrowing the plan tool's
+// SLICE_CAP_BYTES (which caps plan-section extraction for a different reason),
+// so this pipeline handler carries no dependency on the tools layer.
+const REVIEW_DIFF_CAP_BYTES = 30 * 1024;
 
 function parseOutcomeFromText(text: string): 'clean' | 'found' | null {
   const outcomeMatch = text.match(/^##\s*outcome\s*$/im);
@@ -40,12 +45,12 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
   }
 
-  // Truncate diff to SLICE_CAP_BYTES by UTF-8 byte length, reserving space for the truncation marker
+  // Truncate diff to REVIEW_DIFF_CAP_BYTES by UTF-8 byte length, reserving space for the truncation marker
   const truncationMarker = '[diff truncated]';
   const diffBytes = Buffer.byteLength(cumulativeDiff, 'utf8');
-  if (diffBytes > SLICE_CAP_BYTES) {
+  if (diffBytes > REVIEW_DIFF_CAP_BYTES) {
     const markerBytes = Buffer.byteLength(truncationMarker, 'utf8');
-    const availableBytes = SLICE_CAP_BYTES - markerBytes;
+    const availableBytes = REVIEW_DIFF_CAP_BYTES - markerBytes;
 
     // Truncate by finding the right position in UTF-8
     let truncated = '';

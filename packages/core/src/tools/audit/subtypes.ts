@@ -16,7 +16,7 @@ import { SKILL_AUDIT_CRITERIA, SKILL_AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_SK
 export type AuditSubtype = 'default' | 'plan' | 'spec' | 'skill';
 
 // Copied verbatim from ROUTE_SEMANTICS.audit in
-// packages/core/src/lifecycle/read-route-criteria.ts (the legacy
+// packages/core/src/routing/read-route-criteria.ts (the legacy
 // private const there is removed in Task 8 once dispatch reads from here).
 const SEMANTICS_DEFAULT: RouteSemantics = {
   goalLine: 'Find ALL issues of THIS specific kind in the artifact above.',

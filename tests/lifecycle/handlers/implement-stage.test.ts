@@ -4,7 +4,7 @@ import type { ImplementPayload, RouteName } from '../../../packages/core/src/lif
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 // Import the real read-route-criteria BEFORE mock.module so the factory can spread
 // it (Bun's mock.module factory receives no importOriginal helper).
-import * as readRouteCriteriaActual from '../../../packages/core/src/lifecycle/read-route-criteria.js';
+import * as readRouteCriteriaActual from '../../../packages/core/src/routing/read-route-criteria.js';
 
 // v0.5: the implement stage now calls ctx.getSession(tier).send(prompt, opts)
 // directly — no delegateWithEscalation wrapper. The lifecycle-state fixture
@@ -13,7 +13,7 @@ import * as readRouteCriteriaActual from '../../../packages/core/src/lifecycle/r
 // Bun's mock.module requires an explicit factory (no auto-mock).
 vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js', () => ({ startProgressWatchdog: vi.fn(), recordPostHocSignals: vi.fn() }));
 vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js', () => ({ runReadRouteImplementer: vi.fn() }));
-vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', () => {
+vi.mock('../../../packages/core/src/routing/read-route-criteria.js', () => {
   const actual = readRouteCriteriaActual;
   return {
     ...actual,

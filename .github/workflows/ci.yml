@@ -12,6 +12,25 @@ on:
     branches: [main, master, 'release/**']
 
 jobs:
+  # Static gates — OS-independent, so run once. eslint exits 0 on warnings
+  # (the consistent-type-imports nits are warn-level by design) but fails on
+  # errors; dependency-cruiser enforces the architecture layering rules
+  # (no substrate→pipeline, no pipeline→tools, no cycles) at zero violations.
+  lint:
+    name: lint (eslint + layering)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - name: Install workspace deps
+        run: bun install
+      - name: ESLint
+        run: bun run lint
+      - name: Dependency layering (dependency-cruiser)
+        run: bun run lint:deps
+
   verify:
     name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

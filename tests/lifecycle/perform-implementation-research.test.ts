@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'bun:test';
-import { runResearchPreLoop } from '../../packages/core/src/lifecycle/research-pre-loop.js';
+import { runResearchPreLoop } from '../../packages/core/src/research/research-pre-loop.js';
 
 const validPlan = JSON.stringify({
   braveQueries: [], arxivQueries: [], semanticScholarQueries: [],
