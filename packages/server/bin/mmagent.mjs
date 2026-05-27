@@ -36,4 +36,12 @@ try {
 }
 
 const res = spawnSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+// On Alpine/musl the compiled binary links libstdc++/libgcc (a Bun requirement).
+// Exit 127 with no normal run usually means those are missing on a bare image.
+if (res.status === 127 && os === 'linux') {
+  process.stderr.write(
+    'mmagent: the binary failed to start. On Alpine/musl, install the C++ runtime: ' +
+    '`apk add --no-cache libstdc++ libgcc` (node:alpine images already include these).\n',
+  );
+}
 process.exit(res.status ?? 1);

@@ -19,6 +19,7 @@ const opts = {
   // Build/packaging phase (Bun toolchain + standalone-binary distribution).
   skipBuild: argv.includes('--skip-build'),
   skipTests: argv.includes('--skip-tests'),
+  skipDocker: argv.includes('--skip-docker'),
   buildOnly: argv.includes('--build-only'),
   expectBranch: (argv.find((a) => a.startsWith('--branch=')) || '').split('=')[1] || null,
   allowMismatch: argv.includes('--allow-mismatch'),

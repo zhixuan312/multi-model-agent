@@ -13,7 +13,7 @@
 // Pure Node/Bun child_process; no server required. Returns check records in the
 // same shape verify.mjs produces: [{ checkId, status: 'PASS'|'FAIL'|'SKIP', detail }].
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, existsSync, symlinkSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,18 +69,24 @@ export async function runBuildChecks(opts = {}) {
     checks.push(check('test-suite', 'SKIP', '--skip-tests'));
   }
 
-  // 5. compile the host standalone binary (+ per-platform manifest)
-  const { target, binFile, pkg } = hostTarget();
-  const comp = run(BUN, ['scripts/build-binaries.mjs', target], { timeoutMs: 300000 });
+  // 5. compile host + (when Docker is available) linux binaries for real cross-platform
+  //    EXECUTION proof. On Apple Silicon, Docker runs linux/arm64 natively, so the
+  //    linux glibc + musl binaries can actually be RUN, not just compiled.
+  const { target, binFile } = hostTarget();
+  const dockerAvail = !opts.skipDocker && run('docker', ['info'], { timeoutMs: 15000 }).code === 0;
+  const linuxArch = process.arch === 'arm64' ? 'arm64' : 'x64'; // run the host-arch linux binary natively in Docker
+  const linuxTargets = dockerAvail ? [`bun-linux-${linuxArch}`, `bun-linux-${linuxArch}-musl`] : [];
+  const compTargets = [target, ...linuxTargets];
+  const comp = run(BUN, ['scripts/build-binaries.mjs', ...compTargets], { timeoutMs: 900000 });
   const binDir = join(ROOT, 'binaries', target);
   const binPath = join(binDir, binFile);
   const compiled = comp.code === 0 && existsSync(binPath);
-  checks.push(check('binary-compile', compiled ? 'PASS' : 'FAIL', `${target} exit=${comp.code} exists=${existsSync(binPath)}`));
+  checks.push(check('binary-compile', compiled ? 'PASS' : 'FAIL', `${compTargets.join(',')} exit=${comp.code}`));
 
   if (compiled) {
-    // 6. binary runs a subcommand (entry detection via import.meta.main)
-    const info = run(binPath, ['info'], { timeoutMs: 30000 });
-    checks.push(check('binary-runs', info.code === 0 && /mmagent cli=/.test(info.out) ? 'PASS' : 'FAIL', `info exit=${info.code}`));
+    // 6. host binary runs (entry detection via import.meta.main; --version is server-independent)
+    const ver = run(binPath, ['--version'], { timeoutMs: 30000 });
+    checks.push(check('binary-runs', ver.code === 0 && /\d+\.\d+\.\d+/.test(ver.out) ? 'PASS' : 'FAIL', `--version='${ver.out.trim()}' exit=${ver.code}`));
 
     // 7. binary installs skills from EMBEDDED assets (clean HOME) with @include expansion
     const home = mkdtempSync(join(tmpdir(), 'smoke-skill-'));
@@ -89,37 +95,67 @@ export async function runBuildChecks(opts = {}) {
       const sync = run(binPath, ['sync-skills', '--silent', '--best-effort'], { env: { HOME: home }, timeoutMs: 60000 });
       const installed = run('find', [home, '-name', 'SKILL.md']).out.trim().split('\n').filter(Boolean);
       let expanded = false;
-      if (installed[0]) {
-        const content = readFileSync(installed[0], 'utf8');
-        expanded = !content.includes('@include'); // directives must be inlined from embedded _shared
-      }
+      if (installed[0]) expanded = !readFileSync(installed[0], 'utf8').includes('@include');
       const ok = sync.code === 0 && installed.length > 0 && expanded;
-      checks.push(check('binary-embedded-skills', ok ? 'PASS' : 'FAIL',
-        `installed=${installed.length} includeExpanded=${expanded}`));
+      checks.push(check('binary-embedded-skills', ok ? 'PASS' : 'FAIL', `installed=${installed.length} includeExpanded=${expanded}`));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
 
-    // 8. bin resolver resolves the platform package and execs the binary
-    const nm = join(ROOT, 'node_modules', '@zhixuan92');
-    const link = join(nm, pkg.split('/')[1]);
+    // 8. REAL publish-shape install: npm pack the top-level + host platform package,
+    //    install both into a clean dir (no repo), and run the installed bin shim →
+    //    proves the bin resolver resolves the optional-dep package and execs the binary.
+    const work = mkdtempSync(join(tmpdir(), 'smoke-npm-'));
     try {
-      mkdirSync(nm, { recursive: true });
-      try { rmSync(link, { force: true }); } catch { /* ignore */ }
-      symlinkSync(binDir, link);
-      const resolved = run('node', [join(ROOT, 'packages/server/bin/mmagent.mjs'), 'info'], { timeoutMs: 30000 });
-      checks.push(check('bin-resolver', resolved.code === 0 && /mmagent cli=/.test(resolved.out) ? 'PASS' : 'FAIL', `exit=${resolved.code}`));
+      const tlDir = join(ROOT, 'binaries', '_toplevel');
+      const packTl = run('npm', ['pack', '--silent', '--pack-destination', work], { cwd: tlDir });
+      const packPlat = run('npm', ['pack', '--silent', '--pack-destination', work], { cwd: binDir });
+      const tgzs = run('ls', [work]).out.trim().split('\n').filter((f) => f.endsWith('.tgz')).map((f) => join(work, f));
+      const inst = join(work, 'install');
+      mkdirSync(inst);
+      run('npm', ['init', '-y'], { cwd: inst });
+      const install = run('npm', ['install', '--no-audit', '--no-fund', '--no-save', ...tgzs], { cwd: inst, timeoutMs: 180000 });
+      const installedBin = join(inst, 'node_modules', '.bin', 'mmagent');
+      const binRun = existsSync(installedBin) ? run(installedBin, ['--version'], { cwd: inst, timeoutMs: 30000 }) : { code: 1, out: 'bin not linked' };
+      const ok = packTl.code === 0 && packPlat.code === 0 && install.code === 0 && /\d+\.\d+\.\d+/.test(binRun.out);
+      checks.push(check('npm-install-publish-shape', ok ? 'PASS' : 'FAIL',
+        `pack/install/run -> '${binRun.out.trim()}' (install exit=${install.code})`));
     } finally {
-      try { rmSync(link, { force: true }); } catch { /* ignore */ }
+      rmSync(work, { recursive: true, force: true });
     }
+
+    // 9. FOREIGN-PLATFORM EXECUTION: run the linux binaries in Docker (glibc + musl).
+    //    Images mirror the realistic npm-consumer environment: a Bun --compile
+    //    binary links libstdc++/libgcc even on musl, so bare `alpine` fails — but
+    //    any Alpine box that has npm (node:alpine) ships those libs. We test the
+    //    images consumers actually have.
+    if (dockerAvail) {
+      for (const [t, image, label] of [
+        [`bun-linux-${linuxArch}`, 'debian:stable-slim', 'linux-glibc'],
+        [`bun-linux-${linuxArch}-musl`, 'node:lts-alpine', 'linux-musl'],
+      ]) {
+        const lbin = join(ROOT, 'binaries', t, 'mmagent');
+        if (!existsSync(lbin)) { checks.push(check(`${label}-exec`, 'FAIL', `${t} binary missing`)); continue; }
+        const d = run('docker', [
+          'run', '--rm', '--platform', `linux/${linuxArch}`,
+          '-v', `${lbin}:/mmagent:ro`, image, '/mmagent', '--version',
+        ], { timeoutMs: 300000 });
+        checks.push(check(`${label}-exec`, d.code === 0 && /\d+\.\d+\.\d+/.test(d.out) ? 'PASS' : 'FAIL',
+          `${image} ${linuxArch} -> '${d.out.trim().slice(0, 20)}' exit=${d.code}`));
+      }
+    } else {
+      checks.push(check('linux-binary-exec', 'SKIP', 'docker unavailable (CI runners cover linux/windows execution)'));
+    }
+    // Windows binaries compile but can't execute on this OS — explicitly noted, not silently dropped.
+    checks.push(check('windows-binary-exec', 'SKIP', 'cannot execute win32 binary on this OS — CI-only'));
   } else {
-    checks.push(check('binary-runs', 'SKIP', 'compile failed'));
-    checks.push(check('binary-embedded-skills', 'SKIP', 'compile failed'));
-    checks.push(check('bin-resolver', 'SKIP', 'compile failed'));
+    for (const id of ['binary-runs', 'binary-embedded-skills', 'npm-install-publish-shape', 'linux-binary-exec', 'windows-binary-exec']) {
+      checks.push(check(id, 'SKIP', 'compile failed'));
+    }
   }
 
   // Clean up build artifacts (gitignored, but keep the tree tidy).
-  try { rmSync(join(ROOT, 'binaries', target), { recursive: true, force: true }); } catch { /* ignore */ }
+  try { rmSync(join(ROOT, 'binaries'), { recursive: true, force: true }); } catch { /* ignore */ }
 
   return checks;
 }

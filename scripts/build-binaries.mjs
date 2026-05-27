@@ -5,7 +5,7 @@
 //
 // Run `bun scripts/gen-embedded-skills.mjs` first (the root build does this).
 // Outputs to binaries/<target>/mmagent[.exe].
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,8 +46,9 @@ const requested = process.argv.slice(2);
 const targets = requested.length > 0 ? requested : TARGETS;
 
 let failed = 0;
+const built = []; // platform package names successfully compiled (for the top-level optional-deps)
 for (const t of targets) {
-  const { binFile, manifest } = platformPackage(t);
+  const { name, binFile, manifest } = platformPackage(t);
   const outDir = join(ROOT, 'binaries', t);
   mkdirSync(outDir, { recursive: true });
   const outfile = join(outDir, binFile);
@@ -70,6 +71,26 @@ for (const t of targets) {
   }
   // Emit the per-platform npm package manifest alongside the binary.
   writeFileSync(join(outDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+  built.push(name);
+}
+
+// Emit the thin top-level "publish-shape" package that consumers install:
+// bin -> the node resolver shim; the platform binaries as optionalDependencies
+// (npm installs only the one matching the host os/cpu/libc).
+if (built.length > 0) {
+  const tlDir = join(ROOT, 'binaries', '_toplevel');
+  mkdirSync(join(tlDir, 'bin'), { recursive: true });
+  copyFileSync(join(ROOT, 'packages/server/bin/mmagent.mjs'), join(tlDir, 'bin', 'mmagent.mjs'));
+  const tl = {
+    name: '@zhixuan92/multi-model-agent',
+    version: VERSION,
+    bin: { mmagent: 'bin/mmagent.mjs', 'multi-model-agent': 'bin/mmagent.mjs' },
+    optionalDependencies: Object.fromEntries(built.map((n) => [n, VERSION])),
+    files: ['bin'],
+    engines: { node: '>=18' }, // the resolver shim runs under npm's node; the binary needs nothing
+  };
+  writeFileSync(join(tlDir, 'package.json'), JSON.stringify(tl, null, 2) + '\n');
+  process.stderr.write(`\n[build-binaries] top-level publish-shape package -> binaries/_toplevel (${built.length} optionalDeps)\n`);
 }
 
 if (failed > 0) {
