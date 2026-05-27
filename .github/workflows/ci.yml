@@ -1,0 +1,63 @@
+name: CI
+
+# Validates the Bun toolchain + the standalone-binary distribution on every push.
+# Each OS runner natively EXECUTES its own platform binary (the smoke's build
+# phase compiles + runs it), so this matrix closes the Windows-execution gap that
+# a single macOS dev box cannot — no Docker/emulation needed in CI.
+
+on:
+  push:
+    branches: [main, master, 'release/**']
+  pull_request:
+    branches: [main, master, 'release/**']
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - name: Install workspace deps
+        run: bun install
+      - name: Build (gen embedded skills + tsc workspaces)
+        run: bun run build
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Test suite (per-file isolation)
+        run: bun run test
+      # Build/packaging phase: compiles this OS's binary, runs it natively
+      # (--version), verifies embedded skills, and does a real npm pack/install.
+      # --skip-docker: the runner IS this OS, so no cross-platform emulation needed.
+      - name: Build + packaging validation (native binary execution)
+        run: bun scripts/full-smoke/index.mjs --build-only --skip-tests --skip-docker
+
+  # musl (Alpine) is not a standard GitHub runner OS — validate it in an Alpine
+  # container, compiling and EXECUTING the linux-x64-musl binary natively.
+  verify-musl:
+    name: verify (alpine/musl)
+    runs-on: ubuntu-latest
+    container: node:lts-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bun + toolchain deps
+        run: |
+          apk add --no-cache bash unzip libstdc++ libgcc git
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      - name: Install workspace deps
+        run: bun install
+      - name: Build
+        run: bun run build
+      - name: Compile + execute the musl binary natively
+        run: |
+          bun scripts/build-binaries.mjs bun-linux-x64-musl
+          OUT="$(binaries/bun-linux-x64-musl/mmagent --version)"
+          echo "musl binary --version => $OUT"
+          echo "$OUT" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+' || { echo "musl binary did not run"; exit 1; }
