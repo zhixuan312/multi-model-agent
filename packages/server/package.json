@@ -47,7 +47,7 @@
   "scripts": {
     "prebuild": "rm -rf dist",
     "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && bun scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
-    "postinstall": "bun scripts/postinstall.js",
+    "postinstall": "node scripts/postinstall.js",
     "prepublishOnly": "bun run build"
   },
   "engines": {
