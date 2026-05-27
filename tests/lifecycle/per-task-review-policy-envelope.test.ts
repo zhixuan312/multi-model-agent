@@ -40,17 +40,17 @@ const mockRunTask = vi.fn(async () => ({
   directoriesListed: [],
 } as any));
 
-vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
+// Inject dispatcher + resolver via executeTask's deps param instead of vi.mock
+// (sticky/process-global under Bun).
+const execDeps = {
   runTaskViaDispatcher: (input: any) => mockRunTask(input),
   applyParallelSafetySuffixIfNeeded: (tasks: any[], _concurrent: boolean) => tasks.slice(),
-}));
-
-vi.mock('../../packages/core/src/providers/agent-resolver.js', () => ({
   resolveAgent: () => ({ slot: 'standard', provider: { name: 'stub', config: { type: 'claude', model: 'stub' } } }),
-}));
+} as any;
 
 const toolConfigImport = await import('../../packages/core/src/tools/delegate/tool-config.js');
 const { executeTask } = await import('../../packages/core/src/lifecycle/task-executor.js');
+const runExec = (ctx: any, input: any) => executeTask(toolConfigImport.toolConfig, ctx, input, execDeps);
 
 function buildContext(batchId: string, bus: EnvelopeBus, registry: BatchRegistry, envelope: TaskEnvelopeStore) {
   return {
@@ -96,7 +96,7 @@ describe('per-task reviewPolicy reaches the envelope (4.7.7 wire-honesty regress
     // Sanity: pre-fix state — envelope was seeded with 'full'.
     expect(env0.snapshot().reviewPolicy).toBe('full');
 
-    await executeTask(toolConfigImport.toolConfig, buildContext('b-single-none', bus, registry, env0), {
+    await runExec(buildContext('b-single-none', bus, registry, env0), {
       tasks: [{ prompt: 'task A', reviewPolicy: 'none' }],
     });
 
@@ -109,7 +109,7 @@ describe('per-task reviewPolicy reaches the envelope (4.7.7 wire-honesty regress
     const registry = new BatchRegistry();
     const env0 = seedAsyncDispatchEnvelope('b-single-quality', bus, registry);
 
-    await executeTask(toolConfigImport.toolConfig, buildContext('b-single-quality', bus, registry, env0), {
+    await runExec(buildContext('b-single-quality', bus, registry, env0), {
       tasks: [{ prompt: 'task A', reviewPolicy: 'quality_only' }],
     });
 
@@ -121,7 +121,7 @@ describe('per-task reviewPolicy reaches the envelope (4.7.7 wire-honesty regress
     const registry = new BatchRegistry();
     const env0 = seedAsyncDispatchEnvelope('b-single-default', bus, registry);
 
-    await executeTask(toolConfigImport.toolConfig, buildContext('b-single-default', bus, registry, env0), {
+    await runExec(buildContext('b-single-default', bus, registry, env0), {
       tasks: [{ prompt: 'task A' }],
     });
 
@@ -134,7 +134,7 @@ describe('per-task reviewPolicy reaches the envelope (4.7.7 wire-honesty regress
     const registry = new BatchRegistry();
     const env0 = seedAsyncDispatchEnvelope('b-multi-mixed', bus, registry);
 
-    await executeTask(toolConfigImport.toolConfig, buildContext('b-multi-mixed', bus, registry, env0), {
+    await runExec(buildContext('b-multi-mixed', bus, registry, env0), {
       tasks: [
         { prompt: 'task A', reviewPolicy: 'none' },
         { prompt: 'task B', reviewPolicy: 'diff_only' },
