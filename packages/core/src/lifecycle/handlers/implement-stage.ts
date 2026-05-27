@@ -7,7 +7,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ImplementPayload } from '../stage-io.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import type { Finding, Citation } from '../stage-io.js';
-import { performImplementation } from '../perform-implementation.js';
+import { performImplementation, type PerformImplementationDeps } from '../perform-implementation.js';
 import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.js';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -65,6 +65,7 @@ function tel(
 
 export async function implementHandler(
   state: LifecycleState,
+  deps?: PerformImplementationDeps,
 ): Promise<StageGate<ImplementPayload>> {
   const t0 = Date.now();
 
@@ -85,7 +86,7 @@ export async function implementHandler(
 
     // v5: Call performImplementation to orchestrate read or write routes
     // and populate state.lastRunResult.
-    await performImplementation(state);
+    await performImplementation(state, deps);
 
     const result = state.lastRunResult as any;
     if (!result) {

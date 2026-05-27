@@ -54,6 +54,10 @@ export class ClaudeSession implements Session {
     apiKey?: string;
     baseUrl?: string;
     oauthAccessToken?: string;
+    // Injectable SDK query (defaults to the real one) so tests substitute a fake
+    // WITHOUT mock.module('@anthropic-ai/claude-agent-sdk'), which under Bun is
+    // sticky/process-global and leaked into every later claude-provider test.
+    queryFn?: typeof query;
   }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
@@ -104,7 +108,7 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
-    const q = query({
+    const q = (this.args.queryFn ?? query)({
       prompt: promptIterable(),
       options: {
         model: this.args.model,

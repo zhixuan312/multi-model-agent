@@ -4,9 +4,10 @@ import { reviewHandler } from '../../packages/core/src/lifecycle/handlers/review
 let mockReviewerTurns: Array<ReturnType<typeof fakeReviewerTurn>> = [];
 let turnIndex = 0;
 
-vi.mock('../../packages/core/src/lifecycle/handlers/tier-policy.js', () => ({
-  invertedReviewerTier: vi.fn(() => 'complex'),
-}));
+// No tier-policy mock: the real invertedReviewerTier('standard') already returns
+// 'complex' (the state below is standard-tiered), so the previous
+// vi.mock('tier-policy') was redundant — and under Bun it leaked as a sticky
+// process-global mock into later tests that use the real tier inversion.
 
 function fakeReviewerTurn(verdict: 'approved' | 'changes_required', findings = '') {
   const findingsSection = findings ? `## Findings\n${findings}` : '## Findings\n(none)';
