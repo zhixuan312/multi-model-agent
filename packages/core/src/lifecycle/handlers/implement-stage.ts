@@ -4,15 +4,13 @@
 // containing the worker's structured output plus prose-extracted findings.
 
 import type { LifecycleState } from '../stage-plan-types.js';
-import type { StageGate, ImplementPayload, RouteName } from '../stage-io.js';
+import type { StageGate, ImplementPayload } from '../stage-io.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import type { Finding, Citation } from '../stage-io.js';
 import { performImplementation } from '../perform-implementation.js';
 import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.js';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-
-const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore', 'journal-recall'];
 
 export function capturePreTaskState(state: LifecycleState): void {
   // Production wires the cwd onto state.executionContext.cwd, not state.cwd —
@@ -36,49 +34,6 @@ export function capturePreTaskState(state: LifecycleState): void {
   (state as { preTaskUntrackedFiles?: Set<string> }).preTaskUntrackedFiles = new Set(
     relativeFiles.map((rel) => join(cwd, rel))
   );
-}
-
-// Forward declaration — the actual parser lives in findings-parser.ts.
-// We parse inline to keep the dependency lightweight and avoid importing
-// the full findings-parser which may have criteria-specific logic.
-function parseFindingsFromProse(text: string): Finding[] {
-  if (!text || text.trim().length === 0) return [];
-
-  const blocks: string[] = [];
-  const lines = text.split('\n');
-  let current: string[] = [];
-  for (const line of lines) {
-    if (/^## Finding \d+:/.test(line)) {
-      if (current.length > 0) blocks.push(current.join('\n'));
-      current = [line];
-    } else if (current.length > 0) {
-      current.push(line);
-    }
-  }
-  if (current.length > 0) blocks.push(current.join('\n'));
-
-  const findings: Finding[] = [];
-  const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
-
-  for (const block of blocks) {
-    const claimLine = block.match(/^\s*- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
-    if (claimLine.startsWith('[N/A]')) continue;
-
-    const sevRaw = block.match(/^\s*- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();
-    const severity: Finding['severity'] =
-      sevRaw && SEVERITY_VALUES.has(sevRaw)
-        ? (sevRaw as Finding['severity'])
-        : 'medium';
-    const category = block.match(/^\s*- Category:\s*(\S+)/im)?.[1] ?? 'general';
-    const evidence = block.match(/^\s*- (?:Issue|Evidence):\s*(.+)$/im)?.[1]?.trim();
-    const suggestion = block.match(/^\s*- (?:Suggestion|Fix):\s*(.+)$/im)?.[1]?.trim();
-
-    const f: Finding = { severity, category, claim: claimLine, source: 'implementer' };
-    if (evidence) f.evidence = evidence;
-    if (suggestion) f.suggestion = suggestion;
-    findings.push(f);
-  }
-  return findings;
 }
 
 function defaultImplementPayload(self: 'done' | 'failed'): ImplementPayload {
@@ -238,7 +193,7 @@ export async function implementHandler(
 // stage handler is the bare `implementHandler` function above. This class
 // preserves the test-fixture contract while delegating to the v5 handler.
 export class TaskExecutor {
-  constructor(private _emitter?: unknown) {}
+  constructor(_emitter?: unknown) {}
   handler = async (state: LifecycleState): Promise<void> => {
     await implementHandler(state);
   };

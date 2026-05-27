@@ -47,7 +47,6 @@ export async function handleRequest(
   // Bun.serve always provides an absolute req.url; the base fallback keeps the
   // pipeline robust to unit tests that pass a path-only Request.
   const urlObj = new URL(req.url, 'http://localhost');
-  const rawUrl = urlObj.pathname + urlObj.search;
   const pathname = urlObj.pathname;
 
   // ── Step 0: draining check ────────────────────────────────────────────────

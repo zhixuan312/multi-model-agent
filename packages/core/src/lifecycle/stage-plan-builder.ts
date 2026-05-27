@@ -4,9 +4,7 @@
 // route applicability (Layer 1: applicableRoutes) and dynamic state-level
 // participation (Layer 2: shouldRun). The new driver walks this in order.
 
-import type { StageDefinition, ImplementPayload, ReviewPayload, ReworkPayload,
-              CommitPayload, AnnotatePayload, ComposePayload, TerminalPayload,
-              RegisterBlockPayload } from './stage-io.js';
+import type { StageDefinition, ReviewPayload } from './stage-io.js';
 import { ALL_TASK_ROUTES, WRITE_ROUTES, currentWork } from './stage-io.js';
 
 // We import handler functions where they exist as exports; this is fine for

@@ -8,7 +8,7 @@
 //   3. Otherwise the SDK reads ANTHROPIC_API_KEY from env itself.
 
 import type { Provider, SessionOpts } from '../types/run-result.js';
-import type { ClaudeProviderConfig, ProviderConfig } from '../types/config.js';
+import type { ClaudeProviderConfig } from '../types/config.js';
 import { ClaudeSession } from './claude-session.js';
 import { getClaudeOAuth } from '../identity/claude-oauth.js';
 

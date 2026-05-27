@@ -9,7 +9,6 @@ import { HUMAN_LABEL } from '../stage-labels.js';
 import { mergeStageStats }     from '../merge-stage-stats.js';
 import { SLICE_CAP_BYTES } from '../../tools/execute-plan/plan-extractor.js';
 import type { AgentType } from '../../types.js';
-import type { ExecutionContext } from '../lifecycle-context.js';
 
 function parseOutcomeFromText(text: string): 'clean' | 'found' | null {
   const outcomeMatch = text.match(/^##\s*outcome\s*$/im);

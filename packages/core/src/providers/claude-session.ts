@@ -20,7 +20,6 @@ import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-re
 import { normalizeClaudeTurn } from './normalize-claude.js';
 import { classifyClaudeToolCall } from './claude-tool-categories.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
-import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
@@ -203,7 +202,7 @@ export class ClaudeSession implements Session {
         // counters reflect actual file activity. isShell is computed but not
         // recorded at the envelope level — it flows through normalize-claude.ts
         // into TurnResult.usedShell.
-        const { writtenPath, isShell } = classifyClaudeToolCall(b.name, b.input);
+        const { writtenPath } = classifyClaudeToolCall(b.name, b.input);
         this.envelope?.recordToolCall({
           stage: 'implementing',
           tool: b.name,
