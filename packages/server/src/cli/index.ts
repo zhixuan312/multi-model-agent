@@ -398,7 +398,11 @@ function isMain(): boolean {
   }
 }
 
-if (isMain()) {
+// Bun sets import.meta.main reliably (including inside a `bun build --compile`
+// binary, where the realpath comparison in isMain() fails because import.meta.url
+// is a virtual $bunfs path). Fall back to isMain() for any non-Bun execution.
+const isEntry = (import.meta as { main?: boolean }).main ?? isMain();
+if (isEntry) {
   void main().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`mmagent: ${msg}\n`);
