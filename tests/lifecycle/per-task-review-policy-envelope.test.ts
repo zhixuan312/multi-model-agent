@@ -19,7 +19,7 @@
 // once the brief slot has produced TaskSpecs, and seeds tasks 1+'s envelopes
 // from tasks[i].reviewPolicy directly.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';

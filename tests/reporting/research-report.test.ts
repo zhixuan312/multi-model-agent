@@ -3,7 +3,7 @@
 // v4.4.x: research findings are parsed by the shared `## Finding N:` parser
 // (parseFindings); this slot only owns the research-specific `## Sources used`
 // markdown table extractor.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   parseSourcesUsed,
   researchReportSchema,

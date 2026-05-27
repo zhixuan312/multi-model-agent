@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { reviewHandler } from '../../packages/core/src/lifecycle/handlers/review-stage.js';
 
 let mockReviewerTurns: Array<ReturnType<typeof fakeReviewerTurn>> = [];

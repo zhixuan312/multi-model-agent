@@ -1,5 +1,5 @@
 // tests/research/acceptance/contract.test.ts
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { runTwoTurnDriver } from '../../../packages/core/src/tools/research/two-turn-driver.js';
 import { applyBudget, EVIDENCE_PACK_LIMITS } from '../../../packages/core/src/research/evidence-pack.js';
 import { resolveEnabledAdapters } from '../../../packages/core/src/research/adapters/index.js';

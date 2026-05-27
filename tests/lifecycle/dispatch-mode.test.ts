@@ -30,7 +30,7 @@ describe('dispatch mode config + schema', () => {
   });
 });
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
   runTaskViaDispatcher: vi.fn(),

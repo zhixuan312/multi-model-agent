@@ -1,5 +1,5 @@
 // tests/reporting/headline-templates/research.test.ts
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { RuntimeRunResult, TaskSpec } from '../../../packages/core/src/types.js';
 import { researchHeadlineTemplate } from '../../../packages/core/src/reporting/headline-templates/research.js';
 

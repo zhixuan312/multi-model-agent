@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 
 const minimalAgentConfig = {

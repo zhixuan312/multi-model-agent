@@ -1,5 +1,5 @@
 // tests/contract/http/batch-context-block.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { TaskEnvelopeStore } from '../../../packages/core/src/events/task-envelope.js';
 // envelopeToPublicResult is exported from batch.ts in Step 3 below (it is
 // currently module-private). We assert the projection directly on a sealed

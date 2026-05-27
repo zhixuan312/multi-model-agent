@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { clientHeaders, toHeaderClientName } from '../../packages/server/src/skill-install/skill-installer-common.js';
 
 describe('clientHeaders', () => {

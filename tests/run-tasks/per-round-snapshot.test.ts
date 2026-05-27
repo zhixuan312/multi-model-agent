@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { subtractTokens, priceTokens, resolveRateCard } from '../../packages/core/src/bounded-execution/cost-compute.js';
 import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
 

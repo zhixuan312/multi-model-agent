@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { mapReviewVerdicts } from '../../packages/core/src/lifecycle/review-verdict-mapping.js';
 
 describe('mapReviewVerdicts', () => {

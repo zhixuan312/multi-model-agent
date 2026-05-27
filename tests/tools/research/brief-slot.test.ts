@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { researchBriefSlot } from '../../../packages/core/src/tools/research/brief-slot.js';
 import {
   compileTurn1PlanPrompt,

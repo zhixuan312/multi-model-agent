@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { retryableFor, classifyContextBlockError } from '@zhixuan92/multi-model-agent-core/error-codes';
 
 describe('retryableFor', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 import { enrichRuntimeResult } from '../../packages/core/src/lifecycle/handlers/enrich-runtime-result.js';

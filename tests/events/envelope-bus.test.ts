@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { EnvelopeBus, type Subscriber } from '../../packages/core/src/events/envelope-bus.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 

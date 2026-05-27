@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as delegate from '../../packages/core/src/tools/delegate/schema.js';
 import * as audit from '../../packages/core/src/tools/audit/schema.js';
 import * as review from '../../packages/core/src/tools/review/schema.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { startProgressWatchdog } from '../../packages/core/src/bounded-execution/progress-watchdog.js';
 
 function makeCtx(overrides: any = {}) {

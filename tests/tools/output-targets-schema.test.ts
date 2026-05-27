@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { inputSchema as delegateInputSchema } from '../../packages/core/src/tools/delegate/schema.js';
 
 describe('delegate schema — outputTargets', () => {

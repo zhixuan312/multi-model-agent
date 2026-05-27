@@ -1,5 +1,5 @@
 // tests/reporting/journal-recall-headline.test.ts
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { journalRecallHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/journal-recall.js';
 

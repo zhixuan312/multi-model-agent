@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { expandContextBlocks } from '../../packages/core/src/stores/expand-context-blocks.js';
 import { renderTerminalReportMarkdown } from '../../packages/core/src/reporting/terminal-report-markdown.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import path from 'node:path';
 import { pickSkillsRoot, skillsRootCandidates } from '../../packages/server/src/skill-install/discover.js';
 

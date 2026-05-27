@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { AUDIT_SUBTYPES } from '../../packages/core/src/tools/audit/subtypes.js';
 import { REVIEW_SUBTYPES } from '../../packages/core/src/tools/review/subtypes.js';
 import { DEBUG_SUBTYPES } from '../../packages/core/src/tools/debug/subtypes.js';

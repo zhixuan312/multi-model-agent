@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { isLoopbackAddress, shouldRejectNonLoopback, isAllowedHostHeader } from '../../packages/core/src/transport/loopback-enforcer.js';
 import { RouteDispatcher } from '../../packages/core/src/transport/route-dispatcher.js';
 import { handleRequest, type PipelineConfig } from '../../packages/server/src/http/request-pipeline.js';

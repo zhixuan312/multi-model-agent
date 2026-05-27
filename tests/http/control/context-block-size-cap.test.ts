@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildCreateContextBlockHandler } from '../../../packages/server/src/http/handlers/control/context-blocks.js';
 import type { ProjectRegistry } from '../../../packages/server/src/http/project-registry.js';

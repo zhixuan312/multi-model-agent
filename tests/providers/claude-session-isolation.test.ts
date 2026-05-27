@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ClaudeSession } from '../../packages/core/src/providers/claude-session.js';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => {

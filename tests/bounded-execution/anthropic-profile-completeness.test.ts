@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { findModelProfile } from '../../packages/core/src/config/model-profile-registry.js';
 
 const ANTHROPIC_MODELS = [

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { emitRequestReceived } from '../../packages/server/src/http/request-observability.js';
 
 describe('emitRequestReceived — always-on (A4, A8)', () => {

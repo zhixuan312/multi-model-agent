@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { normalizeOutputTargets } from '../../packages/core/src/lifecycle/normalize-output-targets.js';
 
 describe('normalizeOutputTargets', () => {

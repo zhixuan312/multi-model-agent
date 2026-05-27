@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { runResearchPreLoop } from '../../packages/core/src/lifecycle/research-pre-loop.js';
 
 const validPlan = JSON.stringify({

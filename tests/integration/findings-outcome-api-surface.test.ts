@@ -1,5 +1,5 @@
 // tests/integration/findings-outcome-api-surface.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import type { TaskSpec, MultiModelConfig, Provider } from '../../packages/core/src/types.js';

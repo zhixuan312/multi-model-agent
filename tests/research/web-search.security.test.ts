@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { BraveClient } from '../../packages/core/src/research/web-search.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';

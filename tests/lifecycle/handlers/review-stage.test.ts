@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { reviewHandler } from '../../../packages/core/src/lifecycle/handlers/review-stage.js';
 
 function fakeTurn(output: string) {

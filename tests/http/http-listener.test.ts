@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { HTTPListener } from '../../packages/core/src/transport/http-listener.js';
 
 describe('HTTPListener', () => {

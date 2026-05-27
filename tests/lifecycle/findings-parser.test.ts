@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { parseFindings } from '../../packages/core/src/lifecycle/findings-parser.js';
 
 describe('parseFindings', () => {

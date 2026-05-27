@@ -1,5 +1,5 @@
 // tests/server/handlers/introspection/health.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { startTestServer } from '../../../helpers/test-server.js';
 import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
 

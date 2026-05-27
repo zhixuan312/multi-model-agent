@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const mockCreateProvider = vi.fn();
 vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({

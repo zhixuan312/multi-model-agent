@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { inputSchema as delegateSchema } from '../../packages/core/src/tools/delegate/schema.js';
 import { executePlanInputSchema as executePlanSchema } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { BatchCache } from '../../packages/core/src/stores/batch-cache.js';
 import type { TaskSpec, RuntimeRunResult } from '../../packages/core/src/types.js';
 

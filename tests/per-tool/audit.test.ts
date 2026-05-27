@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { toolConfig } from '../../packages/core/src/tools/audit/tool-config.js';
 import type { ExecutionContext } from '../../packages/core/src/lifecycle/lifecycle-context.js';
 

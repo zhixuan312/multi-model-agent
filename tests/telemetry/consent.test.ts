@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { FSWatcher } from 'node:fs';
 
 const homeDir = '/tmp/mma-test-home';

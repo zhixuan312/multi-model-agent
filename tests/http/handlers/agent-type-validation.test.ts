@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { inputSchema } from '../../../packages/core/src/tools/delegate/schema.js';
 
 describe('agentType enum closure', () => {

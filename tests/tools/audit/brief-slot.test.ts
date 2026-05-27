@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { auditBriefSlot } from '../../../packages/core/src/tools/audit/brief-slot.js';
 
 describe('auditBriefSlot', () => {

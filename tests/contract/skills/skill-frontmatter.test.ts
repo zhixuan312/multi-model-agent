@@ -1,7 +1,7 @@
 // Validates each packaged skill's SKILL.md has the required frontmatter
 // (name, description, when_to_use, version) and that the endpoint it
 // advertises resolves to a real route in the server route manifest.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import routes from '../goldens/routes.json' with { type: 'json' };

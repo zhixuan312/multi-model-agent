@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { reworkPrompt } from '../../../packages/core/src/lifecycle/handlers/rework-prompt.js';
 
 const ctx = {

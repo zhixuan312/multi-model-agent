@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { StructuredReportParser } from '../../packages/core/src/reporting/structured-report-parser.js';
 
 describe('StructuredReportParser framework', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';

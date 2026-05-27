@@ -4,7 +4,7 @@
  * Tests for Task 9.2 — `mmagent print-token` subcommand.
  * Uses temp dirs; never touches real ~/.multi-model or HOME.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

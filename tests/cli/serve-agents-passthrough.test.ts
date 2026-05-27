@@ -3,7 +3,7 @@
  * MultiModelConfig (including agents) to startServer so tool endpoints
  * register real handlers instead of 503 'no_agent_config' stubs.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

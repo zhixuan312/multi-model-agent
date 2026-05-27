@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { HeadlineComposer } from '../../packages/core/src/reporting/headline-composer.js';
 
 describe('HeadlineComposer framework', () => {

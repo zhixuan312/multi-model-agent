@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { readFileSync } from 'node:fs';
 import { githubSearch } from '../../../packages/core/src/research/adapters/github-search.js';
