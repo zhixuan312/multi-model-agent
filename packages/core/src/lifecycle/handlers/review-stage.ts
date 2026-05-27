@@ -95,7 +95,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
   // node-validation review (frontmatter/edges/schema/confinement/dedup)
   // replaces the code-oriented spec+quality pair, which mis-fits markdown.
   if (state.route === 'journal-record') {
-    const r = await runReviewerWithRetries(state, journalReviewPrompt(context), 'quality', implementerTier);
+    const r = await runReviewerWithRetries(state, journalReviewPrompt(context), implementerTier);
     subResults.push({
       name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
       model: r.model,
@@ -106,7 +106,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     });
   } else {
   if (runSpec) {
-    const r = await runReviewerWithRetries(state, specReviewPrompt(context), 'spec', implementerTier);
+    const r = await runReviewerWithRetries(state, specReviewPrompt(context), implementerTier);
     subResults.push({
       name: 'spec', result: r.parsed, cost: r.costUSD, ms: r.ms,
       model: r.model,
@@ -117,7 +117,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
     });
   }
   if (runQuality) {
-    const r = await runReviewerWithRetries(state, qualityReviewPrompt(context), 'quality', implementerTier);
+    const r = await runReviewerWithRetries(state, qualityReviewPrompt(context), implementerTier);
     subResults.push({
       name: 'quality', result: r.parsed, cost: r.costUSD, ms: r.ms,
       model: r.model,
@@ -227,7 +227,6 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
 async function runReviewerWithRetries(
   state: LifecycleState,
   prompt: string,
-  name: 'spec' | 'quality',
   implementerTier: AgentType,
 ): Promise<{
   parsed: ReturnType<typeof parseReviewReport>;
