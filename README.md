@@ -39,7 +39,8 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
+npm i -g @zhixuan92/multi-model-agent       # installs a standalone binary (Bun embedded) — nothing to run it
+                                            # npm itself uses Node ≥18 only for install; the daemon needs no Node/Bun
 mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -312,7 +313,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
 ## What's new in 4.9.0

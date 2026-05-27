@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - Unreleased
+
+**Runtime migration: Node.js → Bun.** The entire toolchain and product runtime moves to Bun — runtime, test runner, package manager, declared engine, and distribution — while behavior stays identical (contract goldens byte-identical, full live 18-scenario smoke clean). Major bump for the breaking runtime/distribution change; `SCHEMA_VERSION` stays 5.
+
+### Changed
+
+- **HTTP server on `Bun.serve()`** (was raw `node:http`). The request pipeline is now `(Request) → Response`; handlers return `Response`. The 9-step auth order (host → loopback → bearer → decompress → JSON → cwd → client/main-model) is preserved exactly.
+- **Test runner: `bun test`** (was Vitest). 325 test files ported. Run via `bun run test` (`scripts/run-tests.mjs`), which isolates each file in its own process — Bun's `mock.module()` is process-global and sticky, so single-process runs contaminate (this is why Vitest forked).
+- **Toolchain on Bun.** `engines.bun >=1.3.0` (no `engines.node`); `bun install` (`bun.lock`, no `package-lock.json`); CLI shebang `#!/usr/bin/env bun`. `tsc` is retained for typecheck (`tsc --noEmit`) and `dist` emit (Bun doesn't typecheck).
+- **Research adapters use native `fetch`** (was `undici.request`); `undici` dependency removed.
+- **Module resolution** uses a `"bun"` export condition (→ `src`) so Bun resolves the workspace to one module instance; tsc/node still use `dist`.
+
+### Added
+
+- **Standalone per-platform binaries** via `bun build --compile` (`scripts/build-binaries.mjs`): darwin/linux/windows × x64/arm64 + linux musl. Skill assets are embedded (`embedded-skills.ts`, `@include` expanded from embedded `_shared`), so the binary needs neither Node nor Bun to run. Distributed via a thin top-level package (`bin/mmagent.mjs` resolver + per-platform `optionalDependencies`); npm uses Node ≥18 only for the install shim.
+- **CI matrix** (`.github/workflows/ci.yml`) running build + typecheck + the per-file test suite + native binary execution on linux/windows/macOS + an Alpine/musl container.
+- **Full-smoke build/packaging phase** (`--build-only`): toolchain + embedded-skills sync + binary compile/run + real `npm pack`/install + Docker linux glibc/musl execution.
+
+### Notes
+
+- **Subprocess code unchanged.** Codex (`cross-spawn`) and the git helpers stay on `node:child_process` — Bun implements those APIs (with working `detached` + `process.kill(-pid)` process groups); `Bun.spawn` cannot create process groups, so this was the correct choice.
+- **Node by necessity at the npm boundary.** The bin resolver shim and `postinstall.js` run under Node (npm's interpreter), so a Bun-less user can still install. This is intentional, not residual.
+
 ## [4.9.1] - 2026-05-26
 
 Patch fixing telemetry on the delegate skill-passthrough failure path (4.9.0). A skill-resolution failure correctly hard-fails the task, but its telemetry wire record carried a non-enum `errorCode` (`skill_not_found`), which failed Zod validation on upload — the failed-task event was silently dropped (`telemetry_upload_error`). `SCHEMA_VERSION` stays 5. Build green, full Vitest 2103/2103, live 18-scenario full-pipeline smoke clean (0 hard-fails) with the failed-task telemetry record now landing in the queue.
