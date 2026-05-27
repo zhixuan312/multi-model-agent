@@ -81,12 +81,26 @@ if (built.length > 0) {
   const tlDir = join(ROOT, 'binaries', '_toplevel');
   mkdirSync(join(tlDir, 'bin'), { recursive: true });
   copyFileSync(join(ROOT, 'packages/server/bin/mmagent.mjs'), join(tlDir, 'bin', 'mmagent.mjs'));
+  // postinstall: run sync-skills through the resolved platform binary, so the
+  // binary distribution refreshes client skills on install (parity with the
+  // dist-JS package's postinstall). Node-runnable (npm's interpreter); best-effort.
+  const postinstall = `#!/usr/bin/env node
+import { spawn } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const shim = join(dirname(fileURLToPath(import.meta.url)), 'bin', 'mmagent.mjs');
+const c = spawn(process.execPath, [shim, 'sync-skills', '--if-exists', '--silent', '--best-effort'], { stdio: 'inherit' });
+c.on('exit', (code) => process.exit(code ?? 0));
+c.on('error', () => process.exit(0));
+`;
+  writeFileSync(join(tlDir, 'postinstall.mjs'), postinstall);
   const tl = {
     name: '@zhixuan92/multi-model-agent',
     version: VERSION,
     bin: { mmagent: 'bin/mmagent.mjs', 'multi-model-agent': 'bin/mmagent.mjs' },
+    scripts: { postinstall: 'node postinstall.mjs' },
     optionalDependencies: Object.fromEntries(built.map((n) => [n, VERSION])),
-    files: ['bin'],
+    files: ['bin', 'postinstall.mjs'],
     engines: { node: '>=18' }, // the resolver shim runs under npm's node; the binary needs nothing
   };
   writeFileSync(join(tlDir, 'package.json'), JSON.stringify(tl, null, 2) + '\n');
