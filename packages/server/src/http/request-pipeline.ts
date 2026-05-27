@@ -44,7 +44,9 @@ export async function handleRequest(
   server: RequestIPProvider,
 ): Promise<Response> {
   const method = req.method ?? 'GET';
-  const urlObj = new URL(req.url);
+  // Bun.serve always provides an absolute req.url; the base fallback keeps the
+  // pipeline robust to unit tests that pass a path-only Request.
+  const urlObj = new URL(req.url, 'http://localhost');
   const rawUrl = urlObj.pathname + urlObj.search;
   const pathname = urlObj.pathname;
 

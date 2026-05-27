@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { isLoopbackAddress, shouldRejectNonLoopback, isAllowedHostHeader } from '../../packages/core/src/transport/loopback-enforcer.js';
 import { RouteDispatcher } from '../../packages/core/src/transport/route-dispatcher.js';
 import { handleRequest, type PipelineConfig } from '../../packages/server/src/http/request-pipeline.js';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { RawHandler } from '../../packages/server/src/http/types.js';
 
 describe('isLoopbackAddress', () => {
   it.each([
@@ -62,35 +62,23 @@ describe('isAllowedHostHeader', () => {
 });
 
 describe('host-header guard wiring in handleRequest', () => {
-  function fakeRes() {
-    let statusCode = 0;
-    let payload = '';
-    const res = {
-      writeHead(s: number) { statusCode = s; return res; },
-      end(b?: string) { if (b) payload = b; },
-      headersSent: false,
-    } as unknown as ServerResponse;
-    return { res, get statusCode() { return statusCode; }, get payload() { return payload; } };
-  }
-
   const EMPTY: PipelineConfig = {
     loopbackOnlyPaths: new Set(),
     authExemptPaths: new Set(),
     cwdRequiredPaths: new Set(),
     mainModelRequiredPaths: new Set(),
   };
+  const fakeServer = { requestIP: () => ({ address: '127.0.0.1' }) } as never;
 
   it('returns 403 forbidden_host when Host header is not an allowed loopback host', async () => {
-    const router = new RouteDispatcher<(req: IncomingMessage, res: ServerResponse) => void>();
-    router.register('GET', '/dummy', (_req, res) => { res.writeHead(200); res.end('ok'); });
-    const req = {
-      method: 'GET', url: '/dummy',
+    const router = new RouteDispatcher<RawHandler>();
+    router.register('GET', '/dummy', () => new Response('ok', { status: 200 }));
+    const req = new Request('http://localhost/dummy', {
+      method: 'GET',
       headers: { host: 'evil.example.com' },
-      socket: { remoteAddress: '127.0.0.1' },
-    } as unknown as IncomingMessage;
-    const cap = fakeRes();
-    await handleRequest(router as never, 'tok', req, cap.res, {} as never, EMPTY);
-    expect(cap.statusCode).toBe(403);
-    expect(JSON.parse(cap.payload).error.code).toBe('forbidden_host');
+    });
+    const res = await handleRequest(router as never, 'tok', req, {} as never, EMPTY, fakeServer);
+    expect(res.status).toBe(403);
+    expect((await res.json() as { error: { code: string } }).error.code).toBe('forbidden_host');
   });
 });
