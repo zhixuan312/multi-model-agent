@@ -1,7 +1,7 @@
 // Per-request pipeline: body cap → route match → loopback guard → auth →
 // decompress → JSON parse → cwd validation → handler dispatch.
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
-import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
+import type { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { sendError } from './errors.js';
 import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
