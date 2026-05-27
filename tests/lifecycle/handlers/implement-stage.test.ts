@@ -35,6 +35,9 @@ vi.mock('../../../packages/core/src/lifecycle/read-route-criteria.js', () => {
 });
 
 // Import the SUT AFTER the mocks register (Bun does not hoist mock.module above imports).
+// NOTE: Bun's mock.module() is process-global and sticky (no per-file restore), which is
+// why the suite is run per-file-isolated via `bun run test` (scripts/run-tests.mjs) rather
+// than a single `bun test` invocation. See that script's header.
 const { implementHandler } = await import('../../../packages/core/src/lifecycle/handlers/implement-stage.js');
 
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];

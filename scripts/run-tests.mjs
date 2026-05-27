@@ -1,12 +1,16 @@
 #!/usr/bin/env bun
 // Isolated test runner: runs each test FILE in its own bun process.
+// This is the canonical test entry point (`bun run test` / `npm test`). Do NOT
+// run a bare `bun test` over the whole suite — it will report failures.
 //
-// Bun executes all files passed to one `bun test` invocation in a single shared
-// process, so global-state mutations (provider override, fetch stubs, env vars,
-// fake clock, module-level singletons) leak across files. Vitest previously
-// forked per file for isolation; this restores that guarantee. Separate
-// processes mean no shared-memory contamination even when run concurrently, so
-// we run with bounded parallelism for speed.
+// Why: Bun executes all files in one `bun test` invocation in a single shared
+// process, and two things leak across files there:
+//   1. Global state — provider override, fetch stubs, env vars, fake clock.
+//   2. mock.module() — it is process-global and STICKY; mock.restore() does NOT
+//      un-mock modules, so a module mocked in file A is still mocked in file B.
+// Vitest avoided this by forking per file; this runner restores that guarantee.
+// Separate processes = no shared-memory or sticky-mock contamination even when
+// run concurrently, so we use bounded parallelism for speed.
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
