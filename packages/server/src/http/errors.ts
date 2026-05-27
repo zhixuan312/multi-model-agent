@@ -1,17 +1,18 @@
-import type { ServerResponse } from 'node:http';
+// Response builders for the Bun.serve handler chain. Handlers RETURN these.
+const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 
 export function sendError(
-  res: ServerResponse,
   status: number,
   code: string,
   message: string,
   details?: unknown,
-): void {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ error: { code, message, ...(details !== undefined ? { details } : {}) } }));
+): Response {
+  return new Response(
+    JSON.stringify({ error: { code, message, ...(details !== undefined ? { details } : {}) } }),
+    { status, headers: JSON_HEADERS },
+  );
 }
 
-export function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
+export function sendJson(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }

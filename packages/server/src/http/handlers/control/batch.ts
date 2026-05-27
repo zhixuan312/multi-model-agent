@@ -1,6 +1,4 @@
 // packages/server/src/http/handlers/control/batch.ts
-import type { ServerResponse } from 'node:http';
-import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import { notApplicable, type BatchRegistry, formatElapsed } from '@zhixuan92/multi-model-agent-core';
@@ -111,18 +109,12 @@ function buildPendingHeadline(entry: { taskEnvelopes?: (TaskEnvelopeStore | null
  *  taskIndex ≥ results.len → 404 unknown_task_index
  */
 export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
-  return async (
-    _req: IncomingMessage,
-    res: ServerResponse,
-    params: Record<string, string>,
-    ctx,
-  ) => {
+  return async (params, ctx) => {
     const { batchId } = params;
 
     const entry = deps.batchRegistry.get(batchId);
     if (!entry) {
-      sendError(res, 404, 'not_found', `Batch ${batchId} not found`);
-      return;
+      return sendError(404, 'not_found', `Batch ${batchId} not found`);
     }
 
     // Parse optional taskIndex BEFORE checking batch state — syntactic
@@ -132,13 +124,11 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
     let taskIndex: number | null = null;
     if (rawTaskIndex !== null) {
       if (!/^\d+$/.test(rawTaskIndex)) {
-        sendError(
-          res,
+        return sendError(
           400,
           'invalid_task_index',
           `taskIndex must be a non-negative integer; got: ${JSON.stringify(rawTaskIndex)}`,
         );
-        return;
       }
       taskIndex = parseInt(rawTaskIndex, 10);
     }
@@ -226,9 +216,7 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         }
       }
 
-      res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end(headline);
-      return;
+      return new Response(headline, { status: 202, headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
 
     // Build terminal response from envelopes if available, otherwise use pre-computed result
@@ -340,7 +328,7 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
     if (entry.state === 'failed' || entry.state === 'expired' || !fullResult) {
       const reason = `batch ${entry.state}`;
       const errPayload = entry.error ?? (fullResult && fullResult['error']) ?? notApplicable('batch succeeded');
-      sendJson(res, 200, {
+      return sendJson(200, {
         headline:
           entry.state === 'expired'
             ? 'batch expired'
@@ -353,25 +341,21 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         structuredReport: (fullResult?.['structuredReport'] as unknown) ?? notApplicable(reason),
         error: errPayload,
       });
-      return;
     }
 
     // entry.state === 'complete' with a stored result. Executor emits all 7 fields.
     if (taskIndex !== null) {
       const results = fullResult['results'];
       if (!Array.isArray(results) || taskIndex >= results.length) {
-        sendError(
-          res,
+        return sendError(
           404,
           'unknown_task_index',
           `taskIndex ${taskIndex} is out of range (batch has ${Array.isArray(results) ? results.length : 0} result(s))`,
         );
-        return;
       }
-      sendJson(res, 200, { ...fullResult, results: [results[taskIndex]] });
-      return;
+      return sendJson(200, { ...fullResult, results: [results[taskIndex]] });
     }
 
-    sendJson(res, 200, fullResult);
+    return sendJson(200, fullResult);
   };
 }

@@ -96,9 +96,9 @@ async function registerToolHandlers(
     // Drive registration from the registry so adding a tool only requires a tool-config edit.
     for (const entry of surface.list()) {
       if (entry.surface !== 'tool') continue;
-      router.register(entry.httpMethod, entry.httpPath, (_req, res, _params, _ctx) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-      });
+      router.register(entry.httpMethod, entry.httpPath, () =>
+        sendError(503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json'),
+      );
     }
     return;
   }
@@ -246,12 +246,12 @@ async function registerControlHandlers(
     }));
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
-    router.register('POST', '/control/batch-slice', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-    });
-    router.register('POST', '/context-blocks', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-    });
+    router.register('POST', '/control/batch-slice', () =>
+      sendError(503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json'),
+    );
+    router.register('POST', '/context-blocks', () =>
+      sendError(503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json'),
+    );
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   }
 }
@@ -315,18 +315,18 @@ export async function startServer(
 
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
   if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {
-    router.register('GET', '/__routes', (_req, res) => {
-      sendJson(res, 200, router.listRoutes().map((route) => ({
+    router.register('GET', '/__routes', () =>
+      sendJson(200, router.listRoutes().map((route) => ({
         method: route.method.toUpperCase(),
         path: route.path,
-      })));
-    });
+      }))),
+    );
   }
 
   const listener = new HTTPListener({
     bind: config.server.bind,
     port: config.server.port,
-    handler: (req, res) => handleRequest(router, token, req, res, config, PIPELINE_CFG),
+    handler: (req, srv) => handleRequest(router, token, req, config, PIPELINE_CFG, srv),
   });
   const { port, address: serverAddress } = await listener.start();
 

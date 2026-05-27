@@ -1,6 +1,4 @@
 // packages/server/src/http/handlers/tools/execute-plan.ts
-import type { ServerResponse } from 'node:http';
-import type { IncomingMessage } from 'node:http';
 import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import type { ExecutePlanWireInput } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
@@ -12,13 +10,12 @@ import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
 
 export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
-  return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
+  return async (_params, ctx) => {
     const parsed = executePlanInputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
+      return sendError(400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
-      return;
     }
 
     // Carry the HTTP `?cwd=` value through to the brief slot via input.cwd.
@@ -28,8 +25,7 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
-      sendError(res, 503, reserveResult.error, reserveResult.message);
-      return;
+      return sendError(503, reserveResult.error, reserveResult.message);
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
@@ -49,8 +45,8 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
       },
     });
 
-    await emitRequestReceived(deps, batchId, _req.url ?? '', input);
+    await emitRequestReceived(deps, batchId, ctx.url.pathname + ctx.url.search, input);
 
-    sendJson(res, 202, { batchId, statusUrl });
+    return sendJson(202, { batchId, statusUrl });
   };
 }

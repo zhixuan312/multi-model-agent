@@ -1,15 +1,12 @@
 import { describe, it, expect } from 'bun:test';
-import { IncomingMessage } from 'node:http';
-import { Socket } from 'node:net';
 import { resolveCallerIdentity, DEFAULT_IDENTITY } from '../../packages/server/src/http/middleware/caller-identity.js';
 
-function fakeReq(headers: Record<string, string>): IncomingMessage {
-  const socket = new Socket();
-  const req = new IncomingMessage(socket);
+function fakeReq(headers: Record<string, string>): Headers {
+  const h = new Headers();
   for (const [key, value] of Object.entries(headers)) {
-    req.headers[key.toLowerCase()] = value;
+    h.set(key.toLowerCase(), value);
   }
-  return req;
+  return h;
 }
 
 describe('resolveCallerIdentity', () => {

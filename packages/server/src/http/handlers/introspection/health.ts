@@ -1,6 +1,4 @@
 // packages/server/src/http/handlers/introspection/health.ts
-import type { ServerResponse } from 'node:http';
-import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { DriftEntry, SkillManifestSync } from '../../../skill-install/skill-manifest-sync.js';
@@ -19,11 +17,11 @@ export type HealthResponse =
  * No version/pid/uptimeMs — those live in telemetry and GET /status.
  */
 export function buildHealthHandler(deps: { manifestSync: SkillManifestSync }): RawHandler {
-  return (_req: IncomingMessage, res: ServerResponse) => {
+  return () => {
     const drift: DriftEntry[] = deps.manifestSync.driftReport();
     const body: HealthResponse = drift.length === 0
       ? { status: 'ok' }
       : { status: 'drift', drift };
-    sendJson(res, 200, body);
+    return sendJson(200, body);
   };
 }
