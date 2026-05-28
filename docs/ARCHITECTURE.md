@@ -242,3 +242,19 @@ Where to add:
 - `docs/refactor/runner-adapter-matrix.md` — per-provider viability analysis for the runner adapter.
 - `docs/refactor/loc-baseline.md` — LOC baseline for the refactor.
 - `DIRECTION.md` — product north star.
+
+## Known limitations
+
+### Git worktrees + a shared daemon
+
+`mmagent serve` writes worker output relative to the dispatched `?cwd=`. Pairing a
+**git worktree** with a daemon started from a *different* worktree is not currently
+guaranteed to isolate filesystem writes on every platform (observed escaping to the
+daemon's startup cwd under some Bun/Windows configurations). Until the root cause is
+fixed, prefer one of:
+
+- run the daemon from the directory you intend workers to write to, or
+- do the work on a branch in a single worktree.
+
+A write that escapes the dispatched cwd is **not silently accepted** — the task seals
+`failed` with `tool_sandbox_cwd_violation` (see `recordTaskCompletedHandler`).
