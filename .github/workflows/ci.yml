@@ -31,6 +31,26 @@ jobs:
       - name: Dependency layering (dependency-cruiser)
         run: bun run lint:deps
 
+  # Guards the test-isolation invariant: every test must be free of process-global
+  # state leakage (no sticky mock.module on shared modules, restored env/fetch, etc.)
+  # so the WHOLE suite passes in ONE shared bun process — not just per-file-isolated.
+  # `bun run test` (the verify job) forks per file and would HIDE such a leak; this
+  # bare run is the only gate that catches a re-introduced sticky mock.module.
+  bare-test:
+    name: bare bun test (isolation-not-required guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - name: Install workspace deps
+        run: bun install
+      - name: Build (embedded skills needed by tests)
+        run: bun run build
+      - name: Bare bun test (single shared process — fails on any cross-file leak)
+        run: bun test
+
   verify:
     name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
