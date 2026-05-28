@@ -25,6 +25,17 @@ export async function getBatch(token, batchId) {
   return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
 }
 
+// Generic authenticated GET (introspection routes: /status, /__routes).
+// /health is auth-exempt — pass auth=false.
+export async function get(token, path, auth = true) {
+  const headers = auth
+    ? { 'Authorization': `Bearer ${token}`, 'X-MMA-Client': 'claude-code', 'X-MMA-Main-Model': 'claude-opus-4-7' }
+    : {};
+  const res = await fetch(`${BASE_URL}${path}`, { headers });
+  const ct = res.headers.get('content-type') || '';
+  return { status: res.status, body: ct.includes('json') ? await res.json().catch(() => ({})) : await res.text() };
+}
+
 export async function deleteContextBlock(token, id, cwd) {
   const res = await fetch(`${BASE_URL}/context-blocks/${id}?cwd=${encodeURIComponent(cwd)}`,
     { method: 'DELETE', headers: HEADERS(token) });

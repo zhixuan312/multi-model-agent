@@ -7,6 +7,7 @@ import { runDispatch, pollBatch } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
+import { extraRouteChecks } from './extra-routes.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
 import { runBuildChecks } from './build-checks.mjs';
@@ -118,6 +119,18 @@ try {
     } catch (err) {
       records.push(normalize(spec, {}));
       checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];
+    }
+  }
+
+  // Extra live route coverage: introspection (/health, /status, /__routes),
+  // batch-slice (POST /control/batch-slice), context-block DELETE — the routes
+  // in the manifest that the dispatch scenarios don't hit. Skipped under --only.
+  if (!opts.only) {
+    try {
+      records.push({ scenarioId: 'extra-routes', route: 'controls+introspection' });
+      checksByScenario['extra-routes'] = await extraRouteChecks(ctx);
+    } catch (err) {
+      checksByScenario['extra-routes'] = [{ checkId: 'extra-routes', status: 'FAIL', detail: String(err.message || err) }];
     }
   }
 
