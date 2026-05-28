@@ -26,7 +26,13 @@ export function buildRequest(spec, ctx) {
     case 12: return { route: 'delegate', body: { tasks: [ T('Create file src/f.ts with exactly: export const F=6. Only that file. Do not run git.', { filePaths: ['src/f.ts'], reviewPolicy: 'none' }) ] } };
     case 13: return { route: 'delegate', body: { tasks: [ T('Report what src/math.ts exports. Do NOT create or modify any file. Do not run git.', { filePaths: ['src/math.ts'] }) ] } };
     case 14: return { route: 'retry', body: { batchId: ctx.seedBatchId, taskIndices: [ctx.seedFailIdx ?? 0] } };
-    case 15: return { route: 'journal-record', body: { learning: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', tagHints: ['math', 'validation'] } };
+    // 5.0.0: journal-record takes `learnings[]` (was a single `learning`). Send
+    // TWO learnings to exercise the N-learnings → one ordered integration pass +
+    // the {recorded, failed} report contract.
+    case 15: return { route: 'journal-record', body: { learnings: [
+               'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.',
+               'Recording multiple learnings in one journal-record pass must produce a node per learning and surface them in the structured {recorded, failed} report so the dispatcher can attribute partial failures.',
+             ], tagHints: ['math', 'validation'] } };
     case 16: return { route: 'journal-recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
     case 17: return { route: 'delegate', body: { tasks: [ T('Create file src/g.ts with exactly: export const G=7. Only that file. Do not run git.', { filePaths: ['src/g.ts'], reviewPolicy: 'none', skills: ['mma-smoke-skill'] }) ] } };
     case 18: return { route: 'delegate', body: { tasks: [ T('Create file src/h.ts with exactly: export const H=8. Only that file. Do not run git.', { filePaths: ['src/h.ts'], reviewPolicy: 'none', skills: ['__mma_nonexistent_skill__'] }) ] } };

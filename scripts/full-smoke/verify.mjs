@@ -102,6 +102,18 @@ export function verify(rec) {
       `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
   }
 
+  // 5.0.0 journal-record: learnings[] → one integration pass → a {recorded, failed}
+  // report that attributes each submitted learning to a node (or a failure). We
+  // send 2 learnings (dispatch #15) → expect ≥1 recorded node and 0 failed on the
+  // happy path. Guards the new multi-learning contract + report shape end-to-end.
+  if (e.route === 'journal-record' && !e.expectFail) {
+    const recorded = Array.isArray(sr.recorded) ? sr.recorded : [];
+    const failed = Array.isArray(sr.failed) ? sr.failed : [];
+    const verdict = recorded.length >= 1 && failed.length === 0 ? 'PASS'
+      : (recorded.length >= 1 ? 'WARN' : 'FAIL');
+    out.push(C('journal-recorded', verdict, `recorded=${recorded.length} failed=${failed.length} (sent 2 learnings)`));
+  }
+
   // Skill passthrough — positive path (scenario 17): the worker launched and
   // completed WITH a resolved+staged skill. Completion is itself the proof that
   // resolve→stage→native delivery did not break session startup (a staging
