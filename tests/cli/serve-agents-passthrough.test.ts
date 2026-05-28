@@ -20,14 +20,25 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 // journal/batch dispatch). The fake completes deterministically and we drain the
 // batch to terminal so liveByTask releases before stop().
 let __prevOverrideEnv: string | undefined;
+let __prevTelemetryEndpoint: string | undefined;
 beforeAll(() => {
   __prevOverrideEnv = process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+  // CRITICAL: startServe reads telemetry consent from the REAL ~/.multi-model
+  // config and ships to the default hosted endpoint. Since this test now drains
+  // the dispatched task to terminal (sealing the envelope → TelemetryUploader),
+  // a non-empty endpoint would upload a junk mock ($0, model "custom") record to
+  // the production backend on every run. Blank the endpoint so no uploader is
+  // created at all (serve.ts: `if (telemetryEndpoint)` is then false).
+  __prevTelemetryEndpoint = process.env.MMAGENT_TELEMETRY_ENDPOINT;
+  process.env.MMAGENT_TELEMETRY_ENDPOINT = '';
 });
 afterEach(() => { __setCoreTestProviderOverrideMap(null); });
 afterAll(() => {
   if (__prevOverrideEnv === undefined) delete process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
   else process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = __prevOverrideEnv;
+  if (__prevTelemetryEndpoint === undefined) delete process.env.MMAGENT_TELEMETRY_ENDPOINT;
+  else process.env.MMAGENT_TELEMETRY_ENDPOINT = __prevTelemetryEndpoint;
 });
 
 describe('startServe agents pass-through (3.1.1 regression guard)', () => {
