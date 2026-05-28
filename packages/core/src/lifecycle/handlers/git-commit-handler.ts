@@ -2,8 +2,6 @@
 //
 // Gate logic per the spec:
 //   no_repo, no_diff, validation_failed, validation_stale, hook_failed
-
-// DEBUG: SOURCE FILE LOADED AT $(date)
 //
 // The spec (Step 13) supersedes the v4.4.x behavior:
 //   - Returns StageGate<CommitPayload> (tagged union { committed | no_op })
