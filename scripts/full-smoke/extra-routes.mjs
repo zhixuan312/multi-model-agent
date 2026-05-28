@@ -27,13 +27,16 @@ export async function extraRouteChecks(ctx) {
   // gated behind MMAGENT_TEST_INTROSPECTION=1 (not registered on a production
   // server). The route manifest is validated against routes.json at build phase.
 
-  // ── Batch slice (single-task view of a recent batch) ────────────────────────
-  // Use the MOST RECENT batch (ctx.lastBatchId), not the seed — after 18
-  // scenarios the seed batch is evicted from the per-project cache (404).
+  // ── Single-task batch slice: GET /batch/:id?taskIndex=N ─────────────────────
+  // This is the documented slice feature (batch.test.ts) — it reads the sealed
+  // registry/envelope result. (POST /control/batch-slice reads the in-flight
+  // batchCache, which by design holds no results for a COMPLETED batch — wrong
+  // route for this assertion.) Slice the most-recent batch's task 0.
   if (ctx.lastBatchId) {
     try {
-      const { status, json } = await dispatch(t, 'control/batch-slice', { batchId: ctx.lastBatchId, taskIndex: 0 }, ctx.dir);
-      out.push(C('batch-slice', status === 200 && json?.result ? 'PASS' : 'FAIL', `HTTP ${status} hasResult=${!!json?.result}`));
+      const r = await get(t, `/batch/${ctx.lastBatchId}?taskIndex=0`);
+      const ok = r.status === 200 && Array.isArray(r.body?.results) && r.body.results.length === 1;
+      out.push(C('batch-slice', ok ? 'PASS' : 'FAIL', `HTTP ${r.status} results=${Array.isArray(r.body?.results) ? r.body.results.length : '?'}`));
     } catch (e) { out.push(C('batch-slice', 'FAIL', String(e.message || e))); }
   } else {
     out.push(C('batch-slice', 'SKIP', 'no batch captured'));
