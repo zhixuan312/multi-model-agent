@@ -139,29 +139,35 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     sealStatus = ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed';
   }
 
-  // Confinement guard: a worker must only write under its dispatched cwd. If any
-  // reported write escaped (e.g. landed in the daemon's startup cwd / a sibling
-  // git worktree instead of the ?cwd= directory), hard-fail the task rather than
-  // sealing done — a silent mislocation is worse than a visible failure. This is
-  // the single cross-provider chokepoint, so every runner is guarded here.
-  // Checks the worker-reported filesWritten (NOT the git diff): the defining
-  // symptom is that git-in-cwd shows clean while the worker wrote elsewhere.
-  let escapeErrorCode: ErrorCode | null = null;
-  const escaped = findEscapedWrites(last?.filesWritten ?? [], ctx.cwd);
-  if (escaped.length > 0) {
-    sealStatus = 'failed';
-    escapeErrorCode = 'tool_sandbox_cwd_violation';
-    envelope.recordValidationWarning({ rule: 'WorkerWriteEscapedCwd', path: escaped.join(', ') });
-  }
-
-  // Carry commit outcome onto the envelope so the response's structuredReport
-  // surfaces the real SHA/message (the response is built from envelope
-  // snapshots, not from state.lastRunResult). Sourced from the commit gate
-  // payload — authoritative and per-worker pathspec-scoped.
+  // Commit outcome (authoritative, from the commit gate) — computed BEFORE the
+  // confinement guard so it can corroborate the worker's self-reported writes.
+  // Carried onto the envelope below so the response's structuredReport surfaces
+  // the real SHA/message (the response is built from envelope snapshots).
   const commitGate = state.gates?.['commit'];
   const commitPayload = (commitGate?.outcome === 'advance' ? commitGate.payload : null) as
     { kind?: string; commitSha?: string; commitMessage?: string; reason?: string } | null;
   const didCommit = commitPayload?.kind === 'committed';
+
+  // Confinement guard: a worker must only write under its dispatched cwd. A
+  // reported write that escaped (e.g. into a sibling git worktree / the daemon's
+  // startup cwd) is a real mislocation. BUT the worker-reported filesWritten
+  // string is unreliable — LLM workers routinely report normalized/relative/
+  // hallucinated absolute paths (e.g. "/repo/src/x.ts" or "/workspace/src/x.ts")
+  // for a file actually written under the dispatched cwd. So hard-fail ONLY when
+  // the worker claims an escaped write AND no commit landed in cwd (didCommit =
+  // false → the write is not in this repo → it genuinely wrote elsewhere). When a
+  // commit DID land in cwd, the self-reported path is a hallucination — record an
+  // advisory warning rather than failing a legitimate, committed task on an
+  // unreliable self-report string. (The git commit is the authoritative signal.)
+  let escapeErrorCode: ErrorCode | null = null;
+  const escaped = findEscapedWrites(last?.filesWritten ?? [], ctx.cwd);
+  if (escaped.length > 0) {
+    envelope.recordValidationWarning({ rule: 'WorkerWriteEscapedCwd', path: escaped.join(', ') });
+    if (!didCommit) {
+      sealStatus = 'failed';
+      escapeErrorCode = 'tool_sandbox_cwd_violation';
+    }
+  }
 
   envelope.seal({
     status: sealStatus,
