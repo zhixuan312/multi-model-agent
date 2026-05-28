@@ -1,11 +1,19 @@
 import * as journal from '@zhixuan92/multi-model-agent-core/tools/journal/record/schema';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/journal/record/tool-config';
+import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
+import { withProjectJournalLock } from '../../journal-lock.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
+
+/** Lock-wrapped executor for one journal-record dispatch. Exported for wiring tests. */
+export function journalRecordExecutor(input: journal.Input, cwd: string) {
+  return (executionCtx: ExecutionContext) =>
+    withProjectJournalLock(cwd, () => executeTask(toolConfig, executionCtx, input));
+}
 
 export function buildJournalRecordHandler(deps: HandlerDeps): RawHandler {
   return async (_params, ctx) => {
@@ -26,7 +34,7 @@ export function buildJournalRecordHandler(deps: HandlerDeps): RawHandler {
       tool: 'journal-record', projectCwd: cwd, blockIds,
       batchRegistry: deps.batchRegistry, projectContext: pc, deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
-      executor: async (executionCtx) => executeTask(toolConfig, executionCtx, input),
+      executor: journalRecordExecutor(input, cwd),
     });
     await emitRequestReceived(deps, batchId, ctx.url.pathname + ctx.url.search, input);
     return sendJson(202, { batchId, statusUrl });
