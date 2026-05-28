@@ -82,7 +82,7 @@ export type CommitPayload =
       authoredAt: string;
     }
   | { kind: 'no_op';
-      reason: 'no_repo' | 'no_diff' | 'worker_committed_out_of_band' | 'hook_failed';
+      reason: 'no_repo' | 'no_diff' | 'hook_failed';
       detail?: string;
     };
 

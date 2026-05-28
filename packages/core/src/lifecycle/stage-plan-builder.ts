@@ -124,8 +124,9 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
       // cheap workers under-report their writes, which previously caused the
       // gate to skip while git actually had changes, so real work went
       // uncommitted. The commit handler is the single authority on
-      // commit-vs-no_op: it uses getRealFilesChanged() (git diff + untracked)
-      // and returns no_op:no_diff when nothing genuinely changed.
+      // commit-vs-no_op: it stages the worker-written files (workerWrittenFiles)
+      // and runs `git diff --cached --quiet` on them, returning no_op:no_diff
+      // when nothing genuinely changed.
       const work = currentWork({ gates: (state.gates ?? {}) as Record<string, import('./stage-io.js').StageGate<unknown>> });
       if (!work) {
         return { run: false, comment: 'commit skipped because no implementation work advanced' };
