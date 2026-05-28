@@ -22,22 +22,22 @@ afterAll(async () => { await server.close(); });
 const headers = () => ({ 'x-mma-main-model': 'claude-opus-4-7', 'x-mma-client': 'claude-code', 'authorization': `Bearer ${token}`, 'content-type': 'application/json' });
 
 describe('contract: POST /journal handler-level', () => {
-  it('1. valid { learning, tagHints } → 202 with batchId', async () => {
-    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learning: 'x'.repeat(25), tagHints: ['journal'] }) });
+  it('1. valid { learnings, tagHints } → 202 with batchId', async () => {
+    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learnings: ['x'.repeat(25)], tagHints: ['journal'] }) });
     expect(res.status).toBe(202);
     const body = await res.json();
     expect(typeof body.batchId).toBe('string');
   });
 
-  it('2. learning too short → 400 invalid_request', async () => {
-    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learning: 'short' }) });
+  it('2. learning member too short → 400 invalid_request', async () => {
+    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learnings: ['short'] }) });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('invalid_request');
   });
 
   it('3. extra bogus field → 400 (strict schema)', async () => {
-    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learning: 'x'.repeat(25), bogus: 1 }) });
+    const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ learnings: ['x'.repeat(25)], bogus: 1 }) });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('invalid_request');
