@@ -9,10 +9,21 @@ import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
 
-/** Lock-wrapped executor for one journal-record dispatch. Exported for wiring tests. */
-export function journalRecordExecutor(input: journal.Input, cwd: string) {
+/** Lock-wrapped executor for one journal-record dispatch. Exported for wiring tests.
+ *  The lock + executor are injectable (defaulting to the real ones) so the wiring
+ *  test can supply fakes WITHOUT mock.module() — which under Bun is process-global
+ *  and sticky, leaking a mocked task-executor into every later dispatch test. */
+export interface JournalRecordExecutorDeps {
+  executeTask: typeof executeTask;
+  withProjectJournalLock: typeof withProjectJournalLock;
+}
+export function journalRecordExecutor(
+  input: journal.Input,
+  cwd: string,
+  deps: JournalRecordExecutorDeps = { executeTask, withProjectJournalLock },
+) {
   return (executionCtx: ExecutionContext) =>
-    withProjectJournalLock(cwd, () => executeTask(toolConfig, executionCtx, input));
+    deps.withProjectJournalLock(cwd, () => deps.executeTask(toolConfig, executionCtx, input));
 }
 
 export function buildJournalRecordHandler(deps: HandlerDeps): RawHandler {
