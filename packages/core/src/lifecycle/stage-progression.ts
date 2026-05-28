@@ -102,20 +102,3 @@ export function stageOrderForRoute(route: string): string[] {
 
   return ordered.length > 0 ? ordered : ['Finalizing'];
 }
-
-const cache = new Map<string, string[]>();
-
-export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy(
-  {},
-  {
-    get(_target, prop: string): readonly string[] | undefined {
-      if (typeof prop !== 'string') return undefined;
-      let cached = cache.get(prop);
-      if (!cached) {
-        cached = stageOrderForRoute(prop);
-        cache.set(prop, cached);
-      }
-      return cached;
-    },
-  },
-) as Record<string, readonly string[]>;
