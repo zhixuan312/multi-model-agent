@@ -7,6 +7,8 @@ import { deriveCompletion, extractCompletionInputs } from '../derive-completion.
 import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
 import { renderTerminalReportMarkdown } from '../../reporting/terminal-report-markdown.js';
 import { WRITE_ROUTES } from '../stage-io.js';
+import { findEscapedWrites } from '../file-confinement-check.js';
+import type { ErrorCode } from '../../error-codes.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -136,6 +138,21 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     sealStatus = ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed';
   }
 
+  // Confinement guard: a worker must only write under its dispatched cwd. If any
+  // reported write escaped (e.g. landed in the daemon's startup cwd / a sibling
+  // git worktree instead of the ?cwd= directory), hard-fail the task rather than
+  // sealing done — a silent mislocation is worse than a visible failure. This is
+  // the single cross-provider chokepoint, so every runner is guarded here.
+  // Checks the worker-reported filesWritten (NOT the git diff): the defining
+  // symptom is that git-in-cwd shows clean while the worker wrote elsewhere.
+  let escapeErrorCode: ErrorCode | null = null;
+  const escaped = findEscapedWrites(last?.filesWritten ?? [], ctx.cwd);
+  if (escaped.length > 0) {
+    sealStatus = 'failed';
+    escapeErrorCode = 'tool_sandbox_cwd_violation';
+    envelope.recordValidationWarning({ rule: 'WorkerWriteEscapedCwd', path: escaped.join(', ') });
+  }
+
   // Carry commit outcome onto the envelope so the response's structuredReport
   // surfaces the real SHA/message (the response is built from envelope
   // snapshots, not from state.lastRunResult). Sourced from the commit gate
@@ -150,7 +167,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     terminalAt: new Date().toISOString(),
     stopReason: last?.terminationReason?.cause ?? null,
     structuredError: last?.structuredError ?? null,
-    errorCode: (last as { errorCode?: import('../../error-codes.js').ErrorCode | null } | undefined)?.errorCode ?? null,
+    errorCode: escapeErrorCode ?? (last as { errorCode?: ErrorCode | null } | undefined)?.errorCode ?? null,
     realFilesChanged: real.files,
     commitSha: didCommit ? (commitPayload?.commitSha ?? null) : null,
     commitMessage: didCommit ? (commitPayload?.commitMessage ?? null) : null,
