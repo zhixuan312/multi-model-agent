@@ -23,20 +23,20 @@ export async function extraRouteChecks(ctx) {
     out.push(C('status', s.status === 200 ? 'PASS' : 'FAIL', `HTTP ${s.status} version=${s.body?.version ?? '?'}`));
   } catch (e) { out.push(C('status', 'FAIL', String(e.message || e))); }
 
-  try {
-    const r = await get(t, '/__routes');
-    const ok = r.status === 200 && Array.isArray(r.body) && r.body.length > 0;
-    out.push(C('routes-manifest', ok ? 'PASS' : 'FAIL', `HTTP ${r.status} routes=${Array.isArray(r.body) ? r.body.length : '?'}`));
-  } catch (e) { out.push(C('routes-manifest', 'FAIL', String(e.message || e))); }
+  // NOTE: GET /__routes is intentionally NOT checked — it's a test-only route
+  // gated behind MMAGENT_TEST_INTROSPECTION=1 (not registered on a production
+  // server). The route manifest is validated against routes.json at build phase.
 
-  // ── Batch slice (single-task view of a multi/seeded batch) ──────────────────
-  if (ctx.seedBatchId) {
+  // ── Batch slice (single-task view of a recent batch) ────────────────────────
+  // Use the MOST RECENT batch (ctx.lastBatchId), not the seed — after 18
+  // scenarios the seed batch is evicted from the per-project cache (404).
+  if (ctx.lastBatchId) {
     try {
-      const { status, json } = await dispatch(t, 'control/batch-slice', { batchId: ctx.seedBatchId, taskIndex: 0 }, ctx.dir);
+      const { status, json } = await dispatch(t, 'control/batch-slice', { batchId: ctx.lastBatchId, taskIndex: 0 }, ctx.dir);
       out.push(C('batch-slice', status === 200 && json?.result ? 'PASS' : 'FAIL', `HTTP ${status} hasResult=${!!json?.result}`));
     } catch (e) { out.push(C('batch-slice', 'FAIL', String(e.message || e))); }
   } else {
-    out.push(C('batch-slice', 'SKIP', 'no seed batch captured'));
+    out.push(C('batch-slice', 'SKIP', 'no batch captured'));
   }
 
   // ── Context-block DELETE lifecycle (register → delete an unpinned block) ─────

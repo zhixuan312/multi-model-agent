@@ -102,16 +102,16 @@ export function verify(rec) {
       `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
   }
 
-  // 5.0.0 journal-record: learnings[] → one integration pass → a {recorded, failed}
-  // report that attributes each submitted learning to a node (or a failure). We
-  // send 2 learnings (dispatch #15) → expect ≥1 recorded node and 0 failed on the
-  // happy path. Guards the new multi-learning contract + report shape end-to-end.
+  // 5.0.0 journal-record: learnings[] → one integration pass that writes one
+  // journal NODE file per recorded learning under .mmagent/journal/nodes/. We
+  // send 2 learnings (dispatch #15); the observable proof they were recorded is
+  // those node files in filesChanged. (The {recorded,failed} report is the
+  // worker's internal contract, not projected onto the response structuredReport.)
   if (e.route === 'journal-record' && !e.expectFail) {
-    const recorded = Array.isArray(sr.recorded) ? sr.recorded : [];
-    const failed = Array.isArray(sr.failed) ? sr.failed : [];
-    const verdict = recorded.length >= 1 && failed.length === 0 ? 'PASS'
-      : (recorded.length >= 1 ? 'WARN' : 'FAIL');
-    out.push(C('journal-recorded', verdict, `recorded=${recorded.length} failed=${failed.length} (sent 2 learnings)`));
+    const files = sr.filesChanged ?? task0.filesChanged ?? [];
+    const nodeFiles = files.filter((f) => typeof f === 'string' && /\/journal\/nodes\//.test(f));
+    out.push(C('journal-recorded', nodeFiles.length >= 1 ? 'PASS' : 'FAIL',
+      `journal node files written=${nodeFiles.length} (sent 2 learnings); filesChanged=${files.length}`));
   }
 
   // Skill passthrough — positive path (scenario 17): the worker launched and

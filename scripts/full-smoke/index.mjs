@@ -88,6 +88,7 @@ try {
         continue;
       }
       const envelope = await pollBatch(ctx.token, res.batchId);
+      ctx.lastBatchId = res.batchId; // most-recent batch, for the extra-routes batch-slice check
       if (spec.id === 'seed') {
         ctx.seedBatchId = res.batchId;
         const results = Array.isArray(envelope.results) ? envelope.results : [];
