@@ -37,15 +37,20 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ```json
 {
-  "learning": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
+  "learnings": [
+    "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
+    "Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
+  ],
   "tagHints": ["dispatch", "cancellation"]
 }
 ```
 
+**Batch your learnings into ONE call.** Collect every learning from the session and send them together in `learnings[]` — do NOT fire multiple concurrent `journal-record` calls. One worker integrates them sequentially in a single pass (fast and collision-free).
+
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `learning` | string | yes | Natural-language entry: what you decided, why, or what you learned. Keep it concrete. |
-| `tagHints` | string[] | no | Optional tags for later cross-reference (e.g. `["perf", "refactor"]`). Tags are advisory; the journal system may group or index them. |
+| `learnings` | string[] | yes | 1–20 entries, each 20–8000 chars. Each is a natural-language entry: what you decided, why, or what you learned. Keep them concrete. |
+| `tagHints` | string[] | no | Optional tags applied across ALL learnings (batch-scoped); the worker revises/normalizes per node. Advisory. |
 
 **What gets stored & where:**
 
@@ -65,7 +70,9 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "learning": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
+    "learnings": [
+      "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged."
+    ],
     "tagHints": ["dispatch", "cancellation"]
   }' \
   "http://localhost:$PORT/journal-record?cwd=/project")
@@ -82,11 +89,17 @@ Each task carries a structured report containing the graph operation metadata:
 
 ```json
 {
-  "summary": "created 0012; superseded 0009",
+  "summary": "recorded 2, failed 0; created 0012, superseded 0009",
   "filesChanged": [".mmagent/journal/nodes/0012.md", ".mmagent/journal/index.md", ".mmagent/journal/log.md"],
-  "op": "create"
+  "recorded": [
+    { "learningIndex": 0, "op": "create", "ids": ["0012"] },
+    { "learningIndex": 1, "op": "supersede", "ids": ["0013"] }
+  ],
+  "failed": []
 }
 ```
+
+`recorded` and `failed` partition the input learnings by `learningIndex`. To retry, re-send the `failed[]` entries' `learning` text as a new `learnings[]` batch (reuse the original `tagHints`/`contextBlockIds`).
 
 The authoritative success signal is `completed` + the presence of `filesChanged`. See "v5 wire shape" below for the full envelope.
 
