@@ -70,8 +70,9 @@ export async function implementHandler(
   const t0 = Date.now();
 
   try {
-    // Snapshot HEAD + untracked files before the worker runs — Committing reads
-    // this to detect a worker-authored commit (HEAD moved between snapshots).
+    // Snapshot HEAD + untracked files before the worker runs — getRealFilesChanged()
+    // (terminal sealing) and the progress watchdog read these to compute the real
+    // on-disk diff since task start.
     capturePreTaskState(state);
 
     const ctx = state.executionContext;
