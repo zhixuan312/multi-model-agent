@@ -6,10 +6,19 @@ name: CI
 # a single macOS dev box cannot — no Docker/emulation needed in CI.
 
 on:
+  # push fires only for the long-lived branches (validates the post-merge state
+  # + direct pushes). Release/feature branches are validated via pull_request, so
+  # a release-branch push with an open PR runs CI ONCE (the PR), not twice.
   push:
-    branches: [main, master, 'release/**']
+    branches: [main, master]
   pull_request:
     branches: [main, master, 'release/**']
+
+# Cancel a branch/PR's in-flight run when a newer commit arrives, so stale runs
+# don't pile up (and don't waste runner minutes finishing work already superseded).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Static gates — OS-independent, so run once. eslint exits 0 on warnings
