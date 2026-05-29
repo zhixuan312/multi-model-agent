@@ -17,7 +17,8 @@ describe('identity', () => {
     expect(id.publicKeyRaw).toMatch(/^[A-Za-z0-9+/=]+$/);
     const path = join(dir, 'identity.json');
     expect(existsSync(path)).toBe(true);
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // Unix file-mode bits are not meaningful on Windows (chmod is a no-op there).
+    if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
   it('returns the same identity on subsequent calls', () => {

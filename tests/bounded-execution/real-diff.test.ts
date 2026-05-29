@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execSync } from 'node:child_process';
 import { getRealFilesChanged } from '../../packages/core/src/bounded-execution/real-diff.js';
+import { git, initGitRepo, commit, removeGitDir } from '../helpers/git-repo.js';
 
 function makeRepo(): { cwd: string; sha: string } {
   const cwd = mkdtempSync(join(tmpdir(), 'mma-realdiff-'));
-  execSync('git init && git config user.email t@t.com && git config user.name t', { cwd, shell: '/bin/bash' });
+  initGitRepo(cwd);
   writeFileSync(join(cwd, 'a.txt'), 'a');
-  execSync('git add . && git commit -m init', { cwd, shell: '/bin/bash' });
-  const sha = execSync('git rev-parse HEAD', { cwd }).toString().trim();
+  commit(cwd, 'init');
+  const sha = git(cwd, 'rev-parse', 'HEAD');
   return { cwd, sha };
 }
 
@@ -74,7 +74,7 @@ describe('getRealFilesChanged', () => {
   it('returns git_error source when git invocation fails', async () => {
     // Corrupt the .git directory after capturing sha:
     const { cwd, sha } = makeRepo();
-    execSync(`rm -rf "${cwd}/.git"`, { shell: '/bin/bash' });
+    removeGitDir(cwd);
     const state: any = { cwd, preTaskHeadSha: sha, preTaskUntrackedFiles: new Set() };
     const r = await getRealFilesChanged(state);
     expect(r.source).toBe('git_error');

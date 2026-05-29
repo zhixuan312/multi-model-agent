@@ -319,7 +319,10 @@ describe('codex consumeStream — settles on exit even if close never fires', ()
   });
 });
 
-describe('codex killGracefully — signals the whole process group', () => {
+// POSIX-only: process groups / negative-PID signals don't exist on Windows, so
+// killGracefully intentionally skips the process-group path there (see
+// codex-cli-session.ts:371 `process.platform !== 'win32'`).
+describe.skipIf(process.platform === 'win32')('codex killGracefully — signals the whole process group', () => {
   it('sends SIGTERM to the negative PID, not just the leader', () => {
     const fakeProc: any = {
       pid: 12345,

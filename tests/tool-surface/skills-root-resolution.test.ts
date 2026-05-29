@@ -7,33 +7,35 @@ import { pickSkillsRoot, skillsRootCandidates } from '../../packages/server/src/
 // both the npm-install hoisted layout and the core-nested-under-server layout.
 
 describe('pickSkillsRoot — npm-installed layouts', () => {
+  // `here`/`target` are built with path.resolve so they are OS-native: the
+  // product resolves candidates via node:path (backslashes on Windows), so a
+  // hardcoded POSIX `target` string would never satisfy the `p === target`
+  // predicate on win32. Each `target` mirrors the matching candidate segments.
   it('resolves to the server package skills dir under hoisted npm layout', () => {
-    // Simulated layout:
-    //   /opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface  ← here
-    //   /opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/dist/skills              ← target
-    const here = '/fake/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface';
-    const target = '/fake/node_modules/@zhixuan92/multi-model-agent/dist/skills';
+    // here: .../@zhixuan92/multi-model-agent-core/dist/tool-surface
+    // target: .../@zhixuan92/multi-model-agent/dist/skills  (candidate #3)
+    const here = path.resolve('/fake/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface');
+    const target = path.resolve(here, '..', '..', '..', 'multi-model-agent', 'dist', 'skills');
     const resolved = pickSkillsRoot(here, (p) => p === target);
     expect(resolved).toBe(target);
   });
 
   it('resolves to the server skills dir when core is nested under server', () => {
-    // Simulated layout (npm hoisting fallback — global install):
-    //   /opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface  ← here
-    //   /opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/dist/skills                                                       ← target
-    const here =
-      '/opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface';
-    const target = '/opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/dist/skills';
+    // here: .../multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface
+    // target: .../multi-model-agent/dist/skills  (candidate #4)
+    const here = path.resolve(
+      '/opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface',
+    );
+    const target = path.resolve(here, '..', '..', '..', '..', '..', 'dist', 'skills');
     const resolved = pickSkillsRoot(here, (p) => p === target);
     expect(resolved).toBe(target);
   });
 
   it('falls back to the dev-source layout when running from packages/core/src', () => {
-    // Repo dev layout:
-    //   <repo>/packages/core/src/tool-surface  ← here
-    //   <repo>/packages/server/src/skills      ← target
-    const here = '/repo/packages/core/src/tool-surface';
-    const target = '/repo/packages/server/src/skills';
+    // here: <repo>/packages/core/src/tool-surface
+    // target: <repo>/packages/server/src/skills  (candidate #1)
+    const here = path.resolve('/repo/packages/core/src/tool-surface');
+    const target = path.resolve(here, '..', '..', '..', 'server', 'src', 'skills');
     const resolved = pickSkillsRoot(here, (p) => p === target);
     expect(resolved).toBe(target);
   });
