@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve as pathResolve } from 'node:path';
+import { resolve as pathResolve, isAbsolute as pathIsAbsolute } from 'node:path';
 import { extractPlanSection, SLICE_CAP_BYTES } from './plan-extractor.js';
 import type { ReviewPolicy } from '../../types/review-policy.js';
 
@@ -64,7 +64,7 @@ function readPlanSectionRaw(
   descriptor: string,
   cwd: string,
 ): { body: string; truncated: boolean } {
-  const resolved = planFilePath.startsWith('/') ? planFilePath : pathResolve(cwd, planFilePath);
+  const resolved = pathIsAbsolute(planFilePath) ? planFilePath : pathResolve(cwd, planFilePath);
   const text = readFileSync(resolved, 'utf8');
   const lines = text.split(/\r?\n/);
   const ATX = /^(#{1,6})\s+(.+?)\s*$/;

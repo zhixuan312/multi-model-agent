@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 
 export interface ResolveOptions {
   timeoutMs?: number;
@@ -40,7 +41,10 @@ export async function resolveGitToplevel(
     child.stderr?.on('data', () => { /* swallow */ });
     child.on('error', () => settle(null));
     child.on('exit', (code) => {
-      if (code === 0) settle(stdout.trim() || null);
+      // `git --show-toplevel` emits forward-slash paths even on Windows;
+      // normalize to an OS-native absolute path so callers comparing against
+      // realpath/process.cwd() (backslashes on win32) match.
+      if (code === 0) { const out = stdout.trim(); settle(out ? resolvePath(out) : null); }
       else settle(null);
     });
     const t = setTimeout(() => {

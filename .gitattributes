@@ -1,0 +1,6 @@
+# Force LF line endings on checkout for all text files, on every OS.
+# Without this, Windows checks files out with CRLF, which breaks LF-sensitive
+# parsing (e.g. the SKILL.md frontmatter regex) and makes goldens/byte-compares
+# differ between platforms. text=auto lets git auto-detect binary files and
+# leave them untouched.
+* text=auto eol=lf
