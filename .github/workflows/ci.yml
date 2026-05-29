@@ -80,12 +80,13 @@ jobs:
         run: bun run typecheck
       - name: Test suite (per-file isolation)
         # Cap per-file concurrency below the default (8): on the resource-limited
-        # hosted runners (esp. macOS), 8 concurrent bun processes each spawning
-        # git subprocesses hit fork EAGAIN, intermittently failing git-touching
-        # tests. 4 keeps the suite fast while staying under the fork ceiling.
+        # hosted runners, many concurrent bun processes each spawning git
+        # subprocesses hit fork EAGAIN, intermittently failing git-touching tests.
+        # macOS is the most starved runner, so it gets the tightest cap (the git
+        # helpers also retry transient spawn failures — this is the second layer).
         run: bun run test
         env:
-          MMA_TEST_CONCURRENCY: 4
+          MMA_TEST_CONCURRENCY: ${{ matrix.os == 'macos-latest' && '2' || '4' }}
       # Build/packaging phase: compiles this OS's binary, runs it natively
       # (--version), verifies embedded skills, and does a real npm pack/install.
       # --skip-docker: the runner IS this OS, so no cross-platform emulation needed.
