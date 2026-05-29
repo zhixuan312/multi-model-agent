@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRY = join(ROOT, 'packages/server/src/cli/index.ts');
-const VERSION = JSON.parse(readFileSync(join(ROOT, 'packages/server/package.json'), 'utf8')).version;
+const SERVER_PKG = JSON.parse(readFileSync(join(ROOT, 'packages/server/package.json'), 'utf8'));
+const VERSION = SERVER_PKG.version;
 
 // Map a bun --compile target to the npm package name + os/cpu/libc selectors.
 function platformPackage(target) {
@@ -94,13 +95,25 @@ c.on('exit', (code) => process.exit(code ?? 0));
 c.on('error', () => process.exit(0));
 `;
   writeFileSync(join(tlDir, 'postinstall.mjs'), postinstall);
+  // The top-level package is what consumers install and what npm renders, so it
+  // must carry the storefront metadata + README/LICENSE (sourced from the server
+  // package). Without these npm shows "no README / License none / Keywords none".
+  copyFileSync(join(ROOT, 'packages/server/README.md'), join(tlDir, 'README.md'));
+  copyFileSync(join(ROOT, 'packages/server/LICENSE'), join(tlDir, 'LICENSE'));
   const tl = {
     name: '@zhixuan92/multi-model-agent',
     version: VERSION,
+    description: SERVER_PKG.description,
+    keywords: SERVER_PKG.keywords,
+    license: SERVER_PKG.license,
+    homepage: SERVER_PKG.homepage,
+    repository: SERVER_PKG.repository
+      ? { type: SERVER_PKG.repository.type, url: SERVER_PKG.repository.url }
+      : undefined,
     bin: { mmagent: 'bin/mmagent.mjs', 'multi-model-agent': 'bin/mmagent.mjs' },
     scripts: { postinstall: 'node postinstall.mjs' },
     optionalDependencies: Object.fromEntries(built.map((n) => [n, VERSION])),
-    files: ['bin', 'postinstall.mjs'],
+    files: ['bin', 'postinstall.mjs', 'README.md', 'LICENSE'],
     engines: { node: '>=18' }, // the resolver shim runs under npm's node; the binary needs nothing
   };
   writeFileSync(join(tlDir, 'package.json'), JSON.stringify(tl, null, 2) + '\n');
