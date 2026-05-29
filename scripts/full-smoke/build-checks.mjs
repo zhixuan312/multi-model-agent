@@ -13,7 +13,7 @@
 // Pure Node/Bun child_process; no server required. Returns check records in the
 // same shape verify.mjs produces: [{ checkId, status: 'PASS'|'FAIL'|'SKIP', detail }].
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +21,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BUN = process.env.BUN_BIN || 'bun';
 
-function run(cmd, args, { cwd = ROOT, env = {}, timeoutMs = 600000 } = {}) {
+const IS_WIN = process.platform === 'win32';
+
+function run(cmd, args, { cwd = ROOT, env = {}, timeoutMs = 600000, shell = false } = {}) {
   const r = spawnSync(cmd, args, {
-    cwd, timeout: timeoutMs, encoding: 'utf8',
+    cwd, timeout: timeoutMs, encoding: 'utf8', shell,
     env: { ...process.env, MMAGENT_AUTH_TOKEN: undefined, ...env },
   });
   return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), err: r.error };
@@ -92,8 +94,14 @@ export async function runBuildChecks(opts = {}) {
     const home = mkdtempSync(join(tmpdir(), 'smoke-skill-'));
     try {
       mkdirSync(join(home, '.codex'), { recursive: true });
-      const sync = run(binPath, ['sync-skills', '--silent', '--best-effort'], { env: { HOME: home }, timeoutMs: 60000 });
-      const installed = run('find', [home, '-name', 'SKILL.md']).out.trim().split('\n').filter(Boolean);
+      // USERPROFILE is what os.homedir() reads on Windows (HOME on POSIX); set both
+      // so the binary installs into the throwaway dir on every platform.
+      const sync = run(binPath, ['sync-skills', '--silent', '--best-effort'], { env: { HOME: home, USERPROFILE: home }, timeoutMs: 60000 });
+      // Recursive walk instead of Unix `find` (Windows `FIND.EXE` is a text-search tool).
+      const installed = readdirSync(home, { recursive: true })
+        .map((p) => String(p))
+        .filter((p) => p.endsWith('SKILL.md'))
+        .map((p) => join(home, p));
       let expanded = false;
       if (installed[0]) expanded = !readFileSync(installed[0], 'utf8').includes('@include');
       const ok = sync.code === 0 && installed.length > 0 && expanded;
@@ -107,16 +115,23 @@ export async function runBuildChecks(opts = {}) {
     //    proves the bin resolver resolves the optional-dep package and execs the binary.
     const work = mkdtempSync(join(tmpdir(), 'smoke-npm-'));
     try {
+      // npm is npm.cmd on Windows; spawning a .cmd needs shell:true (and the OS
+      // resolves the extension). `ls` doesn't exist on Windows — use readdirSync.
+      const NPM = IS_WIN ? 'npm.cmd' : 'npm';
+      const npmOpts = { shell: IS_WIN };
       const tlDir = join(ROOT, 'binaries', '_toplevel');
-      const packTl = run('npm', ['pack', '--silent', '--pack-destination', work], { cwd: tlDir });
-      const packPlat = run('npm', ['pack', '--silent', '--pack-destination', work], { cwd: binDir });
-      const tgzs = run('ls', [work]).out.trim().split('\n').filter((f) => f.endsWith('.tgz')).map((f) => join(work, f));
+      const packTl = run(NPM, ['pack', '--silent', '--pack-destination', work], { cwd: tlDir, ...npmOpts });
+      const packPlat = run(NPM, ['pack', '--silent', '--pack-destination', work], { cwd: binDir, ...npmOpts });
+      const tgzs = readdirSync(work).map(String).filter((f) => f.endsWith('.tgz')).map((f) => join(work, f));
       const inst = join(work, 'install');
       mkdirSync(inst);
-      run('npm', ['init', '-y'], { cwd: inst });
-      const install = run('npm', ['install', '--no-audit', '--no-fund', '--no-save', ...tgzs], { cwd: inst, timeoutMs: 180000 });
-      const installedBin = join(inst, 'node_modules', '.bin', 'mmagent');
-      const binRun = existsSync(installedBin) ? run(installedBin, ['--version'], { cwd: inst, timeoutMs: 30000 }) : { code: 1, out: 'bin not linked' };
+      run(NPM, ['init', '-y'], { cwd: inst, ...npmOpts });
+      const install = run(NPM, ['install', '--no-audit', '--no-fund', '--no-save', ...tgzs], { cwd: inst, timeoutMs: 180000, ...npmOpts });
+      // npm links the bin as a bare shim on POSIX and as `<name>.cmd` on Windows.
+      const installedBin = join(inst, 'node_modules', '.bin', IS_WIN ? 'mmagent.cmd' : 'mmagent');
+      const binRun = existsSync(installedBin)
+        ? run(installedBin, ['--version'], { cwd: inst, timeoutMs: 30000, shell: IS_WIN })
+        : { code: 1, out: 'bin not linked' };
       const ok = packTl.code === 0 && packPlat.code === 0 && install.code === 0 && /\d+\.\d+\.\d+/.test(binRun.out);
       checks.push(check('npm-install-publish-shape', ok ? 'PASS' : 'FAIL',
         `pack/install/run -> '${binRun.out.trim()}' (install exit=${install.code})`));

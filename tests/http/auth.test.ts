@@ -28,7 +28,8 @@ describe('loadToken', () => {
     const tok = loadToken(f);
     expect(tok).toMatch(/^[a-zA-Z0-9_-]{20,}$/);
     expect(fs.readFileSync(f, 'utf8').trim()).toBe(tok);
-    expect(fs.statSync(f).mode & 0o777).toBe(0o600);
+    // Unix file-mode bits are not meaningful on Windows (chmod is a no-op there).
+    if (process.platform !== 'win32') expect(fs.statSync(f).mode & 0o777).toBe(0o600);
   });
 
   it('expands ~ to homedir', () => {

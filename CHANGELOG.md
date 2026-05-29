@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI matrix** (`.github/workflows/ci.yml`) running build + typecheck + the per-file test suite + native binary execution on linux/windows/macOS + an Alpine/musl container.
 - **Full-smoke build/packaging phase** (`--build-only`): toolchain + embedded-skills sync + binary compile/run + real `npm pack`/install + Docker linux glibc/musl execution.
 
+### Fixed
+
+- **Cross-platform correctness for the shipped Windows/Alpine binaries.** Path-confinement checks (`normalize-output-targets`, `scope-match`) now use `path.sep` instead of a hardcoded `/` so in-cwd writes aren't wrongly rejected on Windows; `git-toplevel` normalizes git's forward-slash output to an OS-native path; `execute-plan` uses `path.isAbsolute` instead of a `/`-prefix test; and `embedded-skills.ts` generation is now deterministic (sorted) so it doesn't drift by filesystem order. The full CI matrix (linux/windows/macOS + Alpine/musl) is green.
+
 ### Notes
 
 - **Subprocess code unchanged.** Codex (`cross-spawn`) and the git helpers stay on `node:child_process` — Bun implements those APIs (with working `detached` + `process.kill(-pid)` process groups); `Bun.spawn` cannot create process groups, so this was the correct choice.

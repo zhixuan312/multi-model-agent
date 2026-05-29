@@ -7,7 +7,9 @@ import { resolveSkillsForTask } from '../packages/core/src/lifecycle/task-runner
 // assert the skills-specific behavior at the resolve+stage seam that the
 // dispatcher calls, plus the per-task isolation guarantees.
 
-describe('delegate skills integration', () => {
+// Skill passthrough/staging is unsupported on Windows (skill-resolver throws
+// skill_isolation_unsupported first); the resolve+stage seam is exercised on POSIX.
+describe.skipIf(process.platform === 'win32')('delegate skills integration', () => {
   it('one task with a missing skill fails while a sibling with a valid skill resolves', async () => {
     // sibling A — valid skill resolves to a staged bundle
     const store = await mkdtemp(join(tmpdir(), 'mma-store-'));

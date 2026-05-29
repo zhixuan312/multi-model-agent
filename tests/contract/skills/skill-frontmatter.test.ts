@@ -16,12 +16,12 @@ interface Frontmatter {
 }
 
 function parseFrontmatter(md: string): Frontmatter {
-  const match = md.match(/^---\n([\s\S]*?)\n---/);
+  const match = md.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) throw new Error('no frontmatter');
   const block = match[1]!;
   const fm: Record<string, string> = {};
   let currentKey: string | null = null;
-  for (const line of block.split('\n')) {
+  for (const line of block.split(/\r?\n/)) {
     const kv = line.match(/^(\w[\w-]*):\s*(.*)$/);
     if (kv) {
       currentKey = kv[1]!;

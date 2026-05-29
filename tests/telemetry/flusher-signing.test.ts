@@ -10,8 +10,16 @@ import { getOrCreateIdentity } from '../../packages/server/src/telemetry/identit
 
 describe('flusher signing', () => {
   let dir: string;
+  // These tests replace globalThis.fetch with a 204 stub. Under bun's single
+  // shared process, NOT restoring it leaks the stub into every later test file
+  // (contract handler dispatches then see 204 instead of 202/400). Capture +
+  // restore so the suite is order-independent (bare `bun test` on Linux order).
+  const realFetch = globalThis.fetch;
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mma-flush-')); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it('sets X-Mmagent-Install-Id, X-Mmagent-Signature, X-Mmagent-Pubkey on every batch', async () => {
     const identity = getOrCreateIdentity(dir);

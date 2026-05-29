@@ -6,10 +6,19 @@ name: CI
 # a single macOS dev box cannot — no Docker/emulation needed in CI.
 
 on:
+  # push fires only for the long-lived branches (validates the post-merge state
+  # + direct pushes). Release/feature branches are validated via pull_request, so
+  # a release-branch push with an open PR runs CI ONCE (the PR), not twice.
   push:
-    branches: [main, master, 'release/**']
+    branches: [main, master]
   pull_request:
     branches: [main, master, 'release/**']
+
+# Cancel a branch/PR's in-flight run when a newer commit arrives, so stale runs
+# don't pile up (and don't waste runner minutes finishing work already superseded).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Static gates — OS-independent, so run once. eslint exits 0 on warnings
@@ -70,7 +79,13 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
       - name: Test suite (per-file isolation)
+        # Cap per-file concurrency below the default (8): on the resource-limited
+        # hosted runners (esp. macOS), 8 concurrent bun processes each spawning
+        # git subprocesses hit fork EAGAIN, intermittently failing git-touching
+        # tests. 4 keeps the suite fast while staying under the fork ceiling.
         run: bun run test
+        env:
+          MMA_TEST_CONCURRENCY: 4
       # Build/packaging phase: compiles this OS's binary, runs it natively
       # (--version), verifies embedded skills, and does a real npm pack/install.
       # --skip-docker: the runner IS this OS, so no cross-platform emulation needed.
@@ -87,7 +102,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install bun + toolchain deps
         run: |
-          apk add --no-cache bash unzip libstdc++ libgcc git
+          apk add --no-cache bash curl unzip libstdc++ libgcc git
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
       - name: Install workspace deps

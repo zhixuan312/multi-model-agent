@@ -2,19 +2,18 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execSync } from 'node:child_process';
 // Import whichever task-executor helper captures preTask state. Path may differ;
 // check the actual export name during implementation.
 import { capturePreTaskState } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
+import { initGitRepo, commit } from '../../helpers/git-repo.js';
 
 describe('task-executor preTask capture', () => {
   let cwd: string;
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'mma-pretask-'));
-    execSync('git init', { cwd });
-    execSync('git config user.email t@t.com && git config user.name t', { cwd, shell: '/bin/bash' });
+    initGitRepo(cwd);
     writeFileSync(join(cwd, 'tracked.txt'), 'tracked');
-    execSync('git add . && git commit -m init', { cwd, shell: '/bin/bash' });
+    commit(cwd, 'init');
     writeFileSync(join(cwd, 'untracked.txt'), 'untracked-existed-pre-task');
   });
 
