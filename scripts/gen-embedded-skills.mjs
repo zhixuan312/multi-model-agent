@@ -17,7 +17,10 @@ const OUT = join(ROOT, 'packages/server/src/skill-install/embedded-skills.ts');
 
 function walk(dir) {
   const files = [];
-  for (const e of readdirSync(dir)) {
+  // Sort entries so the emitted bundle is byte-identical regardless of the
+  // filesystem's readdir order (stable on macOS/APFS, arbitrary on Linux/ext4).
+  // Without this the macOS-committed embedded-skills.ts reads as STALE in Linux CI.
+  for (const e of readdirSync(dir).sort()) {
     const full = join(dir, e);
     if (statSync(full).isDirectory()) files.push(...walk(full));
     else if (e.endsWith('.md')) files.push(full);
