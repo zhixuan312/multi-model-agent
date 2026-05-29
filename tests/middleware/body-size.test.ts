@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'bun:test';
+import { tmpdir } from 'node:os';
 import { COMPRESSED_BODY_LIMIT_BYTES } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { startTestServer } from '../helpers/test-server.js';
+
+// A real existing directory for cwd: '/tmp' does not validate on Windows, so the
+// request would fail cwd validation before reaching the no_agent_config path.
+const REAL_CWD = encodeURIComponent(tmpdir());
 
 describe('body-size middleware', () => {
   it('413 when raw body exceeds compressed cap (256 KiB)', async () => {
@@ -20,7 +25,7 @@ describe('body-size middleware', () => {
     const s = await startTestServer({ server: { limits: { maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES } } });
     try {
       const small = JSON.stringify({ prompt: 'hello' });
-      const res = await fetch(`${s.url}/delegate?cwd=/tmp`, {
+      const res = await fetch(`${s.url}/delegate?cwd=${REAL_CWD}`, {
         method: 'POST',
         body: small,
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}`, 'content-type': 'application/json' },
