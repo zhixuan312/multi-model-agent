@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.0.0] - Unreleased
+## [5.0.0] - 2026-05-29
 
 **Runtime migration: Node.js → Bun.** The entire toolchain and product runtime moves to Bun — runtime, test runner, package manager, declared engine, and distribution — while behavior stays identical (contract goldens byte-identical, full live 18-scenario smoke clean). Major bump for the breaking runtime/distribution change; `SCHEMA_VERSION` stays 5.
 
@@ -885,7 +885,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.1...v5.0.0
 [4.9.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...v4.9.1
 [4.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...v4.8.0
