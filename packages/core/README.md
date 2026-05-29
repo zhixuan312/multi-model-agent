@@ -1,6 +1,6 @@
 # @zhixuan92/multi-model-agent-core
 
-**Runtime library for multi-model-agent.** Import it to run multi-provider agent tasks directly from your own Node program — same routing, supervision, and review pipeline, without the HTTP server.
+**Runtime library for multi-model-agent.** Import it to run multi-provider agent tasks directly from your own Bun or Node program — same routing, supervision, and review pipeline, without the HTTP server.
 
 > **Want the standalone service instead?** Install [`@zhixuan92/multi-model-agent`](https://www.npmjs.com/package/@zhixuan92/multi-model-agent) — it wraps this library in a local HTTP daemon with client-installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.
 
@@ -10,7 +10,7 @@
 npm install @zhixuan92/multi-model-agent-core
 ```
 
-Requires Node >= 22. ESM only.
+Bun-first (`engines.bun >= 1.3`); the published `dist/` build also runs on Node >= 22. ESM only.
 
 ## Quick example
 
