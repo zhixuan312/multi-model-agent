@@ -13,7 +13,7 @@
 // Pure Node/Bun child_process; no server required. Returns check records in the
 // same shape verify.mjs produces: [{ checkId, status: 'PASS'|'FAIL'|'SKIP', detail }].
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,8 +92,14 @@ export async function runBuildChecks(opts = {}) {
     const home = mkdtempSync(join(tmpdir(), 'smoke-skill-'));
     try {
       mkdirSync(join(home, '.codex'), { recursive: true });
-      const sync = run(binPath, ['sync-skills', '--silent', '--best-effort'], { env: { HOME: home }, timeoutMs: 60000 });
-      const installed = run('find', [home, '-name', 'SKILL.md']).out.trim().split('\n').filter(Boolean);
+      // USERPROFILE is what os.homedir() reads on Windows (HOME on POSIX); set both
+      // so the binary installs into the throwaway dir on every platform.
+      const sync = run(binPath, ['sync-skills', '--silent', '--best-effort'], { env: { HOME: home, USERPROFILE: home }, timeoutMs: 60000 });
+      // Recursive walk instead of Unix `find` (Windows `FIND.EXE` is a text-search tool).
+      const installed = readdirSync(home, { recursive: true })
+        .map((p) => String(p))
+        .filter((p) => p.endsWith('SKILL.md'))
+        .map((p) => join(home, p));
       let expanded = false;
       if (installed[0]) expanded = !readFileSync(installed[0], 'utf8').includes('@include');
       const ok = sync.code === 0 && installed.length > 0 && expanded;
