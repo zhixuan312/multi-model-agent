@@ -1,29 +1,30 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { ClaudeSession } from '../../packages/core/src/providers/claude-session.js';
 
-vi.mock('@anthropic-ai/claude-agent-sdk', () => {
-  const capturedQueries: Array<{ env?: Record<string, string> }> = [];
-  return {
-    query: vi.fn((args: any) => {
-      capturedQueries.push({ env: args.options?.env });
-      // return a minimal async iterable that yields one result event then ends
-      return {
-        [Symbol.asyncIterator]() {
-          let done = false;
-          return {
-            async next() {
-              if (done) return { value: undefined, done: true };
-              done = true;
-              return { value: { type: 'result', subtype: 'success', result: '', session_id: 'x', usage: {} }, done: false };
-            },
-          };
-        },
-        close() {},
-      };
-    }),
-    __capturedQueries: capturedQueries,
-  };
-});
+// Inject a fake SDK query via ClaudeSession's queryFn arg instead of
+// mock.module('@anthropic-ai/claude-agent-sdk') — under Bun mock.module is
+// process-global and sticky, so mocking the SDK leaked into every later
+// claude-provider test (env isolation, safety-ceiling, etc.).
+function makeFakeQuery(captured: Array<{ env?: Record<string, string> }>) {
+  return ((args: any) => {
+    captured.push({ env: args.options?.env });
+    return {
+      [Symbol.asyncIterator]() {
+        let done = false;
+        return {
+          async next() {
+            if (done) return { value: undefined, done: true };
+            done = true;
+            return { value: { type: 'result', subtype: 'success', result: '', session_id: 'x', usage: {} }, done: false };
+          },
+        };
+      },
+      close() {},
+    };
+  }) as any;
+}
+
+const baseOpts = () => ({ cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B' } as any);
 
 describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
   let envSnapshot: Record<string, string | undefined>;
@@ -44,15 +45,15 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
   });
 
   it('A3.2 — two concurrent sessions with distinct apiKey each call SDK with their own key', async () => {
-    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
-    mockSdk.__capturedQueries.length = 0;
+    const captured: Array<{ env?: Record<string, string> }> = [];
+    const queryFn = makeFakeQuery(captured);
 
-    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A' });
-    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
+    const sessA = new ClaudeSession({ model: 'm', opts: { ...baseOpts(), taskIndex: 0 }, apiKey: 'KEY-A', queryFn });
+    const sessB = new ClaudeSession({ model: 'm', opts: { ...baseOpts(), taskIndex: 1 }, apiKey: 'KEY-B', queryFn });
 
     await Promise.all([sessA.send('hi-a'), sessB.send('hi-b')]);
 
-    const keys = mockSdk.__capturedQueries.map((q: any) => q.env?.ANTHROPIC_API_KEY).filter(Boolean).sort();
+    const keys = captured.map((q) => q.env?.ANTHROPIC_API_KEY).filter(Boolean).sort();
     expect(keys).toEqual(['KEY-A', 'KEY-B']);
   });
 
@@ -62,9 +63,10 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
       b: process.env.ANTHROPIC_BASE_URL,
       t: process.env.ANTHROPIC_AUTH_TOKEN,
     };
+    const queryFn = makeFakeQuery([]);
 
-    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A', baseUrl: 'https://a.example' });
-    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
+    const sessA = new ClaudeSession({ model: 'm', opts: { ...baseOpts(), taskIndex: 0 }, apiKey: 'KEY-A', baseUrl: 'https://a.example', queryFn });
+    const sessB = new ClaudeSession({ model: 'm', opts: { ...baseOpts(), taskIndex: 1 }, apiKey: 'KEY-B', queryFn });
 
     await Promise.all([sessA.send('hi-a'), sessB.send('hi-b')]);
 

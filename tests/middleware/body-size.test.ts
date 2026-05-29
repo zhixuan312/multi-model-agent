@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { COMPRESSED_BODY_LIMIT_BYTES } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { startTestServer } from '../helpers/test-server.js';
 

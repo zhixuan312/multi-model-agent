@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { discoverPerClientInstallDirs } from '../../packages/server/src/skill-install/discover.js';
 import type { Client } from '../../packages/server/src/skill-install/manifest.js';
 

@@ -1,4 +1,4 @@
-// packages/core/src/lifecycle/research-pre-loop.ts
+// packages/core/src/research/research-pre-loop.ts
 //
 // Called from perform-implementation BEFORE runReadRouteImplementer when
 // the route is /research. Runs turn-1 plan + Step-2 orchestrator, then
@@ -10,14 +10,14 @@
 import type { Session } from '../types/run-result.js';
 import type { ResearchConfig } from '../config/schema.js';
 import { runTwoTurnDriver } from '../tools/research/two-turn-driver.js';
-import { runOrchestrator } from '../research/orchestrator.js';
+import { runOrchestrator } from './orchestrator.js';
 import {
   resolveEnabledAdapters,
   arxivSearch, semanticScholarSearch, githubSearch,
-} from '../research/adapters/index.js';
-import { BraveClient } from '../research/web-search.js';
+} from './adapters/index.js';
+import { BraveClient } from './web-search.js';
 import { compileResearchImplementerPrefix } from '../tools/research/brief-slot.js';
-import { summarizeSourcesUsed, type EvidencePack, type SourceUsage } from '../research/evidence-pack.js';
+import { summarizeSourcesUsed, type EvidencePack, type SourceUsage } from './evidence-pack.js';
 
 export interface ResearchPreLoopInput {
   session:               Pick<Session, 'send'>;

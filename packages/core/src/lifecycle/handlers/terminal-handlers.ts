@@ -1,13 +1,14 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { RuntimeRunResult, TaskSpec } from '../../types.js';
+import type { RuntimeRunResult } from '../../types.js';
 import type { StageGate, TerminalPayload } from '../stage-io.js';
-import { findModelProfile } from '../../config/model-profile-registry.js';
-import { getRealFilesChanged } from '../real-diff.js';
+import { getRealFilesChanged } from '../../bounded-execution/real-diff.js';
 import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
 import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
 import { renderTerminalReportMarkdown } from '../../reporting/terminal-report-markdown.js';
 import { WRITE_ROUTES } from '../stage-io.js';
+import { findEscapedWrites } from '../file-confinement-check.js';
+import type { ErrorCode } from '../../error-codes.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -137,21 +138,42 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     sealStatus = ws === 'done' ? 'done' : ws === 'done_with_concerns' ? 'done_with_concerns' : 'failed';
   }
 
-  // Carry commit outcome onto the envelope so the response's structuredReport
-  // surfaces the real SHA/message (the response is built from envelope
-  // snapshots, not from state.lastRunResult). Sourced from the commit gate
-  // payload — authoritative and per-worker pathspec-scoped.
+  // Commit outcome (authoritative, from the commit gate) — computed BEFORE the
+  // confinement guard so it can corroborate the worker's self-reported writes.
+  // Carried onto the envelope below so the response's structuredReport surfaces
+  // the real SHA/message (the response is built from envelope snapshots).
   const commitGate = state.gates?.['commit'];
   const commitPayload = (commitGate?.outcome === 'advance' ? commitGate.payload : null) as
     { kind?: string; commitSha?: string; commitMessage?: string; reason?: string } | null;
   const didCommit = commitPayload?.kind === 'committed';
+
+  // Confinement guard: a worker must only write under its dispatched cwd. A
+  // reported write that escaped (e.g. into a sibling git worktree / the daemon's
+  // startup cwd) is a real mislocation. BUT the worker-reported filesWritten
+  // string is unreliable — LLM workers routinely report normalized/relative/
+  // hallucinated absolute paths (e.g. "/repo/src/x.ts" or "/workspace/src/x.ts")
+  // for a file actually written under the dispatched cwd. So hard-fail ONLY when
+  // the worker claims an escaped write AND no commit landed in cwd (didCommit =
+  // false → the write is not in this repo → it genuinely wrote elsewhere). When a
+  // commit DID land in cwd, the self-reported path is a hallucination — record an
+  // advisory warning rather than failing a legitimate, committed task on an
+  // unreliable self-report string. (The git commit is the authoritative signal.)
+  let escapeErrorCode: ErrorCode | null = null;
+  const escaped = findEscapedWrites(last?.filesWritten ?? [], ctx.cwd);
+  if (escaped.length > 0) {
+    envelope.recordValidationWarning({ rule: 'WorkerWriteEscapedCwd', path: escaped.join(', ') });
+    if (!didCommit) {
+      sealStatus = 'failed';
+      escapeErrorCode = 'tool_sandbox_cwd_violation';
+    }
+  }
 
   envelope.seal({
     status: sealStatus,
     terminalAt: new Date().toISOString(),
     stopReason: last?.terminationReason?.cause ?? null,
     structuredError: last?.structuredError ?? null,
-    errorCode: (last as { errorCode?: import('../../error-codes.js').ErrorCode | null } | undefined)?.errorCode ?? null,
+    errorCode: escapeErrorCode ?? (last as { errorCode?: ErrorCode | null } | undefined)?.errorCode ?? null,
     realFilesChanged: real.files,
     commitSha: didCommit ? (commitPayload?.commitSha ?? null) : null,
     commitMessage: didCommit ? (commitPayload?.commitMessage ?? null) : null,
@@ -159,68 +181,6 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     contextBlockId: state.contextBlockId ?? null,
   });
   state.taskCompletedRecorded = true;
-}
-
-/**
- * Synthesize an `implementing` stage entry from top-level RuntimeRunResult fields
- * when the per-stage tracker hasn't populated it. Without this, the wire
- * event ships with `stages: []` for every task, which violates the backend's
- * R2.1 invariant ("empty stages only allowed for brief_too_vague|error")
- * for any task that succeeded — every upload would 400.
- *
- * This is a fallback; it does not replace stats already populated by the
- * runner-shell or lifecycle stage tracker.
- */
-function ensureImplementingStage(
-  rr: RuntimeRunResult,
-  ctx: {
-    assignedTier?: 'standard' | 'complex';
-    implementerProvider?: { config?: { model?: string } };
-  },
-): void {
-  // Even when no LLM call ever fires (runner_crash, all_tiers_unavailable,
-  // dispatcher-no-result), the configured implementer model is known up
-  // front via ctx.implementerProvider.config. Stamp it into the synthesized
-  // stage and the top-level rr.models so the wire row reports the *intended*
-  // model instead of the literal 'custom' fallback in event-builder.
-  const fallbackModel =
-    (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null;
-  const fallbackFamily = fallbackModel ? findModelProfile(fallbackModel).family : null;
-
-  if (rr.models === undefined && fallbackModel !== null) {
-    (rr as { models?: RuntimeRunResult['models'] }).models = {
-      implementer: fallbackModel,
-      specReviewer: undefined,
-      qualityReviewer: undefined,
-    };
-  }
-
-  const existing = (rr.stageStats?.implementing) as { entered?: boolean } | undefined;
-  if (existing?.entered) return;
-  const usage = rr.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
-  const synthesized = {
-    stage: 'implementing' as const,
-    entered: true,
-    durationMs: rr.durationMs ?? 0,
-    costUSD: rr.cost?.costUSD ?? null,
-    agentTier: ctx.assignedTier ?? 'standard',
-    modelFamily: fallbackFamily,
-    model: fallbackModel,
-    maxIdleMs: 0,
-    totalIdleMs: 0,
-    activityEvents: 0,
-    inputTokens: usage.inputTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    cachedReadTokens: usage.cachedReadTokens ?? 0,
-    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
-    turnCount: rr.turns ?? 0,
-    filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
-    directoriesListed: 0,
-  };
-  (rr as { stageStats?: Record<string, unknown> }).stageStats = {
-    ...((rr.stageStats as Record<string, unknown> | undefined) ?? {}),
-    implementing: synthesized,
-  };
 }
 
 interface RecorderLike {

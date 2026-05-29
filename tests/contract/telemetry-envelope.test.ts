@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uploader.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';

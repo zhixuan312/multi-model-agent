@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { multiModelConfigSchema } from '../../packages/core/src/config/schema.js';
 
 describe('server.limits cap defaults', () => {

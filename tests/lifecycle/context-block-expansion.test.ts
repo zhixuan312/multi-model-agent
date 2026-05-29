@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as os from 'node:os';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';

@@ -3,7 +3,7 @@
 // flat StageDefinition[] of 9 stages with applicableRoutes + shouldRun
 // gating, not per-row runConditions.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

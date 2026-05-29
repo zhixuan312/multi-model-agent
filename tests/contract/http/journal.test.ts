@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ describe('contract: POST /journal lifecycle', () => {
           'X-MMA-Client': 'claude-code',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ learning: 'x'.repeat(25), tagHints: ['journal'] }),
+        body: JSON.stringify({ learnings: ['x'.repeat(25)], tagHints: ['journal'] }),
       });
       expect(res.status).toBe(202);
       const { batchId } = (await res.json()) as { batchId: string };

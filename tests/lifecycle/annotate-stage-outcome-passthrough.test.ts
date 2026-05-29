@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { annotator } from '../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 
 function makeReadRouteState(findingsOutcome: 'found' | 'clean' | 'not_applicable', reason: string | null = null) {

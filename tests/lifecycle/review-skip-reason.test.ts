@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 

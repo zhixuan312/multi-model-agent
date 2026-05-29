@@ -1,7 +1,7 @@
 // packages/core/src/bounded-execution/progress-watchdog.ts
 import { spawn } from 'node:child_process';
-import { getRealFilesChanged } from '../lifecycle/real-diff.js';
-import { normalizeScopeEntry, isInScope, type NormalizedScopeEntry } from '../lifecycle/scope-match.js';
+import { getRealFilesChanged } from './real-diff.js';
+import { normalizeScopeEntry, isInScope, type NormalizedScopeEntry } from './scope-match.js';
 import type { LifecycleState } from '../lifecycle/stage-plan-types.js';
 
 export interface ProgressWatchdogConfig {

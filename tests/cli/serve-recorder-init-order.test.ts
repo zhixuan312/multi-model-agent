@@ -20,7 +20,7 @@
 // init-order property. Source-text inspection is the minimum-cost,
 // maximum-precision check for this specific failure mode.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';

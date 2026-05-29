@@ -1,5 +1,5 @@
 // tests/lifecycle/progress-watchdog-integration.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { boot } from '../contract/fixtures/harness.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 

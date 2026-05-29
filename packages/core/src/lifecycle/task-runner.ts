@@ -12,7 +12,6 @@ import { resolveAndStageSkills, cleanupSkillStaging, SkillResolutionError } from
 
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { ExecutionContext } from './lifecycle-context.js';
-import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../providers/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';

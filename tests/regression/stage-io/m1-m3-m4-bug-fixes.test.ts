@@ -8,7 +8,7 @@
 // They prove the bug-fix commits (Task 15 + the M3/M4 compose fix) actually
 // resolve the user-reported failure mode.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { composeHandler } from '../../../packages/core/src/lifecycle/handlers/baseline-handlers.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 

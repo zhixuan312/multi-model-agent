@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { z } from 'zod';
 import { ToolSurfaceRegistry } from '../../packages/core/src/tool-surface/tool-surface-registry.js';
 

@@ -9,7 +9,7 @@
 // isolation here; observability cross-checks live in
 // tests/acceptance/stage-io-compose.test.ts.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { composeHandler } from '../../../packages/core/src/lifecycle/handlers/baseline-handlers.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 import type {

@@ -49,7 +49,7 @@ export interface BootOptions {
   diagnosticsLog?: boolean;
 }
 
-function installLoopbackOnlyFetch(): void {
+function installLoopbackOnlyFetch(): () => void {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const requestUrl = typeof input === 'string'
@@ -63,11 +63,20 @@ function installLoopbackOnlyFetch(): void {
     }
     return originalFetch(input, init);
   }) as typeof globalThis.fetch;
+  return () => { globalThis.fetch = originalFetch; };
+}
+
+/** Restore an env var to its pre-boot value (delete if it was unset). */
+function restoreEnv(key: string, prev: string | undefined): void {
+  if (prev === undefined) delete process.env[key];
+  else process.env[key] = prev;
 }
 
 export async function boot(opts: BootOptions): Promise<HarnessHandle> {
-  installLoopbackOnlyFetch();
+  const restoreFetch = installLoopbackOnlyFetch();
   freezeClock();
+  const prevIntrospection = process.env.MMAGENT_TEST_INTROSPECTION;
+  const prevProviderOverride = process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
   process.env.MMAGENT_TEST_INTROSPECTION = '1';
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
   __setCoreTestProviderOverride(opts.provider);
@@ -136,6 +145,9 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
       await server.stop();
       __setCoreTestProviderOverride(null);
       __setCoreTestProviderOverrideMap(null);
+      restoreFetch();
+      restoreEnv('MMAGENT_TEST_INTROSPECTION', prevIntrospection);
+      restoreEnv('MMAGENT_TEST_PROVIDER_OVERRIDE', prevProviderOverride);
       await unlink(tokenPath).catch(() => undefined);
     },
   };

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { runReadRouteImplementer } from '../../../packages/core/src/lifecycle/handlers/read-route-implementer.js';
 import { WARM_FOLLOWUP_PREAMBLE } from '../../../packages/core/src/lifecycle/warm-followup.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';

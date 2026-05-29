@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { toolConfig } from '../../packages/core/src/tools/investigate/tool-config.js';
 import type {
   EnrichedInvestigateInput,

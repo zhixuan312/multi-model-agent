@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as schemas from '@zhixuan92/multi-model-agent-core/tools/index';
 
 const REQUIRED_FIELDS = ['headline','results','batchTimings','costSummary','structuredReport','error'] as const;

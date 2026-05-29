@@ -1,5 +1,5 @@
 // tests/server/handlers/tools/debug.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { startTestServerWithAgents } from '../../../helpers/test-server-with-agents.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';

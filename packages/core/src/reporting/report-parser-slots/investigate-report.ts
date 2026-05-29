@@ -173,7 +173,6 @@ function detectNeedsContext(unresolvedLines: string[]): boolean {
 
 // ── Finding block parsing ──
 
-const FINDING_BLOCK_RE = /^##\s+finding\s+\d+:\s*(.+)$/im;
 const EVIDENCE_BULLET_RE = /^(?:[-*]|\d+[.)])\s+evidence:\s*(.+)$/im;
 
 function parseEvidenceLine(line: string): { isNone: boolean; citations: Citation[]; malformed: number } {

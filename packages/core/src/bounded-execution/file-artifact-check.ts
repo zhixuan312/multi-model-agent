@@ -2,7 +2,7 @@
 // Callers set ctx.outputTargets in task-runner; the implementer stage handler
 // invokes checkOutputTargets() post-task to verify each path exists on disk.
 
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 
 /**
  * Returns the subset of `outputTargets` that do NOT exist on disk.

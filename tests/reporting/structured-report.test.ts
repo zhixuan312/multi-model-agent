@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { structuredReportSuffix, parseStructuredReport, commitSchema } from '@zhixuan92/multi-model-agent-core/reporting/structured-report';
 
 describe('structuredReportSuffix', () => {

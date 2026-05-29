@@ -16,7 +16,7 @@
 // shipped this fix to close. See
 // `docs/superpowers/specs/...` for the full investigation.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { __test } from '../../packages/core/src/providers/codex-cli-session.js';

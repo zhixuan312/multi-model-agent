@@ -7,7 +7,6 @@
 import type { Session, TurnResult } from '../../types/run-result.js';
 import { parseQueryPlan, type QueryPlan } from '../../research/query-plan.js';
 import type { EvidencePack } from '../../research/evidence-pack.js';
-import type { runOrchestrator as RunOrchestrator } from '../../research/orchestrator.js';
 import { compileTurn1PlanPrompt } from './brief-slot.js';
 
 export interface TwoTurnDeps {

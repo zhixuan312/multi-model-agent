@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { gzipSync } from 'node:zlib';
 import { decompressBody } from '../../packages/server/src/http/middleware/decompress.js';
 import { boot } from '../contract/fixtures/harness.js';

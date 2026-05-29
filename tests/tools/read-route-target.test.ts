@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { toolConfig as audit } from '../../packages/core/src/tools/audit/tool-config.js';
 import { toolConfig as review } from '../../packages/core/src/tools/review/tool-config.js';
 import { toolConfig as debug } from '../../packages/core/src/tools/debug/tool-config.js';

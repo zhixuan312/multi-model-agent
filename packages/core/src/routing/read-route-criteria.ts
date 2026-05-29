@@ -5,7 +5,7 @@ import {
   type CachedPrefixTarget,
   type CachedPrefixBlocks,
 } from '../tools/read-route-prompt.js';
-import type { ReadOnlySubtypeSpec } from './read-only-subtype-spec.js';
+import type { ReadOnlySubtypeSpec } from '../lifecycle/read-only-subtype-spec.js';
 import { AUDIT_SUBTYPES, type AuditSubtype } from '../tools/audit/subtypes.js';
 import { REVIEW_SUBTYPES, type ReviewSubtype } from '../tools/review/subtypes.js';
 import { DEBUG_SUBTYPES, type DebugSubtype } from '../tools/debug/subtypes.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { parseReviewReport } from '../../../packages/core/src/lifecycle/handlers/parse-review-report.js';
 
 describe('parse-review-report', () => {

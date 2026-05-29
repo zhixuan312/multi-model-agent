@@ -5,7 +5,7 @@
 // produced strings mention each precondition the parser enforces and that
 // secret-like substrings (OPENAI_API_KEY, etc.) cannot leak into them.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   annotatePromptWrite,
   annotatePromptRead,

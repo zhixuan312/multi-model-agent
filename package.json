@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "4.9.1",
+  "version": "5.0.0",
   "private": true,
   "license": "MIT",
   "description": "Local HTTP service that delegates tool-using work to sub-agents on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
@@ -27,29 +27,28 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:perf": "MMAGENT_PERF_CHECK=1 vitest run tests/perf/",
-    "test:perf:baseline": "MMAGENT_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
-    "serve": "node packages/server/dist/cli/index.js serve",
-    "smoke:full": "node scripts/full-smoke/index.mjs",
-    "smoke:disable-enable": "node scripts/demo-disable-enable.mjs",
-    "regen:observability-golden": "npx tsx tests/contract/regen-observability-golden.ts",
+    "build": "bun scripts/gen-embedded-skills.mjs && bun run --filter='*' build",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/server/tsconfig.json",
+    "test": "bun run scripts/run-tests.mjs",
+    "test:watch": "bun test --watch",
+    "test:perf": "MMAGENT_PERF_CHECK=1 bun test tests/perf/",
+    "test:perf:baseline": "MMAGENT_PERF_SUITE=1 bun test tests/perf/record-baseline.test.ts",
+    "serve": "bun packages/server/dist/cli/index.js serve",
+    "smoke:full": "bun scripts/full-smoke/index.mjs",
+    "smoke:disable-enable": "bun scripts/demo-disable-enable.mjs",
+    "regen:observability-golden": "bun tests/contract/regen-observability-golden.ts",
     "lint": "eslint packages",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "bun": ">=1.3.0"
   },
   "devDependencies": {
-    "@openai/agents": "^0.8.0",
+    "@types/bun": "^1.3.14",
     "dependency-cruiser": "^17.4.0",
     "eslint": "^10.3.0",
     "gray-matter": "^4.0.3",
-    "openai": "^6.0.0",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.59.2",
-    "vitest": "^3.0.0"
+    "typescript-eslint": "^8.59.2"
   }
 }

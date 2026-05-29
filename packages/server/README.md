@@ -25,7 +25,7 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
+npm i -g @zhixuan92/multi-model-agent       # standalone binary (Bun embedded) — npm uses Node ≥18 only to install; the daemon needs no Node/Bun
 mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -233,7 +233,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-15 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+16 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
@@ -250,6 +250,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
+| `POST /control/batch-slice` | Slice an in-flight batch — return a subset of its tasks by index |
 | `GET /health` | Liveness probe (unauthenticated, loopback-only) |
 | `GET /status` | Server status (authenticated, loopback-only) |
 
@@ -288,7 +289,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
 ## What's new in 4.9.0

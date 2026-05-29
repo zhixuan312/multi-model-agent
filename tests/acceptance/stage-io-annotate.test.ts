@@ -4,7 +4,7 @@
 // Annotator parser / passthrough / invented-findings / transport-fallback /
 // commit-message honesty / recovery-message specificity.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { applyAnnotatePreconditions } from '../../packages/core/src/lifecycle/annotate-parser.js';
 import { annotator } from '../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 import type { AnnotatePayload } from '../../packages/core/src/lifecycle/stage-io.js';

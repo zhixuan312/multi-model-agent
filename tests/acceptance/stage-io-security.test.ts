@@ -9,7 +9,7 @@
 // this file is the contract-level test that applies the same security
 // guarantees across the full set of LLM-backed handlers.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   annotatePromptWrite, annotatePromptRead, serializeWriteContext, serializeReadContext,
 } from '../../packages/core/src/lifecycle/annotate-prompts.js';

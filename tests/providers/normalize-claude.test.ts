@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { normalizeClaudeTurn } from '../../packages/core/src/providers/normalize-claude.js';
 
 const asst = (text: string) =>

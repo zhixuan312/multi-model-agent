@@ -4,9 +4,7 @@
 // route applicability (Layer 1: applicableRoutes) and dynamic state-level
 // participation (Layer 2: shouldRun). The new driver walks this in order.
 
-import type { StageDefinition, ImplementPayload, ReviewPayload, ReworkPayload,
-              CommitPayload, AnnotatePayload, ComposePayload, TerminalPayload,
-              RegisterBlockPayload } from './stage-io.js';
+import type { StageDefinition, ReviewPayload } from './stage-io.js';
 import { ALL_TASK_ROUTES, WRITE_ROUTES, currentWork } from './stage-io.js';
 
 // We import handler functions where they exist as exports; this is fine for
@@ -124,8 +122,9 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
       // cheap workers under-report their writes, which previously caused the
       // gate to skip while git actually had changes, so real work went
       // uncommitted. The commit handler is the single authority on
-      // commit-vs-no_op: it uses getRealFilesChanged() (git diff + untracked)
-      // and returns no_op:no_diff when nothing genuinely changed.
+      // commit-vs-no_op: it stages the worker-written files (workerWrittenFiles)
+      // and runs `git diff --cached --quiet` on them, returning no_op:no_diff
+      // when nothing genuinely changed.
       const work = currentWork({ gates: (state.gates ?? {}) as Record<string, import('./stage-io.js').StageGate<unknown>> });
       if (!work) {
         return { run: false, comment: 'commit skipped because no implementation work advanced' };

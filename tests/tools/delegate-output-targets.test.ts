@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { toolConfig } from '../../packages/core/src/tools/delegate/tool-config.js';
 import { delegateBriefSlot } from '../../packages/core/src/tools/delegate/brief-slot.js';
 

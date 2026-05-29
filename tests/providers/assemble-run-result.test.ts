@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { assembleRunResult } from '../../packages/core/src/providers/assemble-run-result.js';
 import type { TurnResult } from '../../packages/core/src/types/run-result.js';
 

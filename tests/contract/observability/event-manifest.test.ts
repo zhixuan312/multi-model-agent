@@ -1,6 +1,6 @@
 import manifest from '../goldens/observability/event-manifest.json' with { type: 'json' };
 import { PlainLogKindEnum, PROVIDER_EVENT_NAMES } from '../../../packages/core/src/events/plain-log-entry.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 describe('observability event manifest', () => {
   it('contains exactly 12 plain log kinds', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   WARM_FOLLOWUP_PREAMBLE,
   buildWarmFollowupMessage,

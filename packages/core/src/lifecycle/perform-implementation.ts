@@ -11,16 +11,33 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { parseFindings } from './findings-parser.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
-import { resolveSubtypeSpec, isReadOnlyRoute } from './read-route-criteria.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from '../routing/read-route-criteria.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
-import { readFile as fsReadFile } from 'fs/promises';
+import { readFile as fsReadFile } from 'node:fs/promises';
 
 function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
   try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
 }
 
-export async function performImplementation(state: LifecycleState): Promise<void> {
+// Deep deps (watchdog + read-route dispatch/criteria) are injectable, defaulting
+// to the real implementations, so tests substitute fakes WITHOUT process-global
+// mock.module(...) — sticky under Bun and a cross-file leak source.
+export interface PerformImplementationDeps {
+  startProgressWatchdog: typeof startProgressWatchdog;
+  recordPostHocSignals: typeof recordPostHocSignals;
+  runReadRouteImplementer: typeof runReadRouteImplementer;
+  resolveSubtypeSpec: typeof resolveSubtypeSpec;
+  isReadOnlyRoute: typeof isReadOnlyRoute;
+}
+const DEFAULT_PERFORM_IMPL_DEPS: PerformImplementationDeps = {
+  startProgressWatchdog, recordPostHocSignals, runReadRouteImplementer, resolveSubtypeSpec, isReadOnlyRoute,
+};
+
+export async function performImplementation(
+  state: LifecycleState,
+  deps: PerformImplementationDeps = DEFAULT_PERFORM_IMPL_DEPS,
+): Promise<void> {
   const task = state.task as TaskSpec | undefined;
   const ctx = state.executionContext as ExecutionContext | undefined;
   if (!task || !ctx) {
@@ -54,10 +71,10 @@ export async function performImplementation(state: LifecycleState): Promise<void
   // tool's SUBTYPES map; the dispatcher uses that to build the cached
   // prefix + per-criterion suffix.
   const route = state.route ?? 'delegate';
-  if (state.toolCategory === 'read_only' && isReadOnlyRoute(route)) {
+  if (state.toolCategory === 'read_only' && deps.isReadOnlyRoute(route)) {
     try {
       const taskWithSubtype = task as TaskSpec & { subtype?: string };
-      const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
+      const routeSpec = deps.resolveSubtypeSpec(route, taskWithSubtype.subtype);
       const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
       const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
       const preReadFiles: Record<string, string> = {};
@@ -98,7 +115,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
         // Pull research-specific task fields from the TaskSpec contract.
         const r = task.research;
         if (!r) throw new Error('research_route_missing_input');
-        const { runResearchPreLoop } = await import('./research-pre-loop.js');
+        const { runResearchPreLoop } = await import('../research/research-pre-loop.js');
         const preLoop = await runResearchPreLoop({
           session: ctx.getSession(decision.impl),
           researchQuestion: r.researchQuestion,
@@ -119,7 +136,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
       // criteria. Earlier criteria's tool results stay in the session
       // context so later criteria don't re-discover the same files.
       const session = ctx.getSession(decision.impl);
-      const dispatchResult = await runReadRouteImplementer({
+      const dispatchResult = await deps.runReadRouteImplementer({
         session,
         cachedPrefix,
         criteria: routeSpec.criteria,
@@ -239,7 +256,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
   // Wire the watchdog. ctx.stall.controller is the existing AbortController
   // passed into session.send via TurnOpts.signal — when the watchdog fires,
   // the controller's abort propagates into the active subprocess.
-  const disposeWatchdog = startProgressWatchdog({
+  const disposeWatchdog = deps.startProgressWatchdog({
     state,
     controller: ctx.stall.controller,
     emit: (_event) => { /* signals flow via envelope + log-writer */ },
@@ -321,7 +338,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
 
     // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
     // adds new signals state for sub-project B's annotator).
-    await recordPostHocSignals(
+    await deps.recordPostHocSignals(
       state,
       enrichedResult.turns ?? 0,
       wdConfig,

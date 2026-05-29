@@ -1,0 +1,3 @@
+[test]
+root = "."
+preload = ["./tests/setup/bun-test-preload.ts"]

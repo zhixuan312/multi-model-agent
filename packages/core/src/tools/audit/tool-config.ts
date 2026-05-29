@@ -1,4 +1,4 @@
-import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
+import type { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema, type Input } from './schema.js';
 import { auditBriefSlot, type AuditBrief } from './brief-slot.js';
 import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';

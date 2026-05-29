@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 
 describe('Executor surfaces structured runner_crash code', () => {

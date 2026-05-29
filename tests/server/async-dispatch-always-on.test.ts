@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { startTestServerWithAgents } from '../helpers/test-server-with-agents.js';
 
 describe('async-dispatch — always-on breadcrumbs (A5)', () => {

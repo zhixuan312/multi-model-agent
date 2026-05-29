@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * CLI entry point for `mmagent` / `multi-model-agent`.
  *
@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import minimist, { type ParsedArgs } from 'minimist';
+import { resolveServerVersion } from '../version.js';
 import {
   loadConfigFromFile,
   type MultiModelConfig,
@@ -85,8 +86,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
 /**
  * Build the ordered list of config-file candidates from discovery sources.
  * Returns an array of resolved paths; callers filter for existence and
- * iterate in priority order. This single builder ensures that
- * resolveConfigPath() and loadConfig() cannot drift apart.
+ * iterate in priority order. This single builder is the one source of the
+ * config discovery order used by loadConfig().
  */
 function buildCandidatePaths(
   explicit: string | undefined,
@@ -106,28 +107,6 @@ function buildCandidatePaths(
   paths.push(path.join(home, '.multi-model', 'config.json'));
 
   return paths;
-}
-
-/**
- * Resolve the config file path using the discovery order:
- *   1. --config <path>   (explicit flag)
- *   2. $MMAGENT_CONFIG   (env var)
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
- *
- * Returns the first path that exists, or undefined if none exist.
- * Does NOT validate or parse the file — caller uses loadConfigFromFile().
- */
-export function resolveConfigPath(
-  explicit: string | undefined,
-  env: Record<string, string | undefined>,
-  cwd: string,
-  home: string,
-): string | undefined {
-  for (const p of buildCandidatePaths(explicit, env, cwd, home)) {
-    if (p && fs.existsSync(p)) return p;
-  }
-  return undefined;
 }
 
 /**
@@ -191,20 +170,6 @@ Global options:
 `;
 
 /**
- * Read the server package version from package.json, walking up from this file.
- */
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
-
-/**
  * Main entry point — exported so it can be unit-tested without subprocess spawning.
  *
  * @param deps  I/O dependencies (defaults to real process globals).
@@ -226,7 +191,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   }
 
   if (opts['version']) {
-    stdout(readServerVersion() + '\n');
+    stdout(resolveServerVersion() + '\n');
     return;
   }
 
@@ -289,7 +254,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         break;
       }
       const code = await runInfo({
-        cliVersion: readServerVersion(),
+        cliVersion: resolveServerVersion(),
         bind: config.server.bind,
         port: config.server.port,
         tokenFile: config.server.auth.tokenFile,
@@ -346,7 +311,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const code = await run({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
-        cliVersion: readServerVersion(),
+        cliVersion: resolveServerVersion(),
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
@@ -398,7 +363,11 @@ function isMain(): boolean {
   }
 }
 
-if (isMain()) {
+// Bun sets import.meta.main reliably (including inside a `bun build --compile`
+// binary, where the realpath comparison in isMain() fails because import.meta.url
+// is a virtual $bunfs path). Fall back to isMain() for any non-Bun execution.
+const isEntry = (import.meta as { main?: boolean }).main ?? isMain();
+if (isEntry) {
   void main().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`mmagent: ${msg}\n`);

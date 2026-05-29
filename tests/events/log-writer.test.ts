@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { LogWriter } from '../../packages/core/src/events/log-writer.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

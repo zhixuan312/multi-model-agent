@@ -1,4 +1,3 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CallerClient } from './middleware/caller-identity.js';
 
 export interface RequestContext {
@@ -11,17 +10,12 @@ export interface RequestContext {
   mainModel: string | null;
 }
 
-export type Handler = (ctx: RequestContext, res: ServerResponse, params: Record<string, string>) => Promise<void> | void;
-
 /**
- * Raw handler shape used by the C1 RouteDispatcher inside the server.
- * Server-specific because it carries RequestContext (caller identity, cwd, body).
- * The core RouteDispatcher is generic; this is the concrete H instantiation
- * the server registers.
+ * Handler shape registered on the C1 RouteDispatcher inside the server.
+ * Under Bun.serve, handlers receive the matched route params + the request
+ * context (caller identity, cwd, parsed body, url) and RETURN a Web `Response`.
  */
 export type RawHandler = (
-  req: IncomingMessage,
-  res: ServerResponse,
   params: Record<string, string>,
   ctx: RequestContext,
-) => Promise<void> | void;
+) => Promise<Response> | Response;

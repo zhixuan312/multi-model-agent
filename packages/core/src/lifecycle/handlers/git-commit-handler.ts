@@ -1,10 +1,7 @@
 // Stage I/O standardization — commitHandler emits StageGate<CommitPayload>.
 //
 // Gate logic per the spec:
-//   no_repo, no_diff, validation_failed, validation_stale,
-//   worker_committed_out_of_band, hook_failed
-
-// DEBUG: SOURCE FILE LOADED AT $(date)
+//   no_repo, no_diff, validation_failed, validation_stale, hook_failed
 //
 // The spec (Step 13) supersedes the v4.4.x behavior:
 //   - Returns StageGate<CommitPayload> (tagged union { committed | no_op })
@@ -82,7 +79,7 @@ async function currentHead(cwd: string): Promise<string | null> {
 // ─── Payload helpers ─────────────────────────────────────────────────────────
 
 function advanceNoOp(
-  reason: 'no_repo' | 'no_diff' | 'worker_committed_out_of_band' | 'hook_failed',
+  reason: 'no_repo' | 'no_diff' | 'hook_failed',
   t0: number,
   detail?: string,
 ): StageGate<CommitPayload> {

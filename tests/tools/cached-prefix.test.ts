@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildReadOnlyCachedPrefix, buildReadOnlyCriterionSuffix, type RouteSemantics } from '../../packages/core/src/tools/read-route-prompt.js';
 import { AUDIT_CRITERIA, AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_AUDIT, SCOPE_RULE_AUDIT, ANNOTATOR_AWARENESS_AUDIT } from '../../packages/core/src/tools/audit/implementer-criteria.js';
 import { WARM_FOLLOWUP_PREAMBLE } from '../../packages/core/src/lifecycle/warm-followup.js';

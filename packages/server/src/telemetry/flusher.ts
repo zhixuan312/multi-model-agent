@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { Queue } from './queue.js';
+import type { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
 import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
@@ -14,7 +14,6 @@ export interface FlusherOptions {
 const MAX_BATCH = 500;
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BOOT_DELAY_MS = 5_000; // 5 seconds
-const QUEUE_SIZE_TRIGGER = 100;
 const DRAIN_BUDGET_MS = 2_000; // 2 seconds
 const MAX_BACKOFF_MS = 60 * 60 * 1000; // 1 hour cap
 const NO_RETRY_AFTER_DEFAULT = 60 * 60 * 1000; // 1 hour

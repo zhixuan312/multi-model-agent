@@ -1,29 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { checkOutputTargets } from '@zhixuan92/multi-model-agent-core/bounded-execution/file-artifact-check';
 
-vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-}));
-
-import { existsSync } from 'fs';
+// Uses REAL temp files rather than `vi.mock('fs')`. Under Bun, mock.module is
+// process-global and sticky — mocking fs here leaked into every later test that
+// touches the filesystem. checkOutputTargets only does existsSync, so a real
+// temp dir exercises it exactly with zero global state.
 
 describe('checkOutputTargets', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  let dir: string;
+  let present: string;
+  let absent: string;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mma-artifact-'));
+    present = join(dir, 'present.ts');
+    absent = join(dir, 'absent.ts');
+    writeFileSync(present, '// exists', 'utf8');
+  });
+
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('returns empty array when all targets exist', () => {
-    (existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    const missing = checkOutputTargets(['/project/src/new-file.ts']);
-    expect(missing).toEqual([]);
+    expect(checkOutputTargets([present])).toEqual([]);
   });
 
   it('returns the missing paths when some are absent', () => {
-    (existsSync as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
-    const missing = checkOutputTargets(['/project/src/a.ts', '/project/src/b.ts']);
-    expect(missing).toEqual(['/project/src/b.ts']);
+    expect(checkOutputTargets([present, absent])).toEqual([absent]);
   });
 
   it('returns empty array on empty input', () => {

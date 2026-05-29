@@ -1,5 +1,5 @@
 // packages/core/src/tools/journal/recall/tool-config.ts
-import { ToolSurfaceRegistry } from '../../../tool-surface/tool-surface-registry.js';
+import type { ToolSurfaceRegistry } from '../../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
 import type { ToolConfig } from '../../../lifecycle/tool-config-types.js';

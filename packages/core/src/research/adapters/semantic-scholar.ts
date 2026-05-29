@@ -1,4 +1,3 @@
-import { request } from 'undici';
 import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
 
@@ -37,10 +36,11 @@ export async function semanticScholarSearch(query: string, opts: SSOpts = {}): P
   url.searchParams.set('limit', String(max));
   url.searchParams.set('fields', 'paperId,title,abstract,year,authors,url');
 
-  let res;
+  let res: Response;
   try {
-    res = await request(url.toString(), {
+    res = await fetch(url.toString(), {
       method: 'GET',
+      redirect: 'manual', // surface 3xx as a redirect error instead of following
       headers: {
         'user-agent': USER_AGENT,
         'x-api-key':  opts.apiKey,
@@ -50,13 +50,13 @@ export async function semanticScholarSearch(query: string, opts: SSOpts = {}): P
     throw new Error(`semantic_scholar_request_failed: ${(err as Error).message}`);
   }
 
-  if (res.statusCode === 429) throw new Error('semantic_scholar_rate_limited');
-  if (res.statusCode >= 300 && res.statusCode < 400) throw new Error('adapter_unexpected_redirect: semantic_scholar');
-  if (res.statusCode !== 200) throw new Error(`semantic_scholar_http_${res.statusCode}`);
+  if (res.status === 429) throw new Error('semantic_scholar_rate_limited');
+  if (res.status >= 300 && res.status < 400) throw new Error('adapter_unexpected_redirect: semantic_scholar');
+  if (res.status !== 200) throw new Error(`semantic_scholar_http_${res.status}`);
 
   let body: unknown;
   try {
-    body = await res.body.json();
+    body = await res.json();
   } catch (err) {
     throw new Error(`semantic_scholar_parse_error: ${(err as Error).message}`);
   }

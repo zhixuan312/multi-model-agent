@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { join } from 'node:path';
-import { normalizeScopeEntry, isInScope } from '../../packages/core/src/lifecycle/scope-match.js';
+import { normalizeScopeEntry, isInScope } from '../../packages/core/src/bounded-execution/scope-match.js';
 
 describe('normalizeScopeEntry', () => {
   it('resolves relative paths against cwd', () => {

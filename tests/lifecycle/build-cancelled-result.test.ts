@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildCancelledResult } from '../../packages/core/src/lifecycle/build-cancelled-result.js';
 
 describe('buildCancelledResult', () => {

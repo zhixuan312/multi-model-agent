@@ -1,4 +1,3 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as investigate from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig, type EnrichedInvestigateInput } from '@zhixuan92/multi-model-agent-core/tools/investigate/tool-config';
@@ -10,21 +9,19 @@ import type { RawHandler } from '../../types.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
 
 export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
-  return async (_req: IncomingMessage, res: ServerResponse, _params, ctx) => {
+  return async (_params, ctx) => {
     const parsed = investigate.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
+      return sendError(400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
-      return;
     }
     const input = parsed.data;
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
-      sendError(res, 503, reserveResult.error, reserveResult.message);
-      return;
+      return sendError(503, reserveResult.error, reserveResult.message);
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
@@ -35,16 +32,14 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     const blockIds = input.contextBlockIds ?? [];
     const missingBlocks = blockIds.filter(id => pc.contextBlocks.get(id) === undefined);
     if (missingBlocks.length > 0) {
-      sendError(res, 400, 'context_block_not_found', 'one or more context block IDs do not exist', { missingBlocks });
-      return;
+      return sendError(400, 'context_block_not_found', 'one or more context block IDs do not exist', { missingBlocks });
     }
 
     // Canonicalize file paths.
     const rawPaths = input.filePaths ?? [];
     const canonResult = canonicalizeFilePaths(rawPaths, cwd);
     if (!Array.isArray(canonResult)) {
-      sendError(res, 400, 'invalid_request', 'one or more filePaths escape cwd', { fieldErrors: canonResult.fieldErrors });
-      return;
+      return sendError(400, 'invalid_request', 'one or more filePaths escape cwd', { fieldErrors: canonResult.fieldErrors });
     }
     const canonicalizedFilePaths = canonResult;
 
@@ -67,7 +62,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       },
     });
 
-    await emitRequestReceived(deps, batchId, _req.url ?? '', input);
-    sendJson(res, 202, { batchId, statusUrl });
+    await emitRequestReceived(deps, batchId, ctx.url.pathname + ctx.url.search, input);
+    return sendJson(202, { batchId, statusUrl });
   };
 }

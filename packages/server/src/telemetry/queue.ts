@@ -72,13 +72,11 @@ async function ensureFile(p: string): Promise<void> {
 }
 
 export class Queue {
-  #dir: string;
   #queuePath: string;
   #approxCount = 0;
   #appendsSinceCapCheck = 0;
 
   constructor(dir: string) {
-    this.#dir = dir;
     this.#queuePath = join(dir, QUEUE_FILE);
   }
 

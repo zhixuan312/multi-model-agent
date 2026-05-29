@@ -4,7 +4,7 @@
 // stage cell in §6, verifies whether the stage is applicable (Layer 1)
 // and whether the default `shouldRun` returns true given a base state.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import type { StageDefinition, RouteName } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

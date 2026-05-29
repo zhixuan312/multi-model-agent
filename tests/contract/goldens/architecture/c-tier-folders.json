@@ -9,6 +9,7 @@
     "providers",
     "reporting",
     "research",
+    "routing",
     "stores",
     "tool-surface",
     "tools",

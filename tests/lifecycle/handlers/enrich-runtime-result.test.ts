@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { enrichRuntimeResult } from '../../../packages/core/src/lifecycle/handlers/enrich-runtime-result.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { RuntimeRunResult } from '../../../packages/core/src/types.js';
