@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.2] - 2026-06-01
+
+Patch refreshing the model-profile registry from a full provider scan (headline: MiniMax-M3). Data-only change — no code paths touched; `SCHEMA_VERSION` stays 5.
+
+### Changed
+
+- **Model profiles refresh (full provider scan, `rateLookupDate` 2026-06-01).** Added `MiniMax-M3` (released 2026-06-01: $0.30/$1.20, cached-read $0.06, 1M-context sparse attention, reasoning tier; tiered $1.20/$4.80 above 512k input). Other findings folded in: DeepSeek V4 Pro's 75%-off rate made permanent (expiry annotation removed); Grok 4.20 price cut to $1.25/$2.50 and dot-form `grok-4.3` flagship + `grok-build` added, `grok-4-heavy` marked deprecated (retires 2026-08-15); new `gemini-3.5-flash` ($1.50/$9) and `gemini-3-pro` marked discontinued; Mistral Medium 3.5 ($1.50/$7.50) / Small 4 ($0.10/$0.30) price changes plus new `devstral` / `ministral` profiles; `kimi-k2.5` profile and corrected catch-all rates; cached-read rates added across Anthropic/Google/xAI/GLM/Kimi profiles; Perplexity Sonar and Amazon Nova families now carry real per-token rates. Anthropic flagship is Claude Opus 4.8 (2026-05-28, unchanged $5/$25 — covered by the existing `claude-opus` prefix). OpenAI/Cohere/Llama/Qwen verified unchanged. READMEs updated to reference MiniMax-M3 / Claude Opus 4.8 (identical rates to the predecessors they replace, so the cost tables still hold).
+
 ## [5.0.1] - 2026-05-29
 
 Patch fixing the npm package storefront. The published `@zhixuan92/multi-model-agent` install package is the generated `binaries/_toplevel` wrapper, whose manifest was emitted bare — so npm rendered the package with no README, `License: none`, and `Keywords: none`. Behavior unchanged; `SCHEMA_VERSION` stays 5.
