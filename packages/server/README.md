@@ -12,7 +12,7 @@
 
 Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste.
 
-| Project | MMA — MiniMax-M2.7 | MMA — DeepSeek V4 Pro | Flagship: Claude Opus 4.7 |
+| Project | MMA — MiniMax-M3 | MMA — DeepSeek V4 Pro | Flagship: Claude Opus 4.8 |
 |---|---|---|---|
 | Feature impl (30 files, ~50 tasks) | **$1.50** · **33× ROI** · ~35 min | **~$2.50** · **20× ROI** · ~15 min | $50 · 1× · *baseline* |
 | Full web SPA (59 tasks) | **$5.65** · **12× ROI** · ~50 min | **~$9** · **7.5× ROI** · ~22 min | $68 · 1× · *baseline* |
@@ -51,7 +51,7 @@ mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-c
 
 Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
-- Heavy Claude Code user → `claude-opus-4-7`
+- Heavy Claude Code user → `claude-opus-4-8`
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
 
@@ -59,7 +59,7 @@ Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 cli
 
 ```bash
 export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
-export MMAGENT_MAIN_MODEL=claude-opus-4-7      # whatever your calling agent runs on
+export MMAGENT_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
 ```
 
 ### 3. Write the config
@@ -150,10 +150,10 @@ You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
 ↓
 Client picks mma-execute-plan (plan file on disk, multiple independent tasks)
 ↓
-mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M2.7),
+mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M3),
 each runs cross-agent review on the complex agent, returns a structured report.
 ↓
-You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-7 (30× ROI)"
+You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-8 (30× ROI)"
 ```
 
 **Sample 2 — debug a failing test (multiple skills chained)**
