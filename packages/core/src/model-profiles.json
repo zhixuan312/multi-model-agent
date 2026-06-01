@@ -3,7 +3,7 @@
     "provider": "anthropic",
     "naming": "claude-{tier}-{major}-{minor} | claude-{major}-{tier}-{date} (3.x legacy)",
     "rateSource": "https://platform.claude.com/docs/en/about-claude/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "claude",
       "supportsEffort": true,
@@ -16,6 +16,7 @@
         "cost": "medium",
         "input": 3,
         "output": 15,
+        "cachedRead": 0.3,
         "cachedNonRead": 3.75,
         "bestFor": "general Claude tasks (catch-all, Sonnet rates)"
       },
@@ -25,8 +26,9 @@
         "cost": "high",
         "input": 5,
         "output": 25,
+        "cachedRead": 0.5,
         "cachedNonRead": 6.25,
-        "bestFor": "high-ambiguity tasks where error cost is high"
+        "bestFor": "high-ambiguity tasks where error cost is high (flagship: claude-opus-4-8, released 2026-05-28, 1M context)"
       },
       {
         "prefix": "claude-sonnet",
@@ -37,6 +39,7 @@
         "cost": "low",
         "input": 1,
         "output": 5,
+        "cachedRead": 0.1,
         "cachedNonRead": 1.25,
         "bestFor": "fast low-cost coding and batch work"
       },
@@ -44,6 +47,7 @@
         "prefix": "claude-opus-4-1",
         "input": 15,
         "output": 75,
+        "cachedRead": 1.5,
         "cachedNonRead": 18.75,
         "bestFor": "active; tentative retirement not sooner than 2026-08-05"
       },
@@ -75,7 +79,7 @@
     "provider": "openai",
     "naming": "gpt-{major}.{minor}[-{size}] — sizes: pro, mini, nano (no suffix = base)",
     "rateSource": "https://developers.openai.com/api/docs/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "openai",
       "supportsEffort": true,
@@ -145,7 +149,8 @@
         "prefix": "gpt-5.3",
         "input": 1.75,
         "output": 14,
-        "bestFor": "reasoning and coding at lower cost than 5.4"
+        "cachedRead": 0.175,
+        "bestFor": "reasoning and coding at lower cost than 5.4 (gpt-5.3-codex; the gpt-5.x-codex / -chat-latest snapshots retire 2026-07/08)"
       },
       {
         "prefix": "gpt-4",
@@ -159,7 +164,7 @@
     "provider": "google",
     "naming": "gemini-{major}[.{minor}]-{tier}-{suffix} — tiers: pro ($2/$12), flash ($0.50/$3)",
     "rateSource": "https://ai.google.dev/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "gemini",
       "supportsEffort": false,
@@ -180,7 +185,17 @@
         "cost": "low",
         "input": 0.5,
         "output": 3,
-        "bestFor": "fast cost-effective Gemini 3 Flash"
+        "cachedRead": 0.05,
+        "bestFor": "Gemini 3 Flash (preview; being phased out in favor of gemini-3.5-flash)"
+      },
+      {
+        "prefix": "gemini-3.5-flash",
+        "tier": "standard",
+        "cost": "medium",
+        "input": 1.5,
+        "output": 9,
+        "cachedRead": 0.15,
+        "bestFor": "current Gemini Flash flagship (GA 2026-05-19); stronger than 3.x Flash at higher rates"
       },
       {
         "prefix": "gemini-3.1-flash-lite",
@@ -188,6 +203,7 @@
         "cost": "low",
         "input": 0.25,
         "output": 1.5,
+        "cachedRead": 0.025,
         "bestFor": "cheapest Gemini tier for high-throughput tasks"
       },
       {
@@ -196,8 +212,10 @@
         "cost": "medium",
         "input": 2,
         "output": 12,
+        "cachedRead": 0.2,
         "notes": "tiered: $2/$12 ≤200k input tokens, $4/$18 above. Cost meter assumes ≤200k tier — long-context calls may underestimate.",
-        "bestFor": "long-context reasoning with large documents"
+        "bestFor": "long-context reasoning with large documents (current Gemini Pro flagship, 1M context)",
+        "inputTokenSoftLimit": 1000000
       },
       {
         "prefix": "gemini-3-pro",
@@ -206,7 +224,7 @@
         "input": 2,
         "output": 12,
         "notes": "tiered: $2/$12 ≤200k input tokens, $4/$18 above.",
-        "bestFor": "Gemini 3.0 Pro variants"
+        "bestFor": "DISCONTINUED 2026-03-26 — replaced by gemini-3.1-pro; rates retained for historical cost accounting"
       },
       {
         "prefix": "gemini-2.5-pro",
@@ -229,9 +247,9 @@
   },
   {
     "provider": "xai",
-    "naming": "grok-{major}[.{minor}][-{variant}] — Grok 4.3 is current flagship; grok-4 / grok-4-1-fast / grok-4-fast retired 2026-05-15",
+    "naming": "grok-{major}[.{minor}][-{variant}] — Grok 4.3 (slug grok-4.3) is current flagship; grok-4 family (incl. heavy) deprecated 2026-05-15, retires 2026-08-15",
     "rateSource": "https://docs.x.ai/developers/models",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "grok",
       "supportsEffort": false,
@@ -244,6 +262,7 @@
         "cost": "low",
         "input": 1.25,
         "output": 2.5,
+        "cachedRead": 0.2,
         "bestFor": "general Grok tasks (catch-all, Grok 4.3 rates)"
       },
       {
@@ -252,15 +271,28 @@
         "cost": "low",
         "input": 1.25,
         "output": 2.5,
-        "bestFor": "current Grok flagship; successor to retired grok-4 / grok-4-1-fast"
+        "cachedRead": 0.2,
+        "bestFor": "current Grok flagship (dash-form alias of grok-4.3)",
+        "inputTokenSoftLimit": 1000000
+      },
+      {
+        "prefix": "grok-4.3",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 1.25,
+        "output": 2.5,
+        "cachedRead": 0.2,
+        "bestFor": "current Grok flagship (released 2026-04-30); 1M context; retired grok-4 / grok-4-fast slugs redirect here",
+        "inputTokenSoftLimit": 1000000
       },
       {
         "prefix": "grok-4.20",
         "tier": "reasoning",
-        "cost": "medium",
-        "input": 2,
-        "output": 6,
-        "bestFor": "long-context Grok variant"
+        "cost": "low",
+        "input": 1.25,
+        "output": 2.5,
+        "bestFor": "Grok 4.20 reasoning / non-reasoning / multi-agent variants; 1M context",
+        "inputTokenSoftLimit": 1000000
       },
       {
         "prefix": "grok-4-heavy",
@@ -268,7 +300,16 @@
         "cost": "high",
         "input": 15,
         "output": 75,
-        "bestFor": "multi-agent reasoning, 256k context",
+        "bestFor": "DEPRECATED 2026-05-15, retires 2026-08-15 — heavy mode now lives inside grok-4.3 multi-agent; rates retained for historical cost accounting",
+        "inputTokenSoftLimit": 256000
+      },
+      {
+        "prefix": "grok-build",
+        "tier": "standard",
+        "cost": "low",
+        "input": 1,
+        "output": 2,
+        "bestFor": "coding-tuned Grok (grok-build-0.1, successor to grok-code-fast-1); 256k context",
         "inputTokenSoftLimit": 256000
       }
     ]
@@ -277,7 +318,7 @@
     "provider": "mistral",
     "naming": "mistral-{tier}-{version} — tiers: large ($0.50/$1.50), small ($0.10/$0.30)",
     "rateSource": "https://mistral.ai/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "mistral",
       "supportsEffort": false,
@@ -298,15 +339,16 @@
       },
       {
         "prefix": "mistral-medium",
-        "input": 0.4,
-        "output": 2,
-        "bestFor": "mid-tier Mistral (Medium 3 / 3.1)"
+        "cost": "medium",
+        "input": 1.5,
+        "output": 7.5,
+        "bestFor": "mid-tier Mistral (Medium 3.5; price rose from Medium 3's $0.40/$2.00)"
       },
       {
         "prefix": "mistral-small",
-        "input": 0.075,
-        "output": 0.2,
-        "bestFor": "fast lightweight tasks and classification (Small 3.2)"
+        "input": 0.1,
+        "output": 0.3,
+        "bestFor": "fast lightweight tasks and classification (Small 4)"
       },
       {
         "prefix": "codestral",
@@ -316,6 +358,30 @@
         "input": 0.3,
         "output": 0.9,
         "bestFor": "coding-tuned Mistral"
+      },
+      {
+        "prefix": "devstral",
+        "family": "mistral",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.4,
+        "output": 2,
+        "bestFor": "coding-agent Mistral line (Devstral 2 / devstral-medium rates)"
+      },
+      {
+        "prefix": "devstral-small",
+        "input": 0.1,
+        "output": 0.3,
+        "bestFor": "small coding-agent Mistral (Devstral Small 2)"
+      },
+      {
+        "prefix": "ministral",
+        "family": "mistral",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.2,
+        "output": 0.2,
+        "bestFor": "edge-sized Mistral models (Ministral 3B/8B/14B; 14B rates)"
       }
     ]
   },
@@ -323,7 +389,7 @@
     "provider": "deepseek",
     "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "deepseek",
       "supportsEffort": false,
@@ -353,16 +419,16 @@
         "input": 0.435,
         "output": 0.87,
         "cachedRead": 0.003625,
-        "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context (limited-time 75% off until 2026-05-31 15:59 UTC; full price input=1.74 output=3.48)",
+        "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context (the 75%-off launch rate was made permanent 2026-05-22)",
         "inputTokenSoftLimit": 1000000
       }
     ]
   },
   {
     "provider": "meta",
-    "naming": "llama-{major}-{variant} | meta-llama/llama-{major}-{variant} (OpenRouter)",
-    "rateSource": "https://openrouter.ai/models",
-    "rateLookupDate": "2026-04-17",
+    "naming": "llama-{major}-{variant} | meta-llama/llama-{major}-{variant} (OpenRouter) — Llama 4 (Maverick/Scout) is current; no Llama 5 as of 2026-06-01",
+    "rateSource": "https://openrouter.ai/meta-llama",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "llama",
       "supportsEffort": false,
@@ -395,7 +461,7 @@
     "provider": "alibaba",
     "naming": "qwen{major}[.{minor}]-{tier} — no separator after 'qwen'",
     "rateSource": "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "qwen",
       "supportsEffort": false,
@@ -416,7 +482,8 @@
         "cost": "low",
         "input": 0.33,
         "output": 1.95,
-        "bestFor": "current Qwen flagship with 1M context",
+        "notes": "rates from third-party aggregators (OpenRouter); official DashScope international pricing page does not yet list a dedicated qwen3.6-plus row as of 2026-06-01.",
+        "bestFor": "current Qwen flagship with 1M context (released 2026-03-30)",
         "inputTokenSoftLimit": 1000000
       },
       {
@@ -434,7 +501,7 @@
     "provider": "zhipu",
     "naming": "glm-{major}[.{minor}] — GLM-5 is ~30% more expensive than GLM-4",
     "rateSource": "https://docs.z.ai/guides/overview/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "glm",
       "supportsEffort": false,
@@ -447,17 +514,22 @@
         "cost": "medium",
         "input": 1,
         "output": 3.2,
+        "cachedRead": 0.2,
         "bestFor": "general GLM/Zhipu family tasks (catch-all, GLM-5 rates)"
       },
       {
         "prefix": "glm-5",
-        "bestFor": "bilingual Chinese/English coding (GLM-5)"
+        "cachedRead": 0.2,
+        "bestFor": "bilingual Chinese/English coding (GLM-5); 200k context",
+        "inputTokenSoftLimit": 200000
       },
       {
         "prefix": "glm-5.1",
         "input": 1.4,
         "output": 4.4,
-        "bestFor": "current top-tier GLM-5 variant"
+        "cachedRead": 0.26,
+        "bestFor": "current GLM flagship (released 2026-04-07); agentic coding, 200k context",
+        "inputTokenSoftLimit": 200000
       },
       {
         "prefix": "glm-4",
@@ -471,6 +543,7 @@
         "cost": "low",
         "input": 0.6,
         "output": 2.2,
+        "cachedRead": 0.11,
         "bestFor": "current GLM-4-series flagship"
       }
     ]
@@ -479,7 +552,7 @@
     "provider": "moonshot",
     "naming": "kimi-k{generation}[.{minor}] | kimi-k{generation}-{variant}",
     "rateSource": "https://platform.kimi.ai/docs/pricing/chat",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "kimi",
       "supportsEffort": false,
@@ -491,9 +564,18 @@
         "tier": "standard",
         "cost": "low",
         "input": 0.6,
-        "output": 2.5,
-        "cachedRead": 0.15,
-        "bestFor": "long-context tasks and coding (catch-all, K2 rates)"
+        "output": 3,
+        "cachedRead": 0.1,
+        "bestFor": "long-context tasks and coding (catch-all, K2.5 rates)"
+      },
+      {
+        "prefix": "kimi-k2.5",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.6,
+        "output": 3,
+        "cachedRead": 0.1,
+        "bestFor": "prior Kimi flagship with vision + thinking modes"
       },
       {
         "prefix": "kimi-k2.6",
@@ -502,7 +584,8 @@
         "input": 0.95,
         "output": 4,
         "cachedRead": 0.16,
-        "bestFor": "current Kimi flagship"
+        "bestFor": "current Kimi flagship (released 2026-04-20); 256k context, thinking + non-thinking modes",
+        "inputTokenSoftLimit": 256000
       }
     ]
   },
@@ -510,7 +593,7 @@
     "provider": "cohere",
     "naming": "command-r[-plus] — plus variant is flagship",
     "rateSource": "https://cohere.com/pricing",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "cohere",
       "supportsEffort": false,
@@ -561,9 +644,9 @@
   },
   {
     "provider": "minimax",
-    "naming": "MiniMax-M{major}.{minor}[-highspeed] — case-sensitive prefix",
+    "naming": "MiniMax-M{major}[.{minor}][-highspeed] — case-sensitive prefix",
     "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
-    "rateLookupDate": "2026-05-11",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "minimax",
       "supportsEffort": true,
@@ -585,7 +668,19 @@
         "cost": "low",
         "input": 0.3,
         "output": 1.2,
-        "bestFor": "current MiniMax flagship; same rates as M2 with stronger reasoning"
+        "cachedRead": 0.06,
+        "bestFor": "prior MiniMax flagship (M2 generation); same rates as M2 with stronger reasoning"
+      },
+      {
+        "prefix": "MiniMax-M3",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 0.3,
+        "output": 1.2,
+        "cachedRead": 0.06,
+        "notes": "tiered: $0.30/$1.20 ≤512k input tokens, $1.20/$4.80 above. Cost meter assumes ≤512k tier — long-context calls may underestimate. Toggleable thinking, same rates both modes.",
+        "bestFor": "current MiniMax flagship (released 2026-06-01); 1M context sparse-attention reasoning at M2 prices",
+        "inputTokenSoftLimit": 512000
       }
     ]
   },
@@ -647,9 +742,9 @@
   },
   {
     "provider": "perplexity",
-    "naming": "sonar[-{variant}] — Perplexity's online-grounded models",
-    "rateSource": "https://docs.perplexity.ai/guides/pricing",
-    "rateLookupDate": "2026-04-29",
+    "naming": "sonar[-{variant}] — Perplexity's online-grounded models; per-request search fees not metered",
+    "rateSource": "https://docs.perplexity.ai/docs/getting-started/pricing",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "sonar",
       "supportsEffort": false,
@@ -660,15 +755,35 @@
         "prefix": "sonar",
         "tier": "standard",
         "cost": "low",
+        "input": 1,
+        "output": 1,
+        "notes": "Perplexity also bills per-request search fees ($5–$12 per 1k requests) which token-based metering does not capture.",
         "bestFor": "online-grounded search-augmented tasks"
+      },
+      {
+        "prefix": "sonar-pro",
+        "tier": "standard",
+        "cost": "medium",
+        "input": 3,
+        "output": 15,
+        "bestFor": "higher-quality grounded search with citations; 200k context",
+        "inputTokenSoftLimit": 200000
+      },
+      {
+        "prefix": "sonar-reasoning",
+        "tier": "reasoning",
+        "cost": "medium",
+        "input": 2,
+        "output": 8,
+        "bestFor": "reasoning over live web results (sonar-reasoning-pro / sonar-deep-research rates)"
       }
     ]
   },
   {
     "provider": "amazon",
-    "naming": "nova[-{tier}][-{version}] — Amazon Bedrock native models",
-    "rateSource": "https://aws.amazon.com/bedrock/nova/pricing/",
-    "rateLookupDate": "2026-04-29",
+    "naming": "nova-{tier}[-v{version}] — Amazon Bedrock native models (wire ids like amazon.nova-pro-v1:0)",
+    "rateSource": "https://aws.amazon.com/bedrock/pricing/",
+    "rateLookupDate": "2026-06-01",
     "defaults": {
       "family": "nova",
       "supportsEffort": false,
@@ -679,7 +794,39 @@
         "prefix": "nova",
         "tier": "standard",
         "cost": "low",
-        "bestFor": "Amazon Bedrock native multimodal models"
+        "input": 0.8,
+        "output": 3.2,
+        "bestFor": "Amazon Bedrock native multimodal models (catch-all, Nova Pro rates)"
+      },
+      {
+        "prefix": "nova-micro",
+        "input": 0.035,
+        "output": 0.14,
+        "bestFor": "cheapest Nova tier, text-only"
+      },
+      {
+        "prefix": "nova-lite",
+        "input": 0.06,
+        "output": 0.24,
+        "bestFor": "low-cost multimodal Nova; 300k context",
+        "inputTokenSoftLimit": 300000
+      },
+      {
+        "prefix": "nova-pro",
+        "input": 0.8,
+        "output": 3.2,
+        "bestFor": "balanced Nova multimodal; 300k context",
+        "inputTokenSoftLimit": 300000
+      },
+      {
+        "prefix": "nova-premier",
+        "tier": "reasoning",
+        "cost": "medium",
+        "input": 2.5,
+        "output": 12.5,
+        "notes": "rates from secondary trackers; AWS pricing pages defer to console — re-confirm before relying on exact figures.",
+        "bestFor": "Nova flagship for complex reasoning; ~1M context",
+        "inputTokenSoftLimit": 1000000
       }
     ]
   },
