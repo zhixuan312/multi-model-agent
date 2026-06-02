@@ -22,3 +22,6 @@
 | 0020 | 2026-05-24 | adopted | Route all lifecycle control through the single invocation surface | architecture, product, invocation-path, mcp, skills, disable, adapters, daemon |
 | 0021 | 2026-05-24 | superseded | Bound delegation spend with per-task maxCostUSD ceilings | cost, budgets, max-cost-usd, cost-caps, guards, lifecycle, delegation-spend |
 | 0022 | 2026-05-24 | adopted | Prefer focus and explicit user budgets over engine cost caps | cost, budgets, focus, autonomous-execution, no-cost-caps, api-contract, completion |
+| 0023 | 2026-06-03 | adopted | Default the complex tier to Sonnet on route-weighted review quality | benchmark, model-selection, complex-tier, read-routes, tiers, code-review, cost |
+| 0024 | 2026-06-03 | adopted | The worker harness, not the model, caps read-route quality at the top end | harness, benchmark, criteria, read-routes, model-selection, plan-audit |
+| 0025 | 2026-06-03 | adopted | Terminal-stage lifecycle bug catalog from the cross-model audit | bugs, terminal-stage, lifecycle, telemetry, contract-tests, benchmark |
