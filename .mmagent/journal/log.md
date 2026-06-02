@@ -22,3 +22,6 @@
 2026-05-24T21:54:27+08:00  create  0020  Route all lifecycle control through the single invocation surface
 2026-05-24T00:00:00+08:00  create  0021  Bound delegation spend with per-task maxCostUSD ceilings
 2026-05-24T00:00:00+08:00  supersede  0022  Prefer focus and explicit user budgets over engine cost caps
+2026-06-03T00:00:00+08:00  create  0023  Default the complex tier to Sonnet on route-weighted review quality
+2026-06-03T00:00:00+08:00  create  0024  The worker harness, not the model, caps read-route quality at the top end
+2026-06-03T00:00:00+08:00  create  0025  Terminal-stage lifecycle bug catalog from the cross-model audit
