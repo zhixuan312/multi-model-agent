@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.0.2] - 2026-06-01
 
-Patch refreshing the model-profile registry from a full provider scan (headline: MiniMax-M3). Data-only change — no code paths touched; `SCHEMA_VERSION` stays 5.
+Patch refreshing the model-profile registry from a full provider scan (headline: MiniMax-M3) and removing stale documentation. Data/docs-only change — no code paths touched; `SCHEMA_VERSION` stays 5.
+
+### Removed
+
+- **Stale markdown files.** `packages/server/CHANGELOG.md` (orphan frozen at 3.11.1 — the root `CHANGELOG.md` is the single live changelog; nothing referenced this copy) and `CONTRIBUTING.md` (pre-5.0 content throughout: npm/Node 22/Vitest toolchain instead of Bun, the v3 `intake/`/`compilers/` architecture deleted in v4.0, and a link to an untracked doc — misleading for contributors; a fresh one can be written against the current codebase if wanted).
 
 ### Changed
 
