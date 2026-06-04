@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { GuardError, WallClockGuard } from '../../packages/core/src/bounded-execution/wall-clock-guard.js';
 
 describe('WallClockGuard error code', () => {

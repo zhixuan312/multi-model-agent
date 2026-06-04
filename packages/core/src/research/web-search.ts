@@ -1,3 +1,4 @@
+import { request } from 'undici';
 import { USER_AGENT } from './user-agent.js';
 import type { ResearchConfig } from '../config/schema.js';
 
@@ -127,11 +128,10 @@ export class BraveClient {
         throw new Error('brave_deadline_exceeded');
       }
       const timer = setTimeout(() => ctrl.abort(), remaining);
-      let res: Response | undefined;
+      let res: Awaited<ReturnType<typeof request>> | undefined;
       try {
-        res = await fetch(url.toString(), {
+        res = await request(url.toString(), {
           method: 'GET',
-          redirect: 'manual',
           headers: {
             'accept': 'application/json',
             'user-agent': USER_AGENT,
@@ -139,20 +139,22 @@ export class BraveClient {
           },
           signal: ctrl.signal,
         });
-        if (res.status === 200) {
-          const body = await res.json() as unknown;
+        if (res.statusCode === 200) {
+          const body = await res.body.json() as unknown;
           return {
             results: validateBraveResults(body),
             keyIndex: idx,
             attempts: [...attempts, { keyIndex: idx, status: 200 }],
           };
         }
-        attempts.push({ keyIndex: idx, status: res.status });
+        attempts.push({ keyIndex: idx, status: res.statusCode });
       } catch {
         attempts.push({ keyIndex: idx, status: 'error' });
       } finally {
         clearTimeout(timer);
-        // fetch bodies are consumed by .json() above; non-200 bodies are GC'd, no explicit dump needed.
+        if (res && res.statusCode !== 200) {
+          try { await res.body.dump?.(); } catch { /* nothing */ }
+        }
       }
 
       // No sleep after the final attempt.

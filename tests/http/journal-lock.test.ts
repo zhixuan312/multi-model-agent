@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { withProjectJournalLock, __journalLockMapSize } from '../../packages/server/src/http/journal-lock.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

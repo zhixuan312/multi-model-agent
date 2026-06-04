@@ -1,5 +1,5 @@
 // tests/acceptance/stage-io-compose.test.ts — AC-21, AC-22
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { ComposePayload } from '../../packages/core/src/lifecycle/stage-io.js';
 import { composeHandler } from '../../packages/core/src/lifecycle/handlers/baseline-handlers.js';
 import { mockState, advanceGate, haltGate } from '../fixtures/lifecycle-state.js';

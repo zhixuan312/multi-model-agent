@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LogWriter } from '../../packages/core/src/events/log-writer.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -45,10 +45,7 @@ describe('LogWriter file destination', () => {
     const w = new LogWriter({ diagnosticsLog: true, logDir: dir });
     const { path, bytes } = await w.spillRequestBody({ batchId: '00000000-0000-0000-0000-000000000001', body: { hello: 'world' } });
     expect(bytes).toBeGreaterThan(0);
-    // Unix file-mode bits are not meaningful on Windows (chmod is a no-op there).
-    if (process.platform !== 'win32') {
-      const stat = statSync(path);
-      expect((stat.mode & 0o777).toString(8)).toBe('600');
-    }
+    const stat = statSync(path);
+    expect((stat.mode & 0o777).toString(8)).toBe('600');
   });
 });

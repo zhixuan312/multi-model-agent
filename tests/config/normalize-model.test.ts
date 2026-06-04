@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { extractCanonicalModelName, findModelProfile } from '../../packages/core/src/config/model-profile-registry.js';
 
 // 4.0.3+: extractCanonicalModelName preserves model + version (e.g.

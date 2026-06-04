@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TerminalBlockRegistrar } from '../../packages/core/src/reporting/terminal-block-registrar.js';
 import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';

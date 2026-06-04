@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { WORKER_SELF_ASSESSMENT_DELEGATE } from '../../../packages/core/src/tools/delegate/implementer-criteria.js';
 
 describe('delegate WORKER_SELF_ASSESSMENT_DELEGATE prompt', () => {

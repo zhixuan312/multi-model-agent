@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { preflight, AbortError } from './preflight.mjs';
 import { createProject } from './fixtures.mjs';
@@ -7,21 +7,14 @@ import { runDispatch, pollBatch } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
-import { extraRouteChecks } from './extra-routes.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
-import { runBuildChecks } from './build-checks.mjs';
 
 const argv = process.argv.slice(2);
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const opts = {
   skipBackend: argv.includes('--skip-backend'),
   strict: argv.includes('--strict'),
-  // Build/packaging phase (Bun toolchain + standalone-binary distribution).
-  skipBuild: argv.includes('--skip-build'),
-  skipTests: argv.includes('--skip-tests'),
-  skipDocker: argv.includes('--skip-docker'),
-  buildOnly: argv.includes('--build-only'),
   expectBranch: (argv.find((a) => a.startsWith('--branch=')) || '').split('=')[1] || null,
   allowMismatch: argv.includes('--allow-mismatch'),
   // --only=1,13 limits the run to a subset of scenario ids (for quick checks).
@@ -30,23 +23,6 @@ const opts = {
   // run's events actually landed in events_raw (the mma→backend→DB leg).
   waitFlush: argv.includes('--wait-flush'),
 };
-
-// ── Build + packaging phase (no running server required) ──────────────────
-// Validates the Bun toolchain + standalone-binary distribution that the live
-// runtime scenarios cannot see. Runs first so a broken build fails fast.
-const buildChecks = await runBuildChecks(opts);
-
-if (opts.buildOnly) {
-  let fails = 0;
-  console.log('Full-smoke — BUILD/PACKAGING phase only\n');
-  for (const c of buildChecks) {
-    const g = { PASS: '✓', FAIL: '✗', SKIP: '—' }[c.status] ?? c.status;
-    console.log(`  ${g} ${c.checkId.padEnd(24)} ${c.detail}`);
-    if (c.status === 'FAIL') fails++;
-  }
-  console.log(`\nbuild/packaging: ${fails === 0 ? 'all checks passed' : `${fails} FAILED`}`);
-  process.exit(fails > 0 ? 1 : 0);
-}
 
 let ctx;
 try {
@@ -88,7 +64,6 @@ try {
         continue;
       }
       const envelope = await pollBatch(ctx.token, res.batchId);
-      ctx.lastBatchId = res.batchId; // most-recent batch, for the extra-routes batch-slice check
       if (spec.id === 'seed') {
         ctx.seedBatchId = res.batchId;
         const results = Array.isArray(envelope.results) ? envelope.results : [];
@@ -123,18 +98,6 @@ try {
     }
   }
 
-  // Extra live route coverage: introspection (/health, /status, /__routes),
-  // batch-slice (POST /control/batch-slice), context-block DELETE — the routes
-  // in the manifest that the dispatch scenarios don't hit. Skipped under --only.
-  if (!opts.only) {
-    try {
-      records.push({ scenarioId: 'extra-routes', route: 'controls+introspection' });
-      checksByScenario['extra-routes'] = await extraRouteChecks(ctx);
-    } catch (err) {
-      checksByScenario['extra-routes'] = [{ checkId: 'extra-routes', status: 'FAIL', detail: String(err.message || err) }];
-    }
-  }
-
   // Run-level backend (④): correlate by event_id (= queue eventId). The flusher
   // uploads every 5 min, so without --wait-flush these rows won't have landed yet
   // — the durable local proof is the queue (③); --wait-flush verifies DB landing.
@@ -150,10 +113,6 @@ try {
 } finally {
   await teardown(ctx);
 }
-
-// Prepend the build/packaging phase so its checks appear in the report + tally.
-records.unshift({ scenarioId: 'build', route: 'build-phase' });
-checksByScenario['build'] = buildChecks;
 
 const exitCode = report(records, checksByScenario, {
   serverVersion: ctx.serverVersion, bootId: ctx.bootId,

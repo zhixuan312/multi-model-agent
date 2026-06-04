@@ -1,16 +1,16 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
+import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CommitStageRunner } from '../../packages/core/src/reporting/commit-stage-runner.js';
-import { initGitRepo, commit } from '../helpers/git-repo.js';
 
 describe('CommitStageRunner', () => {
   it('commits expected files', () => {
     const dir = mkdtempSync(join(tmpdir(), 'csr-'));
-    initGitRepo(dir);
+    execSync('git init && git config user.email t@t.com && git config user.name t', { cwd: dir, shell: '/bin/bash' });
     writeFileSync(join(dir, 'a.txt'), 'hi');
-    commit(dir, 'base', ['a.txt']);
+    execSync('git add a.txt && git commit -m base', { cwd: dir, shell: '/bin/bash' });
     writeFileSync(join(dir, 'b.txt'), 'bye');
     const r = new CommitStageRunner();
     const res = r.run({ cwd: dir, message: 'add b', expectedFiles: ['b.txt'] });
@@ -20,9 +20,9 @@ describe('CommitStageRunner', () => {
 
   it('emits validator_dirty_worktree on extra unstaged', () => {
     const dir = mkdtempSync(join(tmpdir(), 'csr-'));
-    initGitRepo(dir);
+    execSync('git init && git config user.email t@t.com && git config user.name t', { cwd: dir, shell: '/bin/bash' });
     writeFileSync(join(dir, 'a.txt'), 'hi');
-    commit(dir, 'base', ['a.txt']);
+    execSync('git add a.txt && git commit -m base', { cwd: dir, shell: '/bin/bash' });
     writeFileSync(join(dir, 'b.txt'), 'expected');
     writeFileSync(join(dir, 'c.txt'), 'unexpected');   // dirty
     const r = new CommitStageRunner();

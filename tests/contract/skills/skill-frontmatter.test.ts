@@ -1,7 +1,7 @@
 // Validates each packaged skill's SKILL.md has the required frontmatter
 // (name, description, when_to_use, version) and that the endpoint it
 // advertises resolves to a real route in the server route manifest.
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import routes from '../goldens/routes.json' with { type: 'json' };
@@ -16,12 +16,12 @@ interface Frontmatter {
 }
 
 function parseFrontmatter(md: string): Frontmatter {
-  const match = md.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const match = md.match(/^---\n([\s\S]*?)\n---/);
   if (!match) throw new Error('no frontmatter');
   const block = match[1]!;
   const fm: Record<string, string> = {};
   let currentKey: string | null = null;
-  for (const line of block.split(/\r?\n/)) {
+  for (const line of block.split('\n')) {
     const kv = line.match(/^(\w[\w-]*):\s*(.*)$/);
     if (kv) {
       currentKey = kv[1]!;

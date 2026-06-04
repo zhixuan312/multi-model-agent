@@ -1,34 +1,28 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { checkOutputTargets } from '@zhixuan92/multi-model-agent-core/bounded-execution/file-artifact-check';
 
-// Real temp files instead of `vi.mock('fs')` (sticky process-global mock under
-// Bun that leaked into later filesystem tests).
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+}));
+
+import { existsSync } from 'fs';
 
 describe('output-target validation (post-task helper contract)', () => {
-  let dir: string;
-  let present: string;
-  let absent: string;
-
-  beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'mma-output-target-'));
-    present = join(dir, 'present.ts');
-    absent = join(dir, 'absent.ts');
-    writeFileSync(present, '// exists', 'utf8');
-  });
-
-  afterAll(() => {
-    rmSync(dir, { recursive: true, force: true });
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it('returns missing paths when targets are absent', () => {
-    expect(checkOutputTargets([present, absent])).toEqual([absent]);
+    (existsSync as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    const missing = checkOutputTargets(['/project/src/present.ts', '/project/src/absent.ts']);
+    expect(missing).toEqual(['/project/src/absent.ts']);
   });
 
   it('returns empty array when all targets exist', () => {
-    expect(checkOutputTargets([present])).toEqual([]);
+    (existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    expect(checkOutputTargets(['/project/src/a.ts', '/project/src/b.ts'])).toEqual([]);
   });
 
   it('returns empty array on empty input', () => {

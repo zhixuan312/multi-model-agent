@@ -1,3 +1,4 @@
+import { request } from 'undici';
 import { XMLParser } from 'fast-xml-parser';
 import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
@@ -12,18 +13,17 @@ export async function arxivSearch(query: string, opts: ArxivOpts = {}): Promise<
   url.searchParams.set('search_query', `all:${query}`);
   url.searchParams.set('max_results', String(max));
 
-  const res = await fetch(url.toString(), {
+  const res = await request(url.toString(), {
     method: 'GET',
-    redirect: 'manual',
     headers: { 'user-agent': USER_AGENT },
   });
-  if (res.status >= 300 && res.status < 400) {
+  if (res.statusCode >= 300 && res.statusCode < 400) {
     throw new Error('adapter_unexpected_redirect: arxiv');
   }
-  if (res.status !== 200) {
-    throw new Error(`arxiv_http_${res.status}`);
+  if (res.statusCode !== 200) {
+    throw new Error(`arxiv_http_${res.statusCode}`);
   }
-  const xml = await res.text();
+  const xml = await res.body.text();
   const parsed = parser.parse(xml) as { feed?: { entry?: unknown } };
   const entriesRaw = parsed.feed?.entry;
   const entries = Array.isArray(entriesRaw) ? entriesRaw : entriesRaw ? [entriesRaw] : [];

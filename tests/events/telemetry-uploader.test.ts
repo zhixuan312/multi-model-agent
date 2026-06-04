@@ -1,5 +1,5 @@
 // tests/events/telemetry-uploader.test.ts
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uploader.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 

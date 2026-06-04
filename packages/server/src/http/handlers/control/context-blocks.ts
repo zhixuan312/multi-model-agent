@@ -15,6 +15,8 @@
 // the project, and dispatches to the LifecycleDispatcher (which routes
 // through the register_to_block_store stage handler per the StagePlan).
 
+import type { ServerResponse } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
@@ -41,15 +43,21 @@ const createBodySchema = z.object({
  * and delegates block registration to the LifecycleDispatcher StagePlan.
  */
 export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): RawHandler {
-  return async (_params, ctx) => {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    _params: Record<string, string>,
+    ctx,
+  ) => {
     const cwd = ctx.cwd!;
 
     // ── 1. Validate body ───────────────────────────────────────────────────
     const parsed = createBodySchema.safeParse(ctx.body);
     if (!parsed.success) {
-      return sendError(400, 'invalid_request', 'Request body validation failed', {
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
+      return;
     }
 
     const { content } = parsed.data;
@@ -57,17 +65,20 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
     // ── 2. Content byte-size check ─────────────────────────────────────────
     const byteLen = Buffer.byteLength(content, 'utf8');
     if (byteLen > deps.maxContextBlockBytes) {
-      return sendError(
+      sendError(
+        res,
         413,
         'payload_too_large',
         `Context block content exceeds the ${deps.maxContextBlockBytes}-byte limit (got ${byteLen} bytes)`,
       );
+      return;
     }
 
     // ── 3. Reserve project ─────────────────────────────────────────────────
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
-      return sendError(503, reserveResult.error, reserveResult.message);
+      sendError(res, 503, reserveResult.error, reserveResult.message);
+      return;
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
@@ -75,11 +86,13 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
 
     // ── 4. Cap check ───────────────────────────────────────────────────────
     if (pc.contextBlocks.size >= deps.maxContextBlocksPerProject) {
-      return sendError(
+      sendError(
+        res,
         409,
         'cap_exhausted',
         `Project context block cap of ${deps.maxContextBlocksPerProject} reached; delete unused blocks before creating new ones`,
       );
+      return;
     }
 
     // ── 5. Dispatch to lifecycle ───────────────────────────────────────────
@@ -93,7 +106,7 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
 
     // ── 6. Return dispatcher output ────────────────────────────────────────
     const status = output.status === 200 ? 201 : output.status;
-    return sendJson(status as 200 | 201 | 400 | 409, output.body);
+    sendJson(res, status as 200 | 201 | 400 | 409, output.body);
   };
 }
 
@@ -103,7 +116,12 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
  * a different project (isolation).
  */
 export function buildDeleteContextBlockHandler(deps: DeleteContextBlockHandlerDeps): RawHandler {
-  return async (params, ctx) => {
+  return async (
+    _req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+    ctx,
+  ) => {
     const cwd = ctx.cwd!;
     const { blockId } = params;
 
@@ -112,7 +130,8 @@ export function buildDeleteContextBlockHandler(deps: DeleteContextBlockHandlerDe
     const pc = deps.projectRegistry.get(cwd);
     if (!pc) {
       // Project doesn't exist — no blocks can belong to it
-      return sendError(404, 'not_found', `Context block ${blockId} not found`);
+      sendError(res, 404, 'not_found', `Context block ${blockId} not found`);
+      return;
     }
 
     // ── 2. Existence + isolation check ─────────────────────────────────────
@@ -121,19 +140,21 @@ export function buildDeleteContextBlockHandler(deps: DeleteContextBlockHandlerDe
     // belongs to a different project — both map to 404.
     const content = pc.contextBlocks.get(blockId);
     if (content === undefined) {
-      return sendError(404, 'not_found', `Context block ${blockId} not found`);
+      sendError(res, 404, 'not_found', `Context block ${blockId} not found`);
+      return;
     }
 
     // ── 3. Pin check ───────────────────────────────────────────────────────
     const refcount = pc.contextBlocks.refcount(blockId);
     if (refcount > 0) {
-      return sendError(409, 'pinned', `Context block ${blockId} is in use by ${refcount} active batch(es)`, { refcount });
+      sendError(res, 409, 'pinned', `Context block ${blockId} is in use by ${refcount} active batch(es)`, { refcount });
+      return;
     }
 
     // ── 4. Delete ──────────────────────────────────────────────────────────
     pc.contextBlocks.delete(blockId);
     pc.lastActivityAt = Date.now();
 
-    return sendJson(200, { ok: true });
+    sendJson(res, 200, { ok: true });
   };
 }

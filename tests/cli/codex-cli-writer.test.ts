@@ -5,7 +5,7 @@
  * ~/.codex/skills/<skillName>/SKILL.md, so the writer must not collapse all
  * skills into a single AGENTS.md managed block.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';

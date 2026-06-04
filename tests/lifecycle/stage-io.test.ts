@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type {
   StageGate, StageDefinition, EntryDecision, WorkerSelfAssessment,
   RouteName, Finding, Citation, Validation,

@@ -7,7 +7,7 @@
  *   - enable clears the sentinel and reinstalls
  *   - dry-run, --json, and --target scoping
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import {
   mkdtempSync,

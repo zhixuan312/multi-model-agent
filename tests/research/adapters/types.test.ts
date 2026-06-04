@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import type { AdapterResult, AdapterId } from '../../../packages/core/src/research/adapters/types.js';
 
 describe('AdapterResult shape', () => {

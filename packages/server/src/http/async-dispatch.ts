@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchRegistry, ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
+import { STAGE_ORDER_BY_ROUTE } from '@zhixuan92/multi-model-agent-core/lifecycle/stage-progression';
 import { TaskEnvelopeStore } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import type { HandlerDeps } from './handler-deps.js';
 import { buildExecutionContext } from './execution-context.js';

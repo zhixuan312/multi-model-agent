@@ -16,3 +16,17 @@ export interface HeadlineTemplate {
     task?: TaskSpec;
   }): string;
 }
+
+export class HeadlineComposer {
+  constructor(private template: HeadlineTemplate) {}
+
+  compose(input: {
+    taskBrief: string;
+    report: unknown;
+    status: string;
+    runResult?: RuntimeRunResult;
+    task?: TaskSpec;
+  }): string {
+    return this.template.compose(input);
+  }
+}

@@ -7,11 +7,6 @@ import {
   SkillResolutionError,
 } from '../../packages/core/src/providers/skill-resolver.js';
 
-// Skill passthrough is intentionally unsupported on Windows (owner-only FS perms
-// aren't enforceable on win32 — skill-resolver.ts throws skill_isolation_unsupported).
-// The staging behavior is exercised on POSIX; a dedicated win32 case below pins the throw.
-const IS_WIN = process.platform === 'win32';
-
 async function makeStore(skillNames: string[]): Promise<string> {
   const store = await mkdtemp(join(tmpdir(), 'mma-store-'));
   for (const n of skillNames) {
@@ -23,7 +18,7 @@ async function makeStore(skillNames: string[]): Promise<string> {
 }
 
 describe('resolveAndStageSkills', () => {
-  it.skipIf(IS_WIN)('copies named skills into a staged root with skills/<name> layout', async () => {
+  it('copies named skills into a staged root with skills/<name> layout', async () => {
     const store = await makeStore(['atlassian-fetch', 'other']);
     const bundle = await resolveAndStageSkills({
       client: 'claude-code', names: ['atlassian-fetch'],
@@ -38,7 +33,7 @@ describe('resolveAndStageSkills', () => {
     await rm(store, { recursive: true, force: true });
   });
 
-  it.skipIf(IS_WIN)('throws skill_not_found for a missing name', async () => {
+  it('throws skill_not_found for a missing name', async () => {
     const store = await makeStore(['a']);
     await expect(resolveAndStageSkills({
       client: 'claude-code', names: ['nope'], batchId: 'b', taskIndex: 0, storeDirOverride: store,
@@ -46,26 +41,18 @@ describe('resolveAndStageSkills', () => {
     await rm(store, { recursive: true, force: true });
   });
 
-  it.skipIf(IS_WIN)('throws skill_store_unsupported for an unknown client', async () => {
+  it('throws skill_store_unsupported for an unknown client', async () => {
     await expect(resolveAndStageSkills({
       client: 'cursor', names: ['a'], batchId: 'b', taskIndex: 0,
     })).rejects.toMatchObject({ code: 'skill_store_unsupported' });
   });
 
-  it.skipIf(IS_WIN)('throws skill_payload_too_large past the skill-count limit', async () => {
+  it('throws skill_payload_too_large past the skill-count limit', async () => {
     const names = Array.from({ length: 21 }, (_, i) => `s${i}`);
     const store = await makeStore(names);
     await expect(resolveAndStageSkills({
       client: 'claude-code', names, batchId: 'b', taskIndex: 0, storeDirOverride: store,
     })).rejects.toMatchObject({ code: 'skill_payload_too_large' });
-    await rm(store, { recursive: true, force: true });
-  });
-
-  it.skipIf(!IS_WIN)('throws skill_isolation_unsupported on win32 (passthrough unsupported)', async () => {
-    const store = await makeStore(['a']);
-    await expect(resolveAndStageSkills({
-      client: 'claude-code', names: ['a'], batchId: 'b', taskIndex: 0, storeDirOverride: store,
-    })).rejects.toMatchObject({ code: 'skill_isolation_unsupported' });
     await rm(store, { recursive: true, force: true });
   });
 

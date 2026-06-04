@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   CLAUDE_WRITE_TOOLS,
   CLAUDE_SHELL_TOOLS,

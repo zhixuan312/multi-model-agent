@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
 import { prepareExecutionContextHandler } from '../../../packages/core/src/lifecycle/handlers/prepare-execution-context-handler.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';

@@ -272,7 +272,7 @@ export class TaskEnvelopeStore {
     this.notify('recordStall');
   }
 
-  recordSandboxViolation(_entry: { kind: string; path: string }): void {
+  recordSandboxViolation(entry: { kind: string; path: string }): void {
     this.guard('recordSandboxViolation');
     this.env.sandboxViolationCount++;
     this.notify('recordSandboxViolation');

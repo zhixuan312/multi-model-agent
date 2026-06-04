@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';

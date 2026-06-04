@@ -2,7 +2,7 @@
 // contract before/after removing the dead telemetry aggregation. The handler's
 // only observable effects are: (1) the taskTerminalEmitted idempotency flag,
 // (2) it makes NO bus.emit call (the event moved to envelope.seal()).
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { emitTaskTerminalHandler } from '../../packages/core/src/lifecycle/handlers/terminal-handlers.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { toolConfig } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 import { executePlanBriefSlot } from '../../packages/core/src/tools/execute-plan/brief-slot.js';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';

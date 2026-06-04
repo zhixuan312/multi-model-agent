@@ -8,9 +8,7 @@ describe('resolveSkillsForTask', () => {
     expect(r.failure).toBeUndefined();
   });
 
-  // On Windows resolveAndStageSkills throws skill_isolation_unsupported before
-  // the unsupported-client check, so this client-specific code is POSIX-only.
-  it.skipIf(process.platform === 'win32')('returns a per-task failure (not a throw) for an unsupported client', async () => {
+  it('returns a per-task failure (not a throw) for an unsupported client', async () => {
     const r = await resolveSkillsForTask({
       task: { prompt: 'x', skills: ['a'] }, client: 'cursor', batchId: 'b', taskIndex: 0,
     });
@@ -21,10 +19,7 @@ describe('resolveSkillsForTask', () => {
   });
 });
 
-// POSIX-only: relies on the cursor→skill_store_unsupported code path, which on
-// win32 is preempted by skill_isolation_unsupported. Envelope-sealing on a
-// resolution failure is the same mechanism on both.
-describe.skipIf(process.platform === 'win32')('runTaskViaDispatcher — skill resolution failure seals the envelope', () => {
+describe('runTaskViaDispatcher — skill resolution failure seals the envelope', () => {
   it('seals the per-task envelope to terminal failed (so GET /batch is not stuck "running")', async () => {
     const env = TaskEnvelopeStore.create({
       taskId: 't:0', batchId: 'b', taskIndex: 0, route: 'delegate', agentType: 'standard',

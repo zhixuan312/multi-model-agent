@@ -30,19 +30,21 @@ describe('dispatch mode config + schema', () => {
   });
 });
 
-import { vi } from 'bun:test';
-import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { vi } from 'vitest';
 
-// Inject dispatcher + resolver via executeTask's deps param instead of vi.mock
-// — under Bun mock.module is sticky/process-global and leaked into later tests.
-const mockDispatch = vi.fn();
-const execDeps = {
-  runTaskViaDispatcher: mockDispatch,
+vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
+  runTaskViaDispatcher: vi.fn(),
   applyParallelSafetySuffixIfNeeded: (tasks: any[], concurrent: boolean) =>
-    concurrent ? tasks.map((t: any) => ({ ...t, prompt: t.prompt + ' [SUFFIX]' })) : tasks.slice(),
+    concurrent ? tasks.map((t) => ({ ...t, prompt: t.prompt + ' [SUFFIX]' })) : tasks.slice(),
+}));
+
+// Stub the resolver so resolveAgent never throws (no real provider config in test).
+vi.mock('../../packages/core/src/providers/agent-resolver.js', () => ({
   resolveAgent: () => ({ slot: 'standard', provider: { name: 'stub', config: { type: 'claude', model: 'stub' } } }),
-} as any;
-const runExec = (config: any, ctx: any, input: any) => executeTask(config, ctx, input, execDeps);
+}));
+
+import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
 
 const okResult = (i: number) => ({
   output: '', status: 'ok', usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -76,12 +78,12 @@ describe('scheduler mode', () => {
 
   it('parallel: launches all dispatchOne calls before any resolves', async () => {
     let active = 0; let maxActive = 0;
-    mockDispatch.mockImplementation(async () => {
+    (runTaskViaDispatcher as any).mockImplementation(async () => {
       active++; maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 5)); active--;
       return okResult(0);
     });
-    const out = await runExec(configStub('parallel', true), ctxStub(),
+    const out = await executeTask(configStub('parallel', true), ctxStub(),
       { tasks: [{ prompt: 'a' }, { prompt: 'b' }, { prompt: 'c' }] } as any);
     expect(maxActive).toBe(3);
     expect(out.dispatchMode).toBe('parallel');
@@ -89,12 +91,12 @@ describe('scheduler mode', () => {
 
   it('serial: runs one at a time', async () => {
     let active = 0; let maxActive = 0;
-    mockDispatch.mockImplementation(async () => {
+    (runTaskViaDispatcher as any).mockImplementation(async () => {
       active++; maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 5)); active--;
       return okResult(0);
     });
-    const out = await runExec(configStub('serial', false), ctxStub(),
+    const out = await executeTask(configStub('serial', false), ctxStub(),
       { tasks: [{ prompt: 'a' }, { prompt: 'b' }] } as any);
     expect(maxActive).toBe(1);
     expect(out.dispatchMode).toBe('serial');
@@ -102,12 +104,12 @@ describe('scheduler mode', () => {
 
   it('delegate-style override: execution:serial forces serial when overridable', async () => {
     let maxActive = 0; let active = 0;
-    mockDispatch.mockImplementation(async () => {
+    (runTaskViaDispatcher as any).mockImplementation(async () => {
       active++; maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 5)); active--;
       return okResult(0);
     });
-    const out = await runExec(configStub('parallel', true), ctxStub(),
+    const out = await executeTask(configStub('parallel', true), ctxStub(),
       { tasks: [{ prompt: 'a' }, { prompt: 'b' }], execution: 'serial' } as any);
     expect(maxActive).toBe(1);
     expect(out.dispatchMode).toBe('serial');
@@ -115,12 +117,12 @@ describe('scheduler mode', () => {
 
   it('non-overridable route ignores execution field', async () => {
     let maxActive = 0; let active = 0;
-    mockDispatch.mockImplementation(async () => {
+    (runTaskViaDispatcher as any).mockImplementation(async () => {
       active++; maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 5)); active--;
       return okResult(0);
     });
-    const out = await runExec(configStub('serial', false), ctxStub(),
+    const out = await executeTask(configStub('serial', false), ctxStub(),
       { tasks: [{ prompt: 'a' }, { prompt: 'b' }], execution: 'parallel' } as any);
     expect(maxActive).toBe(1);
     expect(out.dispatchMode).toBe('serial');

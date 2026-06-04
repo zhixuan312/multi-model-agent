@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { registerToBlockStoreHandler } from '../../../packages/core/src/lifecycle/handlers/register-context-block-handlers.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';

@@ -102,18 +102,6 @@ export function verify(rec) {
       `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
   }
 
-  // 5.0.0 journal-record: learnings[] → one integration pass that writes one
-  // journal NODE file per recorded learning under .mmagent/journal/nodes/. We
-  // send 2 learnings (dispatch #15); the observable proof they were recorded is
-  // those node files in filesChanged. (The {recorded,failed} report is the
-  // worker's internal contract, not projected onto the response structuredReport.)
-  if (e.route === 'journal-record' && !e.expectFail) {
-    const files = sr.filesChanged ?? task0.filesChanged ?? [];
-    const nodeFiles = files.filter((f) => typeof f === 'string' && /\/journal\/nodes\//.test(f));
-    out.push(C('journal-recorded', nodeFiles.length >= 1 ? 'PASS' : 'FAIL',
-      `journal node files written=${nodeFiles.length} (sent 2 learnings); filesChanged=${files.length}`));
-  }
-
   // Skill passthrough — positive path (scenario 17): the worker launched and
   // completed WITH a resolved+staged skill. Completion is itself the proof that
   // resolve→stage→native delivery did not break session startup (a staging

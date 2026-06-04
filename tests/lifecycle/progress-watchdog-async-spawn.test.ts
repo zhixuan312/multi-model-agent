@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { setTimeout as delay } from 'node:timers/promises';
 
 // This test verifies the event loop stays responsive during a watchdog

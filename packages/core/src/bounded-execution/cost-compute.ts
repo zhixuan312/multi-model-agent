@@ -71,7 +71,7 @@ export function subtractTokens(cur: TokenUsage, prev: TokenUsage): TokenUsage {
   ];
   const allDecreased = fields.every(f => cur[f] <= prev[f]) && fields.some(f => cur[f] < prev[f]);
   if (allDecreased) {
-     
+    // eslint-disable-next-line no-console
     console.warn(`[cost] subtractTokens: detected counter reset (all fields ≤ prev); treating cur as full delta`);
     return { ...cur };
   }
@@ -79,7 +79,7 @@ export function subtractTokens(cur: TokenUsage, prev: TokenUsage): TokenUsage {
   for (const f of fields) {
     const raw = cur[f] - prev[f];
     if (raw < 0) {
-       
+      // eslint-disable-next-line no-console
       console.warn(`[cost] subtractTokens: ${f} went negative (cur=${cur[f]}, prev=${prev[f]}); clamping to 0`);
     }
     out[f] = Math.max(0, raw);

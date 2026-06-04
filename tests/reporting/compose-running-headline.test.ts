@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { composeRunningHeadline } from '../../packages/core/src/reporting/compose-running-headline.js';
 
 describe('composeRunningHeadline', () => {

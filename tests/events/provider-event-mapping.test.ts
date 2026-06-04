@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { mapProviderEventToPlainEntry, PROVIDER_EVENT_NAMES, PlainLogEntrySchema } from '../../packages/core/src/events/plain-log-entry.js';
 
 describe('mapProviderEventToPlainEntry', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { applyAnnotatePreconditions } from '../../packages/core/src/lifecycle/annotate-parser.js';
 
 // Mirror the review verdict/findings into the review gate payload — the

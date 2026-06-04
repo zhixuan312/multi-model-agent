@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { qualityReviewPrompt } from '../../../packages/core/src/lifecycle/handlers/quality-review-prompt.js';
 
 describe('qualityReviewPrompt', () => {

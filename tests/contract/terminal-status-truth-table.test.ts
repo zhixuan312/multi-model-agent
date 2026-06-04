@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
 import type { TerminalInputs, TerminalDecision } from '../../packages/core/src/reporting/terminal-status-deriver.js';

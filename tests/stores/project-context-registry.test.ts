@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { createProjectContext } from '../../packages/core/src/stores/project-context-registry.js';
 
 describe('createProjectContext', () => {

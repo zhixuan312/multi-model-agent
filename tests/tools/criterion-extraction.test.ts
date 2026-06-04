@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { AUDIT_CRITERIA } from '../../packages/core/src/tools/audit/implementer-criteria.js';
 import { REVIEW_CRITERIA } from '../../packages/core/src/tools/review/implementer-criteria.js';
 import { DEBUG_CRITERIA } from '../../packages/core/src/tools/debug/implementer-criteria.js';

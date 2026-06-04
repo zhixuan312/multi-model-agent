@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "5.0.2",
+  "version": "5.0.3",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -29,237 +29,190 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./config/schema": {
-      "bun": "./src/config/schema.ts",
       "types": "./dist/config/schema.d.ts",
       "import": "./dist/config/schema.js"
     },
     "./config/load": {
-      "bun": "./src/config/load.ts",
       "types": "./dist/config/load.d.ts",
       "import": "./dist/config/load.js"
     },
     "./config/model-profile-registry": {
-      "bun": "./src/config/model-profile-registry.ts",
       "types": "./dist/config/model-profile-registry.d.ts",
       "import": "./dist/config/model-profile-registry.js"
     },
     "./providers/provider-factory": {
-      "bun": "./src/providers/provider-factory.ts",
       "types": "./dist/providers/provider-factory.d.ts",
       "import": "./dist/providers/provider-factory.js"
     },
     "./lifecycle/task-runner": {
-      "bun": "./src/lifecycle/task-runner.ts",
       "types": "./dist/lifecycle/task-runner.d.ts",
       "import": "./dist/lifecycle/task-runner.js"
     },
     "./lifecycle/stage-progression": {
-      "bun": "./src/lifecycle/stage-progression.ts",
       "types": "./dist/lifecycle/stage-progression.d.ts",
       "import": "./dist/lifecycle/stage-progression.js"
     },
     "./lifecycle/stage-labels": {
-      "bun": "./src/lifecycle/stage-labels.ts",
       "types": "./dist/lifecycle/stage-labels.d.ts",
       "import": "./dist/lifecycle/stage-labels.js"
     },
     "./bounded-execution/activity-tracker": {
-      "bun": "./src/bounded-execution/activity-tracker.ts",
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
     },
     "./types": {
-      "bun": "./src/types.ts",
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
     },
     "./reporting/structured-report": {
-      "bun": "./src/reporting/structured-report.ts",
       "types": "./dist/reporting/structured-report.d.ts",
       "import": "./dist/reporting/structured-report.js"
     },
     "./error-codes": {
-      "bun": "./src/error-codes.ts",
       "types": "./dist/error-codes.d.ts",
       "import": "./dist/error-codes.js"
     },
     "./events/jsonl-writer": {
-      "bun": "./src/events/jsonl-writer.ts",
       "types": "./dist/events/jsonl-writer.d.ts",
       "import": "./dist/events/jsonl-writer.js"
     },
     "./events/task-envelope": {
-      "bun": "./src/events/task-envelope.ts",
       "types": "./dist/events/task-envelope.d.ts",
       "import": "./dist/events/task-envelope.js"
     },
     "./events/envelope-bus": {
-      "bun": "./src/events/envelope-bus.ts",
       "types": "./dist/events/envelope-bus.d.ts",
       "import": "./dist/events/envelope-bus.js"
     },
     "./events/log-writer": {
-      "bun": "./src/events/log-writer.ts",
       "types": "./dist/events/log-writer.d.ts",
       "import": "./dist/events/log-writer.js"
     },
     "./events/telemetry-uploader": {
-      "bun": "./src/events/telemetry-uploader.ts",
       "types": "./dist/events/telemetry-uploader.d.ts",
       "import": "./dist/events/telemetry-uploader.js"
     },
     "./events/stderr-log-subscriber": {
-      "bun": "./src/events/stderr-log-subscriber.ts",
       "types": "./dist/events/stderr-log-subscriber.d.ts",
       "import": "./dist/events/stderr-log-subscriber.js"
     },
     "./lifecycle/auto-commit": {
-      "bun": "./src/lifecycle/auto-commit.ts",
       "types": "./dist/lifecycle/auto-commit.d.ts",
       "import": "./dist/lifecycle/auto-commit.js"
     },
     "./bounded-execution/file-artifact-check": {
-      "bun": "./src/bounded-execution/file-artifact-check.ts",
       "types": "./dist/bounded-execution/file-artifact-check.d.ts",
       "import": "./dist/bounded-execution/file-artifact-check.js"
     },
     "./lifecycle/task-executor": {
-      "bun": "./src/lifecycle/task-executor.ts",
       "types": "./dist/lifecycle/task-executor.d.ts",
       "import": "./dist/lifecycle/task-executor.js"
     },
     "./lifecycle/executor-output-types": {
-      "bun": "./src/lifecycle/executor-output-types.ts",
       "types": "./dist/lifecycle/executor-output-types.d.ts",
       "import": "./dist/lifecycle/executor-output-types.js"
     },
     "./tools": {
-      "bun": "./src/tools/index.ts",
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
     },
     "./tools/index": {
-      "bun": "./src/tools/index.ts",
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
     },
     "./tools/audit/tool-config": {
-      "bun": "./src/tools/audit/tool-config.ts",
       "types": "./dist/tools/audit/tool-config.d.ts",
       "import": "./dist/tools/audit/tool-config.js"
     },
     "./tools/debug/tool-config": {
-      "bun": "./src/tools/debug/tool-config.ts",
       "types": "./dist/tools/debug/tool-config.d.ts",
       "import": "./dist/tools/debug/tool-config.js"
     },
     "./tools/delegate/tool-config": {
-      "bun": "./src/tools/delegate/tool-config.ts",
       "types": "./dist/tools/delegate/tool-config.d.ts",
       "import": "./dist/tools/delegate/tool-config.js"
     },
     "./tools/execute-plan/tool-config": {
-      "bun": "./src/tools/execute-plan/tool-config.ts",
       "types": "./dist/tools/execute-plan/tool-config.d.ts",
       "import": "./dist/tools/execute-plan/tool-config.js"
     },
     "./tools/investigate/tool-config": {
-      "bun": "./src/tools/investigate/tool-config.ts",
       "types": "./dist/tools/investigate/tool-config.d.ts",
       "import": "./dist/tools/investigate/tool-config.js"
     },
     "./tools/journal/record/tool-config": {
-      "bun": "./src/tools/journal/record/tool-config.ts",
       "types": "./dist/tools/journal/record/tool-config.d.ts",
       "import": "./dist/tools/journal/record/tool-config.js"
     },
     "./tools/journal/recall/tool-config": {
-      "bun": "./src/tools/journal/recall/tool-config.ts",
       "types": "./dist/tools/journal/recall/tool-config.d.ts",
       "import": "./dist/tools/journal/recall/tool-config.js"
     },
     "./tools/register-context-block/tool-config": {
-      "bun": "./src/tools/register-context-block/tool-config.ts",
       "types": "./dist/tools/register-context-block/tool-config.d.ts",
       "import": "./dist/tools/register-context-block/tool-config.js"
     },
     "./tools/retry/tool-config": {
-      "bun": "./src/tools/retry/tool-config.ts",
       "types": "./dist/tools/retry/tool-config.d.ts",
       "import": "./dist/tools/retry/tool-config.js"
     },
     "./tools/review/tool-config": {
-      "bun": "./src/tools/review/tool-config.ts",
       "types": "./dist/tools/review/tool-config.d.ts",
       "import": "./dist/tools/review/tool-config.js"
     },
     "./tools/delegate/schema": {
-      "bun": "./src/tools/delegate/schema.ts",
       "types": "./dist/tools/delegate/schema.d.ts",
       "import": "./dist/tools/delegate/schema.js"
     },
     "./tools/audit/schema": {
-      "bun": "./src/tools/audit/schema.ts",
       "types": "./dist/tools/audit/schema.d.ts",
       "import": "./dist/tools/audit/schema.js"
     },
     "./tools/investigate/schema": {
-      "bun": "./src/tools/investigate/schema.ts",
       "types": "./dist/tools/investigate/schema.d.ts",
       "import": "./dist/tools/investigate/schema.js"
     },
     "./tools/journal/record/schema": {
-      "bun": "./src/tools/journal/record/schema.ts",
       "types": "./dist/tools/journal/record/schema.d.ts",
       "import": "./dist/tools/journal/record/schema.js"
     },
     "./tools/journal/recall/schema": {
-      "bun": "./src/tools/journal/recall/schema.ts",
       "types": "./dist/tools/journal/recall/schema.d.ts",
       "import": "./dist/tools/journal/recall/schema.js"
     },
     "./tools/research/schema": {
-      "bun": "./src/tools/research/schema.ts",
       "types": "./dist/tools/research/schema.d.ts",
       "import": "./dist/tools/research/schema.js"
     },
     "./tools/research/tool-config": {
-      "bun": "./src/tools/research/tool-config.ts",
       "types": "./dist/tools/research/tool-config.d.ts",
       "import": "./dist/tools/research/tool-config.js"
     },
     "./tools/review/schema": {
-      "bun": "./src/tools/review/schema.ts",
       "types": "./dist/tools/review/schema.d.ts",
       "import": "./dist/tools/review/schema.js"
     },
     "./tools/debug/schema": {
-      "bun": "./src/tools/debug/schema.ts",
       "types": "./dist/tools/debug/schema.d.ts",
       "import": "./dist/tools/debug/schema.js"
     },
     "./tools/retry/schema": {
-      "bun": "./src/tools/retry/schema.ts",
       "types": "./dist/tools/retry/schema.d.ts",
       "import": "./dist/tools/retry/schema.js"
     },
     "./tools/register-context-block/schema": {
-      "bun": "./src/tools/register-context-block/schema.ts",
       "types": "./dist/tools/register-context-block/schema.d.ts",
       "import": "./dist/tools/register-context-block/schema.js"
     },
     "./events/consent-rules": {
-      "bun": "./src/events/consent-rules.ts",
       "types": "./dist/events/consent-rules.d.ts",
       "import": "./dist/events/consent-rules.js"
     },
     "./events/wire-schema": {
-      "bun": "./src/events/wire-schema.ts",
       "types": "./dist/events/wire-schema.d.ts",
       "import": "./dist/events/wire-schema.js"
     }
@@ -269,7 +222,7 @@
     "build": "tsc"
   },
   "engines": {
-    "bun": ">=1.3.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.145",
@@ -277,6 +230,7 @@
     "cross-spawn": "^7.0.6",
     "fast-xml-parser": "^5.7.2",
     "jsdom": "^29.1.1",
+    "undici": "^8.2.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ALL_MODEL_IDS } from '../../packages/core/src/config/model-profile-registry.js';
 
 describe('ALL_MODEL_IDS', () => {

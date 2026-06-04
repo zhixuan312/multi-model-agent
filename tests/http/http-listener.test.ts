@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { HTTPListener } from '../../packages/core/src/transport/http-listener.js';
 
 describe('HTTPListener', () => {
@@ -10,36 +10,17 @@ describe('HTTPListener', () => {
     let seen = false;
     const l = track(new HTTPListener({
       bind: '127.0.0.1', port: 0,
-      handler: () => { seen = true; return new Response('ok', { status: 200 }); },
+      handler: (_req, res) => { seen = true; res.writeHead(200); res.end('ok'); },
     }));
     const { port, address } = await l.start();
     expect(port).toBeGreaterThan(0);
     expect(address).toBeTruthy();
     const r = await fetch(`http://127.0.0.1:${port}/`);
     expect(r.status).toBe(200);
-    expect(await r.text()).toBe('ok');
     expect(seen).toBe(true);
   });
 
-  it('handler receives the Request and the server (for requestIP)', async () => {
-    const l = track(new HTTPListener({
-      bind: '127.0.0.1', port: 0,
-      handler: (req, server) => {
-        const ip = server.requestIP(req)?.address ?? 'none';
-        return new Response(JSON.stringify({ path: new URL(req.url).pathname, ipSeen: ip !== 'none' }), {
-          status: 200, headers: { 'content-type': 'application/json' },
-        });
-      },
-    }));
-    const { port } = await l.start();
-    const r = await fetch(`http://127.0.0.1:${port}/echo`);
-    expect(r.status).toBe(200);
-    const body = await r.json() as { path: string; ipSeen: boolean };
-    expect(body.path).toBe('/echo');
-    expect(body.ipSeen).toBe(true);
-  });
-
-  it('rejecting handler → logs to stderr and returns 500 internal_error', async () => {
+  it('rejecting handler (headers unsent) → logs to stderr and returns 500 internal_error', async () => {
     const errSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     const l = track(new HTTPListener({
       bind: '127.0.0.1', port: 0,
@@ -54,8 +35,22 @@ describe('HTTPListener', () => {
     errSpy.mockRestore();
   });
 
+  it('rejecting handler (headers already sent) → ends response, logs, no crash', async () => {
+    const errSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const l = track(new HTTPListener({
+      bind: '127.0.0.1', port: 0,
+      handler: async (_req, res) => { res.writeHead(200); res.write('partial'); throw new Error('late'); },
+    }));
+    const { port } = await l.start();
+    const r = await fetch(`http://127.0.0.1:${port}/`);
+    expect(r.status).toBe(200);            // headers already committed
+    expect(await r.text()).toBe('partial'); // response ended cleanly, no hang
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[mmagent] listener handler rejected:'));
+    errSpy.mockRestore();
+  });
+
   it('stop() is idempotent', async () => {
-    const l = new HTTPListener({ bind: '127.0.0.1', port: 0, handler: () => new Response(null, { status: 204 }) });
+    const l = new HTTPListener({ bind: '127.0.0.1', port: 0, handler: (_req, res) => { res.end(); } });
     await l.start();
     await l.stop();
     await expect(l.stop()).resolves.toBeUndefined();

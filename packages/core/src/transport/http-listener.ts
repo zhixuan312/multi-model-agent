@@ -1,15 +1,14 @@
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+
 /**
- * HTTPListener — owns the HTTP socket lifecycle on Bun.serve: bind a loopback
- * interface, accept connections, close on shutdown. Routing, draining policy,
- * auth, and request parsing live elsewhere (RouteDispatcher + request-pipeline).
- * The listener's only request-time responsibility is to convert a rejected
- * handler promise into a 500 response.
+ * HTTPListener — owns the HTTP socket lifecycle: bind a loopback interface,
+ * accept connections, close on shutdown. Routing, draining policy, auth, and
+ * request parsing live elsewhere (RouteDispatcher + request-pipeline). The
+ * listener's only request-time responsibility is to convert a rejected handler
+ * promise into a 500 (when the response is still writable) or a log line.
  */
 
-/** The concrete server object Bun.serve returns (avoids the generic `Server<T>` param). */
-export type BunServer = ReturnType<typeof Bun.serve>;
-
-export type HTTPRequestHandler = (req: Request, server: BunServer) => Response | Promise<Response>;
+export type HTTPRequestHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 
 export interface HTTPListenerOptions {
   /** Bind address — must be a loopback interface in production (127.0.0.1 or ::1). */
@@ -21,35 +20,37 @@ export interface HTTPListenerOptions {
 }
 
 export class HTTPListener {
-  private server: BunServer | null = null;
+  private server: Server | null = null;
 
   constructor(private readonly options: HTTPListenerOptions) {}
 
   async start(): Promise<{ port: number; address: string | null }> {
-    const handler = this.options.handler;
-    const server = Bun.serve({
-      port: this.options.port,
-      hostname: this.options.bind,
-      async fetch(req, srv) {
-        try {
-          return await handler(req, srv);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
-          process.stderr.write(`[mmagent] listener handler rejected: ${msg}\n`);
-          return new Response(
-            JSON.stringify({ error: { code: 'internal_error', message: 'Internal server error' } }),
-            { status: 500, headers: { 'content-type': 'application/json' } },
-          );
+    const server = createServer((req, res) => {
+      Promise.resolve(this.options.handler(req, res)).catch((err: unknown) => {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        process.stderr.write(`[mmagent] listener handler rejected: ${msg}\n`);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 'internal_error', message: 'Internal server error' } }));
+        } else if (!res.writableEnded) {
+          res.end();
         }
-      },
+      });
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(this.options.port, this.options.bind, resolve);
     });
     this.server = server;
-    return { port: server.port ?? this.options.port, address: this.options.bind };
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr !== null ? (addr as { port: number }).port : this.options.port;
+    const address = typeof addr === 'object' && addr !== null ? ((addr as { address?: string }).address ?? null) : null;
+    return { port, address };
   }
 
   async stop(): Promise<void> {
     if (!this.server) return;
-    await this.server.stop(true);
+    const server = this.server;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     this.server = null;
   }
 }

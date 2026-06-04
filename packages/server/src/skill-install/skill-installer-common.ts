@@ -7,6 +7,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Client, ManifestEntry } from './manifest.js';
+import {
+  SkillNotFoundError,
+  getSkillsRoot,
+  readSkillContent,
+  SUPPORTED_SKILLS,
+} from './discover.js';
 import { installClaudeCode, uninstallClaudeCode } from './skill-installers/claude-code.js';
 import { installGeminiCli, uninstallGeminiCli } from './skill-installers/gemini-cli.js';
 import { installCodexCli, uninstallCodexCli } from './skill-installers/codex-cli.js';

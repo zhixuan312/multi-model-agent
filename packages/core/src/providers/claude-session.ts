@@ -20,6 +20,7 @@ import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-re
 import { normalizeClaudeTurn } from './normalize-claude.js';
 import { classifyClaudeToolCall } from './claude-tool-categories.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
@@ -54,10 +55,6 @@ export class ClaudeSession implements Session {
     apiKey?: string;
     baseUrl?: string;
     oauthAccessToken?: string;
-    // Injectable SDK query (defaults to the real one) so tests substitute a fake
-    // WITHOUT mock.module('@anthropic-ai/claude-agent-sdk'), which under Bun is
-    // sticky/process-global and leaked into every later claude-provider test.
-    queryFn?: typeof query;
   }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
@@ -108,7 +105,7 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
-    const q = (this.args.queryFn ?? query)({
+    const q = query({
       prompt: promptIterable(),
       options: {
         model: this.args.model,
@@ -206,7 +203,7 @@ export class ClaudeSession implements Session {
         // counters reflect actual file activity. isShell is computed but not
         // recorded at the envelope level — it flows through normalize-claude.ts
         // into TurnResult.usedShell.
-        const { writtenPath } = classifyClaudeToolCall(b.name, b.input);
+        const { writtenPath, isShell } = classifyClaudeToolCall(b.name, b.input);
         this.envelope?.recordToolCall({
           stage: 'implementing',
           tool: b.name,

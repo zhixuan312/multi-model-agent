@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { toolConfig } from '../../packages/core/src/tools/research/tool-config.js';
 
 // Per-tool integration coverage for research.

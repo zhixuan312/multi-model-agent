@@ -8,7 +8,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { EMBEDDED_SKILLS } from './embedded-skills.js';
 
 /**
  * Regex matching a line that starts with `@include ` (exact space after
@@ -91,13 +90,6 @@ export function inlineIncludes(
     } catch (err) {
       const nodeErr = err as NodeJS.ErrnoException;
       if (nodeErr.code === 'ENOENT') {
-        // Compiled-binary fallback: _shared/* is not on disk inside a
-        // `bun build --compile` binary; consult the embedded assets.
-        const embedded = EMBEDDED_SKILLS[relativePath];
-        if (embedded !== undefined) {
-          result.push(embedded);
-          continue;
-        }
         // Missing shared file — warn and drop the directive line.
         const detail = err instanceof Error ? err.message : String(err);
         process.stderr.write(

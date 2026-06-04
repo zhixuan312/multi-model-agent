@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { parseFindings } from '../../packages/core/src/lifecycle/findings-parser.js';
 
 describe('parseFindings — structured warnings for dropped blocks', () => {

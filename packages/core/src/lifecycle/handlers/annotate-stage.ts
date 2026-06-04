@@ -157,6 +157,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   let fallbackMode = false;
 
   if (tier >= 1) {
+    const droppedEvidenceCount = truncatedFindings.filter(f => (f as { evidence?: string }).evidence !== undefined).length;
     truncatedFindings = truncatedFindings.map(f => {
       const cp: Fin = { ...f };
       delete (cp as { evidence?: string }).evidence;
@@ -167,6 +168,7 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
     env?.recordValidationWarning?.({ rule: 'AnnotateTruncationTier1', path: 'annotatePrompt' });
   }
   if (tier >= 2) {
+    const dropped = truncatedSummary ? 1 : 0;
     truncatedSummary = '';
     const env = envelope as any;
     env?.recordValidationWarning?.({ rule: 'AnnotateTruncationTier2', path: 'annotatePrompt' });

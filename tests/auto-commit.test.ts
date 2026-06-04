@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { composeCommitMessage } from '@zhixuan92/multi-model-agent-core/lifecycle/auto-commit';
 
 describe('composeCommitMessage', () => {

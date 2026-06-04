@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, statSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +11,7 @@ describe('install-id', () => {
   it('returns a UUIDv4 and creates the file with mode 0600', () => {
     const id = getOrCreateInstallId(dir);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    // Unix file-mode bits are not meaningful on Windows (chmod is a no-op there).
-    if (process.platform !== 'win32') expect(statSync(join(dir,'install-id')).mode & 0o777).toBe(0o600);
+    expect(statSync(join(dir,'install-id')).mode & 0o777).toBe(0o600);
   });
 
   it('is idempotent — second call returns the same UUID', () => {

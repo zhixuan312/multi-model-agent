@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { notifySkillInstalled } from '../../packages/server/src/skill-install/skill-installer-common.js';
 
 interface FakeFetch {

@@ -53,3 +53,16 @@ export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 export function retryableFor(status: string): boolean {
   return status === 'provider_timeout';
 }
+
+export function classifyContextBlockError(err: Error): 'context_block_not_found' | 'retryable' | 'non_retryable' {
+  const msg = err.message.toLowerCase();
+  if (msg.includes('context block') || (msg.includes('id') && msg.includes('undefined'))) {
+    if (msg.includes('not found') || msg.includes('undefined') || msg.includes('missing')) {
+      return 'context_block_not_found';
+    }
+  }
+  if (msg.includes('rate limit') || msg.includes('429') || msg.includes('503') || msg.includes('502')) {
+    return 'retryable';
+  }
+  return 'non_retryable';
+}

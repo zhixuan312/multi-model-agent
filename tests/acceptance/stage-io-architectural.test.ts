@@ -5,7 +5,7 @@
 // stage ordering, return-type uniformity, payload shape, compose purity,
 // and driver halt containment.
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type {

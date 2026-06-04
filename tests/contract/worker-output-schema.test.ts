@@ -6,7 +6,7 @@
 // back to status='failed' on schema rejection per the worker-output
 // contract).
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   WorkerOutputSchema,
   parseWorkerOutput,

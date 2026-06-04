@@ -1,27 +1,27 @@
-import { describe, it, expect } from 'bun:test';
-import { journalRecordExecutor } from '../../packages/server/src/http/handlers/tools/journal-record.js';
+import { describe, it, expect, vi } from 'vitest';
 
-// Inject the lock + executor via journalRecordExecutor's deps param instead of
-// mock.module() — under Bun mock.module is process-global and STICKY (no per-file
-// restore), so mocking the core task-executor here leaked a mocked executeTask
-// into every later dispatch test (audit/debug/journal/batch).
+// Hoisted mutable state — vi.mock factories are hoisted above imports, so the
+// state they close over must be created with vi.hoisted (a hoisted factory
+// can't reference ordinary module-scope locals).
+const h = vi.hoisted(() => ({ lockCalls: [] as string[], executeCalls: { n: 0 } }));
+
+vi.mock('../../packages/server/src/http/journal-lock.js', () => ({
+  withProjectJournalLock: async (cwd: string, fn: () => Promise<unknown>) => { h.lockCalls.push(cwd); return fn(); },
+  __journalLockMapSize: () => 0,
+}));
+vi.mock('@zhixuan92/multi-model-agent-core/lifecycle/task-executor', () => ({
+  executeTask: async () => { h.executeCalls.n++; return { completed: true }; },
+}));
+
+const { journalRecordExecutor } =
+  await import('../../packages/server/src/http/handlers/tools/journal-record.js');
 
 describe('journalRecordExecutor (AC-5 wiring)', () => {
   it('wraps executeTask in withProjectJournalLock for the given cwd', async () => {
-    const lockCalls: string[] = [];
-    let executeCalls = 0;
-    const deps = {
-      withProjectJournalLock: async (cwd: string, fn: () => Promise<unknown>) => {
-        lockCalls.push(cwd);
-        return fn();
-      },
-      executeTask: async () => { executeCalls++; return { completed: true }; },
-    } as never;
-
-    const run = journalRecordExecutor({ learnings: ['x'.repeat(20)] } as never, '/proj', deps);
+    h.lockCalls.length = 0; h.executeCalls.n = 0;
+    const run = journalRecordExecutor({ learnings: ['x'.repeat(20)] }, '/proj');
     await run({} as never);
-
-    expect(lockCalls).toEqual(['/proj']);
-    expect(executeCalls).toBe(1);
+    expect(h.lockCalls).toEqual(['/proj']);
+    expect(h.executeCalls.n).toBe(1);
   });
 });

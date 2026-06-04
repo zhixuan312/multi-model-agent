@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -55,9 +55,7 @@ describe('validateCwd', () => {
     if (r.ok) expect(r.canonicalCwd).toBe(fs.realpathSync(real));
   });
 
-  // Skipped on Windows: unprivileged symlink creation is unreliable in win32 CI;
-  // the realpath-based escape check itself is exercised here on POSIX.
-  it.skipIf(process.platform === 'win32')('rejects symlink that escapes its parent directory → forbidden_cwd', () => {
+  it('rejects symlink that escapes its parent directory → forbidden_cwd', () => {
     // Structure: tmp/outer/  (exists)
     //            tmp/sandbox/link → ../outer  (escapes sandbox)
     const outer = path.join(tmp, 'outer');
@@ -81,9 +79,7 @@ describe('validateCwd', () => {
   // routing tasks at them produces confused write attribution and the
   // 'feedback_mma_worker_sandbox_topic_tracker' bug pattern.
   describe('A4a.1 stale-sibling pattern rejection', () => {
-    // Skipped on Windows: the guard targets the POSIX `/tmp/claude/G--` prefix
-    // (a macOS/Linux Claude-Code artifact path) which os.tmpdir() never yields on win32.
-    it.skipIf(process.platform === 'win32')('rejects /tmp/claude/G--*  with forbidden_cwd', () => {
+    it('rejects /tmp/claude/G--*  with forbidden_cwd', () => {
       // Build a real directory matching the pattern. /tmp on macOS resolves
       // to /private/tmp via realpath; either prefix is the stale-sibling
       // pattern. Use os.tmpdir() to find the real /tmp prefix.

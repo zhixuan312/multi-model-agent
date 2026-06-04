@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { PlainLogEntrySchema, PlainLogKindEnum } from '../../packages/core/src/events/plain-log-entry.js';
 import type { TaskEnvelope } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';

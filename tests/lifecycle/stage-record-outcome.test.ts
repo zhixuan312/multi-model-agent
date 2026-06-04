@@ -1,5 +1,5 @@
 // tests/lifecycle/stage-record-outcome.test.ts
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { StageGate } from '../../packages/core/src/lifecycle/stage-io.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { readdirSync } from 'node:fs';
 
 // register-context-block test is restored by Phase F5 of the v4 engine wiring plan

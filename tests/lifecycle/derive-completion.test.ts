@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { deriveCompletion, type CompletionInputs } from '../../packages/core/src/lifecycle/derive-completion.js';
 
 function base(overrides: Partial<CompletionInputs> = {}): CompletionInputs {

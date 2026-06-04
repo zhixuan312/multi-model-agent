@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { inputSchema as delegateInputSchema } from '../../packages/core/src/tools/delegate/schema.js';
 import { executePlanInputSchema } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 import type { TaskSpec } from '../../packages/core/src/types.js';

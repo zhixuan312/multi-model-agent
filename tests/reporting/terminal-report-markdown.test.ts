@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { renderTerminalReportMarkdown } from '../../packages/core/src/reporting/terminal-report-markdown.js';
 
 const base = {

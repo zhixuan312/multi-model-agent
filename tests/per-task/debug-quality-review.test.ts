@@ -1,20 +1,16 @@
-import { describe, it, expect, beforeAll, afterEach, afterAll } from 'bun:test';
-import { __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
+import { describe, it, expect, vi } from 'vitest';
 
-// Provider injection via the supported __setCoreTestProviderOverrideMap seam,
-// not vi.mock('provider-factory') (sticky/process-global under Bun).
-let __prevOverrideEnv: string | undefined;
-beforeAll(() => {
-  __prevOverrideEnv = process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-  process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
-});
-afterEach(() => { __setCoreTestProviderOverrideMap(null); });
-afterAll(() => {
-  if (__prevOverrideEnv === undefined) delete process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-  else process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = __prevOverrideEnv;
-});
+const mockProviderRun = vi.fn();
+const mockCreateProvider = vi.fn();
 
-import type { MultiModelConfig, RuntimeRunResult, AgentType, Provider } from '@zhixuan92/multi-model-agent-core';
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
+  createProvider: (slot: string) => mockCreateProvider(slot),
+}));
+
+// The executor imports runTaskViaDispatcher internally, which calls createProvider.
+// We register mock implementations per test.
+
+import type { MultiModelConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
 import { toolConfig } from '../../packages/core/src/tools/debug/tool-config.js';
 
@@ -73,10 +69,7 @@ const config: MultiModelConfig = {
 
 describe('executeDebug — quality_only review', () => {
   it('returns envelope with specReviewVerdict, qualityReviewVerdict, and roundsUsed', async () => {
-    __setCoreTestProviderOverrideMap(new Map<AgentType, Provider>([
-      ['standard', makeProvider('standard') as unknown as Provider],
-      ['complex', makeProvider('complex') as unknown as Provider],
-    ]));
+    mockCreateProvider.mockImplementation((slot: string) => makeProvider(slot));
 
     const ctx = {
       config,

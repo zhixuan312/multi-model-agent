@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // Standalone test: loads ~/.multi-model/config.json, creates the minimax
 // provider, and calls .run() directly. Bypasses the MCP server entirely
 // so we isolate whether the bug is in the runner/provider or the MCP

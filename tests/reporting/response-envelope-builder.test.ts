@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ResponseEnvelopeBuilder } from '../../packages/core/src/reporting/response-envelope-builder.js';
 
 describe('ResponseEnvelopeBuilder', () => {

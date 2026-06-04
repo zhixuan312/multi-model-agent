@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { makeFindingsHeadlineTemplate } from '../../packages/core/src/reporting/findings-headline.js';
 
 describe('makeFindingsHeadlineTemplate', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { retryBriefSlot } from '../../../packages/core/src/tools/retry/brief-slot.js';
 
 describe('retryBriefSlot', () => {

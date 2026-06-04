@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { composeCommitMessage } from '../../../packages/core/src/lifecycle/handlers/compose-commit-message.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 // Import enrichRuntimeResult + recordTaskCompletedHandler from the lifecycle module:

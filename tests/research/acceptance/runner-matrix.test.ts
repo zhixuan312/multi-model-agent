@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { runOrchestrator } from '../../../packages/core/src/research/orchestrator.js';
 import { runTwoTurnDriver } from '../../../packages/core/src/tools/research/two-turn-driver.js';
 

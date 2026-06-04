@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { notApplicableSchema, type NotApplicable } from '@zhixuan92/multi-model-agent-core';
 
 describe('NotApplicable sentinel', () => {

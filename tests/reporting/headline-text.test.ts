@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { firstSentenceOrTruncate } from '../../packages/core/src/reporting/headline-text.js';
 
 describe('firstSentenceOrTruncate (Gap 12)', () => {

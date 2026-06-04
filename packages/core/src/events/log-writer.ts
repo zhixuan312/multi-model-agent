@@ -18,7 +18,7 @@ export class LogWriter implements Subscriber {
   private writer: JsonlWriter | null = null;
   private requestSpillDir: string;
 
-  constructor(opts: LogWriterOpts) {
+  constructor(private opts: LogWriterOpts) {
     const baseDir = opts.logDir ?? join(homedir(), '.multi-model', 'logs');
     if (opts.diagnosticsLog) this.writer = new JsonlWriter({ dir: baseDir });
     this.requestSpillDir = join(baseDir, 'requests');

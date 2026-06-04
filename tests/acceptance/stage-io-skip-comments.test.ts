@@ -3,7 +3,7 @@
 // AC-26: layer-2 synthesized skip comment is handler-authored verbatim
 // AC-27: handler-emitted skip follows `${stage.name} skipped by handler:` prefix
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { StageDefinition, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
