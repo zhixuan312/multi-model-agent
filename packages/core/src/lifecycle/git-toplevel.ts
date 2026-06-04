@@ -2,21 +2,36 @@ import { spawn } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 
 export interface ResolveOptions {
+  /** Per-attempt spawn timeout (ms). Default 5000. Total worst-case wall time is
+   *  bounded by `maxAttempts × timeoutMs` only when every attempt is a transient
+   *  fork failure; a timeout itself is definitive and is NOT retried. */
   timeoutMs?: number;
-  /** Max spawn attempts on a TRANSIENT failure (spawn error / timeout). Default 3. */
+  /** Max spawn attempts on a TRANSIENT fork failure (EAGAIN/ENOMEM). Default 3.
+   *  Coerced to a positive integer; non-finite values fall back to 3. */
   maxAttempts?: number;
 }
 
-/** Outcome of one spawn attempt. `transient` = spawn-level failure (EAGAIN/ENOMEM)
- *  or timeout — worth retrying; a clean non-zero exit (not a repo) is definitive. */
+/** Outcome of one spawn attempt. `transient` = a spawn-level fork failure
+ *  (EAGAIN/ENOMEM) worth retrying. Everything else — a clean non-zero exit
+ *  (not a repo), a permanent spawn error (ENOENT: git not installed), or a
+ *  timeout — is definitive and returned immediately without retry. */
 interface Attempt { value: string | null; transient: boolean; }
+
+/** True only for the fork-pressure spawn errors this retry path targets.
+ *  ENOENT (git missing), EACCES, signal-kills, etc. are permanent → no retry. */
+function isTransientSpawnError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return code === 'EAGAIN' || code === 'ENOMEM';
+}
 
 function attemptOnce(cwd: string, timeoutMs: number): Promise<Attempt> {
   return new Promise((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const settle = (value: string | null, transient = false) => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer); // free the timer on EVERY exit path (incl. 'error')
       resolve({ value, transient });
     };
     let child;
@@ -27,15 +42,16 @@ function attemptOnce(cwd: string, timeoutMs: number): Promise<Attempt> {
         // console binary when the daemon has no attached console. No-op on POSIX.
         windowsHide: true,
       });
-    } catch {
-      settle(null, true); // synchronous spawn throw → transient
+    } catch (err) {
+      settle(null, isTransientSpawnError(err)); // sync throw: retry only EAGAIN/ENOMEM
       return;
     }
     let stdout = '';
     child.stdout?.on('data', (b: Buffer) => { stdout += b.toString('utf8'); });
     child.stderr?.on('data', () => { /* swallow */ });
-    // A spawn-level 'error' (EAGAIN/ENOMEM under fork pressure) is transient.
-    child.on('error', () => settle(null, true));
+    // Retry only the fork-pressure failure class; ENOENT (git missing) and other
+    // permanent spawn errors are definitive.
+    child.on('error', (err) => settle(null, isTransientSpawnError(err)));
     child.on('exit', (code) => {
       // `git --show-toplevel` emits forward-slash paths even on Windows;
       // normalize to an OS-native absolute path so callers comparing against
@@ -43,30 +59,32 @@ function attemptOnce(cwd: string, timeoutMs: number): Promise<Attempt> {
       if (code === 0) { const out = stdout.trim(); settle(out ? resolvePath(out) : null); }
       else settle(null); // git ran and said "not a repo" → definitive, do not retry
     });
-    const t = setTimeout(() => {
+    timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
-      settle(null, true); // timeout → transient
+      // Timeout is definitive: retrying would triple the worst-case stall on the
+      // commit critical path. Caller falls back (?? cwd) immediately instead.
+      settle(null, false);
     }, timeoutMs);
-    child.on('exit', () => clearTimeout(t));
   });
 }
 
 /**
  * Returns the canonical absolute path of the git toplevel for `cwd`, or
- * null if `cwd` is not in a git repo, git is unavailable, the directory
- * does not exist, or the spawn times out (default 5 s).
+ * null if `cwd` is not in a git repo, git is unavailable (ENOENT), the
+ * directory does not exist, or the spawn times out (default 5 s).
  *
- * Pure function of (cwd, filesystem state). Never throws. Retries on TRANSIENT
- * spawn failures (EAGAIN/ENOMEM/timeout — common when many git subprocesses
- * fork concurrently under load); a definitive "not a repo" result is returned
- * immediately without retry.
+ * Pure function of (cwd, filesystem state). Never throws. Retries ONLY transient
+ * fork failures (EAGAIN/ENOMEM — common when many git subprocesses fork
+ * concurrently under load), up to `maxAttempts`. A "not a repo" exit, a missing
+ * git binary (ENOENT), and a timeout are all definitive and returned immediately.
  */
 export async function resolveGitToplevel(
   cwd: string,
   opts: ResolveOptions = {},
 ): Promise<string | null> {
   const timeoutMs = opts.timeoutMs ?? 5000;
-  const maxAttempts = Math.max(1, opts.maxAttempts ?? 3);
+  const rawAttempts = opts.maxAttempts ?? 3;
+  const maxAttempts = Number.isFinite(rawAttempts) ? Math.max(1, Math.floor(rawAttempts)) : 3;
   for (let i = 0; i < maxAttempts; i++) {
     const { value, transient } = await attemptOnce(cwd, timeoutMs);
     if (!transient) return value;
