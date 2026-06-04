@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3] - 2026-06-04
+
+**Reverts the Bun runtime + standalone-binary distribution shipped in 5.0.0–5.0.2, returning to the Node build.** Those releases distributed `@zhixuan92/multi-model-agent` as a `bun build --compile` standalone binary. That binary bundled `@anthropic-ai/claude-agent-sdk`, which works by spawning a separate **native `claude` CLI** (shipped in `@anthropic-ai/claude-agent-sdk-<platform>`). The SDK resolves that CLI via `require.resolve` at runtime — which cannot work inside the compiled `$bunfs` virtual filesystem and has no `node_modules` to fall back to — so every claude/standard-tier worker threw `Native CLI binary for <platform> not found` and `runner_crash`ed at 0 turns. The codex/complex tier was unaffected (it spawns its own on-disk CLI). This was a regression present in all of 5.0.0–5.0.2.
+
+The Node build resolves the SDK's native CLI from a normal on-disk `node_modules`, so the claude tier works again. Consumers now need **Node ≥22** (instead of a self-contained binary).
+
+### Changed
+- **Runtime: Bun → Node ≥22.** Reverted `Bun.serve` (back to `node:http`), `Bun.spawn`, `bun:test` (back to Vitest), and the `bun build --compile` per-platform binary distribution (`build-binaries.mjs`, `binaries/_toplevel`). Published as a plain Node npm package again (`bin` → `dist/cli/index.js` with a `node` shebang).
+
+### Preserved from the 5.0.x line (forward-ported onto the Node base)
+- **Journal redesign:** `learnings[]` array (N learnings compiled into one ordered brief), per-project journal write mutex + handler lock, refreshed `mma-journal-record` skill.
+- **Report contract:** worker procedure + report contract, `{recorded, failed}` report parser.
+- **Lifecycle cwd-escape hardening:** `findEscapedWrites` + hard-fail on writes escaping the dispatched cwd, plus the committed-in-cwd false-fail fix.
+- **Model profiles:** added MiniMax-M3 + full provider rate scan.
+- **Reliability:** retry git spawn on transient `EAGAIN`/`ENOMEM` under fork pressure (`resolveGitToplevel` + git-commit-handler).
+
+Build green; full Vitest suite **2127/2127**.
+
 ## [4.9.0] - 2026-05-26
 
 Adds **delegate skill passthrough**: a `/delegate` task can now name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those skills — resolved from the *main agent's* store (selected by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively to whichever provider runs the task. Default is unchanged (no `skills` → today's behavior, byte-for-byte). `SCHEMA_VERSION` stays 5; no wire-schema or telemetry change. Build green, full Vitest suite 2103/2103, and a live 18-scenario full-pipeline smoke clean (0 hard-fails) including the two new skill-passthrough scenarios.
