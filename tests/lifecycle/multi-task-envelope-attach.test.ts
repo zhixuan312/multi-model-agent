@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
@@ -27,20 +27,20 @@ const mockRunTask = vi.fn(async (input: {
   } as any;
 });
 
-// Inject the dispatcher + agent resolver via executeTask's deps param instead
-// of vi.mock — under Bun mock.module is sticky/process-global and leaked these
-// stubs into later lifecycle tests.
-const execDeps = {
+vi.mock('../../packages/core/src/lifecycle/task-runner.js', () => ({
   runTaskViaDispatcher: (input: any) => mockRunTask(input),
   applyParallelSafetySuffixIfNeeded: (tasks: any[], _concurrent: boolean) => tasks.slice(),
+}));
+
+// Stub the agent resolver so resolution doesn't fail when no real config exists.
+vi.mock('../../packages/core/src/providers/agent-resolver.js', () => ({
   resolveAgent: () => ({ slot: 'standard', provider: { name: 'stub', config: { type: 'claude', model: 'stub' } } }),
-} as any;
+}));
 
 // Use the delegate tool config so briefSlot maps the input tasks 1:1 to
 // briefs (exercises the multi-task path naturally).
 const toolConfigImport = await import('../../packages/core/src/tools/delegate/tool-config.js');
 const { executeTask } = await import('../../packages/core/src/lifecycle/task-executor.js');
-const runExec = (ctx: any, input: any) => executeTask(toolConfigImport.toolConfig, ctx, input, execDeps);
 
 function buildContext(batchId: string, bus: EnvelopeBus, registry: BatchRegistry, envelope: TaskEnvelopeStore) {
   return {
@@ -81,7 +81,7 @@ describe('multi-task /delegate envelope attachment', () => {
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);
 
-    await runExec(ctx, {
+    await executeTask(toolConfigImport.toolConfig, ctx, {
       tasks: [{ prompt: 'task A' }],
     });
 
@@ -107,7 +107,7 @@ describe('multi-task /delegate envelope attachment', () => {
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);
 
-    await runExec(ctx, {
+    await executeTask(toolConfigImport.toolConfig, ctx, {
       tasks: [
         { prompt: 'task A' },
         { prompt: 'task B' },
@@ -156,7 +156,7 @@ describe('multi-task /delegate envelope attachment', () => {
     registry.attachEnvelope(batchId, 0, env0);
     const ctx = buildContext(batchId, bus, registry, env0);
 
-    await runExec(ctx, {
+    await executeTask(toolConfigImport.toolConfig, ctx, {
       tasks: [
         { prompt: 'task A' },
         { prompt: 'task B' },

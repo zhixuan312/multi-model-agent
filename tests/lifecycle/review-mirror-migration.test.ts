@@ -2,7 +2,7 @@
 // The rework GATE already reads gates.review.payload directly; the accessor
 // reads the same source. These assertions must hold identically before and
 // after the hoist + state mirror are removed.
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import { reviewPayload } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

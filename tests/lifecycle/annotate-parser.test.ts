@@ -4,7 +4,7 @@
 // parser that gates AnnotatePayload.completed). The LLM annotator is the
 // proposer; this parser is the enforcer.
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { applyAnnotatePreconditions } from '../../packages/core/src/lifecycle/annotate-parser.js';
 import type { AnnotatePayload } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

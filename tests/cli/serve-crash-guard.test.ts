@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -54,15 +54,11 @@ function emitExitSafe(emitter: NodeJS.EventEmitter, event: string, ...args: unkn
   }
 }
 
-// Invoke ONLY the listeners startServe added (those beyond `baseline`), calling
-// them directly rather than via process.emit(). Under Bun, process.emit('uncaughtException')
-// also drives the runtime's native crash machinery (signal-exit, real exit); calling
-// the registered handlers directly tests the mmagent crash-guard in isolation.
-function emitToNewListeners(event: string, baseline: number, ...args: unknown[]): void {
-  const listeners = process.listeners(event as 'uncaughtException').slice(baseline);
-  for (const l of listeners) {
-    try { (l as (...a: unknown[]) => void)(...args); }
-    catch (e: unknown) { if (!(e instanceof FakeExit)) throw e; }
+function processEmitSafe(event: string, ...args: unknown[]): void {
+  try {
+    process.emit(event, ...args);
+  } catch (e: unknown) {
+    if (!(e instanceof FakeExit)) throw e;
   }
 }
 
@@ -132,19 +128,19 @@ describe('serve crash-guard (Bug 7)', () => {
     expect(process.listenerCount('unhandledRejection')).toBeGreaterThanOrEqual(unhandledBefore + 1);
 
     const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
-    emitToNewListeners('uncaughtException', uncaughtBefore, epipe);
+    processEmitSafe('uncaughtException', epipe);
     expect(exitCalls).toEqual([0]);
 
     exitCalls.length = 0;
-    emitToNewListeners('uncaughtException', uncaughtBefore, new Error('boom'));
+    processEmitSafe('uncaughtException', new Error('boom'));
     expect(exitCalls).toEqual([1]);
 
     exitCalls.length = 0;
-    emitToNewListeners('unhandledRejection', unhandledBefore, epipe, Promise.resolve());
+    processEmitSafe('unhandledRejection', epipe, Promise.resolve());
     expect(exitCalls).toEqual([0]);
 
     exitCalls.length = 0;
-    emitToNewListeners('unhandledRejection', unhandledBefore, new Error('reject-boom'), Promise.resolve());
+    processEmitSafe('unhandledRejection', new Error('reject-boom'), Promise.resolve());
     expect(exitCalls).toEqual([1]);
 
     await handle.stop();

@@ -2,11 +2,9 @@
 
 [![npm](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=npm)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 
-**The horizontal harness for AI engineering** — a local HTTP daemon that routes the right agent to the right task, gets it done right with **cross-agent review**, and caps spend with **bounded execution**. One process serves Claude Code, Codex CLI, Gemini CLI, and Cursor via installable skills; bring your own keys.
+Local HTTP daemon that delegates tool-using work to sub-agents on different LLM providers. One process serves Claude Code, Codex CLI, Gemini CLI, and Cursor via installable skills.
 
-**The bet:** a reviewed multi-agent harness matches or beats a single frontier model, at a fraction of the cost. **Models go deep; we connect them wide** — and the engineer always keeps the judgment.
-
-*Renamed from `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — the package no longer uses MCP. North star: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). See [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).*
+*Renamed from `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — the package no longer uses MCP. See [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).*
 
 ## Why
 
@@ -20,13 +18,6 @@ Your flagship model reasoning about architecture is money well spent. That same 
 
 Plus structural quality: implementation and review run on **different** model families — different blind spots, catches what self-review can't.
 
-## How it works
-
-- **Three layers.** Your own agent keeps the judgment on top; beneath it sit two labor slots you configure — `complex` and `standard` (labor *categories*, not fixed intelligence tiers).
-- **AIDLC + rods.** Each tool is a *rod* — a gate over one stage of the AI Development Life Cycle: `investigate` / `research` feed the front, `audit` gates the spec and plan, `delegate` / `execute-plan` build, `review` / `debug` guard the output, `retry` closes the loop, `journal` remembers. The harness instruments the lifecycle; the engineer authors it.
-- **Reviewed by default.** Write tasks run implement → spec review → quality review → rework with implementer and reviewer on **different agents**; read-only rods return findings and skip review.
-- **Built on the providers' own runtimes.** Claude work runs through the **Claude Agent SDK**, OpenAI/Codex work through the official **Codex CLI** — when a provider deepens its runtime the harness gets better for free, and a Claude Code task can run on Codex underneath (or vice versa).
-
 ## Initial setup
 
 Four steps, in order.
@@ -34,7 +25,7 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # standalone binary (Bun embedded) — npm uses Node ≥18 only to install; the daemon needs no Node/Bun
+npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
 mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -128,7 +119,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-research` | `POST /research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | `POST /audit` | Audit a prose artifact against a named criteria set — pick the **subtype**: `default` (general prose-coherence), `spec` (requirements: testability, decision-trace), `plan` (a plan verified against the actual codebase), `skill` (a SKILL.md). Run `subtype=plan` before `mma-execute-plan`. |
+| `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
 | `mma-journal-record` | `POST /journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
 | `mma-journal-recall` | `POST /journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
@@ -242,7 +233,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-16 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+15 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
@@ -259,7 +250,6 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
-| `POST /control/batch-slice` | Slice an in-flight batch — return a subset of its tasks by index |
 | `GET /health` | Liveness probe (unauthenticated, loopback-only) |
 | `GET /status` | Server status (authenticated, loopback-only) |
 
@@ -298,12 +288,12 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its process re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.0
+## What's new in 4.9.0
 
-- **Runtime migrated to Bun**, and this package now ships as **standalone per-platform binaries** with Bun embedded: `npm i -g @zhixuan92/multi-model-agent` resolves a native binary that needs neither Node nor Bun to run (npm uses Node ≥18 only for the install shim). Behavior is identical to 4.x.
+- **Delegate skill passthrough.** `POST /delegate` tasks accept an optional `skills: string[]`. Each name is resolved from the caller's skill store (by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively — Claude workers via a local SDK plugin, Codex workers via an ephemeral `CODEX_HOME`. Unknown names hard-fail just that task; omitting `skills` is byte-for-byte the previous behavior.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

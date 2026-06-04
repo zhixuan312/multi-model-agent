@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { parseWorkerOutput } from '../../packages/core/src/lifecycle/worker-output-contract.js';
 
 // v5 — WorkerOutputSchema collapsed to 'done' | 'failed' (no done_with_concerns).

@@ -1,5 +1,5 @@
 // tests/events/task-envelope-seal.test.ts
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore, SealedEnvelopeError } from '../../packages/core/src/events/task-envelope.js';
 
 const seed = { taskId: 't1', batchId: 'b1', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'full' as const };

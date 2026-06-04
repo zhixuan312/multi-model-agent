@@ -1,5 +1,5 @@
 // tests/lifecycle/annotator-model-stat.test.ts
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { annotator } from '../../packages/core/src/lifecycle/handlers/annotate-stage.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 

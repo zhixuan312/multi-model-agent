@@ -19,12 +19,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 // ShutdownCause: previously exported from http-server-log.ts (removed in events refactor).
 type ShutdownCause = 'sigterm' | 'sigint' | 'uncaught_exception' | 'unhandled_rejection' | 'stdout_epipe' | 'stdout_other_error' | 'uncaughtException' | 'unhandledRejection';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
-import { resolveServerVersion } from '../version.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
@@ -90,6 +90,16 @@ export async function maybeAutoUpdateSkills(
   }
 }
 
+function readServerVersion(): string {
+  try {
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 function envVarHint(agentName: string): string {
   return `${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
@@ -162,7 +172,7 @@ export async function startServe(
   // if recorder is null at that moment, the uploader is wired with
   // recorder=null and silently drops every event for the daemon's lifetime.
   const homeDir = path.join(os.homedir(), '.multi-model');
-  const mmagentVersion = resolveServerVersion();
+  const mmagentVersion = readServerVersion();
   createRecorder({ homeDir, mmagentVersion });
 
   // Pass the full MultiModelConfig (not just the server block) so
@@ -344,7 +354,7 @@ export async function startServe(
     const token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
     const fp = createHash('sha256').update(token).digest('hex').slice(0, 8);
     const bootId = randomUUID();
-    const version = resolveServerVersion();
+    const version = readServerVersion();
     process.stdout.write(
       `[mmagent] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
     );

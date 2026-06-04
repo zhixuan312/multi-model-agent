@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { basename } from 'node:path';
 import { buildOutputEnvelopeSchema } from '../shared-output.js';
-import type { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
+import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { executePlanBriefSlot, type ExecutePlanBrief } from './brief-slot.js';
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';

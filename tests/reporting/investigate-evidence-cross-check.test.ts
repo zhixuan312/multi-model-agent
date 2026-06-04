@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { parseInvestigationReport } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 describe('investigate: evidence (none) cross-section enforcement', () => {

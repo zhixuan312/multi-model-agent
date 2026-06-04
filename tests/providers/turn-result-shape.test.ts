@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { TurnResult } from '../../packages/core/src/types/run-result.js';
 
 const NINE_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [

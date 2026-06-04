@@ -5,65 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.0.2] - 2026-06-01
+## [5.0.3] - 2026-06-04
 
-Patch refreshing the model-profile registry from a full provider scan (headline: MiniMax-M3) and removing stale documentation. Data/docs-only change — no code paths touched; `SCHEMA_VERSION` stays 5.
+**Reverts the Bun runtime + standalone-binary distribution shipped in 5.0.0–5.0.2, returning to the Node build.** Those releases distributed `@zhixuan92/multi-model-agent` as a `bun build --compile` standalone binary. That binary bundled `@anthropic-ai/claude-agent-sdk`, which works by spawning a separate **native `claude` CLI** (shipped in `@anthropic-ai/claude-agent-sdk-<platform>`). The SDK resolves that CLI via `require.resolve` at runtime — which cannot work inside the compiled `$bunfs` virtual filesystem and has no `node_modules` to fall back to — so every claude/standard-tier worker threw `Native CLI binary for <platform> not found` and `runner_crash`ed at 0 turns. The codex/complex tier was unaffected (it spawns its own on-disk CLI). This was a regression present in all of 5.0.0–5.0.2.
 
-### Removed
-
-- **Stale markdown files.** `packages/server/CHANGELOG.md` (orphan frozen at 3.11.1 — the root `CHANGELOG.md` is the single live changelog; nothing referenced this copy) and `CONTRIBUTING.md` (pre-5.0 content throughout: npm/Node 22/Vitest toolchain instead of Bun, the v3 `intake/`/`compilers/` architecture deleted in v4.0, and a link to an untracked doc — misleading for contributors; a fresh one can be written against the current codebase if wanted).
+The Node build resolves the SDK's native CLI from a normal on-disk `node_modules`, so the claude tier works again. Consumers now need **Node ≥22** (instead of a self-contained binary).
 
 ### Changed
+- **Runtime: Bun → Node ≥22.** Reverted `Bun.serve` (back to `node:http`), `Bun.spawn`, `bun:test` (back to Vitest), and the `bun build --compile` per-platform binary distribution (`build-binaries.mjs`, `binaries/_toplevel`). Published as a plain Node npm package again (`bin` → `dist/cli/index.js` with a `node` shebang).
 
-- **Model profiles refresh (full provider scan, `rateLookupDate` 2026-06-01).** Added `MiniMax-M3` (released 2026-06-01: $0.30/$1.20, cached-read $0.06, 1M-context sparse attention, reasoning tier; tiered $1.20/$4.80 above 512k input). Other findings folded in: DeepSeek V4 Pro's 75%-off rate made permanent (expiry annotation removed); Grok 4.20 price cut to $1.25/$2.50 and dot-form `grok-4.3` flagship + `grok-build` added, `grok-4-heavy` marked deprecated (retires 2026-08-15); new `gemini-3.5-flash` ($1.50/$9) and `gemini-3-pro` marked discontinued; Mistral Medium 3.5 ($1.50/$7.50) / Small 4 ($0.10/$0.30) price changes plus new `devstral` / `ministral` profiles; `kimi-k2.5` profile and corrected catch-all rates; cached-read rates added across Anthropic/Google/xAI/GLM/Kimi profiles; Perplexity Sonar and Amazon Nova families now carry real per-token rates. Anthropic flagship is Claude Opus 4.8 (2026-05-28, unchanged $5/$25 — covered by the existing `claude-opus` prefix). OpenAI/Cohere/Llama/Qwen verified unchanged. READMEs updated to reference MiniMax-M3 / Claude Opus 4.8 (identical rates to the predecessors they replace, so the cost tables still hold).
+### Preserved from the 5.0.x line (forward-ported onto the Node base)
+- **Journal redesign:** `learnings[]` array (N learnings compiled into one ordered brief), per-project journal write mutex + handler lock, refreshed `mma-journal-record` skill.
+- **Report contract:** worker procedure + report contract, `{recorded, failed}` report parser.
+- **Lifecycle cwd-escape hardening:** `findEscapedWrites` + hard-fail on writes escaping the dispatched cwd, plus the committed-in-cwd false-fail fix.
+- **Model profiles:** added MiniMax-M3 + full provider rate scan.
 
-## [5.0.1] - 2026-05-29
-
-Patch fixing the npm package storefront. The published `@zhixuan92/multi-model-agent` install package is the generated `binaries/_toplevel` wrapper, whose manifest was emitted bare — so npm rendered the package with no README, `License: none`, and `Keywords: none`. Behavior unchanged; `SCHEMA_VERSION` stays 5.
-
-### Fixed
-
-- **Generated top-level package metadata (`scripts/build-binaries.mjs`).** The binary-distribution top-level package (`binaries/_toplevel` — the actual `npm i @zhixuan92/multi-model-agent` artifact) now carries `description`, `keywords`, `license`, `homepage`, and `repository` (sourced from `packages/server/package.json`) and ships `README.md` + `LICENSE`. These were previously omitted, leaving the npm page with no README, no license, and no keywords.
-
-## [5.0.0] - 2026-05-29
-
-**Runtime migration: Node.js → Bun.** The entire toolchain and product runtime moves to Bun — runtime, test runner, package manager, declared engine, and distribution — while behavior stays identical (contract goldens byte-identical, full live 18-scenario smoke clean). Major bump for the breaking runtime/distribution change; `SCHEMA_VERSION` stays 5.
-
-### Changed
-
-- **HTTP server on `Bun.serve()`** (was raw `node:http`). The request pipeline is now `(Request) → Response`; handlers return `Response`. The 9-step auth order (host → loopback → bearer → decompress → JSON → cwd → client/main-model) is preserved exactly.
-- **Test runner: `bun test`** (was Vitest). 325 test files ported. Run via `bun run test` (`scripts/run-tests.mjs`), which isolates each file in its own process — Bun's `mock.module()` is process-global and sticky, so single-process runs contaminate (this is why Vitest forked).
-- **Toolchain on Bun.** `engines.bun >=1.3.0` (no `engines.node`); `bun install` (`bun.lock`, no `package-lock.json`); CLI shebang `#!/usr/bin/env bun`. `tsc` is retained for typecheck (`tsc --noEmit`) and `dist` emit (Bun doesn't typecheck).
-- **Research adapters use native `fetch`** (was `undici.request`); `undici` dependency removed.
-- **Module resolution** uses a `"bun"` export condition (→ `src`) so Bun resolves the workspace to one module instance; tsc/node still use `dist`.
-
-### Added
-
-- **Standalone per-platform binaries** via `bun build --compile` (`scripts/build-binaries.mjs`): darwin/linux/windows × x64/arm64 + linux musl. Skill assets are embedded (`embedded-skills.ts`, `@include` expanded from embedded `_shared`), so the binary needs neither Node nor Bun to run. Distributed via a thin top-level package (`bin/mmagent.mjs` resolver + per-platform `optionalDependencies`); npm uses Node ≥18 only for the install shim.
-- **CI matrix** (`.github/workflows/ci.yml`) running build + typecheck + the per-file test suite + native binary execution on linux/windows/macOS + an Alpine/musl container.
-- **Full-smoke build/packaging phase** (`--build-only`): toolchain + embedded-skills sync + binary compile/run + real `npm pack`/install + Docker linux glibc/musl execution.
-
-### Fixed
-
-- **Cross-platform correctness for the shipped Windows/Alpine binaries.** Path-confinement checks (`normalize-output-targets`, `scope-match`) now use `path.sep` instead of a hardcoded `/` so in-cwd writes aren't wrongly rejected on Windows; `git-toplevel` normalizes git's forward-slash output to an OS-native path; `execute-plan` uses `path.isAbsolute` instead of a `/`-prefix test; and `embedded-skills.ts` generation is now deterministic (sorted) so it doesn't drift by filesystem order. The full CI matrix (linux/windows/macOS + Alpine/musl) is green.
-
-### Notes
-
-- **Subprocess code unchanged.** Codex (`cross-spawn`) and the git helpers stay on `node:child_process` — Bun implements those APIs (with working `detached` + `process.kill(-pid)` process groups); `Bun.spawn` cannot create process groups, so this was the correct choice.
-- **Node by necessity at the npm boundary.** The bin resolver shim and `postinstall.js` run under Node (npm's interpreter), so a Bun-less user can still install. This is intentional, not residual.
-
-## [4.9.1] - 2026-05-26
-
-Patch fixing telemetry on the delegate skill-passthrough failure path (4.9.0). A skill-resolution failure correctly hard-fails the task, but its telemetry wire record carried a non-enum `errorCode` (`skill_not_found`), which failed Zod validation on upload — the failed-task event was silently dropped (`telemetry_upload_error`). `SCHEMA_VERSION` stays 5. Build green, full Vitest 2103/2103, live 18-scenario full-pipeline smoke clean (0 hard-fails) with the failed-task telemetry record now landing in the queue.
-
-### Fixed
-
-- **Wire-safe errorCode on skill-resolution failure (core).** The per-task envelope is now sealed with a valid wire `ErrorCode` (`'other'`) instead of `null`; the precise skill code rides on `structuredError.code` (a free string) so it still surfaces on `results[i].error.code` and the batch-level `error.code`. Prevents the dropped-telemetry bug: `to-wire-record` falls back to `structuredError.code` when `errorCode` is null, and a non-enum value there fails wire validation.
-
-### Notes
-
-- **`SCHEMA_VERSION` stays 5.** No wire-schema or `ErrorCode` enum change — the fix keeps skill failures within the existing `'other'` bucket. PRIVACY.md unaffected.
-- **Full-smoke accuracy.** Scenario 18's expected `emits` is now `1` (the failed-task record uploads) and execute-plan's is `2` (one wire record per task descriptor); the run-level telemetry tally is now an exact 20/20.
+Build green; full Vitest suite **2127/2127**.
 
 ## [4.9.0] - 2026-05-26
 
@@ -909,10 +866,7 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v5.0.1...HEAD
-[5.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/v5.0.0...v5.0.1
-[5.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.1...v5.0.0
-[4.9.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...v4.9.1
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.9.0...HEAD
 [4.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.20...v4.8.0
 [4.7.20]: https://github.com/zhixuan312/multi-model-agent/compare/v4.7.19...v4.7.20

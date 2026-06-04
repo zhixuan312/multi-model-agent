@@ -52,7 +52,8 @@ export function parseWorkerOutput(workerText: string): WorkerOutput {
   let raw: unknown;
   try {
     raw = JSON.parse(block);
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       workerSelfAssessment: 'failed' as const,
       summary: workerText.trim().slice(0, 2000) || '[empty]',
@@ -70,6 +71,7 @@ export function parseWorkerOutput(workerText: string): WorkerOutput {
 
   // Schema-invalid but has summary: return failed with salvaged fields.
   const obj = (typeof raw === 'object' && raw !== null) ? (raw as Record<string, unknown>) : {};
+  const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
   const summaryStr = typeof obj.summary === 'string' && obj.summary.length > 0 ? obj.summary : workerText.trim().slice(0, 2000) || '[empty]';
 
   return {

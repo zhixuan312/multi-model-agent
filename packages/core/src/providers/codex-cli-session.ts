@@ -23,7 +23,7 @@ import type { ChildProcess } from 'node:child_process';
 // would be unsafe for our args (the `-c model_providers.X={…}` block contains shell
 // metacharacters that cmd.exe would mangle). Single-purpose import.
 import spawn from 'cross-spawn';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,6 +31,7 @@ import type { Session, SessionOpts, TurnOpts, TurnResult, TokenUsage } from '../
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js';
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
+import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { prepareCodexSkillHome, codexAuthMode } from './codex-skill-home.js';

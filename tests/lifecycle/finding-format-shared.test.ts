@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { FINDING_FORMAT_SHARED } from '../../packages/core/src/routing/read-route-criteria.js';
 
 describe('FINDING_FORMAT_SHARED — canonical format', () => {

@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('child_process', () => ({
+  execFileSync: vi.fn(),
+}));
+
+import { execFileSync } from 'child_process';
 import { getClaudeOAuth } from '../../packages/core/src/identity/claude-oauth.js';
 
-// execFileSync is injected into the SUT and passed as a local fake here, rather
-// than `vi.mock('child_process')` — under Bun mock.module is process-global and
-// sticky, so mocking child_process leaked into every later test spawning codex/git.
+const mockExec = execFileSync as ReturnType<typeof vi.fn>;
 
 // Fixed timestamps so the test does not depend on Date.now().
 const FAR_FUTURE_MS = Date.UTC(2100, 0, 1);
@@ -16,10 +20,8 @@ function setPlatform(p: NodeJS.Platform): void {
 }
 
 describe('getClaudeOAuth', () => {
-  let mockExec: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    mockExec = vi.fn();
+    vi.clearAllMocks();
     setPlatform('darwin');
   });
 
@@ -29,7 +31,7 @@ describe('getClaudeOAuth', () => {
 
   it('case 1: returns null on non-darwin platforms', () => {
     setPlatform('linux');
-    expect(getClaudeOAuth(mockExec as never)).toBeNull();
+    expect(getClaudeOAuth()).toBeNull();
     expect(mockExec).not.toHaveBeenCalled();
   });
 
@@ -37,12 +39,12 @@ describe('getClaudeOAuth', () => {
     mockExec.mockImplementation(() => {
       throw new Error('security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.');
     });
-    expect(getClaudeOAuth(mockExec as never)).toBeNull();
+    expect(getClaudeOAuth()).toBeNull();
   });
 
   it('case 3: returns null when keychain payload is not valid JSON', () => {
     mockExec.mockReturnValue('not-json-at-all');
-    expect(getClaudeOAuth(mockExec as never)).toBeNull();
+    expect(getClaudeOAuth()).toBeNull();
   });
 
   it('case 4: returns null when JSON parses but has no accessToken', () => {
@@ -54,7 +56,7 @@ describe('getClaudeOAuth', () => {
         },
       }),
     );
-    expect(getClaudeOAuth(mockExec as never)).toBeNull();
+    expect(getClaudeOAuth()).toBeNull();
   });
 
   it('case 5: returns null when token is expired', () => {
@@ -66,7 +68,7 @@ describe('getClaudeOAuth', () => {
         },
       }),
     );
-    expect(getClaudeOAuth(mockExec as never)).toBeNull();
+    expect(getClaudeOAuth()).toBeNull();
   });
 
   it('case 6: returns the credentials when token is valid and unexpired', () => {
@@ -81,7 +83,7 @@ describe('getClaudeOAuth', () => {
         },
       }),
     );
-    const creds = getClaudeOAuth(mockExec as never);
+    const creds = getClaudeOAuth();
     expect(creds).not.toBeNull();
     expect(creds?.accessToken).toBe('tok-valid');
     expect(creds?.refreshToken).toBe('r-valid');

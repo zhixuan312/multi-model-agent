@@ -1,21 +1,14 @@
-import { describe, it, expect, vi, beforeAll, afterEach, afterAll } from 'bun:test';
-import type { MultiModelConfig, RuntimeRunResult, AgentType, Provider } from '@zhixuan92/multi-model-agent-core';
-import { __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
+import { describe, it, expect, vi } from 'vitest';
+
+const mockCreateProvider = vi.fn();
+
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
+  createProvider: (slot: string) => mockCreateProvider(slot),
+}));
+
+import type { MultiModelConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
 import { toolConfig } from '../../packages/core/src/tools/debug/tool-config.js';
-
-// Provider injection via the supported __setCoreTestProviderOverrideMap seam,
-// not vi.mock('provider-factory') (sticky/process-global under Bun).
-let __prevOverrideEnv: string | undefined;
-beforeAll(() => {
-  __prevOverrideEnv = process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-  process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
-});
-afterEach(() => { __setCoreTestProviderOverrideMap(null); });
-afterAll(() => {
-  if (__prevOverrideEnv === undefined) delete process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-  else process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = __prevOverrideEnv;
-});
 
 const workerOutput = JSON.stringify({
   findings: [
@@ -80,10 +73,7 @@ function makeCtx() {
 }
 
 async function executeDebugFixture() {
-  __setCoreTestProviderOverrideMap(new Map<AgentType, Provider>([
-    ['standard', makeProvider('standard') as unknown as Provider],
-    ['complex', makeProvider('complex') as unknown as Provider],
-  ]));
+  mockCreateProvider.mockImplementation((slot: string) => makeProvider(slot));
   const ctx = makeCtx();
   const input = { problem: 'null dereference in src/bug.ts' };
   return executeTask(toolConfig, ctx, input);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { runReadRouteImplementer } from '../../packages/core/src/lifecycle/handlers/read-route-implementer.js';
 
 describe('runReadRouteImplementer — outcome aggregation', () => {

@@ -1,4 +1,4 @@
-import { resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 
 export interface NormalizedScopeEntry {
   absPath: string;    // absolute, .. resolved
@@ -7,12 +7,10 @@ export interface NormalizedScopeEntry {
 
 export function normalizeScopeEntry(cwd: string, entry: string): NormalizedScopeEntry {
   const absPath = resolve(cwd, entry);
-  // The raw entry is forward-slash (plan/user convention); absPath is OS-native
-  // (backslashes on Windows), so classify using the platform separator.
   if (entry.endsWith('/')) return { absPath, kind: 'directory' };
-  // No-extension entries (no '.' after the last separator) → inferred directory
-  const lastSep = absPath.lastIndexOf(sep);
-  const basename = absPath.slice(lastSep + 1);
+  // No-extension entries (no '.' after the last '/') → inferred directory
+  const lastSlash = absPath.lastIndexOf('/');
+  const basename = absPath.slice(lastSlash + 1);
   if (!basename.includes('.')) return { absPath, kind: 'directory' };
   return { absPath, kind: 'file' };
 }
@@ -22,9 +20,8 @@ export function isInScope(filePath: string, scope: NormalizedScopeEntry[]): bool
     if (entry.kind === 'file') {
       if (filePath === entry.absPath) return true;
     } else {
-      // directory: prefix match with a trailing separator so 'src/auth' doesn't
-      // match 'src/authenticate'. Use the platform sep (absPath is OS-native).
-      const prefix = entry.absPath.endsWith(sep) ? entry.absPath : `${entry.absPath}${sep}`;
+      // directory: prefix match with a trailing slash so 'src/auth' doesn't match 'src/authenticate'
+      const prefix = entry.absPath.endsWith('/') ? entry.absPath : `${entry.absPath}/`;
       if (filePath.startsWith(prefix)) return true;
     }
   }

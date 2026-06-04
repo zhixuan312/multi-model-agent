@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { startStallWatchdog } from '../../../packages/core/src/bounded-execution/stall-watchdog.js';
 import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 import type { Subscriber, BusMessage } from '../../../packages/core/src/events/envelope-bus.js';

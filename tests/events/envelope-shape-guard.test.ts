@@ -1,5 +1,5 @@
 // tests/events/envelope-shape-guard.test.ts
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { TaskEnvelope } from '../../packages/core/src/events/task-envelope.js';
 
 describe('TaskEnvelope shape guard (A2)', () => {

@@ -1,38 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
 import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
-import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 
-// v0.5: the implement stage calls ctx.getSession(tier).send(prompt, opts) directly;
-// the write path is driven by the lifecycle-state fixture's ctx.getSession plumbing
-// (__mockSessionResponse / __llmAlwaysFails). The deep deps (watchdog + read-route
-// dispatch/criteria) are injected via implementHandler's deps param rather than
-// vi.mock — under Bun mock.module is sticky/process-global and leaked these stubs
-// into later tests (warm-followup, runReadRouteImplementer, etc.).
-const mockStartWatchdog = vi.fn(() => () => {});
-const mockRecordPostHoc = vi.fn(async () => {});
-const mockRunReadRoute = vi.fn();
-const implDeps = {
-  startProgressWatchdog: mockStartWatchdog,
-  recordPostHocSignals: mockRecordPostHoc,
-  runReadRouteImplementer: mockRunReadRoute,
-  resolveSubtypeSpec: () => ({
-    buildPrefix: () => 'mock prefix',
-    criteria: [{ id: 'c1', label: 'criterion 1' }],
-    buildSuffix: (_c: { id: string }) => 'mock suffix',
-    semantics: {
-      goalLine: 'mock goal',
-      emptyOutcomeLine: 'mock empty',
-      findingMeaningParagraph: 'mock finding',
-      severityMeanings: { critical: 'c', high: 'h', medium: 'm', low: 'l' },
-      mustEmitAtLeastOne: false,
-      legalOutcomes: ['found', 'clean'] as const,
-    },
-  }),
-  isReadOnlyRoute: (route: string) => ['audit', 'review', 'debug', 'investigate', 'explore'].includes(route),
-} as any;
-const runImpl = (state: any) => implementHandler(state, implDeps);
+// v0.5: the implement stage now calls ctx.getSession(tier).send(prompt, opts)
+// directly — no delegateWithEscalation wrapper. The lifecycle-state fixture
+// already plumbs ctx.getSession through __mockSessionResponse / __llmAlwaysFails,
+// so tests just set those on the state instead of mocking the deleted module.
+vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
+vi.mock('../../../packages/core/src/routing/read-route-criteria.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../packages/core/src/routing/read-route-criteria.js')>();
+  return {
+    ...actual,
+    resolveSubtypeSpec: () => ({
+      buildPrefix: () => 'mock prefix',
+      criteria: [{ id: 'c1', label: 'criterion 1' }],
+      buildSuffix: (_c: { id: string }) => 'mock suffix',
+      semantics: {
+        goalLine: 'mock goal',
+        emptyOutcomeLine: 'mock empty',
+        findingMeaningParagraph: 'mock finding',
+        severityMeanings: { critical: 'c', high: 'h', medium: 'm', low: 'l' },
+        mustEmitAtLeastOne: false,
+        legalOutcomes: ['found', 'clean'] as const,
+      },
+    }),
+    isReadOnlyRoute: (route: string) => ['audit', 'review', 'debug', 'investigate', 'explore'].includes(route),
+  };
+});
 
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
@@ -63,6 +60,8 @@ describe('implementHandler', () => {
   });
 
   it('returns a StageGate<ImplementPayload> on advance', async () => {
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
@@ -80,7 +79,7 @@ describe('implementHandler', () => {
       workerSelfAssessment: 'done',
     });
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('advance');
     expect((gate.payload as ImplementPayload).workerSelfAssessment).toBe('done');
     expect((gate.payload as ImplementPayload).filesChanged).toEqual(['x.ts']);
@@ -89,6 +88,8 @@ describe('implementHandler', () => {
   });
 
   it('halts on provider transport failure', async () => {
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
@@ -96,12 +97,14 @@ describe('implementHandler', () => {
     });
     (state.executionContext as any).__llmAlwaysFails = true;
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('halt');
     expect(gate.comment).toMatch(/implement status: error/);
   });
 
   it('advances with workerSelfAssessment=failed when worker emits failed', async () => {
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
@@ -119,15 +122,17 @@ describe('implementHandler', () => {
       workerSelfAssessment: 'failed',
     });
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('advance');
     expect((gate.payload as ImplementPayload).workerSelfAssessment).toBe('failed');
     expect((gate.payload as ImplementPayload).summary).toBe('gave up');
   });
 
   it('reads route: fills findings from runReadRouteImplementer output', async () => {
+    const { runReadRouteImplementer } = await import('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
 
-    mockRunReadRoute.mockResolvedValueOnce({
+    vi.mocked(runReadRouteImplementer).mockResolvedValueOnce({
       findings: [
         { id: 'F1', severity: 'high', category: 'correctness', claim: 'missing null check', evidence: 'foo()', source: 'implementer' },
         { id: 'F2', severity: 'medium', category: 'style', claim: 'naming inconsistency', evidence: 'bar', source: 'implementer' },
@@ -141,6 +146,7 @@ describe('implementHandler', () => {
       findingsOutcome: 'found',
       findingsOutcomeReason: null,
     });
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'audit',
@@ -148,7 +154,7 @@ describe('implementHandler', () => {
       task: { id: 't1', prompt: 'audit this doc', readTarget: 'audit this doc', brief: { title: 'T', body: 'B' }, subtype: 'default' } as any,
     });
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('advance');
     const payload = gate.payload as ImplementPayload;
     expect(payload.findings).toHaveLength(2);
@@ -158,6 +164,8 @@ describe('implementHandler', () => {
   });
 
   it('halts when session throws a sandbox violation', async () => {
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
@@ -168,12 +176,14 @@ describe('implementHandler', () => {
       close: async () => {},
     });
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('halt');
     expect(gate.comment).toMatch(/implement status: error/);
   });
 
   it('fills all ImplementPayload fields with defaults when JSON block missing', async () => {
+    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
+    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
 
     const state = mockState({
       route: 'delegate',
@@ -186,7 +196,7 @@ describe('implementHandler', () => {
       workerSelfAssessment: 'failed',
     });
 
-    const gate = await runImpl(state as any);
+    const gate = await implementHandler(state as any);
     expect(gate.outcome).toBe('advance');
     const payload = gate.payload as ImplementPayload;
     expect(payload.workerSelfAssessment).toBe('failed');

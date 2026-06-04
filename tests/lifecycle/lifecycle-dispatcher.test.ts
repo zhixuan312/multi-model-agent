@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 import { ContextBlockNotFoundError } from '../../packages/core/src/stores/context-block-tool.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
 
 describe('ActivityTracker.getHeadlineSnapshot', () => {

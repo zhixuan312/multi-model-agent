@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http';
+
 const CLIENT_ALLOWLIST = new Set(['claude-code', 'cursor', 'codex-cli', 'gemini-cli']);
 
 export type CallerClient = 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli' | 'other';
@@ -19,14 +21,14 @@ export const DEFAULT_IDENTITY: CallerIdentity = {
   mainModel: null,
 };
 
-export function resolveCallerIdentity(headers: Headers): CallerIdentity {
-  const rawClient = headers.get('x-mma-client')?.toLowerCase().trim();
+export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
+  const rawClient = (req.headers['x-mma-client'] as string | undefined)?.toLowerCase().trim();
 
   const callerClient = (rawClient && CLIENT_ALLOWLIST.has(rawClient))
     ? (rawClient as CallerClient)
     : 'other';
 
-  const rawMainModel = headers.get('x-mma-main-model')?.trim();
+  const rawMainModel = (req.headers['x-mma-main-model'] as string | undefined)?.trim();
   const mainModel = rawMainModel && rawMainModel.length > 0 ? rawMainModel : null;
 
   return { callerClient, mainModel };

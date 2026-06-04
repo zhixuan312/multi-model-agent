@@ -2,7 +2,7 @@
 // - Framework used: custom node:http router (`Router` class)
 // - Registered routes are held in `Router.routes`, a Map<method, Map<path, RouteEntry>>
 // - Routes are enumerated via `router.listRoutes()` exposed through the test-only GET /__routes hook
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import routesGolden from './goldens/routes.json' with { type: 'json' };
 import { boot } from './fixtures/harness.js';
 import { mockProvider } from './fixtures/mock-providers.js';

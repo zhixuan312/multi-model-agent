@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { toolConfig } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 
 describe('execute-plan per-tool integration (4.3.0 pipeline-redesign)', () => {

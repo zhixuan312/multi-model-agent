@@ -1,4 +1,6 @@
 // packages/server/src/http/handlers/control/batch-slice.ts
+import type { ServerResponse } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { HandlerDeps } from '../../handler-deps.js';
@@ -10,19 +12,21 @@ const inputSchema = z.object({
 });
 
 export function buildBatchSliceHandler(deps: HandlerDeps): RawHandler {
-  return async (_params, ctx) => {
+  return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      return sendError(400, 'invalid_request', 'Request body validation failed', {
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
+      return;
     }
 
     const input = parsed.data;
     const cwd = ctx.cwd!;
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
-      return sendError(503, reserveResult.error, reserveResult.message);
+      sendError(res, 503, reserveResult.error, reserveResult.message);
+      return;
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
@@ -31,18 +35,21 @@ export function buildBatchSliceHandler(deps: HandlerDeps): RawHandler {
     // T4: use the registry/delegate batchId directly as the cache key.
     const entry = pc.batchCache.get(input.batchId);
     if (!entry) {
-      return sendError(404, 'not_found', `Batch ${input.batchId} not found`);
+      sendError(res, 404, 'not_found', `Batch ${input.batchId} not found`);
+      return;
     }
 
     const results = entry.results;
     if (!Array.isArray(results) || input.taskIndex >= results.length) {
-      return sendError(
+      sendError(
+        res,
         404,
         'unknown_task_index',
         `taskIndex ${input.taskIndex} is out of range (batch has ${Array.isArray(results) ? results.length : 0} result(s))`,
       );
+      return;
     }
 
-    return sendJson(200, { batchId: input.batchId, result: results[input.taskIndex] });
+    sendJson(res, 200, { batchId: input.batchId, result: results[input.taskIndex] });
   };
 }

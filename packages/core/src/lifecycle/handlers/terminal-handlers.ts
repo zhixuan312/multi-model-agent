@@ -1,7 +1,8 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { RuntimeRunResult } from '../../types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../types.js';
 import type { StageGate, TerminalPayload } from '../stage-io.js';
+import { findModelProfile } from '../../config/model-profile-registry.js';
 import { getRealFilesChanged } from '../../bounded-execution/real-diff.js';
 import { deriveCompletion, extractCompletionInputs } from '../derive-completion.js';
 import { TerminalBlockRegistrar } from '../../reporting/terminal-block-registrar.js';
@@ -181,6 +182,68 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     contextBlockId: state.contextBlockId ?? null,
   });
   state.taskCompletedRecorded = true;
+}
+
+/**
+ * Synthesize an `implementing` stage entry from top-level RuntimeRunResult fields
+ * when the per-stage tracker hasn't populated it. Without this, the wire
+ * event ships with `stages: []` for every task, which violates the backend's
+ * R2.1 invariant ("empty stages only allowed for brief_too_vague|error")
+ * for any task that succeeded — every upload would 400.
+ *
+ * This is a fallback; it does not replace stats already populated by the
+ * runner-shell or lifecycle stage tracker.
+ */
+function ensureImplementingStage(
+  rr: RuntimeRunResult,
+  ctx: {
+    assignedTier?: 'standard' | 'complex';
+    implementerProvider?: { config?: { model?: string } };
+  },
+): void {
+  // Even when no LLM call ever fires (runner_crash, all_tiers_unavailable,
+  // dispatcher-no-result), the configured implementer model is known up
+  // front via ctx.implementerProvider.config. Stamp it into the synthesized
+  // stage and the top-level rr.models so the wire row reports the *intended*
+  // model instead of the literal 'custom' fallback in event-builder.
+  const fallbackModel =
+    (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null;
+  const fallbackFamily = fallbackModel ? findModelProfile(fallbackModel).family : null;
+
+  if (rr.models === undefined && fallbackModel !== null) {
+    (rr as { models?: RuntimeRunResult['models'] }).models = {
+      implementer: fallbackModel,
+      specReviewer: undefined,
+      qualityReviewer: undefined,
+    };
+  }
+
+  const existing = (rr.stageStats?.implementing) as { entered?: boolean } | undefined;
+  if (existing?.entered) return;
+  const usage = rr.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
+  const synthesized = {
+    stage: 'implementing' as const,
+    entered: true,
+    durationMs: rr.durationMs ?? 0,
+    costUSD: rr.cost?.costUSD ?? null,
+    agentTier: ctx.assignedTier ?? 'standard',
+    modelFamily: fallbackFamily,
+    model: fallbackModel,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
+    activityEvents: 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
+    turnCount: rr.turns ?? 0,
+    filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
+    directoriesListed: 0,
+  };
+  (rr as { stageStats?: Record<string, unknown> }).stageStats = {
+    ...((rr.stageStats as Record<string, unknown> | undefined) ?? {}),
+    implementing: synthesized,
+  };
 }
 
 interface RecorderLike {

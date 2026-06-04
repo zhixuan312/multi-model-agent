@@ -11,13 +11,11 @@
 [![npm: @zhixuan92/multi-model-agent](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=%40zhixuan92%2Fmulti-model-agent)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 [![npm: @zhixuan92/multi-model-agent-core](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-core?label=%40zhixuan92%2Fmulti-model-agent-core)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-core)
 
-**The horizontal harness for AI engineering.** multi-model-agent routes the right agent to the right task, gets it done right with **cross-agent review**, and caps spend with **bounded execution** — so your flagship model stays on architecture and judgment while the labor runs on a fleet of cheaper agents, in parallel.
+Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for 90%+ less.
 
-A local HTTP daemon any agent client calls — Claude Code, Codex CLI, Gemini CLI, Cursor. One tool call delegates work to sub-agents across providers; the harness routes, executes, reviews, and costs it, then hands back a structured report. Bring your own keys, serve it in minutes.
+A local HTTP daemon for Claude Code, Codex CLI, Gemini CLI, and Cursor. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
-**The bet:** a reviewed multi-agent harness matches or beats a single frontier model, at a fraction of the cost — and we measure it. **Models go deep; we connect them wide** — and the engineer always keeps the judgment.
-
-*(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md). North star: [DIRECTION.md](./DIRECTION.md).)*
+*(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md).)*
 
 ## Why
 
@@ -34,16 +32,6 @@ Your flagship model reasoning about architecture is money well spent. That same 
 | Full web SPA (59 tasks) | **$5.65** · **12× ROI** · ~50 min | **~$9** · **7.5× ROI** · ~22 min | $68 · 1× · *baseline* |
 | Backend microservice (91 tasks) | **$8.21** · **13× ROI** · ~1.5 hrs | **~$14** · **7.5× ROI** · ~40 min | $104 · 1× · *baseline* |
 
-## How it works
-
-**Three layers.** Your own agent (Claude Code, Codex — whatever you talk to) stays on top and keeps the judgment. Beneath it sit two labor slots you configure — `complex` and `standard`. These are labor *categories*, not fixed intelligence tiers: you decide what each means for your workflow and budget, and a cheaper model can fill a slot as your fleet changes.
-
-**The AI Development Life Cycle (AIDLC).** Work isn't a flat stream of tasks — it's a lifecycle, and each tool is a **rod**: a gate over one stage. `investigate` / `research` / `explore` feed the front; `audit` gates the spec and the plan; `delegate` / `execute-plan` build; `review` / `debug` guard the output; `retry` closes the loop; `journal` remembers. The harness instruments and guards the lifecycle — the engineer authors it (what to build, which approach, whether to merge).
-
-**Reviewed by default.** Every artifact-producing task runs the full lifecycle — implement → spec review → quality review → rework — with the implementer and reviewer on **different agents**. Different training data, different blind spots: structural quality you can't get from self-review. Read-only rods (`audit` / `review` / `debug` / `investigate` / `research`) skip review and return findings.
-
-**Built on the providers' own runtimes.** Claude and Claude-compatible work runs through the **Claude Agent SDK**; OpenAI and OpenAI-compatible work runs through the official **Codex CLI**. We don't reinvent the agent loop — when a provider deepens its runtime, the whole harness gets better for free. And because we connect wide, a Claude Code user's task can run on Codex underneath, and a Codex user gets Anthropic's advances the same way.
-
 ## Initial setup
 
 Four steps, in order.
@@ -51,8 +39,7 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # installs a standalone binary (Bun embedded) — nothing to run it
-                                            # npm itself uses Node ≥18 only for install; the daemon needs no Node/Bun
+npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
 mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -161,7 +148,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | Audit a prose artifact against a named criteria set — pick the **subtype**: `default` (general prose-coherence), `spec` (requirements: testability, decision-trace), `plan` (a plan verified against the actual codebase), `skill` (a SKILL.md). Run `subtype=plan` before `mma-execute-plan`. |
+| `mma-audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
 | `mma-journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
 | `mma-journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
@@ -308,7 +295,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 16 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -325,12 +312,12 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.0
+## What's new in 4.9.0
 
-- **Runtime migrated to Bun**, and the CLI now ships as **standalone per-platform binaries** with Bun embedded: `npm i -g @zhixuan92/multi-model-agent` installs a native binary that needs neither Node nor Bun to run (npm uses Node ≥18 only for the one-line install shim). Behavior is identical to 4.x.
+- **Delegate skill passthrough.** A `/delegate` task can name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those — resolved from your own skill store, staged in isolation, and delivered natively to the Claude or Codex worker. Default is unchanged: no `skills`, no behavior change.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

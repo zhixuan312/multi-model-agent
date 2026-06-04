@@ -3,7 +3,7 @@
 // StageDefinition[] and the invariants we care about are stage-name
 // uniqueness, handler-is-function, and shouldRun purity.
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import type { StageDefinition } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

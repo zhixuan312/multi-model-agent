@@ -6,12 +6,7 @@
 // `packages/core/src/providers/codex.ts:9`), not here — by design. Token
 // refresh is not implemented; expired tokens cause this function to
 // return `null` and the provider falls back to other auth paths.
-import { execFileSync } from 'node:child_process';
-
-// execFileSync is injected (defaulting to the real one) so tests supply a fake
-// WITHOUT `mock.module('child_process')`, which under Bun is process-global and
-// sticky — it leaked into every later test that spawns codex/git subprocesses.
-type ExecFileSyncFn = typeof execFileSync;
+import { execFileSync } from 'child_process';
 
 export interface ClaudeOAuthCredentials {
   accessToken: string;
@@ -42,11 +37,11 @@ export interface ClaudeOAuthCredentials {
  * the past, returns null and the caller falls back. (Most subscription
  * tokens are valid for ~1 year, so refresh is rare in practice.)
  */
-export function getClaudeOAuth(exec: ExecFileSyncFn = execFileSync): ClaudeOAuthCredentials | null {
+export function getClaudeOAuth(): ClaudeOAuthCredentials | null {
   if (process.platform !== 'darwin') return null;
   let raw: string;
   try {
-    raw = exec('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'], {
+    raw = execFileSync('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();

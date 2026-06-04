@@ -1,20 +1,23 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { MockAgent, setGlobalDispatcher } from 'undici';
 import { readFileSync } from 'node:fs';
-import { saveFetch, restoreFetch, stubFetch, resp } from '../fixtures/mock-fetch.js';
 import { semanticScholarSearch } from '../../../packages/core/src/research/adapters/semantic-scholar.js';
 
 describe('semanticScholarSearch', () => {
-  beforeEach(() => { saveFetch(); });
-  afterEach(() => { restoreFetch(); });
+  let agent: MockAgent;
+  beforeEach(() => { agent = new MockAgent(); agent.disableNetConnect(); setGlobalDispatcher(agent); });
+  afterEach(async () => { await agent.close(); });
 
   const fixtureJson = readFileSync('tests/research/fixtures/adapters/semantic-scholar.json', 'utf8');
 
   function intercept200(body: string) {
-    stubFetch(() => resp(200, body));
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .reply(200, body, { headers: { 'content-type': 'application/json' } });
   }
 
   function interceptStatus(status: number, body?: string) {
-    stubFetch(() => resp(status, body ?? '{}'));
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .reply(status, body ?? '{}', { headers: { 'content-type': 'application/json' } });
   }
 
   // ---- happy path ----
@@ -193,7 +196,8 @@ describe('semanticScholarSearch', () => {
   });
 
   it('handles 302 redirect by throwing redirect error', async () => {
-    stubFetch(() => resp(302, '', { location: 'https://other.com' }));
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .reply(302, '', { headers: { location: 'https://other.com' } });
     await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/adapter_unexpected_redirect/);
   });
 
@@ -208,31 +212,39 @@ describe('semanticScholarSearch', () => {
   });
 
   it('handles malformed JSON', async () => {
-    stubFetch(() => resp(200, 'not json'));
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .reply(200, 'not json', { headers: { 'content-type': 'application/json' } });
     await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_parse_error/);
   });
 
   it('handles network failure with adapter context', async () => {
-    stubFetch(() => { throw new Error('ECONNREFUSED'); });
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .replyWithError(new Error('ECONNREFUSED'));
     await expect(semanticScholarSearch('q', { apiKey: 'test-key' })).rejects.toThrow(/semantic_scholar_request_failed.*ECONNREFUSED/);
   });
 
   it('sends mma-research user-agent header', async () => {
     let capturedUa: string | undefined;
-    stubFetch((_url, init) => {
-      capturedUa = (init?.headers as Record<string,string>)['user-agent'];
-      return resp(200, JSON.stringify({ data: [] }));
-    });
+    agent.get('https://api.semanticscholar.org')
+      .intercept({ path: /graph\/v1\/paper\/search/ })
+      .reply((opts) => {
+        capturedUa = (opts.headers as Record<string,string>)['user-agent'];
+        return { statusCode: 200, data: JSON.stringify({ data: [] }) };
+      });
+
     await semanticScholarSearch('test', { maxResults: 1, apiKey: 'k' });
     expect(capturedUa).toMatch(/^mma-research\//);
   });
 
   it('sends x-api-key header when apiKey provided', async () => {
     let capturedKey: string | undefined;
-    stubFetch((_url, init) => {
-      capturedKey = (init?.headers as Record<string,string>)['x-api-key'];
-      return resp(200, JSON.stringify({ data: [] }));
-    });
+    agent.get('https://api.semanticscholar.org')
+      .intercept({ path: /graph\/v1\/paper\/search/ })
+      .reply((opts) => {
+        capturedKey = (opts.headers as Record<string,string>)['x-api-key'];
+        return { statusCode: 200, data: JSON.stringify({ data: [] }) };
+      });
+
     await semanticScholarSearch('test', { maxResults: 1, apiKey: 'my-key' });
     expect(capturedKey).toBe('my-key');
   });

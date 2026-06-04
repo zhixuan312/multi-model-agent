@@ -1,15 +1,13 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'bun:test';
-import type { MultiModelConfig, RuntimeRunResult, AgentType, Provider } from '@zhixuan92/multi-model-agent-core';
-import { __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
+import { describe, it, expect, vi } from 'vitest';
+
+const mockCreateProvider = vi.fn();
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
+  createProvider: (slot: string) => mockCreateProvider(slot),
+}));
+
+import type { MultiModelConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 import { executeTask } from '../packages/core/src/lifecycle/task-executor.js';
 import { toolConfig } from '../packages/core/src/tools/delegate/tool-config.js';
-
-// Inject fake providers via the supported __setCoreTestProviderOverrideMap seam
-// (gated by MMAGENT_TEST_PROVIDER_OVERRIDE=1) instead of vi.mock on the
-// provider-factory module — under Bun mock.module is sticky/process-global and
-// leaked the createProvider mock into later tests. resolveAgent throws
-// agent_not_configured from its own config check BEFORE createProvider, so
-// overriding both slots is safe: unconfigured-tier tests still hit that path.
 
 // A minimal worker result; reviewPolicy 'none' on each task keeps dispatch to a
 // single implement stage (no review/rework), so this is all the provider needs.
@@ -48,24 +46,8 @@ function provider(slot: string) {
 const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
 describe('executeTask (delegate route) — dispatch behavior', () => {
-  let prevEnv: string | undefined;
-  beforeAll(() => {
-    prevEnv = process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-    process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
-  });
-  beforeEach(() => {
-    __setCoreTestProviderOverrideMap(new Map<AgentType, Provider>([
-      ['standard', provider('standard') as unknown as Provider],
-      ['complex', provider('complex') as unknown as Provider],
-    ]));
-  });
-  afterEach(() => { __setCoreTestProviderOverrideMap(null); });
-  afterAll(() => {
-    if (prevEnv === undefined) delete process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
-    else process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = prevEnv;
-  });
-
   it('runs tasks in parallel and returns all results', { timeout: 30_000 }, async () => {
+    mockCreateProvider.mockImplementation((slot: string) => provider(slot));
     const config: MultiModelConfig = {
       agents: {
         standard: { type: 'codex', model: 'a-model', baseUrl: 'https://a.example.com/v1' },
@@ -86,6 +68,7 @@ describe('executeTask (delegate route) — dispatch behavior', () => {
   });
 
   it('one task error does not prevent the other task from returning its result', { timeout: 30_000 }, async () => {
+    mockCreateProvider.mockImplementation((slot: string) => provider(slot));
     const config: MultiModelConfig = {
       agents: { standard: { type: 'codex', model: 'x', baseUrl: 'https://example.invalid/v1' } },
       defaults,
@@ -133,5 +116,88 @@ describe('executeTask (delegate route) — dispatch behavior', () => {
     expect(results).toHaveLength(1);
     expect(results[0].status).toBe('error');
     expect(results[0].error).toContain('agent_not_configured');
+  });
+});
+
+describe('public type surface', () => {
+  it('AgentType type is importable', () => {
+    const agentType: import('@zhixuan92/multi-model-agent-core').AgentType = 'standard';
+    expect(agentType).toBe('standard');
+  });
+
+  it('AgentConfig interface accepts the minimal shape', () => {
+    const cfg: import('@zhixuan92/multi-model-agent-core').AgentConfig = {
+      type: 'claude',
+      model: 'claude-opus-4-6',
+    };
+    expect(cfg.type).toBe('claude');
+    expect(cfg.model).toBe('claude-opus-4-6');
+  });
+
+  it('AgentConfig accepts all optional fields', () => {
+    const cfg: import('@zhixuan92/multi-model-agent-core').AgentConfig = {
+      type: 'codex',
+      model: 'deepseek-r1',
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiKeyEnv: 'DEEPSEEK_API_KEY',
+      inputCostPerMTok: 0.55,
+      outputCostPerMTok: 2.19,
+      timeoutMs: 300_000,
+      sandboxPolicy: 'cwd-only',
+    };
+    expect(cfg.type).toBe('codex');
+  });
+
+  it('RuntimeRunResult carries review statuses and per-phase subreports', () => {
+    const result: RuntimeRunResult = {
+      output: 'done',
+      status: 'ok',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+      turns: 1,
+      filesWritten: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      retryable: false,
+      workerStatus: 'done',
+      specReviewStatus: 'approved',
+      qualityReviewStatus: 'approved',
+      agents: {
+        implementer: 'standard',
+        specReviewer: 'complex',
+        qualityReviewer: 'complex',
+      },
+      implementationReport: {
+        summary: 'did it',
+        filesChanged: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+      specReviewReport: {
+        summary: 'looks good',
+        filesChanged: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+      qualityReviewReport: {
+        summary: 'code is clean',
+        filesChanged: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+    };
+    expect(result.workerStatus).toBe('done');
+    expect(result.specReviewStatus).toBe('approved');
+    expect(result.qualityReviewStatus).toBe('approved');
+    expect(result.agents?.implementer).toBe('standard');
+    expect(result.agents?.specReviewer).toBe('complex');
+  });
+
+  it('TaskSpec accepts reviewPolicy', () => {
+    const task: import('@zhixuan92/multi-model-agent-core').TaskSpec = {
+      prompt: 'do X',
+      agentType: 'standard',
+      reviewPolicy: 'full',
+    };
+    expect(task.reviewPolicy).toBe('full');
   });
 });

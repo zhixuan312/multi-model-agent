@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { annotatePromptWrite } from '../../packages/core/src/lifecycle/annotate-prompts.js';
 
 describe('annotate-prompts — reads commit signal from active gate', () => {

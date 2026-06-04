@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { buildOutputEnvelopeSchema } from '../../packages/core/src/tools/shared-output.js';
 
 const baseEnvelope = {

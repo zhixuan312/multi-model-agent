@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { HUMAN_LABEL, WIRE_LABEL, STAGE_LABELS, type StageLabel } from '../../packages/core/src/lifecycle/stage-labels.js';
 
 describe('stage labels', () => {

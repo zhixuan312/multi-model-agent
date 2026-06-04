@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { createProvider } from '@zhixuan92/multi-model-agent-core/providers/provider-factory';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 

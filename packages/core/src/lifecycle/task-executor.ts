@@ -33,20 +33,10 @@ import { TaskEnvelopeStore } from '../events/task-envelope.js';
  *
  * Target: ≤ 200 LOC. If it grows past 250, factor helpers back out.
  */
-// Orchestration deps are injectable (defaulting to the real implementations) so
-// tests can substitute the dispatcher / agent resolver WITHOUT a process-global
-// `mock.module(...)`, which under Bun is sticky and leaks into later test files.
-export interface TaskExecutorDeps {
-  resolveAgent: typeof resolveAgent;
-  runTaskViaDispatcher: typeof runTaskViaDispatcher;
-  applyParallelSafetySuffixIfNeeded: typeof applyParallelSafetySuffixIfNeeded;
-}
-
 export async function executeTask<Input, Brief, Report>(
   config: ToolConfig<Input, Brief, Report>,
   ctx: ExecutionContext,
   input: Input,
-  deps: TaskExecutorDeps = { resolveAgent, runTaskViaDispatcher, applyParallelSafetySuffixIfNeeded },
 ): Promise<ExecutorOutput> {
   // ── Step 1: Compile briefs ──
   const briefs = config.briefSlot(input);
@@ -77,7 +67,7 @@ export async function executeTask<Input, Brief, Report>(
   // overrides instead of forcing the whole batch onto one tier.
   const resolvedPerTask = tasks.map((task) => {
     try {
-      return deps.resolveAgent(task.agentType ?? config.agentType, ctx.config);
+      return resolveAgent(task.agentType ?? config.agentType, ctx.config);
     } catch (err) {
       return {
         error: err instanceof Error ? err.message : String(err),
@@ -190,7 +180,7 @@ export async function executeTask<Input, Brief, Report>(
     }
     try {
       const taskEnvelope = envelopeForTask(i);
-      return await deps.runTaskViaDispatcher({
+      return await runTaskViaDispatcher({
         task,
         resolved: r,
         config: ctx.config,
@@ -228,7 +218,7 @@ export async function executeTask<Input, Brief, Report>(
   // Append the parallel-safety reminder only when tasks actually run
   // concurrently (parallel mode + >1 task). The original tasks[] (stored in
   // the batch cache for retry) is left unsuffixed.
-  const dispatchTasks = deps.applyParallelSafetySuffixIfNeeded(tasks, concurrent);
+  const dispatchTasks = applyParallelSafetySuffixIfNeeded(tasks, concurrent);
 
   let results: RuntimeRunResult[];
   if (tasks.length === 1) {

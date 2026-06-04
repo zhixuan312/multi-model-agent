@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 

@@ -2,7 +2,9 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { sendJson } from '../../errors.js';
+import type { ServerResponse } from 'node:http';
+import type { IncomingMessage } from 'node:http';
+import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../project-registry.js';
@@ -90,7 +92,7 @@ export interface StatusHandlerDeps {
  * Returns the §5.10 status shape.
  */
 export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
-  return () => {
+  return (_req: IncomingMessage, res: ServerResponse) => {
     const {
       batchRegistry,
       projectRegistry,
@@ -169,7 +171,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     // ── Skill manifest ────────────────────────────────────────────────────────
     const { skillVersion, skillCompatible } = readSkillManifest();
 
-    return sendJson(200, {
+    sendJson(res, 200, {
       version,
       pid: process.pid,
       bind,

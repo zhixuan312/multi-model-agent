@@ -4,7 +4,7 @@
  * Pin the upsert behavior: bootstrap, up-to-date short-circuit, version
  * upgrade, orphan removal, dry-run, --target scoping, no-clients-detected.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';

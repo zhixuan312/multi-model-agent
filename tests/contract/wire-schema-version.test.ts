@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { SCHEMA_VERSION, ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/wire-schema.js';
 
 describe('wire schema version contract', () => {

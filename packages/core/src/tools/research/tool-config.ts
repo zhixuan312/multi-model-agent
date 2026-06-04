@@ -1,4 +1,4 @@
-import type { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
+import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';

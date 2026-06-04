@@ -4,6 +4,8 @@
 // missing-batch and invalid task cases return 202 and surface the error
 // asynchronously inside the batch result. This is the route called by
 // the `mma-retry` skill and end-user clients.
+import type { ServerResponse } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
 import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
 import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/retry/tool-config';
@@ -13,12 +15,13 @@ import type { HandlerDeps } from '../../handler-deps.js';
 import type { RawHandler } from '../../types.js';
 
 export function buildRetryHandler(deps: HandlerDeps): RawHandler {
-  return async (_params, ctx) => {
+  return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = retry.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      return sendError(400, 'invalid_request', 'Request body validation failed', {
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
+      return;
     }
 
     const input = parsed.data;
@@ -26,7 +29,8 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
-      return sendError(503, reserveResult.error, reserveResult.message);
+      sendError(res, 503, reserveResult.error, reserveResult.message);
+      return;
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
@@ -77,6 +81,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       },
     });
 
-    return sendJson(202, { batchId, statusUrl });
+    sendJson(res, 202, { batchId, statusUrl });
   };
 }

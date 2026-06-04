@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { inputSchema } from '../../../packages/core/src/tools/research/schema.js';
 
 describe('research inputSchema', () => {

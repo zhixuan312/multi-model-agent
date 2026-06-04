@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf } from 'bun:test';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import type { RuntimeRunResult, RawStageStats } from '../packages/core/src/types.js';
 
 describe('RuntimeRunResult shape (Phase 0 contract)', () => {

@@ -1,7 +1,8 @@
-import type { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
+import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
+import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { reviewBriefSlot, type ReviewBrief } from './brief-slot.js';
 import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
 import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';

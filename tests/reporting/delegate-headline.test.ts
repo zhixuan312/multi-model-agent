@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { delegateHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/delegate.js';
 import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';

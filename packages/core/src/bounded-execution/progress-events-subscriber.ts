@@ -31,6 +31,7 @@ export interface ProgressEventsSubscriberContext {
   taskIndex?: number;
 }
 
+const READ_TOOLS = new Set(['Read']);
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 export function startProgressEventsSubscriber(

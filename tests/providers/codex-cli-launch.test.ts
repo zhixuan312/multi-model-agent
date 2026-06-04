@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { buildCodexCliLaunch } from '../../packages/core/src/providers/codex-cli-launch.js';
 
 describe('buildCodexCliLaunch (D7)', () => {

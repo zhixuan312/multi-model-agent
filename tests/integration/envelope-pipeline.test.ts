@@ -20,7 +20,7 @@
 //   • TelemetryUploader wired with recorder=null because createRecorder
 //     ran AFTER startServer (covered by recorder-init test below)
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';

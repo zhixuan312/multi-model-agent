@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { computeAggregateCost } from '../../packages/core/src/lifecycle/shared-compute.js';
 
 // Minimal RunResult-shaped fixture. Only the fields computeAggregateCost

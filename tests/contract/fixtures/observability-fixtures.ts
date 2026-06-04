@@ -11,7 +11,6 @@ async function bootAndCapture(
 ): Promise<EventType[]> {
   const cwd = mkdtempSync(join(tmpdir(), 'mma-fixture-'));
   const logDir = mkdtempSync(join(tmpdir(), 'mma-logs-'));
-  const prevLogDir = process.env.MMAGENT_LOG_DIR;
   process.env.MMAGENT_LOG_DIR = logDir;
   // Opt-in to JSONL persistence — the harness defaults to log:false so contract
   // tests don't pollute the user's global log; the observability fixture is the
@@ -21,8 +20,6 @@ async function bootAndCapture(
     await scenario(handle, cwd, logDir);
   } finally {
     await handle.close();
-    if (prevLogDir === undefined) delete process.env.MMAGENT_LOG_DIR;
-    else process.env.MMAGENT_LOG_DIR = prevLogDir;
   }
   const files = readdirSync(logDir).filter((f: string) => f.endsWith('.jsonl'));
   const events: EventType[] = [];

@@ -15,7 +15,7 @@
 // runtime properties: every wire-side ComposePayload field is reachable on
 // the RunResult shape, and the shapes don't accidentally drop a key.
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { ComposePayload } from '../../packages/core/src/lifecycle/stage-io.js';
 
 // Sample object that exercises every ComposePayload field at the type level.

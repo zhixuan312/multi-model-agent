@@ -12,7 +12,7 @@
 //
 // This test asserts the driver now hoists payload → state so the
 // downstream rework gate can fire.
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { StageDefinition, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

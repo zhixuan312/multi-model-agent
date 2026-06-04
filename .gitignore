@@ -23,6 +23,3 @@ coverage/
 .mma/
 *.tgz
 full-smoke-results.json
-# Compiled standalone binaries from scripts/build-binaries.mjs — large build
-# output; per-platform packages are produced + published at release time.
-binaries/

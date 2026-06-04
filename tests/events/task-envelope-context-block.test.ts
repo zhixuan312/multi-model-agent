@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 
 const seed = {

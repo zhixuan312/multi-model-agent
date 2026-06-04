@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { decideConsent, type ConsentDecision } from '../../packages/core/src/events/consent-rules.js';
 
 describe('consent-rules — pure decision (env, config) → decision', () => {

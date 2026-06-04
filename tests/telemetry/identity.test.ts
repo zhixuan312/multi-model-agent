@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,8 +17,7 @@ describe('identity', () => {
     expect(id.publicKeyRaw).toMatch(/^[A-Za-z0-9+/=]+$/);
     const path = join(dir, 'identity.json');
     expect(existsSync(path)).toBe(true);
-    // Unix file-mode bits are not meaningful on Windows (chmod is a no-op there).
-    if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
   it('returns the same identity on subsequent calls', () => {

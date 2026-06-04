@@ -45,6 +45,7 @@ const MANIFEST_NAME = 'install-manifest.json';
 
 /** Zod schema for a single client target value. */
 const clientSchema = z.enum(['claude-code', 'gemini', 'codex', 'cursor']);
+type ClientValue = z.infer<typeof clientSchema>;
 
 const manifestEntrySchema = z.object({
   name: z.string().min(1),

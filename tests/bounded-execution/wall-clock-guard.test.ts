@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WallClockGuard } from '../../packages/core/src/bounded-execution/wall-clock-guard.js';
 
 describe('WallClockGuard', () => {

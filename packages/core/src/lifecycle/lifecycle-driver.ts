@@ -111,6 +111,7 @@ export async function runStagePlan(
         telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
       };
       state.gates![stage.name] = skipGate;
+      emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
       recordStageOnEnvelope(state, stage.name, skipGate, 'not_applicable');
       if (isVisibleStage(stage.name)) { visibleTotal -= 1; publishStageTotal(); }
       continue;
@@ -125,6 +126,7 @@ export async function runStagePlan(
         telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
       };
       state.gates![stage.name] = skipGate;
+      emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
       recordStageOnEnvelope(state, stage.name, skipGate, decision.skipReason ?? 'noop');
       if (isVisibleStage(stage.name)) { visibleTotal -= 1; publishStageTotal(); }
       continue;
@@ -199,6 +201,8 @@ export async function runStagePlan(
         };
         state.gates![stage.name] = haltGate;
         state.halted = true;
+        emitGateRecorded(ctx, stage.name, 'halt', 0, 0);
+        emitHaltEvent(ctx, stage.name, haltGate.comment ?? '', 'timeout');
         recordStageOnEnvelope(state, stage.name, haltGate);
         continue;
       }
@@ -212,9 +216,11 @@ export async function runStagePlan(
         abortAsRejection(stallSignal, `stage ${stage.name} aborted by stall watchdog`),
       ]);
       state.gates![stage.name] = gate;
+      emitGateRecorded(state.executionContext, stage.name, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
       recordStageOnEnvelope(state, stage.name, gate);
       if (gate.outcome === 'halt') {
         state.halted = true;
+        emitHaltEvent(state.executionContext, stage.name, gate.comment ?? '', gate.telemetry.stopReason);
       }
     } catch (err) {
       if (err instanceof ContextBlockNotFoundError) throw err;
@@ -227,9 +233,11 @@ export async function runStagePlan(
         telemetry: { stageLabel: stage.name, durationMs: tCatch, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' },
       };
       state.gates![stage.name] = haltGate;
+      emitGateRecorded(state.executionContext, stage.name, 'halt', 0, tCatch);
       recordStageOnEnvelope(state, stage.name, haltGate);
       state.halted = true;
       state.terminal = true;
+      emitHaltEvent(state.executionContext, stage.name, haltGate.comment ?? '', 'transport_error');
     }
   }
 
@@ -332,3 +340,23 @@ function recordStageOnEnvelope(
   } catch { /* sealed during the call; harmless */ }
 }
 
+function emitHaltEvent(
+  ctx: ExecutionContext | undefined,
+  stageName: string,
+  comment: string,
+  stopReason: string,
+): void {
+  // Stage halt events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.seal() or other stage-tracking methods.
+}
+
+function emitGateRecorded(
+  ctx: ExecutionContext | undefined,
+  stageName: string,
+  outcome: 'advance' | 'skip' | 'halt',
+  costUSD: number | null,
+  durationMs: number,
+): void {
+  // Gate recording events are no longer emitted via the bus; they are recorded
+  // through the envelope API via envelope.completeStage() or other mutations.
+}

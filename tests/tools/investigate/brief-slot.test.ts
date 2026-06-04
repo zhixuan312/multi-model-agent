@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { investigateBriefSlot } from '../../../packages/core/src/tools/investigate/brief-slot.js';
 
 const baseInput = {

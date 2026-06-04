@@ -1,5 +1,5 @@
 // tests/server/handlers/control/context-blocks.test.ts
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

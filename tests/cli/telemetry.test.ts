@@ -3,7 +3,7 @@
  *
  * Tests for Task 7.1 — `mmagent telemetry` subcommands.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -43,10 +43,7 @@ function readConfig(homeDir: string): unknown {
 describe('mmagent telemetry status', () => {
   let savedEnv: string | undefined;
 
-  // Clear MMAGENT_TELEMETRY to the no-env baseline: the test preload forces it to
-  // '0' (telemetry guard), which would otherwise mask the default/config source
-  // paths these tests exercise. Tests that need an env value set it explicitly.
-  beforeEach(() => { savedEnv = process.env.MMAGENT_TELEMETRY; delete process.env.MMAGENT_TELEMETRY; });
+  beforeEach(() => { savedEnv = process.env.MMAGENT_TELEMETRY; });
   afterEach(() => {
     if (savedEnv === undefined) delete process.env.MMAGENT_TELEMETRY;
     else process.env.MMAGENT_TELEMETRY = savedEnv;

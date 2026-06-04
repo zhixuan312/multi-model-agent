@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { journalReviewPrompt } from '../../../packages/core/src/lifecycle/handlers/journal-review-prompt.js';
 import { parseReviewReport } from '../../../packages/core/src/lifecycle/handlers/parse-review-report.js';
 

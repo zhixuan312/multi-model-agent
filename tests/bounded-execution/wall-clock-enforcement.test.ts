@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { WallClockGuard } from '../../packages/core/src/bounded-execution/wall-clock-guard.js';
 
 describe('WallClockGuard end-to-end enforcement', () => {

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // Verify which hosted web-search tool type the Codex backend accepts.
 // Usage: CODEX_DEBUG=1 node scripts/test-codex-websearch.mjs
 //

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { ResearchConfigSchema, multiModelConfigSchema } from '../../packages/core/src/config/schema.js';
 
 describe('ResearchConfigSchema', () => {

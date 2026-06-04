@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Client } from './manifest.js';
-import { EMBEDDED_SKILLS } from './embedded-skills.js';
 
 export const SUPPORTED_SKILLS = [
   'multi-model-agent',
@@ -95,11 +94,7 @@ export function readSkillContent(skillName: string, skillsRoot?: string): string
   try {
     return fs.readFileSync(skillFile, 'utf-8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      // Compiled-binary fallback: dist/skills is not on disk inside a
-      // `bun build --compile` binary, so consult the embedded assets.
-      return EMBEDDED_SKILLS[`${skillName}/SKILL.md`] ?? null;
-    }
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
 }
