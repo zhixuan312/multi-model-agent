@@ -85,8 +85,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
 /**
  * Build the ordered list of config-file candidates from discovery sources.
  * Returns an array of resolved paths; callers filter for existence and
- * iterate in priority order. This single builder is the one source of the
- * config discovery order used by loadConfig().
+ * iterate in priority order. This single builder ensures that
+ * resolveConfigPath() and loadConfig() cannot drift apart.
  */
 function buildCandidatePaths(
   explicit: string | undefined,
@@ -106,6 +106,28 @@ function buildCandidatePaths(
   paths.push(path.join(home, '.multi-model', 'config.json'));
 
   return paths;
+}
+
+/**
+ * Resolve the config file path using the discovery order:
+ *   1. --config <path>   (explicit flag)
+ *   2. $MMAGENT_CONFIG   (env var)
+ *   3. CWD/.multi-model-agent.json
+ *   4. ~/.multi-model/config.json
+ *
+ * Returns the first path that exists, or undefined if none exist.
+ * Does NOT validate or parse the file — caller uses loadConfigFromFile().
+ */
+export function resolveConfigPath(
+  explicit: string | undefined,
+  env: Record<string, string | undefined>,
+  cwd: string,
+  home: string,
+): string | undefined {
+  for (const p of buildCandidatePaths(explicit, env, cwd, home)) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  return undefined;
 }
 
 /**
