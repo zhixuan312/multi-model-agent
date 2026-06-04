@@ -19,7 +19,6 @@ The Node build resolves the SDK's native CLI from a normal on-disk `node_modules
 - **Report contract:** worker procedure + report contract, `{recorded, failed}` report parser.
 - **Lifecycle cwd-escape hardening:** `findEscapedWrites` + hard-fail on writes escaping the dispatched cwd, plus the committed-in-cwd false-fail fix.
 - **Model profiles:** added MiniMax-M3 + full provider rate scan.
-- **Reliability:** retry git spawn on transient `EAGAIN`/`ENOMEM` under fork pressure (`resolveGitToplevel` + git-commit-handler).
 
 Build green; full Vitest suite **2127/2127**.
 

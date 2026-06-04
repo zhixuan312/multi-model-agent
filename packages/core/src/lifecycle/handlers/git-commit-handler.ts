@@ -52,21 +52,12 @@ function workerWrittenFiles(state: LifecycleState, cwd: string): string[] {
   return out;
 }
 
-async function gitC(cwd: string, args: string[], attempt = 0): Promise<{ stdout: string; stderr: string; code: number }> {
+async function gitC(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
     const { stdout, stderr } = await execFileP('git', ['-C', cwd, ...args], { windowsHide: true });
     return { stdout, stderr, code: 0 };
   } catch (err) {
-    const e = err as { stdout?: string; stderr?: string; code?: number | string; message?: string };
-    // Retry ONLY the fork-pressure spawn failures this hardening targets
-    // (EAGAIN/ENOMEM under concurrent fork load). A real git failure has a numeric
-    // exit code; permanent spawn errors (ENOENT: git missing, EACCES, signal kills)
-    // are NOT transient and must fail fast rather than spin 3× on the commit path.
-    const transient = e.code === 'EAGAIN' || e.code === 'ENOMEM';
-    if (transient && attempt < 3) {
-      await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
-      return gitC(cwd, args, attempt + 1);
-    }
+    const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };
     return {
       stdout: e.stdout ?? '',
       stderr: e.stderr ?? e.message ?? String(err),
