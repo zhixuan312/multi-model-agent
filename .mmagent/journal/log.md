@@ -34,3 +34,8 @@
 2026-06-08T00:00:00+08:00  create  0032  Forge persists resumable workflow state in Postgres via Drizzle
 2026-06-08T00:00:00+08:00  create  0033  Forge build plan — staged sub-projects, Foundation+Spec first, Execute last and highest-risk
 2026-06-08T00:00:00+08:00  create  0034  Record Forge design decisions to the journal before authoring a formal spec
+2026-06-08T00:00:00+08:00  create  0035  One Project is one flow with a design/build regime split at the spec freeze
+2026-06-08T00:00:00+08:00  create  0036  Every MMA call is scoped to exactly one repo; Plan decomposes along repo boundaries
+2026-06-08T00:00:00+08:00  create  0037  Single-team tenancy — one shared agent credential, member identity for audit, project-level visibility
+2026-06-08T00:00:00+08:00  create  0038  Public Projects share equal rights; spec components map to role owners
+2026-06-08T00:00:00+08:00  create  0039  Forge design docs live in the Forge repo design/ dir, not docs/superpowers

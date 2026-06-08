@@ -34,3 +34,8 @@
 | 0032 | 2026-06-08 | adopted | Forge persists resumable workflow state in Postgres via Drizzle | forge, architecture, decision, state, drizzle, postgres, sdlc |
 | 0033 | 2026-06-08 | adopted | Forge build plan — staged sub-projects, Foundation+Spec first, Execute last and highest-risk | forge, decision, sdlc, build-plan, mma-integration, security |
 | 0034 | 2026-06-08 | adopted | Record Forge design decisions to the journal before authoring a formal spec | forge, process, decision |
+| 0035 | 2026-06-08 | adopted | One Project is one flow with a design/build regime split at the spec freeze | forge, decision, flow, sdlc, freeze, phase-machine |
+| 0036 | 2026-06-08 | adopted | Every MMA call is scoped to exactly one repo; Plan decomposes along repo boundaries | forge, decision, architecture, one-repo-per-call, multi-repo, mma-integration, write-routes |
+| 0037 | 2026-06-08 | adopted | Single-team tenancy — one shared agent credential, member identity for audit, project-level visibility | forge, tenancy, decision, architecture, security, visibility, state |
+| 0038 | 2026-06-08 | adopted | Public Projects share equal rights; spec components map to role owners | forge, spec, collaboration, decision, flow, mermaid, satisfaction-gate |
+| 0039 | 2026-06-08 | adopted | Forge design docs live in the Forge repo design/ dir, not docs/superpowers | forge, docs, process, decision, repo-boundary |
