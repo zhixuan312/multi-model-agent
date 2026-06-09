@@ -6,6 +6,8 @@ import { journalHeadlineTemplate } from '../../../reporting/headline-templates/j
 import { journalReportSchema } from '../../../reporting/report-parser-slots/journal-report.js';
 import { journalRecordBriefSlot, type JournalRecordBrief } from './brief-slot.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../../config/schema.js';
+import { assembleGoal, goalToTaskSpec } from '../../../lifecycle/goal-builder.js';
+import { implementGoalPrompt } from '../../../lifecycle/goal-prompts.js';
 
 export function registerJournalRecord(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -28,17 +30,21 @@ export const toolConfig: ToolConfig<Input, JournalRecordBrief, unknown> = {
   dispatchModeOverridable: false,
   agentType: 'complex',
   briefSlot: journalRecordBriefSlot,
-  buildTaskSpec: (brief, ctx) => ({
-    prompt: brief.prompt,
-    taskDescriptor: brief.taskDescriptor,
-    agentType: brief.agentType,
-    reviewPolicy: brief.reviewPolicy,
-    contextBlockIds: brief.contextBlockIds,
-    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
-    tools: ctx.config.defaults?.tools ?? 'full',
-    timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
-  }),
+  buildTaskSpec: (brief, ctx) => {
+    const goal = assembleGoal({
+      source: 'journal-record',
+      cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+      tasks: brief.tasks,
+      // Journal integration is nuanced — complex on both phases.
+      phases: [{ tier: 'complex', mode: 'implement' }, { tier: 'complex', mode: 'review-fix' }],
+      reviewPolicy: 'review-fix',
+      tools: ctx.config.defaults?.tools ?? 'full',
+      sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+      preamble: brief.preamble,
+      ...(brief.contextBlockIds && brief.contextBlockIds.length > 0 && { contextBlockIds: brief.contextBlockIds }),
+    });
+    return goalToTaskSpec(goal, implementGoalPrompt(goal), DEFAULT_TASK_TIMEOUT_MS);
+  },
   reportSchema: journalReportSchema,
   headlineTemplate: journalHeadlineTemplate,
 };

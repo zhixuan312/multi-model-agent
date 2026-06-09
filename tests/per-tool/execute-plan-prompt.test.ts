@@ -32,28 +32,26 @@ function buildPrompt(tmp: string): string {
     taskDescriptors: ['Step 1: create util'],
     cwd: tmp,
   } as any);
-  const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+  const spec = toolConfig.buildTaskSpec(briefs[0]!, ctx);
   return spec.prompt;
 }
 
-describe('execute-plan prompt content (4.2.3 slim)', () => {
-  it('opens with the mechanical-executor orientation', () => {
+// Goal mode: the implement prompt is the whole-plan goal prompt.
+describe('execute-plan goal implement prompt', () => {
+  it('opens with the autonomous-executor orientation', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
       const prompt = buildPrompt(tmp);
-      expect(prompt).toContain('mechanical executor');
-      expect(prompt).toContain('higher-capability model');
-      expect(prompt).toContain('VERBATIM contracts');
+      expect(prompt).toContain('autonomous executor of a multi-task plan');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('includes the slim 4-failure-mode taxonomy', () => {
+  it('includes the 4-failure-mode taxonomy', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
       const prompt = buildPrompt(tmp);
-      // 4.2.3 slim — top 4 modes calibrated from observed failures.
       expect(prompt).toContain('CODE SUBSTITUTION');
       expect(prompt).toContain('STEP SKIP');
       expect(prompt).toContain('PLAN REWRITE');
@@ -63,36 +61,34 @@ describe('execute-plan prompt content (4.2.3 slim)', () => {
     }
   });
 
-  it('includes plan-vs-source reconciliation rule', () => {
+  it('carries the per-task commit convention and a worked example', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
       const prompt = buildPrompt(tmp);
-      expect(prompt).toContain('Plan-vs-source reconciliation');
-      expect(prompt).toContain('Reconciliations');
+      expect(prompt).toContain('[task N]');
+      expect(prompt).toContain('git commit -m');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('includes self-verification requirement', () => {
+  it('prohibits destructive git operations', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
       const prompt = buildPrompt(tmp);
-      expect(prompt).toContain('Self-verification');
-      expect(prompt).toContain('PASS / FAIL');
+      expect(prompt).toContain('PROHIBITED git operations');
+      expect(prompt).toMatch(/reset --hard/);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('is significantly slimmer than the pre-4.2.3 prompt (under 8 KB)', () => {
+  it('requires the structured-summary JSON block and embeds the plan section', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
       const prompt = buildPrompt(tmp);
-      // Pre-4.2.3 framing was ~16 KB before the section body.
-      // Slim target: ~3 KB framing + section body.
-      const bytes = Buffer.byteLength(prompt, 'utf8');
-      expect(bytes).toBeLessThan(8 * 1024);
+      expect(prompt).toMatch(/```json/);
+      expect(prompt).toContain('clamp(x, min, max)');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

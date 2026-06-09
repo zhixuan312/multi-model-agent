@@ -1,105 +1,67 @@
 import { describe, it, expect } from 'vitest';
 import { delegateBriefSlot } from '../../../packages/core/src/tools/delegate/brief-slot.js';
+import { toolConfig } from '../../../packages/core/src/tools/delegate/tool-config.js';
 import { inputSchema } from '../../../packages/core/src/tools/delegate/schema.js';
 
-// All assertions go through the public slot (compileDelegatePrompt is now
-// private inside brief-slot.ts). Each test runs the slot on a one-task input
-// and reads the resulting brief's `prompt` field — the compiled worker prompt.
+const ctx = { cwd: '/tmp', projectContext: { cwd: '/tmp' }, config: { defaults: {} } } as any;
 
-function compile(prompt: string, filePaths?: string[]): string {
-  const briefs = delegateBriefSlot({
-    tasks: [{
-      prompt,
-      filePaths,
-      agentType: 'standard',
-      reviewPolicy: 'full',
-    }],
-  } as any);
-  return briefs[0].prompt;
-}
-
-describe('delegateBriefSlot — compiled prompt content (4.2.3 slim)', () => {
-  it('opens with the smallest-complete-change orientation', () => {
-    const out = compile('add util.clamp(x,min,max)');
-    expect(out).toContain('SMALLEST COMPLETE CHANGE');
-    expect(out).toContain('minimal AND complete');
+// Goal mode: /delegate compiles ONE goal-set brief whose tasks are the caller's
+// tasks. The implement prompt is materialized in buildTaskSpec.
+describe('delegateBriefSlot — goal-set construction', () => {
+  it('returns exactly one brief regardless of task count, one GoalTask per task', () => {
+    const briefs = delegateBriefSlot(inputSchema.parse({
+      tasks: [{ prompt: 'a' }, { prompt: 'b' }],
+    }));
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0]!.tasks).toHaveLength(2);
   });
 
-  it('includes the slim 4-failure-mode taxonomy', () => {
-    const out = compile('add util.clamp');
-    expect(out).toContain('SCOPE CREEP');
-    expect(out).toContain('SILENT PARTIAL FIX');
-    expect(out).toContain('PHANTOM TEST PASS');
-    expect(out).toContain('INCOMPLETE REFACTOR');
+  it('derives phase-1 tier complex if any task is complex, else standard', () => {
+    const stdOnly = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'a' }] }));
+    expect(stdOnly[0]!.phase1Tier).toBe('standard');
+    const withComplex = delegateBriefSlot(inputSchema.parse({
+      tasks: [{ prompt: 'a' }, { prompt: 'b', agentType: 'complex' }],
+    }));
+    expect(withComplex[0]!.phase1Tier).toBe('complex');
   });
 
-  it('includes the brief-vs-diff walk', () => {
-    const out = compile('add util.clamp');
-    expect(out).toContain('Brief-vs-diff walk');
-    expect(out).toContain('"Smallest" means no extras. "Complete" means no gaps');
+  it('reviewPolicy collapses to none only when every task opts out', () => {
+    const allNone = delegateBriefSlot(inputSchema.parse({
+      tasks: [{ prompt: 'a', reviewPolicy: 'none' }, { prompt: 'b', reviewPolicy: 'none' }],
+    }));
+    expect(allNone[0]!.reviewPolicy).toBe('none');
+    const someReview = delegateBriefSlot(inputSchema.parse({
+      tasks: [{ prompt: 'a', reviewPolicy: 'none' }, { prompt: 'b' }],
+    }));
+    expect(someReview[0]!.reviewPolicy).toBe('review-fix');
   });
 
-  it('strengthens the file constraint when filePaths is set', () => {
-    const out = compile('add util.clamp', ['src/util.ts', 'tests/util.test.ts']);
-    expect(out).toContain('FILE CONSTRAINT: write to exactly these path(s)');
-    expect(out).toContain('Existing files in this list are pre-verified');
-    expect(out).toContain('Non-existent paths in this list are explicit OUTPUT TARGETS');
-    expect(out).toContain('off-limits to write');
-    expect(out).toContain('`src/util.ts`');
-    expect(out).toContain('`tests/util.test.ts`');
+  it('task body carries the caller brief, scope rule, and failure modes', () => {
+    const briefs = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'add util.clamp' }] }));
+    const body = briefs[0]!.tasks[0]!.body;
+    expect(body).toContain('add util.clamp');
+    expect(body).toContain('Scope:');
+    expect(body).toContain('SCOPE CREEP');
   });
 
-  it('omits the file constraint when filePaths is empty', () => {
-    const out = compile('add util.clamp');
-    expect(out).not.toContain('FILE CONSTRAINT');
-  });
-
-  it('embeds the caller brief between the orientation and the rules', () => {
-    const out = compile('add util.clamp(x,min,max) to src/util.ts');
-    expect(out).toContain('Brief from the caller');
-    expect(out).toContain('add util.clamp(x,min,max) to src/util.ts');
-    const orientationIdx = out.indexOf('SMALLEST COMPLETE CHANGE');
-    const briefIdx = out.indexOf('add util.clamp(x,min,max) to src/util.ts');
-    const scopeIdx = out.indexOf('Scope:');
-    expect(orientationIdx).toBeLessThan(briefIdx);
-    expect(briefIdx).toBeLessThan(scopeIdx);
-  });
-
-  it('is significantly slimmer than the pre-4.2.3 prompt (under 6 KB)', () => {
-    const out = compile('add util.clamp');
-    const bytes = Buffer.byteLength(out, 'utf8');
-    expect(bytes).toBeLessThan(6 * 1024);
+  it('strengthens the file constraint when filePaths is set, omits it otherwise', () => {
+    const withPaths = delegateBriefSlot(inputSchema.parse({
+      tasks: [{ prompt: 'x', filePaths: ['src/util.ts'] }],
+    }))[0]!.tasks[0]!.body;
+    expect(withPaths).toContain('src/util.ts');
+    const without = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'x' }] }))[0]!.tasks[0]!.body;
+    expect(without).not.toContain('Write to exactly these path');
   });
 });
 
-describe('delegateBriefSlot — brief construction', () => {
-  it('returns one brief per task', () => {
-    const briefs = delegateBriefSlot({
-      tasks: [
-        { prompt: 'a', agentType: 'standard', reviewPolicy: 'full' },
-        { prompt: 'b', agentType: 'complex', reviewPolicy: 'none' },
-      ],
-    } as any);
-    expect(briefs).toHaveLength(2);
-  });
-
-  it('defaults agentType and reviewPolicy (applied by the schema)', () => {
-    // Defaulting is authoritative in the Zod schema; the handler parses
-    // before calling the slot, so parse here to mirror production.
-    const briefs = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'x' }] }));
-    expect(briefs[0].agentType).toBe('standard');
-    expect(briefs[0].reviewPolicy).toBe('full');
-  });
-
-  it('forwards contextBlockIds onto the brief', () => {
-    const briefs = delegateBriefSlot({
-      tasks: [{
-        prompt: 'x',
-        contextBlockIds: ['cb-1'],
-        agentType: 'standard',
-        reviewPolicy: 'full',
-      }],
-    } as any);
-    expect(briefs[0].contextBlockIds).toEqual(['cb-1']);
+describe('delegate goal prompt (via buildTaskSpec)', () => {
+  it('materializes the implement prompt with the goal conventions', () => {
+    const briefs = delegateBriefSlot(inputSchema.parse({ tasks: [{ prompt: 'add util.clamp' }] }));
+    const spec = toolConfig.buildTaskSpec(briefs[0]!, ctx);
+    expect(spec.goal).toBeDefined();
+    expect(spec.prompt).toContain('[task N]');                 // commit convention
+    expect(spec.prompt).toContain('PROHIBITED git operations'); // bounded git surface
+    expect(spec.prompt).toMatch(/```json/);                     // structured summary
+    expect(spec.prompt).toContain('add util.clamp');            // the task body
   });
 });

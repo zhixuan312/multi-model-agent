@@ -22,6 +22,8 @@
 
 import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
+import { rmSync } from 'node:fs';
+import { makeGoalRepo, committingProvider, goalTask } from '../helpers/goal-git.js';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
@@ -153,35 +155,31 @@ describe('envelope pipeline — end-to-end', () => {
     expect(snap.toolCalls.length).toBe(snap.headline.toolTotal);
   });
 
-  it('seals envelope with status=done for a successful run (workerStatus fallback)', async () => {
-    const provider = makeRecordingProvider({ envelopeSeen: false });
-    const envelope = TaskEnvelopeStore.create({
-      taskId: 'b3:0', batchId: 'b3', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
-      client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
-      reviewPolicy: 'full' as const,
-    });
-    const task: TaskSpec = {
-      prompt: 'do the thing', cwd: os.tmpdir(),
-      reviewPolicy: 'none', timeoutMs: 60_000, tools: 'none',
-    };
-
-    await runTaskViaDispatcher({
-      task,
-      resolved: { slot: 'standard', provider } as ResolvedAgent,
-      config: makeConfig(),
-      taskIndex: 0,
-      route: 'delegate',
-      envelope,
-    });
-
-    const snap = envelope.snapshot();
-    // Regression: recordTaskCompletedHandler used to read state.workerStatus
-    // (only set by rework-stage); for routes without rework, it fell through
-    // to 'failed' even when the worker succeeded. The fix falls back to
-    // state.lastRunResult.workerStatus.
-    expect(snap.status).toBe('done');
-    expect(envelope.isSealed()).toBe(true);
+  it('seals envelope with status=done for a successful goal-set run (≥1 commit)', async () => {
+    const cwd = makeGoalRepo();
+    try {
+      const provider = committingProvider(cwd);
+      const envelope = TaskEnvelopeStore.create({
+        taskId: 'b3:0', batchId: 'b3', taskIndex: 0,
+        route: 'delegate', agentType: 'standard',
+        client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
+        reviewPolicy: 'none' as const,
+      });
+      await runTaskViaDispatcher({
+        task: goalTask(cwd),
+        resolved: { slot: 'standard', provider } as ResolvedAgent,
+        config: makeConfig(),
+        taskIndex: 0,
+        route: 'delegate',
+        envelope,
+      });
+      const snap = envelope.snapshot();
+      // Goal mode: completion = implement advanced AND ≥1 commit in baseSha..HEAD.
+      expect(snap.status).toBe('done');
+      expect(envelope.isSealed()).toBe(true);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it('emits a sealed envelope snapshot that TelemetryUploader can enqueue', async () => {
@@ -204,21 +202,19 @@ describe('envelope pipeline — end-to-end', () => {
     });
     bus.subscribe(uploader);
 
+    const cwd = makeGoalRepo();
+    try {
     const envelope = TaskEnvelopeStore.create({
       taskId: 'b4:0', batchId: 'b4', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
-      client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
-      reviewPolicy: 'full' as const,
+      client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
+      reviewPolicy: 'none' as const,
     }, bus);
 
-    const provider = makeRecordingProvider({ envelopeSeen: false });
-    const task: TaskSpec = {
-      prompt: 'do the thing', cwd: os.tmpdir(),
-      reviewPolicy: 'none', timeoutMs: 60_000, tools: 'none',
-    };
+    const provider = committingProvider(cwd);
 
     await runTaskViaDispatcher({
-      task,
+      task: goalTask(cwd),
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
@@ -242,6 +238,9 @@ describe('envelope pipeline — end-to-end', () => {
     expect(rec['workerStatus']).toBe('done');
     expect(rec['terminalStatus']).toBe('ok');
     expect(rec['mainModel']).toBe('claude-opus-4-7');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it('aggregates per-stage tokens + cost into envelope totals and wire record (4.7.3 aggregation fix)', async () => {

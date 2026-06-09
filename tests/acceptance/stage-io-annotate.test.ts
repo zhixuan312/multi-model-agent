@@ -181,25 +181,7 @@ describe('AC-23: completed=false message names specific blocking gate or finding
   });
 });
 
-describe('AC-13: commit-message honesty for unaddressed findings', () => {
-  // This is a property of the commit handler — when rework leaves findings
-  // unaddressed, the commit message should include those finding IDs. We
-  // verify by source inspection because constructing a full commit harness
-  // exceeds the unit-test surface.
-  it('git-commit-handler source mentions unaddressedFindingIds in its commit-message construction', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const url = await import('node:url');
-    const here = path.dirname(url.fileURLToPath(import.meta.url));
-    const handlerPath = path.resolve(here, '../../packages/core/src/lifecycle/handlers/git-commit-handler.ts');
-    const src = fs.readFileSync(handlerPath, 'utf-8');
-    // Loose check — the commit-handler module should at least reference
-    // unaddressed findings in some form for the honest-message path. If
-    // your fork drops this, this test fires.
-    expect(src.length).toBeGreaterThan(100);
-    // Pass conditionally: AC-13 may be implemented elsewhere. Mark as
-    // architectural placeholder so the AC number is registered in the
-    // suite.
-    expect(typeof src).toBe('string');
-  });
-});
+// AC-13 (commit-message honesty for unaddressed findings) removed in goal mode:
+// the MMA commit handler is gone — the agent self-commits per task, and the
+// goal report surfaces unaddressed work via the `incomplete_plan` finding
+// (see goal-report.ts + tests/lifecycle/goal-report.test.ts).

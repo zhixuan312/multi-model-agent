@@ -24,6 +24,10 @@ export interface CompletionInputs {
   unaddressedFindingIds: string[] | undefined;
   commitKind: 'committed' | 'no_op' | undefined;
   criteriaSucceeded: string[] | undefined;
+  /** Goal mode (write routes): commits in baseSha..HEAD. When defined, the
+   *  goal branch applies — completion = implement advanced AND ≥1 commit
+   *  (the agent self-commits; there is no MMA review verdict / commit gate). */
+  goalCommitCount?: number;
 }
 
 export interface CompletionResult {
@@ -45,7 +49,17 @@ export function deriveCompletion(inputs: CompletionInputs): CompletionResult {
     return { completed: implementOk && criteriaOk, reasons };
   }
 
-  // 3. Write routes: review + commit must pass
+  // 3a. Goal-mode write routes: the agent self-commits and there is no MMA
+  // review verdict / commit gate. Completion = implementer advanced AND at
+  // least one commit landed in baseSha..HEAD (mirrors the status truth table:
+  // failed only on zero commits).
+  if (inputs.goalCommitCount !== undefined) {
+    const committed = inputs.goalCommitCount > 0;
+    if (!committed) reasons.push('no commits landed');
+    return { completed: implementOk && committed, reasons };
+  }
+
+  // 3. Write routes (legacy non-goal): review + commit must pass
   const reviewOk =
     inputs.reviewPolicy === 'none' ||
     inputs.reviewVerdict === 'approved' ||
@@ -93,5 +107,8 @@ export function extractCompletionInputs(state: LifecycleState): CompletionInputs
     unaddressedFindingIds: (state as { unaddressedFindingIds?: string[] }).unaddressedFindingIds ?? last?.unaddressedFindingIds,
     commitKind,
     criteriaSucceeded: last?.criteriaSucceeded,
+    ...((state as { goalCommitCount?: number }).goalCommitCount !== undefined && {
+      goalCommitCount: (state as { goalCommitCount?: number }).goalCommitCount,
+    }),
   };
 }

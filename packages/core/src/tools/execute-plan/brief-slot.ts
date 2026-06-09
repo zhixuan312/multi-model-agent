@@ -1,18 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
 import { extractPlanSection, SLICE_CAP_BYTES } from './plan-extractor.js';
-import type { ReviewPolicy } from '../../types/review-policy.js';
+import type { GoalReviewPolicy } from '../../types/goal.js';
+import type { TaskInput } from '../../lifecycle/goal-builder.js';
 
 // ── Brief slot for the execute-plan route ──
-// Wired as ToolConfig.briefSlot in tool-config.ts.
+// One goal-set per call: each task descriptor → one GoalTask whose body is the
+// matched plan section. The whole plan runs as a single autonomous implement
+// pass (self-commit per task) then a complex-tier review-fix pass.
 
 export interface ExecutePlanBrief {
-  taskDescriptor: string;
+  tasks: TaskInput[];
+  reviewPolicy: GoalReviewPolicy;
   filePaths: string[];
-  sectionBody: string;
-  sectionTruncated: boolean;
   contextBlockIds: string[];
-  reviewPolicy: ReviewPolicy;
   cwd: string;
 }
 
@@ -28,7 +29,8 @@ export function executePlanBriefSlot(input: ExecutePlanInput): ExecutePlanBrief[
   const planPath = input.filePaths[0]!;
   const cwd = input.cwd ?? process.cwd();
   const rp = input.perTaskReviewPolicy ?? {};
-  return input.taskDescriptors.map((descriptor, i) => {
+
+  const tasks: TaskInput[] = input.taskDescriptors.map((descriptor) => {
     let sectionBody = '';
     let sectionTruncated = false;
     try {
@@ -36,28 +38,35 @@ export function executePlanBriefSlot(input: ExecutePlanInput): ExecutePlanBrief[
       sectionBody = section.body;
       sectionTruncated = section.truncated;
     } catch {
-      // extractPlanSection enforces sandbox — if that fails (e.g. macOS
-      // temp-dir symlinks), fall back to reading the file without sandbox.
       const raw = readPlanSectionRaw(planPath, descriptor, cwd);
       sectionBody = raw.body;
       sectionTruncated = raw.truncated;
     }
-    return {
-      taskDescriptor: descriptor,
-      filePaths: input.filePaths,
-      sectionBody,
-      sectionTruncated,
-      contextBlockIds: input.contextBlockIds ?? [],
-      reviewPolicy: (rp[String(i)] ?? rp[i] ?? 'full') as ReviewPolicy,
-      cwd,
-    };
+    const body = sectionBody.trim().length > 0
+      ? (sectionTruncated
+          ? `${sectionBody}\n\n⚠ Section truncated at the size cap — read the full plan file (${planPath}) for the tail if needed.`
+          : sectionBody)
+      : `No unique plan section matched "${descriptor}". Read the plan file ${planPath}, find this task, and implement it. If still no unique match, report and skip this task.`;
+    return { heading: descriptor, body, phase: 1 };
   });
+
+  // Collapse per-task review policy to the goal axis: review unless every task opted out.
+  const allNone = input.taskDescriptors.every((_, i) => (rp[String(i)] ?? rp[i] ?? 'full') === 'none');
+  const reviewPolicy: GoalReviewPolicy = allNone ? 'none' : 'review-fix';
+
+  return [{
+    tasks,
+    reviewPolicy,
+    filePaths: input.filePaths,
+    contextBlockIds: input.contextBlockIds ?? [],
+    cwd,
+  }];
 }
 
 /**
  * Read a plan file and extract a heading section without sandbox enforcement.
- * Used as a fallback when extractPlanSection's realpath check rejects the path
- * (e.g. macOS temp directories that are symlinks).
+ * Fallback when extractPlanSection's realpath check rejects the path (e.g.
+ * macOS temp directories that are symlinks).
  */
 function readPlanSectionRaw(
   planFilePath: string,
@@ -73,11 +82,11 @@ function readPlanSectionRaw(
   let startIdx = -1;
   let level = 0;
   for (let i = 0; i < lines.length; i++) {
-    const m = ATX.exec(lines[i]);
+    const m = ATX.exec(lines[i]!);
     if (!m) continue;
-    if (m[2].trim() === wantTrim) {
+    if (m[2]!.trim() === wantTrim) {
       startIdx = i;
-      level = m[1].length;
+      level = m[1]!.length;
       break;
     }
   }
@@ -87,8 +96,8 @@ function readPlanSectionRaw(
 
   let endIdx = lines.length;
   for (let i = startIdx + 1; i < lines.length; i++) {
-    const m = ATX.exec(lines[i]);
-    if (m && m[1].length <= level) { endIdx = i; break; }
+    const m = ATX.exec(lines[i]!);
+    if (m && m[1]!.length <= level) { endIdx = i; break; }
   }
 
   let body = lines.slice(startIdx, endIdx).join('\n');

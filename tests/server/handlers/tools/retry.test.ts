@@ -62,7 +62,7 @@ describe('POST /retry handler', () => {
     }
   });
 
-  it('returns 400 invalid_request when taskIndices is missing', async () => {
+  it('returns 400 invalid_request when batchId is missing (goal mode: batchId is the only input)', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
@@ -70,11 +70,10 @@ describe('POST /retry handler', () => {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ batchId: 'some-batch' }),
+        body: JSON.stringify({}),
       });
 
       expect(res.status).toBe(400);

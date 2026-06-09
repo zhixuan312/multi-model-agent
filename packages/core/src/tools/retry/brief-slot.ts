@@ -2,8 +2,7 @@ import type { Input } from './schema.js';
 
 export interface RetryBrief {
   batchId: string;
-  taskIndex: number;
 }
 
-export const retryBriefSlot = (input: Input): RetryBrief[] =>
-  input.taskIndices.map((idx) => ({ batchId: input.batchId, taskIndex: idx }));
+/** One brief: re-fire the stored goal-set for `batchId`. */
+export const retryBriefSlot = (input: Input): RetryBrief[] => [{ batchId: input.batchId }];

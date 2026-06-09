@@ -13,6 +13,9 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { buildCancelledResult } from './build-cancelled-result.js';
 import { TaskEnvelopeStore } from '../events/task-envelope.js';
+import { withWriteGoalLock, WriteGoalBusyError, DEFAULT_WRITE_GOAL_LOCK_TIMEOUT_MS } from './write-goal-lock.js';
+import { resolveGitToplevel } from './git-toplevel.js';
+import { checkGoalShape } from './goal-preconditions.js';
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
@@ -99,6 +102,27 @@ export async function executeTask<Input, Brief, Report>(
     retryable: false,
     durationMs: Date.now() - startMs,
     structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
+    workerStatus: 'failed' as const,
+    actualCostUSD: 0,
+    directoriesListed: [],
+  });
+
+  const buildGoalFailResult = (code: string, msg: string): RuntimeRunResult => ({
+    output: '',
+    status: 'error' as const,
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    filesWritten: [],
+    outputIsDiagnostic: true,
+    escalationLog: [],
+    error: msg,
+    // errorCode must stay within the wire ErrorCode enum; the precise goal
+    // code rides on structuredError.code (a free string) so it still surfaces
+    // on results[i].error.code without widening the enum.
+    errorCode: 'other' as const,
+    retryable: false,
+    durationMs: Date.now() - startMs,
+    structuredError: { code, message: msg, where: `goal:${config.name}` },
     workerStatus: 'failed' as const,
     actualCostUSD: 0,
     directoriesListed: [],
@@ -221,7 +245,30 @@ export async function executeTask<Input, Brief, Report>(
   const dispatchTasks = applyParallelSafetySuffixIfNeeded(tasks, concurrent);
 
   let results: RuntimeRunResult[];
-  if (tasks.length === 1) {
+  const goal0 = tasks[0]?.goal;
+  if (goal0) {
+    // Goal mode (write routes): one sequential goal-set, serialized per repo so
+    // concurrent same-repo goal-sets never interleave self-commits. Shape
+    // preconditions (empty/oversized plan) hard-fail before the lock; git
+    // preconditions + baseSha capture happen inside the lock (prepare stage).
+    const shape = checkGoalShape(goal0);
+    if (!shape.ok) {
+      results = [buildGoalFailResult(shape.code, shape.message)];
+    } else {
+      const repoKey = (await resolveGitToplevel(goal0.cwd)) ?? goal0.cwd;
+      try {
+        results = [await withWriteGoalLock(
+          repoKey,
+          () => dispatchOne(tasks[0]!, 0),
+          DEFAULT_WRITE_GOAL_LOCK_TIMEOUT_MS,
+        )];
+      } catch (e) {
+        results = e instanceof WriteGoalBusyError
+          ? [buildGoalFailResult('write_goal_busy', e.message)]
+          : [buildCrashResult(e instanceof Error ? e.message : String(e))];
+      }
+    }
+  } else if (tasks.length === 1) {
     // Single-task fast path — identical to pre-change behavior, no suffix.
     results = [await dispatchOne(tasks[0]!, 0)];
   } else if (mode === 'parallel') {

@@ -14,13 +14,15 @@ Body for task 2.
 `;
 
 function makeTempCwd(): string {
-  const dir = join(tmpdir(), `intake-pr2-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const dir = join(tmpdir(), `execplan-goal-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
+// Goal mode: ONE brief whose tasks are the matched plan sections; per-task
+// review policy collapses to the goal axis.
 describe('executePlanBriefSlot', () => {
-  it('extracts a named section into a brief', () => {
+  it('extracts each named section into a GoalTask', () => {
     const cwd = makeTempCwd();
     try {
       writeFileSync(join(cwd, 'plan.md'), FIXTURE_PLAN);
@@ -30,35 +32,40 @@ describe('executePlanBriefSlot', () => {
         cwd,
       });
       expect(briefs).toHaveLength(1);
-      expect(briefs[0].taskDescriptor).toBe('Task 1: Do something');
-      expect(briefs[0].sectionBody).toContain('Step body here.');
-      expect(briefs[0].sectionTruncated).toBe(false);
-      expect(briefs[0].filePaths).toEqual(['plan.md']);
-      expect(briefs[0].cwd).toBe(cwd);
+      expect(briefs[0]!.tasks).toHaveLength(1);
+      expect(briefs[0]!.tasks[0]!.heading).toBe('Task 1: Do something');
+      expect(briefs[0]!.tasks[0]!.body).toContain('Step body here.');
+      expect(briefs[0]!.filePaths).toEqual(['plan.md']);
+      expect(briefs[0]!.cwd).toBe(cwd);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
 
-  it('applies perTaskReviewPolicy per task index', () => {
+  it('collapses perTaskReviewPolicy: review-fix unless every task opts out', () => {
     const cwd = makeTempCwd();
     try {
       writeFileSync(join(cwd, 'plan.md'), FIXTURE_PLAN);
-      const briefs = executePlanBriefSlot({
+      const someReview = executePlanBriefSlot({
         filePaths: ['plan.md'],
         taskDescriptors: ['Task 1: Do something', 'Task 2: Another thing'],
         cwd,
         perTaskReviewPolicy: { '0': 'none', '1': 'quality_only' },
       });
-      expect(briefs).toHaveLength(2);
-      expect(briefs[0].reviewPolicy).toBe('none');
-      expect(briefs[1].reviewPolicy).toBe('quality_only');
+      expect(someReview[0]!.reviewPolicy).toBe('review-fix');
+      const allNone = executePlanBriefSlot({
+        filePaths: ['plan.md'],
+        taskDescriptors: ['Task 1: Do something', 'Task 2: Another thing'],
+        cwd,
+        perTaskReviewPolicy: { '0': 'none', '1': 'none' },
+      });
+      expect(allNone[0]!.reviewPolicy).toBe('none');
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
 
-  it('defaults reviewPolicy to "full" when not specified', () => {
+  it('defaults reviewPolicy to "review-fix" when not specified', () => {
     const cwd = makeTempCwd();
     try {
       writeFileSync(join(cwd, 'plan.md'), FIXTURE_PLAN);
@@ -67,13 +74,13 @@ describe('executePlanBriefSlot', () => {
         taskDescriptors: ['Task 1: Do something'],
         cwd,
       });
-      expect(briefs[0].reviewPolicy).toBe('full');
+      expect(briefs[0]!.reviewPolicy).toBe('review-fix');
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
 
-  it('truncates sections larger than 30 KB cap (SLICE_CAP_BYTES)', () => {
+  it('truncates sections larger than the 30 KB cap (SLICE_CAP_BYTES)', () => {
     const cwd = makeTempCwd();
     try {
       const big = 'x'.repeat(35 * 1024);
@@ -84,8 +91,9 @@ describe('executePlanBriefSlot', () => {
         taskDescriptors: ['Task 1: Big task'],
         cwd,
       });
-      expect(briefs[0].sectionTruncated).toBe(true);
-      expect(briefs[0].sectionBody.length).toBeLessThanOrEqual(30 * 1024);
+      // Truncated body keeps the cap (plus the appended truncation note).
+      expect(briefs[0]!.tasks[0]!.body).toContain('Section truncated');
+      expect(briefs[0]!.tasks[0]!.body.length).toBeLessThanOrEqual(31 * 1024);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

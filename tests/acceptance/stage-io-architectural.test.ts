@@ -15,20 +15,21 @@ import type {
   StageDefinition, StageGate, ComposePayload,
 } from '../../packages/core/src/lifecycle/stage-io.js';
 
+// Goal mode (v5.1): the per-task review/rework/commit trio collapsed into a
+// single phase-2 review-fix pass (named `review`); the agent self-commits, so
+// there is no MMA commit/rework stage.
 const STAGES_IN_ORDER = [
   'prepare',
   'register-block',
   'implement',
   'review',
-  'rework',
-  'commit',
   'annotate',
   'compose',
   'terminal',
 ] as const;
 
-describe('AC-1: STAGE_PLAN has 9 stages in canonical order', () => {
-  it('STAGE_PLAN length is 9', () => {
+describe('AC-1: STAGE_PLAN has 7 stages in canonical order', () => {
+  it('STAGE_PLAN length matches the canonical ordering', () => {
     expect(STAGE_PLAN.length).toBe(STAGES_IN_ORDER.length);
   });
 
