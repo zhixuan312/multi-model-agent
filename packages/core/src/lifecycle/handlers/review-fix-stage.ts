@@ -9,7 +9,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { TaskSpec, RuntimeRunResult } from '../../types.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
-import { renderGitLogStat } from '../git-exec.js';
+import { renderGitLogStat, renderWorkingTreeStatus } from '../git-exec.js';
 import { reviewFixGoalPrompt, MAX_GIT_LOG_BYTES } from '../goal-prompts.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
 
@@ -42,18 +42,16 @@ export async function reviewFixHandler(state: LifecycleState): Promise<StageGate
   const phase2Tier = goal.phases[1]?.tier ?? 'complex';
   try {
     const { text: gitLog } = await renderGitLogStat(goal.cwd, baseSha, MAX_GIT_LOG_BYTES);
-    const prompt = reviewFixGoalPrompt(goal, gitLog);
+    // Feed phase 2 the UNCOMMITTED working tree too, so it can see + commit work
+    // the implementer did but didn't commit (otherwise an empty log blinds it).
+    const workingTree = await renderWorkingTreeStatus(goal.cwd);
+    const prompt = reviewFixGoalPrompt(goal, gitLog, workingTree);
     const session = ctx.getSession(phase2Tier);
     const turn = await session.send(prompt, {
       stageLabel: HUMAN_LABEL.review,
       signal: ctx.stall.controller.signal,
     });
     const result = assembleRunResult(turn) as RuntimeRunResult;
-
-    // Safety-net: commit any fixes the agent left uncommitted (keeps the tree clean).
-    const { commitSweep } = await import('../git-exec.js');
-    const { goalSweepSubject } = await import('../goal-prompts.js');
-    try { await commitSweep(goal.cwd, goalSweepSubject(goal, 'review-fix')); } catch { /* best-effort */ }
 
     (state as { goalPhase2Output?: string }).goalPhase2Output = result.output ?? '';
 

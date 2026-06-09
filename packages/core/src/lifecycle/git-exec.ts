@@ -113,22 +113,21 @@ export async function renderGitLogStat(cwd: string, base: string, maxBytes = 128
 }
 
 /**
- * Safety-net commit sweep. The agent is instructed to self-commit per task, but
- * weak tiers don't always comply (and leftover uncommitted changes would dirty
- * the tree for the next goal-set). After each phase, if the work-tree is dirty,
- * MMA commits the remaining changes so the work lands and the tree stays clean.
- * Returns true when it created a commit. `subject` should follow the `[task N]`
- * convention when the goal is single-task so the report can still attribute it.
+ * Render the UNCOMMITTED working-tree state for the phase-2 prompt: `git status
+ * --short` plus a `--stat` of staged+unstaged changes (no patch body). This is
+ * what lets the review-fix tier see work the implementer wrote but did NOT
+ * commit — without it, an implementer that under-commits leaves phase 2 blind.
+ * Returns '(clean working tree)' when there are no uncommitted changes.
  */
-export async function commitSweep(cwd: string, subject: string): Promise<boolean> {
-  if (await isCleanWorkTree(cwd)) return false;
-  const add = await gitC(cwd, ['add', '-A']);
-  if (add.code !== 0) return false;
-  // Nothing staged after add (e.g. only ignored files) → no commit.
-  const staged = await gitC(cwd, ['diff', '--cached', '--quiet']);
-  if (staged.code === 0) return false;
-  const commit = await gitC(cwd, ['commit', '-m', subject]);
-  return commit.code === 0;
+export async function renderWorkingTreeStatus(cwd: string, maxBytes = 64 * 1024): Promise<string> {
+  const status = await gitC(cwd, ['status', '--short']);
+  if (status.code !== 0) return '(working-tree status unavailable)';
+  if (status.stdout.trim() === '') return '(clean working tree — nothing uncommitted)';
+  const stat = await gitC(cwd, ['diff', 'HEAD', '--stat', '--no-color']);
+  const text = `Uncommitted changes (git status --short):\n${status.stdout}\n` +
+    (stat.code === 0 && stat.stdout.trim() ? `\nDiff stat vs HEAD:\n${stat.stdout}` : '');
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  return Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8') + '\n…[truncated]…\n';
 }
 
 /**

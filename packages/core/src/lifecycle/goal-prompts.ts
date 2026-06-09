@@ -16,17 +16,6 @@ export function derivePhaseTimeoutMs(taskCount: number, override?: number): numb
   return Math.max(PER_TASK_DEFAULT_MS, taskCount * PER_TASK_DEFAULT_MS);
 }
 
-/** Commit subject for an MMA safety-net sweep of uncommitted goal changes.
- *  Single-task goals keep the `[task 1]` convention so the report attributes it. */
-export function goalSweepSubject(goal: Goal, phase: 'implement' | 'review-fix'): string {
-  if (goal.tasks.length === 1) {
-    return phase === 'review-fix'
-      ? `[task 1] fix: ${goal.tasks[0]!.heading}`
-      : `[task 1] ${goal.tasks[0]!.heading}`;
-  }
-  return `chore(goal): ${phase} sweep of uncommitted changes (${goal.tasks.length} tasks)`;
-}
-
 /** First non-empty line of `text`, trimmed to `max` chars (heading derivation). */
 export function firstLine(text: string, max = 72): string {
   const line = (text.split('\n').find((l) => l.trim().length > 0) ?? '').trim();
@@ -130,16 +119,33 @@ export function implementGoalPrompt(goal: Goal): string {
   ].join('\n');
 }
 
-/** Phase-2 review-fix prompt: review each task's commit vs the plan, fix + commit. */
-export function reviewFixGoalPrompt(goal: Goal, gitLog: string): string {
+/**
+ * Phase-2 review-fix prompt. You are the COMPLETION GUARANTOR, not just a
+ * reviewer of commits. The implementer (a cheaper tier) attempted every task but
+ * may have left some incomplete, wrong, OR done-but-uncommitted. Your job is to
+ * make sure EVERY task ends up correctly implemented AND committed — walking the
+ * tasks one by one against both the commit log and the uncommitted working tree.
+ */
+export function reviewFixGoalPrompt(goal: Goal, gitLog: string, workingTree: string): string {
   return [
-    'You are reviewing and fixing an implementation of the plan below, done by a prior agent.',
-    'Each task was committed with a `[task N] ...` subject. Review EACH task\'s commit against',
-    'the plan for FIDELITY (did it implement what the plan specified?) and CORRECTNESS',
-    '(is it actually right — bugs, edge cases, broken builds?).',
+    'You are the COMPLETION GUARANTOR for the plan below. A prior implementer (a cheaper',
+    'tier) attempted every task. It may have: committed a task correctly ([task N] …), done',
+    'the work but left it UNCOMMITTED in the working tree, implemented a task WRONGLY or',
+    'INCOMPLETELY, or not done it at all. Your job: make sure EVERY task is correctly',
+    'implemented AND committed by the end. Do not assume the commit log is complete —',
+    'inspect the working tree too.',
     ...(goal.preamble ? ['', goal.preamble] : []),
     '',
-    'When a task needs changes: fix it and commit the fix.',
+    'Work through the tasks ONE BY ONE, in order. For each task:',
+    '1. Determine its real state — check the commit log AND the uncommitted working tree',
+    '   (and the files themselves). Did the implementer actually do it, correctly?',
+    '2. If it is correct but NOT yet committed → commit it as `[task N] <heading>`.',
+    '3. If it is incomplete or wrong → finish/fix it, then commit as `[task N] fix: <what>`.',
+    '4. If it is correct and already committed → verify it matches the plan; only re-commit',
+    '   if you actually change something.',
+    '',
+    'By the end EVERY task MUST be implemented and committed, and the working tree MUST be',
+    'clean (no uncommitted changes left behind).',
     '',
     commitConvention('review-fix'),
     '',
@@ -148,11 +154,14 @@ export function reviewFixGoalPrompt(goal: Goal, gitLog: string): string {
     phaseCheckpoint(goal.phaseCount),
     '',
     STRUCTURED_SUMMARY,
-    'Additionally include a top-level "findings" array in the JSON: what was wrong, what you',
-    'fixed, and anything that remains unresolved.',
+    'Additionally include a top-level "findings" array in the JSON: what was wrong/missing,',
+    'what you completed or fixed, and anything that remains unresolved.',
     '',
-    '──────────────────── COMMITS SO FAR (git log) ────────────────────',
-    gitLog || '(no commits recorded)',
+    '──────────────── COMMITS SO FAR (git log --stat) ────────────────',
+    gitLog || '(no commits yet — the implementer committed nothing)',
+    '',
+    '──────────────── UNCOMMITTED WORK (git status) ────────────────',
+    workingTree,
     '',
     '─────────────────────── PLAN ───────────────────────',
     goal.planText,
