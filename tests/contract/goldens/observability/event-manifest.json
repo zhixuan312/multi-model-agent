@@ -51,6 +51,7 @@
         "claude_text_emission",
         "claude_tool_call",
         "claude_session_closed",
+        "claude_compaction",
         "codex_subprocess_starting",
         "codex_spawn_failed",
         "codex_subprocess_started",

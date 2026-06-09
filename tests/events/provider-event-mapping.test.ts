@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { mapProviderEventToPlainEntry, PROVIDER_EVENT_NAMES, PlainLogEntrySchema } from '../../packages/core/src/events/plain-log-entry.js';
 
 describe('mapProviderEventToPlainEntry', () => {
-  it('produces valid entries for all 20 provider event names', () => {
-    expect(PROVIDER_EVENT_NAMES).toHaveLength(20);
+  it('produces valid entries for all 21 provider event names', () => {
+    expect(PROVIDER_EVENT_NAMES).toHaveLength(21);
     for (const name of PROVIDER_EVENT_NAMES) {
       const provider = name.startsWith('claude') ? 'claude' as const : 'codex' as const;
       const entry = mapProviderEventToPlainEntry(provider, name, { turn: 1 });
