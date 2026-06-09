@@ -16,6 +16,17 @@ export function derivePhaseTimeoutMs(taskCount: number, override?: number): numb
   return Math.max(PER_TASK_DEFAULT_MS, taskCount * PER_TASK_DEFAULT_MS);
 }
 
+/** Commit subject for an MMA safety-net sweep of uncommitted goal changes.
+ *  Single-task goals keep the `[task 1]` convention so the report attributes it. */
+export function goalSweepSubject(goal: Goal, phase: 'implement' | 'review-fix'): string {
+  if (goal.tasks.length === 1) {
+    return phase === 'review-fix'
+      ? `[task 1] fix: ${goal.tasks[0]!.heading}`
+      : `[task 1] ${goal.tasks[0]!.heading}`;
+  }
+  return `chore(goal): ${phase} sweep of uncommitted changes (${goal.tasks.length} tasks)`;
+}
+
 /** First non-empty line of `text`, trimmed to `max` chars (heading derivation). */
 export function firstLine(text: string, max = 72): string {
   const line = (text.split('\n').find((l) => l.trim().length > 0) ?? '').trim();

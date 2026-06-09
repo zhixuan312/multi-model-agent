@@ -133,6 +133,16 @@ export async function implementHandler(
     // and populate state.lastRunResult.
     await performImplementation(state);
 
+    // Goal mode safety-net: the agent should have self-committed per task, but
+    // weak tiers don't always comply. Commit any leftover uncommitted changes so
+    // the work lands and the tree is clean for phase 2 / the next goal-set.
+    const goal = (state.task as { goal?: import('../../types/goal.js').Goal } | undefined)?.goal;
+    if (goal) {
+      const { commitSweep } = await import('../git-exec.js');
+      const { goalSweepSubject } = await import('../goal-prompts.js');
+      try { await commitSweep(goal.cwd, goalSweepSubject(goal, 'implement')); } catch { /* best-effort */ }
+    }
+
     const result = state.lastRunResult as any;
     if (!result) {
       return {

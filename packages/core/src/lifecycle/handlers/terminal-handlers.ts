@@ -146,7 +146,20 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
   const commitGate = state.gates?.['commit'];
   const commitPayload = (commitGate?.outcome === 'advance' ? commitGate.payload : null) as
     { kind?: string; commitSha?: string; commitMessage?: string; reason?: string } | null;
-  const didCommit = commitPayload?.kind === 'committed';
+  let didCommit = commitPayload?.kind === 'committed';
+
+  // Goal mode (no commit gate): the agent self-commits, so the commit SHA /
+  // message come from the goal report (git HEAD of baseSha..HEAD), surfaced via
+  // state.structuredReport by the annotate goal-branch.
+  const goalReport = (state as { structuredReport?: { commitSha?: string | null; commitMessage?: string | null } }).structuredReport;
+  const isGoal = Boolean((state.task as { goal?: unknown } | undefined)?.goal);
+  let goalCommitSha: string | null = null;
+  let goalCommitMessage: string | null = null;
+  if (isGoal && goalReport?.commitSha) {
+    didCommit = true;
+    goalCommitSha = goalReport.commitSha;
+    goalCommitMessage = goalReport.commitMessage ?? null;
+  }
 
   // Confinement guard: a worker must only write under its dispatched cwd. A
   // reported write that escaped (e.g. into a sibling git worktree / the daemon's
@@ -176,8 +189,8 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     structuredError: last?.structuredError ?? null,
     errorCode: escapeErrorCode ?? (last as { errorCode?: ErrorCode | null } | undefined)?.errorCode ?? null,
     realFilesChanged: real.files,
-    commitSha: didCommit ? (commitPayload?.commitSha ?? null) : null,
-    commitMessage: didCommit ? (commitPayload?.commitMessage ?? null) : null,
+    commitSha: didCommit ? (goalCommitSha ?? commitPayload?.commitSha ?? null) : null,
+    commitMessage: didCommit ? (goalCommitMessage ?? commitPayload?.commitMessage ?? null) : null,
     commitSkipReason: commitPayload?.kind === 'no_op' ? (commitPayload?.reason ?? null) : null,
     contextBlockId: state.contextBlockId ?? null,
   });

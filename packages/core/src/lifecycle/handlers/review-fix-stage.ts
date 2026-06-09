@@ -50,6 +50,11 @@ export async function reviewFixHandler(state: LifecycleState): Promise<StageGate
     });
     const result = assembleRunResult(turn) as RuntimeRunResult;
 
+    // Safety-net: commit any fixes the agent left uncommitted (keeps the tree clean).
+    const { commitSweep } = await import('../git-exec.js');
+    const { goalSweepSubject } = await import('../goal-prompts.js');
+    try { await commitSweep(goal.cwd, goalSweepSubject(goal, 'review-fix')); } catch { /* best-effort */ }
+
     (state as { goalPhase2Output?: string }).goalPhase2Output = result.output ?? '';
 
     const costUSD = (result as { actualCostUSD?: number | null }).actualCostUSD

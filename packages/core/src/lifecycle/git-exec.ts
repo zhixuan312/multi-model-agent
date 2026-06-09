@@ -113,6 +113,25 @@ export async function renderGitLogStat(cwd: string, base: string, maxBytes = 128
 }
 
 /**
+ * Safety-net commit sweep. The agent is instructed to self-commit per task, but
+ * weak tiers don't always comply (and leftover uncommitted changes would dirty
+ * the tree for the next goal-set). After each phase, if the work-tree is dirty,
+ * MMA commits the remaining changes so the work lands and the tree stays clean.
+ * Returns true when it created a commit. `subject` should follow the `[task N]`
+ * convention when the goal is single-task so the report can still attribute it.
+ */
+export async function commitSweep(cwd: string, subject: string): Promise<boolean> {
+  if (await isCleanWorkTree(cwd)) return false;
+  const add = await gitC(cwd, ['add', '-A']);
+  if (add.code !== 0) return false;
+  // Nothing staged after add (e.g. only ignored files) → no commit.
+  const staged = await gitC(cwd, ['diff', '--cached', '--quiet']);
+  if (staged.code === 0) return false;
+  const commit = await gitC(cwd, ['commit', '-m', subject]);
+  return commit.code === 0;
+}
+
+/**
  * Ensure a committer identity is resolvable for the agent's own `git commit`
  * calls. The agent commits in its own subprocess, so env overrides won't reach
  * it — instead, when the repo/global config has no identity, set a goal-set
