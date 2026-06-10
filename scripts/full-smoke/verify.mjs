@@ -110,17 +110,17 @@ export function verify(rec) {
       `status=${st}${!ok && soft ? ' (no-guarantor / ambiguous scenario → soft)' : ''}`));
   }
 
-  // Skill passthrough — positive path (scenario 17): the worker launched and
-  // completed WITH a resolved+staged skill. Completion is itself the proof that
-  // resolve→stage→native delivery did not break session startup (a staging
-  // failure would have short-circuited the task to a hard fail). Carries no
-  // skill_* error code on the result.
+  // Skill passthrough — positive path (scenario 17): the worker LAUNCHED and RAN
+  // with a resolved+staged skill. The proof of resolve→stage→native delivery is
+  // that the implementing stage advanced (a staging failure short-circuits BEFORE
+  // implement, to a skill_* error) and the result carries no skill_* error code.
+  // It is NOT the commit/terminal outcome — a reviewPolicy:'none' scenario may
+  // soft-fail on the commit (no guarantor) yet still have equipped the skill.
   if (e.skills && !e.expectSkillError) {
-    const st = task0.status;
-    const ok = st === 'done' || st === 'done_with_concerns';
+    const ran = outcomeOf('implementing') === 'advance';
     const noSkillErr = !JSON.stringify(task0).includes('skill_');
-    out.push(C('skill-equipped', ok && noSkillErr ? 'PASS' : 'FAIL',
-      `skills=${JSON.stringify(e.skills)} status=${st} noSkillError=${noSkillErr}`));
+    out.push(C('skill-equipped', ran && noSkillErr ? 'PASS' : 'FAIL',
+      `skills=${JSON.stringify(e.skills)} ran=${ran} status=${task0.status} noSkillError=${noSkillErr}`));
   }
 
   if (e.kind === 'read') {
