@@ -78,22 +78,37 @@ describe('buildGoalReport', () => {
     expect(gr.report.workerStatus).toBe('done');
   });
 
-  it('flags incomplete_plan when fewer commits than tasks (AC-21)', async () => {
+  it('reports each NOT-done task with its reason (a task with no commit)', async () => {
     const base = git('rev-parse', 'HEAD').trim();
     commitFile('a.ts', '[task 1] add a'); // task 2 never committed
     const gr = await buildGoalReport({ goal: goalFor(['add a', 'add b']), baseSha: base, phase1Output: SUMMARY([{ task: 1, status: 'done' }]) });
     expect(gr.report.workerStatus).toBe('done_with_concerns');
-    expect(gr.report.findings.some((f) => f.category === 'incomplete_plan')).toBe(true);
+    const nd = gr.report.findings.find((f) => f.category === 'task_not_done');
+    expect(nd).toBeDefined();
+    expect(nd!.claim).toMatch(/task 2/);
+    expect(nd!.claim).toMatch(/no commit/);
+    // The summary tells the caller the clean per-task roll-up; no review churn.
+    expect(gr.report.summary).toMatch(/1\/2 task\(s\) done/);
+    expect(gr.report.summary).toMatch(/Not done: task 2/);
+    expect(gr.report.reviewConcerns).toEqual([]);
+    expect(gr.report.reworkApplied).toBe(false);
   });
 
-  it('reports failed (zero commits) and flags unmatched commits', async () => {
+  it('a committed-but-reported-failed task is NOT done, with the note as the reason', async () => {
+    const base = git('rev-parse', 'HEAD').trim();
+    commitFile('a.ts', '[task 1] add a');
+    const p1 = '```json\n' + JSON.stringify({ tasks: [{ task: 1, heading: 'add a', filesChanged: [], verification: [], status: 'failed', note: 'compile error remains' }], overall: 'x' }) + '\n```';
+    const gr = await buildGoalReport({ goal: goalFor(['add a']), baseSha: base, phase1Output: p1 });
+    expect(gr.report.workerStatus).toBe('done_with_concerns');
+    const nd = gr.report.findings.find((f) => f.category === 'task_not_done');
+    expect(nd!.claim).toMatch(/reported failed: compile error remains/);
+  });
+
+  it('zero commits → failed; the summary says nothing was committed', async () => {
     const base = git('rev-parse', 'HEAD').trim();
     const gr0 = await buildGoalReport({ goal: goalFor(['add a']), baseSha: base, phase1Output: SUMMARY([{ task: 1, status: 'failed' }]) });
     expect(gr0.commitCount).toBe(0);
     expect(gr0.report.workerStatus).toBe('failed');
-
-    commitFile('x.ts', 'no convention here');
-    const gr1 = await buildGoalReport({ goal: goalFor(['add a']), baseSha: base, phase1Output: SUMMARY([{ task: 1, status: 'done' }]) });
-    expect(gr1.report.findings.some((f) => f.category === 'unmatched_commit')).toBe(true);
+    expect(gr0.report.summary).toMatch(/nothing was committed/);
   });
 });

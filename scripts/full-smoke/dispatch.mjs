@@ -9,7 +9,7 @@ export function buildRequest(spec, ctx) {
   switch (spec.id) {
     case 1:  return { route: 'context-blocks', body: { content: ctx.specMd } };
     case 2:  return { route: 'investigate', body: { question: 'In src/math.ts, does divide handle a zero divisor? Cite the line.', filePaths: ['src/'] } };
-    case 3:  return { route: 'research', body: { researchQuestion: 'What are common strategies for guarding division-by-zero in TypeScript code?', background: 'Reviewing a small math module that performs division without checking the divisor for zero.' } };
+    case 3:  return { route: 'research', body: { researchQuestion: 'What static program-analysis techniques have researchers proposed for detecting division-by-zero errors in software?', background: 'Surveying the literature on static detection of division-by-zero (abstract interpretation, symbolic execution, etc.) to inform guarding a small math module.' } };
     case 4:  return { route: 'audit', body: { subtype: 'plan', filePaths: [`${cwd}/plan.md`], contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
     case 5:  return { route: 'delegate', body: { tasks: [
                T('Create file src/a.ts with exactly: export const A=1. Only that file.', { filePaths: ['src/a.ts'], reviewPolicy: 'full' }),

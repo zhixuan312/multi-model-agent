@@ -76,96 +76,90 @@ export async function buildGoalReport(input: GoalReportInput): Promise<GoalRepor
 
   // Match commits → tasks via [task N] prefix.
   const matchedTasks = new Set<number>();
-  const unmatched: GitLogCommit[] = [];
   const filesChangedSet = new Set<string>();
   for (const c of commits) {
     for (const f of c.filesChanged) filesChangedSet.add(f);
     const n = taskNumberFromSubject(c.subject);
-    if (n === null) unmatched.push(c);
-    else matchedTasks.add(n);
+    if (n !== null) matchedTasks.add(n);
   }
-  if (unmatched.length > 0) {
-    pushFinding('low', 'unmatched_commit',
-      `${unmatched.length} commit(s) did not use the [task N] convention`,
-      { evidence: unmatched.map((c) => c.subject).slice(0, 5).join('; ') });
-  }
+  // History-rewrite guard: baseSha must still be an ancestor of HEAD (a rewrite
+  // makes per-task attribution unreliable).
+  const historyRewritten = !(await isAncestor(cwd, baseSha, head));
 
-  // History-rewrite guard: baseSha must still be an ancestor of HEAD.
-  if (!(await isAncestor(cwd, baseSha, head))) {
-    pushFinding('high', 'history_rewritten',
-      `baseSha ${baseSha.slice(0, 8)} is no longer an ancestor of HEAD — history was rewritten`);
-  }
-
-  // Per-task statuses: phase-1 baseline, OVERRIDDEN by phase-2 (the final state —
-  // a task phase 1 failed but phase 2 fixed is `done`).
+  // Final per-task state. The CALLER only wants to know: is each task done, and
+  // if not, what's the problem — NOT the in-between (which tier did what). A task
+  // is DONE when it has a [task N] commit AND its final self-reported status
+  // (phase-2 over phase-1 — the end state) is not failed/skipped.
   const p1 = parseGoalSummary(input.phase1Output);
   const p2 = input.phase2Output ? parseGoalSummary(input.phase2Output) : null;
-  if (!p1) {
-    pushFinding('medium', 'summary_unparseable',
-      'phase-1 structured-summary JSON block was missing or malformed');
-  }
   const statusByTask = new Map<number, ParsedTaskSummary['status']>();
-  for (const t of p1?.tasks ?? []) if (t.status) statusByTask.set(t.task, t.status);
-  for (const t of p2?.tasks ?? []) if (t.status) statusByTask.set(t.task, t.status); // phase-2 wins
-
-  // Phase-2 review notes are INFORMATIONAL (what the reviewer looked at / fixed) —
-  // they do NOT downgrade the run on their own. Drop empty ones; only genuine
-  // unresolved work surfaces as a structural concern via per-task status below.
-  for (const f of p2?.findings ?? []) {
-    const text = (f.claim ?? f.note ?? '').trim();
-    if (text.length > 0) pushFinding('low', f.category ?? 'review_note', text);
+  const noteByTask = new Map<number, string>();
+  for (const t of [...(p1?.tasks ?? []), ...(p2?.tasks ?? [])]) {
+    if (t.status) statusByTask.set(t.task, t.status); // later (phase-2) wins
+    if (t.note && t.note.trim()) noteByTask.set(t.task, t.note.trim());
   }
 
-  const failedOrSkipped: number[] = [];
-  const missing: number[] = [];
+  const notDone: Array<{ n: number; heading: string; reason: string }> = [];
   for (const t of goal.tasks) {
-    const s = statusByTask.get(t.n);
-    if (s === 'failed' || s === 'skipped') failedOrSkipped.push(t.n);
-    if (!matchedTasks.has(t.n)) missing.push(t.n);
+    const committed = matchedTasks.has(t.n);
+    const status = statusByTask.get(t.n);
+    if (!committed) {
+      notDone.push({ n: t.n, heading: t.heading, reason: 'no commit recorded for this task' });
+    } else if (status === 'failed' || status === 'skipped') {
+      const note = noteByTask.get(t.n);
+      notDone.push({ n: t.n, heading: t.heading, reason: `reported ${status}${note ? `: ${note}` : ''}` });
+    }
   }
-  if (commits.length < taskCount || missing.length > 0 || failedOrSkipped.length > 0) {
-    const parts: string[] = [];
-    if (missing.length > 0) parts.push(`no commit for task(s): ${missing.join(', ')}`);
-    if (failedOrSkipped.length > 0) parts.push(`failed/skipped task(s): ${failedOrSkipped.join(', ')}`);
-    if (commits.length < taskCount && missing.length === 0) parts.push(`${commits.length} commits < ${taskCount} tasks`);
-    pushFinding('medium', 'incomplete_plan',
-      `plan not fully completed: ${parts.join('; ')}`);
+
+  // findings = ONLY the final-state problems the caller needs to act on. No
+  // intermediate review notes, no "the reviewer fixed X" — just: not-done tasks.
+  for (const nd of notDone) {
+    pushFinding('high', 'task_not_done', `task ${nd.n} (${nd.heading}) NOT done — ${nd.reason}`);
+  }
+  if (historyRewritten) {
+    pushFinding('high', 'history_rewritten',
+      'git history was rewritten below the goal-set start commit — per-task attribution is unreliable');
   }
 
   const filesChanged = [...filesChangedSet];
   const lastCommit = commits[commits.length - 1];
-  const overall = p2?.overall ?? p1?.overall ?? `goal-set: ${commits.length} commit(s) across ${taskCount} task(s)`;
+  const doneCount = taskCount - notDone.length;
+  const allDone = notDone.length === 0 && commits.length > 0 && !historyRewritten;
 
-  // done_with_concerns is driven by STRUCTURAL problems (missing/failed tasks,
-  // rewritten history, unparseable summary, off-convention commits) — NOT by the
-  // presence of benign phase-2 review notes. A clean, fully-committed run where
-  // the reviewer found nothing wrong is `done`.
-  const STRUCTURAL = new Set(['unmatched_commit', 'history_rewritten', 'summary_unparseable', 'incomplete_plan']);
-  const hasConcerns = findings.some((f) => STRUCTURAL.has(f.category));
+  // One clean answer for the main agent: are all tasks done, or which are not + why.
+  const summary = commits.length === 0
+    ? 'No tasks completed — nothing was committed.'
+    : allDone
+      ? `All ${taskCount} task(s) done and committed.`
+      : `${doneCount}/${taskCount} task(s) done. Not done: `
+        + notDone.map((nd) => `task ${nd.n} (${nd.reason})`).join('; ')
+        + (historyRewritten ? '; history was rewritten' : '') + '.';
+
   const workerStatus: StructuredReport['workerStatus'] =
-    commits.length === 0 ? 'failed' : hasConcerns ? 'done_with_concerns' : 'done';
+    commits.length === 0 ? 'failed' : allDone ? 'done' : 'done_with_concerns';
 
   const report: StructuredReport = {
-    summary: overall,
+    summary,
     workerStatus,
-    unresolved: failedOrSkipped.map((n) => `task ${n} not completed`),
+    unresolved: notDone.map((nd) => `task ${nd.n} (${nd.heading}): ${nd.reason}`),
     filesChanged,
-    reviewVerdict: input.phase2Output ? (hasConcerns ? 'changes_required' : 'approved') : null,
-    reviewConcerns: (p2?.findings ?? []).map((f) => f.claim ?? f.note ?? '').filter(Boolean),
-    reworkApplied: Boolean(input.phase2Output),
-    commitSha: commits.length > 0 ? (head) : null,
+    // The intermediate review process is deliberately NOT surfaced to the caller.
+    reviewVerdict: null,
+    reviewConcerns: [],
+    reworkApplied: false,
+    commitSha: commits.length > 0 ? head : null,
     commitMessage: lastCommit ? lastCommit.subject : null,
     commitSkipReason: commits.length === 0 ? 'no_commits' : null,
     findings: findings.map((f) => ({ severity: f.severity, category: f.category, claim: f.claim, ...(f.evidence && { evidence: f.evidence }), ...(f.suggestion && { suggestion: f.suggestion }) })),
     criteriaErrors: [],
-    findingsOutcome: hasConcerns ? 'found' : 'clean',
+    findingsOutcome: notDone.length > 0 || historyRewritten ? 'found' : 'clean',
   };
 
   const payload: AnnotatePayload = {
-    completed: commits.length > 0 && missing.length === 0 && failedOrSkipped.length === 0,
-    message: overall,
+    completed: allDone,
+    message: summary,
     findings,
-    summary: overall,
+    summary,
     filesChanged,
     commitSha: commits.length > 0 ? head : null,
   };
