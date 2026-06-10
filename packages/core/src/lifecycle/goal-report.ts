@@ -96,26 +96,31 @@ export async function buildGoalReport(input: GoalReportInput): Promise<GoalRepor
       `baseSha ${baseSha.slice(0, 8)} is no longer an ancestor of HEAD — history was rewritten`);
   }
 
-  // Per-task statuses from the phase-1 (then phase-2) structured summaries.
+  // Per-task statuses: phase-1 baseline, OVERRIDDEN by phase-2 (the final state —
+  // a task phase 1 failed but phase 2 fixed is `done`).
   const p1 = parseGoalSummary(input.phase1Output);
   const p2 = input.phase2Output ? parseGoalSummary(input.phase2Output) : null;
   if (!p1) {
     pushFinding('medium', 'summary_unparseable',
       'phase-1 structured-summary JSON block was missing or malformed');
   }
-  // Phase-2 findings flow through verbatim.
-  for (const f of p2?.findings ?? []) {
-    pushFinding('medium', f.category ?? 'review_finding', f.claim ?? f.note ?? 'review finding');
-  }
+  const statusByTask = new Map<number, ParsedTaskSummary['status']>();
+  for (const t of p1?.tasks ?? []) if (t.status) statusByTask.set(t.task, t.status);
+  for (const t of p2?.tasks ?? []) if (t.status) statusByTask.set(t.task, t.status); // phase-2 wins
 
-  const summaryByTask = new Map<number, ParsedTaskSummary>();
-  for (const t of p1?.tasks ?? []) summaryByTask.set(t.task, t);
+  // Phase-2 review notes are INFORMATIONAL (what the reviewer looked at / fixed) —
+  // they do NOT downgrade the run on their own. Drop empty ones; only genuine
+  // unresolved work surfaces as a structural concern via per-task status below.
+  for (const f of p2?.findings ?? []) {
+    const text = (f.claim ?? f.note ?? '').trim();
+    if (text.length > 0) pushFinding('low', f.category ?? 'review_note', text);
+  }
 
   const failedOrSkipped: number[] = [];
   const missing: number[] = [];
   for (const t of goal.tasks) {
-    const s = summaryByTask.get(t.n);
-    if (s?.status === 'failed' || s?.status === 'skipped') failedOrSkipped.push(t.n);
+    const s = statusByTask.get(t.n);
+    if (s === 'failed' || s === 'skipped') failedOrSkipped.push(t.n);
     if (!matchedTasks.has(t.n)) missing.push(t.n);
   }
   if (commits.length < taskCount || missing.length > 0 || failedOrSkipped.length > 0) {
@@ -131,8 +136,12 @@ export async function buildGoalReport(input: GoalReportInput): Promise<GoalRepor
   const lastCommit = commits[commits.length - 1];
   const overall = p2?.overall ?? p1?.overall ?? `goal-set: ${commits.length} commit(s) across ${taskCount} task(s)`;
 
-  // Status: failed only on zero commits; done iff complete + no findings; else done_with_concerns.
-  const hasConcerns = findings.length > 0;
+  // done_with_concerns is driven by STRUCTURAL problems (missing/failed tasks,
+  // rewritten history, unparseable summary, off-convention commits) — NOT by the
+  // presence of benign phase-2 review notes. A clean, fully-committed run where
+  // the reviewer found nothing wrong is `done`.
+  const STRUCTURAL = new Set(['unmatched_commit', 'history_rewritten', 'summary_unparseable', 'incomplete_plan']);
+  const hasConcerns = findings.some((f) => STRUCTURAL.has(f.category));
   const workerStatus: StructuredReport['workerStatus'] =
     commits.length === 0 ? 'failed' : hasConcerns ? 'done_with_concerns' : 'done';
 

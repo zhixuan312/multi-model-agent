@@ -55,6 +55,29 @@ describe('buildGoalReport', () => {
     expect(gr.payload.completed).toBe(true);
   });
 
+  it('benign phase-2 review notes do NOT downgrade a clean run to done_with_concerns', async () => {
+    const base = git('rev-parse', 'HEAD').trim();
+    commitFile('a.ts', '[task 1] add a');
+    const p1 = SUMMARY([{ task: 1, status: 'done' }]);
+    // Phase 2 reviewed and emitted a non-empty informational finding, all done.
+    const p2 = '```json\n' + JSON.stringify({
+      tasks: [{ task: 1, heading: 'h', filesChanged: [], verification: [], status: 'done' }],
+      overall: 'reviewed', findings: [{ category: 'review_note', claim: 'task 1 looks correct, no change' }],
+    }) + '\n```';
+    const gr = await buildGoalReport({ goal: goalFor(['add a']), baseSha: base, phase1Output: p1, phase2Output: p2 });
+    expect(gr.report.workerStatus).toBe('done');
+    expect(gr.payload.completed).toBe(true);
+  });
+
+  it('phase-2 status override: a task phase-1 failed but phase-2 committed is done', async () => {
+    const base = git('rev-parse', 'HEAD').trim();
+    commitFile('a.ts', '[task 1] add a'); // phase 2 ended up committing it
+    const p1 = SUMMARY([{ task: 1, status: 'failed' }]);     // phase 1 gave up
+    const p2 = SUMMARY([{ task: 1, status: 'done' }]);       // phase 2 finished it
+    const gr = await buildGoalReport({ goal: goalFor(['add a']), baseSha: base, phase1Output: p1, phase2Output: p2 });
+    expect(gr.report.workerStatus).toBe('done');
+  });
+
   it('flags incomplete_plan when fewer commits than tasks (AC-21)', async () => {
     const base = git('rev-parse', 'HEAD').trim();
     commitFile('a.ts', '[task 1] add a'); // task 2 never committed
