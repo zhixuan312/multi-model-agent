@@ -57,8 +57,9 @@ const STRUCTURED_SUMMARY = [
   ' "overall":"one-line summary"}',
   '```',
   'status is "done" | "failed" | "skipped". `verification` MAY be empty when the task',
-  'defines no commands. If you noticed a plan defect, set that task status "failed"/"skipped"',
-  'and describe it in `note` (do NOT silently work around it).',
+  'defines no commands. If you hit a plan defect, describe it in `note` and still implement the',
+  'best faithful version — use "done" when you completed a reasonable implementation; reserve',
+  '"failed"/"skipped" for a task you genuinely could not complete.',
 ].join('\n');
 
 function phaseCheckpoint(phaseCount: number): string {
@@ -89,13 +90,46 @@ export function renderPlanText(tasks: GoalTask[], phaseCount: number): string {
 
 const IMPLEMENT_ORIENTATION = [
   'You are the autonomous executor of a multi-task plan written by a higher-capability model.',
-  'Execute EVERY task below, in order, exactly as specified — implement, do not redesign.',
+  'Execute EVERY task below, ONE AT A TIME, in order, from the first task to the last,',
+  'following the plan as designed — implement faithfully, do not redesign the plan.',
   '',
-  'The four ways execution diverges from intent — check yourself against each per task:',
+  'Stay faithful to the plan — the four ways execution diverges from intent:',
   '1. CODE SUBSTITUTION — plan gave a code block; you wrote different code. The plan code is the contract; copy it verbatim.',
   '2. STEP SKIP — plan listed steps; you omitted some. Every step is required unless marked optional.',
-  '3. PLAN REWRITE — you "improved" the plan. That is a contract violation; implement what is written.',
-  '4. PROBLEM-NOT-FLAGGED — you noticed a plan defect and silently worked around it. Report it in the task note instead.',
+  '3. PLAN REWRITE — you "redesigned" the plan. Implement what is written, not your own approach.',
+  '4. PROBLEM-NOT-FLAGGED — you hit a PLAN defect and said nothing. Note it in the task `note`, then proceed with the best faithful implementation. (Fidelity governs the plan\'s DESIGN — fixing your own implementation bugs as you go is expected; see Autonomy below.)',
+].join('\n');
+
+/** The code-quality bar every task's output must clear (both phases). */
+const ENGINEERING_STANDARD = [
+  'ENGINEERING STANDARD — every task\'s output MUST clear this bar (no exceptions):',
+  '- Production-grade and fully wired: NO stubs, TODOs, placeholders, or half-implementations.',
+  '  Everything you add must have a live caller on the production path — nothing exposed-but-unused.',
+  '- No legacy or dormant code: when you replace something, DELETE the old path. No dead code,',
+  '  commented-out blocks, or unreachable branches left behind.',
+  '- No parallel / duplicate implementations: do not add a second way to do what already exists —',
+  '  reuse or extend the existing one. One responsibility, one implementation.',
+  '- Match the code you touch: follow its existing patterns, naming, structure, and error handling.',
+  '- Build for the long term: clear, focused, reusable units — expandable, maintainable, scalable.',
+  '  No clever shortcuts that hurt readability.',
+  '- Keep it green: if the project builds and its tests pass, your changes must keep them passing.',
+].join('\n');
+
+/** Autonomy + recoverability discipline (both phases). */
+const AUTONOMY_AND_RECOVERY = [
+  'AUTONOMY & RECOVERABILITY:',
+  '- Drive the WHOLE plan from the first task to the last. Do not stop early, ask for confirmation,',
+  '  or bail on uncertainty. Completing every task is the job.',
+  '- Fix problems YOURSELF as you hit them — compile errors, failing tests, broken integrations,',
+  '  mismatched signatures, missing imports: investigate, fix, continue. A blocker is something to',
+  '  solve, not a reason to quit.',
+  '- If the PLAN itself is wrong (impossible step, undefined symbol), note it in that task\'s `note`',
+  '  and proceed with the most faithful reasonable implementation. Keep moving — never abandon the run.',
+  '- You are always recoverable: you COMMIT after each task, so finished work is durable. Do NOT',
+  '  depend on holding the whole plan in your head — `git log`, the files on disk, and the plan text',
+  '  are your source of truth; re-read them whenever you need to. There is NO context-window worry:',
+  '  go task by task, commit, re-ground. If your context gets compacted, recover state from git + the',
+  '  files, not from memory.',
 ].join('\n');
 
 /** Phase-1 implement prompt over the whole plan. */
@@ -103,6 +137,10 @@ export function implementGoalPrompt(goal: Goal): string {
   return [
     IMPLEMENT_ORIENTATION,
     ...(goal.preamble ? ['', goal.preamble] : []),
+    '',
+    AUTONOMY_AND_RECOVERY,
+    '',
+    ENGINEERING_STANDARD,
     '',
     commitConvention('implement'),
     '',
@@ -146,6 +184,15 @@ export function reviewFixGoalPrompt(goal: Goal, gitLog: string, workingTree: str
     '',
     'By the end EVERY task MUST be implemented and committed, and the working tree MUST be',
     'clean (no uncommitted changes left behind).',
+    '',
+    'Also hold every task to the ENGINEERING STANDARD below — actively hunt for and FIX (then',
+    'commit) violations the implementer left: dead/dormant code, unwired stubs or half-',
+    'implementations, duplicate/parallel implementations of existing functionality, and anything',
+    'that breaks the build or tests.',
+    '',
+    AUTONOMY_AND_RECOVERY,
+    '',
+    ENGINEERING_STANDARD,
     '',
     commitConvention('review-fix'),
     '',
