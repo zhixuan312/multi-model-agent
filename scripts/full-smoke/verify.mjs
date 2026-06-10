@@ -78,13 +78,14 @@ export function verify(rec) {
       }
     }
   }
-  // Fix A (4.8.0): commit subject is clean conventional (`type(scope): …`),
-  // NOT a chain-of-thought leak or prompt-orientation boilerplate.
+  // Goal mode (5.1.0): commit subject follows the `[task N] …` convention the
+  // annotator keys on (optionally `[task N] fix: …` for the review-fix phase),
+  // NOT a chain-of-thought leak.
   if (e.kind === 'write' && !e.expectFail && SHA40.test(sr.commitSha ?? '') && typeof sr.commitMessage === 'string') {
     const subj = sr.commitMessage.split('\n')[0];
-    const conventional = /^(feat|fix|chore|refactor|test|docs|chore)(\([^)]+\))?: \S/.test(subj);
+    const goalConvention = /^\[task \d+\] \S/.test(subj);
     const leak = /(i'?ll\b|i will\b|let me\b|looking at\b|you maintain\b|your job\b|i need to\b)/i.test(subj);
-    out.push(C('commit-msg-format', conventional && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
+    out.push(C('commit-msg-format', goalConvention && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
   }
   // Fix C (4.8.0): a successful write task reaches a done terminal status —
   // not a spurious `failed` (parse-miss reconciliation / review fit). The
