@@ -79,6 +79,9 @@ export const SCENARIOS = [
   // → emits 1.
   { id: 17, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', skills: ['mma-smoke-skill'], emits: 1 },
   { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 1 },
+  // Rich goal-set (5.1.0): 4 tasks across 2 plan-phases; full implement→review-fix
+  // with PHASE checkpoints + intra-goal dependencies. One goal-set → one result.
+  { id: 19, route: 'execute-plan', tier: 'standard', kind: 'write', tasks: 4, emits: 1 },
 ];
 
 // 4.7.20 universal terminal context block: the per-route `context-block` check in

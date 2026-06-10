@@ -2,7 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { executePlanBriefSlot } from '../../../packages/core/src/tools/execute-plan/brief-slot.js';
+import { executePlanBriefSlot, derivePhases } from '../../../packages/core/src/tools/execute-plan/brief-slot.js';
+
+describe('derivePhases', () => {
+  it('groups tasks by their parent (##) section into plan-phases', () => {
+    const plan = [
+      '# Rich Plan', '',
+      '## Phase A: helpers', '### Task A1', 'x', '### Task A2', 'y',
+      '## Phase B: consumers', '### Task B1', 'z', '### Task B2', 'w',
+    ].join('\n');
+    expect(derivePhases(plan, ['Task A1', 'Task A2', 'Task B1', 'Task B2'])).toEqual([1, 1, 2, 2]);
+  });
+  it('flat plans (no grouping above the tasks) collapse to a single phase', () => {
+    const plan = '# Plan\n\n## Task 1\na\n\n## Task 2\nb\n';
+    expect(derivePhases(plan, ['Task 1', 'Task 2'])).toEqual([1, 1]);
+  });
+});
 
 const FIXTURE_PLAN = `# Test Plan
 

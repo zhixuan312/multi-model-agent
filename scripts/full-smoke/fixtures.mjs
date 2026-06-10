@@ -42,6 +42,18 @@ export function createProject() {
     '### Task 2: add modulo\nAdd `modulo(a,b)` to `src/math.ts`.\n');
   writeFileSync(join(dir, 'spec.md'),
     `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
+  // Rich multi-phase plan (scenario 19): 2 plan-phases × 2 tasks, with a real
+  // dependency (Phase B uses Phase A's helpers). Exercises the full goal-set:
+  // phase-1 implement commits all 4 [task N] across 2 PHASE checkpoints, then
+  // phase-2 review-fix walks each task.
+  writeFileSync(join(dir, 'richplan.md'),
+    '# Rich Plan\n\n' +
+    '## Phase A: helpers\n\n' +
+    '### Task A1: add clamp\nCreate `src/util.ts` exporting `clamp(x, lo, hi)` that returns x bounded to [lo, hi].\n\n' +
+    '### Task A2: add isEven\nAdd `isEven(n)` to `src/util.ts` returning whether n is even.\n\n' +
+    '## Phase B: consumers\n\n' +
+    '### Task B1: add clampedAdd\nAdd `clampedAdd(a, b, lo, hi)` to `src/util.ts` that returns `clamp(a + b, lo, hi)` (reuse clamp from Task A1).\n\n' +
+    '### Task B2: add evenSum\nAdd `evenSum(nums)` to `src/util.ts` summing only the even numbers (reuse isEven from Task A2).\n');
   git('add', '.'); git('commit', '-qm', 'seed');
   installSmokeSkill();
   return { dir };

@@ -30,6 +30,8 @@ export function buildRequest(spec, ctx) {
     case 16: return { route: 'journal-recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
     case 17: return { route: 'delegate', body: { tasks: [ T('Create file src/g.ts with exactly: export const G=7. Only that file.', { filePaths: ['src/g.ts'], reviewPolicy: 'none', skills: ['mma-smoke-skill'] }) ] } };
     case 18: return { route: 'delegate', body: { tasks: [ T('Create file src/h.ts with exactly: export const H=8. Only that file.', { filePaths: ['src/h.ts'], reviewPolicy: 'none', skills: ['__mma_nonexistent_skill__'] }) ] } };
+    // Rich multi-phase goal-set: 4 tasks across 2 plan-phases (Phase B depends on Phase A).
+    case 19: return { route: 'execute-plan', body: { filePaths: [`${cwd}/richplan.md`], taskDescriptors: ['Task A1: add clamp', 'Task A2: add isEven', 'Task B1: add clampedAdd', 'Task B2: add evenSum'] } };
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }
