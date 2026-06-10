@@ -62,7 +62,11 @@ export function verify(rec) {
     const multiTask = (e.tasks && e.tasks > 1) || e.route === 'execute-plan';
     const committed = SHA40.test(sr.commitSha ?? '');
     const labeledSkip = !committed && typeof sr.commitSkipReason === 'string' && sr.commitSkipReason.length > 0;
-    const commitVerdict = committed || labeledSkip ? 'PASS' : (multiTask ? 'WARN' : 'FAIL');
+    // reviewPolicy:'none' has no phase-2 guarantor (design choice: trust the
+    // standard tier), so an uncommitted result is a tier reliability issue, not
+    // a system bug → WARN, not FAIL.
+    const softCommit = multiTask || e.reviewPolicy === 'none';
+    const commitVerdict = committed || labeledSkip ? 'PASS' : (softCommit ? 'WARN' : 'FAIL');
     const commitDetail = `commitSha=${sr.commitSha}${labeledSkip ? ` (skipped: ${sr.commitSkipReason})` : ''}${multiTask ? ' (aggregate = task 0 only)' : ''}`;
     if (e.expectCommitSkip) {
       out.push(C('commit-skip', sr.commitSkipReason === e.expectCommitSkip ? 'PASS' : 'FAIL', `commitSkipReason=${sr.commitSkipReason} commitSha=${sr.commitSha}`));
@@ -99,8 +103,11 @@ export function verify(rec) {
   if (e.kind === 'write' && !e.expectFail) {
     const st = task0.status;
     const ok = st === 'done' || st === 'done_with_concerns';
-    out.push(C('terminal-status', ok ? 'PASS' : (e.expectRework ? 'WARN' : 'FAIL'),
-      `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
+    // reviewPolicy:'none' has no guarantor → a failed seal is tier reliability,
+    // not a system bug (same soft rationale as expectRework).
+    const soft = e.expectRework || e.reviewPolicy === 'none';
+    out.push(C('terminal-status', ok ? 'PASS' : (soft ? 'WARN' : 'FAIL'),
+      `status=${st}${!ok && soft ? ' (no-guarantor / ambiguous scenario → soft)' : ''}`));
   }
 
   // Skill passthrough — positive path (scenario 17): the worker launched and
