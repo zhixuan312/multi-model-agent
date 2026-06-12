@@ -136,3 +136,15 @@ export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-
 // Headline templates
 export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
 export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';
+
+// Unified task engine
+export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';
+export type { TaskType, TypeConfig } from './unified/type-registry.js';
+export { taskInputSchema } from './unified/task-input-schema.js';
+export type { TaskInput } from './unified/task-input-schema.js';
+export { loadSkill, validateSkillsExist, clearSkillCache } from './unified/skill-loader.js';
+export type { SkillPair } from './unified/skill-loader.js';
+export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
+export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
+export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
+export type { ReviewerOutput, ReviewerFinding, ParseResult } from './unified/reviewer-output-parser.js';
