@@ -8,11 +8,11 @@ const T = (prompt, extra = {}) => ({ prompt, ...extra });
 export function buildRequest(spec, ctx) {
   const cwd = ctx.dir;
   switch (spec.id) {
-    // A. Task Types
+    // A. Task Types (10 base types)
     case 1:  return { type: 'context-blocks', body: { content: ctx.specMd } };
     case 2:  return { type: 'investigate', body: { question: 'In src/math.ts, does divide handle a zero divisor? Cite the line.', filePaths: ['src/'] } };
     case 3:  return { type: 'research', body: { researchQuestion: 'What static program-analysis techniques have researchers proposed for detecting division-by-zero errors in software?', background: 'Surveying the literature on static detection of division-by-zero (abstract interpretation, symbolic execution, etc.) to inform guarding a small math module.' } };
-    case 4:  return { type: 'audit', body: { subtype: 'spec', filePaths: [`${cwd}/spec.md`], contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
+    case 4:  return { type: 'audit', body: { subtype: 'default', filePaths: [`${cwd}/spec.md`] } };
     case 5:  return { type: 'delegate', body: { tasks: [
                T('Create file src/a.ts with exactly: export const A=1. Only that file.', { filePaths: ['src/a.ts'] })], reviewPolicy: 'reviewed' } };
     case 6:  return { type: 'execute_plan', body: { filePaths: [`${cwd}/plan.md`], taskDescriptors: ['Task 1: add subtract'] } };
@@ -21,14 +21,19 @@ export function buildRequest(spec, ctx) {
     case 9:  return { type: 'journal_record', body: { entry: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.' } };
     case 10: return { type: 'journal_recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
 
-    // B. Tier & Review Policy overrides
-    case 11: return { type: 'delegate', body: { tasks: [
+    // B. Audit Subtypes (spec, plan, skill — each loads a different implement-<subtype>.md)
+    case 11: return { type: 'audit', body: { subtype: 'spec', filePaths: [`${cwd}/spec.md`], contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
+    case 12: return { type: 'audit', body: { subtype: 'plan', filePaths: [`${cwd}/plan.md`], contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
+    case 13: return { type: 'audit', body: { subtype: 'skill', filePaths: [`${cwd}/spec.md`] } };
+
+    // C. Tier & Review Policy overrides
+    case 14: return { type: 'delegate', body: { tasks: [
                T('Create file src/c.ts with exactly: export const C=3. Only that file.', { filePaths: ['src/c.ts'] }) ], agentTier: 'complex', reviewPolicy: 'reviewed' } };
-    case 12: return { type: 'delegate', body: { tasks: [
+    case 15: return { type: 'delegate', body: { tasks: [
                T('Create file src/f.ts with exactly: export const F=6. Only that file.', { filePaths: ['src/f.ts'] }) ], reviewPolicy: 'none' } };
 
-    // C. Session Reuse — reuse implementer session from scenario #2
-    case 13: {
+    // D. Session Reuse — reuse implementer session from scenario #2
+    case 16: {
       const sessionIds = ctx.sessionFromScenario2
         ? { implementer: ctx.sessionFromScenario2 }
         : undefined;
@@ -39,9 +44,9 @@ export function buildRequest(spec, ctx) {
       } };
     }
 
-    // D. Error Cases — these are raw payloads that should fail validation
-    case 14: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', question: 'hello' } };
-    case 15: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing question */ } };
+    // E. Error Cases — these are raw payloads that should fail validation
+    case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', question: 'hello' } };
+    case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing question */ } };
 
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }

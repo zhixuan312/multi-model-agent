@@ -102,7 +102,7 @@ try {
       // ─── Normal task: poll to terminal ───
       const envelope = await pollTask(ctx.token, res.taskId);
 
-      // Capture session from scenario #2 for session reuse in scenario #13
+      // Capture session from scenario #2 for session reuse in scenario #16
       if (spec.id === 2) {
         const implSession = envelope.results?.[0]?.sessions?.implementer;
         if (implSession?.sessionId) {

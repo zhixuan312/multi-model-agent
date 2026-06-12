@@ -65,11 +65,11 @@ export const POLL = {
 //   - all others     → 1
 // ─────────────────────────────────────────────────────────────────────────────
 export const SCENARIOS = [
-  // A. Task Types
+  // A. Task Types (10 base types)
   { id: 1,  type: 'context-blocks', kind: 'assist', emits: 0 },
   { id: 2,  type: 'investigate', tier: 'complex', kind: 'read', emits: 1 },
   { id: 3,  type: 'research', tier: 'complex', kind: 'read', network: true, emits: 0 },
-  { id: 4,  type: 'audit', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 4,  type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', emits: 1 },
   { id: 5,  type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, emits: 1 },
   { id: 6,  type: 'execute_plan', tier: 'standard', kind: 'write', emits: 1 },
   { id: 7,  type: 'review', tier: 'complex', kind: 'read', emits: 1 },
@@ -77,14 +77,19 @@ export const SCENARIOS = [
   { id: 9,  type: 'journal_record', tier: 'complex', kind: 'write', emits: 1 },
   { id: 10, type: 'journal_recall', tier: 'complex', kind: 'read', emits: 1 },
 
-  // B. Tier & Review Policy overrides
-  { id: 11, type: 'delegate', tier: 'complex', kind: 'write', tasks: 1, emits: 1 },
-  { id: 12, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', emits: 1 },
+  // B. Audit Subtypes (spec, plan, skill — each loads a different skill file)
+  { id: 11, type: 'audit', subtype: 'spec', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 12, type: 'audit', subtype: 'plan', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 13, type: 'audit', subtype: 'skill', tier: 'complex', kind: 'read', emits: 1 },
 
-  // C. Session Reuse
-  { id: 13, type: 'investigate', tier: 'complex', kind: 'read', sessionReuse: true, emits: 1 },
+  // C. Tier & Review Policy overrides
+  { id: 14, type: 'delegate', tier: 'complex', kind: 'write', tasks: 1, emits: 1 },
+  { id: 15, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', emits: 1 },
 
-  // D. Error Cases
-  { id: 14, type: 'error_invalid_type', kind: 'error', expectStatus: 400, emits: 0 },
-  { id: 15, type: 'error_missing_field', kind: 'error', expectStatus: 400, emits: 0 },
+  // D. Session Reuse
+  { id: 16, type: 'investigate', tier: 'complex', kind: 'read', sessionReuse: true, emits: 1 },
+
+  // E. Error Cases
+  { id: 17, type: 'error_invalid_type', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 18, type: 'error_missing_field', kind: 'error', expectStatus: 400, emits: 0 },
 ];
