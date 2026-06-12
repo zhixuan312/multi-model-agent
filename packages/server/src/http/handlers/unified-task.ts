@@ -16,10 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 // Navigate from packages/server/src/http/handlers/ → packages/core/src/skills/
-// In compiled output this is dist/http/handlers/ → ../../core/src/skills/
-// At source it's src/http/handlers/ → ../../../core/src/skills/
-// Use the source path since tsc preserves the relative structure and skills are .md (not compiled).
-const SKILLS_DIR = path.resolve(thisDir, '..', '..', '..', '..', '..', 'core', 'src', 'skills');
+// 5x .. walks up to the monorepo root; then packages/core/src/skills/ reaches the skill .md files.
+const SKILLS_DIR = path.resolve(thisDir, '..', '..', '..', '..', '..', 'packages', 'core', 'src', 'skills');
 
 export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
   return async (_req, res, _params, ctx) => {
@@ -91,6 +89,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           reviewPolicy,
           cwd,
           sandboxPolicy: typeConfig.sandbox,
+          worktreeEnabled: typeConfig.worktree,
+          taskId: id,
         });
         return {
           headline: `${input.type}: ${result.status}`,
@@ -100,7 +100,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             status: result.status,
             report: result.reviewerOutput ?? { raw: result.implementerOutput },
             sessions: result.sessions,
-            worktree: null,
+            worktree: result.worktree,
             cost: result.cost,
             error: null,
           }],
@@ -121,7 +121,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
       },
     });
 
-    sendJson(res, 202, { taskId: batchId, statusUrl });
+    sendJson(res, 202, { taskId: batchId, batchId, statusUrl });
   };
 }
 

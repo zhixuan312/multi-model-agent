@@ -28,7 +28,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 ## Endpoint
 
-`POST /debug?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -36,10 +36,8 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 ```json
 {
-  "problem": "POST /login returns 500 when password contains special characters",
-  "context": "Regression introduced in commit abc123; only affects production config",
-  "hypothesis": "The bcrypt binding fails on non-ASCII input in the Docker image",
-  "subtype": "default",
+  "type": "debug",
+  "errorMessage": "POST /login returns 500 when password contains special characters",
   "filePaths": [
     "/project/src/auth/login.ts",
     "/project/src/auth/password.ts"
@@ -67,8 +65,8 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"problem":"Tests fail on CI only","hypothesis":"Missing env var","filePaths":["/project/src/config.ts"]}' \
-  "http://localhost:$PORT/debug?cwd=/project")
+  -d '{"type":"debug","errorMessage":"Tests fail on CI only","filePaths":["/project/src/config.ts"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

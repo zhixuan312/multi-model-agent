@@ -25,7 +25,7 @@ describe('async-dispatch — always-on breadcrumbs (A5)', () => {
   it.skip('emits executor_started and batch_completed to stderr with diagnostics.log=false', async () => {
     const handle = await startTestServerWithAgents({ diagnostics: { log: false }, defaults: { timeoutMs: 100, tools: 'full', sandboxPolicy: 'cwd-only' } });
     try {
-      await fetch(`${handle.url}/investigate?cwd=${encodeURIComponent(process.cwd())}`, {
+      await fetch(`${handle.url}/task?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'X-MMA-Client': 'claude-code',
@@ -33,7 +33,7 @@ describe('async-dispatch — always-on breadcrumbs (A5)', () => {
           'Authorization': `Bearer ${handle.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ question: 'noop test' }),
+        body: JSON.stringify({ type: 'investigate', question: 'noop test' }),
       });
       // Allow async-dispatch to flush and executor to complete.
       await new Promise((r) => setTimeout(r, 12000));

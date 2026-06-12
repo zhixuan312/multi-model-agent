@@ -29,7 +29,7 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ## Endpoint
 
-`POST /journal-record?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -37,11 +37,8 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ```json
 {
-  "learnings": [
-    "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
-    "Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
-  ],
-  "tagHints": ["dispatch", "cancellation"]
+  "type": "journal_record",
+  "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged. Also: Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
 }
 ```
 
@@ -70,12 +67,10 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "learnings": [
-      "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged."
-    ],
-    "tagHints": ["dispatch", "cancellation"]
+    "type": "journal_record",
+    "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
   }' \
-  "http://localhost:$PORT/journal-record?cwd=/project")
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

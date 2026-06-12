@@ -14,7 +14,7 @@ export interface WorktreeInfo {
 export type ExecFn = (
   cmd: string,
   args: string[],
-  opts: { cwd: string },
+  opts: { cwd: string; windowsHide?: boolean },
 ) => Promise<{ stdout: string; stderr: string }>;
 
 export interface FsOps {
@@ -23,7 +23,7 @@ export interface FsOps {
 }
 
 const defaultExec: ExecFn = async (cmd, args, opts) => {
-  const { stdout, stderr } = await execFileAsync(cmd, args, { cwd: opts.cwd });
+  const { stdout, stderr } = await execFileAsync(cmd, args, { cwd: opts.cwd, windowsHide: true });
   return { stdout: stdout ?? '', stderr: stderr ?? '' };
 };
 
@@ -55,7 +55,7 @@ export class WorktreeManager {
     await this.fs.mkdir(join(cwd, '.mma', 'worktrees'), { recursive: true });
 
     // Create worktree with a new branch off HEAD
-    await this.exec('git', ['worktree', 'add', worktreeDir, '-b', branch], { cwd });
+    await this.exec('git', ['worktree', 'add', worktreeDir, '-b', branch], { cwd, windowsHide: true });
 
     // Install dependencies if package.json exists
     try {
@@ -72,7 +72,7 @@ export class WorktreeManager {
    * Check whether a worktree has uncommitted changes.
    */
   async hasChanges(worktreePath: string): Promise<boolean> {
-    const { stdout } = await this.exec('git', ['status', '--porcelain'], { cwd: worktreePath });
+    const { stdout } = await this.exec('git', ['status', '--porcelain'], { cwd: worktreePath, windowsHide: true });
     return stdout.trim().length > 0;
   }
 
@@ -86,12 +86,12 @@ export class WorktreeManager {
       return true;
     }
 
-    await this.exec('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath });
+    await this.exec('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath, windowsHide: true });
     // Branch delete uses the parent repo; worktreePath's parent is fine since
     // the worktree itself was just removed.  Use dirname twice to reach the
     // repo root (.mma/worktrees/<id> → .mma/worktrees → .mma → repo).
     const repoRoot = join(worktreePath, '..', '..', '..');
-    await this.exec('git', ['branch', '-D', branch], { cwd: repoRoot });
+    await this.exec('git', ['branch', '-D', branch], { cwd: repoRoot, windowsHide: true });
     return false;
   }
 

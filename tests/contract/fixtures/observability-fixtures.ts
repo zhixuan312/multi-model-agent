@@ -68,10 +68,10 @@ export async function runTaskLifecycleFixtures(): Promise<EventType[]> {
     ],
   });
   return bootAndCapture(provider, async (h, cwd) => {
-    const dispatch = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+    const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePaths: ['a.ts', 'b.ts'] }),
+      body: JSON.stringify({ type: 'review', filePaths: ['a.ts', 'b.ts'] }),
     });
     const { batchId } = (await dispatch.json()) as { batchId: string };
     await pollToTerminal(h.baseUrl, h.token, batchId);
@@ -84,10 +84,10 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
 
   // Sub-fixture A: failProvider returning error — triggers batch_failed
   events.push(...await bootAndCapture(failProvider({ status: 'error', errorCode: 'runner_crash' }), async (h, cwd) => {
-    const dispatch = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+    const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePaths: ['fail.ts'] }),
+      body: JSON.stringify({ type: 'review', filePaths: ['fail.ts'] }),
     });
     const { batchId } = (await dispatch.json()) as { batchId: string };
     await pollToTerminal(h.baseUrl, h.token, batchId);
@@ -95,10 +95,10 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
 
   // Sub-fixture B: stall_abort — provider that hangs, triggering idle detection
   events.push(...await bootAndCapture(mockProvider({ delayMs: 10_000 }), async (h, cwd) => {
-    await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+    await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePaths: ['stall.ts'] }),
+      body: JSON.stringify({ type: 'review', filePaths: ['stall.ts'] }),
     });
     // Do not poll to terminal; the server will abort the stall on its own
     await new Promise((r) => setTimeout(r, 300));
@@ -106,7 +106,7 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
 
   // Sub-fixture C: invalid request body — returns 400 (no batch created)
   events.push(...await bootAndCapture(mockProvider({}), async (h, cwd) => {
-    const res = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+    const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ badField: 'no valid fields' }),

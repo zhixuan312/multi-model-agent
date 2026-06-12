@@ -44,7 +44,7 @@ digraph when_to_use {
 
 ## Endpoint
 
-`POST /retry?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -52,6 +52,7 @@ digraph when_to_use {
 
 ```json
 {
+  "type": "retry_tasks",
   "batchId": "550e8400-e29b-41d4-a716-446655440000",
   "taskIndices": [1, 3]
 }
@@ -73,8 +74,8 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"batchId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \
-  "http://localhost:$PORT/retry?cwd=/project")
+  -d '{"type":"retry_tasks","batchId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')   # NEW batchId — not the original
 ```
 
@@ -82,7 +83,7 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')   # NEW batchId — not the origina
 
 ## Response shapes
 
-### POST /retry?cwd=<abs> — dispatch response (202)
+### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
 { "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }

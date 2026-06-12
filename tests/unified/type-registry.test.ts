@@ -5,8 +5,8 @@ import {
 } from '../../packages/core/src/unified/type-registry.js';
 
 describe('TypeRegistry', () => {
-  it('has 9 task types', () => {
-    expect(TASK_TYPES).toHaveLength(9);
+  it('has 10 task types', () => {
+    expect(TASK_TYPES).toHaveLength(10);
   });
 
   it('delegate defaults to standard/worktree/cwd-only', () => {

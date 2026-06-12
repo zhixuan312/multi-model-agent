@@ -27,7 +27,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 
 ## Endpoint
 
-`POST /execute-plan?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -35,6 +35,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 
 ```json
 {
+  "type": "execute_plan",
   "taskDescriptors": [
     "1. Add input validation to login handler",
     "2. Write unit tests for the auth module"
@@ -66,8 +67,8 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
-  "http://localhost:$PORT/execute-plan?cwd=/project")
+  -d '{"type":"execute_plan","taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
@@ -75,7 +76,7 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 ## Response shapes
 
-### POST /execute-plan?cwd=<abs> — dispatch response (202)
+### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
 { "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }

@@ -35,7 +35,7 @@ mean and which directions to pursue.
 
 ## Endpoint
 
-`POST /research?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -63,6 +63,7 @@ If the Semantic Scholar API key is not configured:
 
 ```json
 {
+  "type": "research",
   "researchQuestion": "What approaches exist for streaming JSON parsing under 100KB?",
   "background": "We currently use a single-pass push parser; we want to evaluate alternatives.",
   "subtype": "default",
@@ -90,10 +91,11 @@ BATCH=$(curl -f -sS -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "research",
     "researchQuestion": "State-of-the-art SIMD JSON parsers under 100KB?",
     "background": "We use a single-pass push parser; want SIMD alternatives."
   }' \
-  "http://localhost:$PORT/research?cwd=/project")
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

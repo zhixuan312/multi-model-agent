@@ -18,10 +18,10 @@ describe('contract: polling lifecycle', () => {
   it('returns 202 with running headline then 200 with terminal envelope', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const dispatch = await authedFetch(`${h.baseUrl}/review?cwd=${process.cwd()}`, h.token, {
+      const dispatch = await authedFetch(`${h.baseUrl}/task?cwd=${process.cwd()}`, h.token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePaths: ['/tmp/hello.ts'] }),
+        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/hello.ts'] }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };
@@ -51,10 +51,10 @@ describe('contract: polling lifecycle', () => {
   it('repeated poll after terminal returns identical body (idempotent)', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const dispatch = await authedFetch(`${h.baseUrl}/review?cwd=${process.cwd()}`, h.token, {
+      const dispatch = await authedFetch(`${h.baseUrl}/task?cwd=${process.cwd()}`, h.token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePaths: ['/tmp/x.ts'] }),
+        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/x.ts'] }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };

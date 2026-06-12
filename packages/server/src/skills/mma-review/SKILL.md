@@ -37,7 +37,7 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 
 ## Endpoint
 
-`POST /review?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -45,6 +45,7 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 
 ```json
 {
+  "type": "review",
   "code": "inline code snippet (optional if filePaths given)",
   "focus": ["correctness", "security"],
   "subtype": "default",
@@ -73,8 +74,8 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \
-  "http://localhost:$PORT/review?cwd=/project")
+  -d '{"type":"review","focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 

@@ -32,7 +32,7 @@ describe('A11.2 public-envelope cost roll-up', () => {
   it('per-task actualCostUSD matches sumStageCosts and batch roll-up matches per-task sum', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const dispatch = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(process.cwd())}`, {
+      const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,7 +40,7 @@ describe('A11.2 public-envelope cost roll-up', () => {
           'X-MMA-Client': 'claude-code',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ filePaths: ['/tmp/add.ts'] }),
+        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/add.ts'] }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };

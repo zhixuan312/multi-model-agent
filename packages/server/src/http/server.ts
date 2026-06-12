@@ -54,7 +54,6 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
   '/task',
   '/control/batch-slice', '/context-blocks',
 ]);
@@ -64,121 +63,24 @@ const CWD_REQUIRED_PATHS = new Set([
  *  tool routes need it; the introspection / batch-polling / context-block
  *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
-  '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
   '/task',
 ]);
 
 /**
- * Registers tool handlers (POST /review, /debug, /execute-plan, /retry, etc.).
- * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
- * iterates `registry.list()` filtered to `surface: 'tool'` entries to drive
- * route registration. The registry is the canonical source for tool surface
- * metadata (httpMethod, httpPath, schema, toolCategory).
+ * Registers per-route tool handlers.
+ *
+ * All tool routes now go through the unified POST /task endpoint.
+ * This function is intentionally empty — Task 17 removes it entirely.
  */
 async function registerToolHandlers(
-  router: RouteDispatcher<RawHandler>,
-  config: ServerConfig,
-  batchRegistry: BatchRegistry,
-  projectRegistry: ProjectRegistry,
+  _router: RouteDispatcher<RawHandler>,
+  _config: ServerConfig,
+  _batchRegistry: BatchRegistry,
+  _projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry } =
-    await import('@zhixuan92/multi-model-agent-core');
-
-  const surface = buildToolSurfaceRegistry();
-
-  // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
-  // when the full mmagent.config.json is loaded. In test/minimal configs that only
-  // have `server:`, we create a stub config. Real CLI startup will load full config.
-  const multiModelConfig = (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
-    : undefined;
-
-  if (!multiModelConfig) {
-    // Server started with server-only config (e.g. tests): register stubs that return 503.
-    // Drive registration from the registry so adding a tool only requires a tool-config edit.
-    for (const entry of surface.list()) {
-      if (entry.surface !== 'tool') continue;
-      router.register(entry.httpMethod, entry.httpPath, (_req, res, _params, _ctx) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-      });
-    }
-    return;
-  }
-
-  const bus = new EnvelopeBus();
-  const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
-  bus.subscribe(logWriter);
-  // Always-on stderr log stream — no quiet mode and no --verbose flag (4.7.3+).
-  bus.subscribe(new StderrLogSubscriber());
-
-  let recorderForBus: Recorder | null = null;
-  try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
-  // decideConsent signature: read from packages/server/src/telemetry/consent.ts. Today it reads
-  // process.env.MMAGENT_TELEMETRY + a config.json. Replicate that call here:
-  const decideConsentForUploader = () => {
-    const envVal = process.env.MMAGENT_TELEMETRY;
-    let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
-    try {
-      const cfgPath = join(homedir(), '.multi-model', 'config.json');
-      const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-      if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
-        configState = { enabled: cfg.telemetry.enabled };
-      }
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-        configState = { kind: 'unreadable' };
-      }
-    }
-    return decideConsent({ env: envVal, config: configState });
-  };
-  const uploader = new TelemetryUploader({
-    recorder: recorderForBus,
-    consent: { decide: decideConsentForUploader },
-    buildOpts: (env: any) => ({
-      toolMode: 'full',                     // default
-      implementerModel: env.stages[0]?.model ?? env.mainModel,
-      implementerTier: env.stages[0]?.tier ?? env.agentType,
-      mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
-    }),
-  });
-  bus.subscribe(uploader);
-
-  const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
-
-  // Per-tool handler builders, keyed by registry routeName. The registry tells
-  // us WHICH route to register and at WHICH path/method; this map answers HOW
-  // to build the per-tool handler.
-  const { buildReviewHandler } = await import('./handlers/tools/review.js');
-  const { buildDebugHandler } = await import('./handlers/tools/debug.js');
-  const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
-  const { buildRetryHandler } = await import('./handlers/tools/retry.js');
-  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
-  const { buildResearchHandler } = await import('./handlers/tools/research.js');
-  const { buildJournalRecordHandler } = await import('./handlers/tools/journal-record.js');
-  const { buildJournalRecallHandler } = await import('./handlers/tools/journal-recall.js');
-
-  const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
-    review: buildReviewHandler,
-    debug: buildDebugHandler,
-    execute_plan: buildExecutePlanHandler,
-    retry_tasks: buildRetryHandler,
-    investigate: buildInvestigateHandler,
-    research: buildResearchHandler,
-    'journal-record': buildJournalRecordHandler,
-    'journal-recall': buildJournalRecallHandler,
-  };
-
-  for (const entry of surface.list()) {
-    if (entry.surface !== 'tool') continue;
-    const builder = builders[entry.routeName];
-    if (!builder) {
-      // Route is in the registry but its handler hasn't been wired yet
-      // (e.g. /research added in a prior task, handler lands in a later one).
-      // Skip silently — the next task wires the handler and enables the route.
-      continue;
-    }
-    router.register(entry.httpMethod, entry.httpPath, builder(deps));
-  }
+  // All per-route tool handlers (review, debug, execute-plan, retry,
+  // investigate, research, journal-record, journal-recall) have been
+  // removed. All tool traffic is now served by POST /task.
 }
 
 /**
