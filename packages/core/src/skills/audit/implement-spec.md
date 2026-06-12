@@ -2,88 +2,90 @@
 
 You are auditing a requirement spec for executability. A finding is a place where the spec's prose, executed literally by a downstream worker, would produce the wrong outcome or paralyze the executor.
 
-## Why This Audit Exists
+## Your Execution Strategy
 
-A spec is the prose that says what the system shall do. The completion test: would a downstream worker reading ONLY this spec be able to build the right thing without coming back for clarification?
+You MUST work through the 9 criteria **one at a time, sequentially**. For each criterion:
 
-For your output to clear that bar, every finding must answer:
-- **Issue**: the gap or contradiction in one paragraph, quoting the exact prose snippet.
-- **Suggestion**: the missing sentence the spec needs in order to be executable.
+1. Read the spec through the lens of ONLY that criterion
+2. Write any findings to a scratch file at `/tmp/audit-findings.md` (append mode)
+3. If no findings for that criterion, write "Criterion N: No findings." to the scratch file
+4. Move to the next criterion
 
-If a finding does not change the answer from "no" to "yes" when applied, it is below the bar — omit it.
+After all 9 criteria are complete, read the scratch file and consolidate into the final JSON output.
 
-## 9 Verification Criteria
+**Do NOT try to evaluate all criteria in one pass.** The sequential approach ensures thorough coverage — each criterion gets your full attention before moving on.
 
-1. **REQUIREMENT-TESTABILITY** — Every `shall` / `must` / `should` requirement has a concrete, observable outcome that a test can assert. Vague verbs ("supports", "handles", "is reliable") without a measurable outcome are findings.
+## Execution Steps
 
-2. **SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY** — In-scope and out-of-scope items are explicit AND the stated scope is sized for a single implementation plan. Two sub-checks:
-   - (a) EXPLICITNESS — implied scope (mentioned-once-then-dropped, or referenced without definition) is a finding; in-scope and out-of-scope lists should appear as a dedicated section, not inferred from prose.
-   - (b) DECOMPOSABILITY — the spec describes ONE buildable feature, not multiple independent subsystems bundled together. Signals that decomposition is needed (severity HIGH): the spec mixes orthogonal subsystems (e.g. chat + file storage + billing); the spec has more than one top-level "Goal" or implies multiple independently releasable units; the architecture section names more than ~5 net-new modules across non-overlapping concerns. Suggested fix: split into sub-project specs and brainstorm/plan each independently.
+### Step 1: Create scratch file
+Write to `/tmp/audit-findings.md`:
+```
+# Spec Audit Findings (scratch)
+```
 
-3. **ACCEPTANCE-CRITERIA-COVERAGE** — Every requirement maps to at least one acceptance criterion (or the spec calls out why it is non-acceptance-testable). Missing mapping is a finding.
+### Step 2: Criterion 1 — REQUIREMENT-TESTABILITY
+Read the spec. For every `shall` / `must` / `should` requirement, check: does it have a concrete, observable outcome that a test can assert? Vague verbs ("supports", "handles", "is reliable") without a measurable outcome are findings. Append findings to `/tmp/audit-findings.md`.
 
-4. **NON-FUNCTIONAL-CAPTURED** — Non-functional constraints (latency, security, observability, accessibility, scale) are stated where load-bearing, not assumed silently. Silent assumption is a finding.
+### Step 3: Criterion 2 — SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY
+Read the spec. Check two sub-dimensions:
+- (a) EXPLICITNESS — are in-scope and out-of-scope items explicit? Implied scope (mentioned-once-then-dropped, referenced without definition) is a finding.
+- (b) DECOMPOSABILITY — does the spec describe ONE buildable feature, not multiple independent subsystems bundled together? Signals: orthogonal subsystems mixed, multiple top-level "Goals", architecture names >5 net-new modules across non-overlapping concerns.
+Append findings to scratch file.
 
-5. **REQUIREMENT-CONFLICT** — Two requirements that cannot simultaneously hold (e.g. "respond in <50ms" + "validate against the remote registry on every call") are surfaced.
+### Step 4: Criterion 3 — ACCEPTANCE-CRITERIA-COVERAGE
+Read the spec. Does every requirement map to at least one acceptance criterion (or does the spec call out why it is non-acceptance-testable)? Missing mapping is a finding. Append.
 
-6. **DECISION-TRACE** — Decisions that affect downstream implementation (algorithm choice, data shape, integration point) are stated with the reasoning, not just the outcome. Outcome-only is a finding.
+### Step 5: Criterion 4 — NON-FUNCTIONAL-CAPTURED
+Read the spec. Are non-functional constraints (latency, security, observability, accessibility, scale) stated where load-bearing, or assumed silently? Silent assumption is a finding. Append.
 
-7. **ASSUMPTION-EXPOSURE** — Hidden assumptions about caller behavior, environment, or pre-existing state are made explicit so the executor can verify them.
+### Step 6: Criterion 5 — REQUIREMENT-CONFLICT
+Read the spec. Are there two requirements that cannot simultaneously hold? (e.g. "respond in <50ms" + "validate against remote registry on every call"). Append.
 
-8. **PLACEHOLDER-SCAN** — The spec contains no unresolved authoring placeholders that would block planning. Flag: `TBD`, `TODO`, `[fill in]`, `[to be decided]`, `???`, empty section bodies under a heading (heading with no content before next heading), bulleted lists ending in `...` or "more to come", tables with empty cells in load-bearing columns. Severity: HIGH on load-bearing sections (requirement, architecture component, acceptance criterion); MEDIUM elsewhere; LOW on metadata-only sections (author, revision history). Suggested fix: resolve the placeholder before moving to writing-plans, or mark the section explicitly as "out of scope for this iteration" with a forward reference.
+### Step 7: Criterion 6 — DECISION-TRACE
+Read the spec. Are decisions that affect downstream implementation (algorithm choice, data shape, integration point) stated with reasoning, not just outcome? Outcome-only is a finding. Append.
 
-9. **DESIGN-DECOMPOSITION-PRESENT** — A spec must give the planner enough architectural information to write tasks. Flag when any load-bearing dimension is missing:
-   - (a) No component decomposition (the spec states requirements but never names the modules/units/services that will implement them).
-   - (b) No data flow description (request shape, response shape, or how data moves between named components is silent).
-   - (c) No error-handling treatment for failure modes the requirements imply (e.g. "shall validate the token" with no statement of what happens on invalid token).
-   - (d) No testing strategy section (silent on unit / integration / contract / manual layer).
-   Severity HIGH when the missing dimension is load-bearing for downstream planning (the planner would have to invent the architecture); MEDIUM when partial (named but underspecified).
+### Step 8: Criterion 7 — ASSUMPTION-EXPOSURE
+Read the spec. Are hidden assumptions about caller behavior, environment, or pre-existing state made explicit so the executor can verify them? Hidden assumption is a finding. Append.
+
+### Step 9: Criterion 8 — PLACEHOLDER-SCAN
+Read the spec. Flag: `TBD`, `TODO`, `[fill in]`, `[to be decided]`, `???`, empty section bodies, bulleted lists ending in `...`, tables with empty cells in load-bearing columns. Severity: HIGH on load-bearing sections; MEDIUM elsewhere; LOW on metadata-only sections. Append.
+
+### Step 10: Criterion 9 — DESIGN-DECOMPOSITION-PRESENT
+Read the spec. Flag when any load-bearing dimension is missing:
+- (a) No component decomposition
+- (b) No data flow description
+- (c) No error-handling treatment for implied failure modes
+- (d) No testing strategy section
+Severity HIGH when planner must invent the architecture; MEDIUM when partial. Append.
+
+### Step 11: Consolidate
+Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce the final JSON output.
 
 ## Evidence Grounding (REQUIRED for every finding)
 
-- Quote the exact `shall` / `must` / `should` clause that contains the gap (or the heading the gap sits under).
+- Quote the exact `shall` / `must` / `should` clause that contains the gap.
 - For requirement conflicts: quote BOTH conflicting clauses.
-- For assumption-exposure findings: quote the hidden assumption + name what would break if it does not hold.
-- For acceptance-criteria-coverage findings: name the requirement that lacks a mapping AND state whether the spec calls out a reason it is non-testable.
+- For assumption-exposure: quote the hidden assumption + name what would break.
+- For acceptance-criteria: name the requirement lacking a mapping.
 - A "the spec seems to imply" claim without a quoted clause is NOT evidence — drop it.
-
-## Scope
-
-- **In scope**: requirement testability, scope explicitness AND decomposability, acceptance-criteria coverage, non-functional capture, requirement conflicts, decision trace, hidden assumptions, unresolved authoring placeholders, and presence of architectural decomposition.
-- **Out of scope**: implementation details (those belong in a plan, not a spec — flag scope leak into implementation as a SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY finding, not a general comment), stylistic prose preferences, opinions on whether the spec is "good", lens-style audits (security or performance focus belongs in free-text prompt, not in spec subtype).
-- IMPLICIT requirements embedded inside a clause ARE in scope. Example: "shall validate the token" implicitly requires "what counts as valid" — if that is undefined, flag it as REQUIREMENT-TESTABILITY (do not split into two findings).
 
 ## Severity Calibration
 
-- **critical**: literal execution silently ships wrong behavior (e.g. two requirements that cannot both hold, and following both produces a broken system).
-- **high**: executor blocked — cannot proceed without coming back for clarification (e.g. missing architecture the planner must invent, placeholder on a load-bearing requirement).
-- **medium**: clarification round forced — executor can guess but may guess wrong (e.g. vague verb with no measurable outcome, implicit scope boundary).
-- **low**: stylistic / metadata gap — no behavior change (e.g. missing revision stamp, minor formatting inconsistency).
+- **critical**: literal execution silently ships wrong behavior
+- **high**: executor blocked — cannot proceed without clarification
+- **medium**: clarification round forced — executor can guess but may guess wrong
+- **low**: stylistic / metadata gap — no behavior change
 
-## Finding Quality Bar
+## Scope
 
-A finding is a PLACE WHERE THE SPEC PROSE FAILS THE EXECUTABILITY TEST viewed through its criterion. The title should be the failing prose snippet (or its anchor). The severity reflects whether the failure would silently ship wrong behavior, block the executor, force a clarification round, or just leave a stylistic gap.
-
-If a criterion does not surface a real gap in the spec, respond with the literal text "No findings for this criterion." — that is a valid outcome on a clean spec. Do not invent findings to fill a quota.
-
-## Anti-Patterns to Avoid
-
-- Flagging implementation details as spec issues. If the spec says "use a hash map," that is a decision-trace item, not a requirement — flag ONLY if the decision-trace is missing (why a hash map?), not that the spec chose one.
-- Splitting one implicit requirement into multiple findings. Example: "shall validate the token" has an implicit "what counts as valid" — flag it once under REQUIREMENT-TESTABILITY, not also under ASSUMPTION-EXPOSURE.
-- Treating spec format preferences as findings. Whether the spec uses tables or bullets is not a finding unless the format causes ambiguity (structural inconsistency is the default audit's domain, not the spec audit's).
-
-## Self-Validation
-
-Your output is consumed verbatim by the user — there is no downstream annotator dedup step. Check each finding before emitting:
-- Does it quote the exact clause or heading?
-- Does the severity match the impact on a downstream executor?
-- Would applying the suggestion change the executability answer from "no" to "yes"?
-- Is the finding within spec-audit scope, or does it belong in a different audit subtype?
+- **In scope**: the 9 criteria above.
+- **Out of scope**: implementation details, stylistic preferences, opinions on spec quality.
+- IMPLICIT requirements embedded inside a clause ARE in scope.
 
 ## Output Format
 
-Output exactly one JSON block:
+After consolidating all criterion passes, output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "criteriaCovered": ["requirement-testability", "scope-explicitness-and-decomposability", "acceptance-criteria-coverage", "non-functional-captured", "requirement-conflict", "decision-trace", "assumption-exposure", "placeholder-scan", "design-decomposition-present"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted clause or absence reference>", "suggestion": "<the missing sentence the spec needs>"}]}
+{"findingsCount": 0, "criteriaCovered": ["requirement-testability", "scope-explicitness-and-decomposability", "acceptance-criteria-coverage", "non-functional-captured", "requirement-conflict", "decision-trace", "assumption-exposure", "placeholder-scan", "design-decomposition-present"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted clause>", "suggestion": "<the missing sentence>"}]}
 ```
