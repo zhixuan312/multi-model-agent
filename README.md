@@ -256,7 +256,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
 
-**V2→V3 upgrade note:** Previous V2 opt-ins are cleared on upgrade to 3.10.0+. Run `mmagent telemetry enable` to opt in to schema v3.
+**Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mmagent telemetry enable` to opt in to the current wire schema (v6).
 
 ### Verbose / diagnostics
 
@@ -272,7 +272,7 @@ Add the `diagnostics` block to `~/.multi-model/config.json`:
 }
 ```
 
-Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`.
+Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<taskId>.json`.
 
 > **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
@@ -282,7 +282,7 @@ Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/lo
 mmagent serve [--verbose] [--log]                # start daemon
 mmagent info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
 mmagent status [--json]                          # health + stats from a running daemon
-mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
+mmagent logs  [--follow] [--task=<id>]           # tail today's diagnostic log
 mmagent print-token                              # print the current auth token
 mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
 mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
@@ -313,7 +313,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
 ## What's new in 5.2.0
