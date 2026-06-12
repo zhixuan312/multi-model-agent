@@ -61,14 +61,14 @@ Recall relevant project learnings from the journal via a read-only mmagent worke
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type":"journal_recall","query":"what have we learned about dispatch cancellation reliability?"}' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

@@ -74,8 +74,8 @@ export interface DispatchTaskInput {
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   /** Registry to attach/detach the per-task ExecutionContext on. When provided,
    *  shutdown drain in serve.ts can walk the registry and call closeSessions()
-   *  on every in-flight task before the daemon exits. */
-  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
+   *  on every in-flight task before the daemon exits. Structural type. */
+  batchRegistry?: ExecutionContext['batchRegistry'];
   /** Per-task event envelope for recording lifecycle mutations. Optional during migration. */
   envelope?: import('../events/task-envelope.js').TaskEnvelopeStore;
   resolvedSkills?: ResolvedSkillBundle;

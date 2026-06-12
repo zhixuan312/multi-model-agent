@@ -105,8 +105,6 @@ export type { ResolvedAgent } from './providers/agent-resolver.js';
 export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 
 
-// Batch registry
-export * from './stores/batch-registry.js';
 
 // Observability
 export { TaskEnvelopeStore } from './events/task-envelope.js';

@@ -88,20 +88,20 @@ When `subtype: 'plan'`:
 ### Default audit (general prose)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type":"audit","subtype":"default","filePaths":["/project/docs/api-spec.md"]}' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 ### Spec audit (requirement prose)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
@@ -113,7 +113,7 @@ BATCH=$(curl -f --show-error -s -X POST \
 ### Skill audit (SKILL.md)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
@@ -125,7 +125,7 @@ BATCH=$(curl -f --show-error -s -X POST \
 ### Plan audit (verify a code-execution plan against the codebase)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \

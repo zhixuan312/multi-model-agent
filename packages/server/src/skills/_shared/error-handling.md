@@ -7,8 +7,8 @@
 | `400` | `invalid_request` | Fix the request body or query params |
 | `401` | `unauthorized` | Re-fetch token; check `MMAGENT_AUTH_TOKEN` |
 | `403` | `forbidden` | `cwd` query param missing or out of scope |
-| `404` | `not_found` | Wrong `batchId` or resource does not exist |
-| `409` | `invalid_batch_state` / `pinned` | Batch in wrong state; check current state first |
+| `404` | `not_found` | Wrong `taskId` or resource does not exist |
+| `409` | `invalid_task_state` / `pinned` | Task in wrong state; check current state first |
 | `413` | `payload_too_large` | Reduce content size (context block or body) |
 | `429` | `rate_limited` | Wait `Retry-After` seconds, then retry |
 | `503` | `project_cap_exceeded` | Too many concurrent projects; wait and retry |

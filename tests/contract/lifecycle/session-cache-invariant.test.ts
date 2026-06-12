@@ -41,10 +41,10 @@ describe('session cache invariant — one open per (task, tier)', () => {
         body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
       });
       expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
+      const { taskId } = (await dispatch.json()) as { taskId: string };
       // Poll to terminal.
       for (let i = 0; i < 200; i++) {
-        const r = await fetch(`${server.baseUrl}/batch/${batchId}`, { headers });
+        const r = await fetch(`${server.baseUrl}/task/${taskId}`, { headers });
         if (r.status === 200) break;
         await new Promise((res) => setTimeout(res, 50));
       }

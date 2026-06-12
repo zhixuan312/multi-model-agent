@@ -3,8 +3,8 @@
 // Server API inspected from packages/server/src/http/server.ts on 2026-04-24:
 //   - Export: `startServer(config: ServerConfig): Promise<RunningServer>`
 //     (packages/server/src/http/server.ts:134)
-//   - RunningServer has: { port, serverAddress, stop(), batchRegistry,
-//     projectRegistry, serverStartedAt } (line 31)
+//   - RunningServer has: { port, serverAddress, stop(), taskRegistry,
+//     projectRegistry, serverStartedAt }
 //   - Listen: `server.listen(config.server.port, config.server.bind, resolve)`
 //     with `port: 0` for OS-assigned port (line 186)
 //   - Token loaded from `config.server.auth.tokenFile` (line 135) — so the

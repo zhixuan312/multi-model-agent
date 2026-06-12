@@ -7,10 +7,10 @@ import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import { getRecorder } from '../telemetry/recorder.js';
 
 /**
- * Builds a canonical ExecutionContext for the async-dispatch → executor path.
+ * Builds a canonical ExecutionContext for the task dispatch -> executor path.
  *
  * The canonical type carries lifecycle-specific required fields (task, timing,
- * stall, etc.) that aren't applicable in the server→executor code path. We
+ * stall, etc.) that aren't applicable in the server->executor code path. We
  * cast through `as ExecutionContext` because the executors only access the
  * subset of fields populated here. Phase B/E will migrate executors into the
  * full lifecycle, after which this shim can be deleted.
@@ -18,17 +18,14 @@ import { getRecorder } from '../telemetry/recorder.js';
 export function buildExecutionContext(
   deps: HandlerDeps,
   pc: ProjectContext,
-  batchId: string,
+  taskId: string,
   envelope: TaskEnvelopeStore,
   route?: string,
   caller?: { client: string; mainModel?: string | null },
 ): ExecutionContext {
-  const recordHeartbeat = (tick: HeartbeatTickInfo) => {
-    const effectiveBatchId = tick.batchId || batchId;
-    const entry = deps.batchRegistry.get(effectiveBatchId);
-    if (!entry) return;
-    entry.lastHeartbeatAt = Date.now();
-    entry.running = [{ worker: tick.provider, turn: Math.max(1, tick.stageIndex) }];
+  const recordHeartbeat = (_tick: HeartbeatTickInfo) => {
+    // TaskRegistry does not track heartbeat state; headline updates
+    // are handled via taskRegistry.setHeadline() at a higher level.
     // Record heartbeat to envelope — this triggers snapshot push with recomputed headline
     envelope.recordHeartbeat({ stallIdleMs: 0 });
   };
@@ -51,14 +48,11 @@ export function buildExecutionContext(
     mainModel: caller?.mainModel ?? null,
     route: route ?? '',
     client: caller?.client ?? 'other',
-    batchId,
+    batchId: taskId,
     recordHeartbeat,
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,
-    // Thread the BatchRegistry so task-runner can attach this ctx for
-    // shutdown-drain visibility into in-flight tasks.
-    batchRegistry: deps.batchRegistry,
     task: { prompt: '' },
     taskIndex: 0,
     cwd: pc.cwd,

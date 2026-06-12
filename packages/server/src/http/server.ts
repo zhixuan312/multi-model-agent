@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
@@ -38,8 +39,8 @@ export interface RunningServer {
   /** The resolved address the server is bound to. Used by CLI to log the actual listen address. */
   serverAddress: string | null;
   stop(): Promise<void>;
-  /** Shared BatchRegistry — exposed for testing and introspection handlers. */
-  batchRegistry: BatchRegistry;
+  /** Shared TaskRegistry — exposed for testing and introspection handlers. */
+  taskRegistry: TaskRegistry;
   /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
   projectRegistry: ProjectRegistry;
   /** Wall-clock ms when the server finished starting (Date.now()). Used for uptimeMs in /status. */
@@ -55,35 +56,32 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
   '/task',
-  '/control/batch-slice', '/context-blocks',
+  '/context-blocks',
 ]);
 
 /** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
  *  so wire telemetry's main_model column is never null for billed runs. The
- *  tool routes need it; the introspection / batch-polling / context-block
+ *  tool routes need it; the introspection / task-polling / context-block
  *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
   '/task',
 ]);
 
 /**
- * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks).
+ * Registers control handlers (POST/DELETE /context-blocks).
  */
 async function registerControlHandlers(
   router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
-  batchRegistry: BatchRegistry,
+  taskRegistry: TaskRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildBatchHandler } = await import('./handlers/control/batch.js');
-  const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
     ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
     : undefined;
 
-  router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
     const bus = new EnvelopeBus();
     const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
@@ -120,8 +118,6 @@ async function registerControlHandlers(
     });
     bus.subscribe(uploader);
 
-    const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
-    router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
       projectRegistry,
       maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
@@ -129,9 +125,6 @@ async function registerControlHandlers(
     }));
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
-    router.register('POST', '/control/batch-slice', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-    });
     router.register('POST', '/context-blocks', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });
@@ -148,12 +141,10 @@ export async function startServer(
   const router = new RouteDispatcher<RawHandler>();
 
   // ── Create shared registries ───────────────────────────────────────────────
-  const { BatchRegistry } = await import('@zhixuan92/multi-model-agent-core');
+  const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
   const { ProjectRegistry } = await import('./project-registry.js');
 
-  const batchRegistry = new BatchRegistry({
-    batchTtlMs: config.server.limits.batchTtlMs,
-  });
+  const taskRegistry = new TaskRegistry();
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
@@ -181,7 +172,7 @@ export async function startServer(
   router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
   // Register control handlers
-  await registerControlHandlers(router, config, batchRegistry, projectRegistry);
+  await registerControlHandlers(router, config, taskRegistry, projectRegistry);
 
   // Register unified task handler (POST /task, GET /task/:taskId)
   {
@@ -197,7 +188,7 @@ export async function startServer(
       });
       bus.subscribe(logWriter);
       bus.subscribe(new StderrLogSubscriber());
-      const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
+      const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
       const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
@@ -214,7 +205,7 @@ export async function startServer(
   // GET /status — operator introspection (registered after registries are ready)
   const { buildStatusHandler } = await import('./handlers/introspection/status.js');
   router.register('GET', '/status', buildStatusHandler({
-    batchRegistry,
+    taskRegistry,
     projectRegistry,
     serverStartedAt,
     bind: config.server.bind,
@@ -242,15 +233,15 @@ export async function startServer(
     port,
     serverAddress,
     stop: () => listener.stop(),
-    batchRegistry,
+    taskRegistry,
     projectRegistry,
     serverStartedAt,
   };
 }
 
 // Per-request pipeline lives in request-pipeline.ts. server.ts owns routing
-// table + bootstrap; the pipeline owns body-cap → route → loopback → auth →
-// JSON parse → cwd → dispatch.
+// table + bootstrap; the pipeline owns body-cap -> route -> loopback -> auth ->
+// JSON parse -> cwd -> dispatch.
 const PIPELINE_CFG = {
   loopbackOnlyPaths: LOOPBACK_ONLY_PATHS,
   authExemptPaths: AUTH_EXEMPT_PATHS,

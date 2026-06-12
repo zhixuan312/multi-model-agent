@@ -1,8 +1,11 @@
 import type { ContextBlockStore } from '../stores/context-block-tool.js';
-import type { BatchRegistry } from '../stores/batch-registry.js';
+
+interface TerminalBlockRegistry {
+  recordTerminalBlock(batchId: string, taskIndex: number, blockId: string): void;
+}
 
 export class TerminalBlockRegistrar {
-  constructor(private store: ContextBlockStore, private registry: BatchRegistry) {}
+  constructor(private store: ContextBlockStore, private registry: TerminalBlockRegistry) {}
 
   register(opts: { batchId: string; taskIndex: number; route: string; markdown: string }): string | undefined {
     if (opts.route === 'register-context-block') return undefined;

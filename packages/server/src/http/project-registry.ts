@@ -1,4 +1,5 @@
-import { createProjectContext, type ProjectContext, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import { createProjectContext, type ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import { validateCwd } from './cwd-validator.js';
 
 export type ReserveError = 'project_cap' | 'invalid_cwd' | 'missing_cwd' | 'cwd_not_dir' | 'forbidden_cwd';
@@ -107,20 +108,20 @@ export class ProjectRegistry {
 
   /**
    * Returns true if the project context is idle and eligible for eviction.
-   * Gates on: no active HTTP requests, no active batches in the registry,
+   * Gates on: no active HTTP requests, no active tasks in the registry,
    * no active sessions, no pending reservations, and idle for at least idleTimeoutMs.
    */
-  isIdleFor(pc: ProjectContext, now: number, idleTimeoutMs: number, batchRegistry: BatchRegistry): boolean {
+  isIdleFor(pc: ProjectContext, now: number, idleTimeoutMs: number, taskRegistry: TaskRegistry): boolean {
     return (
       pc.activeRequests === 0 &&
-      batchRegistry.countActiveForProject(pc.cwd) === 0 &&
+      taskRegistry.countActive(pc.cwd) === 0 &&
       pc.activeSessions.size === 0 &&
       pc.pendingReservations === 0 &&
       (now - pc.lastActivityAt) > idleTimeoutMs
     );
   }
 
-  evictIdle(batchRegistry?: BatchRegistry): void {
+  evictIdle(taskRegistry?: TaskRegistry): void {
     const now = Date.now();
     const victims: string[] = [];
     for (const [cwd, pc] of this.map.entries()) {
@@ -128,7 +129,7 @@ export class ProjectRegistry {
         pc.activeSessions.size === 0 &&
         pc.activeRequests === 0 &&
         pc.pendingReservations === 0 &&
-        (batchRegistry === undefined || batchRegistry.countActiveForProject(cwd) === 0) &&
+        (taskRegistry === undefined || taskRegistry.countActive(cwd) === 0) &&
         now - pc.lastActivityAt > this.idleEvictionMs
       ) {
         victims.push(cwd);

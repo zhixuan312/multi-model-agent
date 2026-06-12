@@ -185,6 +185,6 @@ export type ProgressEvent = {
   headline: string
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number
-  /** Lightweight state snapshot for use by recordHeartbeat to update BatchRegistry. */
-  snapshot: import('../stores/batch-registry.js').HeadlineSnapshot
+  /** Lightweight state snapshot for use by recordHeartbeat. */
+  snapshot: import('../bounded-execution/activity-tracker-types.js').HeadlineSnapshot
 }

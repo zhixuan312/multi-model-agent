@@ -85,7 +85,7 @@ The `default` subtype's criteria target primary-source preference, practitioner 
 ## Full example
 
 ```bash
-BATCH=$(curl -f -sS -X POST \
+RESULT=$(curl -f -sS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
@@ -96,7 +96,7 @@ BATCH=$(curl -f -sS -X POST \
     "background": "We use a single-pass push parser; want SIMD alternatives."
   }' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

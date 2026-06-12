@@ -30,12 +30,12 @@ describe('contract: POST /journal/recall lifecycle', () => {
         body: JSON.stringify({ type: 'journal_recall', query: 'x'.repeat(25) }),
       });
       expect(res.status).toBe(202);
-      const { batchId } = (await res.json()) as { batchId: string };
-      expect(typeof batchId).toBe('string');
+      const { taskId } = (await res.json()) as { taskId: string };
+      expect(typeof taskId).toBe('string');
 
       let body: Record<string, unknown> | null = null;
       for (let i = 0; i < 40; i++) {
-        const poll = await fetch(`${h.baseUrl}/batch/${batchId}`, {
+        const poll = await fetch(`${h.baseUrl}/task/${taskId}`, {
           headers: {
             'X-MMA-Main-Model': 'claude-opus-4-7',
             'X-MMA-Client': 'claude-code',

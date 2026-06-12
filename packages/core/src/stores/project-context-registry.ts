@@ -5,7 +5,7 @@ export interface ProjectContext {
   readonly cwd: string;
   /** In-memory context-block store (the only implementation). */
   readonly contextBlocks: ContextBlockStore;
-  /** Per-project terminal-only retention index; authoritative live-batch lookup is via BatchRegistry.countActiveForProject(cwd). */
+  /** Per-project terminal-only retention index. */
   readonly batchCache: BatchCache;
   readonly createdAt: number;
   /** Wall-clock ms of last activity on this project context (HTTP request, session attach/detach). */

@@ -33,16 +33,16 @@ async function bootAndCapture(
   return events;
 }
 
-async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<void> {
+async function pollToTerminal(baseUrl: string, token: string, taskId: string): Promise<void> {
   for (let i = 0; i < 180; i++) {
-    const poll = await fetch(`${baseUrl}/batch/${batchId}`, {
+    const poll = await fetch(`${baseUrl}/task/${taskId}`, {
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${token}` },
     });
     if (poll.status === 200) return;
-    if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status} polling batch ${batchId}`);
+    if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status} polling task ${taskId}`);
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(`poll timeout ${batchId}`);
+  throw new Error(`poll timeout ${taskId}`);
 }
 
 /** Aggregator. */
@@ -73,8 +73,8 @@ export async function runTaskLifecycleFixtures(): Promise<EventType[]> {
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'review', filePaths: ['a.ts', 'b.ts'] }),
     });
-    const { batchId } = (await dispatch.json()) as { batchId: string };
-    await pollToTerminal(h.baseUrl, h.token, batchId);
+    const { taskId } = (await dispatch.json()) as { taskId: string };
+    await pollToTerminal(h.baseUrl, h.token, taskId);
   });
 }
 
@@ -89,8 +89,8 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
       headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'review', filePaths: ['fail.ts'] }),
     });
-    const { batchId } = (await dispatch.json()) as { batchId: string };
-    await pollToTerminal(h.baseUrl, h.token, batchId);
+    const { taskId } = (await dispatch.json()) as { taskId: string };
+    await pollToTerminal(h.baseUrl, h.token, taskId);
   }));
 
   // Sub-fixture B: stall_abort — provider that hangs, triggering idle detection

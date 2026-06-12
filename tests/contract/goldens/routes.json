@@ -1,11 +1,9 @@
 [
   "DELETE /context-blocks/:blockId",
   "GET /__routes",
-  "GET /batch/:batchId",
   "GET /health",
   "GET /status",
   "GET /task/:taskId",
   "POST /context-blocks",
-  "POST /control/batch-slice",
   "POST /task"
 ]

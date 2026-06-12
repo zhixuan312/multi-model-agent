@@ -1,14 +1,14 @@
 ## Response shapes
 
-### POST /<tool>?cwd=<abs> — dispatch response (202)
+### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
-{ "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }
+{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
 ```
 
-Use `batchId` to poll. `statusUrl` is a convenience pointer.
+Use `taskId` to poll. `statusUrl` is a convenience pointer.
 
-### GET /batch/:id — polling response
+### GET /task/:taskId — polling response
 
 The HTTP status is the state discriminator:
 
@@ -27,7 +27,7 @@ The terminal JSON envelope always has these 6 fields. Each may be a real value o
   "batchTimings": { /* timings */ },
   "costSummary": { /* cost roll-up */ },
   "structuredReport": { /* parsed sections */ },
-  "error": { "kind": "not_applicable", "reason": "batch succeeded" }
+  "error": { "kind": "not_applicable", "reason": "task succeeded" }
 }
 ```
 
@@ -35,10 +35,10 @@ Read the envelope by the shape of `error`:
 
 | Shape | Meaning |
 |---|---|
-| `error` is a real object (with `code` / `message`) | Batch failed — read `error.code` + `error.message` |
-| `error` is `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
+| `error` is a real object (with `code` / `message`) | Task failed — read `error.code` + `error.message` |
+| `error` is `{kind: "not_applicable", ...}` | Task succeeded — read `results` |
 
-### GET /batch/:id?taskIndex=N — single task slice
+### GET /task/:taskId?taskIndex=N — single task slice
 
 Same 6-field envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 

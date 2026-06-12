@@ -290,35 +290,13 @@ export async function startServe(
     stderr(`[mmagent] received ${sig}, shutting down gracefully\u2026\n`);
     // 1) Refuse new dispatches immediately so they don't compound the drain.
     setDraining(true);
-    // 2) Walk BatchRegistry: close every in-flight task's sessions in parallel
-    //    with a 5-second wall clock. After the grace window, SIGKILL any
-    //    subprocess still alive whose session exposes a pid. Without this,
-    //    SIGTERM-killed daemons leaked codex children as orphans (see 2026-05-16
-    //    OOM post-mortem).
-    const SHUTDOWN_GRACE_MS = 5000;
-    const inflight = running.batchRegistry?.allInFlight?.() ?? [];
-    const closeAll = Promise.allSettled(
-      inflight.flatMap((entry) => {
-        const ctxs = entry.executionContexts ? Array.from(entry.executionContexts.values()) : [];
-        return ctxs.map(async (ec) => {
-          try { await ec.closeSessions(); } catch { /* swallow */ }
-        });
-      }),
-    );
-    const drainSessions = Promise.race([
-      closeAll,
-      new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS).unref()),
-    ]).then(() => {
-      // Belt-and-suspenders: SIGKILL anything still alive whose pid we know.
-      for (const entry of inflight) {
-        const ctxs = entry.executionContexts ? Array.from(entry.executionContexts.values()) : [];
-        for (const ec of ctxs) {
-          for (const pid of ec.getActivePids?.() ?? []) {
-            try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-          }
-        }
-      }
-    });
+    // 2) TaskRegistry tracks in-flight tasks (no execution contexts).
+    //    Log what's still running for operators, then proceed to shutdown.
+    const inflight = running.taskRegistry?.allInFlight?.() ?? [];
+    if (inflight.length > 0) {
+      stderr(`[mmagent] draining ${inflight.length} in-flight task(s)\n`);
+    }
+    const drainSessions = Promise.resolve();
 
     const drainTelemetry = flusher ? flusher.drain() : Promise.resolve();
     drainSessions

@@ -98,8 +98,8 @@ export interface ExecutionContext {
 
   /**
    * Heartbeat tick recorder — server-supplied callback that turns
-   * HeartbeatTickInfo into BatchRegistry.updateRunningHeadlineSnapshot.
-   * Optional (CLI/local clients don't have a BatchRegistry).
+   * HeartbeatTickInfo into the running headline display.
+   * Optional (CLI/local clients don't have a registry).
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
 
@@ -127,8 +127,16 @@ export interface ExecutionContext {
   contextBlockStore?: ContextBlockStore;
   /** BatchId owning this execution — threaded so ActivityTracker can tag ticks. */
   batchId?: string;
-  /** Optional BatchRegistry — when set, task-runner attaches this ctx onto
+  /** Optional batch/task registry — when set, task-runner attaches this ctx onto
    *  the entry so shutdown drain can close sessions across all in-flight
-   *  tasks. Server callers pass this through HandlerDeps; CLI callers omit. */
-  batchRegistry?: import('../stores/batch-registry.js').BatchRegistry;
+   *  tasks. Server callers pass this through HandlerDeps; CLI callers omit.
+   *  Structural type: any object implementing the needed methods. */
+  batchRegistry?: {
+    get(id: string): { taskEnvelopes?: (import('../events/task-envelope.js').TaskEnvelopeStore | null)[]; tasksTotal?: number; tasksStarted?: number } | undefined;
+    attachEnvelope(id: string, taskIndex: number, env: import('../events/task-envelope.js').TaskEnvelopeStore): void;
+    attachExecutionContext(id: string, taskIndex: number, ec: ExecutionContext): void;
+    detachExecutionContext(id: string, taskIndex: number): void;
+    recordTerminalBlock(batchId: string, taskIndex: number, blockId: string): void;
+    complete?(taskIndex: number, result: unknown): void;
+  };
 }

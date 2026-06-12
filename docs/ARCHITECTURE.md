@@ -18,19 +18,16 @@ Each stage decomposes into sub-layers that always run in this order. The pipelin
 
 ```
 Stage 1 — INGRESS  (HTTP boundary)
-  1.1  Transport          server/src/http/{server,router,loopback}.ts
+  1.1  Transport          server/src/http/{server,router}.ts
   1.2  Authentication     server/src/http/auth.ts
   1.3  Validation         server/src/http/{cwd-validator,canonicalize-file-paths}.ts
-  1.4  Context binding    server/src/http/{project-registry,handler-deps,
-                          request-pipeline,request-observability}.ts +
-                          core/src/executors/execution-context.ts
+  1.4  Unified handler    server/src/http/handlers/unified-task.ts
+                          (POST /task + GET /task/:taskId)
 
-Stage 2 — BRIEF COMPILATION  (interpret request → executable brief, per-tool)
-  2.1  Per-tool briefSlot  core/src/tools/<tool>/tool-config.ts (briefSlot field)  ← vertical slice point
-                           (PR 2 of intake-dissolution will extract to
-                           core/src/tools/<tool>/brief-slot.ts uniformly)
-  2.2  Boundary validation packages/server/src/http/validation/verify-command
-                           (server-side gate before dispatch)
+Stage 2 — INPUT VALIDATION  (validate + route request via type discriminator)
+  2.1  Zod validation      core/src/unified/task-input-schema.ts (discriminated union)
+  2.2  Type registry       core/src/unified/type-registry.ts (TYPE_REGISTRY → defaults, sandbox, worktree)
+  2.3  Skill loading       core/src/unified/skill-loader.ts (implement.md + review.md per type)
 
 Stage 3 — DISPATCH  (pick agent, run implementer, supervise)
   3.1  Agent resolution   core/src/routing/{resolve-agent,model-profiles,
@@ -66,49 +63,49 @@ Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
                           bucketing,field-coverage,concern-classifier,
                           consent-rules}.ts +
                           observability/{bus,events,*-sink}.ts
-  5.5  Persistence        core/src/{batch-registry,batch-cache,async-dispatch}.ts,
-                          context/context-block-store.ts,
+  5.5  Persistence        core/src/unified/task-registry.ts,
+                          core/src/stores/{batch-cache,context-block-tool}.ts,
                           run-tasks/commit-stage.ts, auto-commit.ts
 ```
 
-Stages 3+4+5 are gated by each task's `reviewPolicy` (`full | quality_only | diff_only | none`). Read-only presets set `quality_only` or `none`; artifact-producing presets keep `full`. The lifecycle inspects the policy and skips stages accordingly — there is no parallel "lite" lifecycle.
+Stages 3+4+5 are gated by each task's `reviewPolicy` (`reviewed | none`). Read-only types set `none`; artifact-producing types keep `reviewed`. The lifecycle inspects the policy and skips stages accordingly — there is no parallel "lite" lifecycle.
 
-## Vertical axis — the tool stack
+## Vertical axis — the type stack
 
-Every tool is a stack of files at fixed layers. Adding a tool adds one row at each layer; the layer itself never changes shape.
+Every task type is a stack of files at fixed layers. Adding a type adds one row at each layer; the layer itself never changes shape.
 
 ```
-Layer L.1  Schema           core/src/tool-schemas/<tool>.ts            (Zod input/output)
-Layer L.2  HTTP handler     server/src/http/handlers/tools/<tool>.ts   (or .../control/)
-Layer L.3  Brief slot       core/src/tools/<tool>/tool-config.ts:briefSlot  (raw → TaskBrief[])
-Layer L.4  Executor         core/src/executors/<tool>.ts               (review policy + lifecycle)
-Layer L.5  Bespoke output   core/src/reporting/parse-<tool>-report.ts +
-                            compose-<tool>-headline.ts                  (tools w/ custom output)
-Layer L.6  Skill markdown   server/src/skills/mma-<tool>/SKILL.md       (caller-facing prompt)
+Layer L.1  Type registry    core/src/unified/type-registry.ts           (TASK_TYPES + TYPE_REGISTRY)
+Layer L.2  Zod schema       core/src/unified/task-input-schema.ts       (discriminated union per type)
+Layer L.3  Skill prompts    core/src/skills/<type>/implement.md + review.md  (worker criteria)
+Layer L.4  Pipeline         core/src/unified/two-phase-pipeline.ts      (unified two-phase lifecycle)
+Layer L.5  Bespoke output   core/src/reporting/parse-<type>-report.ts +
+                            compose-<type>-headline.ts                   (types w/ custom output)
+Layer L.6  Skill markdown   server/src/skills/mma-<type>/SKILL.md        (caller-facing prompt)
 Layer L.7  Installer hook   server/src/install/{claude-code,cursor,codex-cli,
-                            gemini-cli}.ts via manifest.ts               (per-client writer)
-Layer L.8  Contract goldens tests/contract/goldens/endpoints/<tool>-<stage>.json +
+                            gemini-cli}.ts via manifest.ts                (per-client writer)
+Layer L.8  Contract goldens tests/contract/goldens/endpoints/<type>-<stage>.json +
                             routes.json + observability.json
 ```
 
-Per-tool fill of the stack:
+Per-type fill of the stack:
 
-| Tool | L.4 executor | L.5 bespoke output | L.6 skill |
-|---|---|---|---|
-| `delegate_tasks` | full review | — | mma-delegate |
-| `audit_document` | quality_only | — | mma-audit |
-| `review_code` | quality_only | — | mma-review |
-| `debug_task` | quality_only | — | mma-debug |
-| `execute_plan` | full review + plan-extraction | — | mma-execute-plan |
-| `investigate` | review off | parse-investigation-report + compose-investigate-headline | mma-investigate |
-| `explore` | review off + research adapters | parse-explore-report + compose-explore-headline + derive-explore-status | mma-explore |
-| `retry_tasks` | replay prior batch | — | mma-retry |
-| `register_context_block` | state-only (no executor) | — | mma-context-blocks |
-| `get_batch_slice` | state-only | — | (used internally by mma-* skills) |
+| Type | Review policy | Worktree | Sandbox | Skill |
+|---|---|---|---|---|
+| `delegate` | reviewed | yes | cwd-only | mma-delegate |
+| `audit` | none | no | read-only | mma-audit |
+| `review` | none | no | read-only | mma-review |
+| `debug` | none | no | read-only | mma-debug |
+| `execute_plan` | reviewed | yes | cwd-only | mma-execute-plan |
+| `investigate` | none | no | read-only | mma-investigate |
+| `research` | none | no | read-only | mma-research |
+| `journal_recall` | none | no | read-only | mma-journal-recall |
+| `journal_record` | none | no | cwd-only | mma-journal-record |
+| `retry_tasks` | reviewed | no | cwd-only | mma-retry |
 
 Two invariants the layered stack enforces:
 
-- **Vertical layers don't reach across.** A schema (L.1) never imports an executor (L.4); a skill markdown (L.6) is plain prose with no code dependency. New tools fill the stack top-to-bottom — they don't sneak in mid-stack.
+- **Vertical layers don't reach across.** A schema (L.2) never imports bespoke output (L.5); a skill markdown (L.6) is plain prose with no code dependency. New types fill the stack top-to-bottom — they don't sneak in mid-stack.
 - **Horizontal stages don't reach backwards.** Reporting (5) reads from Review (4) outputs; Review never reads from Reporting. The pipeline is one-way except for the rework sub-loop inside Stage 4.
 
 ## Substrate — orthogonal capabilities
@@ -137,8 +134,9 @@ C.5  Telemetry & observability   core/src/telemetry/{event-builder,normalize,cla
                                 observability/{bus,events,buckets,*-sink}.ts,
                                 diagnostics/{jsonl-writer,http-server-log,
                                 request-spill,verbose-line}.ts
-C.6  State stores (in-process)   core/src/{project-context,batch-registry,
-                                batch-cache}.ts, context/context-block-store.ts
+C.6  State stores (in-process)   core/src/unified/task-registry.ts,
+                                core/src/stores/{batch-cache,context-block-tool,
+                                project-context-registry}.ts
 C.7  Distribution                server/src/install/{claude-code,cursor,codex-cli,
                                 gemini-cli,discover,manifest,manifest-resolve,
                                 missing-skills,orchestrate,headers,notify,
@@ -154,13 +152,13 @@ Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` i
 
 ## Request lifecycle (concrete trace)
 
-1. **Ingress** — `server/src/http/server.ts` routes `POST /<tool>?cwd=<abs>` to a handler. Handlers reserve a `ProjectContext` per cwd and build an `ExecutionContext` via `core/src/executors/execution-context.ts`.
-2. **Brief compilation** — Each route's `tools/<tool>/tool-config.ts:briefSlot` translates raw input into `Brief[]` consumed by the generic executor. No central pipeline; each tool owns its briefSlot (PR 2 of intake-dissolution extracts these into uniform `tools/<tool>/brief-slot.ts` files). Boundary validation (e.g. `validateVerifyCommand`) runs server-side before dispatch. v4.0 removed the clarification gate; ambiguous briefs proceed with the most likely interpretation.
-3. **Dispatch** — `core/src/run-tasks/index.ts::runTasks` drives each task through `reviewed-lifecycle.ts`, which calls `execute-task.ts` → `delegate-with-escalation.ts`. The escalation orchestrator picks a provider via `routing/resolve-agent.ts` and invokes `Provider.run(prompt, options)`, collecting `AttemptRecord`s.
-4. **Review** — `reviewed-lifecycle.ts` runs spec review, quality review, and (when applicable) diff review per the task's `reviewPolicy`, looping rework until approved, plateaued, or capped.
-5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), telemetry events emitted via the observability bus, and the result stored in `BatchRegistry` for retrieval via `GET /batch/:id`.
+1. **Ingress** — `server/src/http/server.ts` routes `POST /task?cwd=<abs>` to the unified handler (`handlers/unified-task.ts`). The handler validates the `type` discriminator via the Zod discriminated union in `unified/task-input-schema.ts`, reserves a `ProjectContext` per cwd, and registers a `TaskRegistry` entry.
+2. **Pipeline** — The unified two-phase pipeline (`unified/two-phase-pipeline.ts`) loads skill prompts from `skills/<type>/implement.md` + `review.md` via `unified/skill-loader.ts`, resolves agent tier from `TYPE_REGISTRY`, and drives the implement + review lifecycle.
+3. **Dispatch** — The pipeline picks a provider via the type's default tier, invokes `Provider.run(prompt, options)`, and supervises execution with bounded-execution guards.
+4. **Review** — When `reviewPolicy` is `reviewed`, the pipeline runs a second-phase review pass. When `none`, the review phase is skipped.
+5. **Reporting** — Results are aggregated into the uniform envelope, telemetry events emitted via the observability bus, and the result stored in `TaskRegistry` for retrieval via `GET /task/:taskId`.
 
-**Same-repo dispatch serialization (4.6.0+):** Write routes (`/delegate`, `/execute-plan`) opt into `serializeSameRepo` on their `ToolConfig`. Tasks that share a git toplevel (or raw cwd when not in a git repo) run sequentially in caller input order; tasks in different repos run in parallel across groups. This eliminates commit-stage and implement-stage races within a single repo. Read-only routes (`audit`, `review`, `debug`, `investigate`, `explore`) keep full `Promise.all` fan-out.
+**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`) keep full `Promise.all` fan-out.
 
 ## Testing layers
 
@@ -195,7 +193,7 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `readiness/readiness.ts`, `effort-inference.ts`, `cross-tier-guard.ts` | Removed. Effort flows from dispatch directly; per-tool briefSlot in `tools/<tool>/tool-config.ts` is the sole brief-construction layer |
 | `core/src/intake/` directory (pipeline, classify, resolve, field-inferer, context-overflow-estimator, source-schema, verify-referenced-blocks, host-allowlist-builder, brief-compiler classes, dead scaffolded slots) | Removed across PR 1 + PR 2 of the intake-dissolution cleanup. Live brief compilation co-located with each tool at `tools/<tool>/brief-slot.ts`. Plan extraction + draft-id helpers under `tools/execute-plan/`. Boundary `verify-command` validator moved to `packages/server/src/http/validation/` |
 | 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 4 |
-| `reviewPolicy` values `'spec_only'` / `'off'` | Removed. Closed enum is `'full' | 'quality_only' | 'diff_only' | 'none'` |
+| `reviewPolicy` values `'spec_only'` / `'off'` / `'full'` / `'quality_only'` / `'diff_only'` | Removed. Closed enum is `'reviewed' | 'none'` |
 
 ### v0.4.7.5 — Intake directory dissolved; per-route briefSlots co-located
 
@@ -228,11 +226,10 @@ The `packages/core/src/intake/` directory was removed. Every dispatching route n
 
 Where to add:
 
-- **A new provider:** `core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `core/src/provider.ts` factory.
-- **A new specialized preset:** fill the L.1–L.7 stack — `tool-schemas/<name>.ts`, `tools/<name>/brief-slot.ts` (briefSlot extraction; PR 2 of intake-dissolution makes this the uniform pattern), `tools/<name>/tool-config.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
+- **A new provider:** `core/src/providers/<name>-runner.ts` with a `RunnerAdapter` implementation. Update provider factory.
+- **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Optional: `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
-- **A new observability event:** emit structured log line from `diagnostics/` or a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
-- **A new tool/route:** register in `server/src/http/server.ts`; add handler under `http/handlers/tools/`; add route to `tests/contract/goldens/routes.json`; add tool schema in `core/src/tool-schemas/`; pin per-stage goldens under `tests/contract/goldens/endpoints/`.
+- **A new observability event:** emit structured log line from a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
 
 ## Further reading
 

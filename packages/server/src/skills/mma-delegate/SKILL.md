@@ -57,21 +57,21 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 | `tasks[].filePaths` | string[] | no | Files the worker focuses on |
 | `tasks[].done` | string | no | Acceptance criteria |
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `tasks[].reviewPolicy` | `"full"` / `"quality_only"` / `"diff_only"` / `"none"` | no | See review-policy snippet below. Default `"full"` |
+| `tasks[].reviewPolicy` | `"reviewed"` / `"none"` | no | See review-policy snippet below. Default `"reviewed"` |
 
 @include _shared/review-policy.md
 
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type":"delegate","tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md
@@ -81,22 +81,22 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
-{ "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }
+{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
 ```
 
-Use `batchId` to poll. `statusUrl` is a convenience pointer.
+Use `taskId` to poll. `statusUrl` is a convenience pointer.
 
-### GET /batch/:id — polling response
+### GET /task/:taskId — polling response
 
 The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
 | `202 text/plain` | Still pending — body is the running headline string |
-| `200 application/json` | Terminal — body is the batch envelope below |
+| `200 application/json` | Terminal — body is the task envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
 
-### GET /batch/:id?taskIndex=N — single task slice
+### GET /task/:taskId?taskIndex=N — single task slice
 
 Same envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 

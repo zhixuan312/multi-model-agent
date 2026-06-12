@@ -62,15 +62,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     wtInfo = { branch: created.branch, path: created.path };
   }
 
-  const implSession = input.implementerProvider.openSession({
-    cwd: effectiveCwd,
-    wallClockDeadline: deadline,
-    abortSignal: ac.signal,
-  });
-
-  const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${input.taskPayload}`;
-  const implTurn = await implSession.send(implPrompt);
-  const implId = implSession.getSessionId();
+  const sessions: Session[] = [];
 
   // --- Worktree cleanup helper ---
   const resolveWorktree = async (): Promise<WorktreeInfo | null> => {
@@ -79,52 +71,77 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     return { branch: wtInfo.branch, path: wtInfo.path, hasChanges: preserved };
   };
 
-  if (input.reviewPolicy === 'none') {
+  // Close all opened sessions — best-effort, errors swallowed.
+  const closeSessions = async (): Promise<void> => {
+    await Promise.allSettled(sessions.map(s => s.close()));
+  };
+
+  try {
+    const implSession = input.implementerProvider.openSession({
+      cwd: effectiveCwd,
+      wallClockDeadline: deadline,
+      abortSignal: ac.signal,
+      batchId: input.taskId ?? 'pipeline',
+      taskIndex: 0,
+    });
+    sessions.push(implSession);
+
+    const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${input.taskPayload}`;
+    const implTurn = await implSession.send(implPrompt);
+    const implId = implSession.getSessionId();
+
+    if (input.reviewPolicy === 'none') {
+      const worktree = await resolveWorktree();
+      return {
+        status: 'done',
+        implementerOutput: implTurn.output,
+        implementerTurn: implTurn,
+        reviewerOutput: null,
+        reviewerRaw: null,
+        reviewerTurn: null,
+        reviewerParseError: null,
+        sessions: {
+          implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
+          reviewer: null,
+        },
+        cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+        worktree,
+      };
+    }
+
+    const revSession = input.reviewerProvider.openSession({
+      cwd: effectiveCwd,
+      wallClockDeadline: deadline,
+      abortSignal: ac.signal,
+      batchId: input.taskId ?? 'pipeline',
+      taskIndex: 1,
+    });
+    sessions.push(revSession);
+
+    const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${implTurn.output}`;
+    const revTurn = await revSession.send(revPrompt);
+    const revId = revSession.getSessionId();
+
+    const parsed = parseReviewerOutput(revTurn.output);
+
     const worktree = await resolveWorktree();
+
     return {
-      status: 'done',
+      status: parsed.ok ? 'done' : 'done_with_concerns',
       implementerOutput: implTurn.output,
       implementerTurn: implTurn,
-      reviewerOutput: null,
-      reviewerRaw: null,
-      reviewerTurn: null,
-      reviewerParseError: null,
+      reviewerOutput: parsed.ok ? parsed.data : null,
+      reviewerRaw: revTurn.output,
+      reviewerTurn: revTurn,
+      reviewerParseError: parsed.ok ? null : parsed.error,
       sessions: {
         implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
-        reviewer: null,
+        reviewer: { tier: 'complex', sessionId: revId, resumeSupported: revId !== null },
       },
-      cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+      cost: { implementerUsd: implTurn.costUSD, reviewerUsd: revTurn.costUSD },
       worktree,
     };
+  } finally {
+    await closeSessions();
   }
-
-  const revSession = input.reviewerProvider.openSession({
-    cwd: effectiveCwd,
-    wallClockDeadline: deadline,
-    abortSignal: ac.signal,
-  });
-
-  const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${implTurn.output}`;
-  const revTurn = await revSession.send(revPrompt);
-  const revId = revSession.getSessionId();
-
-  const parsed = parseReviewerOutput(revTurn.output);
-
-  const worktree = await resolveWorktree();
-
-  return {
-    status: parsed.ok ? 'done' : 'done_with_concerns',
-    implementerOutput: implTurn.output,
-    implementerTurn: implTurn,
-    reviewerOutput: parsed.ok ? parsed.data : null,
-    reviewerRaw: revTurn.output,
-    reviewerTurn: revTurn,
-    reviewerParseError: parsed.ok ? null : parsed.error,
-    sessions: {
-      implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
-      reviewer: { tier: 'complex', sessionId: revId, resumeSupported: revId !== null },
-    },
-    cost: { implementerUsd: implTurn.costUSD, reviewerUsd: revTurn.costUSD },
-    worktree,
-  };
 }

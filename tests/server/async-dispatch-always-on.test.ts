@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { startTestServerWithAgents } from '../helpers/test-server-with-agents.js';
 
-describe('async-dispatch — always-on breadcrumbs (A5)', () => {
+describe('task dispatch — always-on breadcrumbs (A5)', () => {
   let stderrCalls: string[] = [];
   let stdoutCalls: string[] = [];
   let originalStderr: typeof process.stderr.write;
@@ -22,7 +22,7 @@ describe('async-dispatch — always-on breadcrumbs (A5)', () => {
   // TODO: Re-enable once a single-dispatch write route is available (old delegate
   // route removed in unified-task migration; remaining read-only routes run
   // sequential criteria that exceed the mock-provider timeout in CI).
-  it.skip('emits executor_started and batch_completed to stderr with diagnostics.log=false', async () => {
+  it.skip('emits executor_started and task_completed to stderr with diagnostics.log=false', async () => {
     const handle = await startTestServerWithAgents({ diagnostics: { log: false }, defaults: { timeoutMs: 100, tools: 'full', sandboxPolicy: 'cwd-only' } });
     try {
       await fetch(`${handle.url}/task?cwd=${encodeURIComponent(process.cwd())}`, {
@@ -35,17 +35,17 @@ describe('async-dispatch — always-on breadcrumbs (A5)', () => {
         },
         body: JSON.stringify({ type: 'investigate', question: 'noop test' }),
       });
-      // Allow async-dispatch to flush and executor to complete.
+      // Allow task dispatch to flush and executor to complete.
       await new Promise((r) => setTimeout(r, 12000));
     } finally {
       await handle.stop();
     }
     const joined = stderrCalls.join('');
     expect(joined).toMatch(/event=executor_started /);
-    // batch ends in either batch_completed (success) or batch_failed (since the
+    // Task ends in either task_completed (success) or task_failed (since the
     // mock baseUrl is invalid). Accept either.
-    expect(joined).toMatch(/event=batch_(completed|failed) /);
+    expect(joined).toMatch(/event=task_(completed|failed) /);
     // Direct-write paths must no longer touch stdout for these breadcrumbs.
-    expect(stdoutCalls.join('')).not.toMatch(/event=(executor_started|batch_completed|batch_failed) /);
+    expect(stdoutCalls.join('')).not.toMatch(/event=(executor_started|task_completed|task_failed) /);
   }, 30_000);
 });

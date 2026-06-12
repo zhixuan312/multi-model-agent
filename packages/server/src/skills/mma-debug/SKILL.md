@@ -60,14 +60,14 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type":"debug","errorMessage":"Tests fail on CI only","filePaths":["/project/src/config.ts"]}' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

@@ -8,7 +8,6 @@ async function authedFetch(url: string, token: string, init?: RequestInit): Prom
     headers: {
       ...(init?.headers ?? {}),
       "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
       Authorization: `Bearer ${token}`,
     },
   });
@@ -24,12 +23,12 @@ describe('contract: polling lifecycle', () => {
         body: JSON.stringify({ type: 'review', filePaths: ['/tmp/hello.ts'] }),
       });
       expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
-      expect(batchId).toMatch(/^[a-f0-9-]+$/i);
+      const { taskId } = (await dispatch.json()) as { taskId: string };
+      expect(taskId).toMatch(/^[a-f0-9-]+$/i);
 
       let terminal: Response | null = null;
       for (let i = 0; i < 30; i++) {
-        const poll = await authedFetch(`${h.baseUrl}/batch/${batchId}`, h.token);
+        const poll = await authedFetch(`${h.baseUrl}/task/${taskId}`, h.token);
         if (poll.status === 200) {
           terminal = poll;
           break;
@@ -57,11 +56,11 @@ describe('contract: polling lifecycle', () => {
         body: JSON.stringify({ type: 'review', filePaths: ['/tmp/x.ts'] }),
       });
       expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
+      const { taskId } = (await dispatch.json()) as { taskId: string };
 
       let first: unknown;
       for (let i = 0; i < 30; i++) {
-        const poll = await authedFetch(`${h.baseUrl}/batch/${batchId}`, h.token);
+        const poll = await authedFetch(`${h.baseUrl}/task/${taskId}`, h.token);
         if (poll.status === 200) {
           first = await poll.json();
           break;
@@ -71,7 +70,7 @@ describe('contract: polling lifecycle', () => {
       }
 
       expect(first).toBeDefined();
-      const second = await (await authedFetch(`${h.baseUrl}/batch/${batchId}`, h.token)).json();
+      const second = await (await authedFetch(`${h.baseUrl}/task/${taskId}`, h.token)).json();
       expect(second).toEqual(first);
     } finally {
       await h.close();

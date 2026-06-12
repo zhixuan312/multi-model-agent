@@ -1,13 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { TerminalBlockRegistrar } from '../../packages/core/src/reporting/terminal-block-registrar.js';
 import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
-import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
+
+function makeRegistry() {
+  const blocks = new Map<string, string>();
+  return {
+    recordTerminalBlock(batchId: string, taskIndex: number, blockId: string) {
+      blocks.set(`${batchId}:${taskIndex}`, blockId);
+    },
+    getTerminalBlock(batchId: string, taskIndex: number): string | undefined {
+      return blocks.get(`${batchId}:${taskIndex}`);
+    },
+  };
+}
 
 describe('TerminalBlockRegistrar', () => {
-  it('registers a block and records to BatchRegistry', () => {
+  it('registers a block and records to registry', () => {
     const store = new InMemoryContextBlockStore();
-    const reg = new BatchRegistry();
-    reg.register({ batchId: 'b1', projectCwd: '/tmp', tool: 'delegate', state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(), blockIds: [], blocksReleased: false });
+    const reg = makeRegistry();
     const r = new TerminalBlockRegistrar(store, reg);
     const id = r.register({ batchId: 'b1', taskIndex: 0, route: 'delegate', markdown: '## Done' });
     expect(id).toBe('terminal-b1-0');
@@ -17,7 +27,7 @@ describe('TerminalBlockRegistrar', () => {
 
   it('skips register_context_block route', () => {
     const store = new InMemoryContextBlockStore();
-    const reg = new BatchRegistry();
+    const reg = makeRegistry();
     const r = new TerminalBlockRegistrar(store, reg);
     expect(r.register({ batchId: 'b1', taskIndex: 0, route: 'register-context-block', markdown: 'x' })).toBeUndefined();
   });

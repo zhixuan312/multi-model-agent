@@ -61,7 +61,7 @@ The worker creates, refines, or supersedes nodes in the graph (never appends bli
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
@@ -71,7 +71,7 @@ BATCH=$(curl -f --show-error -s -X POST \
     "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
   }' \
   "http://localhost:$PORT/task?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

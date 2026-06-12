@@ -1,13 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
 import { terminalHandler } from '../../packages/core/src/lifecycle/handlers/terminal-handlers.js';
 import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
-import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+
+function makeRegistry() {
+  const blocks = new Map<string, string>();
+  return {
+    recordTerminalBlock(batchId: string, taskIndex: number, blockId: string) {
+      blocks.set(`${batchId}:${taskIndex}`, blockId);
+    },
+    getTerminalBlock(batchId: string, taskIndex: number): string | undefined {
+      return blocks.get(`${batchId}:${taskIndex}`);
+    },
+    // Satisfy BatchRegistryLike for persistToBatchRegistryHandler
+    complete() {},
+  };
+}
 
 function makeState(route: 'review' | 'execute-plan') {
   const store = new InMemoryContextBlockStore();
-  const registry = new BatchRegistry();
-  registry.register({ batchId: 'b1', projectCwd: '/tmp', tool: route, state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(), blockIds: [], blocksReleased: false });
+  const registry = makeRegistry();
   const envelope = TaskEnvelopeStore.create({
     taskId: 't0', batchId: 'b1', taskIndex: 0, route, agentType: 'complex',
     client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'none',

@@ -6,7 +6,7 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
-import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../project-registry.js';
 
 /**
@@ -75,7 +75,7 @@ function readSkillManifest(): SkillManifestInfo {
 }
 
 export interface StatusHandlerDeps {
-  batchRegistry: BatchRegistry;
+  taskRegistry: TaskRegistry;
   projectRegistry: ProjectRegistry;
   serverStartedAt: number;
   bind: string;
@@ -89,12 +89,12 @@ export interface StatusHandlerDeps {
  *  - Bearer auth (enforced by server pipeline, step 4)
  *  - Loopback origin (enforced by server pipeline, step 3 — LOOPBACK_ONLY_PATHS)
  *
- * Returns the §5.10 status shape.
+ * Returns the status shape.
  */
 export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
   return (_req: IncomingMessage, res: ServerResponse) => {
     const {
-      batchRegistry,
+      taskRegistry,
       projectRegistry,
       serverStartedAt,
       bind,
@@ -105,68 +105,38 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
 
     // ── Counters ──────────────────────────────────────────────────────────────
     let activeRequests = 0;
-    let activeBatches = 0;
 
     const projects: {
       cwd: string;
       createdAt: number;
       lastActivityAt: number;
       activeRequests: number;
-      activeBatches: number;
+      activeTasks: number;
       contextBlockCount: number;
     }[] = [];
 
     for (const [, pc] of projectRegistry.entries()) {
-      const pcActiveBatches = batchRegistry.countActiveForProject(pc.cwd);
+      const pcActiveTasks = taskRegistry.countActive(pc.cwd);
       activeRequests += pc.activeRequests;
-      activeBatches += pcActiveBatches;
 
       projects.push({
         cwd: pc.cwd,
         createdAt: pc.createdAt,
         lastActivityAt: pc.lastActivityAt,
         activeRequests: pc.activeRequests,
-        activeBatches: pcActiveBatches,
+        activeTasks: pcActiveTasks,
         contextBlockCount: pc.contextBlocks.size,
       });
     }
 
-    // ── Batch lists ───────────────────────────────────────────────────────────
-    const inflight: {
-      batchId: string;
-      tool: string;
-      cwd: string;
-      startedAt: number;
-      state: string;
-    }[] = [];
-
-    const recent: {
-      batchId: string;
-      tool: string;
-      cwd: string;
-      state: string;
-      stateChangedAt: number;
-    }[] = [];
-
-    for (const entry of batchRegistry.entries()) {
-      if (entry.state === 'pending') {
-        inflight.push({
-          batchId: entry.batchId,
-          tool: entry.tool,
-          cwd: entry.projectCwd,
-          startedAt: entry.startedAt,
-          state: entry.state,
-        });
-      } else if (entry.state === 'complete' || entry.state === 'failed') {
-        recent.push({
-          batchId: entry.batchId,
-          tool: entry.tool,
-          cwd: entry.projectCwd,
-          state: entry.state,
-          stateChangedAt: entry.stateChangedAt,
-        });
-      }
-    }
+    // ── Task lists ───────────────────────────────────────────────────────────
+    const inflight = taskRegistry.allInFlight().map(entry => ({
+      taskId: entry.taskId,
+      tool: entry.tool,
+      cwd: entry.cwd,
+      startedAt: entry.startedAt,
+      state: entry.state,
+    }));
 
     // ── Skill manifest ────────────────────────────────────────────────────────
     const { skillVersion, skillCompatible } = readSkillManifest();
@@ -180,11 +150,10 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       counters: {
         projectCount: projectRegistry.size,
         activeRequests,
-        activeBatches,
+        activeTasks: inflight.length,
       },
       projects,
       inflight,
-      recent,
       skillVersion,
       skillCompatible,
     });

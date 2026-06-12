@@ -358,7 +358,7 @@ export class ActivityTracker {
     return null;
   }
 
-  public getHeadlineSnapshot(): import('../stores/batch-registry.js').HeadlineSnapshot {
+  public getHeadlineSnapshot(): import('./activity-tracker-types.js').HeadlineSnapshot {
     const prefix = this.composeHeadlinePrefix();
     const statsClause = this.composeStatsClause();
     const dispatchedAt = Number.isFinite(this.startTime) && this.startTime > 0
