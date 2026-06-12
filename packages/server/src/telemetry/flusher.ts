@@ -3,7 +3,7 @@ import { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
 import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
-import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
+// SCHEMA_VERSION import removed — flusher now accepts v5+ records (see filter below).
 
 export interface FlusherOptions {
   queue: Queue;
@@ -128,19 +128,17 @@ export class Flusher {
       // Single identity snapshot per flush — threaded into both head-truncation and uploadBatch.
       const identity = getOrCreateIdentity(this.#dir);
 
-      // V4-only: drop EVERY record that can't be authenticated, not just a
-      // contiguous head-prefix. Records older than SCHEMA_VERSION or whose
-      // installId doesn't match the current identity are permanently
-      // un-authenticatable; retrying the same signed payload always fails.
-      // Previously we only dropped a contiguous head — a sandwiched older
-      // record (e.g. queued during a roll-back/forward, or installId churn)
-      // would either propagate into an upload or split the upload into
-      // versioned groups. Now: full-batch filter, then re-read to refresh
-      // meta byteOffsets after the file rewrite.
+      // Drop every record that can't be authenticated. Records with
+      // schemaVersion < 5 (truly ancient v1–v4) or whose installId doesn't
+      // match the current identity are permanently un-authenticatable;
+      // retrying the same signed payload always fails. v5 records (from
+      // existing 4.x/5.0/5.1 installations) and v6+ (current) are kept.
+      // Full-batch filter, then re-read to refresh meta byteOffsets after
+      // the file rewrite.
       const dropHashes = new Set<string>();
       for (let i = 0; i < batch.records.length; i++) {
         const r = batch.records[i];
-        if (r.schemaVersion < SCHEMA_VERSION || r.installId !== identity.installId) {
+        if (r.schemaVersion < 5 || r.installId !== identity.installId) {
           dropHashes.add(batch.meta[i].sha256);
         }
       }

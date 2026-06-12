@@ -188,6 +188,37 @@ export async function startServer(
       });
       bus.subscribe(logWriter);
       bus.subscribe(new StderrLogSubscriber());
+
+      // Wire TelemetryUploader so unified-handler tasks emit wire records.
+      let recorderForUnified: Recorder | null = null;
+      try { recorderForUnified = getRecorder(); } catch { /* not initialized */ }
+      const decideConsentForUnified = () => {
+        const envVal = process.env.MMAGENT_TELEMETRY;
+        let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
+        try {
+          const cfgPath = join(homedir(), '.multi-model', 'config.json');
+          const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+          if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
+            configState = { enabled: cfg.telemetry.enabled };
+          }
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+            configState = { kind: 'unreadable' };
+          }
+        }
+        return decideConsent({ env: envVal, config: configState });
+      };
+      bus.subscribe(new TelemetryUploader({
+        recorder: recorderForUnified,
+        consent: { decide: decideConsentForUnified },
+        buildOpts: (env: any) => ({
+          toolMode: 'full',
+          implementerModel: env.stages[0]?.model ?? env.mainModel,
+          implementerTier: env.stages[0]?.tier ?? env.agentType,
+          mainModelFamily: env.mainModel?.split('-')[0] ?? 'unknown',
+        }),
+      }));
+
       const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
       const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
