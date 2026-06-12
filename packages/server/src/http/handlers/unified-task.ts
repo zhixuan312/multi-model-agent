@@ -32,21 +32,90 @@ function taskTypeToRoute(type: TaskType): Route {
  */
 function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', skillContent: string): string | undefined {
   if (role === 'reviewer') {
-    return 'You have verified every criterion the implementer was supposed to cover, checked for hallucinated findings, validated evidence quality, and produced the required JSON output block.';
+    return [
+      'You have verified every criterion the implementer was supposed to cover.',
+      'You have checked for hallucinated findings (claims without evidence in the source material).',
+      'You have validated evidence quality (every finding cites actual file:line or quoted text).',
+      'You have checked severity calibration against the skill definitions.',
+      'You have produced the required JSON output block with findings, summary, and verdict.',
+    ].join(' ');
   }
-  if (type === 'audit') {
-    const criteriaMatch = skillContent.match(/(?:criteria|perspectives|failure modes|verification criteria)[^\n]*\n/i);
-    const countMatch = skillContent.match(/(\d+)\s+(?:Verification Criteria|perspectives|failure modes|Execution Steps)/i);
-    const count = countMatch ? countMatch[1] : 'all';
-    return `You have evaluated the document against ALL ${count} criteria one by one, written findings for each to the scratch file, and produced the final consolidated JSON output block with criteriaCovered listing every criterion.`;
+
+  switch (type) {
+    case 'audit': {
+      const countMatch = skillContent.match(/(\d+)\s+(?:Verification Criteria|perspectives|failure modes|Execution Steps)/i);
+      const count = countMatch ? countMatch[1] : 'all';
+      return [
+        `You have evaluated the document against ALL ${count} criteria one by one.`,
+        'For each criterion, you wrote findings to the scratch file before moving to the next.',
+        'Every criterion either has findings with quoted evidence, or an explicit "No findings for this criterion." entry.',
+        'You have read the scratch file and consolidated into the final JSON output block.',
+        `The criteriaCovered array in your output lists all ${count} criteria.`,
+      ].join(' ');
+    }
+    case 'investigate':
+      return [
+        'You have applied ALL 5 investigation perspectives: direct-symbol-trace, caller-analysis, test-driven, cross-file dependency-map, documentation/comment-lens.',
+        'Every finding cites file:line from files you actually read (no training-data citations).',
+        'Absent things are evidenced with "searched <pattern> in <path>, no matches."',
+        'You have calibrated confidence (high/medium/low) based on evidence strength.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'review':
+      return [
+        'You have swept ALL 10 review categories: test gap, cross-file ripple, pre-existing-vs-regression, missing edge case, race/concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption.',
+        'Cross-file findings cite both the change site AND the broken caller.',
+        'Pre-existing bugs are separated from new regressions.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'debug':
+      return [
+        'You have applied ALL 4 investigation angles: symptom-location, recent-change, test-failure, reproduction.',
+        'Your trace chain has at least 3 evidence points: symptom → intermediate state → cause, each with file:line.',
+        'You have proposed a fix (read-only — describe, do not apply).',
+        'You have stated a falsifier (how the maintainer verifies the fix).',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'research':
+      return [
+        'You have searched from ALL 5 perspectives: primary-sources, practitioner-consensus, recent-developments, counter-perspectives, cross-domain.',
+        'Every finding cites a real source with URL or identifier.',
+        'Source tier (primary/practitioner/recent) is indicated.',
+        'You have produced the required JSON output block with sources, findings, and synthesis.',
+      ].join(' ');
+    case 'delegate':
+      return [
+        'You have implemented ALL requested changes in the task description.',
+        'Only the declared filePaths were modified (no scope creep).',
+        'If tests exist for the changed area, you have verified they pass.',
+        'You have produced the required JSON output block listing tasks completed and files changed.',
+      ].join(' ');
+    case 'execute_plan':
+      return [
+        'You have followed EVERY step in the plan exactly as written.',
+        'Code blocks in the plan were applied verbatim (no substitution or improvisation).',
+        'If the plan lists verification commands, you ran them.',
+        'No steps were skipped or reordered.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'journal_record':
+      return [
+        'You have classified the learning (decision/constraint/pattern/mistake).',
+        'You have checked the existing journal for supersede/refine/merge candidates.',
+        'You have written the node file with proper YAML frontmatter and edges.',
+        'You have updated the journal catalog (log.md and index.md).',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'journal_recall':
+      return [
+        'You have searched from ALL 3 perspectives: keyword-match, graph-neighborhood, contradiction-and-history.',
+        'Superseded nodes are excluded from results.',
+        'Each result includes the learning, context, and relevance assessment.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    default:
+      return 'You have completed the task as specified in the skill instructions and produced the required output.';
   }
-  if (type === 'investigate' || type === 'review' || type === 'debug' || type === 'research') {
-    return 'You have completed the full analysis using your tool surface, produced evidence-grounded findings, and output the required JSON block.';
-  }
-  if (type === 'delegate' || type === 'execute_plan') {
-    return 'You have implemented all requested changes, verified with tests where applicable, and produced the required JSON output block.';
-  }
-  return undefined;
 }
 
 /**
