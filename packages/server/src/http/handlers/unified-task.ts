@@ -113,7 +113,7 @@ function buildEnvelopeSnapshot(
       ? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' }
       : null,
     errorCode: null,
-    reviewPolicy: reviewPolicy === 'none' ? 'none' : 'full',
+    reviewPolicy: reviewPolicy === 'none' ? 'none' : 'reviewed',
     plannedStageTotal: stages.length,
     stages,
     toolCalls: [],

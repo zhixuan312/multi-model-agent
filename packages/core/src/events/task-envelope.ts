@@ -89,7 +89,7 @@ export interface TaskEnvelope {
   stopReason: string | null;
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy: 'reviewed' | 'full' | 'quality_only' | 'diff_only' | 'none';
   // Planned count of visible stages for this run, published by the lifecycle
   // driver up front (and decremented as stages are skipped). The headline's
   // stageTotal reads this so the batch progress denominator is stable
@@ -138,7 +138,7 @@ export interface CreateSeed {
   taskId: string; batchId: string; taskIndex: number;
   route: Route; agentType: AgentTier;
   client: string; mainModel: string; cwd: string;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy: 'reviewed' | 'full' | 'quality_only' | 'diff_only' | 'none';
 }
 
 export class SealedEnvelopeError extends Error {
@@ -199,7 +199,7 @@ export class TaskEnvelopeStore {
    * Without this, /delegate's per-task `reviewPolicy: 'none'` silently shows
    * up on the wire as 'full' — the dishonesty bug 4.7.7 was meant to close.
    */
-  setReviewPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'none'): void {
+  setReviewPolicy(policy: 'reviewed' | 'full' | 'quality_only' | 'diff_only' | 'none'): void {
     this.guard('setReviewPolicy');
     if (this.env.reviewPolicy === policy) return;
     this.env.reviewPolicy = policy;

@@ -48,5 +48,5 @@ export interface ExecutorOutput {
   qualityReviewVerdict?: ReviewVerdict;
   roundsUsed?: number;
   /** Effective dispatch mode used for this batch ('serial' | 'parallel'). */
-  dispatchMode?: import('./tool-config-types.js').DispatchMode;
+  dispatchMode?: 'serial' | 'parallel';
 }
