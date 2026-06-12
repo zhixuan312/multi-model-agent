@@ -123,6 +123,10 @@
     "./events/wire-schema": {
       "types": "./dist/events/wire-schema.d.ts",
       "import": "./dist/events/wire-schema.js"
+    },
+    "./research": {
+      "types": "./dist/research/index.d.ts",
+      "import": "./dist/research/index.js"
     }
   },
   "scripts": {

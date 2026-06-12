@@ -11,6 +11,20 @@ import {
 } from '@zhixuan92/multi-model-agent-core';
 import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model-agent-core';
 import type { TaskEnvelope, StageRecord, Route } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
+import type { Provider } from '@zhixuan92/multi-model-agent-core';
+import type { ResearchConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
+import {
+  BraveClient,
+  runOrchestrator,
+  parseQueryPlan,
+  serializeEvidencePack,
+  summarizeSourcesUsed,
+  resolveEnabledAdapters,
+  arxivSearch,
+  semanticScholarSearch,
+  githubSearch,
+} from '@zhixuan92/multi-model-agent-core/research';
+import type { EvidencePack, SourceUsage } from '@zhixuan92/multi-model-agent-core/research';
 import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,6 +148,7 @@ function buildEnvelopeSnapshot(
   mainModel: string,
   cwd: string,
   durationMs: number,
+  sourcesUsed: TaskEnvelope['sourcesUsed'] = [],
 ): TaskEnvelope {
   const now = new Date().toISOString();
   const route = taskTypeToRoute(type);
@@ -226,12 +241,139 @@ function buildEnvelopeSnapshot(
     sandboxViolationCount: 0,
     taskMaxIdleMs: 0,
     findings: [],
-    sourcesUsed: [],
+    sourcesUsed,
     escalationLog: [],
     validationWarnings: [],
     headline: { prefix: '', stageLabel: 'done', stageIndex: stages.length, stageTotal: stages.length, toolWrites: 0, toolTotal: 0 },
   };
 }
+
+// ─── Research pre-processing ─────────────────────────────────────────────
+
+interface ResearchContext {
+  /** Serialized evidence pack to inject into the implementer prompt. */
+  evidenceMarkdown: string;
+  /** Structured source-usage summary for the response envelope. */
+  sourcesUsed: SourceUsage[];
+}
+
+const QUERY_PLAN_PROMPT = `You are a research query planner. Given a research question and background, emit ONLY a JSON query plan — no prose, no code fences.
+
+The JSON must conform to this shape:
+{
+  "braveQueries":           ["<search query string>", ...],
+  "arxivQueries":           ["<search query string>", ...],
+  "semanticScholarQueries": ["<search query string>", ...],
+  "githubQueries":          [{"q": "<search query string>", "kind": "repo|code"}, ...]
+}
+
+Rules:
+- Max 8 entries per array, max 200 chars per query string.
+- Phrase queries as topical keywords, NOT full sentences.
+- Empty arrays are allowed for sources you do not need.
+- Emit ONLY the JSON object.`;
+
+/**
+ * Turn 1 + orchestrator: ask the implementer LLM for a QueryPlan, then fan
+ * out across real adapters to gather an EvidencePack. Falls back gracefully:
+ * - If the LLM output isn't parseable as a QueryPlan, returns null (caller
+ *   proceeds with LLM-only research).
+ * - If the orchestrator throws, returns null.
+ */
+async function prepareResearchContext(
+  researchQuestion: string,
+  background: string,
+  implProvider: Provider,
+  researchCfg: ResearchConfig,
+  taskId: string,
+  cwd: string,
+): Promise<ResearchContext | null> {
+  // --- Turn 1: generate a query plan via the implementer LLM ---
+  const planSession = implProvider.openSession({
+    cwd,
+    wallClockDeadline: Date.now() + 60_000,  // 60s budget for plan generation
+    abortSignal: new AbortController().signal,
+    taskId,
+    taskIndex: 0,
+  });
+
+  try {
+    const planPrompt = [
+      QUERY_PLAN_PROMPT,
+      '',
+      '## Research Question',
+      researchQuestion,
+      '',
+      '## Background',
+      background,
+    ].join('\n');
+
+    const planTurn = await planSession.send(planPrompt);
+    const planOutput = planTurn.output.trim();
+
+    // Extract JSON from the output — the LLM may wrap it in code fences
+    let jsonStr = planOutput;
+    const fenceMatch = planOutput.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1]!.trim();
+    }
+
+    const queryPlan = parseQueryPlan(jsonStr);
+
+    // --- Orchestrator: fan out queries against real APIs ---
+    const enabledAdapters = resolveEnabledAdapters(researchCfg.builtinAdapters, {
+      semanticScholarApiKey: researchCfg.builtinAdapters.semanticScholarApiKey,
+      githubPat: researchCfg.builtinAdapters.githubPat,
+    });
+
+    // Build BraveClient only if API keys are configured
+    const hasBraveKeys = researchCfg.brave.apiKeys.length > 0;
+    const braveClient = hasBraveKeys ? new BraveClient(researchCfg.brave) : null;
+
+    const pack = await runOrchestrator(queryPlan, {
+      enabledAdapters,
+      brave: {
+        search: async (query: string) => {
+          if (!braveClient) {
+            throw new Error('brave_not_configured: no API keys');
+          }
+          return braveClient.search(query);
+        },
+      },
+      adapters: {
+        arxiv: (q) => arxivSearch(q),
+        semanticScholar: (q) => semanticScholarSearch(q, {
+          apiKey: researchCfg.builtinAdapters.semanticScholarApiKey,
+        }),
+        github: (q, kind) => githubSearch(q, {
+          kind,
+          pat: researchCfg.builtinAdapters.githubPat,
+        }),
+      },
+      perAdapterTimeoutMs: researchCfg.brave.timeoutMs,
+      totalDeadlineMs:     30_000,
+      concurrencyCap:      4,
+    });
+
+    const evidenceMarkdown = serializeEvidencePack(pack);
+    const sourcesUsed = summarizeSourcesUsed(pack);
+
+    process.stderr.write(
+      `[mmagent] event=research_evidence_ready ts=${new Date().toISOString()} task=${taskId} sources=${pack.sources.length} failed=${pack.failedAttempts.length}\n`,
+    );
+
+    return { evidenceMarkdown, sourcesUsed };
+  } catch (err) {
+    process.stderr.write(
+      `[mmagent] event=research_preprocess_failed ts=${new Date().toISOString()} task=${taskId} error="${((err instanceof Error ? err.message : String(err))).replace(/"/g, '\\"')}"\n`,
+    );
+    return null;
+  } finally {
+    try { await planSession.close(); } catch { /* best-effort */ }
+  }
+}
+
+// ─── Handler helpers ─────────────────────────────────────────────────────
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 // Navigate from packages/server/src/http/handlers/ -> packages/core/src/skills/
@@ -312,11 +454,40 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const implementerGoal = buildGoalCondition(input.type, 'implementer', skills.implement);
           const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
 
+          // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
+          let researchCtx: ResearchContext | null = null;
+          let enrichedPayload = JSON.stringify(payload, null, 2);
+
+          if (input.type === 'research') {
+            const researchPayload = payload as { researchQuestion: string; background: string };
+            researchCtx = await prepareResearchContext(
+              researchPayload.researchQuestion,
+              researchPayload.background,
+              implAgent.provider,
+              deps.config.research,
+              taskId,
+              cwd,
+            );
+            if (researchCtx) {
+              // Inject the real evidence into the payload so the implementer
+              // synthesizes from actual sources, not training-data recall.
+              enrichedPayload = [
+                enrichedPayload,
+                '',
+                '---',
+                '',
+                '## Pre-fetched Evidence (from real API queries)',
+                '',
+                researchCtx.evidenceMarkdown,
+              ].join('\n');
+            }
+          }
+
           const result = await runTwoPhasePipeline({
             type: input.type,
             implementerSkill: skills.implement,
             reviewerSkill: skills.review,
-            taskPayload: JSON.stringify(payload, null, 2),
+            taskPayload: enrichedPayload,
             implementerProvider: implAgent.provider,
             reviewerProvider: revAgent.provider,
             implementerTier: implTier,
@@ -369,6 +540,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               workerStatus: result.status,
               filesChanged: result.implementerTurn.filesWritten,
             },
+            sourcesUsed: researchCtx?.sourcesUsed ?? [],
             error: result.status === 'failed'
               ? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' }
               : { kind: 'not_applicable' as const, reason: 'task succeeded' },
@@ -385,6 +557,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               implTier, revTier, reviewPolicy,
               implModelId, revModelId, mainModelId,
               cwd, durationMs,
+              researchCtx?.sourcesUsed ?? [],
             );
             deps.bus.emitEnvelopeSnapshot(envelope, 'seal');
           } catch (telErr) {
