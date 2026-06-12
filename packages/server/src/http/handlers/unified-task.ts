@@ -179,7 +179,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     let skills;
     try {
-      skills = await loadSkill(input.type, SKILLS_DIR);
+      const subtype = (input as Record<string, unknown>).subtype as string | undefined;
+      skills = await loadSkill(input.type, SKILLS_DIR, subtype);
     } catch (err) {
       sendError(res, 500, 'skill_load_failed', err instanceof Error ? err.message : 'Skill load failed');
       return;
