@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Write routes are sequential (one goal-set per call); `delegate.execution` and `retry.taskIndices` inputs removed. The agent self-commits per task — MMA no longer owns the commit. Reports surface only the final per-task state (review-process detail is hidden).
 - Both goal prompts now carry the engineering-quality bar (no dead/dormant/unwired/duplicate code; expandable/maintainable/scalable/reusable), autonomy (fix problems yourself, never bail), and context-window recoverability (commit per task, treat git + files + plan as the source of truth).
+- A goal phase's wall-clock budget scales off the configured per-task timeout: `max(config.defaults.timeoutMs, taskCount × config.defaults.timeoutMs)` (a goal runs every task in one send). Tuning `defaults.timeoutMs` now flows through to goal runs instead of a hardcoded per-task baseline.
 
 ### Removed
 - Per-task `review` / `rework` / `commit` lifecycle stages + DiffTracker; `git-commit-handler`, `{spec,quality,journal}-review-prompt`, `rework-prompt`, `parse-review-report`, `compose-commit-message`, `tier-policy`, and the per-project journal lock (folded into `withWriteGoalLock`).
