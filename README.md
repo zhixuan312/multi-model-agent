@@ -148,7 +148,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
+| `mma-audit` | Audit a spec / plan / design doc / skill file for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Subtypes: `default` (prose-coherence), `plan` (code-execution plan vs codebase), `spec` (requirement testability + decision trace), `skill` (skill file reader-effectiveness). |
 | `mma-journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
 | `mma-journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
@@ -157,7 +157,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | Skill | Use when |
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
-| `mma-retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
+| `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
 
 ### Two generic usage samples
 
@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Write tools (`delegate`, `execute-plan`, `retry`, `journal-record`) run the whole plan as one sequential **goal-set**: the standard agent implements every task in order and commits each (`[task N] …`), then the complex agent reviews and fixes — returning one structured report of the final per-task state. Read tools (`audit`, `review`, `debug`, `investigate`, `research`, …) fan out per file/criterion. Each has a wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`) go through the same two-phase pipeline: implement on one tier, review on the other. Write types (`delegate`, `execute_plan`, `journal_record`) run as sequential goal-sets; read types fan out per file/criterion. Each has a wall-clock timeout. Task dispatch is async — it returns `202 { taskId, statusUrl }` immediately, and you poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -316,9 +316,9 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.9.0
+## What's new in 5.2.0
 
-- **Delegate skill passthrough.** A `/delegate` task can name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those — resolved from your own skill store, staged in isolation, and delivered natively to the Claude or Codex worker. Default is unchanged: no `skills`, no behavior change.
+- **Unified task API.** All task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`) go through a single `POST /task` endpoint with a `type` discriminator. The per-route REST endpoints are removed. Every type flows through the same two-phase pipeline with optional cross-agent review.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

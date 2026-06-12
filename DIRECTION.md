@@ -46,7 +46,7 @@ The work isn't a flat stream of isolated tasks. It's a **software development li
 
 > investigate / research → spec → plan → execute → review → debug / retry — with **audit** gating the spec and the plan, and a failure loop back to plan.
 
-Each specialized tool is a **rod in the harness** — a gate over one stage of that lifecycle. `investigate` and `research` feed the front; `audit` gates the spec and plan before code is written; `execute_plan` / `delegate` do the building; `review_code` and `verify_work` guard the output; `debug_task` and `retry_tasks` close the loop. Together they make the lifecycle *observed and defensible* rather than a single uninspected leap from prompt to merge.
+Each specialized tool is a **rod in the harness** — a gate over one stage of that lifecycle. `investigate` and `research` feed the front; `audit` gates the spec and plan before code is written; `execute_plan` / `delegate` do the building; `review` guards the output; `debug` and `retry_tasks` close the loop. Together they make the lifecycle *observed and defensible* rather than a single uninspected leap from prompt to merge.
 
 **We harness the lifecycle; we do not author it.** The harness enforces evaluation, review, and audit at each gate — but the engineer, through their own agent, makes every call: what to build, which approach, whether to merge. We are the rails and the gates, never the driver. This is the synthesis of "right agent for the right task" and "we help, we don't replace": maximum lifecycle coverage, zero erosion of the engineer's judgment.
 
@@ -68,11 +68,11 @@ The engineer does judgment. We do labor and gating. We don't make architectural 
 
 ### 3. Quality is structural, not aspirational
 
-Self-review has constitutional blind spots. A model cannot reliably catch what it's constitutionally bad at, no matter how many rounds you give it. Quality comes from structure: a *different* agent reviews the work, checking both spec compliance and code quality. This is what makes The Bet real — cross-agent review is the mechanism that makes cheap-tier output trustable to a frontier-alone standard. For tasks that produce file artifacts, cross-agent review is the structural default. Tasks that produce no file artifacts (audits, analyses, read-only investigations) skip the review topology because there are no artifacts to review; their quality comes from the specialized preset's prompt engineering and output contract instead.
+Self-review has constitutional blind spots. A model cannot reliably catch what it's constitutionally bad at, no matter how many rounds you give it. Quality comes from structure: a *different* agent reviews the work, checking both spec compliance and code quality. This is what makes The Bet real — cross-agent review is the mechanism that makes cheap-tier output trustable to a frontier-alone standard. All task types flow through the same two-phase pipeline by default: implement on one tier, review on the other. Cross-agent review is the structural default for every type, not just artifact-producing tasks. Callers may disable review for task classes where a single model is genuinely sufficient — we make that easy, but the default is always cross-agent.
 
 Findings are **advisory signal for the engineer, not pass/fail gates**. A task can complete cleanly while carrying open concerns — even serious ones — because surfacing a concern is the harness doing its job, not the task failing. The only true failure is a terminal error. We report findings faithfully and let the engineer judge; we never inflate a finding into a failure or bury one to look clean.
 
-The topology may evolve (more review slots, richer routing), but the requirement that artifact-producing implementation and review run on different agents is the structural default. Callers may disable review for task classes where a single model is genuinely sufficient — we make that easy, but the default is always cross-agent.
+The topology may evolve (more review slots, richer routing), but the requirement that implementation and review run on different agents is the structural default.
 
 ### 4. Evidence and economics are first-class
 
@@ -88,7 +88,7 @@ A new model appears, you drop it into a slot. The system — routing, supervisio
 
 ### 7. Generic works for everyone, specialized works better — and the rod set grows
 
-The core is a generic task dispatcher. Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) are opinionated presets — rods — over the same machinery: they set good defaults so callers don't construct full task specs for common patterns. Every rod maps to the same platform primitives; specialization is convenience, not divergence. The set of rods is deliberately **open and expected to grow** as the lifecycle we harness widens — but each new rod earns its place by proving a pattern is universal, and it stays a thin gate over generic primitives. We add rods; we do not accumulate domain logic inside them.
+The core is a generic task dispatcher. Specialized types (`audit`, `review`, `debug`, `execute_plan`, `research`, `investigate`) are opinionated presets — rods — over the same machinery: they set good defaults so callers don't construct full task specs for common patterns. Every rod maps to the same platform primitives; specialization is convenience, not divergence. The set of rods is deliberately **open and expected to grow** as the lifecycle we harness widens — but each new rod earns its place by proving a pattern is universal, and it stays a thin gate over generic primitives. We add rods; we do not accumulate domain logic inside them.
 
 ### 8. We should not make agents fail at tasks they can do
 
@@ -96,7 +96,7 @@ If the agent wrote the files and the work evidence is there, the status should r
 
 ### 9. Every tool call is a self-contained unit
 
-Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`register_context_block`, batch polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
+Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`register_context_block`, task polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
 
 ---
 
@@ -138,17 +138,17 @@ Every task goes through intake and implementation. Artifact-producing tasks also
 3. **Spec review** — Did the output satisfy the brief? Run by the *other* agent (cross-agent review).
 4. **Quality review** — Is the work safe, correct, maintainable? Also the *other* agent. Review continues until approved, findings plateau, or the safety limit is reached.
 
-Non-artifact tasks (audits, analyses, read-only investigations) skip stages 3 and 4 — their quality comes from the specialized preset's prompt engineering and output contract.
+All task types go through the same pipeline by default. Callers may opt out of review for task classes where a single-phase run is sufficient.
 
 ### The rods, today
 
 The specialized tools are the harness's current rods over the lifecycle — this is the set we ship now, and it is expected to grow:
 
-**Generic**: `delegate_tasks` — the power tool. Batch of tasks, parallel execution, full lifecycle. General-purpose fallback when no specialized rod fits.
+**Generic**: `delegate` — the power tool. One or more tasks, full two-phase pipeline. General-purpose fallback when no specialized rod fits.
 
-**Specialized rods**: `audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan` — opinionated gates for common lifecycle stages. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed.
+**Specialized rods**: `audit`, `review`, `debug`, `execute_plan`, `research`, `investigate` — opinionated gates for common lifecycle stages. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed.
 
-**Orchestration**: `register_context_block`, `retry_tasks`, `get_batch_slice` — context management and batch operations. These help the caller manage state across calls without us maintaining workflow state.
+**Orchestration**: `register_context_block`, `retry_tasks` — context management and task operations. These help the caller manage state across calls without us maintaining workflow state.
 
 ### What comes back
 

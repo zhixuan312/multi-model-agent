@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-06-12
+
+**Unified task API.** All task types now go through a single `POST /task` endpoint with a `type` discriminator, replacing the per-route REST endpoints. Every type flows through the same two-phase pipeline (implement on one tier, review on the other) with cross-agent review as the structural default for all types, not just artifact-producing tasks. Callers may opt out of review per type where a single-phase run suffices.
+
+### Added
+- Unified `POST /task` endpoint accepting a `type`-discriminated input schema. All 10 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`) route through a single handler with shared validation, auth, and observability.
+- Universal two-phase pipeline: all task types default to cross-agent review (implement on one tier, review on the other). Callers opt out per type when single-phase is sufficient.
+
+### Changed
+- Per-route REST endpoints (`/delegate`, `/audit`, `/review`, `/debug`, `/execute-plan`, `/investigate`, `/research`, `/journal-record`, `/journal-recall`, `/retry`) replaced by `POST /task` + `GET /task/:id`. Wire routes remain for telemetry/observability.
+- `mma-audit` subtypes updated: `default`, `plan`, `spec`, `skill` (removed stale `security` and `performance` lenses).
+
+### Removed
+- Dead `batch-persister.ts` (unreferenced since the reporting rewrite).
+- Per-route handler files under `packages/server/src/http/handlers/tools/`.
+
 ## [5.1.0] - 2026-06-12
 
 **Goal-mode rewrite of the write routes.** All four write routes (`delegate`, `execute-plan`, `retry`, `journal-record`) now run the whole plan as one sequential **goal-set** instead of a per-task review/rework/commit lifecycle. Phase 1 (standard tier) implements every task in order and self-commits each as `[task N] <heading>`; phase 2 (complex tier) is the completion guarantor — it reviews each task against the plan *and the working tree* and fixes/commits anything the implementer left. The caller gets one clean report of the final per-task state (is each task done; if not, why), with the phase-1/phase-2 churn hidden. `SCHEMA_VERSION` unchanged (5).
