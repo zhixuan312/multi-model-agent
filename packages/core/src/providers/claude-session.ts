@@ -183,6 +183,20 @@ export class ClaudeSession implements Session {
   private emitEventTelemetry(ev: SDKMessage): void {
     if (!this.bus) return;
     const type = (ev as { type?: string }).type;
+    // Compaction observability (goal mode): the SDK emits a `compact_boundary`
+    // system message when it auto-compacts the conversation. Surface it so long
+    // goal-set runs are no longer blind to context compaction. Observe-only.
+    if (type === 'system' && (ev as { subtype?: string }).subtype === 'compact_boundary') {
+      const meta = (ev as { compact_metadata?: { trigger?: string; pre_tokens?: number; post_tokens?: number } }).compact_metadata ?? {};
+      this.bus.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_compaction', {
+        turn: this.turns,
+        trigger: meta.trigger ?? 'unknown',
+        preTokens: meta.pre_tokens ?? 0,
+        postTokens: meta.post_tokens ?? 0,
+        ...this.taskTag(),
+      }));
+      return;
+    }
     if (type !== 'assistant') return;
     const message = (ev as { message?: { content?: unknown } }).message;
     const content = Array.isArray(message?.content) ? message!.content : [];

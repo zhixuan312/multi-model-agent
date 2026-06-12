@@ -141,7 +141,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 
 | Skill | Use when |
 |---|---|
-| `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
+| `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them on cheap workers as one goal-set (implement → review-fix). |
 | `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
 | `mma-explore` | Orchestrator playbook — fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
@@ -166,10 +166,11 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 ```
 You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
 ↓
-Client picks mma-execute-plan (plan file on disk, multiple independent tasks)
+Client picks mma-execute-plan (plan file on disk, multiple tasks)
 ↓
-mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M3),
-each runs cross-agent review on the complex agent, returns a structured report.
+mmagent runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
+implements each task in order and commits it (`[task N] …`), then the complex agent
+reviews every task and fixes anything left — returning one structured report.
 ↓
 You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-8 (30× ROI)"
 ```
@@ -295,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Write tools (`delegate`, `execute-plan`, `retry`, `journal-record`) run the whole plan as one sequential **goal-set**: the standard agent implements every task in order and commits each (`[task N] …`), then the complex agent reviews and fixes — returning one structured report of the final per-task state. Read tools (`audit`, `review`, `debug`, `investigate`, `research`, …) fan out per file/criterion. Each has a wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)

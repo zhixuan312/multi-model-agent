@@ -17,13 +17,13 @@ const ROUTES: RouteName[] = ['delegate', 'execute-plan', 'audit', 'review', 'deb
 // We verify Layer-1 applicability for every cell. Layer-2 dynamics require
 // more state context and are exercised elsewhere (e.g., review skips when
 // reviewPolicy='none' — covered in stage-io-skip-comments.test.ts).
+// Goal mode (v5.1): review = phase-2 review-fix (write routes only); rework +
+// commit stages removed (the agent self-commits).
 const EXPECTED_APPLICABILITY: Record<string, RouteName[]> = {
   prepare:           ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
   'register-block':  [],                                                                  // register-context-block ONLY (not in ROUTES)
   implement:         ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
   review:            ['delegate', 'execute-plan'],
-  rework:            ['delegate', 'execute-plan'],
-  commit:            ['delegate', 'execute-plan'],
   annotate:          ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
   compose:           ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
   terminal:          ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
@@ -48,51 +48,38 @@ describe('AC-18: per-route × per-stage participation matrix (Layer 1 only)', ()
   }
 });
 
-describe('AC-18: Layer-2 shouldRun decisions for representative stages', () => {
+describe('AC-18: Layer-2 shouldRun decisions (review-fix stage)', () => {
   const review = STAGE_PLAN.find((s) => (s as StageDefinition).name === 'review') as StageDefinition;
-  const rework = STAGE_PLAN.find((s) => (s as StageDefinition).name === 'rework') as StageDefinition;
-  const commit = STAGE_PLAN.find((s) => (s as StageDefinition).name === 'commit') as StageDefinition;
+  const goalStub = { goal: { tasks: [{ n: 1 }], phases: [{ tier: 'standard' }, { tier: 'complex' }] } };
 
   it('review.shouldRun returns false when implement gate did not advance', () => {
-    const state = { gates: {}, reviewPolicy: 'full' } as unknown as LifecycleState;
-    const d = review.shouldRun(state);
-    expect(d.run).toBe(false);
+    const state = { gates: {}, reviewPolicy: 'full', task: goalStub } as unknown as LifecycleState;
+    expect(review.shouldRun(state).run).toBe(false);
+  });
+
+  it('review.shouldRun returns false when the task carries no goal', () => {
+    const state = {
+      gates: { implement: { outcome: 'advance' } },
+      reviewPolicy: 'full',
+    } as unknown as LifecycleState;
+    expect(review.shouldRun(state).run).toBe(false);
   });
 
   it('review.shouldRun returns false when reviewPolicy=none', () => {
     const state = {
-      gates: { implement: { outcome: 'advance', payload: {}, telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' } } },
+      gates: { implement: { outcome: 'advance' } },
       reviewPolicy: 'none',
+      task: goalStub,
     } as unknown as LifecycleState;
-    const d = review.shouldRun(state);
-    expect(d.run).toBe(false);
+    expect(review.shouldRun(state).run).toBe(false);
   });
 
-  it('rework.shouldRun returns false when review approved', () => {
+  it('review.shouldRun runs when implement advanced, goal present, reviewPolicy != none', () => {
     const state = {
-      gates: {
-        review: {
-          outcome: 'advance',
-          payload: { verdict: 'approved' },
-          telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
-        },
-      },
+      gates: { implement: { outcome: 'advance' } },
+      reviewPolicy: 'full',
+      task: goalStub,
     } as unknown as LifecycleState;
-    const d = rework.shouldRun(state);
-    expect(d.run).toBe(false);
-  });
-
-  it('commit.shouldRun returns false when no implementation work advanced', () => {
-    const state = { gates: {} } as unknown as LifecycleState;
-    const d = commit.shouldRun(state);
-    expect(d.run).toBe(false);
-  });
-
-  it('commit.shouldRun runs when work advanced even if the worker self-reported zero files (the handler is the authority on commit-vs-no_op via getRealFilesChanged)', () => {
-    const state = {
-      gates: { implement: { outcome: 'advance', payload: { filesChanged: [] } } },
-    } as unknown as LifecycleState;
-    const d = commit.shouldRun(state);
-    expect(d.run).toBe(true);
+    expect(review.shouldRun(state).run).toBe(true);
   });
 });

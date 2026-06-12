@@ -50,16 +50,18 @@ export const SCENARIOS = [
   { id: 2,  route: 'investigate', tier: 'complex', kind: 'read', emits: 1 },
   { id: 3,  route: 'research', tier: 'complex', kind: 'read', network: true, emits: 0 },
   { id: 4,  route: 'audit', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 5,  route: 'delegate', tier: 'standard', kind: 'write', dispatchMode: 'parallel', tasks: 2, emits: 2 },
-  { id: 6,  route: 'delegate', tier: 'complex', kind: 'write', dispatchMode: 'parallel', tasks: 1, emits: 1 },
-  { id: 7,  route: 'delegate', tier: 'standard', kind: 'write', dispatchMode: 'serial', tasks: 2, emits: 2 },
-  { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', dispatchMode: 'serial', emits: 2 },
+  // Goal mode (5.1.0): each write call is ONE sequential goal-set → ONE result,
+  // regardless of how many tasks it bundles. No parallel fan-out.
+  { id: 5,  route: 'delegate', tier: 'standard', kind: 'write', tasks: 2, emits: 1 },
+  { id: 6,  route: 'delegate', tier: 'complex', kind: 'write', tasks: 1, emits: 1 },
+  { id: 7,  route: 'delegate', tier: 'standard', kind: 'write', tasks: 2, emits: 1 },
+  { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', emits: 1 },
   { id: 'seed', route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', seed: true, emits: 1 },
   { id: 9,  route: 'review', tier: 'complex', kind: 'read', emits: 1 },
   { id: 10, route: 'debug', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 11, route: 'delegate', tier: 'standard', kind: 'write', expectRework: 'best-effort', emits: 1 },
+  { id: 11, route: 'delegate', tier: 'standard', kind: 'write', emits: 1 },
   { id: 12, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
-  { id: 13, route: 'delegate', tier: 'standard', kind: 'write', expectCommitSkip: 'no_diff', emits: 1 },
+  { id: 13, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
   { id: 14, route: 'retry', kind: 'assist', emits: 1 },
   // Journal (4.8.0). Record (write) must run before recall (read) so the recall
   // worker has populated .mmagent/journal/ to read. Both complex-tier.
@@ -77,6 +79,9 @@ export const SCENARIOS = [
   // → emits 1.
   { id: 17, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', skills: ['mma-smoke-skill'], emits: 1 },
   { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 1 },
+  // Rich goal-set (5.1.0): 4 tasks across 2 plan-phases; full implement→review-fix
+  // with PHASE checkpoints + intra-goal dependencies. One goal-set → one result.
+  { id: 19, route: 'execute-plan', tier: 'standard', kind: 'write', tasks: 4, emits: 1 },
 ];
 
 // 4.7.20 universal terminal context block: the per-route `context-block` check in

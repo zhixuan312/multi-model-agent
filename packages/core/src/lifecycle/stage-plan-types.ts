@@ -101,14 +101,6 @@ export interface LifecycleState {
   verifyResult?: unknown;
   commits?: unknown;
   /**
-   * Snapshot-based diff tracker. Captured before the implementer runs;
-   * used at every reviewer call site to produce a cumulative unified
-   * diff (every change since task start) so reviewers can ground their
-   * verdicts in evidence rather than the worker's prose claim.
-   * Tool sweep #6.
-   */
-  diffTracker?: import('./diff-tracker.js').DiffTracker;
-  /**
    * Concerns flagged by spec_review rounds 1..N. Round N+1's reviewer
    * receives them so it can verify the rework addressed each.
    */
@@ -166,6 +158,17 @@ export interface LifecycleState {
   // Undefined when cwd is not a git work-tree. Both populated together or both undefined.
   preTaskHeadSha?: string;
   preTaskUntrackedFiles?: Set<string>;
+
+  // Goal mode (write routes): HEAD at goal-set start, captured by the prepare
+  // stage inside withWriteGoalLock. The report builder reads baseSha..HEAD.
+  goalBaseSha?: string;
+  /** Phase-2 (review-fix) raw output, for the deterministic goal report. */
+  goalPhase2Output?: string;
+  /** Phase-2 transport error, if any (run still completes from phase-1 commits). */
+  goalPhase2Error?: string;
+  /** Commits in baseSha..HEAD, set by the annotate goal-branch; feeds the
+   *  terminal seal's completion derivation (failed only on zero commits). */
+  goalCommitCount?: number;
 
   // Sub-project C: progress-watchdog mutations. Set by the watchdog when its
   // signals trip. Read by the next iteration of the turn loop (preStopReason)

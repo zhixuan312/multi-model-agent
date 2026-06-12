@@ -7,6 +7,20 @@ import type { TaskSpec, RuntimeRunResult } from '../../types.js';
 import { noStructuredReportSchema } from '../../reporting/report-parser-slots/no-structured-report.js';
 import { makeFindingsHeadlineTemplate } from '../../reporting/findings-headline.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
+import { implementGoalPrompt } from '../../lifecycle/goal-prompts.js';
+
+const RETRY_PREAMBLE = [
+  'RETRY: the plan below was partially executed in a prior run. The commits since the run',
+  'start (see `git log`) show what is already done. Do NOT redo committed, correct work —',
+  'complete what is missing and fix what is wrong, committing with the same `[task N]` convention.',
+  '',
+].join('\n');
+
+/** Thrown when the prior batch's goal has been evicted from the cache. */
+class GoalNotFoundError extends Error {
+  readonly code = 'goal_not_found';
+  constructor(batchId: string) { super(`no stored goal for batch ${batchId}`); this.name = 'GoalNotFoundError'; }
+}
 
 export function registerRetry(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -17,7 +31,7 @@ export function registerRetry(registry: ToolSurfaceRegistry): void {
     schema: inputSchema,
     toolCategory: 'assist',
     agentTypeDefault: 'standard',
-    agentTypeOverridable: true,
+    agentTypeOverridable: false,
     responseShapeName: 'BatchResponse',
   });
 }
@@ -25,27 +39,19 @@ export function registerRetry(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   name: 'retry',
   category: 'assist',
-  dispatchMode: 'parallel',
+  dispatchMode: 'serial',
   dispatchModeOverridable: false,
   agentType: 'standard',
   briefSlot: retryBriefSlot,
   buildTaskSpec: (brief, ctx) => {
-    const batchCache = ctx.projectContext?.batchCache;
-    const batch = batchCache?.get(brief.batchId);
-    const origTask = batch?.tasks[brief.taskIndex] as TaskSpec | undefined;
-    const defaults = ctx.config.defaults;
+    const batch = ctx.projectContext?.batchCache?.get(brief.batchId);
+    const origTask = batch?.tasks[0] as TaskSpec | undefined;
+    if (!origTask?.goal) throw new GoalNotFoundError(brief.batchId);
+    // Re-fire the same goal-set; the prepare stage captures a fresh baseSha
+    // (current HEAD) so the re-run continues from where the prior run left off.
     return {
-      prompt: origTask?.prompt ?? `Retry task ${brief.taskIndex} from batch ${brief.batchId}`,
-      agentType: origTask?.agentType ?? 'standard',
-      reviewPolicy: origTask?.reviewPolicy ?? 'none',
-      briefQualityPolicy: origTask?.briefQualityPolicy ?? 'off',
-      tools: origTask?.tools ?? defaults?.tools ?? 'full',
-      timeoutMs: origTask?.timeoutMs ?? defaults?.timeoutMs ?? 1_800_000,
-      sandboxPolicy: origTask?.sandboxPolicy ?? defaults?.sandboxPolicy ?? 'cwd-only',
-      cwd: origTask?.cwd ?? ctx.projectContext?.cwd ?? ctx.cwd,
-      contextBlockIds: origTask?.contextBlockIds ?? [],
-      mainModel: origTask?.mainModel,
-      done: origTask?.done,
+      ...origTask,
+      prompt: RETRY_PREAMBLE + implementGoalPrompt(origTask.goal),
     };
   },
   reportSchema: noStructuredReportSchema,
@@ -53,18 +59,12 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   postProcessEnvelope: (envelope, ctx) => {
     const results = (Array.isArray(envelope.results) ? envelope.results : []) as RuntimeRunResult[];
     const total = results.length;
-    // Tool sweep #8 fix: pre-fix this hard-coded `retry: N/N tasks complete`
-    // regardless of actual outcomes — operator could not tell if any
-    // retried task had failed. Now compute the true ok/incomplete/error
-    // breakdown from per-task `status` and emit a headline that mirrors
-    // delegate / execute-plan: '[<aggregate-status>] retry: ok/total tasks complete'
-    // with detail when not all ok.
     let ok = 0, incomplete = 0, error = 0;
     for (const r of results) {
       const s = r?.status;
       if (s === 'ok') ok++;
       else if (s === 'error') error++;
-      else incomplete++; // 'incomplete' or any unknown bucket
+      else incomplete++;
     }
     const aggregate: 'ok' | 'incomplete' | 'error' =
       error > 0 ? 'error' : incomplete > 0 ? 'incomplete' : 'ok';
@@ -73,10 +73,6 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
     if (error > 0) detail += `, ${error} error`;
     envelope.headline = `[${aggregate}] retry: ${detail}`;
     envelope.structuredReport = notApplicable('no structured report emitted by this executor');
-    // Tool sweep #8: keep the underlying review verdicts on the envelope
-    // (do NOT delete) so downstream telemetry + UI can show whether the
-    // retried tasks' lifecycles passed their spec/quality chains. Pre-fix
-    // these were stripped, hiding important failure signal.
     if (ctx?.batchId) {
       envelope.retryBatchId = ctx.batchId;
     }

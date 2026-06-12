@@ -1,14 +1,13 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate } from '../stage-io.js';
 import type { TaskSpec } from '../../types.js';
-import { DiffTracker } from '../diff-tracker.js';
 
 /**
  * Stage handler: row 2.5 — prepare_execution_context.
  *
- * Seeding: populates state.task, state.reviewPolicy, state.diffTracker.
- * This handler is the canonical "state was set up correctly" acknowledgment
- * for downstream handlers that read from these slots.
+ * Seeding: populates state.task, state.reviewPolicy. This handler is the
+ * canonical "state was set up correctly" acknowledgment for downstream
+ * handlers that read from these slots.
  *
  * §5.1 payload: null. Gate exists only for the per-stage telemetry slot.
  */
@@ -33,27 +32,6 @@ export async function prepareExecutionContextHandler(
     const task = state.task as TaskSpec | undefined;
     if (task?.reviewPolicy) {
       state.reviewPolicy = task.reviewPolicy;
-    }
-
-    // Tool sweep #6: snapshot the worker's declared filePaths BEFORE the
-    // implementer runs so reviewer stages can produce a cumulative diff
-    // against the pre-task baseline. Skip read-only routes (audit / review
-    // / verify / debug / investigate / explore) — they don't write files
-    // by sandbox policy, so a tracker would just be empty noise.
-    if (!state.diffTracker && task && state.toolCategory !== 'read_only') {
-      const cwd = task.cwd;
-      const filePaths = Array.isArray(task.filePaths) ? task.filePaths : [];
-      if (cwd && filePaths.length > 0) {
-        const tracker = new DiffTracker(cwd);
-        try {
-          await tracker.snapshot(filePaths);
-          state.diffTracker = tracker;
-        } catch {
-          // Snapshot failures (permission, unreadable) shouldn't block the
-          // task. Reviewer just sees an empty diff and falls back to the
-          // worker-output-only path — degraded but not broken.
-        }
-      }
     }
 
     return {

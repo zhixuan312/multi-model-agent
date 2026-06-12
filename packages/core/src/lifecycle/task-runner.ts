@@ -98,7 +98,9 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     : input.task;
   const cwd = task.cwd ?? process.cwd();
   const timeoutMs = task.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000;
-  const stallTimeoutMs = config.defaults?.stallTimeoutMs ?? 300_000;
+  // Goal mode widens the idle-stall threshold (whole-plan sends have long
+  // internal gaps for verification commands, commits, and git-log re-grounding).
+  const stallTimeoutMs = task.idleStallMs ?? config.defaults?.stallTimeoutMs ?? 300_000;
   const startMs = Date.now();
 
   const providers: Partial<Record<AgentType, Provider>> = {};

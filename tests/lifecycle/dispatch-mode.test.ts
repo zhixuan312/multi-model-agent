@@ -4,9 +4,9 @@ import { toolConfig as delegateConfig } from '../../packages/core/src/tools/dele
 import { toolConfig as executePlanConfig } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 
 describe('dispatch mode config + schema', () => {
-  it('delegate config defaults to parallel and is caller-overridable', () => {
-    expect(delegateConfig.dispatchMode).toBe('parallel');
-    expect(delegateConfig.dispatchModeOverridable).toBe(true);
+  it('delegate config is serial and not overridable (goal mode is sequential)', () => {
+    expect(delegateConfig.dispatchMode).toBe('serial');
+    expect(delegateConfig.dispatchModeOverridable).toBe(false);
   });
 
   it('execute-plan config is serial and not overridable', () => {
@@ -14,13 +14,8 @@ describe('dispatch mode config + schema', () => {
     expect(executePlanConfig.dispatchModeOverridable).toBe(false);
   });
 
-  it('delegate schema accepts an execution override', () => {
+  it('delegate schema rejects an execution field (removed in goal mode — strict)', () => {
     const r = delegateSchema.safeParse({ tasks: [{ prompt: 'x' }], execution: 'serial' });
-    expect(r.success).toBe(true);
-  });
-
-  it('delegate schema rejects an unknown execution value', () => {
-    const r = delegateSchema.safeParse({ tasks: [{ prompt: 'x' }], execution: 'bogus' });
     expect(r.success).toBe(false);
   });
 

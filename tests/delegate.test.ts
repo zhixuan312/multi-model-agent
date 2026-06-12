@@ -46,7 +46,7 @@ function provider(slot: string) {
 const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
 describe('executeTask (delegate route) — dispatch behavior', () => {
-  it('runs tasks in parallel and returns all results', { timeout: 30_000 }, async () => {
+  it('collapses multiple tasks into ONE goal-set (single result, sequential)', { timeout: 30_000 }, async () => {
     mockCreateProvider.mockImplementation((slot: string) => provider(slot));
     const config: MultiModelConfig = {
       agents: {
@@ -61,36 +61,22 @@ describe('executeTask (delegate route) — dispatch behavior', () => {
         { prompt: 'task b', agentType: 'complex', reviewPolicy: 'none' },
       ],
     });
+    // Goal mode: N caller tasks → one goal-set → one result (not N).
     const results = out.results as RuntimeRunResult[];
-    expect(results).toHaveLength(2);
-    expect(results[0].status).toBeDefined();
-    expect(results[1].status).toBeDefined();
+    expect(results).toHaveLength(1);
   });
 
-  it('one task error does not prevent the other task from returning its result', { timeout: 30_000 }, async () => {
-    mockCreateProvider.mockImplementation((slot: string) => provider(slot));
+  it('empty task list fails with empty_plan before dispatch', async () => {
     const config: MultiModelConfig = {
       agents: { standard: { type: 'codex', model: 'x', baseUrl: 'https://example.invalid/v1' } },
       defaults,
     };
-    const out = await executeTask(toolConfig, makeCtx(config), {
-      tasks: [
-        { prompt: 'runs', agentType: 'standard', reviewPolicy: 'none' },
-        { prompt: 'unconfigured tier', agentType: 'complex', reviewPolicy: 'none' },
-      ],
-    });
+    mockCreateProvider.mockImplementation((slot: string) => provider(slot));
+    const out = await executeTask(toolConfig, makeCtx(config), { tasks: [] } as any);
     const results = out.results as RuntimeRunResult[];
-    expect(results).toHaveLength(2);
-    expect(results[0].status).toBeDefined();
-    expect(results[1].status).toBe('error');
-    expect(results[1].error).toContain('agent_not_configured');
-  });
-
-  it('returns empty results for empty task list', async () => {
-    const config: MultiModelConfig = { agents: {}, defaults };
-    const out = await executeTask(toolConfig, makeCtx(config), { tasks: [] });
-    const results = Array.isArray(out.results) ? out.results : [];
-    expect(results).toHaveLength(0);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.status).toBe('error');
+    expect(results[0]!.structuredError?.code ?? results[0]!.error).toContain('empty_plan');
   });
 
   it('returns an error result when the named agent tier is not configured', async () => {

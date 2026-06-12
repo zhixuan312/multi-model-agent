@@ -65,27 +65,6 @@ export type ReviewPayload = {
   outcomeMalformed?: boolean;
 };
 
-export type ReworkPayload = {
-  workerSelfAssessment: WorkerSelfAssessment;
-  summary: string;
-  filesChanged: string[];
-  unaddressedFindingIds: string[];
-  summaryTrustworthy?: boolean;
-  parsedCleanly?: boolean;
-};
-
-export type CommitPayload =
-  | { kind: 'committed';
-      commitSha: string;
-      commitMessage: string;
-      filesChanged: string[];
-      authoredAt: string;
-    }
-  | { kind: 'no_op';
-      reason: 'no_repo' | 'no_diff' | 'hook_failed';
-      detail?: string;
-    };
-
 export type AnnotatePayload = {
   completed: boolean;
   message: string;
@@ -171,15 +150,3 @@ export type StageDefinition<TPayload = unknown> = {
   handler: (state: LifecycleState) => Promise<StageGate<TPayload>>;
 };
 
-// ───── Helpers ─────
-
-/** Canonical "current work artifact" lookup used by commit/annotate/compose. */
-export function currentWork(state: { gates: Record<string, StageGate<unknown>> }):
-  ImplementPayload | ReworkPayload | null
-{
-  const rework = state.gates['rework'];
-  if (rework?.outcome === 'advance') return rework.payload as ReworkPayload;
-  const implement = state.gates['implement'];
-  if (implement?.outcome === 'advance') return implement.payload as ImplementPayload;
-  return null;
-}

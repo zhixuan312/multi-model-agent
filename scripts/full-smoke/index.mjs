@@ -1,6 +1,21 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { preflight, AbortError } from './preflight.mjs';
+
+// Harness hygiene: the smoke shares ONE git workspace across all scenarios. In
+// goal mode a write scenario where the worker under-commits leaves the tree
+// dirty, which would fail the NEXT goal-set's clean-tree precondition. Commit
+// any leftover here so each scenario's verdict stays independent (the failing
+// scenario's own result already records the miss; this just unblocks the rest).
+function keepWorkspaceClean(dir) {
+  try {
+    const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim();
+    if (!dirty) return;
+    execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', dir, 'commit', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
+  } catch { /* best-effort */ }
+}
 import { createProject } from './fixtures.mjs';
 import { SCENARIOS } from './config.mjs';
 import { runDispatch, pollBatch } from './dispatch.mjs';
@@ -90,6 +105,7 @@ try {
       });
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
+      if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
       totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
         ?? envelope.costSummary?.totalActualCostUSD ?? 0;
     } catch (err) {

@@ -45,39 +45,18 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
-        const callExecutor = async () => {
-          const batchCache = executionCtx.projectContext!.batchCache;
-
-          const batch = batchCache.get(input.batchId);
-          if (!batch) {
-            throw new Error(
-              `batch "${input.batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
-            );
-          }
-          batchCache.touch(input.batchId);
-          for (const i of input.taskIndices) {
-            if (i < 0 || i >= batch.tasks.length) {
-              throw new Error(
-                `index ${i} is out of range for batch ${input.batchId} (size ${batch.tasks.length})`,
-              );
-            }
-          }
-          const subset = input.taskIndices.map((i) => batch.tasks[i]);
-          if (!executionCtx.batchId) throw new Error('retry requires batchId');
-          const retryBatchId = batchCache.remember(executionCtx.batchId, subset);
-
-          try {
-            const result = await executeTask(toolConfig, executionCtx, input);
-            const results = Array.isArray(result.results) ? result.results : [];
-            try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
-            return result;
-          } catch (err) {
-            try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
-            throw err;
-          }
-        };
-
-        return callExecutor();
+        const batchCache = executionCtx.projectContext!.batchCache;
+        // Surface a clean error if the prior batch's goal is gone; buildTaskSpec
+        // also throws goal_not_found, but this gives the friendlier message.
+        if (!batchCache.get(input.batchId)) {
+          throw new Error(
+            `batch "${input.batchId}" is unknown or expired — re-dispatch via delegate / execute-plan`,
+          );
+        }
+        batchCache.touch(input.batchId);
+        // Goal mode: executeTask pulls the stored goal (via the retry tool-config's
+        // buildTaskSpec) and re-fires the whole goal-set against the current HEAD.
+        return executeTask(toolConfig, executionCtx, input);
       },
     });
 

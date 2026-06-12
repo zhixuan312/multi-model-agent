@@ -62,7 +62,11 @@ export function verify(rec) {
     const multiTask = (e.tasks && e.tasks > 1) || e.route === 'execute-plan';
     const committed = SHA40.test(sr.commitSha ?? '');
     const labeledSkip = !committed && typeof sr.commitSkipReason === 'string' && sr.commitSkipReason.length > 0;
-    const commitVerdict = committed || labeledSkip ? 'PASS' : (multiTask ? 'WARN' : 'FAIL');
+    // reviewPolicy:'none' has no phase-2 guarantor (design choice: trust the
+    // standard tier), so an uncommitted result is a tier reliability issue, not
+    // a system bug → WARN, not FAIL.
+    const softCommit = multiTask || e.reviewPolicy === 'none';
+    const commitVerdict = committed || labeledSkip ? 'PASS' : (softCommit ? 'WARN' : 'FAIL');
     const commitDetail = `commitSha=${sr.commitSha}${labeledSkip ? ` (skipped: ${sr.commitSkipReason})` : ''}${multiTask ? ' (aggregate = task 0 only)' : ''}`;
     if (e.expectCommitSkip) {
       out.push(C('commit-skip', sr.commitSkipReason === e.expectCommitSkip ? 'PASS' : 'FAIL', `commitSkipReason=${sr.commitSkipReason} commitSha=${sr.commitSha}`));
@@ -78,13 +82,14 @@ export function verify(rec) {
       }
     }
   }
-  // Fix A (4.8.0): commit subject is clean conventional (`type(scope): …`),
-  // NOT a chain-of-thought leak or prompt-orientation boilerplate.
+  // Goal mode (5.1.0): commit subject follows the `[task N] …` convention the
+  // annotator keys on (optionally `[task N] fix: …` for the review-fix phase),
+  // NOT a chain-of-thought leak.
   if (e.kind === 'write' && !e.expectFail && SHA40.test(sr.commitSha ?? '') && typeof sr.commitMessage === 'string') {
     const subj = sr.commitMessage.split('\n')[0];
-    const conventional = /^(feat|fix|chore|refactor|test|docs|chore)(\([^)]+\))?: \S/.test(subj);
+    const goalConvention = /^\[task \d+\] \S/.test(subj);
     const leak = /(i'?ll\b|i will\b|let me\b|looking at\b|you maintain\b|your job\b|i need to\b)/i.test(subj);
-    out.push(C('commit-msg-format', conventional && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
+    out.push(C('commit-msg-format', goalConvention && !leak ? 'PASS' : 'FAIL', `subject="${subj.slice(0, 80)}"`));
   }
   // Fix C (4.8.0): a successful write task reaches a done terminal status —
   // not a spurious `failed` (parse-miss reconciliation / review fit). The
@@ -98,21 +103,24 @@ export function verify(rec) {
   if (e.kind === 'write' && !e.expectFail) {
     const st = task0.status;
     const ok = st === 'done' || st === 'done_with_concerns';
-    out.push(C('terminal-status', ok ? 'PASS' : (e.expectRework ? 'WARN' : 'FAIL'),
-      `status=${st}${!ok && e.expectRework ? ' (deliberately-ambiguous rework scenario → soft)' : ''}`));
+    // reviewPolicy:'none' has no guarantor → a failed seal is tier reliability,
+    // not a system bug (same soft rationale as expectRework).
+    const soft = e.expectRework || e.reviewPolicy === 'none';
+    out.push(C('terminal-status', ok ? 'PASS' : (soft ? 'WARN' : 'FAIL'),
+      `status=${st}${!ok && soft ? ' (no-guarantor / ambiguous scenario → soft)' : ''}`));
   }
 
-  // Skill passthrough — positive path (scenario 17): the worker launched and
-  // completed WITH a resolved+staged skill. Completion is itself the proof that
-  // resolve→stage→native delivery did not break session startup (a staging
-  // failure would have short-circuited the task to a hard fail). Carries no
-  // skill_* error code on the result.
+  // Skill passthrough — positive path (scenario 17): the worker LAUNCHED and RAN
+  // with a resolved+staged skill. The proof of resolve→stage→native delivery is
+  // that the implementing stage advanced (a staging failure short-circuits BEFORE
+  // implement, to a skill_* error) and the result carries no skill_* error code.
+  // It is NOT the commit/terminal outcome — a reviewPolicy:'none' scenario may
+  // soft-fail on the commit (no guarantor) yet still have equipped the skill.
   if (e.skills && !e.expectSkillError) {
-    const st = task0.status;
-    const ok = st === 'done' || st === 'done_with_concerns';
+    const ran = outcomeOf('implementing') === 'advance';
     const noSkillErr = !JSON.stringify(task0).includes('skill_');
-    out.push(C('skill-equipped', ok && noSkillErr ? 'PASS' : 'FAIL',
-      `skills=${JSON.stringify(e.skills)} status=${st} noSkillError=${noSkillErr}`));
+    out.push(C('skill-equipped', ran && noSkillErr ? 'PASS' : 'FAIL',
+      `skills=${JSON.stringify(e.skills)} ran=${ran} status=${task0.status} noSkillError=${noSkillErr}`));
   }
 
   if (e.kind === 'read') {

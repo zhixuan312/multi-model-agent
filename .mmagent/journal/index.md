@@ -25,3 +25,17 @@
 | 0023 | 2026-06-03 | adopted | Default the complex tier to Sonnet on route-weighted review quality | benchmark, model-selection, complex-tier, read-routes, tiers, code-review, cost |
 | 0024 | 2026-06-03 | adopted | The worker harness, not the model, caps read-route quality at the top end | harness, benchmark, criteria, read-routes, model-selection, plan-audit |
 | 0025 | 2026-06-03 | adopted | Terminal-stage lifecycle bug catalog from the cross-model audit | bugs, terminal-stage, lifecycle, telemetry, contract-tests, benchmark |
+| 0026 | 2026-06-08 | adopted | Forge is the human-facing harness for the MMA SDLC flow | forge, decision, sdlc, product, mma-integration |
+| 0027 | 2026-06-08 | adopted | Build Forge as one consolidated Next.js app in its own repo | forge, architecture, decision, nextjs, repo-boundary |
+| 0028 | 2026-06-08 | adopted | Forge's server tier calls co-located mmagent over HTTP, never links mma-core | forge, architecture, mma-integration, http-boundary, decision |
+| 0029 | 2026-06-08 | adopted | Forge spec Q&A is a code-orchestrated workflow, not an autonomous agent | forge, architecture, decision, workflow, structured-outputs, mma-integration |
+| 0030 | 2026-06-08 | adopted | Per-component dynamic satisfaction gate for Forge spec Q&A | forge, design, decision, sdlc, satisfaction-gate, mma-integration |
+| 0031 | 2026-06-08 | adopted | Forge stack — all-latest versions as of 2026-06-08 | forge, stack, decision, dependencies |
+| 0032 | 2026-06-08 | adopted | Forge persists resumable workflow state in Postgres via Drizzle | forge, architecture, decision, state, drizzle, postgres, sdlc |
+| 0033 | 2026-06-08 | adopted | Forge build plan — staged sub-projects, Foundation+Spec first, Execute last and highest-risk | forge, decision, sdlc, build-plan, mma-integration, security |
+| 0034 | 2026-06-08 | adopted | Record Forge design decisions to the journal before authoring a formal spec | forge, process, decision |
+| 0035 | 2026-06-08 | adopted | One Project is one flow with a design/build regime split at the spec freeze | forge, decision, flow, sdlc, freeze, phase-machine |
+| 0036 | 2026-06-08 | adopted | Every MMA call is scoped to exactly one repo; Plan decomposes along repo boundaries | forge, decision, architecture, one-repo-per-call, multi-repo, mma-integration, write-routes |
+| 0037 | 2026-06-08 | adopted | Single-team tenancy — one shared agent credential, member identity for audit, project-level visibility | forge, tenancy, decision, architecture, security, visibility, state |
+| 0038 | 2026-06-08 | adopted | Public Projects share equal rights; spec components map to role owners | forge, spec, collaboration, decision, flow, mermaid, satisfaction-gate |
+| 0039 | 2026-06-08 | adopted | Forge design docs live in the Forge repo design/ dir, not docs/superpowers | forge, docs, process, decision, repo-boundary |

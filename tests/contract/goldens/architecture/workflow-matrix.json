@@ -67,7 +67,7 @@
       "routeName": "retry_tasks",
       "toolCategory": "assist",
       "agentTypeDefault": "standard",
-      "agentTypeOverridable": true,
+      "agentTypeOverridable": false,
       "responseShapeName": "BatchResponse"
     },
     {
@@ -110,26 +110,6 @@
     },
     {
       "name": "review",
-      "applicableRoutes": [
-        "delegate",
-        "execute-plan",
-        "retry",
-        "journal-record"
-      ],
-      "runOnHalt": false
-    },
-    {
-      "name": "rework",
-      "applicableRoutes": [
-        "delegate",
-        "execute-plan",
-        "retry",
-        "journal-record"
-      ],
-      "runOnHalt": false
-    },
-    {
-      "name": "commit",
       "applicableRoutes": [
         "delegate",
         "execute-plan",

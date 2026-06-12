@@ -20,9 +20,13 @@ export const PlainLogEntrySchema = z.object({
 export type PlainLogEntry = z.infer<typeof PlainLogEntrySchema>;
 
 export const PROVIDER_EVENT_NAMES = [
-  // Claude (7)
+  // Claude (8)
   'claude_session_starting','claude_turn_started','claude_error',
   'claude_turn_completed','claude_text_emission','claude_tool_call','claude_session_closed',
+  // Compaction observability (5.1.0, goal mode): emitted on the SDK's
+  // compact_boundary system message so long goal-set runs are no longer
+  // blind to context compaction. Observe-only — carries {trigger, preTokens, postTokens}.
+  'claude_compaction',
   // Codex (13)
   'codex_subprocess_starting','codex_spawn_failed','codex_subprocess_started','codex_subprocess_exited',
   'codex_thread_started','codex_turn_started','codex_command_started','codex_command_completed',

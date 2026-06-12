@@ -58,6 +58,34 @@ export async function annotator(state: LifecycleState): Promise<StageGate<Annota
   const route = (state as { route?: string }).route;
   const isRead = !!route && READ_ROUTES.has(route);
 
+  // Goal mode (write routes): the report is rebuilt deterministically from
+  // `git log baseSha..HEAD` + the phases' structured-summary blocks — no LLM
+  // judge turn, no commit gate. The agent self-committed; git is the source.
+  const goal = (state.task as { goal?: import('../../types/goal.js').Goal } | undefined)?.goal;
+  if (goal) {
+    const baseSha = (state.goalBaseSha as string | undefined) ?? state.preTaskHeadSha;
+    const { buildGoalReport } = await import('../goal-report.js');
+    const gr = await buildGoalReport({
+      goal,
+      baseSha: baseSha ?? 'HEAD',
+      phase1Output: (last.output as string | undefined) ?? '',
+      ...(state.goalPhase2Output !== undefined && { phase2Output: state.goalPhase2Output }),
+    });
+    (state as { structuredReport?: unknown }).structuredReport = gr.report;
+    (state as { annotatePayload?: AnnotatePayload }).annotatePayload = gr.payload;
+    // Feed the terminal seal's deriveCompletion goal branch (completion = ≥1 commit).
+    (state as { goalCommitCount?: number }).goalCommitCount = gr.commitCount;
+    mergeStageStats(state, 'annotating', {
+      inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0,
+      turnCount: 0, costUSD: 0, durationMs: Date.now() - t0, filesWrittenCount: 0,
+    }, { tier: null, model: null });
+    return {
+      outcome: 'advance',
+      payload: gr.payload,
+      telemetry: { stageLabel: 'annotate', durationMs: Date.now() - t0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
+    };
+  }
+
   const findings = (last.findings as StructuredReport['findings'] | undefined) ?? [];
   const summary = (last.summary as string | undefined)
     ?? (isRead ? `produced ${findings.length} findings` : ((last.output as string | undefined) ?? '').slice(0, 200));

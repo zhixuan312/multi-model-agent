@@ -32,9 +32,10 @@ const taskSchema = z.object({
 }).strict();
 
 export const inputSchema = z.object({
-  tasks: z.array(taskSchema).describe('Array of tasks to execute (parallel by default)'),
-  execution: z.enum(['parallel', 'serial']).optional().describe(
-    'Override dispatch scheduling for this batch. Default: parallel (tasks run concurrently). Set "serial" to run tasks one-at-a-time in array order.',
+  tasks: z.array(taskSchema).min(1).describe(
+    'Ordered tasks executed as one goal-set: a single autonomous implement pass runs every ' +
+    'task in order and self-commits each as `[task N] <heading>`, then a complex-tier ' +
+    'review-fix pass reviews and fixes. Sequential by design — no parallel fan-out.',
   ),
 }).strict();
 

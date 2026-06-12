@@ -1,9 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
+
+// Goal mode requires a git repo with a clean tree + resolvable HEAD.
+function initGitRepo(dir: string): void {
+  const git = (...a: string[]) => execFileSync('git', ['-C', dir, ...a], { stdio: 'ignore' });
+  git('init', '-q');
+  git('config', 'user.email', 'test@mma.local');
+  git('config', 'user.name', 'mma test');
+  writeFileSync(join(dir, 'seed.txt'), 'seed\n');
+  git('add', '-A');
+  git('commit', '-qm', 'seed');
+}
 
 // Lifecycle contract for the journal (record) write route: a valid body
 // dispatches a task that polls to a terminal batch envelope. Assertions are
@@ -14,6 +26,7 @@ import { mockProvider } from '../fixtures/mock-providers.js';
 describe('contract: POST /journal lifecycle', () => {
   it('valid body dispatches a task and polls to a successful terminal envelope', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'journal-lifecycle-'));
+    initGitRepo(cwd);
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd });
     try {
       const res = await fetch(`${h.baseUrl}/journal-record?cwd=${encodeURIComponent(cwd)}`, {

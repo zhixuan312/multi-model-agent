@@ -9,8 +9,13 @@ export interface ArxivOpts { maxResults?: number; }
 
 export async function arxivSearch(query: string, opts: ArxivOpts = {}): Promise<AdapterResult[]> {
   const max = Math.min(25, Math.max(1, opts.maxResults ?? 10));
+  // arxiv's query parser rejects punctuation in `all:` (`?`, `:`, parens, etc.)
+  // with HTTP 400 even after URL-encoding — a raw natural-language question
+  // would 400. Reduce to arxiv-safe tokens (alphanumerics/-, single-spaced,
+  // length-capped); fall back to the raw query only if sanitizing emptied it.
+  const safe = query.replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
   const url = new URL('https://export.arxiv.org/api/query');
-  url.searchParams.set('search_query', `all:${query}`);
+  url.searchParams.set('search_query', `all:${safe || query}`);
   url.searchParams.set('max_results', String(max));
 
   const res = await request(url.toString(), {

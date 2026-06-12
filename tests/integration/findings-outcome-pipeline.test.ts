@@ -12,6 +12,8 @@
 //   - inferred fallback (worker omits ## Outcome) lands the right default
 import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
+import { rmSync } from 'node:fs';
+import { makeGoalRepo, committingProvider, goalTask } from '../helpers/goal-git.js';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
@@ -179,33 +181,32 @@ found`,
         mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
       }),
     }));
-    const envelope = TaskEnvelopeStore.create({
-      taskId: 'fo3:0', batchId: 'fo3', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
-      client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
-      reviewPolicy: 'full' as const,
-    }, bus);
-    const provider = makeProviderEmittingOutput(
-      `## Summary\nAll clean.\n\n## Outcome\nclean`,
-    );
-    const task: TaskSpec = {
-      prompt: 'do the thing', cwd: os.tmpdir(),
-      reviewPolicy: 'none', timeoutMs: 60_000, tools: 'none',
-    };
+    const cwd = makeGoalRepo('mma-fo-');
+    try {
+      const envelope = TaskEnvelopeStore.create({
+        taskId: 'fo3:0', batchId: 'fo3', taskIndex: 0,
+        route: 'delegate', agentType: 'standard',
+        client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
+        reviewPolicy: 'none' as const,
+      }, bus);
+      const provider = committingProvider(cwd, { outcome: 'clean' });
 
-    await runTaskViaDispatcher({
-      task,
-      resolved: { slot: 'standard', provider } as ResolvedAgent,
-      config: makeConfig(),
-      taskIndex: 0,
-      route: 'delegate',
-      envelope,
-      bus,
-    });
+      await runTaskViaDispatcher({
+        task: goalTask(cwd),
+        resolved: { slot: 'standard', provider } as ResolvedAgent,
+        config: makeConfig(),
+        taskIndex: 0,
+        route: 'delegate',
+        envelope,
+        bus,
+      });
 
-    expect(enqueued.length).toBeGreaterThanOrEqual(1);
-    const rec = enqueued[0] as Record<string, unknown>;
-    expect(rec['route']).toBe('delegate');
-    expect(rec['terminalStatus']).toBe('ok');
+      expect(enqueued.length).toBeGreaterThanOrEqual(1);
+      const rec = enqueued[0] as Record<string, unknown>;
+      expect(rec['route']).toBe('delegate');
+      expect(rec['terminalStatus']).toBe('ok');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

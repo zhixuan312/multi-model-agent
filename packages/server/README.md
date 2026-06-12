@@ -112,7 +112,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 
 | Skill | Target endpoint | Use when |
 |---|---|---|
-| `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
+| `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them on cheap workers as one goal-set (implement → review-fix). |
 | `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
 | `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
@@ -139,10 +139,11 @@ The `multi-model-agent` skill (no `mma-` prefix) is a top-level overview your cl
 ```
 You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
 ↓
-Client picks mma-execute-plan (plan file on disk, multiple independent tasks)
+Client picks mma-execute-plan (plan file on disk, multiple tasks)
 ↓
-mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M3),
-each runs cross-agent review on the complex agent, returns a structured report.
+mmagent runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
+implements each task in order and commits it (`[task N] …`), then the complex agent
+reviews every task and fixes anything left — returning one structured report.
 ↓
 You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-8 (30× ROI)"
 ```
@@ -275,7 +276,7 @@ mmagent telemetry dump-queue                     # print the locally-queued even
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a wall-clock timeout.
+`mmagent serve` runs a loopback HTTP server. Write tools (`delegate`, `execute-plan`, `retry`, `journal-record`) run the whole plan as one sequential **goal-set**: the standard agent implements every task in order and commits each (`[task N] …`), then the complex agent reviews and fixes — returning one structured report of the final per-task state. Read tools fan out per file/criterion. Each has a wall-clock timeout.
 
 Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). Layer map and request lifecycle: [docs/ARCHITECTURE.md](https://github.com/zhixuan312/multi-model-agent/blob/master/docs/ARCHITECTURE.md).
 

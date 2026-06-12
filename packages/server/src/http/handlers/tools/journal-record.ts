@@ -5,15 +5,18 @@ import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/journal/reco
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
-import { withProjectJournalLock } from '../../journal-lock.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
 
-/** Lock-wrapped executor for one journal-record dispatch. Exported for wiring tests. */
-export function journalRecordExecutor(input: journal.Input, cwd: string) {
+/**
+ * Executor for one journal-record dispatch. Per-cwd serialization is handled by
+ * the goal-set's `withWriteGoalLock` (in task-executor), which subsumes the old
+ * per-project journal lock — no separate lock here.
+ */
+export function journalRecordExecutor(input: journal.Input, _cwd: string) {
   return (executionCtx: ExecutionContext) =>
-    withProjectJournalLock(cwd, () => executeTask(toolConfig, executionCtx, input));
+    executeTask(toolConfig, executionCtx, input);
 }
 
 export function buildJournalRecordHandler(deps: HandlerDeps): RawHandler {

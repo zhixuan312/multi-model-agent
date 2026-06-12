@@ -4,16 +4,16 @@
 // route applicability (Layer 1: applicableRoutes) and dynamic state-level
 // participation (Layer 2: shouldRun). The new driver walks this in order.
 
-import type { StageDefinition, ImplementPayload, ReviewPayload, ReworkPayload,
-              CommitPayload, AnnotatePayload, ComposePayload, TerminalPayload,
-              RegisterBlockPayload } from './stage-io.js';
-import { ALL_TASK_ROUTES, WRITE_ROUTES, currentWork } from './stage-io.js';
+import type { StageDefinition } from './stage-io.js';
+import { ALL_TASK_ROUTES, WRITE_ROUTES } from './stage-io.js';
 
 // We import handler functions where they exist as exports; this is fine for
 // modules with no circular deps. Where the v5 handler is gated to opt-in,
 // the wrapper falls back to a no-op.
 import { prepareExecutionContextHandler } from './handlers/prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './handlers/register-context-block-handlers.js';
+import { checkGitPreconditions } from './goal-preconditions.js';
+import type { Goal } from '../types/goal.js';
 
 const ALL_TASK_ROUTES_ARR: readonly string[] = ALL_TASK_ROUTES;
 const WRITE_ROUTES_ARR: readonly string[] = WRITE_ROUTES;
@@ -36,6 +36,34 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
       const t0 = Date.now();
       try {
         await prepareExecutionContextHandler(state);
+        // Goal mode (write routes): run git preconditions + capture baseSha
+        // INSIDE the write-goal lock (the whole dispatch is locked), before any
+        // implement send. A failed precondition halts before phase 1.
+        const goal = (state.task as { goal?: Goal } | undefined)?.goal;
+        if (goal) {
+          const pre = await checkGitPreconditions(goal);
+          if (!pre.ok) {
+            // Surface the precondition code as a proper failed result so the
+            // dispatcher returns it (not the generic runner_crash fallback) and
+            // the batch completes with a well-formed failed task.
+            (state as { lastRunResult?: unknown }).lastRunResult = {
+              output: '', status: 'error',
+              usage: { inputTokens: 0, outputTokens: 0 },
+              turns: 0, filesWritten: [], outputIsDiagnostic: true, escalationLog: [],
+              error: pre.message, errorCode: 'other',
+              structuredError: { code: pre.code, message: pre.message, where: 'goal-precondition' },
+              workerStatus: 'failed',
+            };
+            return {
+              outcome: 'halt',
+              comment: `${pre.code}: ${pre.message}`,
+              payload: null,
+              telemetry: { stageLabel: 'prepare', durationMs: Date.now() - t0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
+            };
+          }
+          (state as { goalBaseSha?: string }).goalBaseSha = pre.baseSha;
+          (state as { preTaskHeadSha?: string }).preTaskHeadSha = pre.baseSha;
+        }
         return {
           outcome: 'advance',
           payload: null,
@@ -76,66 +104,30 @@ export const STAGE_PLAN: StageDefinition<unknown>[] = [
     },
   },
   {
+    // Goal mode phase 2: review-fix. One autonomous send on the configured
+    // phase-2 tier reviews each task's commit and self-commits fixes. Replaces
+    // the old review→rework→commit trio (write-routes-only); read routes skip
+    // it exactly as before.
     name: 'review',
     runOnHalt: false,
     applicableRoutes: WRITE_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
     shouldRun: (state) => {
       const impl = state.gates?.['implement'];
       if (impl?.outcome !== 'advance') {
-        return { run: false, comment: 'review skipped because implement did not advance' };
+        return { run: false, comment: 'review-fix skipped because implement did not advance' };
+      }
+      const task = state.task as { goal?: unknown } | undefined;
+      if (!task?.goal) {
+        return { run: false, comment: 'review-fix skipped: no goal on task' };
       }
       if (state.reviewPolicy === 'none') {
-        return { run: false, comment: 'review skipped because reviewPolicy=none', skipReason: 'reviewPolicy_none' };
+        return { run: false, comment: 'review-fix skipped because reviewPolicy=none', skipReason: 'reviewPolicy_none' };
       }
       return { run: true };
     },
     handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/review-stage.js'));
-      return mod.reviewHandler(state);
-    },
-  },
-  {
-    name: 'rework',
-    runOnHalt: false,
-    applicableRoutes: WRITE_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
-    shouldRun: (state) => {
-      const review = state.gates?.['review'];
-      if (review?.outcome !== 'advance') {
-        return { run: false, comment: 'rework skipped because review did not produce a verdict' };
-      }
-      const verdict = (review.payload as ReviewPayload | null)?.verdict;
-      if (verdict === 'approved') {
-        return { run: false, comment: 'rework skipped because review approved' };
-      }
-      return { run: true };
-    },
-    handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/rework-stage.js'));
-      return mod.reworkHandler(state);
-    },
-  },
-  {
-    name: 'commit',
-    runOnHalt: false,
-    applicableRoutes: WRITE_ROUTES_ARR as unknown as StageDefinition['applicableRoutes'],
-    shouldRun: (state) => {
-      // Run whenever implementation work advanced. We deliberately do NOT
-      // pre-skip on the worker's self-reported filesChanged (currentWork) —
-      // cheap workers under-report their writes, which previously caused the
-      // gate to skip while git actually had changes, so real work went
-      // uncommitted. The commit handler is the single authority on
-      // commit-vs-no_op: it stages the worker-written files (workerWrittenFiles)
-      // and runs `git diff --cached --quiet` on them, returning no_op:no_diff
-      // when nothing genuinely changed.
-      const work = currentWork({ gates: (state.gates ?? {}) as Record<string, import('./stage-io.js').StageGate<unknown>> });
-      if (!work) {
-        return { run: false, comment: 'commit skipped because no implementation work advanced' };
-      }
-      return { run: true };
-    },
-    handler: async (state) => {
-      const mod = await loadHandler(() => import('./handlers/git-commit-handler.js'));
-      return mod.commitHandler(state);
+      const mod = await loadHandler(() => import('./handlers/review-fix-stage.js'));
+      return mod.reviewFixHandler(state);
     },
   },
   {
