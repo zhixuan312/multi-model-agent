@@ -77,7 +77,7 @@ export function goalToTaskSpec(
     prompt: implementPrompt,
     goal,
     agentType: goal.phases[0]!.tier,
-    reviewPolicy: goal.reviewPolicy === 'none' ? 'none' : 'full',
+    reviewPolicy: goal.reviewPolicy === 'none' ? 'none' : 'reviewed',
     cwd: goal.cwd,
     tools: goal.tools,
     sandboxPolicy: goal.sandboxPolicy,

@@ -77,7 +77,7 @@ export class LifecycleDispatcher {
   private initialState(input: DispatchInput): LifecycleState {
     return {
       terminal: false,
-      reviewPolicy: (input.rawRequest as { reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none' })?.reviewPolicy ?? 'full',
+      reviewPolicy: (input.rawRequest as { reviewPolicy?: 'reviewed' | 'none' })?.reviewPolicy ?? 'reviewed',
       shutdownInProgress: false,
       route: input.route,
       toolCategory: input.toolCategory,

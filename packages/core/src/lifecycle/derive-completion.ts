@@ -16,7 +16,7 @@ const READ_ROUTES: ReadonlySet<RouteName> = new Set([
 export interface CompletionInputs {
   route: RouteName;
   implementOutcome: 'advance' | 'skip' | 'halt' | undefined;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy: 'reviewed' | 'none';
   reviewVerdict: 'approved' | 'concerns' | 'changes_required' | 'annotated' | 'error' | 'skipped' | undefined;
   reviewSubResults?: Array<{ name: 'spec' | 'quality'; verdict: string }>;
   reworkApplied: boolean | undefined;

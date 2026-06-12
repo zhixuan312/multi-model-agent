@@ -57,7 +57,7 @@ describe('LifecycleDispatcher', () => {
     const out = await dispatcher.dispatch({
       route: 'delegate',
       toolCategory: 'artifact_producing',
-      rawRequest: { reviewPolicy: 'diff_only' },
+      rawRequest: { reviewPolicy: 'none' },
       context: {
         executionContext: {
           bus: { emit: () => {} },
@@ -66,10 +66,10 @@ describe('LifecycleDispatcher', () => {
       },
     });
 
-    expect(out.finalState?.reviewPolicy).toBe('diff_only');
+    expect(out.finalState?.reviewPolicy).toBe('none');
   });
 
-  it('defaults reviewPolicy to full when not in rawRequest', async () => {
+  it('defaults reviewPolicy to reviewed when not in rawRequest', async () => {
     const dispatcher = new LifecycleDispatcher();
 
     const out = await dispatcher.dispatch({
@@ -84,6 +84,6 @@ describe('LifecycleDispatcher', () => {
       },
     });
 
-    expect(out.finalState?.reviewPolicy).toBe('full');
+    expect(out.finalState?.reviewPolicy).toBe('reviewed');
   });
 });

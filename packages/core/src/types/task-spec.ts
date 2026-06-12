@@ -26,7 +26,7 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
+  reviewPolicy?: 'reviewed' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
   mainModel?: string
   formatConstraints?: FormatConstraints

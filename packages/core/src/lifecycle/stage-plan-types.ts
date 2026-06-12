@@ -38,7 +38,7 @@ export interface LifecycleState {
   /** v5: halted flag set when any stage returns outcome:'halt'. Driver-only. */
   halted?: boolean;
   workerStatus?: string;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy: 'reviewed' | 'none';
   shutdownInProgress: boolean;
   route?: string;
   toolCategory?: ToolCategory;

@@ -47,7 +47,7 @@ export function enrichRuntimeResult(state: LifecycleState): void {
   else e.qualityReviewStatus = 'not_applicable';
 
   if (state.diffReviewVerdict !== undefined) e.diffReviewStatus = state.diffReviewVerdict;
-  else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'diff_only') e.diffReviewStatus = 'skipped';
+  else if (state.reviewPolicy === 'reviewed') e.diffReviewStatus = 'skipped';
   else e.diffReviewStatus = 'not_applicable';
 
   // ── verification, commits, commitError ──────────────────────────────────────

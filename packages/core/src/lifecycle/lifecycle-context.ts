@@ -112,7 +112,7 @@ export interface ExecutionContext {
       realFilesChanged: string[];
       client: string;
       mainModel: string | null;
-      reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
+      reviewPolicy?: 'reviewed' | 'none';
     }) => void;
   };
 
