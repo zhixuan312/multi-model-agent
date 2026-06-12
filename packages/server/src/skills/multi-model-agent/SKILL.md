@@ -104,7 +104,7 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 ### Recipe D — Plan-execute-retry
 
-When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full re-dispatch. Pass the **original `taskId`** (via the `batchId` field) as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original task carry forward into retry — no need to re-register.
+When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full re-dispatch. Pass the **original `taskId`** as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original task carry forward into retry — no need to re-register.
 
 ### Anti-patterns
 

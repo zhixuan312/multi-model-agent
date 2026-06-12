@@ -4,7 +4,7 @@
 // (unregister). Lives under handlers/control/ rather than handlers/tools/
 // because register_context_block is an assist-tier sync state op:
 //
-//   - synchronous request/response (no batchId, no async dispatch)
+//   - synchronous request/response (no taskId, no async dispatch)
 //   - no LifecycleDispatcher path (no review chain, no commit stage)
 //   - paired skill is mma-context-blocks/ (covers register + lookup)
 //

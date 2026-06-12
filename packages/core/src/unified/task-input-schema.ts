@@ -33,7 +33,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('research'), researchQuestion: z.string().min(20), background: z.string().min(20), ...common }),
   z.object({ type: z.literal('journal_recall'), query: z.string().min(10), ...common }),
   z.object({ type: z.literal('journal_record'), entry: z.string().min(1), ...common }),
-  z.object({ type: z.literal('retry_tasks'), batchId: z.string().uuid(), taskIndices: z.array(z.number().int().nonnegative()).min(1), ...common }),
+  z.object({ type: z.literal('retry_tasks'), taskId: z.string().uuid(), taskIndices: z.array(z.number().int().nonnegative()).min(1), ...common }),
 ]);
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

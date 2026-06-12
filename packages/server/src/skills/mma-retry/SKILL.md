@@ -53,14 +53,14 @@ digraph when_to_use {
 ```json
 {
   "type": "retry_tasks",
-  "batchId": "550e8400-e29b-41d4-a716-446655440000",
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
   "taskIndices": [1, 3]
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `batchId` | string (UUID) | yes | Task ID from a previous dispatch (not yet expired) |
+| `taskId` | string (UUID) | yes | Task ID from a previous dispatch (not yet expired) |
 | `taskIndices` | number[] | yes | Zero-based indices to re-run; must be non-negative integers |
 
 To re-run all tasks: pass `[0, 1, ..., tasks.length - 1]`. (But consider: if all failed, debug instead of retrying.)
@@ -74,7 +74,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"retry_tasks","batchId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \
+  -d '{"type":"retry_tasks","taskId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')   # NEW taskId — not the original
 ```
@@ -187,7 +187,7 @@ Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to fi
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-retry`:
 
 - **Recipe C — Investigate-plan-execute (last step).** After `mma-execute-plan` returns mixed results, retry the failed indices to close the loop.
-- **Recipe D — Plan-execute-retry.** Pass the **original `taskId`** (via the `batchId` field) as input, specify the failed indices, keep the same configuration. `mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state. Any `contextBlockIds` from the original carry forward.
+- **Recipe D — Plan-execute-retry.** Pass the **original `taskId`** as input, specify the failed indices, keep the same configuration. `mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state. Any `contextBlockIds` from the original carry forward.
 
 Anti-pattern alert: **`full-batch-redispatch`** (AP4). Re-dispatching the entire task re-charges every successful sub-task. Always retry by index.
 
