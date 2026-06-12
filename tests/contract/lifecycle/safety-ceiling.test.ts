@@ -24,6 +24,7 @@ function makeFakeSession(closeImpl: () => Promise<void> = async () => {}): MockS
     async send() { return { output: '', usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 }, costUSD: 0, turns: 0, durationMs: 0, terminationReason: 'ok', filesWritten: [], usedShell: false } as any; },
     close: closeFn,
     closeFn,
+    getSessionId() { return null; },
   } as MockSession;
 }
 

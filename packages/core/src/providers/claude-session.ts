@@ -246,6 +246,10 @@ export class ClaudeSession implements Session {
     }));
   }
 
+  getSessionId(): string | null {
+    return this.sessionId ?? null;
+  }
+
   /** ClaudeSession runs entirely in-process via the SDK; there's no separate
    *  CLI subprocess to expose a pid for. Returning undefined tells the
    *  shutdown drain there is nothing to SIGKILL externally — close() handles

@@ -97,6 +97,11 @@ export interface Session {
    *  between turns or for providers that do not spawn a child (e.g. in-process
    *  SDK clients). Used by shutdown drain to SIGKILL stragglers. */
   getPid?(): number | undefined;
+  /** Returns the provider-assigned session/thread ID if one has been captured
+   *  (i.e. after the first successful send()). Null before any send or if the
+   *  provider never assigns an ID. Used by the unified task API to expose
+   *  session identity on the wire. */
+  getSessionId(): string | null;
 }
 
 // Provider — factory-created handle that openSession returns

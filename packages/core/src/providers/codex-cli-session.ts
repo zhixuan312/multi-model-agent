@@ -250,6 +250,10 @@ export class CodexCliSession implements Session {
     }
   }
 
+  getSessionId(): string | null {
+    return this.threadId ?? null;
+  }
+
   /** OS pid of the currently-active codex CLI subprocess, if any. Undefined
    *  between turns. Used by shutdown drain to SIGKILL stragglers. */
   getPid(): number | undefined {

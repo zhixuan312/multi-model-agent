@@ -48,6 +48,7 @@ function makeAuditProvider(output: string): Provider {
           };
         },
         async close() { /* no-op */ },
+        getSessionId() { return null; },
       };
     },
   };

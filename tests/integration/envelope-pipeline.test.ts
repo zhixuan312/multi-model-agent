@@ -88,6 +88,7 @@ function makeRecordingProvider(captured: { envelopeSeen: boolean }): Provider {
           };
         },
         async close() { /* no-op */ },
+        getSessionId() { return null; },
       };
     },
   };
@@ -267,6 +268,7 @@ describe('envelope pipeline — end-to-end', () => {
             };
           },
           async close() { /* no-op */ },
+          getSessionId() { return null; },
         };
       },
     };

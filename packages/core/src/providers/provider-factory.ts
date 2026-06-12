@@ -143,6 +143,7 @@ function wrapWithSafetyCeiling(p: Provider): Provider {
           try { await inner.close(); } finally { removeFromMap(); }
         },
         ...(inner.getPid && { getPid: inner.getPid.bind(inner) }),
+        getSessionId: inner.getSessionId.bind(inner),
       };
       // Register AFTER the inner open succeeded. Store the WRAPPED Session
       // so releaseTask() can call .close() (which routes to inner.close()
