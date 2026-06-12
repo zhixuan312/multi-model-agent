@@ -67,11 +67,15 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     deps.projectRegistry.cancelReservation(cwd);
 
     const blockIds = input.contextBlockIds ?? [];
+    const contextBlockStore = pc.contextBlocks;
     const { type, agentTier: _at, reviewPolicy: _rp, sessionIds: _si, contextBlockIds: _cbi, ...payload } = input;
 
     // Register task in TaskRegistry and return 202 immediately
     const taskId = randomUUID();
     deps.taskRegistry.register(taskId, cwd, input.type);
+
+    // Emit batch_created diagnostic for observability parity with the old lifecycle.
+    deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { batch_id: taskId, route: input.type } });
 
     const statusUrl = `/task/${taskId}`;
     sendJson(res, 202, { taskId, statusUrl });
@@ -99,6 +103,17 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           });
           const durationMs = Date.now() - startedAtMs;
 
+          // Auto-register a terminal context block for read-only routes
+          // (investigate, audit, review, debug, research, journal_recall)
+          // so callers can reference the output in subsequent dispatches.
+          let contextBlockId: string | null = null;
+          if (typeConfig.sandbox === 'read-only' && result.implementerOutput.trim().length > 0) {
+            try {
+              const block = contextBlockStore.register(result.implementerOutput);
+              contextBlockId = block.id;
+            } catch { /* best-effort — store may be at capacity */ }
+          }
+
           const resultObj = {
             headline: `${input.type}: ${result.status}`,
             results: [{
@@ -109,6 +124,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               sessions: result.sessions,
               worktree: result.worktree,
               cost: result.cost,
+              contextBlockId,
               error: null,
             }],
             batchTimings: { wallClockMs: durationMs, sumOfTaskMs: durationMs, estimatedParallelSavingsMs: 0 },
