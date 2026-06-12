@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { loadSkill, validateSkillsExist, clearSkillCache } from '../../packages/core/src/unified/skill-loader.js';
+import { TASK_TYPES } from '../../packages/core/src/unified/type-registry.js';
 
 const SKILLS_DIR = path.resolve(import.meta.dirname, '../../packages/core/src/skills');
 
@@ -31,5 +32,9 @@ describe('SkillLoader', () => {
 
   it('validateSkillsExist passes for delegate+audit', async () => {
     await expect(validateSkillsExist(['delegate', 'audit'], SKILLS_DIR)).resolves.not.toThrow();
+  });
+
+  it('validates all 9 types have skill files', async () => {
+    await expect(validateSkillsExist(TASK_TYPES, SKILLS_DIR)).resolves.not.toThrow();
   });
 });
