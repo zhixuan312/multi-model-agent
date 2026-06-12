@@ -95,6 +95,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             taskPayload: JSON.stringify(payload, null, 2),
             implementerProvider: implAgent.provider,
             reviewerProvider: revAgent.provider,
+            implementerTier: implTier,
+            reviewerTier: revTier,
             reviewPolicy,
             cwd,
             sandboxPolicy: typeConfig.sandbox,

@@ -2,7 +2,7 @@ import { dispatch, getTask } from './http.mjs';
 import { POLL, BASE_URL } from './config.mjs';
 import { readToken } from './http.mjs';
 
-const T = (prompt, extra = {}) => ({ prompt, reviewPolicy: 'reviewed', ...extra });
+const T = (prompt, extra = {}) => ({ prompt, ...extra });
 
 // Returns { type, body } for a scenario given run context.
 export function buildRequest(spec, ctx) {
@@ -14,18 +14,18 @@ export function buildRequest(spec, ctx) {
     case 3:  return { type: 'research', body: { researchQuestion: 'What static program-analysis techniques have researchers proposed for detecting division-by-zero errors in software?', background: 'Surveying the literature on static detection of division-by-zero (abstract interpretation, symbolic execution, etc.) to inform guarding a small math module.' } };
     case 4:  return { type: 'audit', body: { subtype: 'spec', filePaths: [`${cwd}/spec.md`], contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
     case 5:  return { type: 'delegate', body: { tasks: [
-               T('Create file src/a.ts with exactly: export const A=1. Only that file.', { filePaths: ['src/a.ts'], reviewPolicy: 'reviewed' })] } };
+               T('Create file src/a.ts with exactly: export const A=1. Only that file.', { filePaths: ['src/a.ts'] })], reviewPolicy: 'reviewed' } };
     case 6:  return { type: 'execute_plan', body: { filePaths: [`${cwd}/plan.md`], taskDescriptors: ['Task 1: add subtract'] } };
     case 7:  return { type: 'review', body: { filePaths: [`${cwd}/src/math.ts`] } };
-    case 8:  return { type: 'debug', body: { problem: 'divide(1,0) returned Infinity, expected a thrown error', filePaths: ['src/math.ts'] } };
-    case 9:  return { type: 'journal_record', body: { learnings: ['In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.'], tagHints: ['math', 'validation'] } };
+    case 8:  return { type: 'debug', body: { errorMessage: 'divide(1,0) returned Infinity, expected a thrown error', filePaths: ['src/math.ts'] } };
+    case 9:  return { type: 'journal_record', body: { entry: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.' } };
     case 10: return { type: 'journal_recall', body: { query: 'what have we learned about guarding invalid inputs in the math module?' } };
 
     // B. Tier & Review Policy overrides
     case 11: return { type: 'delegate', body: { tasks: [
-               T('Create file src/c.ts with exactly: export const C=3. Only that file.', { agentTier: 'complex', filePaths: ['src/c.ts'], reviewPolicy: 'reviewed' }) ] } };
+               T('Create file src/c.ts with exactly: export const C=3. Only that file.', { filePaths: ['src/c.ts'] }) ], agentTier: 'complex', reviewPolicy: 'reviewed' } };
     case 12: return { type: 'delegate', body: { tasks: [
-               T('Create file src/f.ts with exactly: export const F=6. Only that file.', { filePaths: ['src/f.ts'], reviewPolicy: 'none' }) ] } };
+               T('Create file src/f.ts with exactly: export const F=6. Only that file.', { filePaths: ['src/f.ts'] }) ], reviewPolicy: 'none' } };
 
     // C. Session Reuse — reuse implementer session from scenario #2
     case 13: {

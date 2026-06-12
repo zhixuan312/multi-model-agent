@@ -48,6 +48,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'do X',
       implementerProvider: mockProvider(impl),
       reviewerProvider: mockProvider(rev),
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
       reviewPolicy: 'reviewed',
       cwd: '/tmp/test',
       sandboxPolicy: 'cwd-only',
@@ -55,7 +57,9 @@ describe('runTwoPhasePipeline', () => {
 
     expect(result.status).toBe('done');
     expect(result.sessions.implementer.sessionId).toBe('sess-mock');
+    expect(result.sessions.implementer.tier).toBe('standard');
     expect(result.sessions.reviewer?.sessionId).toBe('sess-mock');
+    expect(result.sessions.reviewer?.tier).toBe('complex');
     expect(result.reviewerOutput?.verdict).toBe('approved');
     expect(result.worktree).toBeNull();
     expect(impl.send).toHaveBeenCalledOnce();
@@ -72,6 +76,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'audit doc',
       implementerProvider: mockProvider(impl),
       reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'complex',
+      reviewerTier: 'standard',
       reviewPolicy: 'none',
       cwd: '/tmp/test',
       sandboxPolicy: 'read-only',
@@ -94,6 +100,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'x',
       implementerProvider: mockProvider(impl),
       reviewerProvider: mockProvider(rev),
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
       reviewPolicy: 'reviewed',
       cwd: '/tmp',
       sandboxPolicy: 'cwd-only',
@@ -129,6 +137,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'do X',
       implementerProvider: implProvider,
       reviewerProvider: revProvider,
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
       reviewPolicy: 'reviewed',
       cwd: '/tmp/test',
       sandboxPolicy: 'cwd-only',
@@ -175,6 +185,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'do X',
       implementerProvider: mockProvider(impl),
       reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
       reviewPolicy: 'none',
       cwd: '/tmp/test',
       sandboxPolicy: 'cwd-only',
@@ -207,6 +219,8 @@ describe('runTwoPhasePipeline', () => {
       taskPayload: 'audit',
       implementerProvider: mockProvider(impl),
       reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'complex',
+      reviewerTier: 'standard',
       reviewPolicy: 'none',
       cwd: '/tmp/test',
       sandboxPolicy: 'read-only',

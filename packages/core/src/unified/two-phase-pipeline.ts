@@ -11,6 +11,8 @@ export interface PipelineInput {
   taskPayload: string;
   implementerProvider: Provider;
   reviewerProvider: Provider;
+  implementerTier: AgentType;
+  reviewerTier: AgentType;
   reviewPolicy: 'reviewed' | 'none';
   cwd: string;
   sandboxPolicy: SandboxPolicy;
@@ -101,7 +103,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         reviewerTurn: null,
         reviewerParseError: null,
         sessions: {
-          implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
+          implementer: { tier: input.implementerTier, sessionId: implId, resumeSupported: implId !== null },
           reviewer: null,
         },
         cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
@@ -135,8 +137,8 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       reviewerTurn: revTurn,
       reviewerParseError: parsed.ok ? null : parsed.error,
       sessions: {
-        implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
-        reviewer: { tier: 'complex', sessionId: revId, resumeSupported: revId !== null },
+        implementer: { tier: input.implementerTier, sessionId: implId, resumeSupported: implId !== null },
+        reviewer: { tier: input.reviewerTier, sessionId: revId, resumeSupported: revId !== null },
       },
       cost: { implementerUsd: implTurn.costUSD, reviewerUsd: revTurn.costUSD },
       worktree,
