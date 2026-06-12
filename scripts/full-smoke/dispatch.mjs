@@ -84,11 +84,21 @@ export async function runDispatch(spec, ctx) {
 export async function pollTask(token, taskId) {
   const start = Date.now();
   let delay = POLL.taskEveryMs;
+  let polls = 0;
   for (;;) {
     const { status, body } = await getTask(token, taskId);
-    if (status === 200) return body;
+    if (status === 200) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      process.stderr.write(`    poll ${++polls}: terminal (${elapsed}s)\n`);
+      return body;
+    }
     if (status !== 202) throw new Error(`poll ${taskId}: HTTP ${status}`);
     if (Date.now() - start >= POLL.taskMaxMs) throw new Error(`poll ${taskId}: timeout`);
+    const headline = typeof body === 'string' ? body.slice(0, 60) : '';
+    if (++polls % 3 === 0) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+      process.stderr.write(`    poll ${polls}: ${elapsed}s  ${headline}\n`);
+    }
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay * 1.4, 30000);
   }

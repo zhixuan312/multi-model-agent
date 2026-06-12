@@ -65,10 +65,14 @@ try {
   ctx.dir = dir;
   ctx.specMd = readFileSync(`${dir}/spec.md`, 'utf8');
 
+  const log = (msg) => { process.stderr.write(msg + '\n'); };
   const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
+  log(`Full-pipeline smoke — ${scenarios.length} scenarios queued`);
   for (const spec of scenarios) {
     expectedEmits += spec.emits ?? 0;
     try {
+      log(`\n#${spec.id}  ${spec.type ?? spec.kind ?? '?'}  dispatching...`);
+
       // ─── Error scenarios: dispatch and check status inline ───
       if (spec.kind === 'error') {
         const res = await runDispatch(spec, ctx);
@@ -77,6 +81,7 @@ try {
         rec.errorJson = res.json;
         records.push(rec);
         checksByScenario[spec.id] = verify(rec);
+        log(`#${spec.id}  ${spec.type ?? '?'}  → HTTP ${res.status}`);
         continue;
       }
 
@@ -89,9 +94,11 @@ try {
         ctx.contextBlockIds.push(res.blockId);
         records.push(normalize(spec, {}));
         checksByScenario[spec.id] = [{ checkId: 'register', status: res.blockId ? 'PASS' : 'FAIL', detail: `blockId=${res.blockId}` }];
+        log(`#${spec.id}  context-blocks  → registered blockId=${res.blockId}`);
         continue;
       }
 
+      log(`#${spec.id}  ${spec.type}  → taskId=${res.taskId}  polling...`);
       // ─── Normal task: poll to terminal ───
       const envelope = await pollTask(ctx.token, res.taskId);
 
@@ -124,13 +131,20 @@ try {
         rec.resumeSessionId = ctx.sessionFromScenario2;
       }
       records.push(rec);
-      checksByScenario[spec.id] = verify(rec);
+      const checks = verify(rec);
+      checksByScenario[spec.id] = checks;
+      const fails = checks.filter(c => c.status === 'FAIL').length;
+      const warns = checks.filter(c => c.status === 'WARN').length;
+      const cost = envelope.results?.[0]?.cost?.implementerUsd ?? 0;
+      const status = envelope.results?.[0]?.status ?? '?';
+      log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
       if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
       totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
         ?? envelope.costSummary?.totalActualCostUSD ?? 0;
     } catch (err) {
       records.push(normalize(spec, {}));
       checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];
+      log(`#${spec.id}  ${spec.type ?? '?'}  → DISPATCH FAILED: ${err.message}`);
     }
   }
 
