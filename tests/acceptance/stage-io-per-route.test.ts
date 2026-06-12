@@ -9,7 +9,7 @@ import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder
 import type { StageDefinition, RouteName } from '../../packages/core/src/lifecycle/stage-io.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 
-const ROUTES: RouteName[] = ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'];
+const ROUTES: RouteName[] = ['execute-plan', 'review', 'debug', 'investigate', 'explore'];
 
 // Spec §6 matrix — values are 'advance' (Layer 1 + Layer 2 default true)
 // or 'skip' (Layer 1 rejected, or Layer 2 default false).
@@ -20,13 +20,13 @@ const ROUTES: RouteName[] = ['delegate', 'execute-plan', 'audit', 'review', 'deb
 // Goal mode (v5.1): review = phase-2 review-fix (write routes only); rework +
 // commit stages removed (the agent self-commits).
 const EXPECTED_APPLICABILITY: Record<string, RouteName[]> = {
-  prepare:           ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
+  prepare:           ['execute-plan', 'review', 'debug', 'investigate', 'explore'],
   'register-block':  [],                                                                  // register-context-block ONLY (not in ROUTES)
-  implement:         ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
-  review:            ['delegate', 'execute-plan'],
-  annotate:          ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
-  compose:           ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
-  terminal:          ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'],
+  implement:         ['execute-plan', 'review', 'debug', 'investigate', 'explore'],
+  review:            ['execute-plan'],
+  annotate:          ['execute-plan', 'review', 'debug', 'investigate', 'explore'],
+  compose:           ['execute-plan', 'review', 'debug', 'investigate', 'explore'],
+  terminal:          ['execute-plan', 'review', 'debug', 'investigate', 'explore'],
 };
 
 function appliesTo(stage: StageDefinition, route: RouteName): boolean {

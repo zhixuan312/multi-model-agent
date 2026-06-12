@@ -55,7 +55,7 @@ function makeAuditProvider(output: string): Provider {
 }
 
 describe('findings outcome on API surface — results[N]', () => {
-  it('read-only route (audit) surfaces all 4 outcome fields on results[0]', async () => {
+  it('read-only route (review) surfaces all 4 outcome fields on results[0]', async () => {
     const provider = makeAuditProvider(`## Finding 1: missing null guard
 - Severity: high
 - Category: correctness
@@ -66,14 +66,14 @@ describe('findings outcome on API surface — results[N]', () => {
 found — 1 critical finding`);
 
     const envelope = TaskEnvelopeStore.create({
-      taskId: 'audit-test-0', batchId: 'audit-batch', taskIndex: 0,
-      route: 'audit', agentType: 'standard',
+      taskId: 'review-test-0', batchId: 'review-batch', taskIndex: 0,
+      route: 'review', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
-      prompt: 'audit this code', readTarget: 'audit this code', cwd: os.tmpdir(),
+      prompt: 'review this code', readTarget: 'review this code', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 
@@ -82,7 +82,7 @@ found — 1 critical finding`);
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'audit',
+      route: 'review',
       envelope,
     });
 
@@ -104,14 +104,14 @@ found — 1 critical finding`);
 found — security issue found`);
 
     const envelope = TaskEnvelopeStore.create({
-      taskId: 'audit-test-1', batchId: 'audit-batch', taskIndex: 0,
-      route: 'audit', agentType: 'standard',
+      taskId: 'review-test-1', batchId: 'review-batch', taskIndex: 0,
+      route: 'review', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
-      prompt: 'audit security', readTarget: 'audit security', cwd: os.tmpdir(),
+      prompt: 'review security', readTarget: 'review security', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 
@@ -120,7 +120,7 @@ found — security issue found`);
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'audit',
+      route: 'review',
       envelope,
     });
 
@@ -145,14 +145,14 @@ found — security issue found`);
 found — style issue`);
 
     const envelope = TaskEnvelopeStore.create({
-      taskId: 'audit-test-2', batchId: 'audit-batch', taskIndex: 0,
-      route: 'audit', agentType: 'standard',
+      taskId: 'review-test-2', batchId: 'review-batch', taskIndex: 0,
+      route: 'review', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
 
     const task: TaskSpec = {
-      prompt: 'audit code style', readTarget: 'audit code style', cwd: os.tmpdir(),
+      prompt: 'review code style', readTarget: 'review code style', cwd: os.tmpdir(),
       reviewPolicy: 'none', timeoutMs: 60_000, tools: 'full',
     };
 
@@ -161,7 +161,7 @@ found — style issue`);
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'audit',
+      route: 'review',
       envelope,
     });
 

@@ -12,7 +12,7 @@ import { checkOutputTargets } from '../../bounded-execution/file-artifact-check.
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore', 'journal-recall'];
+const READ_ROUTES: RouteName[] = ['review', 'debug', 'investigate', 'explore', 'journal-recall'];
 
 export function capturePreTaskState(state: LifecycleState): void {
   // Production wires the cwd onto state.executionContext.cwd, not state.cwd —

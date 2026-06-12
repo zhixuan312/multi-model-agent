@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { toolConfig as audit } from '../../packages/core/src/tools/audit/tool-config.js';
 import { toolConfig as review } from '../../packages/core/src/tools/review/tool-config.js';
 import { toolConfig as debug } from '../../packages/core/src/tools/debug/tool-config.js';
 import { toolConfig as investigate } from '../../packages/core/src/tools/investigate/tool-config.js';
@@ -22,14 +21,6 @@ function target(spec: any): string {
 }
 
 describe('read-route buildTaskSpec sets a non-empty target', () => {
-  it('audit', () => {
-    const spec = audit.buildTaskSpec(
-      { subtypeText: 'executability', document: undefined, filePaths: ['spec.md'], perFilePath: undefined, done: 'd', hasContextBlocks: false, contextBlockIds: [], subtype: 'default' } as any,
-      ctx,
-    );
-    expect(target(spec).trim().length).toBeGreaterThan(0);
-  });
-
   it('review', () => {
     const spec = review.buildTaskSpec(
       { code: undefined, filePaths: ['a.ts'], focus: [], hasContextBlocks: false, contextBlockIds: [] } as any,

@@ -13,8 +13,6 @@ const full = {
 
 describe('every executor output envelope has all 6 required fields', () => {
   for (const [name, schema] of [
-    ['delegate', schemas.delegate.outputSchema],
-    ['audit', schemas.audit.outputSchema],
     ['review', schemas.review.outputSchema],
     ['debug', schemas.debug.outputSchema],
     ['executePlan', schemas.executePlan.outputSchema],

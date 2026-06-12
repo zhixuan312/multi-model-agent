@@ -28,7 +28,7 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 
 ## Endpoint
 
-`POST /delegate?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -36,6 +36,7 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 
 ```json
 {
+  "type": "delegate",
   "tasks": [
     {
       "prompt": "Add input validation to the login handler",
@@ -68,8 +69,8 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \
-  "http://localhost:$PORT/delegate?cwd=/project")
+  -d '{"type":"delegate","tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
@@ -77,7 +78,7 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 ## Response shapes
 
-### POST /delegate?cwd=<abs> — dispatch response (202)
+### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
 { "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }

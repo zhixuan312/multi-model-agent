@@ -1,22 +1,10 @@
-import { inputSchema as delegateSchema } from '../../packages/core/src/tools/delegate/schema.js';
 import { executePlanInputSchema } from '../../packages/core/src/tools/execute-plan/tool-config.js';
-import { toolConfig as delegateConfig } from '../../packages/core/src/tools/delegate/tool-config.js';
 import { toolConfig as executePlanConfig } from '../../packages/core/src/tools/execute-plan/tool-config.js';
 
 describe('dispatch mode config + schema', () => {
-  it('delegate config is serial and not overridable (goal mode is sequential)', () => {
-    expect(delegateConfig.dispatchMode).toBe('serial');
-    expect(delegateConfig.dispatchModeOverridable).toBe(false);
-  });
-
   it('execute-plan config is serial and not overridable', () => {
     expect(executePlanConfig.dispatchMode).toBe('serial');
     expect(executePlanConfig.dispatchModeOverridable).toBe(false);
-  });
-
-  it('delegate schema rejects an execution field (removed in goal mode — strict)', () => {
-    const r = delegateSchema.safeParse({ tasks: [{ prompt: 'x' }], execution: 'serial' });
-    expect(r.success).toBe(false);
   });
 
   it('execute-plan schema rejects an execution field (strict)', () => {

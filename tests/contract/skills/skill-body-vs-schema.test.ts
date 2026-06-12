@@ -7,24 +7,22 @@ import { z } from 'zod';
 // Imports are subpath imports of @zhixuan92/multi-model-agent-core; if any of
 // these subpaths aren't yet exported in packages/core/package.json's
 // "exports" field, ADD them following the pattern in Tasks A1.6 step 5a / A6.2 step 3a.
-import { inputSchema as auditSchema } from '@zhixuan92/multi-model-agent-core/tools/audit/schema';
 import { inputSchema as reviewSchema } from '@zhixuan92/multi-model-agent-core/tools/review/schema';
 import { inputSchema as debugSchema } from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
 import { inputSchema as investigateSchema } from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
-import { inputSchema as delegateSchema } from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
 import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { inputSchema as registerContextBlockSchema } from '@zhixuan92/multi-model-agent-core/tools/register-context-block/schema';
 import { inputSchema as retrySchema } from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
 import { inputSchema as researchSchema } from '@zhixuan92/multi-model-agent-core/tools/research/schema';
 import { inputSchema as journalRecordSchema } from '@zhixuan92/multi-model-agent-core/tools/journal/record/schema';
 import { inputSchema as journalRecallSchema } from '@zhixuan92/multi-model-agent-core/tools/journal/recall/schema';
+import { taskInputSchema } from '../../../packages/core/src/unified/task-input-schema.js';
 
 const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
-  '/audit': auditSchema,
+  '/task': taskInputSchema,
   '/review': reviewSchema,
   '/debug': debugSchema,
   '/investigate': investigateSchema,
-  '/delegate': delegateSchema,
   '/execute-plan': executePlanInputSchema,
   '/context-blocks': registerContextBlockSchema,
   '/retry': retrySchema,

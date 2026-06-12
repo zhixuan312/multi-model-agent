@@ -77,7 +77,7 @@ describe('Gap 1 — contextBlockIds expansion through runTaskViaDispatcher', () 
       resolved,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       contextBlockStore: store,
     });
 
@@ -103,7 +103,7 @@ describe('Gap 1 — contextBlockIds expansion through runTaskViaDispatcher', () 
       resolved,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
     });
 
     expect(result.status).toBe('ok');
@@ -132,7 +132,7 @@ describe('Gap 1 — contextBlockIds expansion through runTaskViaDispatcher', () 
       resolved,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       contextBlockStore: store,
     });
 

@@ -54,7 +54,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
+  '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
   '/task',
   '/control/batch-slice', '/context-blocks',
 ]);
@@ -64,12 +64,12 @@ const CWD_REQUIRED_PATHS = new Set([
  *  tool routes need it; the introspection / batch-polling / context-block
  *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
+  '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
   '/task',
 ]);
 
 /**
- * Registers tool handlers (POST /delegate, /audit, /review, /debug, /execute-plan, /retry).
+ * Registers tool handlers (POST /review, /debug, /execute-plan, /retry, etc.).
  * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
  * iterates `registry.list()` filtered to `surface: 'tool'` entries to drive
  * route registration. The registry is the canonical source for tool surface
@@ -148,8 +148,6 @@ async function registerToolHandlers(
   // Per-tool handler builders, keyed by registry routeName. The registry tells
   // us WHICH route to register and at WHICH path/method; this map answers HOW
   // to build the per-tool handler.
-  const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
-  const { buildAuditHandler } = await import('./handlers/tools/audit.js');
   const { buildReviewHandler } = await import('./handlers/tools/review.js');
   const { buildDebugHandler } = await import('./handlers/tools/debug.js');
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
@@ -160,8 +158,6 @@ async function registerToolHandlers(
   const { buildJournalRecallHandler } = await import('./handlers/tools/journal-recall.js');
 
   const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
-    delegate: buildDelegateHandler,
-    audit: buildAuditHandler,
     review: buildReviewHandler,
     debug: buildDebugHandler,
     execute_plan: buildExecutePlanHandler,

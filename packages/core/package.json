@@ -124,17 +124,9 @@
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
     },
-    "./tools/audit/tool-config": {
-      "types": "./dist/tools/audit/tool-config.d.ts",
-      "import": "./dist/tools/audit/tool-config.js"
-    },
     "./tools/debug/tool-config": {
       "types": "./dist/tools/debug/tool-config.d.ts",
       "import": "./dist/tools/debug/tool-config.js"
-    },
-    "./tools/delegate/tool-config": {
-      "types": "./dist/tools/delegate/tool-config.d.ts",
-      "import": "./dist/tools/delegate/tool-config.js"
     },
     "./tools/execute-plan/tool-config": {
       "types": "./dist/tools/execute-plan/tool-config.d.ts",
@@ -163,14 +155,6 @@
     "./tools/review/tool-config": {
       "types": "./dist/tools/review/tool-config.d.ts",
       "import": "./dist/tools/review/tool-config.js"
-    },
-    "./tools/delegate/schema": {
-      "types": "./dist/tools/delegate/schema.d.ts",
-      "import": "./dist/tools/delegate/schema.js"
-    },
-    "./tools/audit/schema": {
-      "types": "./dist/tools/audit/schema.d.ts",
-      "import": "./dist/tools/audit/schema.js"
     },
     "./tools/investigate/schema": {
       "types": "./dist/tools/investigate/schema.d.ts",

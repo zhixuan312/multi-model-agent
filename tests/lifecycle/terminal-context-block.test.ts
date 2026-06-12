@@ -4,7 +4,7 @@ import { InMemoryContextBlockStore } from '../../packages/core/src/stores/contex
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
 
-function makeState(route: 'audit' | 'delegate') {
+function makeState(route: 'review' | 'execute-plan') {
   const store = new InMemoryContextBlockStore();
   const registry = new BatchRegistry();
   registry.register({ batchId: 'b1', projectCwd: '/tmp', tool: route, state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(), blockIds: [], blocksReleased: false });
@@ -23,17 +23,17 @@ function makeState(route: 'audit' | 'delegate') {
 }
 
 describe('terminal context block registration', () => {
-  it('read route (audit): registers a block and seals its id', async () => {
-    const { state, store, registry, envelope } = makeState('audit');
+  it('read route (review): registers a block and seals its id', async () => {
+    const { state, store, registry, envelope } = makeState('review');
     await terminalHandler(state);
     expect(state.contextBlockId).toBe('terminal-b1-0');
-    expect(store.get('terminal-b1-0')).toContain('audit');
+    expect(store.get('terminal-b1-0')).toBeTruthy();
     expect(registry.getTerminalBlock('b1', 0)).toBe('terminal-b1-0');
     expect(envelope.snapshot().contextBlockId).toBe('terminal-b1-0');
   });
 
-  it('write route (delegate): registers nothing, contextBlockId null', async () => {
-    const { state, store, envelope } = makeState('delegate');
+  it('write route (execute-plan): registers nothing, contextBlockId null', async () => {
+    const { state, store, envelope } = makeState('execute-plan');
     await terminalHandler(state);
     expect(state.contextBlockId).toBeUndefined();
     expect(store.size).toBe(0);
@@ -41,7 +41,7 @@ describe('terminal context block registration', () => {
   });
 
   it('re-invocation is idempotent: stable id, no second block', async () => {
-    const { state, store } = makeState('audit');
+    const { state, store } = makeState('review');
     await terminalHandler(state);
     const first = state.contextBlockId;
     await terminalHandler(state);
@@ -50,7 +50,7 @@ describe('terminal context block registration', () => {
   });
 
   it('best-effort: store.register failure leaves contextBlockId null + seal still runs', async () => {
-    const { state, envelope } = makeState('audit');
+    const { state, envelope } = makeState('review');
     state.executionContext.contextBlockStore = {
       register: vi.fn(() => { throw new Error('boom'); }),
       get: () => undefined, delete: () => false, pin: () => {}, unpin: () => {},

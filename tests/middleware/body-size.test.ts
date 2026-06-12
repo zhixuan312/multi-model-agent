@@ -7,7 +7,7 @@ describe('body-size middleware', () => {
     const s = await startTestServer({ server: { limits: { maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES } } });
     try {
       const big = 'x'.repeat(COMPRESSED_BODY_LIMIT_BYTES + 1);
-      const res = await fetch(`${s.url}/delegate?cwd=/tmp`, { method: 'POST', body: big });
+      const res = await fetch(`${s.url}/review?cwd=/tmp`, { method: 'POST', body: big });
       expect(res.status).toBe(413);
       const body = await res.json();
       expect(body.error.code).toBe('payload_too_large');
@@ -20,7 +20,7 @@ describe('body-size middleware', () => {
     const s = await startTestServer({ server: { limits: { maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES } } });
     try {
       const small = JSON.stringify({ prompt: 'hello' });
-      const res = await fetch(`${s.url}/delegate?cwd=/tmp`, {
+      const res = await fetch(`${s.url}/review?cwd=/tmp`, {
         method: 'POST',
         body: small,
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}`, 'content-type': 'application/json' },

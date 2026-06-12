@@ -4,8 +4,6 @@
 // editing this file plus the new tool-config.ts, nowhere else.
 
 import { ToolSurfaceRegistry } from './tool-surface-registry.js';
-import { registerDelegate } from '../tools/delegate/tool-config.js';
-import { registerAudit } from '../tools/audit/tool-config.js';
 import { registerReview } from '../tools/review/tool-config.js';
 import { registerDebug } from '../tools/debug/tool-config.js';
 import { registerExecutePlan } from '../tools/execute-plan/tool-config.js';
@@ -17,8 +15,6 @@ import { registerJournalRecord } from '../tools/journal/record/tool-config.js';
 import { registerJournalRecall } from '../tools/journal/recall/tool-config.js';
 
 export function registerAllTools(registry: ToolSurfaceRegistry): void {
-  registerDelegate(registry);
-  registerAudit(registry);
   registerReview(registry);
   registerDebug(registry);
   registerExecutePlan(registry);

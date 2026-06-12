@@ -13,7 +13,7 @@ describe('progress-watchdog integration', () => {
       cwd: process.cwd(),
     });
     try {
-      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -21,7 +21,7 @@ describe('progress-watchdog integration', () => {
           'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ tasks: [{ prompt: 'noop', filePaths: [] }] }),
+        body: JSON.stringify({ filePaths: ['/tmp/noop.ts'] }),
       });
       expect(res.status).toBe(202);
       const { batchId } = (await res.json()) as { batchId: string };

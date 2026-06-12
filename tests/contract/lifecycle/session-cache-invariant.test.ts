@@ -35,10 +35,10 @@ describe('session cache invariant — one open per (task, tier)', () => {
       'Content-Type': 'application/json',
     };
     try {
-      const dispatch = await fetch(`${server.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
+      const dispatch = await fetch(`${server.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
+        body: JSON.stringify({ filePaths: ['/tmp/noop.ts'] }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };

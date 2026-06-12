@@ -6,14 +6,13 @@ import {
   type CachedPrefixBlocks,
 } from '../tools/read-route-prompt.js';
 import type { ReadOnlySubtypeSpec } from '../lifecycle/read-only-subtype-spec.js';
-import { AUDIT_SUBTYPES, type AuditSubtype } from '../tools/audit/subtypes.js';
 import { REVIEW_SUBTYPES, type ReviewSubtype } from '../tools/review/subtypes.js';
 import { DEBUG_SUBTYPES, type DebugSubtype } from '../tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES, type InvestigateSubtype } from '../tools/investigate/subtypes.js';
 import { RESEARCH_SUBTYPES, type ResearchSubtype } from '../tools/research/subtypes.js';
 import { JOURNAL_RECALL_SUBTYPES, type JournalRecallSubtype } from '../tools/journal/recall/subtypes.js';
 
-export type ReadOnlyRouteName = 'audit' | 'review' | 'debug' | 'investigate' | 'research' | 'journal-recall';
+export type ReadOnlyRouteName = 'review' | 'debug' | 'investigate' | 'research' | 'journal-recall';
 
 /** Standard finding-format spec — uniform `## Finding N:` shape across
  *  all read-only routes so the downstream parser/annotator only reads
@@ -45,7 +44,6 @@ interface RouteEntry {
 }
 
 export const READ_ONLY_ROUTES: Record<ReadOnlyRouteName, RouteEntry> = {
-  audit:       { subtypeMap: AUDIT_SUBTYPES       as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
   review:      { subtypeMap: REVIEW_SUBTYPES      as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
   debug:       { subtypeMap: DEBUG_SUBTYPES       as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
   investigate: { subtypeMap: INVESTIGATE_SUBTYPES as Record<string, ReadOnlySubtypeSpec>, defaultSubtype: 'default' },
@@ -99,4 +97,4 @@ export function isReadOnlyRoute(route: string): route is ReadOnlyRouteName {
 }
 
 // Re-export per-tool subtype types for callers that need the literal union.
-export type { AuditSubtype, ReviewSubtype, DebugSubtype, InvestigateSubtype, ResearchSubtype, JournalRecallSubtype };
+export type { ReviewSubtype, DebugSubtype, InvestigateSubtype, ResearchSubtype, JournalRecallSubtype };

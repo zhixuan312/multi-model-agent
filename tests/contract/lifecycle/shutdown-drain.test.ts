@@ -28,16 +28,16 @@ describe('shutdown drain', () => {
     };
     try {
       // Sanity: dispatch works pre-drain.
-      const ok = await fetch(`${server.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
-        method: 'POST', headers, body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
+      const ok = await fetch(`${server.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+        method: 'POST', headers, body: JSON.stringify({ filePaths: ['/tmp/noop.ts'] }),
       });
       expect(ok.status).toBe(202);
 
       // Flip drain flag — new dispatches must 503.
       setDraining(true);
       try {
-        const denied = await fetch(`${server.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
-          method: 'POST', headers, body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
+        const denied = await fetch(`${server.baseUrl}/review?cwd=${encodeURIComponent(cwd)}`, {
+          method: 'POST', headers, body: JSON.stringify({ filePaths: ['/tmp/noop.ts'] }),
         });
         expect(denied.status).toBe(503);
         const body = await denied.json() as { error?: { code?: string } };

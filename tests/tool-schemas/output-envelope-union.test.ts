@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import * as delegate from '../../packages/core/src/tools/delegate/schema.js';
-import * as audit from '../../packages/core/src/tools/audit/schema.js';
 import * as review from '../../packages/core/src/tools/review/schema.js';
 import * as debug from '../../packages/core/src/tools/debug/schema.js';
 import * as executePlan from '../../packages/core/src/tools/execute-plan/barrel.js';
@@ -8,8 +6,6 @@ import * as retry from '../../packages/core/src/tools/retry/schema.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
 const allSchemas = [
-  ['delegate', delegate.outputSchema],
-  ['audit', audit.outputSchema],
   ['review', review.outputSchema],
   ['debug', debug.outputSchema],
   ['executePlan', executePlan.outputSchema],

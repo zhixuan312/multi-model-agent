@@ -7,7 +7,7 @@ import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
 /**
  * Dependencies injected into every handler factory at server startup.
- * Built once; passed to buildDelegateHandler, buildAuditHandler, etc.
+ * Built once; passed to buildReviewHandler, buildDebugHandler, etc.
  */
 export interface HandlerDeps {
   /** Full multi-model config (agents + defaults). May be undefined in unit tests. */

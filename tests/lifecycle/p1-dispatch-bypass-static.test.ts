@@ -16,8 +16,8 @@ describe('Precondition P1 — read-route dispatch bypass (static-source verifica
     expect(src).toMatch(/readTarget.*\?.*readTarget.*:/s);
   });
 
-  it('all 5 read-only tool-configs set readTarget in buildTaskSpec', () => {
-    for (const route of ['audit', 'review', 'debug', 'investigate', 'research']) {
+  it('all 4 read-only tool-configs set readTarget in buildTaskSpec', () => {
+    for (const route of ['review', 'debug', 'investigate', 'research']) {
       const path = `packages/core/src/tools/${route}/tool-config.ts`;
       const src = read(path);
       // Each tool-config's buildTaskSpec must set readTarget so the dispatch bypass kicks in

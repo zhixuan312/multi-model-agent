@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { AUDIT_SUBTYPES } from '../../packages/core/src/tools/audit/subtypes.js';
 import { REVIEW_SUBTYPES } from '../../packages/core/src/tools/review/subtypes.js';
 import { DEBUG_SUBTYPES } from '../../packages/core/src/tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES } from '../../packages/core/src/tools/investigate/subtypes.js';
@@ -11,7 +10,6 @@ import { RESEARCH_SUBTYPES } from '../../packages/core/src/tools/research/subtyp
 // audit's enum is the 4-value set (audit/schema.ts:10); the rest are
 // 'default'-only.
 const SCHEMA_ENUMS: Record<string, string[]> = {
-  audit: ['default', 'plan', 'spec', 'skill'],
   review: ['default'],
   debug: ['default'],
   investigate: ['default'],
@@ -19,7 +17,6 @@ const SCHEMA_ENUMS: Record<string, string[]> = {
 };
 
 const SUBTYPE_MAPS: Record<string, Record<string, unknown>> = {
-  audit: AUDIT_SUBTYPES,
   review: REVIEW_SUBTYPES,
   debug: DEBUG_SUBTYPES,
   investigate: INVESTIGATE_SUBTYPES,

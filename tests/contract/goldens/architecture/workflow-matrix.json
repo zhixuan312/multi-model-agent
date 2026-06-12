@@ -1,24 +1,10 @@
 {
   "tools": [
     {
-      "routeName": "audit",
-      "toolCategory": "read_only",
-      "agentTypeDefault": "complex",
-      "agentTypeOverridable": false,
-      "responseShapeName": "BatchResponse"
-    },
-    {
       "routeName": "debug",
       "toolCategory": "read_only",
       "agentTypeDefault": "complex",
       "agentTypeOverridable": false,
-      "responseShapeName": "BatchResponse"
-    },
-    {
-      "routeName": "delegate",
-      "toolCategory": "artifact_producing",
-      "agentTypeDefault": "standard",
-      "agentTypeOverridable": true,
       "responseShapeName": "BatchResponse"
     },
     {
@@ -94,10 +80,8 @@
     {
       "name": "implement",
       "applicableRoutes": [
-        "delegate",
         "execute-plan",
         "retry",
-        "audit",
         "review",
         "debug",
         "investigate",
@@ -111,7 +95,6 @@
     {
       "name": "review",
       "applicableRoutes": [
-        "delegate",
         "execute-plan",
         "retry",
         "journal-record"
@@ -121,10 +104,8 @@
     {
       "name": "annotate",
       "applicableRoutes": [
-        "delegate",
         "execute-plan",
         "retry",
-        "audit",
         "review",
         "debug",
         "investigate",

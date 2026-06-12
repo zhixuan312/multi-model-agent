@@ -100,7 +100,7 @@ describe('envelope pipeline — end-to-end', () => {
     const provider = makeRecordingProvider(captured);
     const envelope = TaskEnvelopeStore.create({
       taskId: 'b1:0', batchId: 'b1', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
@@ -114,7 +114,7 @@ describe('envelope pipeline — end-to-end', () => {
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope,
     });
 
@@ -127,7 +127,7 @@ describe('envelope pipeline — end-to-end', () => {
     const provider = makeRecordingProvider({ envelopeSeen: false });
     const envelope = TaskEnvelopeStore.create({
       taskId: 'b2:0', batchId: 'b2', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
@@ -141,7 +141,7 @@ describe('envelope pipeline — end-to-end', () => {
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope,
     });
 
@@ -162,7 +162,7 @@ describe('envelope pipeline — end-to-end', () => {
       const provider = committingProvider(cwd);
       const envelope = TaskEnvelopeStore.create({
         taskId: 'b3:0', batchId: 'b3', taskIndex: 0,
-        route: 'delegate', agentType: 'standard',
+        route: 'execute-plan', agentType: 'standard',
         client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
         reviewPolicy: 'none' as const,
       });
@@ -171,7 +171,7 @@ describe('envelope pipeline — end-to-end', () => {
         resolved: { slot: 'standard', provider } as ResolvedAgent,
         config: makeConfig(),
         taskIndex: 0,
-        route: 'delegate',
+        route: 'execute-plan',
         envelope,
       });
       const snap = envelope.snapshot();
@@ -207,7 +207,7 @@ describe('envelope pipeline — end-to-end', () => {
     try {
     const envelope = TaskEnvelopeStore.create({
       taskId: 'b4:0', batchId: 'b4', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
       reviewPolicy: 'none' as const,
     }, bus);
@@ -219,7 +219,7 @@ describe('envelope pipeline — end-to-end', () => {
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope,
       bus,
     });
@@ -235,7 +235,7 @@ describe('envelope pipeline — end-to-end', () => {
     // drops a critical field breaks this test instead of breaking
     // telemetry in production.
     const rec = enqueued[0] as Record<string, unknown>;
-    expect(rec['route']).toBe('delegate');
+    expect(rec['route']).toBe('execute-plan');
     expect(rec['workerStatus']).toBe('done');
     expect(rec['terminalStatus']).toBe('ok');
     expect(rec['mainModel']).toBe('claude-opus-4-7');
@@ -286,7 +286,7 @@ describe('envelope pipeline — end-to-end', () => {
     }));
     const envelope = TaskEnvelopeStore.create({
       taskId: 'b5:0', batchId: 'b5', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     }, bus);
@@ -296,7 +296,7 @@ describe('envelope pipeline — end-to-end', () => {
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope, bus,
     });
 

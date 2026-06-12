@@ -41,7 +41,7 @@ describe('contract: introspection + errors', () => {
   it('missing token returns unauthorized error envelope', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/review?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
       });
       expect(res.status).toBe(401);

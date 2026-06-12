@@ -71,7 +71,7 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
       resolved,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
     });
 
     expect(result).toBeDefined();
@@ -121,7 +121,7 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
         resolved,
         config: makeConfig(),
         taskIndex: 0,
-        route: 'delegate',
+        route: 'execute-plan',
       });
 
       expect(result).toBeDefined();
@@ -159,7 +159,7 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
       resolved,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
     });
 
     expect(result.status).toBe('error');

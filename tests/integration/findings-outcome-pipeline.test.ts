@@ -85,7 +85,7 @@ found`,
     );
     const envelope = TaskEnvelopeStore.create({
       taskId: 'fo1:0', batchId: 'fo1', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
@@ -99,7 +99,7 @@ found`,
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope,
     });
 
@@ -135,7 +135,7 @@ found`,
     );
     const envelope = TaskEnvelopeStore.create({
       taskId: 'fo2:0', batchId: 'fo2', taskIndex: 0,
-      route: 'delegate', agentType: 'standard',
+      route: 'execute-plan', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: os.tmpdir(),
       reviewPolicy: 'full' as const,
     });
@@ -149,7 +149,7 @@ found`,
       resolved: { slot: 'standard', provider } as ResolvedAgent,
       config: makeConfig(),
       taskIndex: 0,
-      route: 'delegate',
+      route: 'execute-plan',
       envelope,
     });
 
@@ -186,7 +186,7 @@ found`,
     try {
       const envelope = TaskEnvelopeStore.create({
         taskId: 'fo3:0', batchId: 'fo3', taskIndex: 0,
-        route: 'delegate', agentType: 'standard',
+        route: 'execute-plan', agentType: 'standard',
         client: 'claude-code', mainModel: 'claude-opus-4-7', cwd,
         reviewPolicy: 'none' as const,
       }, bus);
@@ -197,14 +197,14 @@ found`,
         resolved: { slot: 'standard', provider } as ResolvedAgent,
         config: makeConfig(),
         taskIndex: 0,
-        route: 'delegate',
+        route: 'execute-plan',
         envelope,
         bus,
       });
 
       expect(enqueued.length).toBeGreaterThanOrEqual(1);
       const rec = enqueued[0] as Record<string, unknown>;
-      expect(rec['route']).toBe('delegate');
+      expect(rec['route']).toBe('execute-plan');
       expect(rec['terminalStatus']).toBe('ok');
     } finally {
       rmSync(cwd, { recursive: true, force: true });

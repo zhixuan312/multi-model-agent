@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { AUDIT_SUBTYPES } from '../../packages/core/src/tools/audit/subtypes.js';
 import { REVIEW_SUBTYPES } from '../../packages/core/src/tools/review/subtypes.js';
 import { DEBUG_SUBTYPES } from '../../packages/core/src/tools/debug/subtypes.js';
 import { INVESTIGATE_SUBTYPES } from '../../packages/core/src/tools/investigate/subtypes.js';
@@ -17,16 +16,6 @@ describe('severity-definitions — all 7 routes/templates have spec §9 definiti
     subtypeSpec: any;
     expectedDefinitions: Record<string, string>;
   }> = [
-    {
-      name: 'audit (spec subtype)',
-      subtypeSpec: AUDIT_SUBTYPES.spec,
-      expectedDefinitions: {
-        critical: 'Blocks executability of the audited doc',
-        high: 'Significant ambiguity/gap; rework needed',
-        medium: 'Clarity gap; minor assumption needed',
-        low: 'Polish; no behavior change',
-      },
-    },
     {
       name: 'review',
       subtypeSpec: REVIEW_SUBTYPES.default,

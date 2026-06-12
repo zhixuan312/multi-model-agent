@@ -30,14 +30,14 @@ describe('GET /batch/:batchId', () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
-      const delegateRes = await fetch(`${s.url}/delegate?cwd=${encodeURIComponent(cwd)}`, {
+      const delegateRes = await fetch(`${s.url}/review?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ tasks: [{ prompt: 'do something' }] }),
+        body: JSON.stringify({ filePaths: ['/tmp/something.ts'] }),
       });
       expect(delegateRes.status).toBe(202);
       const { batchId } = await delegateRes.json() as { batchId: string };
@@ -102,14 +102,14 @@ describe('GET /batch/:batchId', () => {
     const cwd = makeTmpCwd();
     try {
       // Create a batch first
-      const delegateRes = await fetch(`${s.url}/delegate?cwd=${encodeURIComponent(cwd)}`, {
+      const delegateRes = await fetch(`${s.url}/review?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ tasks: [{ prompt: 'task' }] }),
+        body: JSON.stringify({ filePaths: ['/tmp/task.ts'] }),
       });
       const { batchId } = await delegateRes.json() as { batchId: string };
 
