@@ -1,0 +1,102 @@
+import type { Provider, Session, TurnResult } from '../types/run-result.js';
+import type { AgentType } from '../types/task-spec.js';
+import type { TaskType, SandboxPolicy } from './type-registry.js';
+import { parseReviewerOutput, type ReviewerOutput } from './reviewer-output-parser.js';
+
+export interface PipelineInput {
+  type: TaskType;
+  implementerSkill: string;
+  reviewerSkill: string;
+  taskPayload: string;
+  implementerProvider: Provider;
+  reviewerProvider: Provider;
+  reviewPolicy: 'reviewed' | 'none';
+  cwd: string;
+  sandboxPolicy: SandboxPolicy;
+  resumeImplementer?: string;
+  resumeReviewer?: string;
+  timeoutMs?: number;
+}
+
+export interface SessionInfo {
+  tier: AgentType;
+  sessionId: string | null;
+  resumeSupported: boolean;
+}
+
+export interface PipelineResult {
+  status: 'done' | 'done_with_concerns' | 'failed';
+  implementerOutput: string;
+  implementerTurn: TurnResult;
+  reviewerOutput: ReviewerOutput | null;
+  reviewerRaw: string | null;
+  reviewerTurn: TurnResult | null;
+  reviewerParseError: string | null;
+  sessions: {
+    implementer: SessionInfo;
+    reviewer: SessionInfo | null;
+  };
+  cost: {
+    implementerUsd: number;
+    reviewerUsd: number | null;
+  };
+}
+
+export async function runTwoPhasePipeline(input: PipelineInput): Promise<PipelineResult> {
+  const ac = new AbortController();
+  const deadline = Date.now() + (input.timeoutMs ?? 3_600_000);
+
+  const implSession = input.implementerProvider.openSession({
+    cwd: input.cwd,
+    wallClockDeadline: deadline,
+    abortSignal: ac.signal,
+  });
+
+  const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${input.taskPayload}`;
+  const implTurn = await implSession.send(implPrompt);
+  const implId = implSession.getSessionId();
+
+  if (input.reviewPolicy === 'none') {
+    return {
+      status: 'done',
+      implementerOutput: implTurn.output,
+      implementerTurn: implTurn,
+      reviewerOutput: null,
+      reviewerRaw: null,
+      reviewerTurn: null,
+      reviewerParseError: null,
+      sessions: {
+        implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
+        reviewer: null,
+      },
+      cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+    };
+  }
+
+  const revSession = input.reviewerProvider.openSession({
+    cwd: input.cwd,
+    wallClockDeadline: deadline,
+    abortSignal: ac.signal,
+  });
+
+  const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${implTurn.output}`;
+  const revTurn = await revSession.send(revPrompt);
+  const revId = revSession.getSessionId();
+
+  const parsed = parseReviewerOutput(revTurn.output);
+
+  return {
+    status: parsed.ok ? 'done' : 'done_with_concerns',
+    implementerOutput: implTurn.output,
+    implementerTurn: implTurn,
+    reviewerOutput: parsed.ok ? parsed.data : null,
+    reviewerRaw: revTurn.output,
+    reviewerTurn: revTurn,
+    reviewerParseError: parsed.ok ? null : parsed.error,
+    sessions: {
+      implementer: { tier: 'standard', sessionId: implId, resumeSupported: implId !== null },
+      reviewer: { tier: 'complex', sessionId: revId, resumeSupported: revId !== null },
+    },
+    cost: { implementerUsd: implTurn.costUSD, reviewerUsd: revTurn.costUSD },
+  };
+}
