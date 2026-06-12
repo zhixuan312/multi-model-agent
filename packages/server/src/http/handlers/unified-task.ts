@@ -251,7 +251,11 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               taskId,
               type: input.type,
               status: result.status,
-              report: result.reviewerOutput ?? { raw: result.implementerOutput },
+              report: {
+                implementer: result.implementerOutput,
+                reviewer: result.reviewerOutput,
+                reviewerParseError: result.reviewerParseError,
+              },
               sessions: result.sessions,
               worktree: result.worktree,
               cost: result.cost,
