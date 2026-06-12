@@ -18,7 +18,7 @@ function keepWorkspaceClean(dir) {
 }
 import { createProject } from './fixtures.mjs';
 import { SCENARIOS } from './config.mjs';
-import { runDispatch, pollBatch } from './dispatch.mjs';
+import { runDispatch, pollTask } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
@@ -78,9 +78,9 @@ try {
         checksByScenario[spec.id] = [{ checkId: 'register', status: res.blockId ? 'PASS' : 'FAIL', detail: `blockId=${res.blockId}` }];
         continue;
       }
-      const envelope = await pollBatch(ctx.token, res.batchId);
+      const envelope = await pollTask(ctx.token, res.taskId);
       if (spec.id === 'seed') {
-        ctx.seedBatchId = res.batchId;
+        ctx.seedTaskId = res.taskId;
         const results = Array.isArray(envelope.results) ? envelope.results : [];
         const idx = results.findIndex((t) => t.status && t.status !== 'done' && t.status !== 'ok');
         ctx.seedFailIdx = idx >= 0 ? idx : 0;
@@ -100,7 +100,7 @@ try {
       }
       const rec = normalize(spec, {
         response: collectResponse(envelope),
-        diagnostics: collectDiagnostics(res.batchId),
+        diagnostics: collectDiagnostics(res.taskId),
         queue, backend: null, // ④ verified run-level after the loop
       });
       records.push(rec);

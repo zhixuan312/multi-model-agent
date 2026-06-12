@@ -13,7 +13,7 @@ export function verify(rec) {
     // retry re-runs a write-route (delegate) task → its terminal contextBlockId
     // must be null (write routes register no block). register-context-block has
     // no task result (returns { id }), so only check when results are present.
-    if (e.route === 'retry' && r?.results?.length) {
+    if (e.type === 'retry_tasks' && r?.results?.length) {
       const cb = r.results[0]?.contextBlockId;
       out.push(C('context-block', cb === null ? 'PASS' : 'WARN', `contextBlockId=${cb} (retry of a write task → expect null)`));
     }
@@ -59,7 +59,7 @@ export function verify(rec) {
     // identical to the seed, leaving nothing to commit. That's PASS (reason
     // shown). Only a null commitSha with NO skip reason is the real "lost
     // commit" bug class → FAIL (or WARN for multi-task aggregates).
-    const multiTask = (e.tasks && e.tasks > 1) || e.route === 'execute-plan';
+    const multiTask = (e.tasks && e.tasks > 1) || e.type === 'execute_plan';
     const committed = SHA40.test(sr.commitSha ?? '');
     const labeledSkip = !committed && typeof sr.commitSkipReason === 'string' && sr.commitSkipReason.length > 0;
     // reviewPolicy:'none' has no phase-2 guarantor (design choice: trust the
@@ -134,7 +134,7 @@ export function verify(rec) {
     // check above. Assert the deliverable is real: non-empty findings that
     // actually carry evidence, AND a sources table showing ≥1 source was
     // used (proves the evidence pack was non-empty, i.e. adapters were healthy).
-    if (e.route === 'research') {
+    if (e.type === 'research') {
       // Empty findings is a LEGITIMATE outcome per the mma-research contract
       // (empty ≠ failure) — synthesis is content-dependent and can be low-yield
       // on a given run even when the route worked (status done, sources fetched).
@@ -168,7 +168,7 @@ export function verify(rec) {
   // contextBlockId surfacing — universal terminal context block (4.7.20).
   // Read routes auto-register a terminal block → non-null contextBlockId on the
   // per-task result. Write routes register none → contextBlockId is exactly null.
-  // `undefined` means the field was not projected onto /batch (the pre-4.7.20 bug)
+  // `undefined` means the field was not projected onto /task (the pre-4.7.20 bug)
   // → FAIL. This is the direct regression guard for the feature.
   if (!e.expectFail && (e.kind === 'read' || e.kind === 'write')) {
     const cb = task0.contextBlockId;
@@ -176,7 +176,7 @@ export function verify(rec) {
       const ok = typeof cb === 'string' && cb.length > 0;
       // research is a network aggregation route; a null here is a soft WARN
       // (worker may not have completed), not a hard regression signal.
-      out.push(C('context-block', ok ? 'PASS' : (e.route === 'research' ? 'WARN' : 'FAIL'),
+      out.push(C('context-block', ok ? 'PASS' : (e.type === 'research' ? 'WARN' : 'FAIL'),
         `contextBlockId=${cb} (read route → expect non-null id)`));
     } else {
       out.push(C('context-block', cb === null ? 'PASS' : 'FAIL',

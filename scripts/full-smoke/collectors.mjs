@@ -23,10 +23,10 @@ function diagLines() {
   return lines;
 }
 
-// ② diagnostics JSONL for a batchId
-export function collectDiagnostics(batchId) {
+// ② diagnostics JSONL for a taskId
+export function collectDiagnostics(taskId) {
   const events = diagLines()
-    .filter((l) => l.includes(batchId))
+    .filter((l) => l.includes(taskId))
     .map((l) => { try { return JSON.parse(l); } catch { return null; } })
     .filter(Boolean);
   const completed = events.find((e) => e.kind === 'batch_completed' || e.kind === 'batch_failed');
@@ -36,7 +36,7 @@ export function collectDiagnostics(batchId) {
 }
 
 // ③ queue: wire records since `prevCount` lines (append-window correlation —
-// the wire record carries NO batchId, only eventId, so per-dispatch isolation
+// the wire record carries NO taskId, only eventId, so per-dispatch isolation
 // uses the append window on an idle server; the flusher may drain mid-run, so
 // this is best-effort and ④ is the durable truth).
 export function queueLineCount() {
