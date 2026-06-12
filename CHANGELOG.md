@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-06-12
+
+**Goal-mode rewrite of the write routes.** All four write routes (`delegate`, `execute-plan`, `retry`, `journal-record`) now run the whole plan as one sequential **goal-set** instead of a per-task review/rework/commit lifecycle. Phase 1 (standard tier) implements every task in order and self-commits each as `[task N] <heading>`; phase 2 (complex tier) is the completion guarantor — it reviews each task against the plan *and the working tree* and fixes/commits anything the implementer left. The caller gets one clean report of the final per-task state (is each task done; if not, why), with the phase-1/phase-2 churn hidden. `SCHEMA_VERSION` unchanged (5).
+
+### Added
+- Two-phase goal-set execution: `Goal` type + `goal-prompts` / `goal-builder` / `goal-report` / `write-goal-lock` / `review-fix` stage. Plan-phase grouping with `PHASE k` checkpoints (execute-plan derives phases from the plan's heading structure).
+- Per-repo `withWriteGoalLock(cwd)` serialization; goal preconditions (`not_a_git_repo`, `dirty_working_tree`, `empty_plan`, `plan_too_large`).
+- Compaction observability: a `claude_compaction` provider event surfaced from the Claude SDK's `compact_boundary` (observe-only).
+
+### Changed
+- Write routes are sequential (one goal-set per call); `delegate.execution` and `retry.taskIndices` inputs removed. The agent self-commits per task — MMA no longer owns the commit. Reports surface only the final per-task state (review-process detail is hidden).
+- Both goal prompts now carry the engineering-quality bar (no dead/dormant/unwired/duplicate code; expandable/maintainable/scalable/reusable), autonomy (fix problems yourself, never bail), and context-window recoverability (commit per task, treat git + files + plan as the source of truth).
+
+### Removed
+- Per-task `review` / `rework` / `commit` lifecycle stages + DiffTracker; `git-commit-handler`, `{spec,quality,journal}-review-prompt`, `rework-prompt`, `parse-review-report`, `compose-commit-message`, `tier-policy`, and the per-project journal lock (folded into `withWriteGoalLock`).
+
+### Fixed
+- `arxiv` research adapter returned HTTP 400 on natural-language queries (punctuation broke arxiv's parser) — the query is now sanitized to arxiv-safe tokens.
+
 ## [5.0.3] - 2026-06-04
 
 **Reverts the Bun runtime + standalone-binary distribution shipped in 5.0.0–5.0.2, returning to the Node build.** Those releases distributed `@zhixuan92/multi-model-agent` as a `bun build --compile` standalone binary. That binary bundled `@anthropic-ai/claude-agent-sdk`, which works by spawning a separate **native `claude` CLI** (shipped in `@anthropic-ai/claude-agent-sdk-<platform>`). The SDK resolves that CLI via `require.resolve` at runtime — which cannot work inside the compiled `$bunfs` virtual filesystem and has no `node_modules` to fall back to — so every claude/standard-tier worker threw `Native CLI binary for <platform> not found` and `runner_crash`ed at 0 turns. The codex/complex tier was unaffected (it spawns its own on-disk CLI). This was a regression present in all of 5.0.0–5.0.2.
