@@ -22,7 +22,7 @@ export class ActivityTracker {
   private readonly intervalMs: number;
   private readonly mainModel: string | undefined;
   private readonly _recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  private readonly _batchId?: string;
+  private readonly _taskId?: string;
   private timer: ReturnType<typeof setInterval> | null = null;
   private startTime = 0;
   private lastLlmMs = 0;
@@ -65,7 +65,7 @@ export class ActivityTracker {
     this.mainModel = options.mainModel;
     this.intervalMs = options.intervalMs ?? 5000;
     this._recordHeartbeat = options.recordHeartbeat;
-    this._batchId = options.batchId;
+    this._taskId = options.taskId;
   }
 
   /**
@@ -83,7 +83,7 @@ export class ActivityTracker {
     const now = Date.now();
     const elapsedMs = this.startTime > 0 ? now - this.startTime : 0;
     return {
-      batchId: this._batchId ?? '',
+      taskId: this._taskId ?? '',
       elapsedMs,
       idleSinceLlmMs: this.lastLlmMs > 0 ? now - this.lastLlmMs : 0,
       idleSinceToolMs: this.lastToolMs > 0 ? now - this.lastToolMs : 0,

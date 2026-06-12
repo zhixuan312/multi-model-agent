@@ -275,7 +275,7 @@ describe('ActivityTracker', () => {
       provider: 'gpt-5.4',
       mainModel: 'claude-opus-4-7',
       intervalMs: 10_000,
-      batchId: 'b-1',
+      taskId: 'b-1',
     });
     timer.start(5);
     timer.transition({ stage: 'review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });

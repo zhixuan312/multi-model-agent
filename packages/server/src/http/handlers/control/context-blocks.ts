@@ -1,19 +1,5 @@
-// packages/server/src/http/handlers/control/context-blocks.ts
-//
-// Hosts POST /context-blocks (register) and DELETE /context-blocks/:id
-// (unregister). Lives under handlers/control/ rather than handlers/tools/
-// because register_context_block is an assist-tier sync state op:
-//
-//   - synchronous request/response (no taskId, no async dispatch)
-//   - no LifecycleDispatcher path (no review chain, no commit stage)
-//   - paired skill is mma-context-blocks/ (covers register + lookup)
-//
-// See vertical_design.md §9 "register_context_block / Assist-tier slot
-// conventions" for the canonical rationale.
-//
-// v4.0: POST /context-blocks is now a thin shim that validates, reserves
-// the project, and dispatches to the LifecycleDispatcher (which routes
-// through the register_to_block_store stage handler per the StagePlan).
+// POST /context-blocks (register) and DELETE /context-blocks/:id (unregister).
+// Synchronous state ops — no async dispatch, no pipeline.
 
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
@@ -21,7 +7,6 @@ import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { ProjectRegistry } from '../../project-registry.js';
-import { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
 
 export interface ContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;
@@ -39,8 +24,7 @@ const createBodySchema = z.object({
 });
 
 /**
- * POST /context-blocks — thin shim that validates, reserves the project,
- * and delegates block registration to the LifecycleDispatcher StagePlan.
+ * POST /context-blocks — validates, reserves the project, registers the block.
  */
 export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): RawHandler {
   return async (
@@ -95,18 +79,11 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
       return;
     }
 
-    // ── 5. Dispatch to lifecycle ───────────────────────────────────────────
-    const dispatcher = new LifecycleDispatcher();
-    const output = await dispatcher.dispatch({
-      route: 'register-context-block',
-      toolCategory: 'assist',
-      rawRequest: parsed.data,
-      context: { projectContext: pc },
-    });
+    // ── 5. Register block directly ──────────────────────────────────────────
+    const registered = pc.contextBlocks.register(content);
 
-    // ── 6. Return dispatcher output ────────────────────────────────────────
-    const status = output.status === 200 ? 201 : output.status;
-    sendJson(res, status as 200 | 201 | 400 | 409, output.body);
+    // ── 6. Return block ID ────────────────────────────────────────────────
+    sendJson(res, 201, { id: registered.id });
   };
 }
 

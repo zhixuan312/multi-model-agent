@@ -36,12 +36,12 @@ function mockProvider(behavior: (opts: SessionOpts) => Session): Provider {
   };
 }
 
-function opts(batchId: string | undefined, taskIndex: number | undefined): SessionOpts {
+function opts(taskId: string | undefined, taskIndex: number | undefined): SessionOpts {
   return {
     cwd: '/tmp',
     wallClockDeadline: Date.now() + 60_000,
     abortSignal: new AbortController().signal,
-    ...(batchId !== undefined && { batchId }),
+    ...(taskId !== undefined && { taskId }),
     ...(taskIndex !== undefined && { taskIndex }),
   } as SessionOpts;
 }
@@ -134,7 +134,7 @@ describe('provider-factory per-task safety (D6)', () => {
     expect(__liveByTask().get('B:7')).toBeUndefined();
     expect(events.find((e) => e.event === 'release_task_close_failed')).toMatchObject({
       event: 'release_task_close_failed',
-      batchId: 'B',
+      taskId: 'B',
       taskIndex: 7,
       error: 'close-failed',
     });

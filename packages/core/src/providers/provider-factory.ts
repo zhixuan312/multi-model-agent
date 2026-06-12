@@ -41,7 +41,7 @@ export class TaskSessionLimitExceededError extends Error {
 export class MissingTaskIdentityError extends Error {
   readonly code = 'missing_task_identity';
   constructor() {
-    super('missing_task_identity: openSession requires opts.batchId and opts.taskIndex');
+    super('missing_task_identity: openSession requires opts.taskId and opts.taskIndex');
   }
 }
 
@@ -60,14 +60,14 @@ function sumOfAllLive(): number {
 }
 
 function taskKey(opts: SessionOpts): string {
-  if (opts.batchId === undefined || opts.taskIndex === undefined) {
+  if (opts.taskId === undefined || opts.taskIndex === undefined) {
     throw new MissingTaskIdentityError();
   }
-  return `${opts.batchId}:${opts.taskIndex}`;
+  return `${opts.taskId}:${opts.taskIndex}`;
 }
 
 /**
- * Force-close any sessions still tracked under (batchId, taskIndex).
+ * Force-close any sessions still tracked under (taskId, taskIndex).
  * Iterates the per-task session map; each close() is awaited inside its
  * own try/catch so a throw from one session does not skip the others.
  * Errors are logged via the bus under `release_task_close_failed` and
@@ -75,11 +75,11 @@ function taskKey(opts: SessionOpts): string {
  * unconditionally deleted.
  */
 export async function releaseTask(
-  batchId: string,
+  taskId: string,
   taskIndex: number,
   bus?: { emit?: (e: Record<string, unknown>) => void },
 ): Promise<void> {
-  const key = `${batchId}:${taskIndex}`;
+  const key = `${taskId}:${taskIndex}`;
   const live = liveByTask.get(key);
   if (!live) return;
   for (const [sessionId, session] of live) {
@@ -90,7 +90,7 @@ export async function releaseTask(
         event: 'release_task_close_failed',
         ts: new Date().toISOString(),
         severity: 'warn',
-        batchId,
+        taskId,
         taskIndex,
         sessionId,
         error: err instanceof Error ? err.message : String(err),
@@ -118,7 +118,7 @@ function wrapWithSafetyCeiling(p: Provider): Provider {
           severity: 'error',
           liveChildren: sumOfAllLive(),
           ceiling: SAFETY_CEILING,
-          ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+          ...(opts.taskId !== undefined && { taskId: opts.taskId }),
           ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
         });
         throw new SafetyCeilingExceededError(sumOfAllLive(), SAFETY_CEILING);

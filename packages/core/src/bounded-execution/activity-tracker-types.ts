@@ -50,7 +50,7 @@ export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set(['review']);
  * ActivityTracker has no knowledge of any registry; it only emits this payload.
  */
 export interface HeartbeatTickInfo {
-  batchId: string;
+  taskId: string;
   elapsedMs: number;
   idleSinceLlmMs: number;
   idleSinceToolMs: number;
@@ -91,8 +91,8 @@ export interface ActivityTrackerOptions {
    * this callback if provided.
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
-  /** The batchId this timer belongs to. Required when recordHeartbeat is set. */
-  batchId?: string;
+  /** The taskId this timer belongs to. Required when recordHeartbeat is set. */
+  taskId?: string;
 }
 
 export interface TransitionFields {

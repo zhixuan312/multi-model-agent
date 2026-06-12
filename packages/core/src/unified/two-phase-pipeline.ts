@@ -83,7 +83,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
       abortSignal: ac.signal,
-      batchId: input.taskId ?? 'pipeline',
+      taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
     });
     sessions.push(implSession);
@@ -115,7 +115,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
       abortSignal: ac.signal,
-      batchId: input.taskId ?? 'pipeline',
+      taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
     });
     sessions.push(revSession);

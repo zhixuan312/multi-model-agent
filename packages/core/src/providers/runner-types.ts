@@ -108,13 +108,13 @@ export interface RunOptions {
    *  `claude_turn_started`, `claude_turn_completed`) that the server's
    *  EnvelopeBus consume. */
   bus?: EnvelopeBus
-  /** Identifies the in-flight batch in emitted runner events. Plumbed
+  /** Identifies the in-flight task in emitted runner events. Plumbed
    *  through delegateWithEscalation so consumers can correlate runner-shell
    *  output back to the originating /audit, /delegate, etc. request. */
-  batchId?: string
-  /** Identifies which task within a batch is running. Threaded through every
+  taskId?: string
+  /** Identifies which task within a dispatch is running. Threaded through every
    *  emitted event so per-task running-headline progress can be tracked when
-   *  a batch has multiple parallel tasks. */
+   *  a dispatch has multiple parallel tasks. */
   taskIndex?: number
   /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string

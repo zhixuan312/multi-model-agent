@@ -28,11 +28,8 @@ export type {
   ProgressEvent,
   InternalRunnerEvent,
 } from './providers/runner-types.js';
-export type {
-  BatchTimings,
-  BatchProgress,
-  BatchAggregateCost,
-} from './lifecycle/executor-output-types.js';
+// (TaskTimings / TaskProgress / TaskAggregateCost removed —
+//  lifecycle/executor-output-types.ts deleted with the lifecycle layer.)
 // (EligibilityFailure / ProviderEligibility re-exports removed —
 //  escalation/types.js is being deleted along with the rest of escalation/.)
 export type {
@@ -74,10 +71,7 @@ export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/b
 export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
 
-// Lifecycle
-export { LifecycleDispatcher } from './lifecycle/lifecycle-dispatcher.js';
-export type { DispatchInput, DispatchOutput } from './lifecycle/lifecycle-dispatcher.js';
-export type { ExecutionContext } from './lifecycle/lifecycle-context.js';
+// (Lifecycle layer deleted — unified pipeline is the only execution path.)
 
 // Transport (C1 substrate)
 export {
@@ -122,15 +116,7 @@ export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from
 // Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
 
 
-// Reporting slots
-export { delegateReportSchema } from './reporting/report-parser-slots/delegate-report.js';
-export type { DelegateStructuredReport } from './reporting/report-parser-slots/delegate-report.js';
-export { executePlanReportSchema } from './reporting/report-parser-slots/execute-plan-report.js';
-export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-plan-report.js';
-
-// Headline templates
-export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
-export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';
+// (Reporting slots + headline templates deleted with the lifecycle layer.)
 
 // Unified task engine
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';

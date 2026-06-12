@@ -65,11 +65,11 @@ export class ClaudeSession implements Session {
     }));
   }
 
-  /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
+  /** Returns task identity (taskId/taskIndex) from SessionOpts for event tagging.
    *  Required so the stall watchdog can filter the shared bus by task. */
-  private taskTag(): { batchId?: string; taskIndex?: number } {
+  private taskTag(): { taskId?: string; taskIndex?: number } {
     return {
-      ...(this.args.opts.batchId !== undefined && { batchId: this.args.opts.batchId }),
+      ...(this.args.opts.taskId !== undefined && { taskId: this.args.opts.taskId }),
       ...(this.args.opts.taskIndex !== undefined && { taskIndex: this.args.opts.taskIndex }),
     };
   }

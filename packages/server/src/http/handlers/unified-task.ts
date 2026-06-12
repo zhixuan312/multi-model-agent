@@ -257,7 +257,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               contextBlockId,
               error: null,
             }],
-            batchTimings: { wallClockMs: durationMs, sumOfTaskMs: durationMs, estimatedParallelSavingsMs: 0 },
+            taskTimings: { wallClockMs: durationMs, sumOfTaskMs: durationMs, estimatedParallelSavingsMs: 0 },
             costSummary: {
               totalActualCostUSD: result.cost.implementerUsd + (result.cost.reviewerUsd ?? 0),
               totalCostDeltaVsMainUSD: 0,

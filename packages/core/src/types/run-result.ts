@@ -16,7 +16,37 @@
 // Drift detector lives at `tests/types/run-result.test.ts`.
 // ──────────────────────────────────────────────────────────────────────────
 
-export type { ComposePayload as RunResult } from '../lifecycle/stage-io.js';
+// Inlined from lifecycle/stage-io.ts (lifecycle layer deleted).
+export type RunResult = {
+  completed: boolean;
+  message: string;
+  findings: Array<{ id?: string; severity: string; category: string; claim: string; evidence?: string; suggestion?: string; source: string }>;
+  summary: string;
+  filesChanged: string[];
+  commitSha: string | null;
+  blockId: string | null;
+  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcomeReason?: string | null;
+  outcomeInferred?: boolean;
+  outcomeMalformed?: boolean;
+  telemetry: {
+    totalDurationMs: number;
+    totalCostUSD: number | null;
+    workerSelfAssessment: 'done' | 'failed' | null;
+    reviewVerdict: 'approved' | 'changes_required' | null;
+    commitOutcome: 'committed' | 'no_op' | 'not_applicable';
+    stopReason: 'normal' | 'turn_cap' | 'timeout' | 'transport_error';
+    haltedStage: string | null;
+    stages: Array<{
+      name: string;
+      outcome: 'advance' | 'skip' | 'halt' | 'not_run';
+      comment?: string;
+      durationMs: number;
+      costUSD: number | null;
+    }>;
+  };
+};
+
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import type { StageStatsMap } from './stage-stats.js';
 
@@ -73,8 +103,8 @@ export interface SessionOpts {
   /** Task identity — required for per-task event tagging so the stall watchdog
    *  can filter the shared bus. Optional only because some unit tests construct
    *  sessions directly without a task context. */
-  batchId?: string;
-  /** Index within batch. */
+  taskId?: string;
+  /** Index within task. */
   taskIndex?: number;
   /** Per-task event envelope for recording provider mutations. Optional during wiring phase. */
   envelope?: TaskEnvelopeStore;
