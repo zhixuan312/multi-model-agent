@@ -12,6 +12,7 @@ import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
 import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
 import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
+import { normalizeModel } from '@zhixuan92/multi-model-agent-core';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
@@ -113,7 +114,7 @@ async function registerControlHandlers(
         toolMode: 'full',                     // default
         implementerModel: env.stages[0]?.model ?? env.mainModel,
         implementerTier: env.stages[0]?.tier ?? env.agentType,
-        mainModelFamily: env.mainModel.split('-')[0] ?? 'unknown',
+        mainModelFamily: env.mainModel ? normalizeModel(env.mainModel).family : 'other',
       }),
     });
     bus.subscribe(uploader);
@@ -215,7 +216,7 @@ export async function startServer(
           toolMode: 'full',
           implementerModel: env.stages[0]?.model ?? env.mainModel,
           implementerTier: env.stages[0]?.tier ?? env.agentType,
-          mainModelFamily: env.mainModel?.split('-')[0] ?? 'unknown',
+          mainModelFamily: env.mainModel ? normalizeModel(env.mainModel).family : 'other',
         }),
       }));
 

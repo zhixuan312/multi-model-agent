@@ -114,7 +114,7 @@ export type { BusMessage, Subscriber } from './events/envelope-bus.js';
 export { LogWriter } from './events/log-writer.js';
 export type { LogWriterOpts } from './events/log-writer.js';
 export { TelemetryUploader } from './events/telemetry-uploader.js';
-export { toWireRecord } from './events/to-wire-record.js';
+export { toWireRecord, normalizeModel } from './events/to-wire-record.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from './events/wire-schema.js';
