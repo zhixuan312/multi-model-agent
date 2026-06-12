@@ -67,23 +67,6 @@ const MAIN_MODEL_REQUIRED_PATHS = new Set([
 ]);
 
 /**
- * Registers per-route tool handlers.
- *
- * All tool routes now go through the unified POST /task endpoint.
- * This function is intentionally empty — Task 17 removes it entirely.
- */
-async function registerToolHandlers(
-  _router: RouteDispatcher<RawHandler>,
-  _config: ServerConfig,
-  _batchRegistry: BatchRegistry,
-  _projectRegistry: ProjectRegistry,
-): Promise<void> {
-  // All per-route tool handlers (review, debug, execute-plan, retry,
-  // investigate, research, journal-record, journal-recall) have been
-  // removed. All tool traffic is now served by POST /task.
-}
-
-/**
  * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks).
  */
 async function registerControlHandlers(
@@ -197,10 +180,7 @@ export async function startServer(
   }
   router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
-  // Register tool handlers (Phase 6)
-  await registerToolHandlers(router, config, batchRegistry, projectRegistry);
-
-  // Register control handlers (Phase 7)
+  // Register control handlers
   await registerControlHandlers(router, config, batchRegistry, projectRegistry);
 
   // Register unified task handler (POST /task, GET /task/:taskId)

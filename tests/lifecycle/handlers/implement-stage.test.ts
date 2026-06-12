@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { implementHandler } from '../../../packages/core/src/lifecycle/handlers/implement-stage.js';
 import { mockState } from '../../fixtures/lifecycle-state.js';
-import type { ImplementPayload, RouteName } from '../../../packages/core/src/lifecycle/stage-io.js';
+import type { ImplementPayload } from '../../../packages/core/src/lifecycle/stage-io.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 
 // v0.5: the implement stage now calls ctx.getSession(tier).send(prompt, opts)
@@ -9,29 +9,6 @@ import type { TurnResult } from '../../../packages/core/src/types/run-result.js'
 // already plumbs ctx.getSession through __mockSessionResponse / __llmAlwaysFails,
 // so tests just set those on the state instead of mocking the deleted module.
 vi.mock('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-vi.mock('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
-vi.mock('../../../packages/core/src/routing/read-route-criteria.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../packages/core/src/routing/read-route-criteria.js')>();
-  return {
-    ...actual,
-    resolveSubtypeSpec: () => ({
-      buildPrefix: () => 'mock prefix',
-      criteria: [{ id: 'c1', label: 'criterion 1' }],
-      buildSuffix: (_c: { id: string }) => 'mock suffix',
-      semantics: {
-        goalLine: 'mock goal',
-        emptyOutcomeLine: 'mock empty',
-        findingMeaningParagraph: 'mock finding',
-        severityMeanings: { critical: 'c', high: 'h', medium: 'm', low: 'l' },
-        mustEmitAtLeastOne: false,
-        legalOutcomes: ['found', 'clean'] as const,
-      },
-    }),
-    isReadOnlyRoute: (route: string) => ['audit', 'review', 'debug', 'investigate', 'explore'].includes(route),
-  };
-});
-
-const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
 function makeMockTurn(opts: {
   output: string;
@@ -128,41 +105,6 @@ describe('implementHandler', () => {
     expect((gate.payload as ImplementPayload).summary).toBe('gave up');
   });
 
-  it('reads route: fills findings from runReadRouteImplementer output', async () => {
-    const { runReadRouteImplementer } = await import('../../../packages/core/src/lifecycle/handlers/read-route-implementer.js');
-    const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
-
-    vi.mocked(runReadRouteImplementer).mockResolvedValueOnce({
-      findings: [
-        { id: 'F1', severity: 'high', category: 'correctness', claim: 'missing null check', evidence: 'foo()', source: 'implementer' },
-        { id: 'F2', severity: 'medium', category: 'style', claim: 'naming inconsistency', evidence: 'bar', source: 'implementer' },
-      ],
-      criteriaErrors: [],
-      usage: { inputTokens: 100, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      turns: 1,
-      costUSD: 0.02,
-      durationMs: 500,
-      synthesizedOutput: 'criterion 1 narrative...',
-      findingsOutcome: 'found',
-      findingsOutcomeReason: null,
-    });
-    vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
-
-    const state = mockState({
-      route: 'audit',
-      toolCategory: 'read_only',
-      task: { id: 't1', prompt: 'audit this doc', readTarget: 'audit this doc', brief: { title: 'T', body: 'B' }, subtype: 'default' } as any,
-    });
-
-    const gate = await implementHandler(state as any);
-    expect(gate.outcome).toBe('advance');
-    const payload = gate.payload as ImplementPayload;
-    expect(payload.findings).toHaveLength(2);
-    expect(payload.findings[0].id).toBe('F1');
-    expect(payload.findings[1].id).toBe('F2');
-    expect(payload.criteriaSucceeded.length).toBeGreaterThanOrEqual(0);
-  });
-
   it('halts when session throws a sandbox violation', async () => {
     const { startProgressWatchdog } = await import('../../../packages/core/src/bounded-execution/progress-watchdog.js');
     vi.mocked(startProgressWatchdog).mockReturnValue(() => {});
@@ -208,6 +150,3 @@ describe('implementHandler', () => {
     expect(payload.sourcesUsed).toEqual([]);
   });
 });
-
-// Unused-but-imported reference to satisfy linters.
-void READ_ROUTES;

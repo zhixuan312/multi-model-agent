@@ -1,6 +1,10 @@
 // Extracted executor closure from task-runner.ts.
-// This function orchestrates the implementation stage: read-route sequential
-// criteria loop or write-route single worker turn, populates state.lastRunResult.
+// This function orchestrates the implementation stage: single worker turn,
+// populates state.lastRunResult.
+//
+// The old read-only route branch (sequential criteria loop via
+// read-route-implementer) was removed in the unified-pipeline cleanup;
+// all task types now flow through runTwoPhasePipeline via POST /task.
 
 import type { TaskSpec, RuntimeRunResult, Provider } from '../types.js';
 import type { LifecycleState } from './stage-plan-types.js';
@@ -11,10 +15,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { parseFindings } from './findings-parser.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
-import { resolveSubtypeSpec, isReadOnlyRoute } from '../routing/read-route-criteria.js';
-import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
-import { readFile as fsReadFile } from 'fs/promises';
 
 function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
   try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
@@ -48,180 +49,7 @@ export async function performImplementation(state: LifecycleState): Promise<void
     state.terminal = true;
     return undefined;
   }
-  // Read-only routes (audit / review / debug / investigate / research)
-  // run the sequential criteria loop on one complex session. The
-  // (route, subtype) pair resolves to a per-subtype spec from the
-  // tool's SUBTYPES map; the dispatcher uses that to build the cached
-  // prefix + per-criterion suffix.
   const route = state.route ?? 'delegate';
-  if (state.toolCategory === 'read_only' && isReadOnlyRoute(route)) {
-    try {
-      const taskWithSubtype = task as TaskSpec & { subtype?: string };
-      const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
-      const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
-      const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
-      const preReadFiles: Record<string, string> = {};
-      for (const fp of filePaths) {
-        try {
-          preReadFiles[fp] = await fsReadFile(fp, 'utf8');
-        } catch {
-          // tolerated — sub-worker can read on demand via tools
-        }
-      }
-      // Target content for the cached prefix. Preference order:
-      //   1. readTarget — pure user question/work/problem (set by the
-      //      route's buildTaskSpec). Every read route sets this.
-      //   2. document — inlined doc (audit's primary input shape).
-      // There is intentionally NO task.prompt fallback: read-route prompts
-      // carry only the pure target now, and /research builds its prefix from
-      // task.research instead. An empty target on a non-research read route is
-      // a wiring bug — fail loud rather than dispatch an empty prefix.
-      const taskWithTarget = task as TaskSpec & { readTarget?: string; document?: string };
-      const targetContent =
-        (taskWithTarget.readTarget && taskWithTarget.readTarget.trim().length > 0)
-          ? taskWithTarget.readTarget
-          : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
-            ? taskWithTarget.document
-            : '';
-      if (route !== 'research' && targetContent.trim().length === 0) {
-        throw new Error('read_route_missing_target');
-      }
-      // /research: replace the standard cachedPrefix with one built from a
-      // pre-loop plan turn + deterministic Step-2 fan-out. The N-criterion loop
-      // below then synthesises against the EvidencePack-bearing prefix.
-      let cachedPrefix: string;
-      // /research: the deterministic `## Sources used` table, derived from the
-      // pre-loop's EvidencePack and threaded onto lastRunResult so the compose
-      // → envelope → batch path surfaces it (the worker never emits the table).
-      let researchSourcesUsed: import('../research/evidence-pack.js').SourceUsage[] | undefined;
-      if (route === 'research') {
-        // Pull research-specific task fields from the TaskSpec contract.
-        const r = task.research;
-        if (!r) throw new Error('research_route_missing_input');
-        const { runResearchPreLoop } = await import('../research/research-pre-loop.js');
-        const preLoop = await runResearchPreLoop({
-          session: ctx.getSession(decision.impl),
-          researchQuestion: r.researchQuestion,
-          background:       r.background,
-          resolvedContextBlocks: r.resolvedContextBlocks ?? [],
-          cfg: ctx.config.research,
-        });
-        cachedPrefix = preLoop.cachedPrefix;
-        researchSourcesUsed = preLoop.sourcesUsed;
-      } else {
-        cachedPrefix = routeSpec.buildPrefix({
-          document: targetContent,
-          preReadFiles,
-          filePaths,
-        });
-      }
-      // v4.4.x: single complex session per task, sequential for-loop over
-      // criteria. Earlier criteria's tool results stay in the session
-      // context so later criteria don't re-discover the same files.
-      const session = ctx.getSession(decision.impl);
-      const dispatchResult = await runReadRouteImplementer({
-        session,
-        cachedPrefix,
-        criteria: routeSpec.criteria,
-        buildSuffix: routeSpec.buildSuffix,
-        legalOutcomes: routeSpec.semantics.legalOutcomes,
-        warnSink: (event, data) => {
-          try {
-            ctx.envelope?.recordValidationWarning({
-              rule: event,
-              path: `${data['reasonCode'] ?? 'unknown'}:${String(data['droppedFindingHeading'] ?? '').slice(0, 120)}`,
-            });
-          } catch { /* envelope sealed — race with terminal stage, harmless */ }
-        },
-      });
-
-      const totalCriteria = routeSpec.criteria.length;
-      const failedCount = dispatchResult.criteriaErrors.length;
-      const succeededCount = totalCriteria - failedCount;
-      const majorityThreshold = Math.ceil(totalCriteria / 2);
-      // deriveCompletion for read-routes requires criteriaSucceeded.length > 0
-      // to consider a task completed. Surfaced via smoke: without this every
-      // read-route run sealed as worker_status=failed, terminal_status=error
-      // because lastRunResult.criteriaSucceeded was never populated.
-      const erroredCriterionIds = new Set(dispatchResult.criteriaErrors.map(e => e.criterionId));
-      const criteriaSucceeded: string[] = routeSpec.criteria
-        .filter(c => !erroredCriterionIds.has(c.id))
-        .map(c => c.id);
-      const status = succeededCount === 0
-        ? 'error'
-        : succeededCount >= majorityThreshold ? 'ok' : 'incomplete';
-      const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
-        ? ('missing_sections' as const)
-        : undefined;
-
-      const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
-        ? 'error'
-        : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
-      const terminationReason = {
-        cause: terminationCause,
-        turnsUsed: dispatchResult.turns,
-        hasFileArtifacts: false,
-        usedShell: false,
-        workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
-        wasPromoted: false,
-      };
-      state.lastRunResult = {
-        output: dispatchResult.synthesizedOutput,
-        status,
-        usage: dispatchResult.usage,
-        turns: dispatchResult.turns,
-        filesWritten: [],
-        outputIsDiagnostic: false,
-        escalationLog: [],
-        workerStatus: succeededCount === 0 ? 'failed' : 'done',
-        terminationReason,
-        findings: dispatchResult.findings,
-        criteriaErrors: dispatchResult.criteriaErrors,
-        criteriaSucceeded,
-        findingsOutcome: dispatchResult.findingsOutcome,
-        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
-        outcomeInferred: dispatchResult.outcomeInferred,
-        outcomeMalformed: dispatchResult.outcomeMalformed,
-        ...(incompleteReason && { incompleteReason }),
-        ...(researchSourcesUsed && { sourcesUsed: researchSourcesUsed }),
-      } as unknown as RuntimeRunResult;
-
-      mergeStageStats(state, 'implementing', {
-        inputTokens: dispatchResult.usage.inputTokens,
-        outputTokens: dispatchResult.usage.outputTokens,
-        cachedReadTokens: dispatchResult.usage.cachedReadTokens,
-        cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
-        turnCount: dispatchResult.turns,
-        costUSD: dispatchResult.costUSD,
-        durationMs: dispatchResult.durationMs,
-      }, {
-        tier: ctx.assignedTier,
-        model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
-        findingsOutcome: dispatchResult.findingsOutcome,
-        findingsOutcomeReason: dispatchResult.findingsOutcomeReason,
-        outcomeInferred: dispatchResult.outcomeInferred,
-        outcomeMalformed: dispatchResult.outcomeMalformed,
-      });
-      if (status !== 'ok') state.terminal = true;
-      return undefined;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      state.lastRunResult = {
-        output: '',
-        status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0 },
-        turns: 0,
-        filesWritten: [],
-        outputIsDiagnostic: true,
-        escalationLog: [],
-        error: message,
-        errorCode: 'runner_crash',
-        workerStatus: 'failed',
-      } as unknown as RuntimeRunResult;
-      state.terminal = true;
-      return undefined;
-    }
-  }
 
   // Build the watchdog config once, just before the session.send call:
   const wdConfig = {
