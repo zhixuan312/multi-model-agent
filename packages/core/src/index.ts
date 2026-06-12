@@ -145,3 +145,5 @@ export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
 export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
 export type { ReviewerOutput, ReviewerFinding, ParseResult } from './unified/reviewer-output-parser.js';
+export { TaskRegistry } from './unified/task-registry.js';
+export type { TaskEntry, TaskState } from './unified/task-registry.js';
