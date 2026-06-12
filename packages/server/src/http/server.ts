@@ -55,6 +55,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
+  '/task',
   '/control/batch-slice', '/context-blocks',
 ]);
 
@@ -64,6 +65,7 @@ const CWD_REQUIRED_PATHS = new Set([
  *  utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research', '/journal-record', '/journal-recall',
+  '/task',
 ]);
 
 /**
@@ -302,6 +304,34 @@ export async function startServer(
 
   // Register control handlers (Phase 7)
   await registerControlHandlers(router, config, batchRegistry, projectRegistry);
+
+  // Register unified task handler (POST /task, GET /task/:taskId)
+  {
+    const multiModelConfig = (config as unknown as { agents?: unknown }).agents
+      ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+      : undefined;
+
+    if (multiModelConfig) {
+      const bus = new EnvelopeBus();
+      const logWriter = new LogWriter({
+        diagnosticsLog: multiModelConfig.diagnostics?.log ?? false,
+        logDir: multiModelConfig.diagnostics?.logDir,
+      });
+      bus.subscribe(logWriter);
+      bus.subscribe(new StderrLogSubscriber());
+      const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, batchRegistry };
+      const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
+      router.register('POST', '/task', buildUnifiedTaskHandler(deps));
+      router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
+    } else {
+      router.register('POST', '/task', (_req, res) => {
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+      });
+      router.register('GET', '/task/:taskId', (_req, res) => {
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+      });
+    }
+  }
 
   // GET /status — operator introspection (registered after registries are ready)
   const { buildStatusHandler } = await import('./handlers/introspection/status.js');

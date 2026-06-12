@@ -4,6 +4,7 @@
   "GET /batch/:batchId",
   "GET /health",
   "GET /status",
+  "GET /task/:taskId",
   "POST /audit",
   "POST /context-blocks",
   "POST /control/batch-slice",
@@ -15,5 +16,6 @@
   "POST /journal-record",
   "POST /research",
   "POST /retry",
-  "POST /review"
+  "POST /review",
+  "POST /task"
 ]
