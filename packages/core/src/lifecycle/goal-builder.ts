@@ -28,6 +28,9 @@ export interface AssembleGoalArgs {
   goalId?: string;
   /** Route-specific procedure prepended to both phase prompts. */
   preamble?: string;
+  /** Operator's per-task wall-clock budget (config.defaults.timeoutMs); the phase
+   *  deadline scales off it. Falls back to PER_TASK_DEFAULT_MS when unset. */
+  perTaskTimeoutMs?: number;
 }
 
 export function assembleGoal(args: AssembleGoalArgs): Goal {
@@ -54,7 +57,7 @@ export function assembleGoal(args: AssembleGoalArgs): Goal {
     tools: args.tools,
     ...(args.skills && args.skills.length > 0 && { skills: args.skills }),
     ...(args.contextBlockIds && args.contextBlockIds.length > 0 && { contextBlockIds: args.contextBlockIds }),
-    goalPhaseTimeoutMs: derivePhaseTimeoutMs(goalTasks.length),
+    goalPhaseTimeoutMs: derivePhaseTimeoutMs(goalTasks.length, args.perTaskTimeoutMs),
     goalIdleStallMs: GOAL_IDLE_STALL_MS,
   };
 }

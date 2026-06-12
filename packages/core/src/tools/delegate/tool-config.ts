@@ -40,6 +40,7 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
       reviewPolicy: brief.reviewPolicy,
       tools: ctx.config.defaults?.tools ?? 'full',
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+      ...(ctx.config.defaults?.timeoutMs !== undefined && { perTaskTimeoutMs: ctx.config.defaults.timeoutMs }),
       ...(brief.skills && brief.skills.length > 0 && { skills: brief.skills }),
       ...(brief.contextBlockIds && brief.contextBlockIds.length > 0 && { contextBlockIds: brief.contextBlockIds }),
     });

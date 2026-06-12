@@ -40,6 +40,7 @@ export const toolConfig: ToolConfig<Input, JournalRecordBrief, unknown> = {
       reviewPolicy: 'review-fix',
       tools: ctx.config.defaults?.tools ?? 'full',
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+      ...(ctx.config.defaults?.timeoutMs !== undefined && { perTaskTimeoutMs: ctx.config.defaults.timeoutMs }),
       preamble: brief.preamble,
       ...(brief.contextBlockIds && brief.contextBlockIds.length > 0 && { contextBlockIds: brief.contextBlockIds }),
     });

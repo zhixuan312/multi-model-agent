@@ -55,6 +55,7 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ExecutePlanBrief> = {
       reviewPolicy: brief.reviewPolicy,
       tools: ctx.config.defaults?.tools ?? 'full',
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+      ...(ctx.config.defaults?.timeoutMs !== undefined && { perTaskTimeoutMs: ctx.config.defaults.timeoutMs }),
       ...(brief.contextBlockIds.length > 0 && { contextBlockIds: brief.contextBlockIds }),
     });
     return goalToTaskSpec(goal, implementGoalPrompt(goal), DEFAULT_TASK_TIMEOUT_MS);

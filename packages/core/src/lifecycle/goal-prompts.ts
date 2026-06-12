@@ -10,10 +10,15 @@ export const GOAL_IDLE_STALL_MS = Math.max(300_000, 10 * 60_000); // ≥10 min
 export const MAX_PLAN_TEXT_BYTES = 256 * 1024;        // hard-fail plan_too_large above this
 export const MAX_GIT_LOG_BYTES = 128 * 1024;          // truncate handoff above this
 
-/** Per-phase wall-clock for a goal-set of `taskCount` tasks. */
-export function derivePhaseTimeoutMs(taskCount: number, override?: number): number {
-  if (override && override > 0) return override;
-  return Math.max(PER_TASK_DEFAULT_MS, taskCount * PER_TASK_DEFAULT_MS);
+/**
+ * Per-phase wall-clock for a goal-set of `taskCount` tasks. Scales with the task
+ * count off the operator's configured per-task budget (`config.defaults.timeoutMs`),
+ * falling back to PER_TASK_DEFAULT_MS only when no config timeout is set. A goal
+ * runs all N tasks in one send, so the phase budget is N × the per-task budget.
+ */
+export function derivePhaseTimeoutMs(taskCount: number, perTaskMs?: number): number {
+  const base = perTaskMs && perTaskMs > 0 ? perTaskMs : PER_TASK_DEFAULT_MS;
+  return Math.max(base, taskCount * base);
 }
 
 /** First non-empty line of `text`, trimmed to `max` chars (heading derivation). */
