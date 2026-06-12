@@ -266,7 +266,8 @@ export function toWireRecord(
     client: env.client,
     agentType: wireAgentType,
     toolMode: opts.toolMode,
-    reviewPolicy: env.reviewPolicy,
+    // v6: collapse legacy reviewPolicy values to 'reviewed' | 'none'.
+    reviewPolicy: env.reviewPolicy === 'none' ? 'none' : 'reviewed',
     implementerModel: opts.implementerModel,
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,

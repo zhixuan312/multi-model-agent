@@ -31,20 +31,20 @@ function envelopeWithPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'non
   return store.snapshot();
 }
 
-describe('toWireRecord reviewPolicy honesty', () => {
-  it('emits reviewPolicy="full" when envelope has full', () => {
+describe('toWireRecord reviewPolicy honesty (v6: reviewed/none)', () => {
+  it('collapses reviewPolicy="full" to "reviewed"', () => {
     const wire = toWireRecord(envelopeWithPolicy('full'), baseOpts());
-    expect(wire.reviewPolicy).toBe('full');
+    expect(wire.reviewPolicy).toBe('reviewed');
   });
 
-  it('emits reviewPolicy="quality_only"', () => {
+  it('collapses reviewPolicy="quality_only" to "reviewed"', () => {
     const wire = toWireRecord(envelopeWithPolicy('quality_only'), baseOpts());
-    expect(wire.reviewPolicy).toBe('quality_only');
+    expect(wire.reviewPolicy).toBe('reviewed');
   });
 
-  it('emits reviewPolicy="diff_only"', () => {
+  it('collapses reviewPolicy="diff_only" to "reviewed"', () => {
     const wire = toWireRecord(envelopeWithPolicy('diff_only'), baseOpts());
-    expect(wire.reviewPolicy).toBe('diff_only');
+    expect(wire.reviewPolicy).toBe('reviewed');
   });
 
   it('emits reviewPolicy="none"', () => {

@@ -22,7 +22,7 @@ const VOLATILE_KEYS = new Set([
   'startedAt',
   'finishedAt',
   'timestamp',
-  'batchId',
+  'taskId',
   'pid',
   'version',
   'id',

@@ -14,7 +14,7 @@ export interface TaskResponseEnvelope {
 }
 
 export interface BatchResponseEnvelope {
-  batchId: string;
+  taskId: string;
   batchCost: { actualUSD: number; deltaUSD: number | null; currency: 'USD'; tasksCount: number };
   tasks: TaskResponseEnvelope[];
 }
@@ -24,7 +24,7 @@ export class ResponseEnvelopeBuilder {
     return input;
   }
 
-  buildBatch(batchId: string, tasks: TaskResponseEnvelope[]): BatchResponseEnvelope {
+  buildBatch(taskId: string, tasks: TaskResponseEnvelope[]): BatchResponseEnvelope {
     let actual = 0;
     let delta: number | null = 0;
     for (const t of tasks) {
@@ -38,7 +38,7 @@ export class ResponseEnvelopeBuilder {
       }
     }
     return {
-      batchId,
+      taskId,
       batchCost: { actualUSD: actual, deltaUSD: delta, currency: 'USD', tasksCount: tasks.length },
       tasks,
     };

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ModelFamilyEnum } from '../config/model-profile-registry.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
@@ -135,11 +135,11 @@ export const TaskCompletedEventSchema = z.object({
   agentType: z.enum(['standard', 'complex']),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
   // reviewPolicy is per-task intent, not outcome.
-  // Shows what the task requested ('full' | 'quality_only' | 'diff_only' | 'none').
+  // v6: collapsed to 'reviewed' (any active review) | 'none'.
   // Whether review actually ran is in stages.review.outcome.
-  // intent='full' + outcome='skipped' is legal (e.g., implement failed;
+  // intent='reviewed' + outcome='skipped' is legal (e.g., implement failed;
   // read route; review-skip gate triggered).
-  reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']),
+  reviewPolicy: z.enum(['reviewed', 'none']),
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
