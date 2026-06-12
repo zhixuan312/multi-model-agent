@@ -21,6 +21,10 @@ export interface PipelineInput {
   timeoutMs?: number;
   worktreeEnabled?: boolean;
   taskId?: string;
+  /** Goal condition for the implementer — keeps the agent working until met. */
+  implementerGoal?: string;
+  /** Goal condition for the reviewer. */
+  reviewerGoal?: string;
 }
 
 export interface SessionInfo {
@@ -89,7 +93,9 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     sessions.push(implSession);
 
     const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${input.taskPayload}`;
-    const implTurn = await implSession.send(implPrompt);
+    const implTurn = await implSession.send(implPrompt, {
+      ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
+    });
     const implId = implSession.getSessionId();
 
     if (input.reviewPolicy === 'none') {
@@ -121,7 +127,9 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     sessions.push(revSession);
 
     const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${implTurn.output}`;
-    const revTurn = await revSession.send(revPrompt);
+    const revTurn = await revSession.send(revPrompt, {
+      ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
+    });
     const revId = revSession.getSessionId();
 
     const parsed = parseReviewerOutput(revTurn.output);

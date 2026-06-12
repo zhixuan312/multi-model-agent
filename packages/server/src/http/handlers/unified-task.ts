@@ -27,6 +27,29 @@ function taskTypeToRoute(type: TaskType): Route {
 }
 
 /**
+ * Build a goal condition string for the Stop hook. This keeps the agent
+ * working until it has covered all criteria defined in the skill file.
+ */
+function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', skillContent: string): string | undefined {
+  if (role === 'reviewer') {
+    return 'You have verified every criterion the implementer was supposed to cover, checked for hallucinated findings, validated evidence quality, and produced the required JSON output block.';
+  }
+  if (type === 'audit') {
+    const criteriaMatch = skillContent.match(/(?:criteria|perspectives|failure modes|verification criteria)[^\n]*\n/i);
+    const countMatch = skillContent.match(/(\d+)\s+(?:Verification Criteria|perspectives|failure modes|Execution Steps)/i);
+    const count = countMatch ? countMatch[1] : 'all';
+    return `You have evaluated the document against ALL ${count} criteria one by one, written findings for each to the scratch file, and produced the final consolidated JSON output block with criteriaCovered listing every criterion.`;
+  }
+  if (type === 'investigate' || type === 'review' || type === 'debug' || type === 'research') {
+    return 'You have completed the full analysis using your tool surface, produced evidence-grounded findings, and output the required JSON block.';
+  }
+  if (type === 'delegate' || type === 'execute_plan') {
+    return 'You have implemented all requested changes, verified with tests where applicable, and produced the required JSON output block.';
+  }
+  return undefined;
+}
+
+/**
  * Build a minimal TaskEnvelope-compatible snapshot from a PipelineResult
  * so the TelemetryUploader can convert it to a wire record and enqueue it.
  */
@@ -217,6 +240,9 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           process.stderr.write(
             `[mmagent] event=executor_started ts=${new Date().toISOString()} task=${taskId} route=${input.type}\n`,
           );
+          const implementerGoal = buildGoalCondition(input.type, 'implementer', skills.implement);
+          const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
+
           const result = await runTwoPhasePipeline({
             type: input.type,
             implementerSkill: skills.implement,
@@ -231,6 +257,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             sandboxPolicy: typeConfig.sandbox,
             worktreeEnabled: typeConfig.worktree,
             taskId,
+            implementerGoal,
+            reviewerGoal,
           });
           const durationMs = Date.now() - startedAtMs;
 

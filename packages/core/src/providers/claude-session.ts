@@ -105,6 +105,29 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
+    // Build goal-mode Stop hook if a goalCondition is provided.
+    // This replicates /goal behavior: after each turn, evaluate whether
+    // the condition is met. If not, block the stop and keep the agent working.
+    const goalHooks: Record<string, unknown> = {};
+    if (_opts?.goalCondition) {
+      const condition = _opts.goalCondition;
+      goalHooks.hooks = {
+        Stop: [{
+          hooks: [async (input: { stop_hook_active?: boolean }) => {
+            if (input.stop_hook_active) return {};
+            return {
+              continue: true,
+              hookSpecificOutput: {
+                hookEventName: 'Stop',
+                decision: 'block',
+                reason: `Goal not yet met. Continue working toward: ${condition}`,
+              },
+            };
+          }],
+        }],
+      };
+    }
+
     const q = query({
       prompt: promptIterable(),
       options: {
@@ -119,6 +142,7 @@ export class ClaudeSession implements Session {
         },
         ...skillOptions,
         ...(this.sessionId && { resume: this.sessionId }),
+        ...goalHooks,
       } as Parameters<typeof query>[0]['options'],
     });
     this.activeQuery = q as unknown as { close?: () => unknown };
