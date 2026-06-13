@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const agentTierSchema = z.enum(['standard', 'complex']);
+const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
 const sessionIdsSchema = z.object({
   implementer: z.string().optional(),
@@ -34,6 +34,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('journal_recall'), query: z.string().min(10), ...common }),
   z.object({ type: z.literal('journal_record'), entry: z.string().min(1), ...common }),
   z.object({ type: z.literal('retry_tasks'), taskId: z.string().uuid(), taskIndices: z.array(z.number().int().nonnegative()).min(1), ...common }),
+  z.object({ type: z.literal('main'), prompt: z.string().min(1), outputFormat: z.string().optional(), ...common }),
 ]);
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

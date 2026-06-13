@@ -5,7 +5,7 @@ import type { Goal } from './goal.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
-export type AgentType = 'standard' | 'complex';
+export type AgentType = 'standard' | 'complex' | 'main';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';

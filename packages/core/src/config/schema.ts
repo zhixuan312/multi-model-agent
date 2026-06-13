@@ -189,6 +189,7 @@ export const multiModelConfigSchema = z.object({
   agents: z.object({
     standard: agentConfigSchema,
     complex: agentConfigSchema,
+    main: agentConfigSchema.optional(),
   }),
   defaults: defaultsSchema,
   diagnostics: z.object({

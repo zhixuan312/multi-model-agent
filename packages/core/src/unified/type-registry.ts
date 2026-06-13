@@ -3,7 +3,7 @@ import type { AgentType } from '../types/task-spec.js';
 export const TASK_TYPES = [
   'audit', 'investigate', 'delegate', 'execute_plan',
   'review', 'debug', 'research', 'journal_recall', 'journal_record',
-  'retry_tasks',
+  'retry_tasks', 'main',
 ] as const;
 
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -26,6 +26,7 @@ export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
   journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
   journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only'  },
   retry_tasks:    { defaultTier: 'standard', worktree: false, sandbox: 'cwd-only'  },
+  main:           { defaultTier: 'main',     worktree: false, sandbox: 'read-only' },
 };
 
 export function getTypeConfig(type: TaskType): TypeConfig {
@@ -35,5 +36,6 @@ export function getTypeConfig(type: TaskType): TypeConfig {
 }
 
 export function oppositeAgent(tier: AgentType): AgentType {
+  if (tier === 'main') return 'complex';
   return tier === 'standard' ? 'complex' : 'standard';
 }

@@ -34,7 +34,7 @@ describe('SkillLoader', () => {
     await expect(validateSkillsExist(['delegate', 'audit'], SKILLS_DIR)).resolves.not.toThrow();
   });
 
-  it('validates all 10 types have skill files', async () => {
+  it('validates all 11 types have skill files', async () => {
     await expect(validateSkillsExist(TASK_TYPES, SKILLS_DIR)).resolves.not.toThrow();
   });
 

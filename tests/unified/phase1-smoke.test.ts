@@ -10,6 +10,6 @@ describe('barrel export smoke', () => {
     expect(typeof taskInputSchema.safeParse).toBe('function');
     expect(typeof parseReviewerOutput).toBe('function');
     expect(Array.isArray(TASK_TYPES)).toBe(true);
-    expect(TASK_TYPES.length).toBe(10);
+    expect(TASK_TYPES.length).toBe(11);
   });
 });

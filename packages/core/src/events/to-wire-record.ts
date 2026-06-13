@@ -258,7 +258,7 @@ export function toWireRecord(
   // Prefer the first stage's tier as the task's headline agentType — matches
   // implementerTier's derivation and reflects what the task actually used,
   // not whatever default async-dispatch seeded the envelope with.
-  const wireAgentType: 'standard' | 'complex' = env.stages[0]?.tier ?? env.agentType;
+  const wireAgentType: 'standard' | 'complex' | 'main' = env.stages[0]?.tier ?? env.agentType;
 
   const record: TaskCompletedEventType = {
     eventId: randomUUID(),

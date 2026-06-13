@@ -1,7 +1,7 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Redesigned as a comprehensive product release gate: 18 scenarios, each testing
+// Redesigned as a comprehensive product release gate: 19 scenarios, each testing
 // a DISTINCT product capability. No duplicates. Covers task types, audit subtypes,
 // tier/review policy overrides, session reuse, error cases, and telemetry.
 import { homedir } from 'node:os';
@@ -30,11 +30,11 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 18-scenario release gate.
+// The 19-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //
-//   A. Task Types (10 types — one scenario each):
+//   A. Task Types (11 types — one scenario each):
 //      #1  context-blocks   — register a context block (synchronous 201)
 //      #2  investigate      — codebase question (read, complex)
 //      #3  research         — external research (read, complex, network)
@@ -45,6 +45,7 @@ export const POLL = {
 //      #8  debug            — debugging (read, complex)
 //      #9  journal_record   — record a learning (write, complex)
 //      #10 journal_recall   — recall learnings (read, complex, depends on #9)
+//      #19 main             — orchestration brain (read, main tier, no reviewer)
 //
 //   B. Audit Subtypes (each loads a different skill file):
 //      #11 audit/spec       — requirement prose executability
@@ -70,7 +71,7 @@ export const POLL = {
 //   - all others     → 1
 // ─────────────────────────────────────────────────────────────────────────────
 export const SCENARIOS = [
-  // A. Task Types (10 base types)
+  // A. Task Types (11 base types)
   { id: 1,  type: 'context-blocks', kind: 'assist', emits: 0 },
   { id: 2,  type: 'investigate', tier: 'complex', kind: 'read', emits: 1 },
   { id: 3,  type: 'research', tier: 'complex', kind: 'read', network: true, emits: 0 },
@@ -81,6 +82,7 @@ export const SCENARIOS = [
   { id: 8,  type: 'debug', tier: 'complex', kind: 'read', emits: 1 },
   { id: 9,  type: 'journal_record', tier: 'complex', kind: 'write', emits: 1 },
   { id: 10, type: 'journal_recall', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 19, type: 'main', tier: 'main', kind: 'read', emits: 1 },
 
   // B. Audit Subtypes (spec, plan, skill — each loads a different skill file)
   { id: 11, type: 'audit', subtype: 'spec', tier: 'complex', kind: 'read', emits: 1 },

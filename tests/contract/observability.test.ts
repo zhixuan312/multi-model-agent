@@ -43,7 +43,7 @@ describe('observability contract — envelope + plain entries', () => {
       expect(typeof env.taskId).toBe('string');
       expect(typeof env.batchId).toBe('string');
       expect(typeof env.taskIndex).toBe('number');
-      expect(['delegate', 'audit', 'review', 'debug', 'investigate', 'execute-plan', 'retry', 'research']).toContain(env.route);
+      expect(['delegate', 'audit', 'review', 'debug', 'investigate', 'execute-plan', 'retry', 'research', 'journal-record', 'journal-recall', 'orchestrate']).toContain(env.route);
       expect(['standard', 'complex']).toContain(env.agentType);
       expect(typeof env.client).toBe('string');
       expect(typeof env.mainModel).toBe('string');

@@ -12,10 +12,10 @@ export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low
 export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
 export interface ValidationWarning { rule: string; path: string }
 
-export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research' | 'journal-record' | 'journal-recall';
+export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research' | 'journal-record' | 'journal-recall' | 'orchestrate';
 export type EnvelopeStatus = 'running' | 'done' | 'done_with_concerns' | 'failed';
 export type StageName = 'implementing' | 'reviewing' | 'reworking' | 'annotating' | 'committing';
-export type AgentTier = 'standard' | 'complex';
+export type AgentTier = 'standard' | 'complex' | 'main';
 
 export interface StageRecord {
   name: StageName;

@@ -346,12 +346,13 @@ export async function startServe(
   // implementer work; the standard tier handles annotator/reviewer + the
   // explore route's internal half. When a tier is unconfigured, log it as
   // "(not configured)" so a misconfigured slot is visible at boot time.
-  const fmtTier = (slot: 'standard' | 'complex'): string => {
+  const fmtTier = (slot: string): string => {
     const cfg = (config.agents as Record<string, { type?: string; model?: string }>)[slot];
     if (!cfg || !cfg.model) return '(not configured)';
     return `${cfg.model} [${cfg.type ?? 'unknown'}]`;
   };
-  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}\n`);
+  const mainLabel = config.agents.main ? ` | main=${fmtTier('main')}` : '';
+  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}${mainLabel}\n`);
 
   // A4a.4 (4.2.2+): warn when stale Claude Code project siblings exist
   // under /tmp/claude/G--*. These come from prior Claude Code test runs

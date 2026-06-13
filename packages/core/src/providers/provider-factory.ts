@@ -176,7 +176,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
   if (coreTestProviderOverrideMap?.has(slot)) return wrapWithSafetyCeiling(coreTestProviderOverrideMap.get(slot)!);
   if (coreTestProviderOverride) return wrapWithSafetyCeiling(coreTestProviderOverride);
 
-  const agentConfig = config.agents[slot];
+  const agentConfig = config.agents[slot] ?? (slot === 'main' ? config.agents.complex : undefined);
   if (!agentConfig) {
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);
   }

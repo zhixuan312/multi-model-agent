@@ -5,8 +5,8 @@ import {
 } from '../../packages/core/src/unified/type-registry.js';
 
 describe('TypeRegistry', () => {
-  it('has 10 task types', () => {
-    expect(TASK_TYPES).toHaveLength(10);
+  it('has 11 task types', () => {
+    expect(TASK_TYPES).toHaveLength(11);
   });
 
   it('delegate defaults to standard/worktree/cwd-only', () => {
@@ -24,19 +24,25 @@ describe('TypeRegistry', () => {
     expect(c).toEqual({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
   });
 
+  it('main defaults to main/no-worktree/read-only', () => {
+    const c = getTypeConfig('main');
+    expect(c).toEqual({ defaultTier: 'main', worktree: false, sandbox: 'read-only' });
+  });
+
   it('throws for unknown type', () => {
     expect(() => getTypeConfig('bogus' as TaskType)).toThrow('Unknown task type');
   });
 
-  it('oppositeAgent inverts', () => {
+  it('oppositeAgent inverts standard/complex and maps main to complex', () => {
     expect(oppositeAgent('standard')).toBe('complex');
     expect(oppositeAgent('complex')).toBe('standard');
+    expect(oppositeAgent('main')).toBe('complex');
   });
 
   it('every registered type has complete config', () => {
     for (const t of TASK_TYPES) {
       const c = getTypeConfig(t);
-      expect(['standard', 'complex']).toContain(c.defaultTier);
+      expect(['standard', 'complex', 'main']).toContain(c.defaultTier);
       expect(typeof c.worktree).toBe('boolean');
       expect(['read-only', 'cwd-only']).toContain(c.sandbox);
     }

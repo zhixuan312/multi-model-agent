@@ -125,4 +125,35 @@ describe('taskInputSchema', () => {
       taskIndices: [0],
     }).success).toBe(false);
   });
+
+  it('accepts main with prompt', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'main',
+      prompt: 'Synthesize the exploration results into a specification.',
+    }).success).toBe(true);
+  });
+
+  it('accepts main with prompt and outputFormat', () => {
+    const r = taskInputSchema.safeParse({
+      type: 'main',
+      prompt: 'List all API endpoints.',
+      outputFormat: 'json',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects main with empty prompt', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'main',
+      prompt: '',
+    }).success).toBe(false);
+  });
+
+  it('accepts main with agentTier override', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'main',
+      prompt: 'Do something.',
+      agentTier: 'main',
+    }).success).toBe(true);
+  });
 });

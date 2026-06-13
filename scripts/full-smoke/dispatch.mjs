@@ -44,7 +44,10 @@ export function buildRequest(spec, ctx) {
       } };
     }
 
-    // E. Error Cases — these are raw payloads that should fail validation
+    // F. Main (orchestrate) — session-persistent brain
+    case 19: return { type: 'main', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
+
+    // G. Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', question: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing question */ } };
 
