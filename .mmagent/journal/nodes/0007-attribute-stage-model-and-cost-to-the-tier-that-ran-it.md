@@ -1,6 +1,7 @@
 ---
 id: "0007"
 title: "Attribute stage model and cost to the tier that ran it"
+category: "design"
 status: "adopted"
 tags:
   - telemetry

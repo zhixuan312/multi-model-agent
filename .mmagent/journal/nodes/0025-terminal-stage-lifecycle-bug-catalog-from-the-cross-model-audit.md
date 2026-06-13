@@ -1,6 +1,7 @@
 ---
 id: "0025"
 title: "Terminal-stage lifecycle bug catalog from the cross-model audit"
+category: "knowledge"
 status: "adopted"
 tags:
   - bugs

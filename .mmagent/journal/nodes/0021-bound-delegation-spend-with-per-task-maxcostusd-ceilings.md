@@ -1,6 +1,7 @@
 ---
 id: "0021"
 title: "Bound delegation spend with per-task maxCostUSD ceilings"
+category: "decision"
 status: "superseded"
 tags:
   - cost

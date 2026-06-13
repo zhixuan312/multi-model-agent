@@ -1,6 +1,7 @@
 ---
 id: "0026"
 title: Forge is the human-facing harness for the MMA SDLC flow
+category: decision
 status: adopted
 tags: [forge, decision, sdlc, product, mma-integration]
 date: 2026-06-08

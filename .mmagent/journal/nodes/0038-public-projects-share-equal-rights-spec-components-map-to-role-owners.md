@@ -1,6 +1,7 @@
 ---
 id: "0038"
 title: Public Projects share equal rights; spec components map to role owners
+category: decision
 status: adopted
 tags: [forge, spec, collaboration, decision, flow, mermaid, satisfaction-gate]
 date: 2026-06-08

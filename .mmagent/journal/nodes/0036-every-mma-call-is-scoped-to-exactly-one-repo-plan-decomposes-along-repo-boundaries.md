@@ -1,6 +1,7 @@
 ---
 id: "0036"
 title: Every MMA call is scoped to exactly one repo; Plan decomposes along repo boundaries
+category: decision
 status: adopted
 tags: [forge, decision, architecture, one-repo-per-call, multi-repo, mma-integration, write-routes]
 date: 2026-06-08

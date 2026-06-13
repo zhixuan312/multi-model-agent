@@ -1,6 +1,7 @@
 ---
 id: "0014"
 title: "Accumulate provider token usage incrementally during streaming turns"
+category: "design"
 status: "adopted"
 tags:
   - providers

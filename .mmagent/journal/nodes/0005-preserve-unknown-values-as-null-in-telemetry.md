@@ -1,6 +1,7 @@
 ---
 id: "0005"
 title: "Preserve unknown values as null in telemetry"
+category: "design"
 status: "adopted"
 tags:
   - telemetry

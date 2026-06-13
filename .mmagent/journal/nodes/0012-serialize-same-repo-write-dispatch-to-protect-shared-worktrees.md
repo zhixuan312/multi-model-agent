@@ -1,6 +1,7 @@
 ---
 id: "0012"
 title: "Serialize same-repo write dispatch to protect shared worktrees"
+category: "decision"
 status: "superseded"
 tags:
   - concurrency

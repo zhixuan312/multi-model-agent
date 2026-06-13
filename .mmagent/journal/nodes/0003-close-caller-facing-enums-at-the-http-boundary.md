@@ -1,6 +1,7 @@
 ---
 id: "0003"
 title: "Close caller-facing enums at the HTTP boundary"
+category: "decision"
 status: "adopted"
 tags:
   - enums

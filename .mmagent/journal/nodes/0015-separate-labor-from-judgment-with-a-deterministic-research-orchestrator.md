@@ -1,6 +1,7 @@
 ---
 id: "0015"
 title: "Separate labor from judgment with a deterministic research orchestrator"
+category: "design"
 status: "adopted"
 tags:
   - research

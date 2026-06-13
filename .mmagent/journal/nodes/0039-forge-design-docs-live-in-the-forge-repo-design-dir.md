@@ -1,6 +1,7 @@
 ---
 id: "0039"
 title: Forge design docs live in the Forge repo design/ dir, not docs/superpowers
+category: process
 status: adopted
 tags: [forge, docs, process, decision, repo-boundary]
 date: 2026-06-08

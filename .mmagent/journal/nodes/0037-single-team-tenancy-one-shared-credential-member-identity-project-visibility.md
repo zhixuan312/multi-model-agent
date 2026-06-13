@@ -1,6 +1,7 @@
 ---
 id: "0037"
 title: Single-team tenancy — one shared agent credential, member identity for audit, project-level visibility
+category: decision
 status: adopted
 tags: [forge, tenancy, decision, architecture, security, visibility, state]
 date: 2026-06-08

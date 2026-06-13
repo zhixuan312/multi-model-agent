@@ -1,6 +1,7 @@
 ---
 id: "0019"
 title: "Treat runtime imports as shipping dependencies and validate from a clean published artifact"
+category: "knowledge"
 status: "adopted"
 tags:
   - packaging

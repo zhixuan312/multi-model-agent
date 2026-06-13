@@ -1,6 +1,7 @@
 ---
 id: "0022"
 title: "Prefer focus and explicit user budgets over engine cost caps"
+category: "decision"
 status: "adopted"
 tags:
   - cost

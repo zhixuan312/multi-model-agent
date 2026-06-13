@@ -1,6 +1,7 @@
 ---
 id: "0004"
 title: "Centralize cost accounting in one pure pricing function"
+category: "design"
 status: "adopted"
 tags:
   - cost

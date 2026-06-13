@@ -1,6 +1,7 @@
 ---
 id: "0006"
 title: "Treat telemetry schema version as a data-loss switch"
+category: "decision"
 status: "adopted"
 tags:
   - telemetry

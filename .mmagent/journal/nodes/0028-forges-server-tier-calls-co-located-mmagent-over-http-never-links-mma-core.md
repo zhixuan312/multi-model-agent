@@ -1,6 +1,7 @@
 ---
 id: "0028"
 title: Forge's server tier calls co-located mmagent over HTTP, never links mma-core
+category: decision
 status: adopted
 tags: [forge, architecture, mma-integration, http-boundary, decision]
 date: 2026-06-08

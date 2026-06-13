@@ -1,6 +1,7 @@
 ---
 id: "0034"
 title: Record Forge design decisions to the journal before authoring a formal spec
+category: process
 status: adopted
 tags: [forge, process, decision]
 date: 2026-06-08

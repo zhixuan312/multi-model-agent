@@ -39,3 +39,10 @@
 2026-06-08T00:00:00+08:00  create  0037  Single-team tenancy — one shared agent credential, member identity for audit, project-level visibility
 2026-06-08T00:00:00+08:00  create  0038  Public Projects share equal rights; spec components map to role owners
 2026-06-08T00:00:00+08:00  create  0039  Forge design docs live in the Forge repo design/ dir, not docs/superpowers
+2026-06-13T18:48:12+08:00  create  0040  Rewrite original cwd paths before worktree worker dispatch
+2026-06-13T18:48:12+08:00  create  0041  Audit unused API parameters before adding new research integrations
+2026-06-13T18:48:12+08:00  create  0042  Use free no-auth academic APIs for production research adapters
+2026-06-13T18:48:12+08:00  create  0043  Use spec and plan audits as architecture bug gates
+2026-06-13T18:48:12+08:00  create  0044  Audit dead code across production and test imports
+2026-06-13T18:48:12+08:00  create  0045  Treat the LLM query planner prompt as the research quality lever
+2026-06-13T18:48:12+08:00  create  0046  Prove research quality with live side-by-side comparisons

@@ -1,6 +1,7 @@
 ---
 id: "0018"
 title: "Confine by default, canonicalize paths, and fail before allocation"
+category: "design"
 status: "adopted"
 tags:
   - security

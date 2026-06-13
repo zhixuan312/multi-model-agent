@@ -1,6 +1,7 @@
 ---
 id: "0030"
 title: Per-component dynamic satisfaction gate for Forge spec Q&A
+category: design
 status: adopted
 tags: [forge, design, decision, sdlc, satisfaction-gate, mma-integration]
 date: 2026-06-08
