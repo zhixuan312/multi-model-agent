@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`) go through the same two-phase pipeline: implement on one tier, review on the other. Write types (`delegate`, `execute_plan`, `journal_record`) run as sequential goal-sets; read types fan out per file/criterion. Each has a wall-clock timeout. Task dispatch is async — it returns `202 { taskId, statusUrl }` immediately, and you poll `GET /task/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) go through the same two-phase pipeline: implement on one tier, review on the other. The `main` type is a session-persistent orchestrator (no reviewer, no worktree) for multi-phase frontend workflows. Write types run as sequential goal-sets; read types fan out per file/criterion. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -318,7 +318,8 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new in 5.2.0
 
-- **Unified task API.** All task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`) go through a single `POST /task` endpoint with a `type` discriminator. The per-route REST endpoints are removed. Every type flows through the same two-phase pipeline with optional cross-agent review.
+- **Unified task API.** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. The per-route REST endpoints are removed. Every type flows through the same two-phase pipeline with optional cross-agent review.
+- **Main orchestrator agent.** New `main` agent tier — a session-persistent brain for multi-phase frontend workflows. Configurable via optional `agents.main` config slot. Wire route: `orchestrate`.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
