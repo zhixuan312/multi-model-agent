@@ -218,29 +218,4 @@ export interface EscalationRecord {
   reason?: string;
 }
 
-// Supporting types re-exported through types.ts barrel
-
-export interface Commit {
-  sha: string;
-  message: string;
-  files: string[];
-  authoredAt: string;
-}
-
-export interface ReviewPromptParts {
-  specPortion?: string;
-  codePortion?: string;
-  rubricPortion?: string;
-}
-
-export interface CacheHints {
-  cacheableSystemPrompt?: boolean;
-}
-
-export interface ReviewRunOptions {
-  mode?: 'standard' | 'review';
-  instructionsSuffix?: string;
-  cacheHints?: CacheHints;
-  abortSignal?: AbortSignal;
-}
 

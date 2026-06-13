@@ -138,7 +138,6 @@ export class ProjectRegistry {
     for (const cwd of victims) {
       const pc = this.map.get(cwd)!;
       pc.contextBlocks.clear();
-      pc.batchCache.clear();
       this.map.delete(cwd);
       this.onProjectEvicted?.(cwd, now - pc.lastActivityAt);
     }
@@ -147,7 +146,6 @@ export class ProjectRegistry {
   clear(): void {
     for (const pc of this.map.values()) {
       pc.contextBlocks.clear();
-      pc.batchCache.clear();
     }
     this.map.clear();
   }

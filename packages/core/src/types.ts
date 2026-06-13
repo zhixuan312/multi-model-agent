@@ -40,12 +40,8 @@ export type {
 } from './types/config.js';
 
 export type {
-  Commit,
   RunResult,
   RuntimeRunResult,
-  ReviewPromptParts,
-  CacheHints,
-  ReviewRunOptions,
   Provider,
 } from './types/run-result.js';
 

@@ -40,14 +40,6 @@ export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
 export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
 export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
-export {
-  FINDINGS_OUTCOME_KINDS,
-  findingsOutcomeKindSchema,
-  inferFromFindings,
-  aggregateOutcomes,
-  type FindingsOutcomeKind,
-} from './reporting/findings-outcome.js';
-
 // Context blocks
 export {
   InMemoryContextBlockStore,
@@ -62,10 +54,6 @@ export { expandContextBlocks } from './stores/expand-context-blocks.js';
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
-
-// Batch cache
-export { BatchCache } from './stores/batch-cache.js';
-export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/batch-cache.js';
 
 // Project context
 export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
