@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-06-13
+
+**Smarter Brave search + three new academic adapters.** The research module now uses Brave's freshness filter, news endpoint, extra_snippets, and page_age for current-data queries. Three free, no-auth academic adapters (OpenAlex, Crossref, PubMed) broaden the evidence base. Worktree path-rewrite fix ensures execute-plan workers write to the correct workspace. Dead code cleanup removes 227 lines of orphaned code, unused config fields, and stale test files.
+
+### Added
+- Brave search strategy: `freshness` (pd/pw/pm/py/date-range), `endpoint` (web/news), `siteFilter` per query. LLM query planner decides strategy per query.
+- Brave `extra_snippets` (up to 6x text per result) and `page_age` (ISO 8601 publication date) parsing.
+- OpenAlex adapter — 250M+ academic works, free, no auth. Abstract reconstruction from inverted-index format. Optional `contactEmail` for polite pool.
+- Crossref adapter — 150M+ DOI-registered publications, free, no auth. Smart date-parts parsing. Optional `contactEmail` for polite pool.
+- PubMed adapter — 35M+ biomedical papers via NCBI E-utilities (esearch → esummary), free. Optional `pubmedApiKey` for higher rate limits.
+- `brave_news` source group — news and web results budget separately in the evidence pack.
+- `redactAdapterUrl` utility — strips `mailto` and `api_key` from adapter URLs before logging.
+- Integration test covering all 9 source groups end-to-end.
+
+### Changed
+- `QueryPlanSchema.braveQueries` changed from `string[]` to `Array<{q, freshness?, endpoint?, siteFilter?}>` (breaking schema change).
+- `MAX_TOTAL_SOURCES` bumped from 50 to 70 (9 source groups × 10 per group).
+- `maxResultsPerQuery` default bumped from 10 to 20.
+- `DROP_PRIORITY` updated: `brave`, `brave_news`, `github_code`, `github_repo`, `crossref`, `semantic_scholar`, `openalex`, `pubmed`, `arxiv`.
+
+### Fixed
+- Worktree path-rewrite: `two-phase-pipeline.ts` now rewrites absolute paths in the task payload when a worktree is active, preventing workers from writing to the original repo instead of the worktree.
+
+### Removed
+- Dead functions: `retryableFor()`, `classifyContextBlockError()`, `ALL_MODEL_IDS`.
+- 9 unused `defaults.*` config fields (timeoutMs, stallTimeoutMs, tools, sandboxPolicy, largeResponseThresholdChars, progressWatchdogEnabled, thrashTurns, thrashWallClockMs, thrashSoftTurns).
+- Broken package.json export `./bounded-execution/file-artifact-check`.
+- 6 orphaned test/fixture files with broken imports.
+
 ## [5.2.0] - 2026-06-13
 
 **Unified task API + main orchestrator agent.** All task types now go through a single `POST /task` endpoint with a `type` discriminator. A new `main` agent tier provides a session-persistent orchestration brain for multi-phase frontend workflows. `SCHEMA_VERSION` bumped to 6.

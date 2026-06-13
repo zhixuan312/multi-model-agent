@@ -76,7 +76,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
+That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.mainModel`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
 ### 4. Start the daemon + verify
 
@@ -116,7 +116,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
 | `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
-| `mma-research` | `POST /research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
+| `mma-research` | `POST /task` | External multi-source research with citations — arxiv, semantic_scholar, github_search, openalex, crossref, pubmed, brave-with-freshness/news/`site:`-filters — for a focused question. |
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
@@ -197,10 +197,7 @@ Every `defaults` knob has a built-in. Override only when you need to.
 
 | Field | Default | What it does |
 |---|---|---|
-| `defaults.timeoutMs` | `3600000` (60 min) | Hard task-level wall-clock cap (bumped from 30 min in 3.9.0) |
-| `defaults.stallTimeoutMs` | `1200000` (20 min) | Aborts in-flight runs idle for this long (bumped from 10 min in 3.9.0) |
-| `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full` |
-| `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd` |
+| `defaults.mainModel` | *(unset)* | Lowest-priority fallback for the main-model resolver chain |
 
 ### Telemetry
 
