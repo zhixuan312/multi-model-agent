@@ -48,18 +48,6 @@
       "types": "./dist/providers/provider-factory.d.ts",
       "import": "./dist/providers/provider-factory.js"
     },
-    "./lifecycle/task-runner": {
-      "types": "./dist/lifecycle/task-runner.d.ts",
-      "import": "./dist/lifecycle/task-runner.js"
-    },
-    "./lifecycle/stage-progression": {
-      "types": "./dist/lifecycle/stage-progression.d.ts",
-      "import": "./dist/lifecycle/stage-progression.js"
-    },
-    "./lifecycle/stage-labels": {
-      "types": "./dist/lifecycle/stage-labels.d.ts",
-      "import": "./dist/lifecycle/stage-labels.js"
-    },
     "./bounded-execution/activity-tracker": {
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
@@ -100,21 +88,9 @@
       "types": "./dist/events/stderr-log-subscriber.d.ts",
       "import": "./dist/events/stderr-log-subscriber.js"
     },
-    "./lifecycle/auto-commit": {
-      "types": "./dist/lifecycle/auto-commit.d.ts",
-      "import": "./dist/lifecycle/auto-commit.js"
-    },
     "./bounded-execution/file-artifact-check": {
       "types": "./dist/bounded-execution/file-artifact-check.d.ts",
       "import": "./dist/bounded-execution/file-artifact-check.js"
-    },
-    "./lifecycle/task-executor": {
-      "types": "./dist/lifecycle/task-executor.d.ts",
-      "import": "./dist/lifecycle/task-executor.js"
-    },
-    "./lifecycle/executor-output-types": {
-      "types": "./dist/lifecycle/executor-output-types.d.ts",
-      "import": "./dist/lifecycle/executor-output-types.js"
     },
     "./events/consent-rules": {
       "types": "./dist/events/consent-rules.d.ts",

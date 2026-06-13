@@ -20,7 +20,7 @@ interface StatusResponse {
   counters?: {
     projectCount?: number;
     activeRequests?: number;
-    activeBatches?: number;
+    activeTasks?: number;
   };
   inflight?: unknown[];
   recent?: unknown[];
@@ -116,7 +116,7 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
   const c = body.counters;
   if (c) {
     lines.push(`  projects:       ${c.projectCount ?? 0}`);
-    lines.push(`  active batches: ${c.activeBatches ?? 0}`);
+    lines.push(`  active tasks:   ${c.activeTasks ?? 0}`);
     lines.push(`  active reqs:    ${c.activeRequests ?? 0}`);
   }
 

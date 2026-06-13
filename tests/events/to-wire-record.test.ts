@@ -12,7 +12,7 @@ const seed = {
   client: 'claude-code',
   mainModel: 'claude-opus-4-7',
   cwd: '/tmp',
-  reviewPolicy: 'full' as const,
+  reviewPolicy: 'reviewed' as const,
 };
 
 describe('toWireRecord', () => {

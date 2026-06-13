@@ -444,7 +444,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const taskId = randomUUID();
     deps.taskRegistry.register(taskId, cwd, input.type);
 
-    // Emit batch_created diagnostic for observability parity with the old lifecycle.
+    // Emit task-created diagnostic for observability.
     deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { batch_id: taskId, route: input.type } });
 
     const statusUrl = `/task/${taskId}`;

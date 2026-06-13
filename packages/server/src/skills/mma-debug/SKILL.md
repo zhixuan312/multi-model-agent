@@ -48,9 +48,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `problem` | string | yes | What is broken (one sentence; concrete symptom) |
-| `context` | string | no | Background — what changed recently, what works, what doesn't |
-| `hypothesis` | string | no | Your initial theory; worker tests it first, then explores |
+| `errorMessage` | string | yes | What is broken (one sentence; concrete symptom) |
 | `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |

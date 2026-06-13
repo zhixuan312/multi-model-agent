@@ -9,7 +9,7 @@ const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   timeoutMs: 60_000,
   sandboxPolicy: 'cwd-only',
   cwd: '/tmp',
-  reviewPolicy: 'full',
+  reviewPolicy: 'reviewed',
   effort: undefined,
   mainModel: undefined,
 } as TaskSpec));

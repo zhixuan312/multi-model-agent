@@ -42,12 +42,9 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 }
 ```
 
-**Batch your learnings into ONE call.** Collect every learning from the session and send them together in `learnings[]` — do NOT fire multiple concurrent `journal-record` calls. One worker integrates them sequentially in a single pass (fast and collision-free).
-
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `learnings` | string[] | yes | 1–20 entries, each 20–8000 chars. Each is a natural-language entry: what you decided, why, or what you learned. Keep them concrete. |
-| `tagHints` | string[] | no | Optional tags applied across ALL learnings (batch-scoped); the worker revises/normalizes per node. Advisory. |
+| `entry` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
 
 **What gets stored & where:**
 

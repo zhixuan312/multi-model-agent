@@ -62,6 +62,6 @@ SESSION_ID=$(echo "$RESULT" | jq -r '.sessions.implementer.sessionId')
 RESULT=$(curl ... -d '{"type":"main","prompt":"Based on your exploration, write a spec...","sessionIds":{"implementer":"'"$SESSION_ID"'"}}' ...)
 ```
 
-@include ../_shared/auth-headers.md
-@include ../_shared/polling.md
-@include ../_shared/response-shape.md
+@include _shared/auth.md
+@include _shared/polling.md
+@include _shared/response-shape.md
