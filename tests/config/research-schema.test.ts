@@ -10,6 +10,9 @@ describe('ResearchConfigSchema', () => {
     expect(r.builtinAdapters.arxiv).toBe(true);
     expect(r.builtinAdapters.semanticScholar).toBe(true);
     expect(r.builtinAdapters.githubSearch).toBe(true);
+    expect(r.builtinAdapters.openalex).toBe(true);
+    expect(r.builtinAdapters.crossref).toBe(true);
+    expect(r.builtinAdapters.pubmed).toBe(true);
   });
 
   it('trims and dedupes apiKeys', () => {
@@ -37,6 +40,28 @@ describe('ResearchConfigSchema', () => {
     expect(() => ResearchConfigSchema.parse({ fetchAllowlistExtra: [] })).toThrow();
     expect(() => ResearchConfigSchema.parse({ builtinAdapters: { genericRss: true } })).toThrow();
   });
+
+  it('defaults new adapters to enabled', () => {
+    const cfg = ResearchConfigSchema.parse({});
+    expect(cfg.builtinAdapters.openalex).toBe(true);
+    expect(cfg.builtinAdapters.crossref).toBe(true);
+    expect(cfg.builtinAdapters.pubmed).toBe(true);
+  });
+
+  it('accepts optional contactEmail', () => {
+    const cfg = ResearchConfigSchema.parse({ builtinAdapters: { contactEmail: 'test@example.com' } });
+    expect(cfg.builtinAdapters.contactEmail).toBe('test@example.com');
+  });
+
+  it('accepts optional pubmedApiKey', () => {
+    const cfg = ResearchConfigSchema.parse({ builtinAdapters: { pubmedApiKey: 'abc123' } });
+    expect(cfg.builtinAdapters.pubmedApiKey).toBe('abc123');
+  });
+
+  it('rejects invalid contactEmail', () => {
+    const r = ResearchConfigSchema.safeParse({ builtinAdapters: { contactEmail: 'not-an-email' } });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe('ResearchConfigSchema inside multiModelConfigSchema', () => {
@@ -50,6 +75,9 @@ describe('ResearchConfigSchema inside multiModelConfigSchema', () => {
     expect(c.research.brave.apiKeys).toEqual([]);
     expect(c.research.brave.timeoutMs).toBe(8000);
     expect(c.research.builtinAdapters.arxiv).toBe(true);
+    expect(c.research.builtinAdapters.openalex).toBe(true);
+    expect(c.research.builtinAdapters.crossref).toBe(true);
+    expect(c.research.builtinAdapters.pubmed).toBe(true);
   });
 
   it('accepts partial research override', () => {

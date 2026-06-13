@@ -36,26 +36,32 @@ export const ResearchConfigSchema = z.object({
               .transform(arr => Array.from(new Set(arr)))
               .default([]),
     timeoutMs: z.number().int().positive().max(30_000).default(8000),
-    maxResultsPerQuery: z.number().int().positive().max(20).default(10),
+    maxResultsPerQuery: z.number().int().positive().max(20).default(20),
     perCallBackoffMs: z.number().int().min(0).max(2_000).default(250),
     // Minimum spacing between two requests on the SAME key. Brave's free tier
     // is 1 req/s/token; without this gate the orchestrator's concurrent fan-out
     // bursts multiple queries onto a round-robin key within milliseconds → 429.
     // 0 disables the gate. 1100ms keeps each key just under the 1 req/s ceiling.
     minPerKeyIntervalMs: z.number().int().min(0).max(10_000).default(1100),
-  }).strict().default(() => ({ apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 10, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 })),
+  }).strict().default(() => ({ apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 })),
   builtinAdapters: z.object({
     arxiv: z.boolean().default(true),
     semanticScholar: z.boolean().default(true),
     semanticScholarApiKey: z.string().min(1).optional(),
     githubSearch: z.boolean().default(true),
     githubPat: z.string().min(1).optional(),
+    openalex: z.boolean().default(true),
+    crossref: z.boolean().default(true),
+    pubmed: z.boolean().default(true),
+    pubmedApiKey: z.string().min(1).optional(),
+    contactEmail: z.string().email().optional(),
   }).strict().default(() => ({
     arxiv: true, semanticScholar: true, githubSearch: true,
+    openalex: true, crossref: true, pubmed: true,
   })),
 }).strict().default(() => ({
-  brave: { apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 10, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
-  builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true },
+  brave: { apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
+  builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
 }));
 
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;

@@ -16,7 +16,7 @@ describe('AdapterResult shape', () => {
   });
 
   it('AdapterId is a string-literal union', () => {
-    const ids: AdapterId[] = ['arxiv', 'semantic_scholar', 'github_search', 'rss'];
-    expect(ids.length).toBe(4);
+    const ids: AdapterId[] = ['arxiv', 'semantic_scholar', 'github_search', 'openalex', 'crossref', 'pubmed'];
+    expect(ids.length).toBe(6);
   });
 });
