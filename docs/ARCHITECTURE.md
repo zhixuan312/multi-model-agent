@@ -153,7 +153,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 | Layer | Location | Purpose |
 |---|---|---|
 | Unit | `tests/<module>/*.test.ts` | Per-file behavior |
-| Integration | `tests/integration/*.test.ts`, `tests/acceptance/*.test.ts` | Mock-provider runs through the two-phase pipeline |
+| Integration | `tests/contract/**/*.test.ts`, `tests/unified/*.test.ts` | Two-phase pipeline tests and HTTP integration |
 | Contract | `tests/contract/**` | HTTP envelopes + skill manifest + observability + route enumeration; goldens under `tests/contract/goldens/` |
 | Perf | `tests/perf/*.test.ts` | Baseline + budget enforcement |
 

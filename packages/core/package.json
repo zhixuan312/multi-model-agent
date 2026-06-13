@@ -89,10 +89,6 @@
       "types": "./dist/events/stderr-log-subscriber.d.ts",
       "import": "./dist/events/stderr-log-subscriber.js"
     },
-    "./bounded-execution/file-artifact-check": {
-      "types": "./dist/bounded-execution/file-artifact-check.d.ts",
-      "import": "./dist/bounded-execution/file-artifact-check.js"
-    },
     "./events/consent-rules": {
       "types": "./dist/events/consent-rules.d.ts",
       "import": "./dist/events/consent-rules.js"

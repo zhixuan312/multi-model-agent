@@ -441,12 +441,6 @@ const FROZEN_DEFAULT_PROFILE: ModelProfile = Object.freeze({ ...DEFAULT_PROFILE 
  * Telemetry uses BoundedIdentifier (telemetry/types.ts) and accepts any
  * reasonable string identifier; see PRIVACY.md for the wire-shape rules.
  */
-export const ALL_MODEL_IDS: readonly string[] = Object.freeze(
-  PROFILE_ENTRIES
-    .map(p => p.prefix)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0)
-);
-
 export function findModelProfile(modelId: string): ModelProfile {
   const normalized = extractCanonicalModelName(modelId).toLowerCase();
   for (const { entry, prefixLc } of PROFILE_LOOKUP) {

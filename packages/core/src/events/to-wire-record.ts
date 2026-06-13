@@ -1,6 +1,4 @@
 // packages/core/src/events/to-wire-record.ts
-// PII projection from TaskEnvelope to wire shape. Copied functions from clamp.ts,
-// normalize.ts, concern-classifier.ts so those files can be deleted in T14.
 
 import { randomUUID } from 'node:crypto';
 import { extractCanonicalModelName, findModelProfile } from '../config/model-profile-registry.js';
@@ -149,8 +147,8 @@ export function toWireRecord(
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
-      maxIdleMs: 0, // TODO: track per-stage max idle in envelope
-      totalIdleMs: 0, // TODO: track per-stage total idle in envelope
+      maxIdleMs: 0,
+      totalIdleMs: 0,
       mainCostUSD: mainCard
         ? priceTokens({
             inputTokens: s.inputTokens,

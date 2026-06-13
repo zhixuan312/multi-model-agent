@@ -114,25 +114,8 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 // === MultiModelConfig schema ===
 
 const defaultsSchema = z.object({
-  timeoutMs: z.number().int().positive().default(DEFAULT_TASK_TIMEOUT_MS),
-  stallTimeoutMs: z.number().int().positive().default(DEFAULT_STALL_TIMEOUT_MS),
-  tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
-  sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
-  largeResponseThresholdChars: z.number().int().positive().optional(),
-  // A6.x (4.3.0+): mainModel re-introduced as the lowest-priority fallback
-  // in the resolver chain. Headers + per-client auto-detection take
-  // precedence; this is the explicit operator override / last resort.
   mainModel: z.string().min(1).optional(),
-  progressWatchdogEnabled: z.boolean().optional(),
-  thrashTurns: z.number().int().positive().optional(),
-  thrashWallClockMs: z.number().int().positive().optional(),
-  thrashSoftTurns: z.number().int().positive().optional(),
-}).default(() => ({
-  timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
-  stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
-  tools: 'full' as const,
-  sandboxPolicy: 'cwd-only' as const,
-}));
+}).default(() => ({}));
 
 // Named constants are the single source of truth for server defaults.
 // Each .default(() => ({...})) references the same constant so changing a
