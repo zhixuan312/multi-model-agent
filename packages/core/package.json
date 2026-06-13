@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -23,7 +23,8 @@
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
   "files": [
-    "dist"
+    "dist",
+    "src/skills"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
