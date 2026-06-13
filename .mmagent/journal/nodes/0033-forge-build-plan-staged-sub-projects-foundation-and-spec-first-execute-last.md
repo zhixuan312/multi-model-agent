@@ -1,6 +1,7 @@
 ---
 id: "0033"
 title: Forge build plan — staged sub-projects, Foundation+Spec first, Execute last and highest-risk
+category: process
 status: adopted
 tags: [forge, decision, sdlc, build-plan, mma-integration, security]
 date: 2026-06-08

@@ -1,6 +1,7 @@
 ---
 id: "0023"
 title: "Default the complex tier to Sonnet on route-weighted review quality"
+category: "decision"
 status: "adopted"
 tags:
   - benchmark

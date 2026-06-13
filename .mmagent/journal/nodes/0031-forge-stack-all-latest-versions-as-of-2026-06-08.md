@@ -1,6 +1,7 @@
 ---
 id: "0031"
 title: Forge stack — all-latest versions as of 2026-06-08
+category: decision
 status: adopted
 tags: [forge, stack, decision, dependencies]
 date: 2026-06-08

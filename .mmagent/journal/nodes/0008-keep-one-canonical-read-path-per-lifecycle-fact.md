@@ -1,6 +1,7 @@
 ---
 id: "0008"
 title: "Keep one canonical read path per lifecycle fact"
+category: "design"
 status: "adopted"
 tags:
   - lifecycle

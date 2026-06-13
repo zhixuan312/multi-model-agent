@@ -1,6 +1,7 @@
 ---
 id: "0011"
 title: "Share one structured-output contract and surface parser drops"
+category: "design"
 status: "adopted"
 tags:
   - findings-format

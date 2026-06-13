@@ -1,6 +1,7 @@
 ---
 id: "0035"
 title: One Project is one flow with a design/build regime split at the spec freeze
+category: design
 status: adopted
 tags: [forge, decision, flow, sdlc, freeze, phase-machine]
 date: 2026-06-08

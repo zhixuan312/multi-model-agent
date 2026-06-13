@@ -1,6 +1,7 @@
 ---
 id: "0010"
 title: "Gate reviewer verdict overrides on severity"
+category: "decision"
 status: "adopted"
 tags:
   - code-review

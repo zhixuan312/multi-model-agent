@@ -1,6 +1,7 @@
 ---
 id: "0017"
 title: "Treat disabled network tests as missing critical-path coverage"
+category: "process"
 status: "adopted"
 tags:
   - testing

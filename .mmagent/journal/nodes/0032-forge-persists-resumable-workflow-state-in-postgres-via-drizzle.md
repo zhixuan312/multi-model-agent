@@ -1,6 +1,7 @@
 ---
 id: "0032"
 title: Forge persists resumable workflow state in Postgres via Drizzle
+category: decision
 status: adopted
 tags: [forge, architecture, decision, state, drizzle, postgres, sdlc]
 date: 2026-06-08

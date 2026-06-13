@@ -1,6 +1,7 @@
 ---
 id: "0016"
 title: "Track file activity only from provider-proven events"
+category: "design"
 status: "adopted"
 tags:
   - observability

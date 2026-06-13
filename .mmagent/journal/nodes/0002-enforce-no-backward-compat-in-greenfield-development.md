@@ -1,6 +1,7 @@
 ---
 id: "0002"
 title: "Enforce no backward compatibility in greenfield development"
+category: "decision"
 status: "adopted"
 tags:
   - development-mode

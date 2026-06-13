@@ -1,6 +1,7 @@
 ---
 id: "0013"
 title: "Prefer same-repo parallel dispatch with scoped git commits"
+category: "decision"
 status: "adopted"
 tags:
   - concurrency

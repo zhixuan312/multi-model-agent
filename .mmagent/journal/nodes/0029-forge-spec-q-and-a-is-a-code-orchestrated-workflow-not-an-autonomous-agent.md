@@ -1,6 +1,7 @@
 ---
 id: "0029"
 title: Forge spec Q&A is a code-orchestrated workflow, not an autonomous agent
+category: decision
 status: adopted
 tags: [forge, architecture, decision, workflow, structured-outputs, mma-integration]
 date: 2026-06-08

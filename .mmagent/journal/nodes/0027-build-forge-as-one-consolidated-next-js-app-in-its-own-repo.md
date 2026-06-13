@@ -1,6 +1,7 @@
 ---
 id: "0027"
 title: Build Forge as one consolidated Next.js app in its own repo
+category: decision
 status: adopted
 tags: [forge, architecture, decision, nextjs, repo-boundary]
 date: 2026-06-08

@@ -1,6 +1,7 @@
 ---
 id: "0020"
 title: "Route all lifecycle control through the single invocation surface"
+category: "design"
 status: "adopted"
 tags:
   - architecture

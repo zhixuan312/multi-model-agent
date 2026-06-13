@@ -1,6 +1,7 @@
 ---
 id: "0009"
 title: "Enforce reviewer and implementer separation by tier"
+category: "decision"
 status: "adopted"
 tags:
   - code-review

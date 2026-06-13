@@ -54,6 +54,12 @@ export interface PipelineResult {
   worktree: WorktreeInfo | null;
 }
 
+function extractStructuredBlock(raw: string): string {
+  const fenceMatch = raw.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+  if (fenceMatch) return fenceMatch[1]!.trim();
+  return raw;
+}
+
 export async function runTwoPhasePipeline(input: PipelineInput): Promise<PipelineResult> {
   const ac = new AbortController();
   const deadline = Date.now() + (input.timeoutMs ?? 3_600_000);
@@ -141,7 +147,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(revSession);
 
-    const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${implTurn.output}`;
+    const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });

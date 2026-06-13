@@ -1,6 +1,7 @@
 ---
 id: "0024"
 title: "The worker harness, not the model, caps read-route quality at the top end"
+category: "knowledge"
 status: "adopted"
 tags:
   - harness

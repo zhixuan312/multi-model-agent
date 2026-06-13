@@ -1,6 +1,7 @@
 ---
 id: "0001"
 title: "Derive completion from objective lifecycle signals"
+category: "decision"
 status: "adopted"
 tags:
   - completion-gating
