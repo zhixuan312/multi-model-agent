@@ -320,8 +320,7 @@ export class ActivityTracker {
       snapshot: this.getHeadlineSnapshot(),
     });
 
-    // Push a tick snapshot so the server can recompose the running headline
-    // and call BatchRegistry.updateRunningHeadline on every tick.
+    // Push a tick snapshot for the running headline.
     if (this._recordHeartbeat) {
       this._recordHeartbeat(this.getHeartbeatTickInfo());
     }

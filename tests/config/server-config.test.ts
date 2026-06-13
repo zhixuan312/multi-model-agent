@@ -14,7 +14,6 @@ describe('server config', () => {
           batchTtlMs: 3_600_000,
           idleProjectTimeoutMs: 1_800_000,
           projectCap: 200,
-          maxBatchCacheSize: 500,
           maxContextBlockBytes: 524_288,
           maxContextBlocksPerProject: 32,
           shutdownDrainMs: 30_000,

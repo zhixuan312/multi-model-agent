@@ -27,7 +27,6 @@ function minimalConfig(tokenFile: string) {
         maxContextBlocksPerProject: 100,
         shutdownDrainMs: 1_000,
         maxBodyBytes: 10_000_000,
-        maxBatchCacheSize: 100,
         maxContextBlockBytes: 1_000_000,
       },
       autoUpdateSkills: false,

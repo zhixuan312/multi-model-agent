@@ -33,9 +33,8 @@ export interface ContextBlockStore {
   runIdleSweep(now: number, idleTtlMs: number): number;
   /** Number of entries. Used by status + size-cap checks. */
   readonly size: number;
-  /** Increment pin count — used by BatchRegistry to hold blocks across an
-   *  active dispatch so they can't be evicted mid-run. Disk-backed
-   *  implementations may treat this as advisory. */
+  /** Increment pin count — holds blocks across an active task dispatch
+   *  so they can't be evicted mid-run. */
   pin(id: string): void;
   /** Decrement pin count. */
   unpin(id: string): void;
@@ -207,7 +206,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
       let oldestId: string | undefined;
       let oldestTick = Infinity;
       for (const [id, entry] of this.entries) {
-        // Skip pinned entries — they are held by active BatchRegistry entries
+        // Skip pinned entries — held by active task dispatches
         if (entry.pinCount > 0) continue;
         if (entry.lastAccessTick < oldestTick) {
           oldestTick = entry.lastAccessTick;

@@ -28,10 +28,6 @@ export type {
   ProgressEvent,
   InternalRunnerEvent,
 } from './providers/runner-types.js';
-// (TaskTimings / TaskProgress / TaskAggregateCost removed —
-//  lifecycle/executor-output-types.ts deleted with the lifecycle layer.)
-// (EligibilityFailure / ProviderEligibility re-exports removed —
-//  escalation/types.js is being deleted along with the rest of escalation/.)
 export type {
   BriefQualityPolicy,
 } from './types/brief-quality-policy.js';
@@ -100,11 +96,6 @@ export { toWireRecord, normalizeModel } from './events/to-wire-record.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from './events/wire-schema.js';
-
-// Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
-
-
-// (Reporting slots + headline templates deleted with the lifecycle layer.)
 
 // Unified task engine
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';

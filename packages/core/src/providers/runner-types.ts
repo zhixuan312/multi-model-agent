@@ -52,10 +52,6 @@ export interface TerminationReason {
   wallClockMs?: number
 }
 
-/**
- * Single provider-attempt record inside an escalation chain. The orchestrator
- * (`delegateWithEscalation`) pushes one entry per `provider.run(...)` call.
- */
 export interface AttemptRecord {
   provider: string
   status: RunStatus
@@ -108,18 +104,9 @@ export interface RunOptions {
    *  `claude_turn_started`, `claude_turn_completed`) that the server's
    *  EnvelopeBus consume. */
   bus?: EnvelopeBus
-  /** Identifies the in-flight task in emitted runner events. Plumbed
-   *  through delegateWithEscalation so consumers can correlate runner-shell
-   *  output back to the originating /audit, /delegate, etc. request. */
   taskId?: string
-  /** Identifies which task within a dispatch is running. Threaded through every
-   *  emitted event so per-task running-headline progress can be tracked when
-   *  a dispatch has multiple parallel tasks. */
   taskIndex?: number
-  /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string
-  /** Lifecycle stage label (e.g. `'Implementing'`, `'Spec review'`). Forwarded
-   *  to the runner-shell so its emitted events carry the current stage. */
   stageLabel?: string
 }
 

@@ -11,7 +11,7 @@ function baseOpts() {
   };
 }
 
-function envelopeWithPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'none') {
+function envelopeWithPolicy(policy: 'reviewed' | 'none') {
   const store = TaskEnvelopeStore.create({
     taskId: 't1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
@@ -31,30 +31,19 @@ function envelopeWithPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'non
   return store.snapshot();
 }
 
-describe('toWireRecord reviewPolicy honesty (v6: reviewed/none)', () => {
-  it('collapses reviewPolicy="full" to "reviewed"', () => {
-    const wire = toWireRecord(envelopeWithPolicy('full'), baseOpts());
+describe('toWireRecord reviewPolicy (v6: reviewed/none)', () => {
+  it('emits reviewPolicy="reviewed" when set', () => {
+    const wire = toWireRecord(envelopeWithPolicy('reviewed'), baseOpts());
     expect(wire.reviewPolicy).toBe('reviewed');
   });
 
-  it('collapses reviewPolicy="quality_only" to "reviewed"', () => {
-    const wire = toWireRecord(envelopeWithPolicy('quality_only'), baseOpts());
-    expect(wire.reviewPolicy).toBe('reviewed');
-  });
-
-  it('collapses reviewPolicy="diff_only" to "reviewed"', () => {
-    const wire = toWireRecord(envelopeWithPolicy('diff_only'), baseOpts());
-    expect(wire.reviewPolicy).toBe('reviewed');
-  });
-
-  it('emits reviewPolicy="none"', () => {
+  it('emits reviewPolicy="none" when set', () => {
     const wire = toWireRecord(envelopeWithPolicy('none'), baseOpts());
     expect(wire.reviewPolicy).toBe('none');
   });
 
-  it('opts.reviewPolicy is no longer in the opts signature', () => {
-    // This is a type-level assertion — if it compiles, the signature dropped reviewPolicy.
-    // @ts-expect-error reviewPolicy must not be in opts after Task 2
-    toWireRecord(envelopeWithPolicy('none'), { ...baseOpts(), reviewPolicy: 'full' });
+  it('opts.reviewPolicy is not in the opts signature', () => {
+    // @ts-expect-error reviewPolicy must not be in opts
+    toWireRecord(envelopeWithPolicy('none'), { ...baseOpts(), reviewPolicy: 'reviewed' });
   });
 });

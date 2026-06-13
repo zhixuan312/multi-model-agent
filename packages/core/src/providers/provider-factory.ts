@@ -1,6 +1,5 @@
-// v4.4 provider-factory. Two runtimes, two factories: claude (in-process
-// via claude-agent-sdk) and codex (subprocess via codex CLI). The Provider
-// exposes only `openSession`; legacy `run`/`runReview` are gone.
+// Provider factory. Three agent tiers (standard, complex, main), two runtimes
+// (claude via agent-sdk, codex via CLI). Provider exposes only `openSession`.
 
 import type {
   AgentType, Provider, MultiModelConfig,

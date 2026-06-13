@@ -51,20 +51,6 @@ export interface TaskSpec {
    * actual worker input is built from `research`).
    */
   readTarget?: string
-  /**
-   * v4.4.x: subtype field for read-only tools. Set by each tool's
-   * buildTaskSpec from the input schema's `subtype` field. The lifecycle's
-   * read-route dispatcher reads this to look up the per-tool
-   * SUBTYPES map and select the matching criteria / orientation /
-   * semantics block. Defaults to 'default' when undefined.
-   *
-   * Per-tool enums today:
-   *   audit:       'default' | 'plan' | 'spec' | 'skill'
-   *   review:      'default'
-   *   debug:       'default'
-   *   investigate: 'default'
-   *   research:    'default'
-   */
   subtype?: string
   /**
    * Research-specific metadata passed from the /research dispatcher to perform-implementation.

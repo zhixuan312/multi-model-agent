@@ -1,22 +1,8 @@
-// Full type definitions for the codebase's actual run-time result shapes.
+// Run-result types.
 //
-// ── PLAN TASK 2 — RunResult IS ComposePayload ─────────────────────────────
-// Per the stage-io-standardization plan, `RunResult` is the v5 wire envelope
-// (= ComposePayload from stage-io.ts). The internal lifecycle data flow
-// (what runners produce, what `state.lastRunResult` holds, what the
-// recorder/event-builder reads) uses a separate type — `RuntimeRunResult`
-// (declared below) — kept distinct from the wire envelope.
-//
-// Consumer rule:
-//   - Anywhere code is reading the BATCH/WIRE-side result → `RunResult`
-//     (= ComposePayload — 8 fields).
-//   - Anywhere code is reading the RUNTIME mirror (workerStatus, stageStats,
-//     usage, terminationReason, …) → `RuntimeRunResult`.
-//
-// Drift detector lives at `tests/types/run-result.test.ts`.
-// ──────────────────────────────────────────────────────────────────────────
+// `RunResult` — the wire envelope shape (unified handler response).
+// `RuntimeRunResult` — the internal fat shape for test mock providers.
 
-// Inlined from lifecycle/stage-io.ts (lifecycle layer deleted).
 export type RunResult = {
   completed: boolean;
   message: string;
@@ -149,11 +135,6 @@ export interface Provider {
   openSession(opts: SessionOpts): Session;
 }
 
-// RunResult — what lifecycle handlers and delegate-with-escalation consume
-// Fields are derived from live usage across event-builder, delegate-with-escalation,
-// task-runner, task-executor, task-completion-summary, review-verdict-mapping,
-// fallback-helpers, and assemble-run-result.
-
 export interface RuntimeRunResult {
   output: string;
   status: string;
@@ -171,7 +152,6 @@ export interface RuntimeRunResult {
   retryable?: boolean;
   incompleteReason?: string;
   escalationLog: EscalationRecord[];
-  // ── event-builder.ts ─────────────────────────────────────────────────────
   durationMs?: number;
   models?: {
     implementer?: string;
@@ -199,11 +179,8 @@ export interface RuntimeRunResult {
   stallTriggered?: boolean;
   taskMaxIdleMs?: number;
   structuredError?: { code: string; message: string; where?: string };
-  // ── review-verdict-mapping.ts ────────────────────────────────────────────
   verifyResult?: unknown;
-  // ── task-executor.ts ─────────────────────────────────────────────────────
   cost?: { costUSD: number | null; costDeltaVsMainUSD: number | null };
-  // ── delegate-with-escalation.ts ─────────────────────────────────────────
 }
 
 export interface EscalationRecord {
