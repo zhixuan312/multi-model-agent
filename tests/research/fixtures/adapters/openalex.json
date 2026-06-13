@@ -1,0 +1,25 @@
+{
+  "meta": { "count": 2, "per_page": 10 },
+  "results": [
+    {
+      "id": "https://openalex.org/W2741809807",
+      "doi": "https://doi.org/10.1038/s41586-021-03819-2",
+      "display_name": "Highly accurate protein structure prediction with AlphaFold",
+      "publication_year": 2021,
+      "abstract_inverted_index": {
+        "Proteins": [0],
+        "are": [1],
+        "essential": [2],
+        "to": [3],
+        "life": [4]
+      }
+    },
+    {
+      "id": "https://openalex.org/W123456789",
+      "doi": null,
+      "display_name": "A survey of deep learning methods",
+      "publication_year": 2023,
+      "abstract_inverted_index": null
+    }
+  ]
+}
