@@ -23,7 +23,7 @@ function buildEnvelope(opts: { status: 'done' | 'failed'; errorCode: string | nu
     taskId: 'fixture-1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
     client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp',
-    reviewPolicy: 'full',
+    reviewPolicy: 'reviewed',
   });
   store.startStage('implementing', { model: 'claude-haiku-4-5', tier: 'standard', round: 1 });
   store.completeStage('implementing', 1, {

@@ -15,8 +15,8 @@ describe('contract: POST /context-blocks', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-            "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+            "X-MMA-Main-Model": "claude-opus-4-7",
+            "X-MMA-Client": "claude-code",
             Authorization: `Bearer ${h.token}`,
           },
           body: JSON.stringify({ content: 'hello from context block' }),
@@ -38,8 +38,8 @@ describe('contract: POST /context-blocks', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-            "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+            "X-MMA-Main-Model": "claude-opus-4-7",
+            "X-MMA-Client": "claude-code",
             Authorization: `Bearer ${h.token}`,
           },
           body: JSON.stringify({}),

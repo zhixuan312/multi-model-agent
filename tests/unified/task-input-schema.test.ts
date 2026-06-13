@@ -101,4 +101,28 @@ describe('taskInputSchema', () => {
       errorMessage: 'TypeError: cannot read property',
     }).success).toBe(true);
   });
+
+  it('accepts retry_tasks with taskId and taskIndices', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'retry_tasks',
+      taskId: '550e8400-e29b-41d4-a716-446655440000',
+      taskIndices: [0, 1],
+    }).success).toBe(true);
+  });
+
+  it('rejects retry_tasks with empty taskIndices', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'retry_tasks',
+      taskId: '550e8400-e29b-41d4-a716-446655440000',
+      taskIndices: [],
+    }).success).toBe(false);
+  });
+
+  it('rejects retry_tasks with non-uuid taskId', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'retry_tasks',
+      taskId: 'not-a-uuid',
+      taskIndices: [0],
+    }).success).toBe(false);
+  });
 });

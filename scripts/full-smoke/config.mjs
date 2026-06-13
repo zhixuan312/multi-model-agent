@@ -1,9 +1,9 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Redesigned as a comprehensive product release gate: 15 scenarios, each testing
-// a DISTINCT product capability. No duplicates. Covers task types, tier/review
-// policy overrides, session reuse, response shape, error cases, and telemetry.
+// Redesigned as a comprehensive product release gate: 18 scenarios, each testing
+// a DISTINCT product capability. No duplicates. Covers task types, audit subtypes,
+// tier/review policy overrides, session reuse, error cases, and telemetry.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,7 +30,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 15-scenario release gate.
+// The 18-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -38,7 +38,7 @@ export const POLL = {
 //      #1  context-blocks   — register a context block (synchronous 201)
 //      #2  investigate      — codebase question (read, complex)
 //      #3  research         — external research (read, complex, network)
-//      #4  audit            — document audit w/ spec subtype + context block
+//      #4  audit (default)  — document audit (read, complex)
 //      #5  delegate         — implementation (write, standard, reviewed)
 //      #6  execute_plan     — plan execution (write, standard)
 //      #7  review           — code review (read, complex)
@@ -46,16 +46,21 @@ export const POLL = {
 //      #9  journal_record   — record a learning (write, complex)
 //      #10 journal_recall   — recall learnings (read, complex, depends on #9)
 //
-//   B. Tier & Review Policy overrides:
-//      #11 delegate complex — override default standard tier → complex
-//      #12 delegate none    — skip reviewer phase (reviewPolicy: 'none')
+//   B. Audit Subtypes (each loads a different skill file):
+//      #11 audit/spec       — requirement prose executability
+//      #12 audit/plan       — plan-vs-codebase coherence
+//      #13 audit/skill      — SKILL.md reader-effectiveness
 //
-//   C. Session Reuse:
-//      #13 investigate resume — resume prior session from scenario #2
+//   C. Tier & Review Policy overrides:
+//      #14 delegate complex — override default standard tier → complex
+//      #15 delegate none    — skip reviewer phase (reviewPolicy: 'none')
 //
-//   D. Error Cases:
-//      #14 invalid type     — POST /task with type: 'nonexistent' → 400
-//      #15 missing field    — POST /task with type: 'investigate' but no question → 400
+//   D. Session Reuse:
+//      #16 investigate resume — resume prior session from scenario #2
+//
+//   E. Error Cases:
+//      #17 invalid type     — POST /task with type: 'nonexistent' → 400
+//      #18 missing field    — POST /task with type: 'investigate' but no question → 400
 //
 // `emits` = how many wire telemetry records this scenario produces. The wire
 // pipeline emits ONE record per sealed task envelope:

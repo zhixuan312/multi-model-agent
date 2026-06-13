@@ -29,7 +29,7 @@ describe('telemetry envelope (v2)', () => {
         client: 'test',
         mainModel: 'claude-sonnet-4-6',
         cwd: '/tmp/test',
-        reviewPolicy: 'full' as const,
+        reviewPolicy: 'reviewed' as const,
       },
       bus,
     );

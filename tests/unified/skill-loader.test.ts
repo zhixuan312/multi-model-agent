@@ -34,7 +34,36 @@ describe('SkillLoader', () => {
     await expect(validateSkillsExist(['delegate', 'audit'], SKILLS_DIR)).resolves.not.toThrow();
   });
 
-  it('validates all 9 types have skill files', async () => {
+  it('validates all 10 types have skill files', async () => {
     await expect(validateSkillsExist(TASK_TYPES, SKILLS_DIR)).resolves.not.toThrow();
+  });
+
+  it('loads audit subtype implement-plan.md when subtype=plan', async () => {
+    const pair = await loadSkill('audit', SKILLS_DIR, 'plan');
+    expect(pair.implement).toContain('PLAN');
+    expect(pair.review).toContain('Reviewer');
+  });
+
+  it('loads audit subtype implement-spec.md when subtype=spec', async () => {
+    const pair = await loadSkill('audit', SKILLS_DIR, 'spec');
+    expect(pair.implement).toContain('Requirement');
+  });
+
+  it('loads audit subtype implement-skill.md when subtype=skill', async () => {
+    const pair = await loadSkill('audit', SKILLS_DIR, 'skill');
+    expect(pair.implement).toContain('SKILL');
+  });
+
+  it('falls back to implement.md for unknown subtype', async () => {
+    const defaultPair = await loadSkill('audit', SKILLS_DIR);
+    clearSkillCache();
+    const unknownPair = await loadSkill('audit', SKILLS_DIR, 'nonexistent');
+    expect(unknownPair.implement).toBe(defaultPair.implement);
+  });
+
+  it('caches separately per subtype', async () => {
+    const defaultPair = await loadSkill('audit', SKILLS_DIR);
+    const planPair = await loadSkill('audit', SKILLS_DIR, 'plan');
+    expect(defaultPair.implement).not.toBe(planPair.implement);
   });
 });
