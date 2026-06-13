@@ -231,6 +231,88 @@ describe('BraveClient', () => {
     // With 3 keys → maxAttempts=3. Should sleep after attempt 0 and attempt 1, but NOT after attempt 2.
     expect(sleeps.length).toBe(2);
   });
+
+  it('sets freshness query param when provided', async () => {
+    let capturedUrl = '';
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply((req) => {
+        capturedUrl = req.path;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      });
+    const c = makeClient();
+    await c.search('earnings', { freshness: 'pm' });
+    expect(capturedUrl).toContain('freshness=pm');
+  });
+
+  it('uses news endpoint when endpoint=news', async () => {
+    let capturedPath = '';
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/news\/search/ })
+      .reply((req) => {
+        capturedPath = req.path;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      });
+    const c = makeClient();
+    await c.search('Apple earnings', { endpoint: 'news' });
+    expect(capturedPath).toContain('/res/v1/news/search');
+  });
+
+  it('sets count=20 for web, count=50 for news', async () => {
+    let webUrl = '';
+    let newsUrl = '';
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply((req) => {
+        webUrl = req.path;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      });
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/news\/search/ })
+      .reply((req) => {
+        newsUrl = req.path;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      });
+    const c = makeClient();
+    await c.search('q1');
+    await c.search('q2', { endpoint: 'news' });
+    expect(webUrl).toContain('count=20');
+    expect(newsUrl).toContain('count=50');
+  });
+
+  it('always sets extra_snippets=true', async () => {
+    let capturedUrl = '';
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply((req) => {
+        capturedUrl = req.path;
+        return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      });
+    const c = makeClient();
+    await c.search('q');
+    expect(capturedUrl).toContain('extra_snippets=true');
+  });
+
+  it('parses page_age and extra_snippets from response', async () => {
+    const body = {
+      web: { results: [{
+        title: 'Test', url: 'https://example.com', snippet: 'main',
+        page_age: '2026-06-10T12:00:00',
+        extra_snippets: ['extra1', 'extra2'],
+      }] },
+    };
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply(200, JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    const c = makeClient();
+    const res = await c.search('q');
+    expect(res.results[0]!.pageAge).toBe('2026-06-10T12:00:00');
+    expect(res.results[0]!.extraSnippets).toEqual(['extra1', 'extra2']);
+  });
+
+  it('omits pageAge and extraSnippets when not in response', async () => {
+    const body = { web: { results: [{ title: 'T', url: 'https://x.com', snippet: 's' }] } };
+    agent.get('https://api.search.brave.com').intercept({ path: /\/res\/v1\/web\/search/ })
+      .reply(200, JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    const c = makeClient();
+    const res = await c.search('q');
+    expect(res.results[0]!.pageAge).toBeUndefined();
+    expect(res.results[0]!.extraSnippets).toBeUndefined();
+  });
 });
 
 describe('Brave UA header', () => {
