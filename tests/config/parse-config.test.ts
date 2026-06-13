@@ -131,7 +131,7 @@ describe('parseConfig', () => {
     });
     expect(result.research.brave.apiKeys).toEqual([]);
     expect(result.research.brave.timeoutMs).toBe(8000);
-    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.brave.maxResultsPerQuery).toBe(20);
     expect(result.research.brave.perCallBackoffMs).toBe(250);
     expect(result.research.brave.minPerKeyIntervalMs).toBe(1100);
     expect(result.research.builtinAdapters.arxiv).toBe(true);
@@ -152,7 +152,7 @@ describe('parseConfig', () => {
     expect(result.research.brave.apiKeys).toEqual(['k1']);
     expect(result.research.brave.timeoutMs).toBe(5000);
     // untouched defaults
-    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.brave.maxResultsPerQuery).toBe(20);
     expect(result.research.builtinAdapters.arxiv).toBe(true);
   });
 
