@@ -29,7 +29,6 @@ import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 
 /** Map unified TaskType (underscores) to wire Route (hyphens). */
 function taskTypeToRoute(type: TaskType): Route {
@@ -390,13 +389,10 @@ function resolveSkillsDir(): string {
   // Dev (monorepo): packages/server/src/http/handlers/ → packages/core/src/skills/
   const devPath = path.resolve(thisDir, '..', '..', '..', '..', '..', 'packages', 'core', 'src', 'skills');
   if (fs.existsSync(devPath)) return devPath;
-  // Production (global install): resolve via the core package
-  try {
-    const esmRequire = createRequire(import.meta.url);
-    const corePkg = esmRequire.resolve('@zhixuan92/multi-model-agent-core/package.json');
-    const prodPath = path.resolve(path.dirname(corePkg), 'src', 'skills');
-    if (fs.existsSync(prodPath)) return prodPath;
-  } catch {}
+  // Production (global install): server package root → node_modules/@zhixuan92/multi-model-agent-core/src/skills/
+  const serverRoot = path.resolve(thisDir, '..', '..', '..');
+  const prodPath = path.join(serverRoot, 'node_modules', '@zhixuan92', 'multi-model-agent-core', 'src', 'skills');
+  if (fs.existsSync(prodPath)) return prodPath;
   return devPath;
 }
 const SKILLS_DIR = resolveSkillsDir();
