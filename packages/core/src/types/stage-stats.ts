@@ -22,7 +22,7 @@ interface BaseStageStats {
   entered:       boolean;
   durationMs:    number | null;
   costUSD:       number | null;
-  agentTier:     'standard' | 'complex' | null;
+  agentTier:     'standard' | 'complex' | 'main' | null;
   modelFamily:   string | null;
   model:         string | null;
   // Populated by the per-stage idle tracker; null when the stage was never
