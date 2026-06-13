@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.2] - 2026-06-13
+
+**Reviewer input robustness + journal backfill.** The two-phase pipeline now strips markdown code fences from implementer output before passing to the reviewer, fixing cases where smaller reviewer models (haiku) couldn't parse the raw dump. Journal nodes 0001-0039 backfilled with the new `category` field; 7 new session learnings recorded (0040-0046). `SCHEMA_VERSION` unchanged.
+
+### Fixed
+- Reviewer prompt robustness: `extractStructuredBlock()` in `two-phase-pipeline.ts` strips markdown code fences from implementer output so the reviewer receives clean JSON. Fixes haiku-tier reviewers saying "I don't see the findings" when codex workers wrap output in triple-backtick fences.
+
+### Changed
+- Journal nodes 0001-0039 backfilled with `category` metadata (decision/design/knowledge/process).
+- 7 new journal nodes (0040-0046) capturing v5.3.0 session learnings: worktree path rewrite, unused API parameters, free academic APIs, audit gates, dead code patterns, query planner prompts, live A/B comparison.
+
 ## [5.3.1] - 2026-06-13
 
 **Journal knowledge graph + EnvelopeBus fix.** The journal system expands from a decision audit trail to a full team knowledge graph with 6 categories (decision, design, behavior, process, knowledge, style). EnvelopeBus threading fix restores provider event logging to stderr. `SCHEMA_VERSION` unchanged.
