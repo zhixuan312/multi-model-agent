@@ -44,8 +44,9 @@ function checkQuality(type, subtype, task0, structuredReport) {
       return [citesFile ? 'PASS' : 'WARN', `${outputLen} chars; file-citation=${citesFile}`];
     }
     case 'review': {
-      if (findings.length === 0 && outputLen < 50) return ['WARN', 'review produced 0 findings and minimal output'];
-      return ['PASS', `${findings.length} findings, ${outputLen} chars output`];
+      const reviewFindings = extractFindingsFromOutput(output);
+      if (reviewFindings.length === 0 && outputLen < 50) return ['WARN', 'review produced 0 findings and minimal output'];
+      return ['PASS', `${reviewFindings.length} findings, ${outputLen} chars output`];
     }
     case 'debug': {
       if (outputLen < 100) return ['FAIL', `debug output too short (${outputLen} chars) — expected root-cause trace`];
@@ -53,7 +54,7 @@ function checkQuality(type, subtype, task0, structuredReport) {
     }
     case 'research': {
       if (outputLen < 200) return ['WARN', `research output short (${outputLen} chars)`];
-      return ['PASS', `${outputLen} chars output, ${findings.length} findings`];
+      return ['PASS', `${outputLen} chars output`];
     }
     case 'journal_recall': {
       if (outputLen < 20) return ['WARN', `recall output very short (${outputLen} chars)`];
