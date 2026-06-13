@@ -62,7 +62,8 @@ function checkQuality(type, subtype, task0, structuredReport) {
     }
     case 'journal_record': {
       if (outputLen < 10) return ['WARN', `record output very short (${outputLen} chars)`];
-      return ['PASS', `${outputLen} chars output`];
+      const hasCategory = /category/.test(output) || /decision|design|behavior|process|knowledge|style/.test(output);
+      return ['PASS', `${outputLen} chars output; category-aware=${hasCategory}`];
     }
     case 'delegate': {
       if (outputLen < 20) return ['WARN', `delegate output very short (${outputLen} chars)`];
@@ -163,7 +164,7 @@ export function verify(rec) {
       out.push(C('research-sources', used.length > 0 ? 'PASS' : 'WARN',
         `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack (transient)'}`));
 
-      const ALLOWED_GROUPS = new Set(['arxiv', 'semantic_scholar', 'github_repo', 'github_code', 'brave']);
+      const ALLOWED_GROUPS = new Set(['arxiv', 'semantic_scholar', 'github_repo', 'github_code', 'brave', 'brave_news', 'openalex', 'crossref', 'pubmed']);
       const stray = (Array.isArray(sourcesUsed) ? sourcesUsed : [])
         .map((s) => s?.source).filter((g) => !ALLOWED_GROUPS.has(g));
       out.push(C('research-adapter-surface', stray.length === 0 ? 'PASS' : 'FAIL',
