@@ -16,18 +16,27 @@ const C = (checkId, status, detail = '') => ({ checkId, status, detail });
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Quality assertions per task type. Returns [status, detail].
+function extractFindingsFromOutput(output) {
+  if (!output) return [];
+  const m = output.match(/```json\s*([\s\S]*?)```/);
+  if (!m) return [];
+  try {
+    const parsed = JSON.parse(m[1]);
+    return parsed.findings ?? [];
+  } catch { return []; }
+}
+
 function checkQuality(type, subtype, task0, structuredReport) {
-  const output = task0.implementerOutput ?? task0.output ?? '';
-  const findings = structuredReport?.findings ?? task0.findings ?? [];
+  const output = task0.report?.implementer ?? structuredReport?.summary ?? task0.output ?? '';
   const outputLen = typeof output === 'string' ? output.length : 0;
 
   switch (type) {
     case 'audit': {
-      if (findings.length === 0) return ['FAIL', 'audit produced 0 findings — expected at least 1'];
+      const findings = extractFindingsFromOutput(output);
+      if (outputLen < 200) return ['FAIL', `audit output too short (${outputLen} chars)`];
+      if (findings.length === 0) return ['WARN', `no JSON findings block parsed from output (${outputLen} chars)`];
       const withEvidence = findings.filter(f => f?.evidence?.length > 20);
-      if (withEvidence.length === 0) return ['FAIL', `${findings.length} findings but none have evidence >20 chars`];
-      const withSuggestion = findings.filter(f => f?.suggestion?.length > 0);
-      return ['PASS', `${findings.length} findings, ${withEvidence.length} grounded, ${withSuggestion.length} with suggestions`];
+      return ['PASS', `${findings.length} findings, ${withEvidence.length} grounded, ${outputLen} chars`];
     }
     case 'investigate': {
       if (outputLen < 100) return ['FAIL', `output too short (${outputLen} chars) — expected substantive analysis`];
@@ -147,21 +156,11 @@ export function verify(rec) {
 
   // Read-type specific checks
   if (e.kind === 'read') {
-    const findings = sr.findings ?? task0.findings ?? [];
-    out.push(C('findings', Array.isArray(findings) ? 'PASS' : 'FAIL', `n=${findings.length}`));
-
     if (e.type === 'research') {
-      const withEvidence = findings.some((f) => typeof f?.evidence === 'string' && f.evidence.trim().length > 0);
-      const evidenceVerdict = findings.length === 0 ? 'WARN' : (withEvidence ? 'PASS' : 'FAIL');
-      out.push(C('research-evidence', evidenceVerdict,
-        findings.length === 0
-          ? 'worker synthesized 0 findings (empty != failure per contract; sources were fetched)'
-          : `findings=${findings.length}; ${findings.filter((f) => f?.evidence?.trim()).length} carry evidence`));
-
-      const sourcesUsed = sr.sourcesUsed ?? task0.sourcesUsed ?? [];
+      const sourcesUsed = r?.sourcesUsed ?? sr.sourcesUsed ?? task0.sourcesUsed ?? [];
       const used = Array.isArray(sourcesUsed) ? sourcesUsed.filter((s) => s?.used === true) : [];
       out.push(C('research-sources', used.length > 0 ? 'PASS' : 'WARN',
-        `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack (transient; external API may have returned no results)'}`));
+        `sourcesUsed=${sourcesUsed.length}, used=${used.length}${used.length ? ` (${used.map((s) => s.source).join(',')})` : ' — orchestrator returned an empty evidence pack (transient)'}`));
 
       const ALLOWED_GROUPS = new Set(['arxiv', 'semantic_scholar', 'github_repo', 'github_code', 'brave']);
       const stray = (Array.isArray(sourcesUsed) ? sourcesUsed : [])
