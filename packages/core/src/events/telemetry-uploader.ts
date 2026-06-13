@@ -17,7 +17,7 @@ export interface TelemetryUploaderOpts {
   buildOpts: (env: TaskEnvelope) => {
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     implementerModel: string;
-    implementerTier: 'standard' | 'complex';
+    implementerTier: 'standard' | 'complex' | 'main';
     mainModelFamily: string;
   };
 }

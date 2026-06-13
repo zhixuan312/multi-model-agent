@@ -52,10 +52,6 @@ export interface TerminationReason {
   wallClockMs?: number
 }
 
-/**
- * Single provider-attempt record inside an escalation chain. The orchestrator
- * (`delegateWithEscalation`) pushes one entry per `provider.run(...)` call.
- */
 export interface AttemptRecord {
   provider: string
   status: RunStatus
@@ -108,18 +104,9 @@ export interface RunOptions {
    *  `claude_turn_started`, `claude_turn_completed`) that the server's
    *  EnvelopeBus consume. */
   bus?: EnvelopeBus
-  /** Identifies the in-flight batch in emitted runner events. Plumbed
-   *  through delegateWithEscalation so consumers can correlate runner-shell
-   *  output back to the originating /audit, /delegate, etc. request. */
-  batchId?: string
-  /** Identifies which task within a batch is running. Threaded through every
-   *  emitted event so per-task running-headline progress can be tracked when
-   *  a batch has multiple parallel tasks. */
+  taskId?: string
   taskIndex?: number
-  /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string
-  /** Lifecycle stage label (e.g. `'Implementing'`, `'Spec review'`). Forwarded
-   *  to the runner-shell so its emitted events carry the current stage. */
   stageLabel?: string
 }
 
@@ -185,6 +172,6 @@ export type ProgressEvent = {
   headline: string
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number
-  /** Lightweight state snapshot for use by recordHeartbeat to update BatchRegistry. */
-  snapshot: import('../stores/batch-registry.js').HeadlineSnapshot
+  /** Lightweight state snapshot for use by recordHeartbeat. */
+  snapshot: import('../bounded-execution/activity-tracker-types.js').HeadlineSnapshot
 }

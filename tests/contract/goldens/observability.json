@@ -35,7 +35,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "route",
         "cwd"
@@ -46,7 +46,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "from",
         "to"
@@ -57,7 +57,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "elapsed",
         "stage",
@@ -74,7 +74,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "loop",
         "attempt",
@@ -90,7 +90,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "loop",
         "attempt",
@@ -104,7 +104,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "loop",
         "attempt",
@@ -118,7 +118,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "loop",
         "attempt",
@@ -132,7 +132,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "stage",
         "verdict",
@@ -144,7 +144,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "command",
         "status",
@@ -156,7 +156,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "reason",
         "stage"
@@ -167,7 +167,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "idleMs",
         "thresholdMs"
@@ -178,7 +178,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "tool",
         "durationMs",
         "taskCount"
@@ -189,7 +189,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "tool",
         "durationMs",
         "errorCode",
@@ -201,7 +201,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "status",
         "workerStatus",
@@ -218,7 +218,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "model",
         "providerType",
@@ -230,7 +230,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "turnIndex",
         "providerType",
@@ -242,7 +242,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "turnIndex",
         "inputTokens",
@@ -258,7 +258,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "tool",
         "turnIndex"
@@ -269,7 +269,7 @@
       "requiredFields": [
         "event",
         "ts",
-        "batchId",
+        "taskId",
         "taskIndex",
         "chars",
         "turnIndex"

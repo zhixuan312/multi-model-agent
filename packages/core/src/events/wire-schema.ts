@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ModelFamilyEnum } from '../config/model-profile-registry.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
@@ -66,7 +66,7 @@ export const StageEntryBase = z.object({
   name: StageNameEnum,
   round: z.number().int().min(0),
   model: z.string().regex(STRICT_ID_REGEX),
-  tier: z.enum(['standard', 'complex']),
+  tier: z.enum(['standard', 'complex', 'main']),
   durationMs: z.number().int().min(0).max(3_600_000),
   costUSD: z.number().min(0).max(500).nullable(),
   inputTokens: z.number().int().min(0).max(100_000_000),
@@ -127,23 +127,23 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block']),
+  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate']),
   subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
-  agentType: z.enum(['standard', 'complex']),
+  agentType: z.enum(['standard', 'complex', 'main']),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
   // reviewPolicy is per-task intent, not outcome.
-  // Shows what the task requested ('full' | 'quality_only' | 'diff_only' | 'none').
+  // v6: collapsed to 'reviewed' (any active review) | 'none'.
   // Whether review actually ran is in stages.review.outcome.
-  // intent='full' + outcome='skipped' is legal (e.g., implement failed;
+  // intent='reviewed' + outcome='skipped' is legal (e.g., implement failed;
   // read route; review-skip gate triggered).
-  reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']),
+  reviewPolicy: z.enum(['reviewed', 'none']),
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
-  implementerTier: z.enum(['standard', 'complex']),
+  implementerTier: z.enum(['standard', 'complex', 'main']),
   mainModel: z.string().nullable(),
   mainModelFamily: ModelFamilyEnum,
 

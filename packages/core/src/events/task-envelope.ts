@@ -1,8 +1,5 @@
-// packages/core/src/events/task-envelope.ts
-// StructuredError lives on RunResult — re-define inline here to decouple events from run-result.
-// Finding: existing in lifecycle/stage-io.ts but we keep a local minimal shape so events doesn't depend on lifecycle.
-// EscalationEntry: existing as EscalationRecord on RunResult — local re-shape here.
-// ValidationWarning: existing inline in TaskCompletedEventSchema — local re-shape here.
+// Task envelope — the structured event store for a single task's lifecycle.
+// Types are defined locally to decouple events/ from types/run-result.
 
 import type { EnvelopeBus } from './envelope-bus.js';
 import type { ErrorCode } from '../error-codes.js';
@@ -12,10 +9,10 @@ export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low
 export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
 export interface ValidationWarning { rule: string; path: string }
 
-export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research' | 'journal-record' | 'journal-recall';
+export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'retry' | 'research' | 'journal-record' | 'journal-recall' | 'orchestrate';
 export type EnvelopeStatus = 'running' | 'done' | 'done_with_concerns' | 'failed';
 export type StageName = 'implementing' | 'reviewing' | 'reworking' | 'annotating' | 'committing';
-export type AgentTier = 'standard' | 'complex';
+export type AgentTier = 'standard' | 'complex' | 'main';
 
 export interface StageRecord {
   name: StageName;
@@ -89,13 +86,7 @@ export interface TaskEnvelope {
   stopReason: string | null;
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
-  // Planned count of visible stages for this run, published by the lifecycle
-  // driver up front (and decremented as stages are skipped). The headline's
-  // stageTotal reads this so the batch progress denominator is stable
-  // (stages-planned) instead of a running tally of stages-recorded-so-far.
-  // 0 means "not published" (non-lifecycle envelopes) — headline then falls
-  // back to the recorded-stage count.
+  reviewPolicy: 'reviewed' | 'none';
   plannedStageTotal: number;
   // accumulated
   stages: StageRecord[];
@@ -138,7 +129,7 @@ export interface CreateSeed {
   taskId: string; batchId: string; taskIndex: number;
   route: Route; agentType: AgentTier;
   client: string; mainModel: string; cwd: string;
-  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy: 'reviewed' | 'none';
 }
 
 export class SealedEnvelopeError extends Error {
@@ -159,7 +150,7 @@ export class TaskEnvelopeStore {
 
   static create(seed: CreateSeed, busOrNotify: EnvelopeBus | Notify = () => {}): TaskEnvelopeStore {
     if (seed.reviewPolicy === undefined) {
-      throw new Error('TaskEnvelopeStore.create: reviewPolicy is required (lifecycle init must set state.reviewPolicy before envelope construction)');
+      throw new Error('TaskEnvelopeStore.create: reviewPolicy is required');
     }
     const notify: Notify = typeof busOrNotify === 'function'
       ? busOrNotify
@@ -199,7 +190,7 @@ export class TaskEnvelopeStore {
    * Without this, /delegate's per-task `reviewPolicy: 'none'` silently shows
    * up on the wire as 'full' — the dishonesty bug 4.7.7 was meant to close.
    */
-  setReviewPolicy(policy: 'full' | 'quality_only' | 'diff_only' | 'none'): void {
+  setReviewPolicy(policy: 'reviewed' | 'none'): void {
     this.guard('setReviewPolicy');
     if (this.env.reviewPolicy === policy) return;
     this.env.reviewPolicy = policy;

@@ -1,7 +1,5 @@
-// Per-stage execution stats — populated by the runner-shell + lifecycle
-// handlers and consumed by the telemetry event-builder. Matches spec
-// architecture.md `types/stage-plan.ts` slot (per-stage stats are the
-// observable surface of stage-plan execution).
+// Per-stage execution stats — populated by the two-phase pipeline
+// and consumed by the telemetry wire-record builder.
 
 export type ReviewVerdict =
   | 'approved' | 'concerns' | 'changes_required' | 'annotated' | 'error' | 'skipped' | 'not_applicable';
@@ -22,7 +20,7 @@ interface BaseStageStats {
   entered:       boolean;
   durationMs:    number | null;
   costUSD:       number | null;
-  agentTier:     'standard' | 'complex' | null;
+  agentTier:     'standard' | 'complex' | 'main' | null;
   modelFamily:   string | null;
   model:         string | null;
   // Populated by the per-stage idle tracker; null when the stage was never

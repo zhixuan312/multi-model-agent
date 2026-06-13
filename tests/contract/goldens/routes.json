@@ -1,19 +1,9 @@
 [
   "DELETE /context-blocks/:blockId",
   "GET /__routes",
-  "GET /batch/:batchId",
   "GET /health",
   "GET /status",
-  "POST /audit",
+  "GET /task/:taskId",
   "POST /context-blocks",
-  "POST /control/batch-slice",
-  "POST /debug",
-  "POST /delegate",
-  "POST /execute-plan",
-  "POST /investigate",
-  "POST /journal-recall",
-  "POST /journal-record",
-  "POST /research",
-  "POST /retry",
-  "POST /review"
+  "POST /task"
 ]

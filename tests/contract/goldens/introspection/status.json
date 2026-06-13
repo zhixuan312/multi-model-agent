@@ -9,11 +9,10 @@
   "counters": {
     "projectCount": 0,
     "activeRequests": 0,
-    "activeBatches": 0
+    "activeTasks": 0
   },
   "projects": [],
   "inflight": [],
-  "recent": [],
   "skillVersion": null,
   "skillCompatible": null
 }

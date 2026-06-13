@@ -14,7 +14,7 @@ describe('RuntimeRunResult shape (Phase 0 contract)', () => {
       entered:     boolean;
       durationMs:  number | null;
       costUSD:     number | null;
-      agentTier:   'standard' | 'complex' | null;
+      agentTier:   'standard' | 'complex' | 'main' | null;
       modelFamily: string | null;
       model:       string | null;
     }>();

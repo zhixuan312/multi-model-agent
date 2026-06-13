@@ -48,7 +48,7 @@ digraph when_to_use {
 
 ## Endpoint
 
-`POST /investigate?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -56,6 +56,7 @@ digraph when_to_use {
 
 ```json
 {
+  "type": "investigate",
   "question": "How does the auth middleware handle token refresh?",
   "subtype": "default",
   "filePaths": ["/project/src/auth/"],
@@ -83,14 +84,14 @@ digraph when_to_use {
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"question":"How does the auth middleware handle token refresh?"}' \
-  "http://localhost:$PORT/investigate?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  -d '{"type":"investigate","question":"How does the auth middleware handle token refresh?"}' \
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

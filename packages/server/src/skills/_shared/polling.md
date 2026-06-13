@@ -1,9 +1,9 @@
-## Polling for batch completion
+## Polling for task completion
 
-After a tool call returns a `batchId`, poll `GET /batch/:id` until the batch
+After a tool call returns a `taskId`, poll `GET /task/:taskId` until the task
 reaches a terminal state.
 
-### HTTP response shapes (3.1.0)
+### HTTP response shapes
 
 | Status | Content-Type | Meaning |
 |---|---|---|
@@ -18,8 +18,8 @@ which terminal state you're in:
 
 | Shape | Meaning |
 |---|---|
-| `error` is a real object | Batch failed — read `error.code` + `error.message` |
-| `error` is `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
+| `error` is a real object | Task failed — read `error.code` + `error.message` |
+| `error` is `{kind: "not_applicable", ...}` | Task succeeded — read `results` |
 
 ### Poll loop (POSIX sh)
 
@@ -39,7 +39,7 @@ while true; do
 
   STATUS=$(curl -f --show-error -o "$BODY_FILE" -w "%{http_code}" -s \
     -H "Authorization: Bearer $TOKEN" \
-    "http://127.0.0.1:$PORT/batch/$BATCH_ID" || true)
+    "http://127.0.0.1:$PORT/task/$TASK_ID" || true)
 
   case "$STATUS" in
     202)
@@ -60,7 +60,7 @@ done
 ```
 
 Start at 1 s, double each iteration, cap at 30 s. The 1800-second client-side
-timeout is a safety cap; most batches complete in under 60 s. Discover `$PORT`
+timeout is a safety cap; most tasks complete in under 60 s. Discover `$PORT`
 at runtime with `mmagent info --json | jq -r .port` (default: 7337).
 
 ### Caller-side tool-timeout note

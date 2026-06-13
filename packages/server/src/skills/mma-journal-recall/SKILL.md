@@ -29,7 +29,7 @@ Recall relevant project learnings from the journal via a read-only mmagent worke
 
 ## Endpoint
 
-`POST /journal-recall?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -37,6 +37,7 @@ Recall relevant project learnings from the journal via a read-only mmagent worke
 
 ```json
 {
+  "type": "journal_recall",
   "query": "what have we learned about dispatch cancellation reliability?",
   "contextBlockIds": []
 }
@@ -60,14 +61,14 @@ Recall relevant project learnings from the journal via a read-only mmagent worke
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"what have we learned about dispatch cancellation reliability?"}' \
-  "http://localhost:$PORT/journal-recall?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  -d '{"type":"journal_recall","query":"what have we learned about dispatch cancellation reliability?"}' \
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

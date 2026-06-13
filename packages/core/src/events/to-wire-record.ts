@@ -91,7 +91,7 @@ export function toWireRecord(
   opts: {
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     implementerModel: string;
-    implementerTier: 'standard' | 'complex';
+    implementerTier: 'standard' | 'complex' | 'main';
     mainModelFamily: string;
   },
 ): TaskCompletedEventType {
@@ -230,9 +230,9 @@ export function toWireRecord(
     cachedReadTokens: number | null;
     cachedNonReadTokens: number | null;
   };
-  const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket } = {};
+  const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket; main?: TierBucket } = {};
   for (const s of env.stages) {
-    if (s.tier !== 'standard' && s.tier !== 'complex') continue;
+    if (s.tier !== 'standard' && s.tier !== 'complex' && s.tier !== 'main') continue;
     // Match the wire stages filter: only LLM-active stages contribute to the
     // per-tier rollup. A committing or skipped stage with zero tokens and
     // zero cost would otherwise seed bucket.model from a stage that did no
@@ -258,7 +258,7 @@ export function toWireRecord(
   // Prefer the first stage's tier as the task's headline agentType — matches
   // implementerTier's derivation and reflects what the task actually used,
   // not whatever default async-dispatch seeded the envelope with.
-  const wireAgentType: 'standard' | 'complex' = env.stages[0]?.tier ?? env.agentType;
+  const wireAgentType: 'standard' | 'complex' | 'main' = env.stages[0]?.tier ?? env.agentType;
 
   const record: TaskCompletedEventType = {
     eventId: randomUUID(),

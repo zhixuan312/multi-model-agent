@@ -6,10 +6,8 @@ import { execSync } from 'node:child_process';
 import { startTestServer } from '../fixtures/start-test-server.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 
-// Verifies the v0.5 invariant: a single task opens at most ONE session per
+// Verifies the invariant: a single task opens at most ONE session per
 // tier, and each opened session is closed exactly once when the task ends.
-// The old delegateWithEscalation wrapper used to open a fresh session per
-// retry attempt; this test would have caught that leak.
 
 function makeGitRepo(dir: string): void {
   mkdirSync(dir, { recursive: true });
@@ -35,16 +33,16 @@ describe('session cache invariant — one open per (task, tier)', () => {
       'Content-Type': 'application/json',
     };
     try {
-      const dispatch = await fetch(`${server.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
+      const dispatch = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
+        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
       });
       expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
+      const { taskId } = (await dispatch.json()) as { taskId: string };
       // Poll to terminal.
       for (let i = 0; i < 200; i++) {
-        const r = await fetch(`${server.baseUrl}/batch/${batchId}`, { headers });
+        const r = await fetch(`${server.baseUrl}/task/${taskId}`, { headers });
         if (r.status === 200) break;
         await new Promise((res) => setTimeout(res, 50));
       }

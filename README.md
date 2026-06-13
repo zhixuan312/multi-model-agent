@@ -148,7 +148,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
+| `mma-audit` | Audit a spec / plan / design doc / skill file for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Subtypes: `default` (prose-coherence), `plan` (code-execution plan vs codebase), `spec` (requirement testability + decision trace), `skill` (skill file reader-effectiveness). |
 | `mma-journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
 | `mma-journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
@@ -157,7 +157,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | Skill | Use when |
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
-| `mma-retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
+| `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
 
 ### Two generic usage samples
 
@@ -256,7 +256,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
 
-**V2→V3 upgrade note:** Previous V2 opt-ins are cleared on upgrade to 3.10.0+. Run `mmagent telemetry enable` to opt in to schema v3.
+**Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mmagent telemetry enable` to opt in to the current wire schema (v6).
 
 ### Verbose / diagnostics
 
@@ -272,7 +272,7 @@ Add the `diagnostics` block to `~/.multi-model/config.json`:
 }
 ```
 
-Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`.
+Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<taskId>.json`.
 
 > **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
@@ -282,7 +282,7 @@ Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/lo
 mmagent serve [--verbose] [--log]                # start daemon
 mmagent info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
 mmagent status [--json]                          # health + stats from a running daemon
-mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
+mmagent logs  [--follow] [--task=<id>]           # tail today's diagnostic log
 mmagent print-token                              # print the current auth token
 mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
 mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 13 REST endpoints. Write tools (`delegate`, `execute-plan`, `retry`, `journal-record`) run the whole plan as one sequential **goal-set**: the standard agent implements every task in order and commits each (`[task N] …`), then the complex agent reviews and fixes — returning one structured report of the final per-task state. Read tools (`audit`, `review`, `debug`, `investigate`, `research`, …) fan out per file/criterion. Each has a wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) go through the same two-phase pipeline: implement on one tier, review on the other. The `main` type is a session-persistent orchestrator (no reviewer, no worktree) for multi-phase frontend workflows. Write types run as sequential goal-sets; read types fan out per file/criterion. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -313,12 +313,13 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.9.0
+## What's new in 5.2.0
 
-- **Delegate skill passthrough.** A `/delegate` task can name skills (`skills: ["atlassian-fetch"]`) and the worker is equipped with exactly those — resolved from your own skill store, staged in isolation, and delivered natively to the Claude or Codex worker. Default is unchanged: no `skills`, no behavior change.
+- **Unified task API.** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. The per-route REST endpoints are removed. Every type flows through the same two-phase pipeline with optional cross-agent review.
+- **Main orchestrator agent.** New `main` agent tier — a session-persistent brain for multi-phase frontend workflows. Configurable via optional `agents.main` config slot. Wire route: `orchestrate`.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

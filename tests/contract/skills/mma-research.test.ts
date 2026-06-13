@@ -15,7 +15,7 @@ describe('mma-research SKILL.md', () => {
   });
 
   it('documents the route and request body', () => {
-    expect(content).toContain('POST /research');
+    expect(content).toContain('POST /task');
     expect(content).toContain('researchQuestion');
     expect(content).toContain('background');
   });

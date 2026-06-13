@@ -1,5 +1,8 @@
 import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
+import type { HeartbeatStage } from '../packages/core/src/bounded-execution/activity-tracker.js';
 import type { ProgressEvent } from '../packages/core/src/providers/runner-types.js';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('ActivityTracker', () => {
   it('requires provider at construction', () => {
@@ -275,7 +278,7 @@ describe('ActivityTracker', () => {
       provider: 'gpt-5.4',
       mainModel: 'claude-opus-4-7',
       intervalMs: 10_000,
-      batchId: 'b-1',
+      taskId: 'b-1',
     });
     timer.start(5);
     timer.transition({ stage: 'review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
@@ -405,6 +408,43 @@ describe('ActivityTracker', () => {
     expect(last.idleSinceToolMs).toBeGreaterThanOrEqual(50);
     expect(last.idleSinceTextMs).toBeGreaterThanOrEqual(20);
     vi.useRealTimers();
+  });
+
+  it('does not emit interval ticks after setStage("terminal")', async () => {
+    const events: ProgressEvent[] = [];
+    const hb = new ActivityTracker((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      intervalMs: 50,
+    });
+    hb.start(3);
+    await sleep(120);
+    hb.setStage('terminal', 3);
+    const afterTerminal = events.length;
+    await sleep(200);
+    expect(events.length).toBe(afterTerminal);
+  });
+
+  it('further heartbeat methods after terminal are no-ops', async () => {
+    const events: ProgressEvent[] = [];
+    const hb = new ActivityTracker((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      intervalMs: 50,
+    });
+    hb.start(3);
+    hb.setStage('terminal', 3);
+    const after = events.length;
+    hb.updateProgress(1);
+    hb.updateCost(1, null);
+    hb.markEvent('llm');
+    expect(events.length).toBe(after);
+  });
+
+  it('HeartbeatStage type covers all telemetry stage names', () => {
+    expectTypeOf<HeartbeatStage>().toEqualTypeOf<
+      | 'implementing' | 'review' | 'rework'
+      | 'review' | 'rework'
+      | 'annotating' | 'review' | 'committing' | 'terminal'
+    >();
   });
 
 });

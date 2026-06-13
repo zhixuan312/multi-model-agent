@@ -6,7 +6,6 @@ describe('createProjectContext', () => {
     const pc = createProjectContext('/tmp/abc');
     expect(pc.cwd).toBe('/tmp/abc');
     expect(pc.contextBlocks).toBeDefined();
-    expect(pc.batchCache).toBeDefined();
   });
 
   it('starts with empty counters and sets', () => {

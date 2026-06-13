@@ -5,7 +5,7 @@ import type { Goal } from './goal.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
-export type AgentType = 'standard' | 'complex';
+export type AgentType = 'standard' | 'complex' | 'main';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';
@@ -26,7 +26,7 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
+  reviewPolicy?: 'reviewed' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
   mainModel?: string
   formatConstraints?: FormatConstraints
@@ -36,7 +36,7 @@ export interface TaskSpec {
   planContext?: string
   outputTargets?: string[]
   /** Skill names the worker should be equipped with (delegate route only).
-   *  Resolved + staged before the session opens; see providers/skill-resolver.ts. */
+   *  Resolved + staged before the session opens. */
   skills?: string[]
   /**
    * For read-only routes that go through the read-route dispatcher, this is
@@ -51,20 +51,6 @@ export interface TaskSpec {
    * actual worker input is built from `research`).
    */
   readTarget?: string
-  /**
-   * v4.4.x: subtype field for read-only tools. Set by each tool's
-   * buildTaskSpec from the input schema's `subtype` field. The lifecycle's
-   * read-route dispatcher reads this to look up the per-tool
-   * SUBTYPES map and select the matching criteria / orientation /
-   * semantics block. Defaults to 'default' when undefined.
-   *
-   * Per-tool enums today:
-   *   audit:       'default' | 'plan' | 'spec' | 'skill'
-   *   review:      'default'
-   *   debug:       'default'
-   *   investigate: 'default'
-   *   research:    'default'
-   */
   subtype?: string
   /**
    * Research-specific metadata passed from the /research dispatcher to perform-implementation.

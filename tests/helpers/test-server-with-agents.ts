@@ -38,7 +38,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         batchTtlMs: 3_600_000,
         idleProjectTimeoutMs: 1_800_000,
         projectCap: 200,
-        maxBatchCacheSize: 500,
         maxContextBlockBytes: 524_288,
         maxContextBlocksPerProject: 32,
         shutdownDrainMs: 30_000,
@@ -52,8 +51,8 @@ export interface TestServerWithAgents {
   url: string;
   token: string;
   stop: () => Promise<void>;
-  /** Shared BatchRegistry — exposed for test helpers that need to inject state. */
-  batchRegistry: import('@zhixuan92/multi-model-agent-core').BatchRegistry;
+  /** Shared TaskRegistry — exposed for test helpers that need to inject state. */
+  taskRegistry: import('@zhixuan92/multi-model-agent-core').TaskRegistry;
   /** Shared ProjectRegistry — exposed for test helpers that need to access project state. */
   projectRegistry: import('../../packages/server/src/http/project-registry.js').ProjectRegistry;
 }
@@ -79,7 +78,7 @@ export async function startTestServerWithAgents(
     url: `http://127.0.0.1:${server.port}`,
     token: DEFAULT_TEST_TOKEN,
     stop: async () => { await server.stop(); },
-    batchRegistry: server.batchRegistry,
+    taskRegistry: server.taskRegistry,
     projectRegistry: server.projectRegistry,
   };
 }

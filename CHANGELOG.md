@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-06-13
+
+**Unified task API + main orchestrator agent.** All task types now go through a single `POST /task` endpoint with a `type` discriminator. A new `main` agent tier provides a session-persistent orchestration brain for multi-phase frontend workflows. `SCHEMA_VERSION` bumped to 6.
+
+### Added
+- Unified `POST /task` endpoint accepting a `type`-discriminated input schema. 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) route through a single handler.
+- `main` agent type — session-persistent orchestrator for multi-phase workflows (explore → spec → plan → execute). Configurable via optional `agents.main` config slot (falls back to `complex` if absent). Wire route: `orchestrate`. No reviewer, no worktree, read-only sandbox.
+- Three agent tiers: `standard` (cheap workers), `complex` (smart workers), `main` (orchestrator brain). `AgentType = 'standard' | 'complex' | 'main'`.
+- Universal two-phase pipeline: all task types default to cross-agent review. Callers opt out per type when single-phase suffices.
+- Quality verification in the full-smoke release gate (per-type output validation).
+- `mma-orchestrate` server skill with SKILL.md documentation.
+
+### Changed
+- Per-route REST endpoints replaced by `POST /task` + `GET /task/:id`. Wire routes remain for telemetry.
+- `reviewPolicy` collapsed to `'reviewed' | 'none'` (was 4-value enum).
+- `SCHEMA_VERSION` bumped from 5 to 6: `taskId` replaces `batchId`, `reviewPolicy` is 2-value, route enum includes `orchestrate`, agent tier includes `main`.
+- `mma-audit` subtypes: `default`, `plan`, `spec`, `skill`.
+
+### Removed
+- `BatchCache`, `BatchRegistry`, lifecycle layer (`LifecycleDriver`, `StagePlanBuilder`, stage handlers).
+- Per-route handler files, `findings-outcome.ts`, `assemble-run-result.ts`, dead type exports (`Commit`, `ReviewPromptParts`, `CacheHints`, `ReviewRunOptions`, `ReviewVerdictEnum`).
+- 18 dead/orphaned scripts (broken imports referencing old APIs).
+- `maxBatchCacheSize` config field, 6 stale `lifecycle/*` export paths from core package.json.
+
 ## [5.1.0] - 2026-06-12
 
 **Goal-mode rewrite of the write routes.** All four write routes (`delegate`, `execute-plan`, `retry`, `journal-record`) now run the whole plan as one sequential **goal-set** instead of a per-task review/rework/commit lifecycle. Phase 1 (standard tier) implements every task in order and self-commits each as `[task N] <heading>`; phase 2 (complex tier) is the completion guarantor — it reviews each task against the plan *and the working tree* and fixes/commits anything the implementer left. The caller gets one clean report of the final per-task state (is each task done; if not, why), with the phase-1/phase-2 churn hidden. `SCHEMA_VERSION` unchanged (5).

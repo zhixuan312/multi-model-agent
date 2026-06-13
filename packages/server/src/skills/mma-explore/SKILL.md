@@ -69,8 +69,9 @@ result (or have decided to skip investigate as greenfield).
 
 This is a main-agent skill — there is no dedicated `/explore` HTTP endpoint.
 Behind the scenes, you dispatch the three delegated tools `mma-investigate`
-(`POST /investigate`), `mma-research` (`POST /research`), and
-`mma-journal-recall` (`POST /journal-recall`) yourself.
+(`POST /task` with `type: "investigate"`), `mma-research` (`POST /task` with
+`type: "research"`), and `mma-journal-recall` (`POST /task` with
+`type: "journal_recall"`) yourself.
 
 ## Request body
 

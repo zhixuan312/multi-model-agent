@@ -24,6 +24,7 @@ function makeFakeSession(closeImpl: () => Promise<void> = async () => {}): MockS
     async send() { return { output: '', usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 }, costUSD: 0, turns: 0, durationMs: 0, terminationReason: 'ok', filesWritten: [], usedShell: false } as any; },
     close: closeFn,
     closeFn,
+    getSessionId() { return null; },
   } as MockSession;
 }
 
@@ -35,12 +36,12 @@ function mockProvider(behavior: (opts: SessionOpts) => Session): Provider {
   };
 }
 
-function opts(batchId: string | undefined, taskIndex: number | undefined): SessionOpts {
+function opts(taskId: string | undefined, taskIndex: number | undefined): SessionOpts {
   return {
     cwd: '/tmp',
     wallClockDeadline: Date.now() + 60_000,
     abortSignal: new AbortController().signal,
-    ...(batchId !== undefined && { batchId }),
+    ...(taskId !== undefined && { taskId }),
     ...(taskIndex !== undefined && { taskIndex }),
   } as SessionOpts;
 }
@@ -133,7 +134,7 @@ describe('provider-factory per-task safety (D6)', () => {
     expect(__liveByTask().get('B:7')).toBeUndefined();
     expect(events.find((e) => e.event === 'release_task_close_failed')).toMatchObject({
       event: 'release_task_close_failed',
-      batchId: 'B',
+      taskId: 'B',
       taskIndex: 7,
       error: 'close-failed',
     });

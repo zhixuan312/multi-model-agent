@@ -27,9 +27,9 @@ export async function captureDelegateLatency(): Promise<number> {
       headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       body: JSON.stringify({ tasks: [{ prompt: 'p' }] }),
     });
-    const { batchId } = (await d.json()) as { batchId: string };
+    const { taskId } = (await d.json()) as { taskId: string };
     while (true) {
-      const p = await fetch(`${h.baseUrl}/batch/${batchId}`, {
+      const p = await fetch(`${h.baseUrl}/task/${taskId}`, {
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       });
       if (p.status === 200) break;
@@ -50,14 +50,14 @@ export async function capturePeakRssFor10Tasks(): Promise<number> {
       headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       body: JSON.stringify({ tasks }),
     });
-    const { batchId } = (await d.json()) as { batchId: string };
+    const { taskId } = (await d.json()) as { taskId: string };
     let peak = process.memoryUsage().rss;
     const poll = setInterval(() => {
       peak = Math.max(peak, process.memoryUsage().rss);
     }, 10);
     try {
       while (true) {
-        const p = await fetch(`${h.baseUrl}/batch/${batchId}`, {
+        const p = await fetch(`${h.baseUrl}/task/${taskId}`, {
           headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         });
         if (p.status === 200) break;

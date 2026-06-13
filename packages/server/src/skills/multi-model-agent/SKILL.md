@@ -56,7 +56,7 @@ digraph picker {
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
 | `mma-explore` | Divergent ideation from codebase + web research + prior-learnings recall — use before `superpowers:brainstorming` |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
-| `mma-retry` | Re-run specific failed/incomplete tasks from a previous batch by index |
+| `mma-retry` | Re-run specific failed/incomplete tasks from a previous dispatch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 
 ## Best practices
@@ -104,7 +104,7 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 ### Recipe D — Plan-execute-retry
 
-When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full-batch re-dispatch. Pass the **original `batchId`** as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `batchId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original batch carry forward into retry — no need to re-register.
+When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full re-dispatch. Pass the **original `taskId`** as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original task carry forward into retry — no need to re-register.
 
 ### Anti-patterns
 
@@ -164,7 +164,7 @@ If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with 
 
 | Default | Value | Notes |
 |---|---|---|
-| Idle TTL | 24 h | Block eligible for eviction after 24 h with no active batch references |
+| Idle TTL | 24 h | Block eligible for eviction after 24 h with no active task references |
 | `maxEntries` | 500 | Per-project cap on total context blocks |
 | Body cap | 50 MiB | Maximum `content` size per block |
 
@@ -180,8 +180,8 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## General flow
 
-1. Call the matching `mma-*` skill → receive `{ batchId, statusUrl }`.
-2. Poll `GET /batch/:id`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
+1. Call the matching `mma-*` skill → receive `{ taskId, statusUrl }`.
+2. Poll `GET /task/:taskId`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
 3. Read `results` / `error` from the 6-field terminal envelope.
 
 ## Common pitfalls
@@ -194,4 +194,4 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Diagnosing slow tasks
 
-`mmagent serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mmagent logs --follow --batch=$BATCH_ID`.
+`mmagent serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mmagent logs --follow --task=$TASK_ID`.

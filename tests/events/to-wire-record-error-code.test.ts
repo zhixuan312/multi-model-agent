@@ -16,7 +16,7 @@ function failedEnvelopeWithCode(code: 'review_diff_rejected' | 'review_quality_f
     taskId: 't1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
     client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp',
-    reviewPolicy: 'full',
+    reviewPolicy: 'reviewed',
   });
   store.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
   store.completeStage('implementing', 1, {
@@ -53,7 +53,7 @@ describe('toWireRecord errorCode preservation', () => {
       taskId: 't1', batchId: 'b1', taskIndex: 0,
       route: 'delegate', agentType: 'standard',
       client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp',
-      reviewPolicy: 'full',
+      reviewPolicy: 'reviewed',
     });
     store.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     store.completeStage('implementing', 1, {

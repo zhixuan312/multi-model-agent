@@ -46,7 +46,7 @@ Store large documents once; reference them by ID in subsequent `mma-*` calls via
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `content` | string | yes | Document content (min 1 char, max 50 MiB) |
-| `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active batch for 24 h is eligible for eviction. |
+| `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active task for 24 h is eligible for eviction. |
 
 #### Response (201)
 
@@ -60,7 +60,7 @@ Use this `id` as a `contextBlockIds` entry in any `mma-*` skill that supports it
 
 `DELETE /context-blocks/:id?cwd=<abs-path>`
 
-Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held by one or more active batches — wait for those batches to complete before deleting.
+Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held by one or more active tasks — wait for those tasks to complete before deleting.
 
 ## Full example
 
@@ -80,11 +80,11 @@ curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"tasks\":[
+  -d "{\"type\":\"delegate\",\"tasks\":[
     {\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]},
     {\"prompt\":\"Implement section 4 per spec\",\"contextBlockIds\":[\"$ID\"]}
   ]}" \
-  "http://localhost:$PORT/delegate?cwd=/project"
+  "http://localhost:$PORT/task?cwd=/project"
 ```
 
 ## v5 wire shape (register-context-block route)
@@ -115,7 +115,7 @@ This skill is the cross-cutting state mechanism described in `multi-model-agent`
 - **Recipe A — Audit-iterate-clean.** Register the doc once before round 1; pass round-N's findings block ID into round N+1.
 - **Recipe B — Debug-fix-verify.** Register the failing test output / reproduction log before the debug call; reuse on verify.
 - **Recipe C — Investigate-plan-execute.** Register the plan file before `mma-execute-plan`.
-- **Recipe D — Plan-execute-retry.** No new registration needed — `mma-retry` inherits the original batch's `contextBlockIds`.
+- **Recipe D — Plan-execute-retry.** No new registration needed — `mma-retry` inherits the original task's `contextBlockIds`.
 
 Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec into 5 task prompts costs N× tokens. Register once; pass `contextBlockIds`.
 
@@ -127,12 +127,12 @@ Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec
 N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each task.
 
 ❌ **Forgetting to delete unused blocks**
-Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent batches finish — or let idle expiry (24 h) evict them.
+Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent tasks finish — or let idle expiry (24 h) evict them.
 
 ❌ **Trying to update a block's content**
 Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.
 
-❌ **Deleting a block while a batch still references it**
-Returns `409 pinned`. **Fix:** poll the dependent batches to terminal first, then delete.
+❌ **Deleting a block while a task still references it**
+Returns `409 pinned`. **Fix:** poll the dependent tasks to terminal first, then delete.
 
 @include _shared/error-handling.md

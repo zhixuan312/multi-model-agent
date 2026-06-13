@@ -29,7 +29,7 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ## Endpoint
 
-`POST /journal-record?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -37,20 +37,14 @@ Record a learning, constraint, or decision outcome to the persistent journal via
 
 ```json
 {
-  "learnings": [
-    "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
-    "Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
-  ],
-  "tagHints": ["dispatch", "cancellation"]
+  "type": "journal_record",
+  "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged. Also: Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
 }
 ```
 
-**Batch your learnings into ONE call.** Collect every learning from the session and send them together in `learnings[]` — do NOT fire multiple concurrent `journal-record` calls. One worker integrates them sequentially in a single pass (fast and collision-free).
-
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `learnings` | string[] | yes | 1–20 entries, each 20–8000 chars. Each is a natural-language entry: what you decided, why, or what you learned. Keep them concrete. |
-| `tagHints` | string[] | no | Optional tags applied across ALL learnings (batch-scoped); the worker revises/normalizes per node. Advisory. |
+| `entry` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
 
 **What gets stored & where:**
 
@@ -64,19 +58,17 @@ The worker creates, refines, or supersedes nodes in the graph (never appends bli
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "learnings": [
-      "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged."
-    ],
-    "tagHints": ["dispatch", "cancellation"]
+    "type": "journal_record",
+    "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
   }' \
-  "http://localhost:$PORT/journal-record?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

@@ -69,6 +69,7 @@ function makeSessionFactory(runner: (prompt: string) => Promise<RuntimeRunResult
       return runResultToTurnResult(rr);
     },
     async close(): Promise<void> { /* no-op */ },
+    getSessionId(): string | null { return null; },
   });
 }
 
@@ -302,6 +303,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       const stage = opts.stage ?? 'ok';
       if (stage === 'hang') {
         const inner = {
+          getSessionId(): string | null { return null; },
           async send(): Promise<TurnResult> {
             return new Promise<TurnResult>((_, reject) => {
               if (sessionOpts?.abortSignal) {
@@ -321,6 +323,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
               opts.onClose?.();
             }
           },
+          getSessionId: inner.getSessionId.bind(inner),
         };
       }
       const inner = makeSessionFactory(runOnce)(sessionOpts);
@@ -334,6 +337,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
             opts.onClose?.();
           }
         },
+        getSessionId: inner.getSessionId.bind(inner),
       };
     },
   };
@@ -379,6 +383,7 @@ export function throwingProvider(err: Error): Provider {
     openSession: (_opts: SessionOpts): Session => ({
       async send(): Promise<TurnResult> { throw err; },
       async close(): Promise<void> { /* no-op */ },
+      getSessionId(): string | null { return null; },
     }),
   };
 }
@@ -431,6 +436,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     openSession: (_opts: SessionOpts): Session => ({
       async send(): Promise<TurnResult> { throw err; },
       async close(): Promise<void> { /* no-op */ },
+      getSessionId(): string | null { return null; },
     }),
   };
 }

@@ -25,7 +25,7 @@ function installHandlerContractFetchAdapter(): void {
         : input.url;
     const parsed = new URL(requestUrl);
 
-    if (parsed.pathname === '/investigate' || parsed.pathname === '/explore') {
+    if (parsed.pathname === '/task' || parsed.pathname === '/explore') {
       const allowedCwd = allowedCwdsByOrigin.get(parsed.origin);
       const requestCwd = parsed.searchParams.get('cwd');
       if (allowedCwd && requestCwd && requestCwd !== allowedCwd) {
@@ -37,7 +37,7 @@ function installHandlerContractFetchAdapter(): void {
     }
 
     const response = await originalFetch(input, init);
-    if (parsed.pathname !== '/investigate' && parsed.pathname !== '/explore') return response;
+    if (parsed.pathname !== '/task' && parsed.pathname !== '/explore') return response;
 
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json') || response.status < 400) return response;

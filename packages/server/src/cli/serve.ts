@@ -290,35 +290,13 @@ export async function startServe(
     stderr(`[mmagent] received ${sig}, shutting down gracefully\u2026\n`);
     // 1) Refuse new dispatches immediately so they don't compound the drain.
     setDraining(true);
-    // 2) Walk BatchRegistry: close every in-flight task's sessions in parallel
-    //    with a 5-second wall clock. After the grace window, SIGKILL any
-    //    subprocess still alive whose session exposes a pid. Without this,
-    //    SIGTERM-killed daemons leaked codex children as orphans (see 2026-05-16
-    //    OOM post-mortem).
-    const SHUTDOWN_GRACE_MS = 5000;
-    const inflight = running.batchRegistry?.allInFlight?.() ?? [];
-    const closeAll = Promise.allSettled(
-      inflight.flatMap((entry) => {
-        const ctxs = entry.executionContexts ? Array.from(entry.executionContexts.values()) : [];
-        return ctxs.map(async (ec) => {
-          try { await ec.closeSessions(); } catch { /* swallow */ }
-        });
-      }),
-    );
-    const drainSessions = Promise.race([
-      closeAll,
-      new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS).unref()),
-    ]).then(() => {
-      // Belt-and-suspenders: SIGKILL anything still alive whose pid we know.
-      for (const entry of inflight) {
-        const ctxs = entry.executionContexts ? Array.from(entry.executionContexts.values()) : [];
-        for (const ec of ctxs) {
-          for (const pid of ec.getActivePids?.() ?? []) {
-            try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-          }
-        }
-      }
-    });
+    // 2) TaskRegistry tracks in-flight tasks (no execution contexts).
+    //    Log what's still running for operators, then proceed to shutdown.
+    const inflight = running.taskRegistry?.allInFlight?.() ?? [];
+    if (inflight.length > 0) {
+      stderr(`[mmagent] draining ${inflight.length} in-flight task(s)\n`);
+    }
+    const drainSessions = Promise.resolve();
 
     const drainTelemetry = flusher ? flusher.drain() : Promise.resolve();
     drainSessions
@@ -368,12 +346,13 @@ export async function startServe(
   // implementer work; the standard tier handles annotator/reviewer + the
   // explore route's internal half. When a tier is unconfigured, log it as
   // "(not configured)" so a misconfigured slot is visible at boot time.
-  const fmtTier = (slot: 'standard' | 'complex'): string => {
+  const fmtTier = (slot: string): string => {
     const cfg = (config.agents as Record<string, { type?: string; model?: string }>)[slot];
     if (!cfg || !cfg.model) return '(not configured)';
     return `${cfg.model} [${cfg.type ?? 'unknown'}]`;
   };
-  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}\n`);
+  const mainLabel = config.agents.main ? ` | main=${fmtTier('main')}` : '';
+  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}${mainLabel}\n`);
 
   // A4a.4 (4.2.2+): warn when stale Claude Code project siblings exist
   // under /tmp/claude/G--*. These come from prior Claude Code test runs

@@ -11,7 +11,7 @@ export function report(records, checksByScenario, meta) {
   for (const rec of records) {
     const checks = checksByScenario[rec.scenarioId] ?? [];
     const cells = checks.map((c) => `${c.checkId}:${GLYPH[c.status] ?? c.status}`);
-    lines.push(`#${String(rec.scenarioId).padEnd(4)} ${rec.route.padEnd(16)} ${cells.join('  ')}`);
+    lines.push(`#${String(rec.scenarioId).padEnd(4)} ${rec.type.padEnd(16)} ${cells.join('  ')}`);
     for (const c of checks) {
       if (c.status === 'FAIL') { hardFail++; gaps.push(`FAIL  #${rec.scenarioId} ${c.checkId}: ${c.detail}`); }
       if (c.status === 'WARN') { warns++; gaps.push(`WARN  #${rec.scenarioId} ${c.checkId}: ${c.detail}`); }

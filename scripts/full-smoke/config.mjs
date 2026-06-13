@@ -1,5 +1,9 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
-// (events_raw migrations, wire-schema, telemetry paths) on 2026-05-22.
+// (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
+//
+// Redesigned as a comprehensive product release gate: 19 scenarios, each testing
+// a DISTINCT product capability. No duplicates. Covers task types, audit subtypes,
+// tier/review policy overrides, session reuse, error cases, and telemetry.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,7 +16,7 @@ export const QUEUE_FILE = process.env.SMOKE_QUEUE_FILE || join(HOME_MM, 'telemet
 export const INSTALL_ID_FILE = join(HOME_MM, 'install-id');
 export const DIAG_DIR = process.env.MMAGENT_LOG_DIR || join(HOME_MM, 'logs'); // mmagent-YYYY-MM-DD.jsonl
 
-export const SCHEMA_VERSION = 5; // packages/core/src/events/wire-schema.ts
+export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
 
 // events_raw flat columns that always exist (001_init.sql). Per-tier model/cost
 // detail lives in the `event` JSONB column, not flat columns — parse that.
@@ -21,73 +25,78 @@ export const EVENTS_RAW_COLUMNS = ['event_id', 'install_id', 'received_at', 'rou
 export const APPROVED_DB_HOSTS = ['localhost', '127.0.0.1', '::1', ''];
 
 export const POLL = {
-  batchEveryMs: 1500, batchMaxMs: 10 * 60 * 1000,
+  taskEveryMs: 1500, taskMaxMs: 10 * 60 * 1000,
   backendEveryMs: 2000, backendMaxMs: 60 * 1000,
 };
 
-// The 15-dispatch cycle. `id` stable; flags drive verify.mjs.
+// ─────────────────────────────────────────────────────────────────────────────
+// The 19-scenario release gate.
 //
-// `emits` = how many wire telemetry records (events_raw rows) this scenario is
-// expected to produce. The wire pipeline emits ONE record per sealed task
-// envelope (telemetry-uploader dedups by taskId), so:
-//   - delegate            → one per task  (`tasks`, default 1)
-//   - execute-plan        → one per task descriptor (each descriptor seals its
-//                              own task envelope → its own wire record). Scenario
-//                              8 dispatches 2 descriptors, so emits 2.
-//   - investigate/audit/review/debug → 1 (single read run)
-//   - journal-record      → 1 (write route; one worker writes the journal nodes)
-//   - journal-recall      → 1 (read route, investigate-shaped; multi-criteria
-//                              fan-out is sub-runs within one sealed envelope)
-//   - retry               → 1 (re-runs the one seeded failed task)
-//   - context-blocks      → 0 (synchronous state op, no worker run)
-//   - research            → 0 (aggregation fan-out; emits no per-task wire
-//                              record on the standard path — revisit if the
-//                              research telemetry model changes)
-// Run-level expected = sum(emits). This replaces the old sum(results.length),
-// which over-counted execute-plan's internal outcomes and research.
+// Each scenario tests a DISTINCT product capability:
+//
+//   A. Task Types (11 types — one scenario each):
+//      #1  context-blocks   — register a context block (synchronous 201)
+//      #2  investigate      — codebase question (read, complex)
+//      #3  research         — external research (read, complex, network)
+//      #4  audit (default)  — document audit (read, complex)
+//      #5  delegate         — implementation (write, standard, reviewed)
+//      #6  execute_plan     — plan execution (write, standard)
+//      #7  review           — code review (read, complex)
+//      #8  debug            — debugging (read, complex)
+//      #9  journal_record   — record a learning (write, complex)
+//      #10 journal_recall   — recall learnings (read, complex, depends on #9)
+//      #19 main             — orchestration brain (read, main tier, no reviewer)
+//
+//   B. Audit Subtypes (each loads a different skill file):
+//      #11 audit/spec       — requirement prose executability
+//      #12 audit/plan       — plan-vs-codebase coherence
+//      #13 audit/skill      — SKILL.md reader-effectiveness
+//
+//   C. Tier & Review Policy overrides:
+//      #14 delegate complex — override default standard tier → complex
+//      #15 delegate none    — skip reviewer phase (reviewPolicy: 'none')
+//
+//   D. Session Reuse:
+//      #16 investigate resume — resume prior session from scenario #2
+//
+//   E. Error Cases:
+//      #17 invalid type     — POST /task with type: 'nonexistent' → 400
+//      #18 missing field    — POST /task with type: 'investigate' but no question → 400
+//
+// `emits` = how many wire telemetry records this scenario produces. The wire
+// pipeline emits ONE record per sealed task envelope:
+//   - context-blocks → 0 (synchronous state op, no worker run)
+//   - research       → 0 (aggregation fan-out; no per-task wire record)
+//   - error cases    → 0 (rejected at validation, no worker dispatched)
+//   - all others     → 1
+// ─────────────────────────────────────────────────────────────────────────────
 export const SCENARIOS = [
-  { id: 1,  route: 'context-blocks', kind: 'assist', emits: 0 },
-  { id: 2,  route: 'investigate', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 3,  route: 'research', tier: 'complex', kind: 'read', network: true, emits: 0 },
-  { id: 4,  route: 'audit', tier: 'complex', kind: 'read', emits: 1 },
-  // Goal mode (5.1.0): each write call is ONE sequential goal-set → ONE result,
-  // regardless of how many tasks it bundles. No parallel fan-out.
-  { id: 5,  route: 'delegate', tier: 'standard', kind: 'write', tasks: 2, emits: 1 },
-  { id: 6,  route: 'delegate', tier: 'complex', kind: 'write', tasks: 1, emits: 1 },
-  { id: 7,  route: 'delegate', tier: 'standard', kind: 'write', tasks: 2, emits: 1 },
-  { id: 8,  route: 'execute-plan', tier: 'standard', kind: 'write', emits: 1 },
-  { id: 'seed', route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', seed: true, emits: 1 },
-  { id: 9,  route: 'review', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 10, route: 'debug', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 11, route: 'delegate', tier: 'standard', kind: 'write', emits: 1 },
-  { id: 12, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
-  { id: 13, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', emits: 1 },
-  { id: 14, route: 'retry', kind: 'assist', emits: 1 },
-  // Journal (4.8.0). Record (write) must run before recall (read) so the recall
-  // worker has populated .mmagent/journal/ to read. Both complex-tier.
-  { id: 15, route: 'journal-record', tier: 'complex', kind: 'write', emits: 1 },
-  { id: 16, route: 'journal-recall', tier: 'complex', kind: 'read', emits: 1 },
-  // Delegate skill passthrough (4.9.0). 17 = happy path: a delegate task that
-  // names an installed skill resolves it from the main-agent store, stages it,
-  // and the worker launches + completes normally (proves resolve→stage→native
-  // delivery doesn't break the session, on whichever provider `standard` maps
-  // to). 18 = hard-fail path: an unknown skill name must fail THAT task with
-  // `skill_not_found` (proves the skills field reaches live resolution and the
-  // failure is clean per-task). 18 bypasses the lifecycle (short-circuit) so it
-  // seals a terminal-failed envelope whose telemetry record uploads cleanly
-  // (errorCode bucketed as 'other'; the precise skill code rides structuredError)
-  // → emits 1.
-  { id: 17, route: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', skills: ['mma-smoke-skill'], emits: 1 },
-  { id: 18, route: 'delegate', tier: 'standard', kind: 'write', skills: ['__mma_nonexistent_skill__'], expectSkillError: 'skill_not_found', emits: 1 },
-  // Rich goal-set (5.1.0): 4 tasks across 2 plan-phases; full implement→review-fix
-  // with PHASE checkpoints + intra-goal dependencies. One goal-set → one result.
-  { id: 19, route: 'execute-plan', tier: 'standard', kind: 'write', tasks: 4, emits: 1 },
-];
+  // A. Task Types (11 base types)
+  { id: 1,  type: 'context-blocks', kind: 'assist', emits: 0 },
+  { id: 2,  type: 'investigate', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 3,  type: 'research', tier: 'complex', kind: 'read', network: true, emits: 0 },
+  { id: 4,  type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 5,  type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, emits: 1 },
+  { id: 6,  type: 'execute_plan', tier: 'standard', kind: 'write', emits: 1 },
+  { id: 7,  type: 'review', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 8,  type: 'debug', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 9,  type: 'journal_record', tier: 'complex', kind: 'write', emits: 1 },
+  { id: 10, type: 'journal_recall', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 19, type: 'main', tier: 'main', kind: 'read', emits: 1 },
 
-// 4.7.20 universal terminal context block: the per-route `context-block` check in
-// verify.mjs asserts read routes surface a non-null `contextBlockId` and write
-// routes surface exactly `null`. Resolution of a passed-in contextBlockId is
-// already exercised live by scenario 4 (audit with `contextBlockIds`), and the
-// byte-for-byte terminal-block expansion is covered by the unit test
-// tests/lifecycle/terminal-block-delta.test.ts — so no separate (slow, complex-
-// tier) delta scenario is run here.
+  // B. Audit Subtypes (spec, plan, skill — each loads a different skill file)
+  { id: 11, type: 'audit', subtype: 'spec', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 12, type: 'audit', subtype: 'plan', tier: 'complex', kind: 'read', emits: 1 },
+  { id: 13, type: 'audit', subtype: 'skill', tier: 'complex', kind: 'read', emits: 1 },
+
+  // C. Tier & Review Policy overrides
+  { id: 14, type: 'delegate', tier: 'complex', kind: 'write', tasks: 1, emits: 1 },
+  { id: 15, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', emits: 1 },
+
+  // D. Session Reuse
+  { id: 16, type: 'investigate', tier: 'complex', kind: 'read', sessionReuse: true, emits: 1 },
+
+  // E. Error Cases
+  { id: 17, type: 'error_invalid_type', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 18, type: 'error_missing_field', kind: 'error', expectStatus: 400, emits: 0 },
+];

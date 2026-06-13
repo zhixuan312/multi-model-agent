@@ -28,7 +28,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 ## Endpoint
 
-`POST /debug?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -36,10 +36,8 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 ```json
 {
-  "problem": "POST /login returns 500 when password contains special characters",
-  "context": "Regression introduced in commit abc123; only affects production config",
-  "hypothesis": "The bcrypt binding fails on non-ASCII input in the Docker image",
-  "subtype": "default",
+  "type": "debug",
+  "errorMessage": "POST /login returns 500 when password contains special characters",
   "filePaths": [
     "/project/src/auth/login.ts",
     "/project/src/auth/password.ts"
@@ -50,9 +48,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `problem` | string | yes | What is broken (one sentence; concrete symptom) |
-| `context` | string | no | Background — what changed recently, what works, what doesn't |
-| `hypothesis` | string | no | Your initial theory; worker tests it first, then explores |
+| `errorMessage` | string | yes | What is broken (one sentence; concrete symptom) |
 | `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
@@ -62,14 +58,14 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"problem":"Tests fail on CI only","hypothesis":"Missing env var","filePaths":["/project/src/config.ts"]}' \
-  "http://localhost:$PORT/debug?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  -d '{"type":"debug","errorMessage":"Tests fail on CI only","filePaths":["/project/src/config.ts"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md

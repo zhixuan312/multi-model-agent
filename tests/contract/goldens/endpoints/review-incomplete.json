@@ -142,7 +142,7 @@
     "kind": "not_applicable",
     "reason": "batch succeeded"
   },
-  "batchId": "<DETERMINISTIC>",
+  "taskId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",

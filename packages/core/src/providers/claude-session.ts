@@ -65,11 +65,11 @@ export class ClaudeSession implements Session {
     }));
   }
 
-  /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
+  /** Returns task identity (taskId/taskIndex) from SessionOpts for event tagging.
    *  Required so the stall watchdog can filter the shared bus by task. */
-  private taskTag(): { batchId?: string; taskIndex?: number } {
+  private taskTag(): { taskId?: string; taskIndex?: number } {
     return {
-      ...(this.args.opts.batchId !== undefined && { batchId: this.args.opts.batchId }),
+      ...(this.args.opts.taskId !== undefined && { taskId: this.args.opts.taskId }),
       ...(this.args.opts.taskIndex !== undefined && { taskIndex: this.args.opts.taskIndex }),
     };
   }
@@ -105,6 +105,29 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
+    // Build goal-mode Stop hook if a goalCondition is provided.
+    // This replicates /goal behavior: after each turn, evaluate whether
+    // the condition is met. If not, block the stop and keep the agent working.
+    const goalHooks: Record<string, unknown> = {};
+    if (_opts?.goalCondition) {
+      const condition = _opts.goalCondition;
+      goalHooks.hooks = {
+        Stop: [{
+          hooks: [async (input: { stop_hook_active?: boolean }) => {
+            if (input.stop_hook_active) return {};
+            return {
+              continue: true,
+              hookSpecificOutput: {
+                hookEventName: 'Stop',
+                decision: 'block',
+                reason: `Goal not yet met. Continue working toward: ${condition}`,
+              },
+            };
+          }],
+        }],
+      };
+    }
+
     const q = query({
       prompt: promptIterable(),
       options: {
@@ -119,6 +142,7 @@ export class ClaudeSession implements Session {
         },
         ...skillOptions,
         ...(this.sessionId && { resume: this.sessionId }),
+        ...goalHooks,
       } as Parameters<typeof query>[0]['options'],
     });
     this.activeQuery = q as unknown as { close?: () => unknown };
@@ -244,6 +268,10 @@ export class ClaudeSession implements Session {
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_closed', {
       ...this.taskTag(),
     }));
+  }
+
+  getSessionId(): string | null {
+    return this.sessionId ?? null;
   }
 
   /** ClaudeSession runs entirely in-process via the SDK; there's no separate

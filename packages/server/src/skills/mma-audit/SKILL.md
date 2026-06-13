@@ -33,7 +33,7 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 
 ## Endpoint
 
-`POST /audit?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -41,6 +41,7 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 
 ```json
 {
+  "type": "audit",
   "document": "inline content to audit (optional if filePaths given)",
   "subtype": "default",
   "filePaths": ["/project/docs/spec.md"],
@@ -87,50 +88,50 @@ When `subtype: 'plan'`:
 ### Default audit (general prose)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"subtype":"default","filePaths":["/project/docs/api-spec.md"]}' \
-  "http://localhost:$PORT/audit?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  -d '{"type":"audit","subtype":"default","filePaths":["/project/docs/api-spec.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 ### Spec audit (requirement prose)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"subtype":"spec","filePaths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}' \
-  "http://localhost:$PORT/audit?cwd=/project")
+  -d '{"type":"audit","subtype":"spec","filePaths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 ```
 
 ### Skill audit (SKILL.md)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"subtype":"skill","filePaths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}' \
-  "http://localhost:$PORT/audit?cwd=/project")
+  -d '{"type":"audit","subtype":"skill","filePaths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 ```
 
 ### Plan audit (verify a code-execution plan against the codebase)
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"subtype":"plan","filePaths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}' \
-  "http://localhost:$PORT/audit?cwd=/project")
+  -d '{"type":"audit","subtype":"plan","filePaths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
 ```
 
 @include _shared/polling.md

@@ -146,7 +146,6 @@ const DEFAULT_SERVER_LIMITS = {
   batchTtlMs: 3_600_000,
   idleProjectTimeoutMs: 1_800_000,
   projectCap: 200,
-  maxBatchCacheSize: 500,
   maxContextBlockBytes: 524_288,
   maxContextBlocksPerProject: 500,
   shutdownDrainMs: 30_000,
@@ -165,7 +164,6 @@ const serverLimitsSchema = z.object({
   batchTtlMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.batchTtlMs),
   idleProjectTimeoutMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.idleProjectTimeoutMs),
   projectCap: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.projectCap),
-  maxBatchCacheSize: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBatchCacheSize),
   maxContextBlockBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlockBytes),
   maxContextBlocksPerProject: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlocksPerProject),
   shutdownDrainMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.shutdownDrainMs),
@@ -189,6 +187,7 @@ export const multiModelConfigSchema = z.object({
   agents: z.object({
     standard: agentConfigSchema,
     complex: agentConfigSchema,
+    main: agentConfigSchema.optional(),
   }),
   defaults: defaultsSchema,
   diagnostics: z.object({

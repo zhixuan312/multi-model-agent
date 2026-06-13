@@ -14,7 +14,7 @@ export function resolveAgent(
   if (!agents) {
     throw new Error(`agent_not_configured: config has no agents block`);
   }
-  const declared = agents[agentType];
+  const declared = agents[agentType] ?? (agentType === 'main' ? agents.complex : undefined);
   if (!declared) {
     throw new Error(`agent_not_configured: agent "${agentType}" not found in config`);
   }

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore, SealedEnvelopeError } from '../../packages/core/src/events/task-envelope.js';
 
-const seed = { taskId: 't1', batchId: 'b1', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'full' as const };
+const seed = { taskId: 't1', batchId: 'b1', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'reviewed' as const };
 
 describe('TaskEnvelopeStore.seal', () => {
   it('sets status, terminalAt, structuredError', () => {
@@ -23,11 +23,6 @@ describe('TaskEnvelopeStore.seal', () => {
   });
 
   it('recordHeartbeat is a silent no-op after seal (regression: periodic timer can race past seal)', () => {
-    // The heartbeat ActivityTracker fires on a 5s interval and may tick once
-    // more between seal() and timer disposal. If recordHeartbeat threw, the
-    // throw would propagate as runner_crash at terminal — sealing the task
-    // as failed even though the worker succeeded. Heartbeats are advisory,
-    // so they no-op after seal instead of throwing.
     const s = TaskEnvelopeStore.create(seed);
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     expect(() => s.recordHeartbeat({ stallIdleMs: 0 })).not.toThrow();
@@ -38,5 +33,17 @@ describe('TaskEnvelopeStore.seal', () => {
     expect(s.isSealed()).toBe(false);
     s.seal({ status: 'failed', stopReason: 'err', realFilesChanged: [] });
     expect(s.isSealed()).toBe(true);
+  });
+
+  it('seal() writes contextBlockId onto the envelope', () => {
+    const s = TaskEnvelopeStore.create({ ...seed, route: 'audit' as const, agentType: 'complex' as const, reviewPolicy: 'none' as const });
+    s.seal({ status: 'done', stopReason: null, realFilesChanged: [], contextBlockId: 'terminal-b1-0' });
+    expect(s.snapshot().contextBlockId).toBe('terminal-b1-0');
+  });
+
+  it('seal() defaults contextBlockId to null when omitted', () => {
+    const s = TaskEnvelopeStore.create({ ...seed, route: 'audit' as const, agentType: 'complex' as const, reviewPolicy: 'none' as const });
+    s.seal({ status: 'done', stopReason: null, realFilesChanged: [] });
+    expect(s.snapshot().contextBlockId).toBeNull();
   });
 });

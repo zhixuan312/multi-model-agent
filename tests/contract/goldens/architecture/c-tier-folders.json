@@ -4,16 +4,13 @@
     "config",
     "events",
     "identity",
-    "journal",
-    "lifecycle",
     "providers",
     "reporting",
     "research",
-    "routing",
+    "skills",
     "stores",
-    "tool-surface",
-    "tools",
     "transport",
-    "types"
+    "types",
+    "unified"
   ]
 }

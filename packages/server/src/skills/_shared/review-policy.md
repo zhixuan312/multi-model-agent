@@ -9,7 +9,5 @@ come from the worker itself, not from a second-pass code review.
 
 | Value | Behavior | Use when |
 |---|---|---|
-| `"full"` | Spec review + quality review (default) | Default for new code or risky edits |
-| `"quality_only"` | Quality review only | Write task where spec-conformance is already certain but you still want a quality pass |
-| `"diff_only"` | Single-pass review of the produced diff | Cheap mechanical refactors (file moves, renames, import-path updates) |
+| `"reviewed"` | Two-phase pipeline: implement + review (default) | Default for new code or risky edits |
 | `"none"` | Skip the review stage | Trivially mechanical edits or throwaway scripts where a second-pass reviewer adds nothing |

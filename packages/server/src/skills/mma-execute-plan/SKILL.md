@@ -27,7 +27,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 
 ## Endpoint
 
-`POST /execute-plan?cwd=<abs-path>`
+`POST /task?cwd=<abs-path>`
 
 @include _shared/auth.md
 
@@ -35,6 +35,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 
 ```json
 {
+  "type": "execute_plan",
   "taskDescriptors": [
     "1. Add input validation to login handler",
     "2. Write unit tests for the auth module"
@@ -51,7 +52,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 | `taskDescriptors` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
 | `filePaths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
-| `perTaskReviewPolicy` | `Record<string, 'full'\|'quality_only'\|'diff_only'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"full"` |
+| `perTaskReviewPolicy` | `Record<string, 'reviewed'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"reviewed"` |
 | `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
 
 @include _shared/review-policy.md
@@ -61,39 +62,39 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 ## Full example
 
 ```bash
-BATCH=$(curl -f --show-error -s -X POST \
+RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
-  "http://localhost:$PORT/execute-plan?cwd=/project")
-BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+  -d '{"type":"execute_plan","taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
+  "http://localhost:$PORT/task?cwd=/project")
+TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
 
 @include _shared/polling.md
 
 ## Response shapes
 
-### POST /execute-plan?cwd=<abs> — dispatch response (202)
+### POST /task?cwd=<abs> — dispatch response (202)
 
 ```json
-{ "batchId": "<uuid>", "statusUrl": "/batch/<uuid>" }
+{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
 ```
 
-Use `batchId` to poll. `statusUrl` is a convenience pointer.
+Use `taskId` to poll. `statusUrl` is a convenience pointer.
 
-### GET /batch/:id — polling response
+### GET /task/:taskId — polling response
 
 The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
 | `202 text/plain` | Still pending — body is the running headline string |
-| `200 application/json` | Terminal — body is the batch envelope below |
+| `200 application/json` | Terminal — body is the task envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
 
-### GET /batch/:id?taskIndex=N — single task slice
+### GET /task/:taskId?taskIndex=N — single task slice
 
 Same envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
@@ -179,7 +180,7 @@ Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to fi
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:
 
 - **Recipe C — Investigate-plan-execute.** `mma-investigate` → write the plan → `mma-execute-plan` → `mma-retry` on failed indices. Register the plan file as a context block before the execute-plan call so it isn't re-inlined into every worker's prompt; retry inherits the same configuration.
-- **Recipe D — Plan-execute-retry (entry point).** `mma-execute-plan` is the producer of the `batchId` that `mma-retry` consumes. When this batch returns mixed `done` / `failed`, the next call is `mma-retry` with failed indices, NOT a re-dispatch.
+- **Recipe D — Plan-execute-retry (entry point).** `mma-execute-plan` is the producer of the `taskId` that `mma-retry` consumes. When this dispatch returns mixed `done` / `failed`, the next call is `mma-retry` with failed indices, NOT a re-dispatch.
 
 Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the batch returns mixed `done` / `failed`, do NOT re-run the whole task list — use `mma-retry` with the failed indices only. Re-running the whole list re-charges every successful task.
 

@@ -47,8 +47,8 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
     const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
     mockSdk.__capturedQueries.length = 0;
 
-    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A' });
-    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
+    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, taskId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A' });
+    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, taskId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
 
     await Promise.all([sessA.send('hi-a'), sessB.send('hi-b')]);
 
@@ -63,8 +63,8 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
       t: process.env.ANTHROPIC_AUTH_TOKEN,
     };
 
-    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A', baseUrl: 'https://a.example' });
-    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, batchId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
+    const sessA = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, taskId: 'B', taskIndex: 0 } as any, apiKey: 'KEY-A', baseUrl: 'https://a.example' });
+    const sessB = new ClaudeSession({ model: 'm', opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, taskId: 'B', taskIndex: 1 } as any, apiKey: 'KEY-B' });
 
     await Promise.all([sessA.send('hi-a'), sessB.send('hi-b')]);
 

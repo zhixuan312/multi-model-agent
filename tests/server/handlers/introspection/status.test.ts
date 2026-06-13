@@ -65,11 +65,10 @@ describe('GET /status', () => {
         counters: {
           projectCount: expect.any(Number),
           activeRequests: expect.any(Number),
-          activeBatches: expect.any(Number),
+          activeTasks: expect.any(Number),
         },
         projects: expect.any(Array),
         inflight: expect.any(Array),
-        recent: expect.any(Array),
       });
 
       // version must be a semver string

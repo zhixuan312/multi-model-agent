@@ -73,12 +73,12 @@ export class CodexCliSession implements Session {
 
   constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {}
 
-  /** Returns task identity (batchId/taskIndex) from SessionOpts for event tagging.
+  /** Returns task identity (taskId/taskIndex) from SessionOpts for event tagging.
    *  The stall watchdog filters bus events by these fields — every emit must carry them
    *  or stuck detection re-breaks under concurrent load. */
-  private taskTag(): { batchId?: string; taskIndex?: number } {
+  private taskTag(): { taskId?: string; taskIndex?: number } {
     return {
-      ...(this.args.opts.batchId !== undefined && { batchId: this.args.opts.batchId }),
+      ...(this.args.opts.taskId !== undefined && { taskId: this.args.opts.taskId }),
       ...(this.args.opts.taskIndex !== undefined && { taskIndex: this.args.opts.taskIndex }),
     };
   }
@@ -250,6 +250,10 @@ export class CodexCliSession implements Session {
     }
   }
 
+  getSessionId(): string | null {
+    return this.threadId ?? null;
+  }
+
   /** OS pid of the currently-active codex CLI subprocess, if any. Undefined
    *  between turns. Used by shutdown drain to SIGKILL stragglers. */
   getPid(): number | undefined {
@@ -407,7 +411,7 @@ class TurnTracker {
     private readonly cumulative: TokenUsage,
     private readonly bus?: BusLike,
     private readonly envelope?: TaskEnvelopeStore,
-    private readonly tag: { batchId?: string; taskIndex?: number } = {},
+    private readonly tag: { taskId?: string; taskIndex?: number } = {},
   ) {
     this.snapshot = { ...cumulative };
   }
