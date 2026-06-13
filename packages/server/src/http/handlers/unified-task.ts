@@ -537,6 +537,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             taskId,
             implementerGoal,
             reviewerGoal,
+            bus: deps.bus,
           });
           const durationMs = Date.now() - startedAtMs;
 
