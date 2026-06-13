@@ -46,6 +46,9 @@ Phrase Brave/adapter queries as topical keywords, not full sentences from the us
 - **semantic_scholar**: natural keywords, no field syntax. Example: `stablecoin adoption mechanism`.
 - **github repo**: qualifiers like `language:solidity stars:>50 topic:stablecoin`. Code search requires PAT (treat as may-fail).
 - **brave**: phrase as you would in a search engine; add `site:` filters for trusted domains.
+- **openalex**: natural keywords, broadest academic coverage (250M+ works). Example: `stablecoin mechanism design`.
+- **crossref**: natural keywords, targets DOI-registered publications. Example: `stablecoin adoption`.
+- **pubmed**: MeSH terms preferred, biomedical focus. Example: `CRISPR delivery nanoparticle`.
 
 Constraints: <= 8 entries per adapter list, <= 200 chars per query string.
 
@@ -64,14 +67,39 @@ If this is the planning turn, emit ONLY a structured query plan as JSON (no pros
 
 ```json
 {
-  "braveQueries":           ["<string>"],
+  "braveQueries":           [{"q": "<query>", "freshness": "pd|pw|pm|py", "endpoint": "web|news", "siteFilter": "site:domain.com"}],
   "arxivQueries":           ["<string>"],
   "semanticScholarQueries": ["<string>"],
-  "githubQueries":          [{"q": "<string>", "kind": "repo|code"}]
+  "githubQueries":          [{"q": "<string>", "kind": "repo|code"}],
+  "openalexQueries":        ["<string>"],
+  "crossrefQueries":        ["<string>"],
+  "pubmedQueries":          ["<string>"]
 }
 ```
 
 Empty arrays are allowed for sources you do not need. Emit ONLY the JSON object — no prose, no preamble, no code fences.
+
+### Brave Search Strategy
+
+Each brave query object can carry optional strategy fields:
+
+- **freshness**: Use when the question involves recent/current data.
+  - 'pd' (past day): breaking news, today's prices
+  - 'pw' (past week): recent announcements, weekly reports
+  - 'pm' (past month): quarterly earnings, recent publications
+  - 'py' (past year): annual reports, year-in-review
+  - 'YYYY-MM-DDtoYYYY-MM-DD': specific date range
+  - Omit for historical/background questions.
+
+- **endpoint**: 'web' (default) or 'news'.
+  - Use 'news' for: financial reports, earnings, current events, policy announcements, product launches.
+  - Use 'web' for: documentation, tutorials, technical references, historical information.
+
+- **siteFilter**: restrict to a specific domain.
+  - Examples: 'site:sec.gov' (SEC filings), 'site:who.int' (WHO reports), 'site:arxiv.org' (preprints via web).
+  - Omit for broad searches.
+
+A single research question should produce a mix of strategies — broad web queries for background, freshness-filtered queries for current data, and news queries when the topic has news coverage.
 
 ## Output Format
 
