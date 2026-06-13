@@ -68,6 +68,17 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     wtInfo = { branch: created.branch, path: created.path };
   }
 
+  // --- Rewrite file paths in the payload to use the worktree cwd ---
+  // When a worktree is active, the taskPayload may contain absolute paths
+  // referencing the original cwd (e.g. plan file paths). The implementer's
+  // session cwd is the worktree, so it will infer the repo root from those
+  // paths and write files to the original repo instead of the worktree.
+  // Rewriting the paths removes this ambiguity.
+  let effectivePayload = input.taskPayload;
+  if (effectiveCwd !== input.cwd) {
+    effectivePayload = input.taskPayload.replaceAll(input.cwd, effectiveCwd);
+  }
+
   const sessions: Session[] = [];
 
   // --- Worktree cleanup helper ---
@@ -92,7 +103,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(implSession);
 
-    const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${input.taskPayload}`;
+    const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${effectivePayload}`;
     const implTurn = await implSession.send(implPrompt, {
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
