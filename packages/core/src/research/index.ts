@@ -18,12 +18,15 @@ export type {
   SourceUsage,
 } from './evidence-pack.js';
 export { BraveClient } from './web-search.js';
-export type { BraveSearchResult, BraveSearchResponse } from './web-search.js';
+export type { BraveSearchOptions, BraveSearchResult, BraveSearchResponse } from './web-search.js';
 export {
   resolveEnabledAdapters,
   arxivSearch,
   semanticScholarSearch,
   githubSearch,
+  openalexSearch,
+  crossrefSearch,
+  pubmedSearch,
 } from './adapters/index.js';
 export type { AdapterCredentials } from './adapters/index.js';
 export type { AdapterId, AdapterResult } from './adapters/types.js';

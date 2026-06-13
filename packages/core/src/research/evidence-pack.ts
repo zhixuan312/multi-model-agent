@@ -2,7 +2,8 @@
 
 export type SourceGroup =
   | 'arxiv' | 'semantic_scholar' | 'github_repo' | 'github_code'
-  | 'brave';
+  | 'brave' | 'brave_news'
+  | 'openalex' | 'crossref' | 'pubmed';
 
 export interface EvidenceSource {
   source:       SourceGroup;
@@ -77,13 +78,16 @@ export const EVIDENCE_PACK_LIMITS = Object.freeze({
   MAX_TOTAL_BYTES:   48 * 1024,
   MAX_PER_GROUP:     10,
   MAX_SNIPPET_CHARS: 500,
-  MAX_TOTAL_SOURCES: 50,
+  MAX_TOTAL_SOURCES: 70,
 });
 
 // Drop priority: lowest-priority group dropped first.
 const DROP_PRIORITY: SourceGroup[] = [
-  'brave',
-  'github_code', 'github_repo', 'semantic_scholar', 'arxiv',
+  'brave', 'brave_news',
+  'github_code', 'github_repo',
+  'crossref',
+  'semantic_scholar', 'openalex',
+  'pubmed', 'arxiv',
 ];
 
 // Within a group, priority is preserved by input order (highest first).

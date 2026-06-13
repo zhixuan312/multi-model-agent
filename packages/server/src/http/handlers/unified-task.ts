@@ -23,8 +23,11 @@ import {
   arxivSearch,
   semanticScholarSearch,
   githubSearch,
+  openalexSearch,
+  crossrefSearch,
+  pubmedSearch,
 } from '@zhixuan92/multi-model-agent-core/research';
-import type { EvidencePack, SourceUsage } from '@zhixuan92/multi-model-agent-core/research';
+import type { EvidencePack, SourceUsage, BraveSearchOptions } from '@zhixuan92/multi-model-agent-core/research';
 import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -269,16 +272,25 @@ const QUERY_PLAN_PROMPT = `You are a research query planner. Given a research qu
 
 The JSON must conform to this shape:
 {
-  "braveQueries":           ["<search query string>", ...],
+  "braveQueries": [{"q": "<query>", "freshness": "pd|pw|pm|py|YYYY-MM-DDtoYYYY-MM-DD", "endpoint": "web|news", "siteFilter": "site:domain.com"}, ...],
   "arxivQueries":           ["<search query string>", ...],
   "semanticScholarQueries": ["<search query string>", ...],
-  "githubQueries":          [{"q": "<search query string>", "kind": "repo|code"}, ...]
+  "githubQueries":          [{"q": "<search query string>", "kind": "repo|code"}, ...],
+  "openalexQueries":        ["<search query string>", ...],
+  "crossrefQueries":        ["<search query string>", ...],
+  "pubmedQueries":          ["<search query string>", ...]
 }
 
 Rules:
 - Max 8 entries per array, max 200 chars per query string.
 - Phrase queries as topical keywords, NOT full sentences.
 - Empty arrays are allowed for sources you do not need.
+- braveQueries: freshness, endpoint, siteFilter are all optional. Omit for default web search.
+  Use freshness for recent/current data. Use endpoint:"news" for financial/news topics.
+  Use siteFilter to restrict to known authoritative domains (e.g., "site:sec.gov").
+- openalexQueries: broadest academic coverage (250M+ works, all disciplines).
+- crossrefQueries: DOI-registered publications, authoritative metadata.
+- pubmedQueries: biomedical/life-sciences focus, use MeSH terms when appropriate.
 - Emit ONLY the JSON object.`;
 
 /**
@@ -341,11 +353,11 @@ async function prepareResearchContext(
     const pack = await runOrchestrator(queryPlan, {
       enabledAdapters,
       brave: {
-        search: async (query: string) => {
+        search: async (query: string, options?: BraveSearchOptions) => {
           if (!braveClient) {
             throw new Error('brave_not_configured: no API keys');
           }
-          return braveClient.search(query);
+          return braveClient.search(query, options);
         },
       },
       adapters: {
@@ -356,6 +368,15 @@ async function prepareResearchContext(
         github: (q, kind) => githubSearch(q, {
           kind,
           pat: researchCfg.builtinAdapters.githubPat,
+        }),
+        openalex: (q) => openalexSearch(q, {
+          contactEmail: researchCfg.builtinAdapters.contactEmail,
+        }),
+        crossref: (q) => crossrefSearch(q, {
+          contactEmail: researchCfg.builtinAdapters.contactEmail,
+        }),
+        pubmed: (q) => pubmedSearch(q, {
+          apiKey: researchCfg.builtinAdapters.pubmedApiKey,
         }),
       },
       perAdapterTimeoutMs: researchCfg.brave.timeoutMs,

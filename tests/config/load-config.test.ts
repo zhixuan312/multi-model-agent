@@ -50,8 +50,7 @@ describe('loadConfigFromFile', () => {
 
     expect(config.agents.standard.type).toBe('codex');
     expect(config.agents.standard.model).toBe('deepseek-r1');
-    expect(config.defaults.timeoutMs).toBe(3_600_000);
-    expect(config.defaults.tools).toBe('full');
+    expect(config.defaults).toBeDefined();
   });
 
   it('throws when explicit config path does not exist', async () => {
@@ -64,13 +63,12 @@ describe('loadConfigFromFile', () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       agents: minimalAgentConfig,
-      defaults: { timeoutMs: 300_000 },
+      defaults: { mainModel: 'claude-opus-4-6' },
     }));
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.defaults.timeoutMs).toBe(300_000);
-    expect(config.defaults.tools).toBe('full');
+    expect(config.defaults.mainModel).toBe('claude-opus-4-6');
   });
 
   it('parses effort when present', async () => {

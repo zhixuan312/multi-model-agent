@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "5.2.2",
+  "version": "5.3.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -88,10 +88,6 @@
     "./events/stderr-log-subscriber": {
       "types": "./dist/events/stderr-log-subscriber.d.ts",
       "import": "./dist/events/stderr-log-subscriber.js"
-    },
-    "./bounded-execution/file-artifact-check": {
-      "types": "./dist/bounded-execution/file-artifact-check.d.ts",
-      "import": "./dist/bounded-execution/file-artifact-check.js"
     },
     "./events/consent-rules": {
       "types": "./dist/events/consent-rules.d.ts",

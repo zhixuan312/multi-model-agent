@@ -2,7 +2,18 @@ import { request } from 'undici';
 import { USER_AGENT } from './user-agent.js';
 import type { ResearchConfig } from '../config/schema.js';
 
-export interface BraveSearchResult { title: string; url: string; snippet: string; }
+export interface BraveSearchOptions {
+  freshness?:     string;
+  endpoint?:      'web' | 'news';
+  extraSnippets?: boolean;
+}
+export interface BraveSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  pageAge?: string;
+  extraSnippets?: string[];
+}
 export interface BraveSearchResponse {
   results: BraveSearchResult[];
   keyIndex: number;
@@ -21,10 +32,15 @@ function validateBraveResults(body: unknown): BraveSearchResult[] {
       return { title: `[invalid entry ${i}]`, url: '', snippet: '' };
     }
     const item = r as Record<string, unknown>;
+    const extraSnippets = Array.isArray(item.extra_snippets)
+      ? (item.extra_snippets as unknown[]).filter((s): s is string => typeof s === 'string')
+      : undefined;
     return {
       title: typeof item.title === 'string' ? item.title : `[missing title ${i}]`,
       url: typeof item.url === 'string' ? item.url : '',
       snippet: typeof item.snippet === 'string' ? item.snippet : '',
+      pageAge: typeof item.page_age === 'string' ? item.page_age : undefined,
+      extraSnippets: extraSnippets && extraSnippets.length > 0 ? extraSnippets : undefined,
     };
   });
 }
@@ -89,13 +105,21 @@ export class BraveClient {
     }
   }
 
-  async search(query: string, siteFilter?: string): Promise<BraveSearchResponse> {
+  async search(query: string, options?: BraveSearchOptions): Promise<BraveSearchResponse> {
     if (this.cfg.apiKeys.length === 0) {
       throw new Error('brave_not_configured: no API keys configured');
     }
-    const url = new URL('https://api.search.brave.com/res/v1/web/search');
-    url.searchParams.set('q', siteFilter ? `${siteFilter} ${query}` : query);
-    url.searchParams.set('count', String(this.cfg.maxResultsPerQuery));
+    const endpoint = options?.endpoint ?? 'web';
+    const basePath = endpoint === 'news' ? '/res/v1/news/search' : '/res/v1/web/search';
+    const count = endpoint === 'news' ? 50 : 20;
+
+    const url = new URL(`https://api.search.brave.com${basePath}`);
+    url.searchParams.set('q', query);
+    url.searchParams.set('count', String(count));
+    if (options?.freshness) {
+      url.searchParams.set('freshness', options.freshness);
+    }
+    url.searchParams.set('extra_snippets', 'true');
 
     const maxAttempts = Math.min(this.cfg.apiKeys.length, 4);
     const attempts: BraveSearchResponse['attempts'] = [];

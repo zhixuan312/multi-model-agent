@@ -1,0 +1,16 @@
+{
+  "header": { "type": "esummary", "version": "0.3" },
+  "result": {
+    "uids": ["39012345", "38901234"],
+    "39012345": {
+      "uid": "39012345",
+      "pubdate": "2026 Mar",
+      "title": "CRISPR-based gene therapy delivery using lipid nanoparticles"
+    },
+    "38901234": {
+      "uid": "38901234",
+      "pubdate": "2025",
+      "title": "Advances in mRNA vaccine development"
+    }
+  }
+}

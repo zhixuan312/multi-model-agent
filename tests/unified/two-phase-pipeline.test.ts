@@ -198,6 +198,69 @@ describe('runTwoPhasePipeline', () => {
     expect(result.worktree).toBeNull();
   });
 
+  it('BUG REPRO: implementer prompt has original-cwd paths while session cwd is worktree', async () => {
+    const createMock = vi.mocked(WorktreeManager.prototype.create);
+    const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);
+
+    const ORIGINAL_CWD = '/project/repo';
+    const WORKTREE_CWD = '/project/repo/.mma/worktrees/abcd1234';
+
+    createMock.mockResolvedValue({
+      branch: 'mma/execute_plan-abcd1234',
+      path: WORKTREE_CWD,
+      hasChanges: false,
+    });
+    cleanupMock.mockResolvedValue(true);
+
+    const impl = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done"}');
+    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+
+    const implProvider = mockProvider(impl);
+    const revProvider = mockProvider(rev);
+
+    // Simulate execute_plan payload — filePaths use the ORIGINAL cwd
+    const taskPayload = JSON.stringify({
+      filePaths: [`${ORIGINAL_CWD}/docs/plans/my-plan.md`],
+      taskDescriptors: ['## 1. Add validation'],
+    }, null, 2);
+
+    await runTwoPhasePipeline({
+      type: 'execute_plan',
+      implementerSkill: '# Execute Plan — Implementer\n\nImplement the task.',
+      reviewerSkill: '# Review',
+      taskPayload,
+      implementerProvider: implProvider,
+      reviewerProvider: revProvider,
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: ORIGINAL_CWD,
+      sandboxPolicy: 'cwd-only',
+      worktreeEnabled: true,
+      taskId: 'abcd1234-5678-9abc-def0-1234567890ab',
+    });
+
+    // The session was opened with the WORKTREE cwd
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: WORKTREE_CWD }),
+    );
+
+    // But the prompt sent to the implementer contains the ORIGINAL cwd path
+    const implSendCall = impl.send.mock.calls[0];
+    const promptSent = implSendCall[0] as string;
+
+    // FIXED: The pipeline rewrites original-cwd paths to worktree paths
+    // so the implementer sees only worktree paths in its prompt.
+    const hasOriginalPath = promptSent.includes(`${ORIGINAL_CWD}/docs`);
+    const hasWorktreePath = promptSent.includes(WORKTREE_CWD);
+
+    expect(hasOriginalPath).toBe(false);  // original-cwd paths are rewritten
+    expect(hasWorktreePath).toBe(true);   // prompt now references the worktree
+
+    // Verify the rewritten path is correct
+    expect(promptSent).toContain(`${WORKTREE_CWD}/docs/plans/my-plan.md`);
+  });
+
   it('creates worktree with reviewPolicy=none and cleans up', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
     const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);

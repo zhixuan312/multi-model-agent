@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_MODEL_IDS,
   findModelProfile,
   modelProfileSchema,
 } from '../../packages/core/src/config/model-profile-registry.js';
@@ -98,9 +97,10 @@ describe('model profile registry', () => {
     }
   });
 
-  it('every exported profile has a family field', () => {
-    for (const modelId of ALL_MODEL_IDS) {
-      expect(findModelProfile(modelId).family).toBeDefined();
+  it('every known model family resolves to a profile with a family field', () => {
+    for (const family of MODEL_FAMILIES) {
+      const example = FAMILY_EXAMPLES[family];
+      expect(findModelProfile(example).family).toBe(family);
     }
   });
 

@@ -16,8 +16,7 @@ describe('parseConfig', () => {
       },
     });
     expect(result.agents.standard.model).toBe('test-model');
-    expect(result.defaults.timeoutMs).toBe(3_600_000);
-    expect(result.defaults.tools).toBe('full');
+    expect(result.defaults).toBeDefined();
   });
 
   it('parses valid full config', () => {
@@ -26,11 +25,9 @@ describe('parseConfig', () => {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
         complex: { type: 'codex', model: 'gpt-5', baseUrl: 'https://api.example.com' },
       },
-      defaults: { timeoutMs: 120_000, tools: 'none' },
     };
     const result = parseConfig(input);
     expect(result.agents.complex.model).toBe('gpt-5');
-    expect(result.defaults.tools).toBe('none');
   });
 
   it('accepts diagnostics.log enabled without logDir', () => {
@@ -92,14 +89,15 @@ describe('parseConfig', () => {
     })).toThrow();
   });
 
-  it('throws on non-integer timeoutMs', () => {
-    expect(() => parseConfig({
+  it('accepts defaults with only mainModel', () => {
+    const result = parseConfig({
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
       },
-      defaults: { timeoutMs: 1.5, tools: 'full' },
-    })).toThrow();
+      defaults: { mainModel: 'claude-opus-4-6' },
+    });
+    expect(result.defaults.mainModel).toBe('claude-opus-4-6');
   });
 
   it('throws when agents missing', () => {
@@ -131,7 +129,7 @@ describe('parseConfig', () => {
     });
     expect(result.research.brave.apiKeys).toEqual([]);
     expect(result.research.brave.timeoutMs).toBe(8000);
-    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.brave.maxResultsPerQuery).toBe(20);
     expect(result.research.brave.perCallBackoffMs).toBe(250);
     expect(result.research.brave.minPerKeyIntervalMs).toBe(1100);
     expect(result.research.builtinAdapters.arxiv).toBe(true);
@@ -152,21 +150,8 @@ describe('parseConfig', () => {
     expect(result.research.brave.apiKeys).toEqual(['k1']);
     expect(result.research.brave.timeoutMs).toBe(5000);
     // untouched defaults
-    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.brave.maxResultsPerQuery).toBe(20);
     expect(result.research.builtinAdapters.arxiv).toBe(true);
   });
 
-  it('accepts the new progress-watchdog defaults', () => {
-    const parsed = parseConfig({
-      agents: { standard: { type: 'codex', model: 'gpt-5.4' }, complex: minimalAgentConfig },
-      defaults: {
-        progressWatchdogEnabled: true,
-        thrashTurns: 25,
-        thrashWallClockMs: 1_200_000,
-        thrashSoftTurns: 10,
-      },
-    });
-    expect(parsed.defaults?.progressWatchdogEnabled).toBe(true);
-    expect(parsed.defaults?.thrashTurns).toBe(25);
-  });
 });

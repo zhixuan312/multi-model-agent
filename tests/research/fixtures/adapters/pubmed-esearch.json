@@ -1,0 +1,8 @@
+{
+  "header": { "type": "esearch", "version": "0.3" },
+  "esearchresult": {
+    "count": "2",
+    "retmax": "2",
+    "idlist": ["39012345", "38901234"]
+  }
+}
