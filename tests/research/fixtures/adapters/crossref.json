@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1234/example.2021.001",
+        "title": ["Stablecoin Adoption in Emerging Markets"],
+        "subtitle": ["A Cross-Country Analysis"],
+        "abstract": "This study examines the adoption patterns of stablecoins across emerging economies.",
+        "published-print": { "date-parts": [[2021, 6, 15]] },
+        "created": { "date-parts": [[2021, 5, 1]] }
+      },
+      {
+        "DOI": "10.5678/noabstract.2023.002",
+        "title": ["Central Bank Digital Currencies: A Review"],
+        "subtitle": null,
+        "published-print": null,
+        "created": { "date-parts": [[2023]] }
+      }
+    ]
+  }
+}
