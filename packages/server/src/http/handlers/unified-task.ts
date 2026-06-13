@@ -119,10 +119,10 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'journal_record':
       return [
-        'You have classified the learning (decision/constraint/pattern/mistake).',
+        'You have classified the entry by category (decision/design/behavior/process/knowledge/style) and operation (create/refine/supersede/merge).',
         'You have checked the existing journal for supersede/refine/merge candidates.',
-        'You have written the node file with proper YAML frontmatter and edges.',
-        'You have updated the journal catalog (log.md and index.md).',
+        'You have written the node file with proper YAML frontmatter (including category) and edges.',
+        'You have updated the journal catalog (log.md and index.md with category column).',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'journal_recall':
@@ -537,6 +537,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             taskId,
             implementerGoal,
             reviewerGoal,
+            bus: deps.bus,
           });
           const durationMs = Date.now() - startedAtMs;
 

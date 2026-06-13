@@ -24,10 +24,12 @@ Reclassify when the existing graph contradicts the chosen operation.
 
 ### 3. Node Quality
 
-- Does each node have correct YAML frontmatter (`id`, `title`, `status`, `tags`, `date`, `links`)?
+- Does each node have correct YAML frontmatter (`id`, `title`, `category`, `status`, `tags`, `date`, `links`)?
+- Is the `category` field one of the fixed enum values: `decision`, `design`, `behavior`, `process`, `knowledge`, `style`?
+- Does the category match the content? A `decision` has a trade-off outcome; a `behavior` describes a user/team pattern; a `knowledge` states a factual finding; etc.
 - Does each node have `## Context` and `## Consequences` sections?
 - Are tags lowercase-kebab format?
-- Is the node body an actionable lesson (not just an observation)? A good learning states what to do differently; a mere observation ("X happened") is not actionable.
+- Is the node body actionable (not just an observation)? Every category should state what to do with the knowledge — a `behavior` says how to adapt; a `knowledge` says how to apply it; a `decision` says what to do instead.
 - Are secrets/credentials redacted from recorded content?
 
 ### 4. Catalog Consistency
@@ -51,8 +53,9 @@ Reclassify when the existing graph contradicts the chosen operation.
 
 - Reclassify operations when the existing graph contradicts the chosen op.
 - Fix edge types that use non-vocabulary terms.
+- Fix missing or incorrect `category` fields.
 - Add missing `supersededBy` links on superseded nodes.
-- Flag learnings recorded as observations rather than actionable lessons.
+- Flag entries recorded as observations rather than actionable knowledge.
 - Report any writes outside `.mmagent/journal/`.
 - Fix catalog inconsistencies (missing index entries, out-of-order sorting).
 

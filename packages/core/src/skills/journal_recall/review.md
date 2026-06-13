@@ -20,6 +20,7 @@ Every cited node must be real and correctly quoted:
 - Was each cited node actually read this session, or is the citation from memory/hallucination?
 - Does the `learning` field accurately represent what the node says, or has it been paraphrased beyond recognition?
 - Is the `status` field correct for each cited node?
+- Is the `category` field correct for each cited node (matches the node's frontmatter)?
 
 Remove findings that cite non-existent or unread nodes. This is the highest-priority check.
 

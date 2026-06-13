@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.1] - 2026-06-13
+
+**Journal knowledge graph + EnvelopeBus fix.** The journal system expands from a decision audit trail to a full team knowledge graph with 6 categories (decision, design, behavior, process, knowledge, style). EnvelopeBus threading fix restores provider event logging to stderr. `SCHEMA_VERSION` unchanged.
+
+### Added
+- Journal `category` field: `decision | design | behavior | process | knowledge | style`. Every node is now typed by what kind of knowledge it captures — not just technical decisions but design rationale, user behavior patterns, process learnings, research findings, and style conventions.
+- Journal category contract test (11 assertions) validating vocabulary consistency across schema, skill prompts, and handler goal conditions.
+- Smoke verify: research adapter surface expanded to include `brave_news`, `openalex`, `crossref`, `pubmed`.
+
+### Changed
+- Journal index.md table format: `id | date | category | status | title | tags` (was `id | date | status | title | tags`).
+- Journal recall output includes `category` field per result.
+- `mma-journal-record` SKILL.md: expanded "when to use" guidance covering all 6 knowledge types.
+
+### Fixed
+- EnvelopeBus not threaded into `runTwoPhasePipeline` — provider events (claude_*, codex_*) were silently dropped instead of reaching stderr log and telemetry.
+
 ## [5.3.0] - 2026-06-13
 
 **Smarter Brave search + three new academic adapters.** The research module now uses Brave's freshness filter, news endpoint, extra_snippets, and page_age for current-data queries. Three free, no-auth academic adapters (OpenAlex, Crossref, PubMed) broaden the evidence base. Worktree path-rewrite fix ensures execute-plan workers write to the correct workspace. Dead code cleanup removes 227 lines of orphaned code, unused config fields, and stale test files.

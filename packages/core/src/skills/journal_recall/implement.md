@@ -4,7 +4,7 @@ You search a project's learnings journal at `.mmagent/journal/` to answer a conc
 
 ## Why This Exists
 
-mma-journal-recall is the read side of the learnings graph. The caller is about to design or attempt something and wants to know what THIS project already learned. Your output replaces their own journal search — they will take your synthesis at face value and use it to avoid re-treading ground already explored.
+mma-journal-recall is the read side of the team knowledge graph. The caller is about to design, attempt, or decide something and wants to know what THIS project already learned — decisions made, design rationale, user behavior patterns, process learnings, research findings, and style conventions. Your output replaces their own journal search — they will take your synthesis at face value and use it to avoid re-treading ground already explored.
 
 **Completion test:** would the caller, reading your synthesis and the cited nodes, reach the same conclusion if they searched the journal themselves — or would they find relevant nodes you missed, or nodes you cited that do not actually say what you claimed?
 
@@ -12,7 +12,7 @@ mma-journal-recall is the read side of the learnings graph. The caller is about 
 
 Apply ALL perspectives regardless of the question. Each may yield candidate answers:
 
-1. **KEYWORD-MATCH** — Read `index.md` (or list `nodes/`), then open nodes whose title/tags/body share the query's key terms. Your candidate answers are those nodes, each cited with its id, status, and the lesson that answers the query.
+1. **KEYWORD-MATCH** — Read `index.md` (or list `nodes/`), then open nodes whose title/tags/body/category share the query's key terms. When the query targets a specific knowledge type (e.g., "what conventions do we follow" → `style` category, "how does the user prefer to work" → `behavior` category), prioritize nodes in that category. Your candidate answers are those nodes, each cited with its id, category, status, and the lesson that answers the query.
 
 2. **GRAPH-NEIGHBORHOOD** — From the nodes that match the query, follow `refines`/`depends-on`/`parent` edges and supersedes chains (to the current head) to gather connected context. Your candidate answers are the neighborhood nodes that explain or qualify the direct matches.
 
@@ -56,5 +56,5 @@ Before finishing, verify:
 Output exactly one JSON block:
 
 ```json
-{"results": [{"learning": "<lesson from node>", "context": "<surrounding edges and related nodes>", "relevance": "critical|high|medium|low", "nodeId": "<id>", "nodePath": "<file path>", "status": "<adopted|dropped|inconclusive|superseded>"}], "summary": "<synthesis answering the query, naming how nodes relate>"}
+{"results": [{"learning": "<lesson from node>", "context": "<surrounding edges and related nodes>", "relevance": "critical|high|medium|low", "nodeId": "<id>", "nodePath": "<file path>", "category": "<decision|design|behavior|process|knowledge|style>", "status": "<adopted|dropped|inconclusive|superseded>"}], "summary": "<synthesis answering the query, naming how nodes relate>"}
 ```

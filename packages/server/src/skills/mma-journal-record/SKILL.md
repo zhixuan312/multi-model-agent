@@ -1,7 +1,7 @@
 ---
 name: mma-journal-record
-description: Use when you've abandoned an approach, hit a constraint, or concluded something worth remembering — record it to the persistent journal as a fire-and-forget decision audit trail for future sessions.
-when_to_use: You've completed analysis and want to log the outcome — abandoned an approach, hit a blocking constraint, or reached a conclusion worth remembering. NOT for recall/investigate/delegate; those are read routes. Journal stores conclusions for cross-session reference.
+description: Use when you've learned something worth remembering — a decision, design rationale, user behavior pattern, process learning, research finding, or style convention. Records it to the persistent team knowledge graph for future sessions.
+when_to_use: You've completed analysis and want to log the outcome — a decision (tried X, use Y), design rationale (why the architecture works this way), user behavior (how the user prefers to work), process learning (what works in the SDLC), research finding (API feasibility, ecosystem fact), or style convention (documentation/code norms). NOT for recall/investigate/delegate; those are read routes. Journal stores team knowledge for cross-session reference.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,17 +9,21 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Record a learning, constraint, or decision outcome to the persistent journal via a fire-and-forget mmagent worker. The worker stores the entry and returns immediately; you continue on your main context.
+Record team knowledge to the persistent journal via a fire-and-forget mmagent worker. The worker integrates the entry into the knowledge graph and returns immediately; you continue on your main context.
 
-**Core principle:** Journal is an audit trail of what you've decided, discovered, or abandoned. Record it once per session; don't re-investigate.
+**Core principle:** The journal is the centralized team knowledge graph — decisions, design rationale, user behavior patterns, process learnings, research findings, and style conventions. Record once per insight; don't re-investigate.
 
 ## When to Use
 
 **Use when:**
-- You've abandoned an approach and want to log why
+- You've made a **decision** — tried X, dropped it, use Y instead
+- You've understood a **design rationale** — why the architecture/pattern is structured this way
+- You've observed a **user behavior** — how the user prefers to work, communicate, or explore
+- You've learned a **process** — what works in the SDLC, what phases/gates are effective
+- You've discovered **knowledge** — API feasibility, ecosystem facts, research findings
+- You've identified a **style convention** — documentation norms, code patterns, naming rules
 - You've hit a blocking constraint worth remembering
-- You've reached a conclusion (e.g., "Pattern X doesn't work in this codebase")
-- You've decided not to pursue a direction and want to avoid repeating that decision next session
+- You want to avoid repeating a dead-end direction next session
 
 **Don't use when:**
 - You're asking a question → `mma-investigate`

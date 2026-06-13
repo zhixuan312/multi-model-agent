@@ -261,6 +261,61 @@ describe('runTwoPhasePipeline', () => {
     expect(promptSent).toContain(`${WORKTREE_CWD}/docs/plans/my-plan.md`);
   });
 
+  it('threads bus into both openSession calls', async () => {
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
+    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const implProvider = mockProvider(impl);
+    const revProvider = mockProvider(rev);
+    const fakeBus = { emitPlainEntry: vi.fn() };
+
+    await runTwoPhasePipeline({
+      type: 'delegate',
+      implementerSkill: '#',
+      reviewerSkill: '#',
+      taskPayload: 'x',
+      implementerProvider: implProvider,
+      reviewerProvider: revProvider,
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: '/tmp',
+      sandboxPolicy: 'cwd-only',
+      bus: fakeBus,
+    });
+
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ bus: fakeBus }),
+    );
+    expect(revProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ bus: fakeBus }),
+    );
+  });
+
+  it('threads bus into openSession for reviewPolicy=none', async () => {
+    const impl = mockSession('done');
+    const implProvider = mockProvider(impl);
+    const fakeBus = { emitPlainEntry: vi.fn() };
+
+    await runTwoPhasePipeline({
+      type: 'audit',
+      implementerSkill: '#',
+      reviewerSkill: '#',
+      taskPayload: 'x',
+      implementerProvider: implProvider,
+      reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'complex',
+      reviewerTier: 'standard',
+      reviewPolicy: 'none',
+      cwd: '/tmp',
+      sandboxPolicy: 'read-only',
+      bus: fakeBus,
+    });
+
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ bus: fakeBus }),
+    );
+  });
+
   it('creates worktree with reviewPolicy=none and cleans up', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
     const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);

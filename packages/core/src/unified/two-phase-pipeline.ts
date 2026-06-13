@@ -25,6 +25,8 @@ export interface PipelineInput {
   implementerGoal?: string;
   /** Goal condition for the reviewer. */
   reviewerGoal?: string;
+  /** EnvelopeBus for provider-level event streaming (stderr + JSONL + telemetry). */
+  bus?: object;
 }
 
 export interface SessionInfo {
@@ -100,6 +102,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       abortSignal: ac.signal,
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
+      bus: input.bus,
     });
     sessions.push(implSession);
 
@@ -134,6 +137,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       abortSignal: ac.signal,
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
+      bus: input.bus,
     });
     sessions.push(revSession);
 
