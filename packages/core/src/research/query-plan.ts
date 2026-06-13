@@ -1,18 +1,29 @@
-// Zod schema for the structured output the worker emits in turn 1.
-// Bounds: 0..8 entries per query list, ≤ 200 chars per query.
 import { z } from 'zod';
 
 const Query200 = z.string().min(1).max(200);
 const Queries = z.array(Query200).max(8);
 
+const BraveQuery = z.object({
+  q:          Query200,
+  freshness:  z.union([
+    z.enum(['pd', 'pw', 'pm', 'py']),
+    z.string().regex(/^\d{4}-\d{2}-\d{2}to\d{4}-\d{2}-\d{2}$/),
+  ]).optional(),
+  endpoint:   z.enum(['web', 'news']).default('web'),
+  siteFilter: z.string().max(100).optional(),
+});
+
 export const QueryPlanSchema = z.object({
-  braveQueries:           Queries,
+  braveQueries:           z.array(BraveQuery).max(8),
   arxivQueries:           Queries,
   semanticScholarQueries: Queries,
   githubQueries:          z.array(z.object({
     q:    Query200,
     kind: z.enum(['repo', 'code']),
   })).max(8),
+  openalexQueries:        Queries.default([]),
+  crossrefQueries:        Queries.default([]),
+  pubmedQueries:          Queries.default([]),
 }).strict();
 
 export type QueryPlan = z.infer<typeof QueryPlanSchema>;
