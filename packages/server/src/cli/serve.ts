@@ -147,6 +147,7 @@ let onUnhandledRejectionRef: ((reason: unknown) => void) | undefined;
 export async function startServe(
   config: MultiModelConfig,
   exit: (code: number) => never = process.exit.bind(process),
+  configPath?: string,
 ): Promise<ServeHandle> {
   const stderr = process.stderr.write.bind(process.stderr);
 
@@ -179,7 +180,7 @@ export async function startServe(
   // registerToolHandlers sees `agents` and registers real tool endpoints.
   // Stripping to { server } here caused a 3.1.0 regression where tool
   // endpoints returned 503 'no_agent_config' even when agents were set.
-  const running = await startServer(config as Parameters<typeof startServer>[0]);
+  const running = await startServer(config as Parameters<typeof startServer>[0], undefined, configPath);
 
   // ── stdout/stderr error + uncaught/unhandled rejection guards ────────
   const logShutdown = (_cause: ShutdownCause): void => {
