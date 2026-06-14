@@ -233,6 +233,12 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
+      const resolvedConfigPath = resolveConfigPath(
+        configArg,
+        deps.env?.() ?? process.env,
+        deps.cwd?.() ?? process.cwd(),
+        deps.homeDir?.() ?? os.homedir(),
+      );
       // Stderr event streaming is always on (4.7.3+; no --verbose flag).
       // --log enables JSONL persistence to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl.
       if (opts['log'] === true) {
@@ -240,7 +246,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         config.diagnostics.log = true;
       }
       // startServe() blocks until a signal arrives and exits the process.
-      await startServe(config, exit);
+      await startServe(config, exit, resolvedConfigPath);
       break;
     }
     case 'print-token': {

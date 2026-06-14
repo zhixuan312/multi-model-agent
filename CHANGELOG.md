@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2026-06-14
+
+**Runtime provider configuration.** New `POST /configure-provider` endpoint validates and hot-swaps a provider/model/auth combination for any agent tier at runtime. Live API probe verifies credentials and model availability before applying. Changes auto-persist to config.json — no server restart needed. Repository-wide documentation refresh and dead golden cleanup. `SCHEMA_VERSION` unchanged.
+
+### Added
+- `POST /configure-provider` endpoint with Zod-validated request schema, live `/v1/models` probe, and runtime config hot-swap with auto-persist to config.json.
+- 46 tests across 3 test files (static validation, probe with mock API server, end-to-end smoke).
+- `getClaudeOAuth` exported from core for OAuth token validation in the configure-provider handler.
+
+### Changed
+- `packages/core/README.md` rewritten — removed references to deleted modules (lifecycle, executors, tools/, intake/, BatchRegistry, ToolConfig).
+- `packages/server/README.md` rewritten — updated REST API section from old per-tool routes to unified `POST /task`, updated agent types from 4 to 2 (claude, codex), added `POST /configure-provider`.
+- `CONTRIBUTING.md` updated — "Adding a new task type" and "Adding a new provider" sections rewritten for v5.x unified task API.
+- `README.md` "What's new" section updated to 5.4.0.
+
+### Removed
+- 27 orphaned golden JSON files in `tests/contract/goldens/endpoints/` (test files deleted in May, goldens left behind).
+
 ## [5.3.2] - 2026-06-13
 
 **Reviewer input robustness + journal backfill.** The two-phase pipeline now strips markdown code fences from implementer output before passing to the reviewer, fixing cases where smaller reviewer models (haiku) couldn't parse the raw dump. Journal nodes 0001-0039 backfilled with the new `category` field; 7 new session learnings recorded (0040-0046). `SCHEMA_VERSION` unchanged.

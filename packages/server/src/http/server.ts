@@ -136,6 +136,7 @@ async function registerControlHandlers(
 export async function startServer(
   config: ServerConfig,
   injectedManifestSync?: import('../skill-install/skill-manifest-sync.js').SkillManifestSync,
+  configPath?: string,
 ): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
@@ -232,6 +233,15 @@ export async function startServer(
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
       });
     }
+  }
+
+  // POST /configure-provider — validate (dryRun=true) or validate+apply (dryRun=false)
+  {
+    const multiModelConfigForProvider = (config as unknown as { agents?: unknown }).agents
+      ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+      : undefined;
+    const { buildConfigureProviderHandler } = await import('./handlers/introspection/configure-provider.js');
+    router.register('POST', '/configure-provider', buildConfigureProviderHandler(multiModelConfigForProvider, configPath));
   }
 
   // GET /status — operator introspection (registered after registries are ready)
