@@ -313,7 +313,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.3.2
+## What's new in 5.4.0
 
 - **`POST /configure-provider`.** Validate and hot-swap a provider/model/auth for any agent tier at runtime — no restart needed. Live API probe verifies credentials and model availability before applying.
 - **Unified task API (5.2.0).** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. Two-phase pipeline with cross-agent review.
