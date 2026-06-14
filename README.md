@@ -313,10 +313,10 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.2.0
+## What's new in 5.3.2
 
-- **Unified task API.** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. The per-route REST endpoints are removed. Every type flows through the same two-phase pipeline with optional cross-agent review.
-- **Main orchestrator agent.** New `main` agent tier — a session-persistent brain for multi-phase frontend workflows. Configurable via optional `agents.main` config slot. Wire route: `orchestrate`.
+- **`POST /configure-provider`.** Validate and hot-swap a provider/model/auth for any agent tier at runtime — no restart needed. Live API probe verifies credentials and model availability before applying.
+- **Unified task API (5.2.0).** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. Two-phase pipeline with cross-agent review.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

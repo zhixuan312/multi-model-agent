@@ -4,8 +4,6 @@
 
 Local HTTP daemon that delegates tool-using work to sub-agents on different LLM providers. One process serves Claude Code, Codex CLI, Gemini CLI, and Cursor via installable skills.
 
-*Renamed from `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — the package no longer uses MCP. See [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).*
-
 ## Why
 
 Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste.
@@ -42,11 +40,7 @@ mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-c
 
 Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
-- Heavy Claude Code user → `claude-opus-4-8`
-- ChatGPT-led workflow → `gpt-5.5`
-- Gemini-led workflow → `gemini-3.1-pro`
-
-Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers wrote JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return a worker's model as the calling agent's "main". The calling client is the only reliable source.
+Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing).
 
 ```bash
 export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
@@ -55,43 +49,34 @@ export MMAGENT_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent run
 
 ### 3. Write the config
 
-Paste this into your shell — it creates `~/.multi-model/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
-
 ```bash
 mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 {
   "agents": {
     "standard": {
-      "type": "claude-compatible",
+      "type": "codex",
       "model": "deepseek-v4-pro",
-      "baseUrl": "https://api.deepseek.com/anthropic",
+      "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "DEEPSEEK_API_KEY"
     },
     "complex": {
       "type": "codex",
-      "model": "gpt-5.5"
+      "model": "gpt-5.5",
+      "apiKeyEnv": "OPENAI_API_KEY"
     }
   }
 }
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.mainModel`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
+That's the whole minimum-viable file. All other knobs have sane built-in defaults.
 
 ### 4. Start the daemon + verify
-
-Two ways — pick one:
-
-**Option A — let your AI client auto-spawn it.** Open your client (Claude Code / Codex CLI / etc.) and call any mma-* skill; the skill's preflight check spawns `mmagent serve` on `127.0.0.1:7337` and reuses it for every subsequent call.
-
-**Option B — start it manually.** Useful when you want the daemon up before opening a client:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
 curl -s http://localhost:7337/health   # → {"status":"ok"}
 ```
-
-For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
 
 ## Updating
 
@@ -99,131 +84,48 @@ For an always-on background install (survives reboots): [launchd / systemd templ
 npm install -g @zhixuan92/multi-model-agent@latest
 pkill -f "mmagent serve"            # stop the running daemon
 mmagent sync-skills                 # reconcile installed skills with the new bundle
-# next AI-client session respawns the daemon via the skill preflight
 ```
-
-A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve`.
 
 ## Skills
 
-Skills are the surface your AI client sees. `mmagent sync-skills` writes them to the client's skill directory and keeps them reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it to the matching skill, the skill calls the matching REST endpoint.
+Skills are the surface your AI client sees. `mmagent sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the unified `POST /task` endpoint.
 
 ### Work-delegation skills
 
-| Skill | Target endpoint | Use when |
+| Skill | Task type | Use when |
 |---|---|---|
-| `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them on cheap workers as one goal-set (implement → review-fix). |
-| `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
-| `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
-| `mma-research` | `POST /task` | External multi-source research with citations — arxiv, semantic_scholar, github_search, openalex, crossref, pubmed, brave-with-freshness/news/`site:`-filters — for a focused question. |
-| `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
-| `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
-| `mma-journal-record` | `POST /journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
-| `mma-journal-recall` | `POST /journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
+| `mma-delegate` | `delegate` | Ad-hoc implementation or research tasks without a plan file |
+| `mma-execute-plan` | `execute_plan` | A plan markdown exists on disk with numbered task headings |
+| `mma-investigate` | `investigate` | Answer a question about this codebase |
+| `mma-explore` | *(orchestrator)* | Fans out investigate + research + journal-recall in parallel |
+| `mma-research` | `research` | External multi-source research with citations |
+| `mma-debug` | `debug` | Debug a failing test or unexpected behavior |
+| `mma-review` | `review` | Source-code review, one worker per file |
+| `mma-audit` | `audit` | Audit a spec/plan/design doc for executability blockers |
+| `mma-journal-record` | `journal_record` | Record a durable project learning |
+| `mma-journal-recall` | `journal_recall` | Recall relevant prior learnings |
 
 ### Plumbing skills
 
-| Skill | Target endpoint | Use when |
+| Skill | Endpoint | Use when |
 |---|---|---|
-| `mma-context-blocks` | `POST/DELETE /context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
-| `mma-retry` | `POST /retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
-
-The `multi-model-agent` skill (no `mma-` prefix) is a top-level overview your client reads first to pick which `mma-*` skill applies.
-
-### Two generic usage samples
-
-**Sample 1 — implement a feature from a plan**
-
-```
-You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
-↓
-Client picks mma-execute-plan (plan file on disk, multiple tasks)
-↓
-mmagent runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
-implements each task in order and commits it (`[task N] …`), then the complex agent
-reviews every task and fixes anything left — returning one structured report.
-↓
-You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-8 (30× ROI)"
-```
-
-**Sample 2 — debug a failing test (multiple skills chained)**
-
-```
-You: "tests/auth/session.test.ts is failing intermittently after the token-refresh refactor — figure it out and fix it"
-↓
-Step 1 — mma-context-blocks
-  The failing test output + the refactor diff are ~8 KB and will be referenced by every
-  downstream call. Register once, get a contextBlockId, reuse it.
-↓
-Step 2 — mma-debug
-  Worker reproduces the failure, traces across session.ts + token-refresh.ts, returns a
-  root-cause hypothesis: "race between refresh-in-flight and session.invalidate()".
-  Main agent stays on the hypothesis, decides the fix shape.
-↓
-Step 3 — mma-delegate
-  Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
-  fix, runs the failing test 20× to confirm the race is gone.
-↓
-Step 4 — mma-review (with the acceptance checklist in the brief)
-  Reviewer worker checks the diff against the acceptance criteria: (a) failing
-  test now passes, (b) no other auth tests regressed, (c) refresh path still
-  emits the expected telemetry.
-↓
-Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
-```
+| `mma-context-blocks` | `POST/DELETE /context-blocks` | Reuse a large doc across multiple calls |
+| `mma-retry` | `retry` task type | Re-run failed indices from a previous task |
 
 ## Configuration reference
 
-### Lookup order
-
-`--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
-
 ### Agent types
+
+Two provider types (v4.4+):
 
 | Type | Auth | When to pick |
 |---|---|---|
-| `claude` | Local Claude Code OAuth (`claude login`) | Stay on Claude end-to-end with subscription auth |
-| `codex` | Codex CLI subscription (`codex login`) | OpenAI flagship work without juggling API keys |
-| `openai-compatible` | `apiKey` or `apiKeyEnv` | Any OpenAI-compatible endpoint — MiniMax, Groq, Together, local vLLM, plus OpenAI direct |
-| `claude-compatible` | `apiKey` or `apiKeyEnv` | Vendors exposing an Anthropic-format endpoint (DeepSeek's `/anthropic`, etc.) — preserves thinking content blocks across multi-turn tool use |
-
-DeepSeek V4 Pro under `claude-compatible` keeps reasoning ON; under `openai-compatible` it works but auto-disables thinking.
-
-### Tuning
-
-Every `defaults` knob has a built-in. Override only when you need to.
-
-| Field | Default | What it does |
-|---|---|---|
-| `defaults.mainModel` | *(unset)* | Lowest-priority fallback for the main-model resolver chain |
+| `claude` | Claude Code OAuth or `apiKey`/`apiKeyEnv` | Anthropic API or any Anthropic-compatible proxy (set `baseUrl`) |
+| `codex` | Codex CLI subscription or `apiKey`/`apiKeyEnv` | OpenAI, DeepSeek, MiniMax, Groq, Together, Ollama — any OpenAI-compatible endpoint (set `baseUrl`) |
 
 ### Telemetry
 
-**Off by default.** Opt in via `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`), or set in config:
-
-```json
-{
-  "agents": { "...": "..." },
-  "telemetry": { "enabled": true }
-}
-```
-
-Every upload batch is signed with a per-install Ed25519 key (TOFU; lives at `~/.multi-model/identity.json`); receivers can verify it came from the install whose `installId` it claims. Full disclosure: [PRIVACY.md](https://github.com/zhixuan312/multi-model-agent/blob/master/PRIVACY.md).
-
-### Verbose / diagnostics
-
-```json
-{
-  "agents": { "...": "..." },
-  "diagnostics": { "log": true, "verbose": true }
-}
-```
-
-Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`.
-
-> **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
+**Off by default.** Opt in via `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`).
 
 ### Auth token
 
@@ -231,69 +133,39 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-15 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+All task types dispatch through the unified `POST /task` endpoint with a `type` discriminator.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /delegate?cwd=<abs>` | Fan out ad-hoc tasks to sub-agents |
-| `POST /audit?cwd=<abs>` | Audit a document (or a code-execution plan via `subtype: 'plan'`) |
-| `POST /review?cwd=<abs>` | Review code (pass acceptance checklists in the brief for verification-style checks) |
-| `POST /debug?cwd=<abs>` | Debug a failure with a hypothesis |
-| `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
-| `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
-| `POST /investigate?cwd=<abs>` | Codebase Q&A — structured answer with file:line citations + confidence |
-| `POST /research?cwd=<abs>` | External multi-source research — arxiv, semantic_scholar, github_search, brave-with-`site:`-filters — for a focused question |
-| `POST /journal-record?cwd=<abs>` | Record one learning into the project's cross-agent journal graph (`.mmagent/journal/`) — create / refine / supersede / merge |
-| `POST /journal-recall?cwd=<abs>` | Recall relevant prior learnings from the journal graph for a question or situation |
-| `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
+| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, main) |
+| `GET /task/:taskId` | Poll task status and results |
+| `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
-| `GET /health` | Liveness probe (unauthenticated, loopback-only) |
-| `GET /status` | Server status (authenticated, loopback-only) |
+| `GET /health` | Liveness probe (unauthenticated) |
+| `GET /status` | Server status (authenticated) |
 
-All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
+All endpoints except `/health` require bearer auth: `Authorization: Bearer <token>`.
 
 ## Operator commands
 
 ```bash
-mmagent serve [--verbose] [--log]                # start daemon
-mmagent info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
+mmagent serve [--log]                            # start daemon
+mmagent info  [--json]                           # version, bind/port, token fingerprint
 mmagent status [--json]                          # health + stats from a running daemon
-mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
+mmagent logs  [--follow]                         # tail diagnostic log
 mmagent print-token                              # print the current auth token
-mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
-mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
-mmagent enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
-mmagent telemetry status                         # show consent state + source
-mmagent telemetry enable                         # opt in
-mmagent telemetry disable                        # opt out + delete local queue
-mmagent telemetry reset-id                       # rotate the local Ed25519 identity
-mmagent telemetry dump-queue                     # print the locally-queued events as JSON
+mmagent sync-skills [--target=<client>]          # install/update skills
+mmagent disable [--target=<client>]              # remove skills
+mmagent enable  [--target=<client>]              # reinstall skills
+mmagent telemetry status|enable|disable          # manage telemetry consent
 ```
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server. Write tools (`delegate`, `execute-plan`, `retry`, `journal-record`) run the whole plan as one sequential **goal-set**: the standard agent implements every task in order and commits each (`[task N] …`), then the complex agent reviews and fixes — returning one structured report of the final per-task state. Read tools fan out per file/criterion. Each has a wall-clock timeout.
+`mmagent serve` runs a loopback HTTP server. All task types go through a unified two-phase pipeline: the standard agent implements, then the complex agent reviews. Each task has a wall-clock timeout and bounded execution.
 
 Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). Layer map and request lifecycle: [docs/ARCHITECTURE.md](https://github.com/zhixuan312/multi-model-agent/blob/master/docs/ARCHITECTURE.md).
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
-| Daemon stale after upgrade | `pkill -f "mmagent serve"`; the skill preflight respawns it on next client session |
-| Skill version mismatch | `mmagent sync-skills` and restart your client |
-| `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
-| `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
-| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
-| Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
-
-## What's new in 4.9.0
-
-- **Delegate skill passthrough.** `POST /delegate` tasks accept an optional `skills: string[]`. Each name is resolved from the caller's skill store (by `X-MMA-Client`), staged into an ephemeral per-task directory, and delivered natively — Claude workers via a local SDK plugin, Codex workers via an ephemeral `CODEX_HOME`. Unknown names hard-fail just that task; omitting `skills` is byte-for-byte the previous behavior.
-
-Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
