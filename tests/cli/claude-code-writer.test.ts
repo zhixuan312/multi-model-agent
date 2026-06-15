@@ -41,11 +41,11 @@ import {
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
 function makeFakeHome(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-claude-home-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-claude-home-'));
 }
 
 function makeFakeSkillsRoot(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-claude-skills-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-claude-skills-'));
 }
 
 function rmFakeDir(dir: string): void {

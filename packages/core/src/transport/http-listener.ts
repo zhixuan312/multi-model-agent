@@ -28,7 +28,7 @@ export class HTTPListener {
     const server = createServer((req, res) => {
       Promise.resolve(this.options.handler(req, res)).catch((err: unknown) => {
         const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
-        process.stderr.write(`[mmagent] listener handler rejected: ${msg}\n`);
+        process.stderr.write(`[mma] listener handler rejected: ${msg}\n`);
         if (!res.headersSent) {
           res.writeHead(500, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: { code: 'internal_error', message: 'Internal server error' } }));

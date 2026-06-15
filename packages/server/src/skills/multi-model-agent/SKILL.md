@@ -1,7 +1,7 @@
 ---
 name: multi-model-agent
 description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
-when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
+when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mma is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
 version: "0.0.0-unreleased"
 ---
 
@@ -121,7 +121,7 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 ```bash
 PORT=7337
 if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-  mmagent serve >/dev/null 2>&1 & disown
+  mma serve >/dev/null 2>&1 & disown
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.5
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
@@ -129,15 +129,15 @@ if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
 fi
 ```
 
-Idempotent: already-running daemon → curl succeeds → no-op. Background `mmagent serve` (with `& disown`) — never run it foreground (it would block the rest of the script).
+Idempotent: already-running daemon → curl succeeds → no-op. Background `mma serve` (with `& disown`) — never run it foreground (it would block the rest of the script).
 
 ## Auth token
 
 ```bash
-export MMAGENT_AUTH_TOKEN=$(mmagent print-token)
+export MMA_AUTH_TOKEN=$(mma print-token)
 ```
 
-Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token is generated once on first `mmagent serve` and persists at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
+Every request requires `Authorization: Bearer $MMA_AUTH_TOKEN`. The token is generated once on first `mma serve` and persists at `~/.mma/auth-token`. It only changes if the file is manually deleted.
 
 ## Worker tier: `agentType`
 
@@ -186,7 +186,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Common pitfalls
 
-❌ **Defaulting to inline Agent dispatch when mmagent is up.** mmagent workers cost ~10× less and don't pollute main context. **Why:** every inline tool call burns flagship-model tokens; that's exactly what mmagent exists to avoid.
+❌ **Defaulting to inline Agent dispatch when mma is up.** mma workers cost ~10× less and don't pollute main context. **Why:** every inline tool call burns flagship-model tokens; that's exactly what mma exists to avoid.
 
 ❌ **Picking `mma-delegate` when a more specific skill fits.** Audit / review / verify / debug / investigate workers know their route's defaults and emit structured reports. **Why:** specialized skills require less input and produce richer output.
 
@@ -194,4 +194,4 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Diagnosing slow tasks
 
-`mmagent serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mmagent logs --follow --task=$TASK_ID`.
+`mma serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mma logs --follow --task=$TASK_ID`.

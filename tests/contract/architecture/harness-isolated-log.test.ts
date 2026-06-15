@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { startTestServer } from '../fixtures/start-test-server.js';
 
-describe('harness writes no events to user global mmagent log', () => {
+describe('harness writes no events to user global mma log', () => {
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const userLog = join(homedir(), '.multi-model', 'logs', `mmagent-${todayUtc}.jsonl`);
+  const userLog = join(homedir(), '.mma', 'logs', `mma-${todayUtc}.jsonl`);
 
   // Read bytes appended to `path` in the [from, to) range. Returns empty
   // string if the range is empty or the file is gone. Reading by offset
@@ -30,7 +30,7 @@ describe('harness writes no events to user global mmagent log', () => {
     await server.close();
     const sizeAfter = existsSync(userLog) ? statSync(userLog).size : 0;
 
-    // The user-global log is shared with any live `mmagent serve` on the
+    // The user-global log is shared with any live `mma serve` on the
     // host, so the file may grow concurrently for reasons unrelated to
     // this test. The contract under test is "this test server didn't
     // write to the user-global log" — check that by scanning the bytes

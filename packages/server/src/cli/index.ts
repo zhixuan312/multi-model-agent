@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * CLI entry point for `mmagent` / `multi-model-agent`.
+ * CLI entry point for `mma` (multi-model-agent).
  *
  * Usage:
- *   mmagent serve [--config <path>]
- *   mmagent --help
- *   mmagent --version
+ *   mma [--config <path>]       # starts the server (serve is the default command)
+ *   mma --help
+ *   mma --version
  *
  * Config discovery order (highest priority → lowest):
  *   1. --config <path>          (explicit flag)
- *   2. $MMAGENT_CONFIG env var
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
+ *   2. $MMA_CONFIG env var
+ *   3. CWD/.mma.json (or .multi-model-agent.json)
+ *   4. ~/.mma/config.json
  *
  * All side effects (process.exit, stdout/stderr writes) are contained in the
  * bootstrap at the bottom of this file. The internal `main()` function is
@@ -55,7 +55,7 @@ export interface CliDeps {
   cwd?: () => string;
   /**
    * Home directory. Defaults to os.homedir().
-   * Used only for resolving the ~/.multi-model/config.json discovery path.
+   * Used only for resolving the ~/.mma/config.json discovery path.
    */
   homeDir?: () => string;
   /**
@@ -78,7 +78,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
-    // `mmagent serve --config ./config.json` would lose --config.
+    // `mma serve --config ./config.json` would lose --config.
   });
 }
 
@@ -98,12 +98,13 @@ function buildCandidatePaths(
 
   if (explicit) paths.push(explicit);
 
-  const envVal = (env['MMAGENT_CONFIG'] ?? '').trim();
+  const envVal = (env['MMA_CONFIG'] ?? '').trim();
   if (envVal) paths.push(envVal);
 
+  paths.push(path.join(cwd, '.mma.json'));
   paths.push(path.join(cwd, '.multi-model-agent.json'));
 
-  paths.push(path.join(home, '.multi-model', 'config.json'));
+  paths.push(path.join(home, '.mma', 'config.json'));
 
   return paths;
 }
@@ -111,9 +112,9 @@ function buildCandidatePaths(
 /**
  * Resolve the config file path using the discovery order:
  *   1. --config <path>   (explicit flag)
- *   2. $MMAGENT_CONFIG   (env var)
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
+ *   2. $MMA_CONFIG   (env var)
+ *   3. CWD/.mma.json (or .multi-model-agent.json)
+ *   4. ~/.mma/config.json
  *
  * Returns the first path that exists, or undefined if none exist.
  * Does NOT validate or parse the file — caller uses loadConfigFromFile().
@@ -163,22 +164,22 @@ export async function loadConfig(
 
   throw new Error(
     `No config file found. Tried:\n${attempted.join('\n')}\n` +
-    `Set one via --config, $MMAGENT_CONFIG, or place it at a default location above.`,
+    `Set one via --config, $MMA_CONFIG, or place it at a default location above.`,
   );
 }
 
 const HELP_TEXT = `\
-mmagent — multi-model-agent HTTP server
+mma — multi-model-agent HTTP server
 
 Usage:
-  mmagent [command] [options]
+  mma [command] [options]
 
 Commands:
-  serve            Start the HTTP server (default)
+  serve            Start the HTTP server (default — just \`mma\` with no command)
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  sync-skills      Install + update + reconcile all shipped skills (single upsert command, replaces 4.0.x install-skill / update-skills)
+  sync-skills      Install + update + reconcile all shipped skills
   disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
@@ -230,6 +231,28 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     return;
   }
 
+  // Auto-migrate ~/.multi-model → ~/.mma (one-time, clean cut)
+  {
+    const home = deps.homeDir?.() ?? os.homedir();
+    const oldDir = path.join(home, '.multi-model');
+    const newDir = path.join(home, '.mma');
+    try {
+      const oldStat = fs.lstatSync(oldDir);
+      if (oldStat.isSymbolicLink()) {
+        fs.unlinkSync(oldDir);
+      } else if (oldStat.isDirectory()) {
+        const newIsSymlink = fs.existsSync(newDir) && fs.lstatSync(newDir).isSymbolicLink();
+        if (newIsSymlink) fs.unlinkSync(newDir);
+        if (!fs.existsSync(newDir)) {
+          fs.renameSync(oldDir, newDir);
+          stderr(`[mma] migrated ~/.multi-model → ~/.mma\n`);
+        } else {
+          stderr(`[mma] warning: both ~/.multi-model and ~/.mma exist; remove ~/.multi-model manually\n`);
+        }
+      }
+    } catch { /* best-effort */ }
+  }
+
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
@@ -240,7 +263,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         deps.homeDir?.() ?? os.homedir(),
       );
       // Stderr event streaming is always on (4.7.3+; no --verbose flag).
-      // --log enables JSONL persistence to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl.
+      // --log enables JSONL persistence to ~/.mma/logs/mma-YYYY-MM-DD.jsonl.
       if (opts['log'] === true) {
         if (!config.diagnostics) config.diagnostics = { log: false };
         config.diagnostics.log = true;
@@ -253,7 +276,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const config = await loadConfig(configArg, deps).catch(() => null);
       const tokenFile = config
         ? config.server.auth.tokenFile
-        : path.join(deps.homeDir?.() ?? os.homedir(), '.multi-model', 'auth-token');
+        : path.join(deps.homeDir?.() ?? os.homedir(), '.mma', 'auth-token');
       const code = printToken({
         homeDir: deps.homeDir?.() ?? os.homedir(),
         tokenFile,
@@ -270,7 +293,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const home = deps.homeDir?.() ?? os.homedir();
       const tokenFile = config
         ? config.server.auth.tokenFile
-        : path.join(home, '.multi-model', 'auth-token');
+        : path.join(home, '.mma', 'auth-token');
       const serverUrl = config
         ? buildServerUrl(config.server.bind, config.server.port)
         : buildServerUrl('127.0.0.1', 7337);
@@ -290,7 +313,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const jsonFlag = opts['json'] === true;
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mmagent info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma info: cannot load config. Set --config or $MMA_CONFIG.\n`);
         exit(1);
         break;
       }
@@ -310,7 +333,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     case 'logs': {
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mmagent logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma logs: cannot load config. Set --config or $MMA_CONFIG.\n`);
         exit(1);
         break;
       }
@@ -360,11 +383,11 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     case 'telemetry': {
-      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.multi-model');
+      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.mma');
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {
-        stderr(`mmagent telemetry: unknown subcommand '${telemetrySubcommand}'\nValid: ${validSubcommands.join(', ')}\n`);
+        stderr(`mma telemetry: unknown subcommand '${telemetrySubcommand}'\nValid: ${validSubcommands.join(', ')}\n`);
         exit(1);
         break;
       }
@@ -378,7 +401,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     default: {
-      stderr(`Unknown command: ${subcommand}\nRun 'mmagent --help' for usage.\n`);
+      stderr(`Unknown command: ${subcommand}\nRun 'mma --help' for usage.\n`);
       exit(1);
     }
   }
@@ -407,7 +430,7 @@ function isMain(): boolean {
 if (isMain()) {
   void main().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`mmagent: ${msg}\n`);
+    process.stderr.write(`mma: ${msg}\n`);
     process.exit(1);
   });
 }

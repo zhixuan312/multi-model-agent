@@ -13,7 +13,7 @@ import { startTestServerWithAgents } from '../../../helpers/test-server-with-age
  * key will be the canonical path.
  */
 function makeTmpCwd(): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), 'mmagent-ctx-block-test-')));
+  return realpathSync(mkdtempSync(join(tmpdir(), 'mma-ctx-block-test-')));
 }
 
 async function createBlock(

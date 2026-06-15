@@ -1,12 +1,12 @@
 /**
  * disabled-state.ts — the persistent "skills disabled" sentinel.
  *
- * `mmagent disable` writes this file; `sync-skills` (and the npm postinstall
+ * `mma disable` writes this file; `sync-skills` (and the npm postinstall
  * hook that shells out to it) consults it so an upgrade never silently
- * reinstalls skills the user deliberately turned off. `mmagent enable` clears
+ * reinstalls skills the user deliberately turned off. `mma enable` clears
  * the relevant targets and, when none remain, deletes the file.
  *
- * Stored at ~/.multi-model/skills-disabled.json — the same directory as the
+ * Stored at ~/.mma/skills-disabled.json — the same directory as the
  * install manifest and auth token, with matching 0o700/0o600 permissions.
  *
  * The sentinel is target-aware: it records *which* clients are disabled so a

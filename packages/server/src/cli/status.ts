@@ -1,12 +1,12 @@
 /**
- * status.ts — `mmagent status` subcommand.
+ * status.ts — `mma status` subcommand.
  *
  * Fetches GET /status from a running server and pretty-prints a summary.
  * Supports --json to dump the raw JSON response.
  * Exits 1 if the server is unreachable or returns an error status.
  *
  * Usage:
- *   mmagent status [--config <path>] [--json]
+ *   mma status [--config <path>] [--json]
  */
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -81,13 +81,13 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    stderr(`mmagent status: cannot reach server at ${serverUrl}: ${msg}\n`);
-    stderr(`Is the server running? Start it with 'mmagent serve'.\n`);
+    stderr(`mma status: cannot reach server at ${serverUrl}: ${msg}\n`);
+    stderr(`Is the server running? Start it with 'mma serve'.\n`);
     return 1;
   }
 
   if (!res.ok) {
-    stderr(`mmagent status: server returned HTTP ${res.status} ${res.statusText}\n`);
+    stderr(`mma status: server returned HTTP ${res.status} ${res.statusText}\n`);
     return 1;
   }
 
@@ -95,7 +95,7 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
   try {
     body = (await res.json()) as StatusResponse;
   } catch (err) {
-    stderr(`mmagent status: invalid JSON response from server\n`);
+    stderr(`mma status: invalid JSON response from server\n`);
     return 1;
   }
 
@@ -106,7 +106,7 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
 
   // Pretty-print summary
   const lines: string[] = [];
-  lines.push(`mmagent server status`);
+  lines.push(`mma server status`);
   lines.push(`─────────────────────────────`);
   if (body.version) lines.push(`  version:        ${body.version}`);
   if (body.pid !== undefined) lines.push(`  pid:            ${body.pid}`);
@@ -126,7 +126,7 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
   if (body.skillVersion !== undefined) {
     const sv = body.skillVersion ?? 'none';
     const compat = body.skillCompatible === true ? ' (compatible)'
-      : body.skillCompatible === false ? ' (incompatible — run mmagent sync-skills to reconcile)'
+      : body.skillCompatible === false ? ' (incompatible — run mma sync-skills to reconcile)'
         : '';
     lines.push(`  skill version:  ${sv}${compat}`);
   }
@@ -152,7 +152,7 @@ export interface RunStatusDeps {
   tokenFile: string;
   /** Whether to output raw JSON. */
   json?: boolean;
-  /** Environment variable accessor (for MMAGENT_AUTH_TOKEN override). */
+  /** Environment variable accessor (for MMA_AUTH_TOKEN override). */
   env?: Record<string, string | undefined>;
   /** Write to stdout. */
   stdout?: (s: string) => boolean;
@@ -176,7 +176,7 @@ export async function runStatus(deps: RunStatusDeps): Promise<number> {
 
   // Read the token (env wins)
   let token: string;
-  const envToken = (env['MMAGENT_AUTH_TOKEN'] ?? '').trim();
+  const envToken = (env['MMA_AUTH_TOKEN'] ?? '').trim();
   if (envToken.length > 0) {
     token = envToken;
   } else {
@@ -189,11 +189,11 @@ export async function runStatus(deps: RunStatusDeps): Promise<number> {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
-        stderr(`mmagent status: token file not found: ${resolvedTokenFile}\n`);
-        stderr(`Run 'mmagent print-token' or set MMAGENT_AUTH_TOKEN.\n`);
+        stderr(`mma status: token file not found: ${resolvedTokenFile}\n`);
+        stderr(`Run 'mma print-token' or set MMA_AUTH_TOKEN.\n`);
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        stderr(`mmagent status: cannot read token file: ${msg}\n`);
+        stderr(`mma status: cannot read token file: ${msg}\n`);
       }
       return 1;
     }

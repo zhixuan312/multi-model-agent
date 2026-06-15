@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.2] - 2026-06-15
+
+**CLI rename + full naming alignment.** The primary CLI binary is now `mma` (with `multi-model-agent` as alias). All internal naming aligned: env vars `MMA_*`, data directory `~/.mma/`, journal at `.mma/journal/`, log prefix `[mma]`, wire field `mmaVersion`, HTTP headers `X-Mma-*`. Auto-migration moves `~/.multi-model/` → `~/.mma/` transparently on first run. `SCHEMA_VERSION` unchanged.
+
+### Added
+- `mma` as the primary CLI binary name. `multi-model-agent` remains as an alias.
+- Auto-migration: `~/.multi-model/` → `~/.mma/` on first CLI invocation (clean cut, no symlink left behind).
+- Config discovery accepts `CWD/.mma.json` (preferred) alongside `CWD/.multi-model-agent.json`.
+
+### Changed
+- All env vars: `MMAGENT_*` → `MMA_*` (`MMA_AUTH_TOKEN`, `MMA_CONFIG`, `MMA_LOG_DIR`, etc.).
+- Data directory: `~/.multi-model/` → `~/.mma/` (config, auth-token, logs, telemetry queue, journal).
+- Project journal: `.mmagent/journal/` → `.mma/journal/`.
+- Log file prefix: `mmagent-YYYY-MM-DD.jsonl` → `mma-YYYY-MM-DD.jsonl`.
+- Telemetry wire field: `mmagentVersion` → `mmaVersion`.
+- HTTP telemetry headers: `X-Mmagent-*` → `X-Mma-*`.
+- Service templates: `com.zhixuan92.mmagent` → `com.zhixuan92.mma`, `mmagent.service` → `mma.service`.
+- All CLI help text, error messages, skill docs, and log prefixes updated.
+
+### Removed
+- `mmagent` CLI bin alias (was intermediate; now only `mma` and `multi-model-agent`).
+
 ## [5.4.1] - 2026-06-15
 
 **Token embedding + lint cleanup.** `sync-skills` now embeds the live auth token directly into installed skill files — clients read one file instead of shelling out to `mmagent print-token`. Response field renamed `usable` → `verified` for clarity. All 12 pre-existing lint warnings fixed. Inaccurate token-rotation claims corrected in skill docs. `SCHEMA_VERSION` unchanged.

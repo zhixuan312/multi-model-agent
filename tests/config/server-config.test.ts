@@ -8,7 +8,7 @@ describe('server config', () => {
       server: {
         bind: '127.0.0.1',
         port: 7337,
-        auth: { tokenFile: '~/.multi-model/auth-token' },
+        auth: { tokenFile: '~/.mma/auth-token' },
         limits: {
           maxBodyBytes: 10_485_760,
           batchTtlMs: 3_600_000,
@@ -27,11 +27,11 @@ describe('server config', () => {
     expect(() => serverConfigSchema.parse({ transport: { mode: 'http' } })).toThrow();
   });
 
-  it('MMAGENT_AUTH_TOKEN env override wins over file', () => {
-    process.env['MMAGENT_AUTH_TOKEN'] = 'from-env';
+  it('MMA_AUTH_TOKEN env override wins over file', () => {
+    process.env['MMA_AUTH_TOKEN'] = 'from-env';
     const token = loadAuthToken({ tokenFile: '/nonexistent' });
     expect(token).toBe('from-env');
-    delete process.env['MMAGENT_AUTH_TOKEN'];
+    delete process.env['MMA_AUTH_TOKEN'];
   });
 
   it('server.autoUpdateSkills defaults to true', () => {

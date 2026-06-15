@@ -28,7 +28,7 @@ export class EnvelopeBus {
     const msg: BusMessage = { type: 'envelope', envelope, reason };
     for (const s of this.subs) {
       try { s.receive(msg); } catch (err) {
-        process.stderr.write(`[mmagent] bus_subscriber_error sub=${s.name} reason=${reason} err=${(err as Error).message}\n`);
+        process.stderr.write(`[mma] bus_subscriber_error sub=${s.name} reason=${reason} err=${(err as Error).message}\n`);
       }
     }
   }
@@ -37,7 +37,7 @@ export class EnvelopeBus {
     const msg: BusMessage = { type: 'plain', entry };
     for (const s of this.subs) {
       try { s.receive(msg); } catch (err) {
-        process.stderr.write(`[mmagent] bus_subscriber_error sub=${s.name} kind=${entry.kind} err=${(err as Error).message}\n`);
+        process.stderr.write(`[mma] bus_subscriber_error sub=${s.name} kind=${entry.kind} err=${(err as Error).message}\n`);
       }
     }
   }

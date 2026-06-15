@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { decideConsent, type ConsentDecision } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 
 export function decide(homeDir: string): ConsentDecision {
-  const env = process.env.MMAGENT_TELEMETRY;
+  const env = process.env.MMA_TELEMETRY;
   const cfgPath = join(homeDir, 'config.json');
   let config: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
   try {

@@ -19,23 +19,23 @@ describe('consent', () => {
   let originalEnv: string | undefined;
 
   beforeEach(() => {
-    originalEnv = process.env.MMAGENT_TELEMETRY;
-    delete process.env.MMAGENT_TELEMETRY;
+    originalEnv = process.env.MMA_TELEMETRY;
+    delete process.env.MMA_TELEMETRY;
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     if (originalEnv === undefined) {
-      delete process.env.MMAGENT_TELEMETRY;
+      delete process.env.MMA_TELEMETRY;
     } else {
-      process.env.MMAGENT_TELEMETRY = originalEnv;
+      process.env.MMA_TELEMETRY = originalEnv;
     }
   });
 
   // -- decide() -------------------------------------------------------
 
   it('env=1 → enabled:true, source:env', () => {
-    process.env.MMAGENT_TELEMETRY = '1';
+    process.env.MMA_TELEMETRY = '1';
     readFileSyncMock.mockReturnValue('{}');
 
     expect(decide(homeDir)).toEqual({ enabled: true, source: 'env' });
@@ -77,14 +77,14 @@ describe('consent', () => {
   });
 
   it('env=invalidTypo → enabled:false, source:env_invalid (blocks config)', () => {
-    process.env.MMAGENT_TELEMETRY = 'invalidTypo';
+    process.env.MMA_TELEMETRY = 'invalidTypo';
     readFileSyncMock.mockReturnValue(JSON.stringify({ telemetry: { enabled: true } }));
 
     expect(decide(homeDir)).toEqual({ enabled: false, source: 'env_invalid' });
   });
 
   it('env="" + config.telemetry.enabled=true → config wins', () => {
-    process.env.MMAGENT_TELEMETRY = '';
+    process.env.MMA_TELEMETRY = '';
     readFileSyncMock.mockReturnValue(JSON.stringify({ telemetry: { enabled: true } }));
 
     expect(decide(homeDir)).toEqual({ enabled: true, source: 'config' });

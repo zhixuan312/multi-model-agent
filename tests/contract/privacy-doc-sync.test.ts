@@ -7,7 +7,7 @@ describe('PRIVACY.md ↔ schema sync', () => {
     const repoRoot = join(__dirname, '..', '..');
     const md = readFileSync(join(repoRoot, 'PRIVACY.md'), 'utf8');
     const expected = [
-      'installId', 'schemaVersion', 'mmagentVersion', 'os', 'nodeMajor',
+      'installId', 'schemaVersion', 'mmaVersion', 'os', 'nodeMajor',
       'route', 'client', 'terminalStatus', 'implementerModel', 'eventId',
       'totalDurationMs', 'totalCostUSD', 'costDeltaVsMainUSD', 'mainCostUSD',
       'inputTokens', 'outputTokens',

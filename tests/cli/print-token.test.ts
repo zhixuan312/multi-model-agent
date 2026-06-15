@@ -1,7 +1,7 @@
 /**
  * tests/cli/print-token.test.ts
  *
- * Tests for Task 9.2 — `mmagent print-token` subcommand.
+ * Tests for Task 9.2 — `mma print-token` subcommand.
  * Uses temp dirs; never touches real ~/.multi-model or HOME.
  */
 import { describe, it, expect } from 'vitest';
@@ -13,7 +13,7 @@ import { rmSync } from 'node:fs';
 import { printToken } from '../../packages/server/src/cli/print-token.js';
 
 function makeTempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'mmagent-print-token-test-'));
+  return mkdtempSync(join(tmpdir(), 'mma-print-token-test-'));
 }
 
 function captureOutput(): { stdout: string[]; stderr: string[]; stdoutFn: (s: string) => boolean; stderrFn: (s: string) => boolean } {
@@ -28,10 +28,10 @@ function captureOutput(): { stdout: string[]; stderr: string[]; stdoutFn: (s: st
 }
 
 describe('print-token', () => {
-  it('prints token from MMAGENT_AUTH_TOKEN env var and exits 0', () => {
+  it('prints token from MMA_AUTH_TOKEN env var and exits 0', () => {
     const { stdoutFn, stderrFn, stdout, stderr } = captureOutput();
     const code = printToken({
-      env: { MMAGENT_AUTH_TOKEN: 'my-secret-token' },
+      env: { MMA_AUTH_TOKEN: 'my-secret-token' },
       stdout: stdoutFn,
       stderr: stderrFn,
     });
@@ -48,7 +48,7 @@ describe('print-token', () => {
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = printToken({
         tokenFile,
-        env: { MMAGENT_AUTH_TOKEN: 'env-token' },
+        env: { MMA_AUTH_TOKEN: 'env-token' },
         stdout: stdoutFn,
         stderr: stderrFn,
       });
@@ -81,10 +81,10 @@ describe('print-token', () => {
   });
 
   it('uses default token path under homeDir when no tokenFile is provided', () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), 'mmagent-fake-home-'));
+    const fakeHome = mkdtempSync(join(tmpdir(), 'mma-fake-home-'));
     try {
-      mkdirSync(join(fakeHome, '.multi-model'), { recursive: true });
-      const tokenFile = join(fakeHome, '.multi-model', 'auth-token');
+      mkdirSync(join(fakeHome, '.mma'), { recursive: true });
+      const tokenFile = join(fakeHome, '.mma', 'auth-token');
       writeFileSync(tokenFile, 'home-token', { mode: 0o600 });
       const { stdoutFn, stderrFn, stdout, stderr } = captureOutput();
       const code = printToken({
@@ -102,7 +102,7 @@ describe('print-token', () => {
   });
 
   it('exits 1 with helpful error when token file does not exist', () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), 'mmagent-nohome-'));
+    const fakeHome = mkdtempSync(join(tmpdir(), 'mma-nohome-'));
     try {
       const { stdoutFn, stderrFn, stdout, stderr } = captureOutput();
       const code = printToken({
@@ -141,11 +141,11 @@ describe('print-token', () => {
     }
   });
 
-  it('trims whitespace from MMAGENT_AUTH_TOKEN env value', () => {
+  it('trims whitespace from MMA_AUTH_TOKEN env value', () => {
     const { stdoutFn, stderrFn, stdout } = captureOutput();
     // Env token with surrounding whitespace is trimmed
     const code = printToken({
-      env: { MMAGENT_AUTH_TOKEN: '  trimmed-token  ' },
+      env: { MMA_AUTH_TOKEN: '  trimmed-token  ' },
       stdout: stdoutFn,
       stderr: stderrFn,
     });

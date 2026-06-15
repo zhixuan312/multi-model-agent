@@ -1,5 +1,5 @@
 /**
- * info.ts — `mmagent info` subcommand.
+ * info.ts — `mma info` subcommand.
  *
  * One-shot identity probe: emits CLI version, configured bind/port, token
  * fingerprint (sha256 first 8 hex chars), and — if the daemon is reachable —
@@ -7,7 +7,7 @@
  * parseable with --json for scripts and human-readable without it.
  *
  * Usage:
- *   mmagent info [--config <path>] [--json]
+ *   mma info [--config <path>] [--json]
  */
 import * as crypto from 'node:crypto';
 import * as os from 'node:os';
@@ -68,7 +68,7 @@ export async function runInfo(deps: InfoDeps): Promise<number> {
   try {
     const token = readFileSync(resolvedTokenFile, 'utf-8').trim();
     if (token.length === 0) {
-      stderr(`mmagent info: auth token file is empty: ${resolvedTokenFile}\n`);
+      stderr(`mma info: auth token file is empty: ${resolvedTokenFile}\n`);
       return 1;
     }
     tokenFp = fingerprint(token);
@@ -76,9 +76,9 @@ export async function runInfo(deps: InfoDeps): Promise<number> {
     const code = (err as NodeJS.ErrnoException).code;
     const msg = err instanceof Error ? err.message : String(err);
     if (code === 'ENOENT') {
-      stderr(`mmagent info: auth token file not found: ${resolvedTokenFile}\n`);
+      stderr(`mma info: auth token file not found: ${resolvedTokenFile}\n`);
     } else {
-      stderr(`mmagent info: cannot read auth token file: ${msg}\n`);
+      stderr(`mma info: cannot read auth token file: ${msg}\n`);
     }
     return 1;
   }
@@ -122,7 +122,7 @@ export async function runInfo(deps: InfoDeps): Promise<number> {
     return 0;
   }
 
-  const parts: string[] = [`mmagent cli=${info.cliVersion}`];
+  const parts: string[] = [`mma cli=${info.cliVersion}`];
   if (typeof info.daemonVersion === 'string') parts.push(`daemon=${info.daemonVersion}`);
   parts.push(`bind=${info.bind}:${info.port}`);
   if (typeof info.pid === 'number') parts.push(`pid=${info.pid}`);

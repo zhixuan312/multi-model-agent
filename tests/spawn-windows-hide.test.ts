@@ -2,7 +2,7 @@
 //
 // On Windows, child_process spawns a visible console window for each console
 // binary (git.exe, codex.exe) unless `windowsHide: true` is passed. When the
-// mmagent daemon has no attached console, every unhidden git spawn pops a
+// mma daemon has no attached console, every unhidden git spawn pops a
 // window — the "flashing shell window" users reported on 4.7.10/4.7.11.
 //
 // This test scans packages/core/src for every child_process invocation of

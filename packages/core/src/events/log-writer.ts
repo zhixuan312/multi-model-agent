@@ -10,7 +10,7 @@ const INLINE_BODY_LIMIT_BYTES = 16_384;
 
 export interface LogWriterOpts {
   diagnosticsLog: boolean;                      // if true → file; else → stderr
-  logDir?: string;                              // defaults to ~/.multi-model/logs
+  logDir?: string;                              // defaults to ~/.mma/logs
 }
 
 export class LogWriter implements Subscriber {
@@ -19,7 +19,7 @@ export class LogWriter implements Subscriber {
   private requestSpillDir: string;
 
   constructor(private opts: LogWriterOpts) {
-    const baseDir = opts.logDir ?? join(homedir(), '.multi-model', 'logs');
+    const baseDir = opts.logDir ?? join(homedir(), '.mma', 'logs');
     if (opts.diagnosticsLog) this.writer = new JsonlWriter({ dir: baseDir });
     this.requestSpillDir = join(baseDir, 'requests');
   }
@@ -33,7 +33,7 @@ export class LogWriter implements Subscriber {
     // redactSecrets is a recursive walker that returns the redacted value at the same shape.
     const redactedRecord = redactSecrets(record) as Record<string, unknown>;
     try { this.writer.writeLine(redactedRecord); } catch (err) {
-      process.stderr.write(`[mmagent] log_writer_error: ${(err as Error).message}\n`);
+      process.stderr.write(`[mma] log_writer_error: ${(err as Error).message}\n`);
     }
   }
 

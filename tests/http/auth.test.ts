@@ -33,8 +33,8 @@ describe('loadToken', () => {
 
   it('expands ~ to homedir', () => {
     const filename = 'test-token-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    const tildePath = `~/.multi-model/runtime/${filename}`;
-    const resolvedPath = path.join(os.homedir(), '.multi-model/runtime', filename);
+    const tildePath = `~/.mma/runtime/${filename}`;
+    const resolvedPath = path.join(os.homedir(), '.mma/runtime', filename);
     try {
       const tok = loadToken(tildePath);
       expect(tok).toBeTruthy();
@@ -62,19 +62,19 @@ describe('loadToken', () => {
     }
   });
 
-  it('MMAGENT_AUTH_TOKEN env override wins over file contents', () => {
+  it('MMA_AUTH_TOKEN env override wins over file contents', () => {
     const f = path.join(tmp, 'token-env');
     fs.writeFileSync(f, 'file-token\n', { mode: 0o600 });
-    const prev = process.env['MMAGENT_AUTH_TOKEN'];
-    process.env['MMAGENT_AUTH_TOKEN'] = 'env-override-token';
+    const prev = process.env['MMA_AUTH_TOKEN'];
+    process.env['MMA_AUTH_TOKEN'] = 'env-override-token';
     try {
       const tok = loadToken(f);
       expect(tok).toBe('env-override-token');
     } finally {
       if (prev === undefined) {
-        delete process.env['MMAGENT_AUTH_TOKEN'];
+        delete process.env['MMA_AUTH_TOKEN'];
       } else {
-        process.env['MMAGENT_AUTH_TOKEN'] = prev;
+        process.env['MMA_AUTH_TOKEN'] = prev;
       }
     }
   });

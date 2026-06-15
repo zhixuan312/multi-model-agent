@@ -14,12 +14,12 @@ const BASELINE_PATH = resolve('tests/perf/baseline.json');
 // Budget assertions are a LANDING gate (per spec DoD criterion 5), not a
 // per-commit check. Running them during normal `npm test` compares against
 // a just-captured baseline in the same process, where resource contention
-// causes spurious failures. Gate behind MMAGENT_PERF_CHECK=1 so CI / the
+// causes spurious failures. Gate behind MMA_PERF_CHECK=1 so CI / the
 // release gate can run them explicitly; normal test runs skip.
 const SKIP =
   !existsSync(BASELINE_PATH) ||
-  process.env.MMAGENT_PERF_SUITE === '1' ||
-  process.env.MMAGENT_PERF_CHECK !== '1';
+  process.env.MMA_PERF_SUITE === '1' ||
+  process.env.MMA_PERF_CHECK !== '1';
 
 describe.skipIf(SKIP)('perf budget', () => {
   const baseline = existsSync(BASELINE_PATH)

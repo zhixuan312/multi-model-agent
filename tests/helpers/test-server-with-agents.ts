@@ -60,7 +60,7 @@ export interface TestServerWithAgents {
 export async function startTestServerWithAgents(
   overrides?: Partial<MultiModelConfig>,
 ): Promise<TestServerWithAgents> {
-  const tokenDir = mkdtempSync(join(tmpdir(), 'mmagent-handler-test-'));
+  const tokenDir = mkdtempSync(join(tmpdir(), 'mma-handler-test-'));
   const tokenFile = join(tokenDir, 'auth-token');
   writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 

@@ -1,12 +1,12 @@
 /**
- * print-token.ts — `mmagent print-token` subcommand.
+ * print-token.ts — `mma print-token` subcommand.
  *
  * Reads the bearer auth token and prints it to stdout.
- * Env override (MMAGENT_AUTH_TOKEN) wins over any file.
+ * Env override (MMA_AUTH_TOKEN) wins over any file.
  * Missing file → prints an error message to stderr and exits 1.
  *
  * Usage:
- *   mmagent print-token [--config <path>]
+ *   mma print-token [--config <path>]
  */
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -42,20 +42,20 @@ export function printToken(deps: PrintTokenDeps = {}): number {
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
 
   // Env override wins
-  const envToken = (env['MMAGENT_AUTH_TOKEN'] ?? '').trim();
+  const envToken = (env['MMA_AUTH_TOKEN'] ?? '').trim();
   if (envToken.length > 0) {
     stdout(envToken + '\n');
     return 0;
   }
 
   // Fall back to token file
-  const rawTokenFile = deps.tokenFile ?? path.join(homeDir, '.multi-model', 'auth-token');
+  const rawTokenFile = deps.tokenFile ?? path.join(homeDir, '.mma', 'auth-token');
   const tokenFile = expandHome(rawTokenFile, homeDir);
 
   try {
     const token = fs.readFileSync(tokenFile, 'utf-8').trim();
     if (token.length === 0) {
-      stderr(`mmagent: token file is empty: ${tokenFile}\n`);
+      stderr(`mma: token file is empty: ${tokenFile}\n`);
       return 1;
     }
     stdout(token + '\n');
@@ -64,12 +64,12 @@ export function printToken(deps: PrintTokenDeps = {}): number {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
       stderr(
-        `mmagent: token file not found: ${tokenFile}\n` +
-        `Run 'mmagent serve' once to generate a token, or set MMAGENT_AUTH_TOKEN.\n`,
+        `mma: token file not found: ${tokenFile}\n` +
+        `Run 'mma serve' once to generate a token, or set MMA_AUTH_TOKEN.\n`,
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      stderr(`mmagent: cannot read token file ${tokenFile}: ${msg}\n`);
+      stderr(`mma: cannot read token file ${tokenFile}: ${msg}\n`);
     }
     return 1;
   }

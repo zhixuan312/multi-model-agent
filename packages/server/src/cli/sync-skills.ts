@@ -1,5 +1,5 @@
 /**
- * sync-skills.ts — `mmagent sync-skills` subcommand.
+ * sync-skills.ts — `mma sync-skills` subcommand.
  *
  * Single command for skill management: idempotent upsert of every shipped
  * skill into every detected (or specified) client. Compares canonical
@@ -12,13 +12,13 @@
  * Replaces install-skill + update-skills as of 4.0.2.
  *
  * Usage:
- *   mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]
+ *   mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]
  *                       [--silent] [--best-effort] [--if-exists]
  *
  * Exit codes:
  *   0 — success (or no clients detected)
  *   1 — one or more skills failed to write/remove
- *   2 — manifest was written by a newer mmagent (FutureManifestError)
+ *   2 — manifest was written by a newer mma (FutureManifestError)
  *   3 — explicit --target was not a known client
  */
 import * as os from 'node:os';
@@ -123,7 +123,7 @@ function versionFromContent(content: string): string {
 }
 
 function manifestPresent(homeDir: string): boolean {
-  return fs.existsSync(path.join(homeDir, '.multi-model', 'install-manifest.json'));
+  return fs.existsSync(path.join(homeDir, '.mma', 'install-manifest.json'));
 }
 
 function readInstalledVersion(skillName: string, target: Client, homeDir: string): string | null {
@@ -159,7 +159,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
 
   let authToken: string | undefined;
   try {
-    const tokenPath = path.join(homeDir, '.multi-model', 'auth-token');
+    const tokenPath = path.join(homeDir, '.mma', 'auth-token');
     if (fs.existsSync(tokenPath)) {
       authToken = fs.readFileSync(tokenPath, 'utf-8').trim();
     }
@@ -172,16 +172,16 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     targets = resolveTargets(parsed.targets, parsed.allTargets, homeDir);
   } catch (err) {
     if (err instanceof UnknownTargetError) {
-      stderr(`mmagent sync-skills: ${err.message}\n`);
+      stderr(`mma sync-skills: ${err.message}\n`);
       return bestEffort ? 0 : ExitCode.ERR_UNKNOWN_TARGET;
     }
     throw err;
   }
 
   // Honor the disable sentinel: drop any client the user turned off via
-  // `mmagent disable`. This is what makes disable sticky — the npm postinstall
+  // `mma disable`. This is what makes disable sticky — the npm postinstall
   // hook shells out to this command, so without the filter every upgrade would
-  // silently reinstall skills the user deliberately removed. `mmagent enable`
+  // silently reinstall skills the user deliberately removed. `mma enable`
   // clears the sentinel before it calls back in here.
   const disabled = disabledTargets(homeDir);
   if (disabled.length > 0) {
@@ -192,7 +192,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       } else {
         log(
           `MMA skills are disabled for ${disabled.join(', ')}. ` +
-          `Run \`mmagent enable\` to restore. Skipping sync.\n`,
+          `Run \`mma enable\` to restore. Skipping sync.\n`,
         );
       }
       return ExitCode.SUCCESS;
@@ -214,7 +214,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     manifestEntries = listEntries(homeDir);
   } catch (err) {
     if (err instanceof FutureManifestError) {
-      stderr(`mmagent sync-skills: ${err.message}\n`);
+      stderr(`mma sync-skills: ${err.message}\n`);
       return bestEffort ? 0 : ExitCode.ERR_FUTURE_MANIFEST;
     }
     if (bestEffort) return 0;

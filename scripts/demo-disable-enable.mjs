@@ -1,4 +1,4 @@
-// Manual end-to-end demo for `mmagent disable` / `enable`.
+// Manual end-to-end demo for `mma disable` / `enable`.
 // Drives the REAL built code against a throwaway home dir — never touches ~/.claude.
 //   node scripts/demo-disable-enable.mjs
 import { mkdtempSync, mkdirSync, existsSync, readdirSync, rmSync } from 'node:fs';
@@ -21,7 +21,7 @@ mkdirSync(path.join(HOME, '.claude'), { recursive: true });   // so detectClient
 mkdirSync(path.join(HOME, '.codex'), { recursive: true });
 
 const claudeSkills = path.join(HOME, '.claude', 'skills');
-const sentinel = path.join(HOME, '.multi-model', 'skills-disabled.json');
+const sentinel = path.join(HOME, '.mma', 'skills-disabled.json');
 const count = () => (existsSync(claudeSkills) ? readdirSync(claudeSkills).length : 0);
 const step = (n, msg) => console.log(`\n── ${n}. ${msg}`);
 

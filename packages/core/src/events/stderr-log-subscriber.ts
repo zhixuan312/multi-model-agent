@@ -1,8 +1,8 @@
 // packages/core/src/events/stderr-log-subscriber.ts
 //
 // EnvelopeBus subscriber that streams every plain log entry to the daemon's
-// stderr in `[mmagent] event=... ts=... key=val` snake_case format. Always-on
-// for `mmagent serve` — there is no quiet mode and no `--verbose` flag.
+// stderr in `[mma] event=... ts=... key=val` snake_case format. Always-on
+// for `mma serve` — there is no quiet mode and no `--verbose` flag.
 // Replaces the 4.7.1 VerboseLogChannel after the 4.7.2 envelope-bus rewrite
 // dropped it; `verbose` as a separate concept is gone (4.7.3+).
 //
@@ -26,7 +26,7 @@ export class StderrLogSubscriber implements Subscriber {
 }
 
 /**
- * Format a PlainLogEntry as a single `[mmagent] event=... ts=... key=val` line.
+ * Format a PlainLogEntry as a single `[mma] event=... ts=... key=val` line.
  * Primitive values are emitted directly (snake-cased, quoted only when they
  * contain whitespace or quotes). One line per event — operators can grep this
  * stream the same way they'd grep the JSONL log.
@@ -45,5 +45,5 @@ export function formatStderrLine(entry: PlainLogEntry): string {
       parts.push(`${snake}=${v}`);
     }
   }
-  return `[mmagent] ${parts.join(' ')}`;
+  return `[mma] ${parts.join(' ')}`;
 }

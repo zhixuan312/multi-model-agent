@@ -3,7 +3,7 @@ export type ConsentDecision =
   | { enabled: false; source: 'env' | 'config' | 'config_unreadable' | 'env_invalid' | 'default' };
 
 export interface ConsentInputs {
-  env:    string | undefined;     // raw value of MMAGENT_TELEMETRY (undefined if unset, '' if set-empty)
+  env:    string | undefined;     // raw value of MMA_TELEMETRY (undefined if unset, '' if set-empty)
   config: { enabled: boolean } | { kind: 'unreadable' } | undefined;
 }
 
@@ -17,8 +17,8 @@ export function decideConsent({ env, config }: ConsentInputs): ConsentDecision {
   //                         "unset or empty string → fall through")
   //   - recognized value  → decide here
   //   - unrecognized      → fail-closed disabled
-  // The CLI `mmagent telemetry status` (Phase 7) surfaces the distinction by
-  // also reading the env directly and reporting "MMAGENT_TELEMETRY is set to ''
+  // The CLI `mma telemetry status` (Phase 7) surfaces the distinction by
+  // also reading the env directly and reporting "MMA_TELEMETRY is set to ''
   // (no effect — falls through to config)" when applicable, so users don't
   // mistake the fall-through for a silent-disable.
   if (env !== undefined) {

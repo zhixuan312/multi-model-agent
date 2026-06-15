@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.zhixuan92.mmagent</string>
+  <string>com.zhixuan92.mma</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/mmagent</string>
+    <string>/usr/local/bin/mma</string>
     <string>serve</string>
     <string>--http</string>
   </array>

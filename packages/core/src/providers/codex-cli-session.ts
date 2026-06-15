@@ -150,7 +150,7 @@ export class CodexCliSession implements Session {
         // keeping the orphan-leak fix on Linux/Mac.
         detached: process.platform !== 'win32',
         // windowsHide suppresses the console window Windows opens per spawned
-        // console binary (only observable when MMAGENT_CODEX_BIN points at
+        // console binary (only observable when MMA_CODEX_BIN points at
         // codex.exe directly). No-op on POSIX.
         windowsHide: true,
       });

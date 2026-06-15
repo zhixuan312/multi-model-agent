@@ -26,14 +26,14 @@ which terminal state you're in:
 ```bash
 DELAY=1
 START=$(date +%s)
-TIMEOUT_S=${MMAGENT_POLL_TIMEOUT_S:-1800}
-BODY_FILE=$(mktemp -t mmagent-poll.XXXXXX)
+TIMEOUT_S=${MMA_POLL_TIMEOUT_S:-1800}
+BODY_FILE=$(mktemp -t mma-poll.XXXXXX)
 trap 'rm -f "$BODY_FILE"' EXIT
 
 while true; do
   NOW=$(date +%s)
   if [ $((NOW - START)) -ge "$TIMEOUT_S" ]; then
-    echo "mmagent: poll timed out after ${TIMEOUT_S}s" >&2
+    echo "mma: poll timed out after ${TIMEOUT_S}s" >&2
     exit 124
   fi
 
@@ -52,16 +52,16 @@ while true; do
       exit 0
       ;;
     "")
-      echo "mmagent: unreachable (curl failed)" >&2; exit 1 ;;
+      echo "mma: unreachable (curl failed)" >&2; exit 1 ;;
     *)
-      echo "mmagent: HTTP $STATUS"; cat "$BODY_FILE" >&2; exit 1 ;;
+      echo "mma: HTTP $STATUS"; cat "$BODY_FILE" >&2; exit 1 ;;
   esac
 done
 ```
 
 Start at 1 s, double each iteration, cap at 30 s. The 1800-second client-side
 timeout is a safety cap; most tasks complete in under 60 s. Discover `$PORT`
-at runtime with `mmagent info --json | jq -r .port` (default: 7337).
+at runtime with `mma info --json | jq -r .port` (default: 7337).
 
 ### Caller-side tool-timeout note
 
@@ -77,7 +77,7 @@ When invoking this poll loop, pick one:
   max the tool allows, or bump the tool's allowed ceiling via harness
   settings).
 - **Alternative — cap the helper to match the tool's limit** by exporting
-  `MMAGENT_POLL_TIMEOUT_S=600` before running the loop. The helper will then
+  `MMA_POLL_TIMEOUT_S=600` before running the loop. The helper will then
   exit 124 cleanly at 10 minutes and the caller can decide whether to
   re-poll or surface the timeout.
 

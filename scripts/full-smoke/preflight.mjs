@@ -45,7 +45,7 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   const installId = readFileSync(INSTALL_ID_FILE, 'utf8').trim();
 
   // Diagnostics gate: today's JSONL must exist (proves diagnostics.log is on).
-  const diagFile = join(DIAG_DIR, `mmagent-${todayUtc()}.jsonl`);
+  const diagFile = join(DIAG_DIR, `mma-${todayUtc()}.jsonl`);
   if (!existsSync(diagFile)) throw new AbortError('diagnostics', `no ${diagFile}`,
     'set diagnostics.log: true in config and restart the server');
 

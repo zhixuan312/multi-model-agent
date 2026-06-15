@@ -5,7 +5,7 @@
 | Status | Code | Action |
 |---|---|---|
 | `400` | `invalid_request` | Fix the request body or query params |
-| `401` | `unauthorized` | Verify token matches `~/.multi-model/auth-token` |
+| `401` | `unauthorized` | Verify token matches `~/.mma/auth-token` |
 | `403` | `forbidden` | `cwd` query param missing or out of scope |
 | `404` | `not_found` | Wrong `taskId` or resource does not exist |
 | `409` | `invalid_task_state` / `pinned` | Task in wrong state; check current state first |
@@ -17,7 +17,7 @@
 ### Network failures
 
 Retry up to 3 times with exponential backoff (1 s → 2 s → 4 s).
-If the server is unreachable, check that `mmagent serve` is running:
+If the server is unreachable, check that `mma serve` is running:
 ```bash
 curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — see spec C13)
 ```
@@ -25,7 +25,7 @@ curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — 
 ### Auth errors (401)
 
 ```bash
-export MMAGENT_AUTH_TOKEN=$(mmagent print-token)
+export MMA_AUTH_TOKEN=$(mma print-token)
 ```
 
-The token persists across restarts at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
+The token persists across restarts at `~/.mma/auth-token`. It only changes if the file is manually deleted.

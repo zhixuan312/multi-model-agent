@@ -1,7 +1,7 @@
 /**
  * tests/cli/telemetry.test.ts
  *
- * Tests for Task 7.1 — `mmagent telemetry` subcommands.
+ * Tests for Task 7.1 — `mma telemetry` subcommands.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
@@ -23,7 +23,7 @@ function captureOutput() {
 }
 
 function setupTempHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'mmagent-telemetry-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mma-telemetry-'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -40,13 +40,13 @@ function readConfig(homeDir: string): unknown {
 
 // ─── status ──────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry status', () => {
+describe('mma telemetry status', () => {
   let savedEnv: string | undefined;
 
-  beforeEach(() => { savedEnv = process.env.MMAGENT_TELEMETRY; });
+  beforeEach(() => { savedEnv = process.env.MMA_TELEMETRY; });
   afterEach(() => {
-    if (savedEnv === undefined) delete process.env.MMAGENT_TELEMETRY;
-    else process.env.MMAGENT_TELEMETRY = savedEnv;
+    if (savedEnv === undefined) delete process.env.MMA_TELEMETRY;
+    else process.env.MMA_TELEMETRY = savedEnv;
   });
 
   it('prints disabled + source=default when no config and no env', async () => {
@@ -108,12 +108,12 @@ describe('mmagent telemetry status', () => {
     }
   });
 
-  it('prints enabled + source=env when MMAGENT_TELEMETRY=1', async () => {
+  it('prints enabled + source=env when MMA_TELEMETRY=1', async () => {
     const tmp = setupTempHome();
     try {
       // config says disabled but env wins
       writeConfig(tmp, { telemetry: { enabled: false } });
-      process.env.MMAGENT_TELEMETRY = '1';
+      process.env.MMA_TELEMETRY = '1';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',
@@ -130,11 +130,11 @@ describe('mmagent telemetry status', () => {
     }
   });
 
-  it('surfaces MMAGENT_TELEMETRY="" as "set to \'\' (no effect)"', async () => {
+  it('surfaces MMA_TELEMETRY="" as "set to \'\' (no effect)"', async () => {
     const tmp = setupTempHome();
     try {
       writeConfig(tmp, { telemetry: { enabled: true } });
-      process.env.MMAGENT_TELEMETRY = '';
+      process.env.MMA_TELEMETRY = '';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',
@@ -150,10 +150,10 @@ describe('mmagent telemetry status', () => {
     }
   });
 
-  it('surfaces MMAGENT_TELEMETRY non-empty value in status output', async () => {
+  it('surfaces MMA_TELEMETRY non-empty value in status output', async () => {
     const tmp = setupTempHome();
     try {
-      process.env.MMAGENT_TELEMETRY = '0';
+      process.env.MMA_TELEMETRY = '0';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',
@@ -192,7 +192,7 @@ describe('mmagent telemetry status', () => {
 
 // ─── enable ───────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry enable', () => {
+describe('mma telemetry enable', () => {
   it('writes config.telemetry.enabled=true when no config exists', async () => {
     const tmp = setupTempHome();
     try {
@@ -254,7 +254,7 @@ describe('mmagent telemetry enable', () => {
 
 // ─── disable ──────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry disable', () => {
+describe('mma telemetry disable', () => {
   it('writes config.telemetry.enabled=false + bumps generation + deletes queue', async () => {
     const tmp = setupTempHome();
     try {
@@ -327,7 +327,7 @@ describe('mmagent telemetry disable', () => {
 
 // ─── reset-id ─────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry reset-id', () => {
+describe('mma telemetry reset-id', () => {
   it('revokeIdentity (bumps generation + deletes queue) + deletes install-id', async () => {
     const tmp = setupTempHome();
     try {
@@ -381,7 +381,7 @@ describe('mmagent telemetry reset-id', () => {
 
 // ─── dump-queue ───────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry dump-queue', () => {
+describe('mma telemetry dump-queue', () => {
   it('prints queue records as JSON to stdout', async () => {
     const tmp = setupTempHome();
     try {
@@ -390,7 +390,7 @@ describe('mmagent telemetry dump-queue', () => {
         schemaVersion: 1,
         install: {
           installId: 'test-id',
-          mmagentVersion: '3.6.0',
+          mmaVersion: '3.6.0',
           os: 'darwin',
           nodeMajor: '22',
           language: 'en',

@@ -1,7 +1,7 @@
 /**
- * logs.ts — `mmagent logs` subcommand.
+ * logs.ts — `mma logs` subcommand.
  *
- * Tails the diagnostic log file for today (mmagent-YYYY-MM-DD.jsonl). Supports
+ * Tails the diagnostic log file for today (mma-YYYY-MM-DD.jsonl). Supports
  * --follow for tail-F semantics and --batch=<id> to filter to a single batch.
  *
  * Exit codes:
@@ -31,8 +31,8 @@ function todayUtc(): string {
 }
 
 function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
-  const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.multi-model', 'logs');
-  return path.join(dir, `mmagent-${todayUtc()}.jsonl`);
+  const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.mma', 'logs');
+  return path.join(dir, `mma-${todayUtc()}.jsonl`);
 }
 
 function matchesBatch(line: string, batchId: string): boolean {
@@ -48,14 +48,14 @@ export async function runLogs(deps: LogsDeps): Promise<number> {
   const waitForLogMs = deps.waitForLogMs ?? 30_000;
 
   if (!deps.config.diagnostics?.log) {
-    stderr(`mmagent logs: diagnostics.log is false in config; set it to true to capture new events.\n`);
+    stderr(`mma logs: diagnostics.log is false in config; set it to true to capture new events.\n`);
   }
 
   const logPath = resolveLogPath(deps.config, homeDir);
 
   if (!fs.existsSync(logPath)) {
     if (!follow) {
-      stderr(`mmagent logs: no log file at ${logPath}. Start the server with diagnostics.log: true and try again.\n`);
+      stderr(`mma logs: no log file at ${logPath}. Start the server with diagnostics.log: true and try again.\n`);
       return 0;
     }
     const deadline = Date.now() + waitForLogMs;
@@ -63,7 +63,7 @@ export async function runLogs(deps: LogsDeps): Promise<number> {
       await new Promise((r) => setTimeout(r, pollMs));
     }
     if (!fs.existsSync(logPath)) {
-      stderr(`mmagent logs: no log file appeared within ${Math.floor(waitForLogMs / 1000)}s at ${logPath}.\n`);
+      stderr(`mma logs: no log file appeared within ${Math.floor(waitForLogMs / 1000)}s at ${logPath}.\n`);
       return 0;
     }
   }
@@ -79,7 +79,7 @@ export async function runLogs(deps: LogsDeps): Promise<number> {
     }
     offset = existing.length;
   } catch (err) {
-    stderr(`mmagent logs: cannot read ${logPath}: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr(`mma logs: cannot read ${logPath}: ${err instanceof Error ? err.message : String(err)}\n`);
     return 0;
   }
 

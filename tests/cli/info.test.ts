@@ -1,5 +1,5 @@
 /**
- * tests/cli/info.test.ts — `mmagent info` subcommand.
+ * tests/cli/info.test.ts — `mma info` subcommand.
  *
  * Uses injected fetch + temp dirs; never hits a real server.
  */
@@ -36,13 +36,13 @@ function failingFetch(msg = 'ECONNREFUSED'): typeof fetch {
 }
 
 function writeToken(contents = 'aaaaaaaa-bbbbbbbb-cccccccc-dddddddd\n'): { tokenFile: string; dir: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'mmagent-info-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mma-info-test-'));
   const tokenFile = join(dir, 'auth-token');
   writeFileSync(tokenFile, contents, { mode: 0o600 });
   return { tokenFile, dir };
 }
 
-describe('mmagent info (daemon not running)', () => {
+describe('mma info (daemon not running)', () => {
   it('JSON output includes required fields with NotApplicable sentinels', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();
@@ -102,7 +102,7 @@ describe('mmagent info (daemon not running)', () => {
       cliVersion: '3.1.0',
       bind: '127.0.0.1',
       port: 17337,
-      tokenFile: '/tmp/mmagent-info-definitely-not-here',
+      tokenFile: '/tmp/mma-info-definitely-not-here',
       json: true,
       stdout: cap.stdoutFn,
       stderr: cap.stderrFn,
@@ -113,7 +113,7 @@ describe('mmagent info (daemon not running)', () => {
   });
 });
 
-describe('mmagent info (daemon running)', () => {
+describe('mma info (daemon running)', () => {
   it('detects daemon running from /health status=ok', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();

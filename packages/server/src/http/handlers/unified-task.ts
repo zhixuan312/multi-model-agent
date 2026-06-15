@@ -388,13 +388,13 @@ async function prepareResearchContext(
     const sourcesUsed = summarizeSourcesUsed(pack);
 
     process.stderr.write(
-      `[mmagent] event=research_evidence_ready ts=${new Date().toISOString()} task=${taskId} sources=${pack.sources.length} failed=${pack.failedAttempts.length}\n`,
+      `[mma] event=research_evidence_ready ts=${new Date().toISOString()} task=${taskId} sources=${pack.sources.length} failed=${pack.failedAttempts.length}\n`,
     );
 
     return { evidenceMarkdown, sourcesUsed };
   } catch (err) {
     process.stderr.write(
-      `[mmagent] event=research_preprocess_failed ts=${new Date().toISOString()} task=${taskId} error="${((err instanceof Error ? err.message : String(err))).replace(/"/g, '\\"')}"\n`,
+      `[mma] event=research_preprocess_failed ts=${new Date().toISOString()} task=${taskId} error="${((err instanceof Error ? err.message : String(err))).replace(/"/g, '\\"')}"\n`,
     );
     return null;
   } finally {
@@ -487,7 +487,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
       void (async () => {
         try {
           process.stderr.write(
-            `[mmagent] event=executor_started ts=${new Date().toISOString()} task=${taskId} route=${input.type}\n`,
+            `[mma] event=executor_started ts=${new Date().toISOString()} task=${taskId} route=${input.type}\n`,
           );
           const implementerGoal = buildGoalCondition(input.type, 'implementer', skills.implement);
           const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
@@ -601,7 +601,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             deps.bus.emitEnvelopeSnapshot(envelope, 'seal');
           } catch (telErr) {
             process.stderr.write(
-              `[mmagent] event=telemetry_emit_error ts=${new Date().toISOString()} task=${taskId} err="${(telErr instanceof Error ? telErr.message : String(telErr)).replace(/"/g, '\\"')}"\n`,
+              `[mma] event=telemetry_emit_error ts=${new Date().toISOString()} task=${taskId} err="${(telErr instanceof Error ? telErr.message : String(telErr)).replace(/"/g, '\\"')}"\n`,
             );
           }
 
@@ -609,13 +609,13 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             deps.taskRegistry.fail(taskId, resultObj);
             deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: 'pipeline_failed', error_message: 'Pipeline completed with failed status' } });
             process.stderr.write(
-              `[mmagent] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
+              `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
             );
           } else {
             deps.taskRegistry.complete(taskId, resultObj);
             deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs } });
             process.stderr.write(
-              `[mmagent] event=task_completed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
+              `[mma] event=task_completed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
             );
           }
         } catch (err) {
@@ -630,7 +630,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const durationMs = Date.now() - startedAtMs;
           deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
           process.stderr.write(
-            `[mmagent] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
+            `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
           );
         }
       })();

@@ -13,7 +13,7 @@ export function readGeneration(dir: string): number {
 
 /**
  * Atomic increment. Uses proper-lockfile (already a dep for queue.ts) so two
- * simultaneous `mmagent telemetry disable` invocations cannot both read N and
+ * simultaneous `mma telemetry disable` invocations cannot both read N and
  * both write N+1 (which would silently lose a generation bump and leave a
  * revoked identity's events accepted by the backend).
  */

@@ -15,17 +15,17 @@ function expandTilde(p: string): string {
 /**
  * Load the auth token for the HTTP server.
  *
- * Env var `MMAGENT_AUTH_TOKEN` wins over any file (and bypasses file validation).
+ * Env var `MMA_AUTH_TOKEN` wins over any file (and bypasses file validation).
  * File contents must be exactly `<token>\n` — no CRLF, no extra whitespace, and
  * the token body must match `[A-Za-z0-9_\-+=/.]+`. Strict validation up front
  * prevents hard-to-diagnose bearer-token mismatches later.
  *
  * A leading `~/` in `tokenFile` is expanded to `os.homedir()` so configs using
- * the common `~/.multi-model/auth-token` pattern work without the caller
+ * the common `~/.mma/auth-token` pattern work without the caller
  * having to resolve it first.
  */
 export function loadAuthToken(opts: { tokenFile: string }): string {
-  const envToken = process.env['MMAGENT_AUTH_TOKEN'];
+  const envToken = process.env['MMA_AUTH_TOKEN'];
   if (envToken && envToken.length > 0) {
     return envToken;
   }

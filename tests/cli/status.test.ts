@@ -1,7 +1,7 @@
 /**
  * tests/cli/status.test.ts
  *
- * Tests for Task 9.3 — `mmagent status` subcommand.
+ * Tests for Task 9.3 — `mma status` subcommand.
  * Uses injected fetch + temp dirs; never hits a real server.
  */
 import { describe, it, expect } from 'vitest';
@@ -189,7 +189,7 @@ describe('fetchStatus: error handling', () => {
 
 describe('runStatus: token loading', () => {
   it('reads token from file and calls server', async () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'mmagent-status-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'mma-status-'));
     try {
       const tokenFile = join(tmpDir, 'auth-token');
       writeFileSync(tokenFile, 'file-token', { mode: 0o600 });
@@ -210,8 +210,8 @@ describe('runStatus: token loading', () => {
     }
   });
 
-  it('uses MMAGENT_AUTH_TOKEN env over token file', async () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'mmagent-status-env-'));
+  it('uses MMA_AUTH_TOKEN env over token file', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'mma-status-env-'));
     try {
       // File contains wrong token but env should win — mock accepts any token
       const tokenFile = join(tmpDir, 'auth-token');
@@ -222,7 +222,7 @@ describe('runStatus: token loading', () => {
         serverUrl: 'http://127.0.0.1:7337',
         tokenFile,
         fetch: makeMockFetch(200, SAMPLE_STATUS),
-        env: { MMAGENT_AUTH_TOKEN: 'env-token' },
+        env: { MMA_AUTH_TOKEN: 'env-token' },
         stdout: stdoutFn,
         stderr: stderrFn,
       });
@@ -234,7 +234,7 @@ describe('runStatus: token loading', () => {
   });
 
   it('exits 1 when token file is missing', async () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), 'mmagent-nohome-'));
+    const fakeHome = mkdtempSync(join(tmpdir(), 'mma-nohome-'));
     try {
       const { stdoutFn, stderrFn, stdout, stderr } = captureOutput();
       const code = await runStatus({

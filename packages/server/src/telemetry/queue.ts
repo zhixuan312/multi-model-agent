@@ -23,7 +23,7 @@ function resetCapWarning(): void {
 export interface QueueRecord {
   schemaVersion: number;
   installId: string;
-  mmagentVersion: string;
+  mmaVersion: string;
   os: 'darwin' | 'linux' | 'win32' | 'other';
   nodeMajor: number;
   generation: number;

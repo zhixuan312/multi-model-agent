@@ -120,7 +120,7 @@ describe('disable', () => {
     expect(state!.targets.sort()).toEqual(['claude-code', 'codex']);
 
     expect(out.stdoutLines.join('')).toMatch(/Disabled MMA skills/);
-    expect(out.stdoutLines.join('')).toMatch(/mmagent enable/);
+    expect(out.stdoutLines.join('')).toMatch(/mma enable/);
   });
 
   it('is sticky: a subsequent sync-skills (postinstall) does not reinstall', async () => {

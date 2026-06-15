@@ -94,10 +94,10 @@ async function registerControlHandlers(
     let recorderForBus: Recorder | null = null;
     try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
     const decideConsentForUploader = () => {
-      const envVal = process.env.MMAGENT_TELEMETRY;
+      const envVal = process.env.MMA_TELEMETRY;
       let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
       try {
-        const cfgPath = join(homedir(), '.multi-model', 'config.json');
+        const cfgPath = join(homedir(), '.mma', 'config.json');
         const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
         if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
           configState = { enabled: cfg.telemetry.enabled };
@@ -129,7 +129,7 @@ async function registerControlHandlers(
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
     router.register('POST', '/context-blocks', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
     });
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   }
@@ -197,10 +197,10 @@ export async function startServer(
       let recorderForUnified: Recorder | null = null;
       try { recorderForUnified = getRecorder(); } catch { /* not initialized */ }
       const decideConsentForUnified = () => {
-        const envVal = process.env.MMAGENT_TELEMETRY;
+        const envVal = process.env.MMA_TELEMETRY;
         let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
         try {
-          const cfgPath = join(homedir(), '.multi-model', 'config.json');
+          const cfgPath = join(homedir(), '.mma', 'config.json');
           const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
           if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
             configState = { enabled: cfg.telemetry.enabled };
@@ -229,10 +229,10 @@ export async function startServer(
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
     } else {
       router.register('POST', '/task', (_req, res) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
       router.register('GET', '/task/:taskId', (_req, res) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
     }
   }
@@ -257,7 +257,7 @@ export async function startServer(
   }));
 
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
-  if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {
+  if (process.env.MMA_TEST_INTROSPECTION === '1') {
     router.register('GET', '/__routes', (_req, res) => {
       sendJson(res, 200, router.listRoutes().map((route) => ({
         method: route.method.toUpperCase(),
