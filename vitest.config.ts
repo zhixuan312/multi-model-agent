@@ -23,14 +23,6 @@ export default defineConfig({
         replacement: path.resolve(__dirname, 'packages/core/src/index.ts'),
       },
       {
-        find: /^@zhixuan92\/multi-model-agent-core\/run-tasks$/,
-        replacement: path.resolve(__dirname, 'packages/core/src/run-tasks/index.ts'),
-      },
-      {
-        find: /^@zhixuan92\/multi-model-agent-core\/run-tasks\/verify-stage\.js$/,
-        replacement: path.resolve(__dirname, 'packages/core/src/lifecycle/handlers/verify-stage.ts'),
-      },
-      {
         find: /^@zhixuan92\/multi-model-agent-core\/research$/,
         replacement: path.resolve(__dirname, 'packages/core/src/research/index.ts'),
       },

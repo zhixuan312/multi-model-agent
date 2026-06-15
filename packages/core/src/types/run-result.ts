@@ -3,6 +3,8 @@
 // `RunResult` — the wire envelope shape (unified handler response).
 // `RuntimeRunResult` — the internal fat shape for test mock providers.
 
+import type { FindingsOutcome } from './enums.js';
+
 export type RunResult = {
   completed: boolean;
   message: string;
@@ -11,7 +13,7 @@ export type RunResult = {
   filesChanged: string[];
   commitSha: string | null;
   blockId: string | null;
-  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcome?: FindingsOutcome;
   findingsOutcomeReason?: string | null;
   outcomeInferred?: boolean;
   outcomeMalformed?: boolean;

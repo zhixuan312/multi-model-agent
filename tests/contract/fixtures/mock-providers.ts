@@ -418,7 +418,7 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
         workerSelfAssessment: 'failed',
         wasPromoted: false,
       },
-      structuredError: { code: opts.errorCode ?? 'runner_crash', message: opts.errorCode ?? statusFinal },
+      structuredError: { code: opts.errorCode ?? 'sdk_execution_error', message: opts.errorCode ?? statusFinal },
     });
     return {
       name: 'mock-fail',

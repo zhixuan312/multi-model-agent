@@ -3,7 +3,7 @@
   "version": "5.4.2",
   "type": "module",
   "license": "MIT",
-  "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
+  "description": "Core library for multi-model-agent: provider runners (Claude, Codex), routing logic, config schema, and sandbox primitives.",
   "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
   "keywords": [
     "mcp",
@@ -111,15 +111,12 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.145",
-    "@mozilla/readability": "^0.6.0",
     "cross-spawn": "^7.0.6",
     "fast-xml-parser": "^5.7.2",
-    "jsdom": "^29.1.1",
     "undici": "^8.2.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/cross-spawn": "^6.0.6",
-    "@types/jsdom": "^28.0.1"
+    "@types/cross-spawn": "^6.0.6"
   }
 }

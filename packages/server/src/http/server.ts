@@ -37,6 +37,12 @@ function readServerVersion(): string {
 
 export const SERVER_VERSION = readServerVersion();
 
+function extractMultiModelConfig(config: ServerConfig): HandlerDeps['config'] | undefined {
+  return (config as unknown as { agents?: unknown }).agents
+    ? (config as unknown as HandlerDeps['config'])
+    : undefined;
+}
+
 export interface RunningServer {
   port: number;
   /** The resolved address the server is bound to. Used by CLI to log the actual listen address. */
@@ -81,46 +87,9 @@ async function registerControlHandlers(
 ): Promise<void> {
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
 
-  const multiModelConfig = (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as HandlerDeps['config'])
-    : undefined;
+  const multiModelConfig = extractMultiModelConfig(config);
 
   if (multiModelConfig) {
-    const bus = new EnvelopeBus();
-    const logWriter = new LogWriter({ diagnosticsLog: multiModelConfig.diagnostics?.log ?? false, logDir: multiModelConfig.diagnostics?.logDir });
-    bus.subscribe(logWriter);
-    bus.subscribe(new StderrLogSubscriber());
-
-    let recorderForBus: Recorder | null = null;
-    try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
-    const decideConsentForUploader = () => {
-      const envVal = process.env.MMA_TELEMETRY;
-      let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
-      try {
-        const cfgPath = join(homedir(), '.mma', 'config.json');
-        const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-        if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
-          configState = { enabled: cfg.telemetry.enabled };
-        }
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-          configState = { kind: 'unreadable' };
-        }
-      }
-      return decideConsent({ env: envVal, config: configState });
-    };
-    const uploader = new TelemetryUploader({
-      recorder: recorderForBus,
-      consent: { decide: decideConsentForUploader },
-      buildOpts: (env: any) => ({
-        toolMode: 'full',                     // default
-        implementerModel: env.stages[0]?.model ?? env.mainModel,
-        implementerTier: env.stages[0]?.tier ?? env.agentType,
-        mainModelFamily: env.mainModel ? normalizeModel(env.mainModel).family : 'other',
-      }),
-    });
-    bus.subscribe(uploader);
-
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
       projectRegistry,
       maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
@@ -180,9 +149,7 @@ export async function startServer(
 
   // Register unified task handler (POST /task, GET /task/:taskId)
   {
-    const multiModelConfig = (config as unknown as { agents?: unknown }).agents
-      ? (config as unknown as HandlerDeps['config'])
-      : undefined;
+    const multiModelConfig = extractMultiModelConfig(config);
 
     if (multiModelConfig) {
       const bus = new EnvelopeBus();
@@ -239,9 +206,7 @@ export async function startServer(
 
   // POST /configure-provider — validate (dryRun=true) or validate+apply (dryRun=false)
   {
-    const multiModelConfigForProvider = (config as unknown as { agents?: unknown }).agents
-      ? (config as unknown as HandlerDeps['config'])
-      : undefined;
+    const multiModelConfigForProvider = extractMultiModelConfig(config);
     const { buildConfigureProviderHandler } = await import('./handlers/introspection/configure-provider.js');
     router.register('POST', '/configure-provider', buildConfigureProviderHandler(multiModelConfigForProvider, configPath));
   }

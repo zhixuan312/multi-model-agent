@@ -47,7 +47,7 @@ Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
   5.1  Output parsing     core/src/reporting/structured-report.ts
   5.2  Status derivation  core/src/reporting/terminal-status-deriver.ts
   5.3  Headline           core/src/reporting/compose-{terminal,running}-headline.ts,
-                          not-applicable.ts, findings-outcome.ts
+                          not-applicable.ts
   5.4  Telemetry emit     core/src/events/{envelope-bus,task-envelope,wire-schema,
                           to-wire-record,consent-rules,telemetry-uploader}.ts
   5.5  Persistence        core/src/unified/task-registry.ts,
@@ -69,10 +69,10 @@ Layer L.4  Pipeline         core/src/unified/two-phase-pipeline.ts      (unified
 Layer L.5  Bespoke output   core/src/reporting/parse-<type>-report.ts +
                             compose-<type>-headline.ts                   (types w/ custom output)
 Layer L.6  Skill markdown   server/src/skills/mma-<type>/SKILL.md        (caller-facing prompt)
-Layer L.7  Installer hook   server/src/install/{claude-code,cursor,codex-cli,
-                            gemini-cli}.ts via manifest.ts                (per-client writer)
+Layer L.7  Installer hook   server/src/skill-install/skill-installers/{claude-code,
+                            cursor,codex-cli,gemini-cli}.ts via manifest.ts  (per-client writer)
 Layer L.8  Contract goldens tests/contract/goldens/endpoints/<type>-<stage>.json +
-                            routes.json + observability.json
+                            routes.json + observability/event-manifest.json
 ```
 
 Per-type fill of the stack:
@@ -89,6 +89,7 @@ Per-type fill of the stack:
 | `journal_recall` | none | no | read-only | mma-journal-recall |
 | `journal_record` | none | no | cwd-only | mma-journal-record |
 | `retry_tasks` | reviewed | no | cwd-only | mma-retry |
+| `main` | none | no | read-only | (orchestrator) |
 
 Two invariants the layered stack enforces:
 
@@ -111,7 +112,7 @@ C.2  Bounded execution           core/src/bounded-execution/{activity-tracker,
 C.3  Provider abstraction        core/src/providers/provider-factory.ts,
                                 providers/{claude,codex}.ts,
                                 providers/{agent-resolver,runner-types,
-                                assemble-run-result}.ts,
+                                normalize-claude,codex-cli-session}.ts,
                                 core/src/model-profiles.json
 C.4  Research substrate          core/src/research/{orchestrator,query-plan,
                                 evidence-pack,web-search,user-agent}.ts +
@@ -125,8 +126,9 @@ C.6  State stores (in-process)   core/src/unified/task-registry.ts,
                                 core/src/stores/{context-block-tool,
                                 expand-context-blocks,
                                 project-context-registry}.ts
-C.7  Distribution                server/src/skill-install/{claude-code,cursor,
-                                codex-cli,gemini-cli,discover,manifest,
+C.7  Distribution                server/src/skill-install/skill-installers/{claude-code,
+                                cursor,codex-cli,gemini-cli}.ts +
+                                server/src/skill-install/{discover,manifest,
                                 skill-manifest-sync,disabled-state,
                                 include-utils}.ts +
                                 server/src/skills/mma-*/SKILL.md
@@ -136,7 +138,7 @@ A single request reads as a path: the horizontal axis tells you *which stage*, t
 
 ## Provider runners
 
-Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.ts`) encapsulates provider-specific I/O (Anthropic Claude SDK, Codex CLI subprocess). Results are assembled via `providers/assemble-run-result.ts`. Agent resolution (`providers/agent-resolver.ts`) maps task-type tiers to configured agents. Provider-specific session management, tool categories, and normalization are co-located in the providers directory.
+Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.ts`) encapsulates provider-specific I/O (Anthropic Claude SDK, Codex CLI subprocess). Result assembly is handled per-provider: `providers/normalize-claude.ts` for Claude, `providers/codex-cli-session.ts` for Codex. Agent resolution (`providers/agent-resolver.ts`) maps task-type tiers to configured agents. Provider-specific session management, tool categories, and normalization are co-located in the providers directory.
 
 ## Request lifecycle (concrete trace)
 
@@ -162,9 +164,8 @@ Mock-provider pattern: `mockProvider` / `failProvider` from `tests/delegate.test
 ## Key observables
 
 - Route manifest: `tests/contract/goldens/routes.json` (canonical list of HTTP routes; change breaks the manifest test).
-- Observability manifest: `tests/contract/goldens/observability.json` (required event + field set a replayed scenario must emit).
+- Observability manifest: `tests/contract/goldens/observability/event-manifest.json` (required event + field set a replayed scenario must emit).
 - Per-endpoint + per-phase goldens: `tests/contract/goldens/endpoints/<type>-<phase>.json`.
-- LOC baseline: `docs/refactor/loc-baseline.md` (branch-cut snapshot for reduction proofs).
 
 ## Maintainer migration appendix
 
@@ -197,15 +198,11 @@ Where to add:
 - **A new provider:** `core/src/providers/<name>.ts`. Update `providers/provider-factory.ts`.
 - **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Optional: `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
-- **A new observability event:** emit structured log line from a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
+- **A new observability event:** emit structured log line from a handler; add required fields to `tests/contract/goldens/observability/event-manifest.json`; the replay test picks it up automatically.
 
 ## Further reading
 
 - `.claude/CLAUDE.md` — local conventions for contributors.
-- `docs/refactor/types-inventory.md` — type relocation decisions (post-Ch 3).
-- `docs/refactor/execution-context-inventory.md` — ExecutionContext field audit.
-- `docs/refactor/runner-adapter-matrix.md` — per-provider viability analysis for the runner adapter.
-- `docs/refactor/loc-baseline.md` — LOC baseline for the refactor.
 - `DIRECTION.md` — product north star.
 
 ## Known limitations

@@ -35,31 +35,24 @@ export class SkillNotFoundError extends Error {
   }
 }
 
-// Discover.ts lives in `packages/core/src/tool-surface/` (or its dist mirror).
-// Skills are bundled by the server package at `packages/server/src/skills/`
-// (copied to `packages/server/dist/skills/` at build time, then shipped on
-// the `@zhixuan92/multi-model-agent` npm package as `dist/skills/`).
-// Probe candidates for both monorepo dev layouts and the two npm-installed
-// layouts (hoisted siblings, or core nested under server).
-//
-// Exported (and parameterized on `here` + `exists`) so the candidate logic
-// can be unit-tested against fixtures that mimic each layout — the v4.0.1
-// regression was a missing prod candidate.
+// Skills are bundled at `packages/server/src/skills/` (copied to
+// `packages/server/dist/skills/` at build time, shipped on the npm package).
+// Probe candidates for monorepo dev layouts and both npm-installed layouts
+// (hoisted siblings, or core nested under server).
 export function skillsRootCandidates(here: string): string[] {
   return [
-    // Dev source: packages/core/src/tool-surface -> packages/server/src/skills
-    path.resolve(here, '..', '..', '..', 'server', 'src', 'skills'),
-    // Dev built: packages/core/dist/tool-surface -> packages/server/dist/skills
-    path.resolve(here, '..', '..', '..', 'server', 'dist', 'skills'),
-    // npm install (hoisted): node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface
-    //                     -> node_modules/@zhixuan92/multi-model-agent/dist/skills
-    path.resolve(here, '..', '..', '..', 'multi-model-agent', 'dist', 'skills'),
-    // npm install (core nested under server):
-    //   .../multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface
-    // -> .../multi-model-agent/dist/skills
-    path.resolve(here, '..', '..', '..', '..', '..', 'dist', 'skills'),
-    // Last-resort fallback for any caller that bundles skills inside core.
+    // Dev source: packages/server/src/skill-install -> packages/server/src/skills
     path.resolve(here, '..', 'skills'),
+    // Dev built: packages/server/dist/skill-install -> packages/server/dist/skills
+    path.resolve(here, '..', 'skills'),
+    // Core dev: packages/core/src/unified -> packages/server/src/skills
+    path.resolve(here, '..', '..', '..', 'server', 'src', 'skills'),
+    // Core built: packages/core/dist/unified -> packages/server/dist/skills
+    path.resolve(here, '..', '..', '..', 'server', 'dist', 'skills'),
+    // npm install (hoisted)
+    path.resolve(here, '..', '..', '..', 'multi-model-agent', 'dist', 'skills'),
+    // npm install (core nested under server)
+    path.resolve(here, '..', '..', '..', '..', '..', 'dist', 'skills'),
   ];
 }
 

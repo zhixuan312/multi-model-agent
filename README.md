@@ -78,7 +78,7 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
 {
   "agents": {
     "standard": {
-      "type": "claude-compatible",
+      "type": "claude",
       "model": "deepseek-v4-pro",
       "baseUrl": "https://api.deepseek.com/anthropic",
       "apiKeyEnv": "DEEPSEEK_API_KEY"
@@ -157,6 +157,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | Skill | Use when |
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
+| `mma-orchestrate` | A multi-phase workflow needs a session-persistent LLM brain for orchestration — send a structured prompt, get a structured response, reuse the session across workflow phases. Uses the `main` tier (no reviewer, no worktree). |
 | `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
 
 ### Two generic usage samples
@@ -206,18 +207,16 @@ Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the ve
 
 | Type | Auth | When to pick |
 |---|---|---|
-| `claude` | Local Claude Code OAuth (`claude login`) | Stay on Claude end-to-end with subscription auth |
-| `codex` | Codex CLI subscription (`codex login`) | OpenAI flagship work without juggling API keys |
-| `openai-compatible` | `apiKey` or `apiKeyEnv` | Any OpenAI-compatible endpoint — MiniMax, Groq, Together, local vLLM, plus OpenAI direct |
-| `claude-compatible` | `apiKey` or `apiKeyEnv` | Vendors exposing an Anthropic-format endpoint (DeepSeek's `/anthropic`, etc.) — preserves thinking content blocks across multi-turn tool use, required for thinking-mode reasoning models |
+| `claude` | Local Claude Code OAuth (`claude login`), or `apiKey`/`apiKeyEnv` with optional `baseUrl` | Claude subscription auth end-to-end, direct Anthropic API, or any Anthropic-compatible proxy (DeepSeek `/anthropic`, etc.) |
+| `codex` | Codex CLI subscription (`codex login`), or `apiKey`/`apiKeyEnv` with optional `baseUrl` | OpenAI subscription auth, direct OpenAI API, or any OpenAI-compatible endpoint (MiniMax, Groq, Together, local vLLM, etc.) |
 
-DeepSeek V4 Pro under `claude-compatible` keeps reasoning ON; the same model under `openai-compatible` works but auto-disables thinking (its `reasoning_content` field is non-standard for Chat Completions and would 400 on multi-turn).
+DeepSeek V4 Pro works as `"type": "claude"` with `baseUrl` pointed at its Anthropic-compatible endpoint. This preserves thinking content blocks across multi-turn tool use. Set `baseUrl` + `apiKeyEnv` on either type to reach any third-party endpoint.
 
 ```json
 {
   "agents": {
     "complex": {
-      "type": "claude-compatible",
+      "type": "claude",
       "model": "deepseek-v4-pro",
       "baseUrl": "https://api.deepseek.com/anthropic",
       "apiKeyEnv": "DEEPSEEK_API_KEY"

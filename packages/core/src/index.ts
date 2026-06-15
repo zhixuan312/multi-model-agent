@@ -27,6 +27,7 @@ export type {
   RunOptions,
   ProgressEvent,
   InternalRunnerEvent,
+  AttemptRecord,
 } from './providers/runner-types.js';
 export type {
   BriefQualityPolicy,

@@ -42,17 +42,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-interface BusLike { emitPlainEntry(entry: unknown): void }
-
-function busOf(opts: SessionOpts): BusLike | undefined {
-  const b = opts.bus as { emitPlainEntry?: unknown } | undefined;
-  return b && typeof b.emitPlainEntry === 'function' ? (b as BusLike) : undefined;
-}
-
-function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
-  const e = opts.envelope as { recordToolCall?: unknown } | undefined;
-  return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
-}
+import { busOf, envelopeOf } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;

@@ -11,7 +11,7 @@ function baseOpts() {
   };
 }
 
-function failedEnvelopeWithCode(code: 'review_diff_rejected' | 'review_quality_findings_unresolved' | 'review_spec_rejected_terminal') {
+function failedEnvelopeWithCode(code: 'sdk_max_turns' | 'validator_no_artifacts' | 'codex_error') {
   const store = TaskEnvelopeStore.create({
     taskId: 't1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
@@ -32,20 +32,20 @@ function failedEnvelopeWithCode(code: 'review_diff_rejected' | 'review_quality_f
 }
 
 describe('toWireRecord errorCode preservation', () => {
-  it('emits errorCode=review_diff_rejected when envelope has it', () => {
-    const wire = toWireRecord(failedEnvelopeWithCode('review_diff_rejected'), baseOpts());
+  it('emits errorCode=sdk_max_turns when envelope has it', () => {
+    const wire = toWireRecord(failedEnvelopeWithCode('sdk_max_turns'), baseOpts());
     expect(wire.terminalStatus).toBe('error');
-    expect(wire.errorCode).toBe('review_diff_rejected');
+    expect(wire.errorCode).toBe('sdk_max_turns');
   });
 
-  it('emits errorCode=review_quality_findings_unresolved', () => {
-    const wire = toWireRecord(failedEnvelopeWithCode('review_quality_findings_unresolved'), baseOpts());
-    expect(wire.errorCode).toBe('review_quality_findings_unresolved');
+  it('emits errorCode=validator_no_artifacts', () => {
+    const wire = toWireRecord(failedEnvelopeWithCode('validator_no_artifacts'), baseOpts());
+    expect(wire.errorCode).toBe('validator_no_artifacts');
   });
 
-  it('emits errorCode=review_spec_rejected_terminal', () => {
-    const wire = toWireRecord(failedEnvelopeWithCode('review_spec_rejected_terminal'), baseOpts());
-    expect(wire.errorCode).toBe('review_spec_rejected_terminal');
+  it('emits errorCode=codex_error', () => {
+    const wire = toWireRecord(failedEnvelopeWithCode('codex_error'), baseOpts());
+    expect(wire.errorCode).toBe('codex_error');
   });
 
   it('emits errorCode=null when terminalStatus is ok', () => {

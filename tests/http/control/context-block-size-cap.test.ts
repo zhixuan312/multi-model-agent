@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildCreateContextBlockHandler } from '../../../packages/server/src/http/handlers/control/context-blocks.js';
 import type { ProjectRegistry } from '../../../packages/server/src/http/project-registry.js';
-import type { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
 
 function mockReq(contentLength: number): IncomingMessage {
   return {
@@ -38,7 +37,6 @@ describe('register-context-block 413', () => {
   it('rejects payload > 524288 bytes with 413', async () => {
     const handler = buildCreateContextBlockHandler({
       projectRegistry: {} as ProjectRegistry,
-      routeDispatcher: { dispatch: () => Promise.resolve({ status: 200, body: {} }) } as unknown as LifecycleDispatcher,
       maxContextBlockBytes: 524_288,
       maxContextBlocksPerProject: 32,
     });
@@ -56,7 +54,6 @@ describe('register-context-block 413', () => {
       projectRegistry: {
         reserveProject: () => ({ ok: false, error: 'unavailable', message: 'stub' }),
       } as unknown as ProjectRegistry,
-      routeDispatcher: { dispatch: () => Promise.resolve({ status: 200, body: {} }) } as unknown as LifecycleDispatcher,
       maxContextBlockBytes: 1024,
       maxContextBlocksPerProject: 32,
     });

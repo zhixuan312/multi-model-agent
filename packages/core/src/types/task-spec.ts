@@ -1,7 +1,6 @@
 // Per-task brief shape — what callers send to /delegate, /audit, etc.
 // Matches spec architecture.md `types/task-spec.ts` slot.
 import type { BriefQualityPolicy } from './brief-quality-policy.js';
-import type { Goal } from './goal.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
@@ -64,14 +63,6 @@ export interface TaskSpec {
   }
   taskDescriptor?: string
   planBasename?: string
-  /**
-   * Write-route goal-set primitive. Set by each write route's buildGoal (via
-   * the single-brief slot). When present, the task is a goal-set: the implement
-   * stage sends the implement prompt (already materialized into `prompt`), and
-   * the review-fix stage + annotate read `goal` for phase-2 tier, conventions,
-   * and report rebuild. Absent on read routes.
-   */
-  goal?: Goal
-  /** Per-task idle-stall override (goal mode widens this); falls back to config default. */
+  /** Per-task idle-stall override; falls back to config default. */
   idleStallMs?: number
 }

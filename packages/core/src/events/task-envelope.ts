@@ -3,6 +3,7 @@
 
 import type { EnvelopeBus } from './envelope-bus.js';
 import type { ErrorCode } from '../error-codes.js';
+import type { FindingsOutcome } from '../types/enums.js';
 
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
@@ -43,7 +44,7 @@ export interface StageRecord {
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
   concernCategories?: string[];
   // Findings outcome threading (review + implementing stages)
-  findingsOutcome?: 'clean' | 'found' | 'not_applicable' | null;
+  findingsOutcome?: FindingsOutcome | null;
   findingsOutcomeReason?: string | null;
   outcomeInferred?: boolean;
   outcomeMalformed?: boolean;
