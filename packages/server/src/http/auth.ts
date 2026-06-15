@@ -11,7 +11,7 @@ function expandHome(p: string): string {
 
 /**
  * Load or generate the bearer token from a file path.
- * Respects the MMAGENT_AUTH_TOKEN env override via coreLoadAuthToken when the
+ * Respects the MMA_AUTH_TOKEN env override via coreLoadAuthToken when the
  * file already exists. Falls back to generating a new token if the file does not exist.
  */
 export function loadToken(tokenPath: string): string {
@@ -24,7 +24,7 @@ export function loadToken(tokenPath: string): string {
         `[multi-model-agent] warning: token file ${resolved} has insecure permissions (mode ${(stat.mode & 0o777).toString(8)}); recommend 'chmod 0600 ${resolved}'\n`,
       );
     }
-    // Use core's loadAuthToken so the MMAGENT_AUTH_TOKEN env override is respected.
+    // Use core's loadAuthToken so the MMA_AUTH_TOKEN env override is respected.
     return coreLoadAuthToken({ tokenFile: resolved });
   }
   const dir = path.dirname(resolved);

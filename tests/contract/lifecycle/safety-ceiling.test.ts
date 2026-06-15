@@ -48,7 +48,7 @@ function opts(taskId: string | undefined, taskIndex: number | undefined): Sessio
 
 describe('provider-factory per-task safety (D6)', () => {
   beforeEach(() => {
-    process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+    process.env.MMA_TEST_PROVIDER_OVERRIDE = '1';
   });
 
   it('A6.1 — TaskSessionLimitExceeded after 2 opens for same key; 2-and-2 across keys succeed', () => {

@@ -16,7 +16,7 @@ Downgrade or remove findings that are tangential to the query.
 ### 2. Citation Accuracy
 
 Every cited node must be real and correctly quoted:
-- Does each `nodeId` and `nodePath` reference a real node file that exists in `.mmagent/journal/nodes/`?
+- Does each `nodeId` and `nodePath` reference a real node file that exists in `.mma/journal/nodes/`?
 - Was each cited node actually read this session, or is the citation from memory/hallucination?
 - Does the `learning` field accurately represent what the node says, or has it been paraphrased beyond recognition?
 - Is the `status` field correct for each cited node?

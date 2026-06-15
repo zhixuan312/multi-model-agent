@@ -26,7 +26,7 @@ which terminal state you're in:
 ```bash
 DELAY=1
 START=$(date +%s)
-TIMEOUT_S=${MMAGENT_POLL_TIMEOUT_S:-1800}
+TIMEOUT_S=${MMA_POLL_TIMEOUT_S:-1800}
 BODY_FILE=$(mktemp -t mmagent-poll.XXXXXX)
 trap 'rm -f "$BODY_FILE"' EXIT
 
@@ -77,7 +77,7 @@ When invoking this poll loop, pick one:
   max the tool allows, or bump the tool's allowed ceiling via harness
   settings).
 - **Alternative — cap the helper to match the tool's limit** by exporting
-  `MMAGENT_POLL_TIMEOUT_S=600` before running the loop. The helper will then
+  `MMA_POLL_TIMEOUT_S=600` before running the loop. The helper will then
   exit 124 cleanly at 10 minutes and the caller can decide whether to
   re-poll or surface the timeout.
 

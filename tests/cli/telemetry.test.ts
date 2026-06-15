@@ -23,7 +23,7 @@ function captureOutput() {
 }
 
 function setupTempHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'mmagent-telemetry-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mma-telemetry-'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -43,10 +43,10 @@ function readConfig(homeDir: string): unknown {
 describe('mma telemetry status', () => {
   let savedEnv: string | undefined;
 
-  beforeEach(() => { savedEnv = process.env.MMAGENT_TELEMETRY; });
+  beforeEach(() => { savedEnv = process.env.MMA_TELEMETRY; });
   afterEach(() => {
-    if (savedEnv === undefined) delete process.env.MMAGENT_TELEMETRY;
-    else process.env.MMAGENT_TELEMETRY = savedEnv;
+    if (savedEnv === undefined) delete process.env.MMA_TELEMETRY;
+    else process.env.MMA_TELEMETRY = savedEnv;
   });
 
   it('prints disabled + source=default when no config and no env', async () => {
@@ -108,12 +108,12 @@ describe('mma telemetry status', () => {
     }
   });
 
-  it('prints enabled + source=env when MMAGENT_TELEMETRY=1', async () => {
+  it('prints enabled + source=env when MMA_TELEMETRY=1', async () => {
     const tmp = setupTempHome();
     try {
       // config says disabled but env wins
       writeConfig(tmp, { telemetry: { enabled: false } });
-      process.env.MMAGENT_TELEMETRY = '1';
+      process.env.MMA_TELEMETRY = '1';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',
@@ -130,11 +130,11 @@ describe('mma telemetry status', () => {
     }
   });
 
-  it('surfaces MMAGENT_TELEMETRY="" as "set to \'\' (no effect)"', async () => {
+  it('surfaces MMA_TELEMETRY="" as "set to \'\' (no effect)"', async () => {
     const tmp = setupTempHome();
     try {
       writeConfig(tmp, { telemetry: { enabled: true } });
-      process.env.MMAGENT_TELEMETRY = '';
+      process.env.MMA_TELEMETRY = '';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',
@@ -150,10 +150,10 @@ describe('mma telemetry status', () => {
     }
   });
 
-  it('surfaces MMAGENT_TELEMETRY non-empty value in status output', async () => {
+  it('surfaces MMA_TELEMETRY non-empty value in status output', async () => {
     const tmp = setupTempHome();
     try {
-      process.env.MMAGENT_TELEMETRY = '0';
+      process.env.MMA_TELEMETRY = '0';
       const { stdoutFn, stderrFn, stdout } = captureOutput();
       const code = await runTelemetry({
         subcommand: 'status',

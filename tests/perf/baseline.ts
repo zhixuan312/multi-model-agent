@@ -77,7 +77,7 @@ export function captureSuiteWallClock(target: 'contract' | 'full'): number {
   const t0 = performance.now();
   const res = spawnSync('npx', args, {
     stdio: 'ignore',
-    env: { ...process.env, MMAGENT_PERF_SUITE: '1' },
+    env: { ...process.env, MMA_PERF_SUITE: '1' },
   });
   if (res.status !== 0) throw new Error(`${target} suite failed during perf capture`);
   return performance.now() - t0;

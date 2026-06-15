@@ -25,10 +25,10 @@ export interface TelemetryDeps {
 }
 
 /**
- * Read the raw MMAGENT_TELEMETRY env value (not the parsed decision).
+ * Read the raw MMA_TELEMETRY env value (not the parsed decision).
  */
 function readRawEnv(): string | undefined {
-  return process.env.MMAGENT_TELEMETRY;
+  return process.env.MMA_TELEMETRY;
 }
 
 /**
@@ -72,12 +72,12 @@ async function runStatus(deps: TelemetryDeps): Promise<number> {
   lines.push(`Source:    ${d.source}`);
 
   if (d.source === 'env_invalid') {
-    lines.push(`Warning:   MMAGENT_TELEMETRY="${envRaw ?? ''}" is not a recognized value (use 1/true/on/yes or 0/false/off/no)`);
+    lines.push(`Warning:   MMA_TELEMETRY="${envRaw ?? ''}" is not a recognized value (use 1/true/on/yes or 0/false/off/no)`);
   }
 
   // Surface set-but-empty env distinction
   if (envRaw !== undefined && envRaw.trim().length === 0) {
-    lines.push(`Note:      MMAGENT_TELEMETRY is set to '' (no effect — falls through to ${d.source})`);
+    lines.push(`Note:      MMA_TELEMETRY is set to '' (no effect — falls through to ${d.source})`);
   }
 
   stdout(lines.join('\n') + '\n');

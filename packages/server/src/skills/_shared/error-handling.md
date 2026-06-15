@@ -25,7 +25,7 @@ curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — 
 ### Auth errors (401)
 
 ```bash
-export MMAGENT_AUTH_TOKEN=$(mmagent print-token)
+export MMA_AUTH_TOKEN=$(mmagent print-token)
 ```
 
 The token persists across restarts at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.

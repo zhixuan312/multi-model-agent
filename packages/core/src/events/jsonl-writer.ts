@@ -20,7 +20,7 @@ export class JsonlWriter {
   private readonly now: () => Date;
 
   constructor(opts: JsonlWriterOptions) {
-    this.dir = process.env.MMAGENT_LOG_DIR ?? opts.dir;
+    this.dir = process.env.MMA_LOG_DIR ?? opts.dir;
     this.openSync = opts.openSync ?? nodeFs.openSync;
     this.writeSync = opts.writeSync ?? nodeFs.writeSync;
     this.closeSync = opts.closeSync ?? nodeFs.closeSync;
@@ -32,7 +32,7 @@ export class JsonlWriter {
     const yyyy = date.getUTCFullYear();
     const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(date.getUTCDate()).padStart(2, '0');
-    return `mmagent-${yyyy}-${mm}-${dd}.jsonl`;
+    return `mma-${yyyy}-${mm}-${dd}.jsonl`;
   }
 
   writeLine(record: Record<string, unknown>): void {

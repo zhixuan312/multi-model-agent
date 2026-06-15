@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Recall relevant project learnings from the journal via a read-only mmagent worker. The worker reads the learnings graph at `.mmagent/journal/` and synthesizes answers to vague conceptual queries.
+Recall relevant project learnings from the journal via a read-only mmagent worker. The worker reads the learnings graph at `.mma/journal/` and synthesizes answers to vague conceptual queries.
 
 **Core principle:** Recall is retrieval (read, traverse graph, synthesize). Delegate it. The main agent stays on using the results — deciding what to do with the prior lessons.
 
@@ -181,7 +181,7 @@ The worker expects a sentence with context, not keywords. **Fix:** phrase it as 
 ❌ **Asking about the codebase instead of the journal**
 > query: "where is DispatchCanceller called?"
 
-That's a codebase question. Use `mma-investigate` instead. Journal recall is for *learnings* stored in `.mmagent/journal/`, not code.
+That's a codebase question. Use `mma-investigate` instead. Journal recall is for *learnings* stored in `.mma/journal/`, not code.
 
 ❌ **Assuming the journal exists**
 > query: "what do we know about X?"

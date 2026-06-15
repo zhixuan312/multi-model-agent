@@ -2,7 +2,7 @@
  * print-token.ts — `mma print-token` subcommand.
  *
  * Reads the bearer auth token and prints it to stdout.
- * Env override (MMAGENT_AUTH_TOKEN) wins over any file.
+ * Env override (MMA_AUTH_TOKEN) wins over any file.
  * Missing file → prints an error message to stderr and exits 1.
  *
  * Usage:
@@ -42,7 +42,7 @@ export function printToken(deps: PrintTokenDeps = {}): number {
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
 
   // Env override wins
-  const envToken = (env['MMAGENT_AUTH_TOKEN'] ?? '').trim();
+  const envToken = (env['MMA_AUTH_TOKEN'] ?? '').trim();
   if (envToken.length > 0) {
     stdout(envToken + '\n');
     return 0;
@@ -65,7 +65,7 @@ export function printToken(deps: PrintTokenDeps = {}): number {
     if (code === 'ENOENT') {
       stderr(
         `mmagent: token file not found: ${tokenFile}\n` +
-        `Run 'mma serve' once to generate a token, or set MMAGENT_AUTH_TOKEN.\n`,
+        `Run 'mma serve' once to generate a token, or set MMA_AUTH_TOKEN.\n`,
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);

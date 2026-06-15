@@ -69,12 +69,12 @@ describe('serve crash-guard (Bug 7)', () => {
     dir = mkdtempSync(join(tmpdir(), 'serve-crash-'));
     tokenFile = join(dir, 'auth-token');
     writeFileSync(tokenFile, 'test-token\n', { mode: 0o600 });
-    process.env.MMAGENT_TELEMETRY_ENDPOINT = '';
+    process.env.MMA_TELEMETRY_ENDPOINT = '';
   });
 
   afterEach(() => {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ }
-    delete process.env.MMAGENT_TELEMETRY_ENDPOINT;
+    delete process.env.MMA_TELEMETRY_ENDPOINT;
   });
 
   it('stdout/stderr EPIPE triggers clean exit, not Node abort', async () => {

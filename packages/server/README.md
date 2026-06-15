@@ -43,8 +43,8 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing).
 
 ```bash
-export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
-export MMAGENT_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
+export MMA_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
+export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
 ```
 
 ### 3. Write the config
@@ -125,11 +125,11 @@ Two provider types (v4.4+):
 
 ### Telemetry
 
-**Off by default.** Opt in via `mma telemetry enable` (or `MMAGENT_TELEMETRY=1`).
+**Off by default.** Opt in via `mma telemetry enable` (or `MMA_TELEMETRY=1`).
 
 ### Auth token
 
-Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMAGENT_AUTH_TOKEN` to override.
+Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUTH_TOKEN` to override.
 
 ## REST API
 

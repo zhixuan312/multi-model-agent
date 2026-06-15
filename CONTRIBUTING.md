@@ -81,7 +81,7 @@ Skills follow the conventions in [docs/SKILL_WRITING_GUIDELINES.md](./docs/SKILL
 
 - Tests run with Vitest globals enabled — no need to import `describe` / `it` / `expect`.
 - Test files mirror the source tree: `packages/core/src/foo/bar.ts` → `tests/foo/bar.test.ts`.
-- Use `env -u MMAGENT_AUTH_TOKEN` when running tests to avoid env override breaking server-handler tests.
+- Use `env -u MMA_AUTH_TOKEN` when running tests to avoid env override breaking server-handler tests.
 
 ## Reporting bugs and security issues
 

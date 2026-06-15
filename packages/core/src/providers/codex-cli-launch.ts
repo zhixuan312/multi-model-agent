@@ -85,7 +85,7 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   if (codexHome) env.CODEX_HOME = codexHome;
 
   return {
-    command: process.env.MMAGENT_CODEX_BIN ?? 'codex',
+    command: process.env.MMA_CODEX_BIN ?? 'codex',
     args,
     env,
   };

@@ -66,7 +66,7 @@ export interface TestServer {
 }
 
 export async function startTestServer(overrides?: DeepPartial<ServerConfig>): Promise<TestServer> {
-  const tokenDir = mkdtempSync(join(tmpdir(), 'mmagent-test-'));
+  const tokenDir = mkdtempSync(join(tmpdir(), 'mma-test-'));
   const tokenFile = join(tokenDir, 'auth-token');
   writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 

@@ -109,16 +109,16 @@ export function inlineIncludes(
 
   if (authToken) {
     output = output.replace(
-      /TOKEN="\$\{MMAGENT_AUTH_TOKEN:-\$\(mmagent print-token\)\}"/g,
+      /TOKEN="\$\{MMA_AUTH_TOKEN:-\$\(mmagent print-token\)\}"/g,
       `TOKEN="${authToken}"`,
     );
     output = output.replace(
-      /MMAGENT_AUTH_TOKEN=\$\(mmagent print-token\)/g,
-      `MMAGENT_AUTH_TOKEN="${authToken}"`,
+      /MMA_AUTH_TOKEN=\$\(mmagent print-token\)/g,
+      `MMA_AUTH_TOKEN="${authToken}"`,
     );
     output = output.replace(
-      /MMAGENT_AUTH_TOKEN=<token>/g,
-      `MMAGENT_AUTH_TOKEN=${authToken}`,
+      /MMA_AUTH_TOKEN=<token>/g,
+      `MMA_AUTH_TOKEN=${authToken}`,
     );
   }
 

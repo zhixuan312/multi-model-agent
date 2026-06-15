@@ -43,11 +43,11 @@ describe('loadAuthToken strict validation', () => {
   });
 
   it('env var override bypasses file validation', () => {
-    process.env['MMAGENT_AUTH_TOKEN'] = 'override-token-value';
+    process.env['MMA_AUTH_TOKEN'] = 'override-token-value';
     try {
       expect(loadAuthToken({ tokenFile: '/nonexistent' })).toBe('override-token-value');
     } finally {
-      delete process.env['MMAGENT_AUTH_TOKEN'];
+      delete process.env['MMA_AUTH_TOKEN'];
     }
   });
 

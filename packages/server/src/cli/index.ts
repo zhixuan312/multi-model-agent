@@ -9,7 +9,7 @@
  *
  * Config discovery order (highest priority → lowest):
  *   1. --config <path>          (explicit flag)
- *   2. $MMAGENT_CONFIG env var
+ *   2. $MMA_CONFIG env var
  *   3. CWD/.multi-model-agent.json
  *   4. ~/.multi-model/config.json
  *
@@ -98,7 +98,7 @@ function buildCandidatePaths(
 
   if (explicit) paths.push(explicit);
 
-  const envVal = (env['MMAGENT_CONFIG'] ?? '').trim();
+  const envVal = (env['MMA_CONFIG'] ?? '').trim();
   if (envVal) paths.push(envVal);
 
   paths.push(path.join(cwd, '.multi-model-agent.json'));
@@ -111,7 +111,7 @@ function buildCandidatePaths(
 /**
  * Resolve the config file path using the discovery order:
  *   1. --config <path>   (explicit flag)
- *   2. $MMAGENT_CONFIG   (env var)
+ *   2. $MMA_CONFIG   (env var)
  *   3. CWD/.multi-model-agent.json
  *   4. ~/.multi-model/config.json
  *
@@ -163,7 +163,7 @@ export async function loadConfig(
 
   throw new Error(
     `No config file found. Tried:\n${attempted.join('\n')}\n` +
-    `Set one via --config, $MMAGENT_CONFIG, or place it at a default location above.`,
+    `Set one via --config, $MMA_CONFIG, or place it at a default location above.`,
   );
 }
 
@@ -240,7 +240,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         deps.homeDir?.() ?? os.homedir(),
       );
       // Stderr event streaming is always on (4.7.3+; no --verbose flag).
-      // --log enables JSONL persistence to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl.
+      // --log enables JSONL persistence to ~/.multi-model/logs/mma-YYYY-MM-DD.jsonl.
       if (opts['log'] === true) {
         if (!config.diagnostics) config.diagnostics = { log: false };
         config.diagnostics.log = true;
@@ -290,7 +290,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const jsonFlag = opts['json'] === true;
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mma info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma info: cannot load config. Set --config or $MMA_CONFIG.\n`);
         exit(1);
         break;
       }
@@ -310,7 +310,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     case 'logs': {
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mma logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma logs: cannot load config. Set --config or $MMA_CONFIG.\n`);
         exit(1);
         break;
       }

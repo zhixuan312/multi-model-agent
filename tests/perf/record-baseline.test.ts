@@ -11,7 +11,7 @@ import {
 } from './baseline.js';
 
 const BASELINE_PATH = resolve('tests/perf/baseline.json');
-const SKIP = existsSync(BASELINE_PATH) || process.env.MMAGENT_PERF_SUITE === '1';
+const SKIP = existsSync(BASELINE_PATH) || process.env.MMA_PERF_SUITE === '1';
 
 describe.skipIf(SKIP)('perf baseline (one-shot capture)', () => {
   it('captures all five metrics and writes baseline.json', async () => {

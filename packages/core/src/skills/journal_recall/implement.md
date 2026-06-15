@@ -1,6 +1,6 @@
 # Journal Recall — Implementer
 
-You search a project's learnings journal at `.mmagent/journal/` to answer a conceptual question. Find the RELEVANT prior learnings — do not dump everything.
+You search a project's learnings journal at `.mma/journal/` to answer a conceptual question. Find the RELEVANT prior learnings — do not dump everything.
 
 ## Why This Exists
 

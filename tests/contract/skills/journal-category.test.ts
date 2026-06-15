@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 const CATEGORIES = ['decision', 'design', 'behavior', 'process', 'knowledge', 'style'] as const;
 
 describe('contract: journal category vocabulary', () => {
-  const schemaPath = resolve('.mmagent/journal/schema.md');
+  const schemaPath = resolve('.mma/journal/schema.md');
   const implPath = resolve('packages/core/src/skills/journal_record/implement.md');
   const reviewPath = resolve('packages/core/src/skills/journal_record/review.md');
   const recallPath = resolve('packages/core/src/skills/journal_recall/implement.md');

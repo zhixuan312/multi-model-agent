@@ -17,7 +17,7 @@
 //
 // Task 2 will add a narrow, env-guarded provider-injection seam (per the
 // plan's Chapter 1 discipline: "Only if no provider-injection seam exists,
-// add a test-only hook guarded by `process.env.MMAGENT_TEST_PROVIDER_OVERRIDE === '1'`").
+// add a test-only hook guarded by `process.env.MMA_TEST_PROVIDER_OVERRIDE === '1'`").
 // Until Task 2 lands that seam, `boot()` throws a clear error — the fixture
 // is compile-ready but not yet runtime-ready. Contract tests that depend on
 // the harness must use `it.todo` / `it.skip` (per global convention #12)
@@ -44,7 +44,7 @@ export interface BootOptions {
   provider: Provider;
   cwd: string;
   /** Opt-in to JSONL diagnostic logging. Default false — tests should not
-   *  pollute the user's global mmagent-YYYY-MM-DD.jsonl. The observability
+   *  pollute the user's global mma-YYYY-MM-DD.jsonl. The observability
    *  fixture sets this to true so it can read emitted events back from disk. */
   diagnosticsLog?: boolean;
 }
@@ -68,8 +68,8 @@ function installLoopbackOnlyFetch(): void {
 export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   installLoopbackOnlyFetch();
   freezeClock();
-  process.env.MMAGENT_TEST_INTROSPECTION = '1';
-  process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+  process.env.MMA_TEST_INTROSPECTION = '1';
+  process.env.MMA_TEST_PROVIDER_OVERRIDE = '1';
   __setCoreTestProviderOverride(opts.provider);
   // Give standard and complex different canonical identities so R3 separation
   // (forbiddenIdentities) doesn't block fallback in single-provider test mode.
@@ -82,7 +82,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   __setCoreTestProviderOverrideMap(new Map([['standard', standardProvider], ['complex', complexProvider]]));
 
   const token = randomUUID();
-  const tokenPath = join(tmpdir(), `mmagent-test-token-${randomUUID()}`);
+  const tokenPath = join(tmpdir(), `mma-test-token-${randomUUID()}`);
   writeFileSync(tokenPath, `${token}\n`, 'utf8');
 
   const config: MultiModelConfig = {

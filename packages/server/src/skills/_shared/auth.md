@@ -12,7 +12,7 @@ Every request to the multi-model-agent server requires:
 
 **From environment variable** (preferred):
 ```
-MMAGENT_AUTH_TOKEN=<token>
+MMA_AUTH_TOKEN=<token>
 ```
 
 **From CLI**:
@@ -23,9 +23,9 @@ mma print-token
 ### Shell helper
 
 ```bash
-TOKEN="${MMAGENT_AUTH_TOKEN:-$(mma print-token)}"
-MMA_CLIENT="${MMAGENT_CLIENT:-claude-code}"
-MMA_MAIN_MODEL="${MMAGENT_MAIN_MODEL:-claude-opus-4-7}"
+TOKEN="${MMA_AUTH_TOKEN:-$(mma print-token)}"
+MMA_CLIENT="${MMA_CLIENT:-claude-code}"
+MMA_MAIN_MODEL="${MMA_MAIN_MODEL:-claude-opus-4-7}"
 
 curl \
   -H "Authorization: Bearer $TOKEN" \

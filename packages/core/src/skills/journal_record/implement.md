@@ -1,6 +1,6 @@
 # Journal Record — Implementer
 
-You maintain a project's learnings journal at `.mmagent/journal/`. Integrate one or more new learnings into the existing graph IN ORDER — do not blindly append. You are the only writer running; integrate each learning fully before the next.
+You maintain a project's learnings journal at `.mma/journal/`. Integrate one or more new learnings into the existing graph IN ORDER — do not blindly append. You are the only writer running; integrate each learning fully before the next.
 
 ## Why This Exists
 
@@ -10,7 +10,7 @@ The journal is a persistent graph of team knowledge — decisions, design ration
 
 Process learnings IN ORDER (learningIndex 0, 1, 2, ...). For EACH learning:
 
-1. **Read state.** Read `.mmagent/journal/schema.md` (create it from the seed if absent), then the node catalog `index.md` (if missing/stale, list `nodes/` directly — nodes/ is source of truth). Re-read this state for every learning so you see nodes you wrote for earlier learnings in THIS run.
+1. **Read state.** Read `.mma/journal/schema.md` (create it from the seed if absent), then the node catalog `index.md` (if missing/stale, list `nodes/` directly — nodes/ is source of truth). Re-read this state for every learning so you see nodes you wrote for earlier learnings in THIS run.
 
 2. **Find candidates.** Find candidate-related nodes (title/tags/body share the learning's key terms, or reachable via supersedes chains). Follow each supersedes/supersededBy chain to its current head.
 
@@ -26,7 +26,7 @@ Process learnings IN ORDER (learningIndex 0, 1, 2, ...). For EACH learning:
 
 6. **Handle failures.** If a single learning cannot be integrated, record it in `failed` (see report format) and CONTINUE to the next learning — do not abort the batch.
 
-7. **Scope constraint.** Write ONLY under `.mmagent/journal/`. Redact secrets/credentials before writing.
+7. **Scope constraint.** Write ONLY under `.mma/journal/`. Redact secrets/credentials before writing.
 
 8. **Corruption check.** If the catalog has duplicate/missing/non-parseable ids, STOP and report `journal_corrupt`; write nothing for ANY learning.
 
@@ -64,7 +64,7 @@ Before finishing, verify:
 - Node ids are collision-free (max existing + 1, zero-padded 4 digits)
 - Superseded nodes have `supersededBy` set and status updated to `superseded`
 - Edge types use only the vocabulary above
-- No writes outside `.mmagent/journal/`
+- No writes outside `.mma/journal/`
 - Secrets/credentials are redacted from recorded content
 
 ## Output Format

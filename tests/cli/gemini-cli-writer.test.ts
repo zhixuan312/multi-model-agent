@@ -34,11 +34,11 @@ function captureStderr(fn: () => void): string {
 }
 
 function makeFakeHome(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-gemini-cli-home-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-gemini-cli-home-'));
 }
 
 function makeFakeSkillsRoot(sharedFiles: Record<string, string>): string {
-  const root = mkdtempSync(path.join(tmpdir(), 'mmagent-gemini-cli-skills-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'mma-gemini-cli-skills-'));
   const sharedDir = path.join(root, '_shared');
   fs.mkdirSync(sharedDir, { recursive: true });
   for (const [relPath, content] of Object.entries(sharedFiles)) {

@@ -14,11 +14,11 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { installCodexCli, uninstallCodexCli } from '../../packages/server/src/skill-install/skill-installers/codex-cli.js';
 
 function makeFakeHome(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-codex-home-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-codex-home-'));
 }
 
 function makeFakeSkillsRoot(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-codex-skills-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-codex-skills-'));
 }
 
 function rmFakeDir(dir: string): void {

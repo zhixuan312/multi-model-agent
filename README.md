@@ -65,8 +65,8 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (server returns `400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers writes JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return the *worker's* model as the calling agent's "main" model. The calling client is the only reliable source. Export both once if you're calling the API directly:
 
 ```bash
-export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
-export MMAGENT_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
+export MMA_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
+export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
 ```
 
 ### 3. Write the config
@@ -149,7 +149,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | Audit a spec / plan / design doc / skill file for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Subtypes: `default` (prose-coherence), `plan` (code-execution plan vs codebase), `spec` (requirement testability + decision trace), `skill` (skill file reader-effectiveness). |
-| `mma-journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mmagent/journal/` (create / refine / supersede / merge with typed edges). |
+| `mma-journal-record` | Record a durable project learning into the cross-agent journal — what was tried, what happened, the lesson — integrated into a graph of ADR "node" files under `.mma/journal/` (create / refine / supersede / merge with typed edges). |
 | `mma-journal-recall` | Recall relevant prior learnings from the journal for a question or situation — traverses the node graph rather than keyword-filtering. |
 
 ### Plumbing skills
@@ -200,7 +200,7 @@ Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the ve
 
 ### Lookup order
 
-`--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
+`--config <path>` → `$MMA_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
 
 ### Agent types
 
@@ -236,11 +236,11 @@ Every `defaults` knob has a sane built-in. Override only when you have a reason.
 
 ### Auth token
 
-Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
+Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUTH_TOKEN` to override the file.
 
 ### Telemetry
 
-**Off by default.** Opt in via `mma telemetry enable` (or `MMAGENT_TELEMETRY=1`), or add the `telemetry` block directly to `~/.multi-model/config.json`:
+**Off by default.** Opt in via `mma telemetry enable` (or `MMA_TELEMETRY=1`), or add the `telemetry` block directly to `~/.multi-model/config.json`:
 
 ```json
 {
@@ -308,7 +308,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
 | Daemon stale after upgrade | `pkill -f "mma serve"`; the skill preflight respawns it on next client session |
 | Skill version mismatch | `mma sync-skills` and restart your client |
-| `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mma print-token)` |
+| `401 unauthorized` from a skill | `export MMA_AUTH_TOKEN=$(mma print-token)` |
 | `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |

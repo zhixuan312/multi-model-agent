@@ -156,8 +156,8 @@ function wrapWithSafetyCeiling(p: Provider): Provider {
 }
 
 function assertTestProviderEnabled(): void {
-  if (process.env.MMAGENT_TEST_PROVIDER_OVERRIDE !== '1') {
-    throw new Error('MMAGENT_TEST_PROVIDER_OVERRIDE must be set to 1 to use the test provider override');
+  if (process.env.MMA_TEST_PROVIDER_OVERRIDE !== '1') {
+    throw new Error('MMA_TEST_PROVIDER_OVERRIDE must be set to 1 to use the test provider override');
   }
 }
 

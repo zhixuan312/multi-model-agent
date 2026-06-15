@@ -46,7 +46,7 @@ Reclassify when the existing graph contradicts the chosen operation.
 
 ### 6. Scope Discipline
 
-- Were all writes confined to `.mmagent/journal/`?
+- Were all writes confined to `.mma/journal/`?
 - Were no files outside the journal directory modified?
 
 ## Fix Policy
@@ -56,7 +56,7 @@ Reclassify when the existing graph contradicts the chosen operation.
 - Fix missing or incorrect `category` fields.
 - Add missing `supersededBy` links on superseded nodes.
 - Flag entries recorded as observations rather than actionable knowledge.
-- Report any writes outside `.mmagent/journal/`.
+- Report any writes outside `.mma/journal/`.
 - Fix catalog inconsistencies (missing index entries, out-of-order sorting).
 
 ## Output Format (REQUIRED)

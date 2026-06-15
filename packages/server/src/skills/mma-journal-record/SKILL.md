@@ -28,7 +28,7 @@ Record team knowledge to the persistent journal via a fire-and-forget mmagent wo
 **Don't use when:**
 - You're asking a question → `mma-investigate`
 - You're dispatching work → `mma-delegate`
-- You want to retrieve past entries → journal is append-only, not searchable; use `git log` or `.mmagent/journal/` files directly
+- You want to retrieve past entries → journal is append-only, not searchable; use `git log` or `.mma/journal/` files directly
 - You're mid-task and want to pause → that's what `blockedBy` is for; journal is for conclusions, not temporary blockers
 
 ## Endpoint
@@ -52,12 +52,12 @@ Record team knowledge to the persistent journal via a fire-and-forget mmagent wo
 
 **What gets stored & where:**
 
-Entries are integrated into a graph-structured journal store at `.mmagent/journal/`:
+Entries are integrated into a graph-structured journal store at `.mma/journal/`:
 - `nodes/` — individual learning entries (keyed by unique node ID)
 - `index.md` — searchable index of all entries, tags, and cross-references
 - `log.md` — append-only event log of create/refine/supersede/merge operations
 
-The worker creates, refines, or supersedes nodes in the graph (never appends blindly). You can query the index or log directly to track learning history. Writes are confined to the project's `.mmagent/` directory (no traversal).
+The worker creates, refines, or supersedes nodes in the graph (never appends blindly). You can query the index or log directly to track learning history. Writes are confined to the project's `.mma/` directory (no traversal).
 
 ## Full example
 
@@ -86,7 +86,7 @@ Each task carries a structured report containing the graph operation metadata:
 ```json
 {
   "summary": "recorded 2, failed 0; created 0012, superseded 0009",
-  "filesChanged": [".mmagent/journal/nodes/0012.md", ".mmagent/journal/index.md", ".mmagent/journal/log.md"],
+  "filesChanged": [".mma/journal/nodes/0012.md", ".mma/journal/index.md", ".mma/journal/log.md"],
   "recorded": [
     { "learningIndex": 0, "op": "create", "ids": ["0012"] },
     { "learningIndex": 1, "op": "supersede", "ids": ["0013"] }
@@ -110,7 +110,7 @@ The main-agent fields are authoritative; the telemetry block is diagnostics.
   "message": "Journal entry created (node 0012); superseded prior learning (node 0009)",
   "findings": [],
   "summary": "created 0012; superseded 0009",
-  "filesChanged": [".mmagent/journal/nodes/0012.md", ".mmagent/journal/index.md", ".mmagent/journal/log.md"],
+  "filesChanged": [".mma/journal/nodes/0012.md", ".mma/journal/index.md", ".mma/journal/log.md"],
   "commitSha": null,
   "blockId": null,
   "telemetry": {
@@ -169,7 +169,7 @@ Log once when you decide not to pursue a direction; don't log "just checked X" o
 **Use tags to build searchable structure.**
 ```bash
 # Later, grep your journal for all perf decisions:
-grep -r "^" .mmagent/journal/ | grep -i "perf:"
+grep -r "^" .mma/journal/ | grep -i "perf:"
 ```
 
 ## Common pitfalls

@@ -17,15 +17,15 @@ import { installCursor, uninstallCursor } from '../../packages/server/src/skill-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function makeFakeCwd(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-cursor-cwd-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-cursor-cwd-'));
 }
 
 function makeFakeHome(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mmagent-cursor-home-'));
+  return mkdtempSync(path.join(tmpdir(), 'mma-cursor-home-'));
 }
 
 function makeFakeSkillsRoot(sharedFiles: Record<string, string> = {}): string {
-  const root = mkdtempSync(path.join(tmpdir(), 'mmagent-cursor-skills-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'mma-cursor-skills-'));
   if (Object.keys(sharedFiles).length > 0) {
     const sharedDir = path.join(root, '_shared');
     fs.mkdirSync(sharedDir, { recursive: true });

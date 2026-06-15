@@ -30,14 +30,14 @@ function today(): string {
 
 function writeLog(logDir: string, lines: string[]): string {
   mkdirSync(logDir, { recursive: true });
-  const file = join(logDir, `mmagent-${today()}.jsonl`);
+  const file = join(logDir, `mma-${today()}.jsonl`);
   writeFileSync(file, lines.map((l) => l + '\n').join(''));
   return file;
 }
 
 describe('mma logs', () => {
   it('prints existing log file contents to stdout', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-'));
     try {
       writeLog(dir, [
         JSON.stringify({ event: 'startup', pid: 1 }),
@@ -55,7 +55,7 @@ describe('mma logs', () => {
   });
 
   it('--batch filters lines by batchId', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-batch-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-batch-'));
     try {
       writeLog(dir, [
         JSON.stringify({ event: 'request_start', batchId: 'b1' }),
@@ -80,7 +80,7 @@ describe('mma logs', () => {
   });
 
   it('no log file + no --follow exits 0 with warning on stderr', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-empty-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-empty-'));
     try {
       const c = cap();
       const code = await runLogs({ config: mkConfig(dir), homeDir: dir, stdout: c.outFn, stderr: c.errFn });
@@ -92,7 +92,7 @@ describe('mma logs', () => {
   });
 
   it('no log file + --follow waits then exits 0 when wait elapses', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-follow-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-follow-'));
     try {
       const c = cap();
       const code = await runLogs({
@@ -112,7 +112,7 @@ describe('mma logs', () => {
   });
 
   it('diagnostics.log: false logs a helpful stderr warning and still tails existing file', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-disabled-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-disabled-'));
     try {
       writeLog(dir, [JSON.stringify({ event: 'startup' })]);
       const c = cap();
@@ -126,7 +126,7 @@ describe('mma logs', () => {
   });
 
   it('--follow tails new writes', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-tail-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-tail-'));
     try {
       const logFile = writeLog(dir, [JSON.stringify({ event: 'startup' })]);
       const c = cap();

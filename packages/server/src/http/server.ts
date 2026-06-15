@@ -94,7 +94,7 @@ async function registerControlHandlers(
     let recorderForBus: Recorder | null = null;
     try { recorderForBus = getRecorder(); } catch { /* not initialized */ }
     const decideConsentForUploader = () => {
-      const envVal = process.env.MMAGENT_TELEMETRY;
+      const envVal = process.env.MMA_TELEMETRY;
       let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
       try {
         const cfgPath = join(homedir(), '.multi-model', 'config.json');
@@ -197,7 +197,7 @@ export async function startServer(
       let recorderForUnified: Recorder | null = null;
       try { recorderForUnified = getRecorder(); } catch { /* not initialized */ }
       const decideConsentForUnified = () => {
-        const envVal = process.env.MMAGENT_TELEMETRY;
+        const envVal = process.env.MMA_TELEMETRY;
         let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
         try {
           const cfgPath = join(homedir(), '.multi-model', 'config.json');
@@ -257,7 +257,7 @@ export async function startServer(
   }));
 
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
-  if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {
+  if (process.env.MMA_TEST_INTROSPECTION === '1') {
     router.register('GET', '/__routes', (_req, res) => {
       sendJson(res, 200, router.listRoutes().map((route) => ({
         method: route.method.toUpperCase(),

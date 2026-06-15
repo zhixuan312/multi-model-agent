@@ -152,7 +152,7 @@ export interface RunStatusDeps {
   tokenFile: string;
   /** Whether to output raw JSON. */
   json?: boolean;
-  /** Environment variable accessor (for MMAGENT_AUTH_TOKEN override). */
+  /** Environment variable accessor (for MMA_AUTH_TOKEN override). */
   env?: Record<string, string | undefined>;
   /** Write to stdout. */
   stdout?: (s: string) => boolean;
@@ -176,7 +176,7 @@ export async function runStatus(deps: RunStatusDeps): Promise<number> {
 
   // Read the token (env wins)
   let token: string;
-  const envToken = (env['MMAGENT_AUTH_TOKEN'] ?? '').trim();
+  const envToken = (env['MMA_AUTH_TOKEN'] ?? '').trim();
   if (envToken.length > 0) {
     token = envToken;
   } else {
@@ -190,7 +190,7 @@ export async function runStatus(deps: RunStatusDeps): Promise<number> {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
         stderr(`mma status: token file not found: ${resolvedTokenFile}\n`);
-        stderr(`Run 'mma print-token' or set MMAGENT_AUTH_TOKEN.\n`);
+        stderr(`Run 'mma print-token' or set MMA_AUTH_TOKEN.\n`);
       } else {
         const msg = err instanceof Error ? err.message : String(err);
         stderr(`mma status: cannot read token file: ${msg}\n`);

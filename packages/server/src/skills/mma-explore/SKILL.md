@@ -12,7 +12,7 @@ version: "0.0.0-unreleased"
 Codebase + external sources + prior learnings, synthesised into 3–5 distinct
 directions. Three delegated calls run in parallel — `mma-investigate` (internal
 codebase), `mma-research` (external sources), and `mma-journal-recall` (what
-this project already learned/decided, from the `.mmagent/journal/` graph) —
+this project already learned/decided, from the `.mma/journal/` graph) —
 and **you** synthesise their results into the final output.
 
 **Core principle:** Exploration is divergent (survey, enumerate, compare).
@@ -102,7 +102,7 @@ Explore top-level orchestration aggregates sub-task results into a valid `Implem
 | Did the leg succeed? | `results[0].completed === true` — findings may be zero on a read route; finding nothing wrong is a valid completion |
 | Internal citation source | `results[0].findings[i].claim` plus a `file:LINE` token from `results[0].findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
 | External citation source | `results[0].findings[i].claim` plus a source name / URL from `results[0].findings[i].evidence` |
-| Prior-learning source | `results[0].findings[i].claim` plus a journal node id from `results[0].findings[i].evidence` (recall cites `` `.mmagent/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
+| Prior-learning source | `results[0].findings[i].claim` plus a journal node id from `results[0].findings[i].evidence` (recall cites `` `.mma/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
 | Divergence axis | `results[0].findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
 
 Apply a sentinel only when `findings` is empty AND `results[0].message` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `results[0].message` reads tersely or `results[0].telemetry.workerSelfAssessment === 'failed'` — a worker can say `'failed'` with usable partial findings.

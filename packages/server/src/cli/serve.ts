@@ -248,14 +248,14 @@ export async function startServe(
   }
 
   // Telemetry uploader. Default endpoint ships to the project's hosted
-  // dashboard. MMAGENT_TELEMETRY_ENDPOINT overrides for self-hosted backends;
+  // dashboard. MMA_TELEMETRY_ENDPOINT overrides for self-hosted backends;
   // setting it to an empty string disables shipping entirely (events stay in
   // ~/.multi-model/telemetry-queue.ndjson). The real off-switch for telemetry
-  // is the consent flag (MMAGENT_TELEMETRY=0 / config.telemetry.enabled =
+  // is the consent flag (MMA_TELEMETRY=0 / config.telemetry.enabled =
   // false) — when consent is off the recorder enqueues nothing, so the
   // flusher's tick is a no-op even with the default endpoint set.
   const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry-frontend.x1.lucazhang.work/v1/events';
-  const envEndpoint = process.env.MMAGENT_TELEMETRY_ENDPOINT;
+  const envEndpoint = process.env.MMA_TELEMETRY_ENDPOINT;
   const telemetryEndpoint = envEndpoint === undefined
     ? DEFAULT_TELEMETRY_ENDPOINT
     : envEndpoint.trim();

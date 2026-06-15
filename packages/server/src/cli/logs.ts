@@ -1,7 +1,7 @@
 /**
  * logs.ts — `mma logs` subcommand.
  *
- * Tails the diagnostic log file for today (mmagent-YYYY-MM-DD.jsonl). Supports
+ * Tails the diagnostic log file for today (mma-YYYY-MM-DD.jsonl). Supports
  * --follow for tail-F semantics and --batch=<id> to filter to a single batch.
  *
  * Exit codes:
@@ -32,7 +32,7 @@ function todayUtc(): string {
 
 function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
   const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.multi-model', 'logs');
-  return path.join(dir, `mmagent-${todayUtc()}.jsonl`);
+  return path.join(dir, `mma-${todayUtc()}.jsonl`);
 }
 
 function matchesBatch(line: string, batchId: string): boolean {

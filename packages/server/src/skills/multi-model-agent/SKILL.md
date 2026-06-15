@@ -134,10 +134,10 @@ Idempotent: already-running daemon → curl succeeds → no-op. Background `mma 
 ## Auth token
 
 ```bash
-export MMAGENT_AUTH_TOKEN=$(mma print-token)
+export MMA_AUTH_TOKEN=$(mma print-token)
 ```
 
-Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token is generated once on first `mma serve` and persists at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
+Every request requires `Authorization: Bearer $MMA_AUTH_TOKEN`. The token is generated once on first `mma serve` and persists at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
 
 ## Worker tier: `agentType`
 
