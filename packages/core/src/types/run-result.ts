@@ -96,6 +96,9 @@ export interface SessionOpts {
   envelope?: TaskEnvelopeStore;
   /** Present only when the task requested skills and resolution succeeded. */
   skills?: ResolvedSkillBundle;
+  /** Session ID from a prior task — seeds the provider session so the first
+   *  send() resumes the prior conversation instead of starting fresh. */
+  resume?: string;
 }
 
 export interface TurnOpts {

@@ -53,10 +53,38 @@ describe('Session resume', () => {
 
     const opts = openSession.mock.calls[0][0];
     expect(opts).toHaveProperty('cwd', '/tmp');
-    // The pipeline accepts resumeImplementer on PipelineInput (verified by
-    // TypeScript compilation).  SessionOpts does not yet carry a resume field,
-    // so the value is not forwarded today — but it is stored on the input for
-    // when providers gain resume support.
+    expect(opts).toHaveProperty('resume', 'sess-prior-123');
+  });
+
+  it('passes resumeReviewer to reviewer openSession', async () => {
+    const implProvider = {
+      name: 'mock', config: {},
+      openSession: vi.fn().mockReturnValue(
+        mockSession('{"tasksCompleted":[],"filesChanged":[],"notes":"ok"}'),
+      ),
+    };
+    const revOpenSession = vi.fn().mockReturnValue(
+      mockSession('{"findings":[],"summary":"ok","verdict":"approved"}', 'rev-resumed'),
+    );
+    const revProvider = { name: 'mock', config: {}, openSession: revOpenSession };
+
+    await runTwoPhasePipeline({
+      type: 'delegate',
+      implementerSkill: '#',
+      reviewerSkill: '#',
+      taskPayload: 'x',
+      implementerProvider: implProvider,
+      reviewerProvider: revProvider,
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: '/tmp',
+      sandboxPolicy: 'cwd-only',
+      resumeReviewer: 'rev-prior-456',
+    });
+
+    const revOpts = revOpenSession.mock.calls[0][0];
+    expect(revOpts).toHaveProperty('resume', 'rev-prior-456');
   });
 
   it('returns session IDs from both providers', async () => {

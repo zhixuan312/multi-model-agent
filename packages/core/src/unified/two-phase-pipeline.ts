@@ -108,6 +108,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
       bus: input.bus,
+      ...(input.resumeImplementer && { resume: input.resumeImplementer }),
     });
     sessions.push(implSession);
 
@@ -143,6 +144,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
       bus: input.bus,
+      ...(input.resumeReviewer && { resume: input.resumeReviewer }),
     });
     sessions.push(revSession);
 

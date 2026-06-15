@@ -71,7 +71,9 @@ export class CodexCliSession implements Session {
   private codexSkillHomeReady = false;
   private skillHomePath: string | undefined;
 
-  constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {}
+  constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {
+    if (args.opts.resume) this.threadId = args.opts.resume;
+  }
 
   /** Returns task identity (taskId/taskIndex) from SessionOpts for event tagging.
    *  The stall watchdog filters bus events by these fields — every emit must carry them

@@ -58,6 +58,7 @@ export class ClaudeSession implements Session {
   }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
+    if (args.opts.resume) this.sessionId = args.opts.resume;
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
       model: args.model,
       cwd: args.opts.cwd,
