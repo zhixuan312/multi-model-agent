@@ -469,7 +469,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     const blockIds = input.contextBlockIds ?? [];
     const contextBlockStore = pc.contextBlocks;
-    const { type, agentTier: _at, reviewPolicy: _rp, sessionIds: _si, contextBlockIds: _cbi, ...payload } = input;
+    const { type, agentTier: _at, reviewPolicy: _rp, sessionIds, contextBlockIds: _cbi, ...payload } = input;
 
     // Register task in TaskRegistry and return 202 immediately
     const taskId = randomUUID();
@@ -538,6 +538,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             implementerGoal,
             reviewerGoal,
             bus: deps.bus,
+            ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
+            ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
           });
           const durationMs = Date.now() - startedAtMs;
 
