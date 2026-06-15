@@ -35,7 +35,7 @@ function writeLog(logDir: string, lines: string[]): string {
   return file;
 }
 
-describe('mmagent logs', () => {
+describe('mma logs', () => {
   it('prints existing log file contents to stdout', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mmagent-logs-'));
     try {

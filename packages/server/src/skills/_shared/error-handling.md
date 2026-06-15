@@ -17,7 +17,7 @@
 ### Network failures
 
 Retry up to 3 times with exponential backoff (1 s → 2 s → 4 s).
-If the server is unreachable, check that `mmagent serve` is running:
+If the server is unreachable, check that `mma serve` is running:
 ```bash
 curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — see spec C13)
 ```

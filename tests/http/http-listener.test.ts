@@ -31,7 +31,7 @@ describe('HTTPListener', () => {
     expect(r.status).toBe(500);
     const body = await r.json() as { error?: { code?: string } };
     expect(body.error?.code).toBe('internal_error');
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[mmagent] listener handler rejected:'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[mma] listener handler rejected:'));
     errSpy.mockRestore();
   });
 
@@ -45,7 +45,7 @@ describe('HTTPListener', () => {
     const r = await fetch(`http://127.0.0.1:${port}/`);
     expect(r.status).toBe(200);            // headers already committed
     expect(await r.text()).toBe('partial'); // response ended cleanly, no hang
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[mmagent] listener handler rejected:'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[mma] listener handler rejected:'));
     errSpy.mockRestore();
   });
 

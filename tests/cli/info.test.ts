@@ -1,5 +1,5 @@
 /**
- * tests/cli/info.test.ts — `mmagent info` subcommand.
+ * tests/cli/info.test.ts — `mma info` subcommand.
  *
  * Uses injected fetch + temp dirs; never hits a real server.
  */
@@ -42,7 +42,7 @@ function writeToken(contents = 'aaaaaaaa-bbbbbbbb-cccccccc-dddddddd\n'): { token
   return { tokenFile, dir };
 }
 
-describe('mmagent info (daemon not running)', () => {
+describe('mma info (daemon not running)', () => {
   it('JSON output includes required fields with NotApplicable sentinels', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();
@@ -113,7 +113,7 @@ describe('mmagent info (daemon not running)', () => {
   });
 });
 
-describe('mmagent info (daemon running)', () => {
+describe('mma info (daemon running)', () => {
   it('detects daemon running from /health status=ok', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();

@@ -40,9 +40,9 @@ Four steps, in order.
 
 ```bash
 npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
-mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
+mma sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
-mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
+mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
 ```
 
 Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
@@ -98,12 +98,12 @@ That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.mai
 
 Two ways — pick one:
 
-**Option A — let your AI client auto-spawn it.** Just open your client (Claude Code / Codex CLI / etc.) and call any mma-* skill; the skill's preflight check spawns `mmagent serve` on `127.0.0.1:7337` and reuses it for every subsequent call. Nothing else to do.
+**Option A — let your AI client auto-spawn it.** Just open your client (Claude Code / Codex CLI / etc.) and call any mma-* skill; the skill's preflight check spawns `mma serve` on `127.0.0.1:7337` and reuses it for every subsequent call. Nothing else to do.
 
 **Option B — start it manually.** Useful when you want the daemon up before opening a client (e.g. to inspect the queue, run `curl /health`, or attach to logs):
 
 ```bash
-mmagent serve                          # 127.0.0.1:7337 by default
+mma serve                          # 127.0.0.1:7337 by default
 curl -s http://localhost:7337/health   # → {"status":"ok"}
 ```
 
@@ -113,29 +113,29 @@ For a long-running background install (always-on, survives reboots), use [the la
 
 ```bash
 npm install -g @zhixuan92/multi-model-agent@latest
-pkill -f "mmagent serve"            # stop the running daemon
-mmagent sync-skills                 # reconcile installed skills with the new bundle
+pkill -f "mma serve"            # stop the running daemon
+mma sync-skills                 # reconcile installed skills with the new bundle
 # next AI-client session respawns the daemon via the skill preflight
 ```
 
-A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve` (a new token is regenerated on boot).
+A drift warning prints on `mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mma serve` (a new token is regenerated on boot).
 
 ## Disabling / re-enabling
 
 To turn MMA off without uninstalling the package — e.g. for a sensitive repo you don't want delegated to external models, or to compare behaviour with and without it:
 
 ```bash
-mmagent disable        # removes the skills from every detected client; your AI stops routing to MMA
-mmagent enable         # restores them
+mma disable        # removes the skills from every detected client; your AI stops routing to MMA
+mma enable         # restores them
 ```
 
 `disable` is **sticky**: it records a sentinel at `~/.multi-model/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
 
-A bare `mmagent disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
+A bare `mma disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
 
 ## Skills
 
-Skills are the surface your AI client sees. `mmagent sync-skills` writes the table below into the client's skill index and keeps it reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
+Skills are the surface your AI client sees. `mma sync-skills` writes the table below into the client's skill index and keeps it reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
 
 ### Work-delegation skills
 
@@ -236,11 +236,11 @@ Every `defaults` knob has a sane built-in. Override only when you have a reason.
 
 ### Auth token
 
-Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
+Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
 
 ### Telemetry
 
-**Off by default.** Opt in via `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`), or add the `telemetry` block directly to `~/.multi-model/config.json`:
+**Off by default.** Opt in via `mma telemetry enable` (or `MMAGENT_TELEMETRY=1`), or add the `telemetry` block directly to `~/.multi-model/config.json`:
 
 ```json
 {
@@ -253,7 +253,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
 
-**Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mmagent telemetry enable` to opt in to the current wire schema (v6).
+**Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mma telemetry enable` to opt in to the current wire schema (v6).
 
 ### Verbose / diagnostics
 
@@ -269,31 +269,31 @@ Add the `diagnostics` block to `~/.multi-model/config.json`:
 }
 ```
 
-Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<taskId>.json`.
+Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<taskId>.json`.
 
 > **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
 ## Operator commands
 
 ```bash
-mmagent serve [--verbose] [--log]                # start daemon
-mmagent info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
-mmagent status [--json]                          # health + stats from a running daemon
-mmagent logs  [--follow] [--task=<id>]           # tail today's diagnostic log
-mmagent print-token                              # print the current auth token
-mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
-mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
-mmagent enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
-mmagent telemetry status                         # show consent state + source (env / config / default)
-mmagent telemetry enable                         # opt in (writes ~/.multi-model/config.json)
-mmagent telemetry disable                       # opt out + delete local queue
-mmagent telemetry reset-id                      # rotate the local Ed25519 identity (new install-id next run)
-mmagent telemetry dump-queue                    # print the locally-queued events as JSON (pre-upload inspection)
+mma serve [--verbose] [--log]                # start daemon
+mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
+mma status [--json]                          # health + stats from a running daemon
+mma logs  [--follow] [--task=<id>]           # tail today's diagnostic log
+mma print-token                              # print the current auth token
+mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
+mma disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
+mma enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
+mma telemetry status                         # show consent state + source (env / config / default)
+mma telemetry enable                         # opt in (writes ~/.multi-model/config.json)
+mma telemetry disable                       # opt out + delete local queue
+mma telemetry reset-id                      # rotate the local Ed25519 identity (new install-id next run)
+mma telemetry dump-queue                    # print the locally-queued events as JSON (pre-upload inspection)
 ```
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) go through the same two-phase pipeline: implement on one tier, review on the other. The `main` type is a session-persistent orchestrator (no reviewer, no worktree) for multi-phase frontend workflows. Write types run as sequential goal-sets; read types fan out per file/criterion. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) go through the same two-phase pipeline: implement on one tier, review on the other. The `main` type is a session-persistent orchestrator (no reviewer, no worktree) for multi-phase frontend workflows. Write types run as sequential goal-sets; read types fan out per file/criterion. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -306,10 +306,10 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | Symptom | Fix |
 |---|---|
 | Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
-| Daemon stale after upgrade | `pkill -f "mmagent serve"`; the skill preflight respawns it on next client session |
-| Skill version mismatch | `mmagent sync-skills` and restart your client |
-| `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
-| `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
+| Daemon stale after upgrade | `pkill -f "mma serve"`; the skill preflight respawns it on next client session |
+| Skill version mismatch | `mma sync-skills` and restart your client |
+| `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mma print-token)` |
+| `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 

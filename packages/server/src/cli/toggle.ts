@@ -1,5 +1,5 @@
 /**
- * toggle.ts — `mmagent disable` / `mmagent enable` subcommands.
+ * toggle.ts — `mma disable` / `mma enable` subcommands.
  *
  * disable: remove every shipped skill from the resolved clients, drop their
  *   manifest entries, and record a sticky sentinel so a later `npm install`
@@ -12,8 +12,8 @@
  * behave identically across all three commands.
  *
  * Usage:
- *   mmagent disable [--target=<client>] [--all-targets] [--dry-run] [--json]
- *   mmagent enable  [--target=<client>] [--all-targets] [--dry-run] [--json]
+ *   mma disable [--target=<client>] [--all-targets] [--dry-run] [--json]
+ *   mma enable  [--target=<client>] [--all-targets] [--dry-run] [--json]
  *
  * Exit codes:
  *   0 — success (or no clients detected)
@@ -79,7 +79,7 @@ function parseToggleArgs(argv: string[]): ToggleArgs {
 }
 
 /**
- * `mmagent disable` — remove all MMA skills from the resolved clients and
+ * `mma disable` — remove all MMA skills from the resolved clients and
  * record the sticky sentinel.
  */
 export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
@@ -95,7 +95,7 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
     targets = resolveTargets(parsed.targets, parsed.allTargets, homeDir);
   } catch (err) {
     if (err instanceof UnknownTargetError) {
-      stderr(`mmagent disable: ${err.message}\n`);
+      stderr(`mma disable: ${err.message}\n`);
       return ToggleExitCode.ERR_UNKNOWN_TARGET;
     }
     throw err;
@@ -150,7 +150,7 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
     const verb = parsed.dryRun ? 'Would disable' : 'Disabled';
     const errClause = errors.length > 0 ? `, ${errors.length} errors` : '';
     stdout(`${verb} MMA skills → ${targets.join(', ')} (${removed.length} removed${errClause}).\n`);
-    if (!parsed.dryRun) stdout('Run `mmagent enable` to restore.\n');
+    if (!parsed.dryRun) stdout('Run `mma enable` to restore.\n');
     for (const e of errors) stderr(`error: ${e.skill} → ${e.target}: ${e.reason}\n`);
   }
 
@@ -158,7 +158,7 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
 }
 
 /**
- * `mmagent enable` — clear the sentinel for the resolved clients, then
+ * `mma enable` — clear the sentinel for the resolved clients, then
  * delegate to sync-skills' idempotent upsert to reinstall the skills.
  */
 export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
@@ -173,7 +173,7 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
     targets = resolveTargets(parsed.targets, parsed.allTargets, homeDir);
   } catch (err) {
     if (err instanceof UnknownTargetError) {
-      stderr(`mmagent enable: ${err.message}\n`);
+      stderr(`mma enable: ${err.message}\n`);
       return ToggleExitCode.ERR_UNKNOWN_TARGET;
     }
     throw err;

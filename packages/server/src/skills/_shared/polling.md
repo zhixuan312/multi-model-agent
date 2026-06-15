@@ -61,7 +61,7 @@ done
 
 Start at 1 s, double each iteration, cap at 30 s. The 1800-second client-side
 timeout is a safety cap; most tasks complete in under 60 s. Discover `$PORT`
-at runtime with `mmagent info --json | jq -r .port` (default: 7337).
+at runtime with `mma info --json | jq -r .port` (default: 7337).
 
 ### Caller-side tool-timeout note
 

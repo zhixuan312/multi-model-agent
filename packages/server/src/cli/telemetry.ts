@@ -1,12 +1,12 @@
 /**
- * telemetry.ts — `mmagent telemetry` subcommands.
+ * telemetry.ts — `mma telemetry` subcommands.
  *
  * Usage:
- *   mmagent telemetry status
- *   mmagent telemetry enable
- *   mmagent telemetry disable
- *   mmagent telemetry reset-id
- *   mmagent telemetry dump-queue
+ *   mma telemetry status
+ *   mma telemetry enable
+ *   mma telemetry disable
+ *   mma telemetry reset-id
+ *   mma telemetry dump-queue
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -107,7 +107,7 @@ async function runEnable(deps: TelemetryDeps): Promise<number> {
     stdout('Telemetry enabled (config.telemetry.enabled = true)\n');
     return 0;
   } catch (err) {
-    stderr(`mmagent telemetry enable: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr(`mma telemetry enable: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 }
@@ -134,7 +134,7 @@ async function runDisable(deps: TelemetryDeps): Promise<number> {
     stdout('Telemetry disabled (config.telemetry.enabled = false, identity revoked)\n');
     return 0;
   } catch (err) {
-    stderr(`mmagent telemetry disable: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr(`mma telemetry disable: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 }
@@ -151,7 +151,7 @@ async function runResetId(deps: TelemetryDeps): Promise<number> {
     stdout('Identity reset (generation bumped, queue deleted, install-id deleted)\n');
     return 0;
   } catch (err) {
-    stderr(`mmagent telemetry reset-id: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr(`mma telemetry reset-id: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 }
@@ -168,7 +168,7 @@ async function runDumpQueue(deps: TelemetryDeps): Promise<number> {
     stdout(JSON.stringify(batch.records, null, 2) + '\n');
     return 0;
   } catch (err) {
-    stderr(`mmagent telemetry dump-queue: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr(`mma telemetry dump-queue: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 }
@@ -184,7 +184,7 @@ export async function runTelemetry(deps: TelemetryDeps): Promise<number> {
     case 'dump-queue':return runDumpQueue(deps);
     default: {
       const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
-      stderr(`mmagent telemetry: unknown subcommand '${(deps as any).subcommand}'\n`);
+      stderr(`mma telemetry: unknown subcommand '${(deps as any).subcommand}'\n`);
       return 1;
     }
   }

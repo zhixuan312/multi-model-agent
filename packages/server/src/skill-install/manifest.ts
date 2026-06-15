@@ -115,7 +115,7 @@ function readManifest(homeDir?: string): InstallManifest {
     parsed = JSON.parse(raw);
   } catch {
     const backup = backupCorrupted(p);
-    process.stderr.write(`[mmagent] manifest corrupt; rebuilt empty v2 (previous copy at ${backup})\n`);
+    process.stderr.write(`[mma] manifest corrupt; rebuilt empty v2 (previous copy at ${backup})\n`);
     const empty = emptyManifest();
     writeManifest(empty, homeDir);
     return empty;
@@ -141,7 +141,7 @@ function readManifest(homeDir?: string): InstallManifest {
 
   // Unrecognized shape (or pre-v2 manifest from an older mmagent) — back up and rebuild empty.
   const backup = backupCorrupted(p);
-  process.stderr.write(`[mmagent] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
+  process.stderr.write(`[mma] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
   const empty = emptyManifest();
   writeManifest(empty, homeDir);
   return empty;

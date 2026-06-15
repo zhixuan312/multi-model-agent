@@ -24,9 +24,9 @@ Four steps, in order.
 
 ```bash
 npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
-mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
+mma sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
-mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
+mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
 ```
 
 | Client | Install location | Loaded |
@@ -74,7 +74,7 @@ That's the whole minimum-viable file. All other knobs have sane built-in default
 ### 4. Start the daemon + verify
 
 ```bash
-mmagent serve                          # 127.0.0.1:7337 by default
+mma serve                          # 127.0.0.1:7337 by default
 curl -s http://localhost:7337/health   # → {"status":"ok"}
 ```
 
@@ -82,13 +82,13 @@ curl -s http://localhost:7337/health   # → {"status":"ok"}
 
 ```bash
 npm install -g @zhixuan92/multi-model-agent@latest
-pkill -f "mmagent serve"            # stop the running daemon
-mmagent sync-skills                 # reconcile installed skills with the new bundle
+pkill -f "mma serve"            # stop the running daemon
+mma sync-skills                 # reconcile installed skills with the new bundle
 ```
 
 ## Skills
 
-Skills are the surface your AI client sees. `mmagent sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the unified `POST /task` endpoint.
+Skills are the surface your AI client sees. `mma sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the unified `POST /task` endpoint.
 
 ### Work-delegation skills
 
@@ -125,11 +125,11 @@ Two provider types (v4.4+):
 
 ### Telemetry
 
-**Off by default.** Opt in via `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`).
+**Off by default.** Opt in via `mma telemetry enable` (or `MMAGENT_TELEMETRY=1`).
 
 ### Auth token
 
-Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override.
+Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMAGENT_AUTH_TOKEN` to override.
 
 ## REST API
 
@@ -150,20 +150,20 @@ All endpoints except `/health` require bearer auth: `Authorization: Bearer <toke
 ## Operator commands
 
 ```bash
-mmagent serve [--log]                            # start daemon
-mmagent info  [--json]                           # version, bind/port, token fingerprint
-mmagent status [--json]                          # health + stats from a running daemon
-mmagent logs  [--follow]                         # tail diagnostic log
-mmagent print-token                              # print the current auth token
-mmagent sync-skills [--target=<client>]          # install/update skills
-mmagent disable [--target=<client>]              # remove skills
-mmagent enable  [--target=<client>]              # reinstall skills
-mmagent telemetry status|enable|disable          # manage telemetry consent
+mma serve [--log]                            # start daemon
+mma info  [--json]                           # version, bind/port, token fingerprint
+mma status [--json]                          # health + stats from a running daemon
+mma logs  [--follow]                         # tail diagnostic log
+mma print-token                              # print the current auth token
+mma sync-skills [--target=<client>]          # install/update skills
+mma disable [--target=<client>]              # remove skills
+mma enable  [--target=<client>]              # reinstall skills
+mma telemetry status|enable|disable          # manage telemetry consent
 ```
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server. All task types go through a unified two-phase pipeline: the standard agent implements, then the complex agent reviews. Each task has a wall-clock timeout and bounded execution.
+`mma serve` runs a loopback HTTP server. All task types go through a unified two-phase pipeline: the standard agent implements, then the complex agent reviews. Each task has a wall-clock timeout and bounded execution.
 
 Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). Layer map and request lifecycle: [docs/ARCHITECTURE.md](https://github.com/zhixuan312/multi-model-agent/blob/master/docs/ARCHITECTURE.md).
 

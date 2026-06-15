@@ -1,7 +1,7 @@
 /**
  * tests/cli/status.test.ts
  *
- * Tests for Task 9.3 — `mmagent status` subcommand.
+ * Tests for Task 9.3 — `mma status` subcommand.
  * Uses injected fetch + temp dirs; never hits a real server.
  */
 import { describe, it, expect } from 'vitest';

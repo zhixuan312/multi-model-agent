@@ -264,7 +264,7 @@ export class Flusher {
         let body = '';
         try { body = (await response.text()).slice(0, 200); } catch { /* ignore */ }
         process.stderr.write(
-          `[mmagent] telemetry upload dropped: status=${status} records=${group.records.length} body=${body}\n`,
+          `[mma] telemetry upload dropped: status=${status} records=${group.records.length} body=${body}\n`,
         );
         return { status: status === 400 ? '400' : '413', retryAfterSeconds: null };
       }

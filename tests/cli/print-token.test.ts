@@ -1,7 +1,7 @@
 /**
  * tests/cli/print-token.test.ts
  *
- * Tests for Task 9.2 — `mmagent print-token` subcommand.
+ * Tests for Task 9.2 — `mma print-token` subcommand.
  * Uses temp dirs; never touches real ~/.multi-model or HOME.
  */
 import { describe, it, expect } from 'vitest';

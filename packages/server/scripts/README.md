@@ -1,6 +1,6 @@
 # mmagent service templates
 
-Templates for running `mmagent serve` as a background user service.
+Templates for running `mma serve` as a background user service.
 
 ## macOS (launchd)
 

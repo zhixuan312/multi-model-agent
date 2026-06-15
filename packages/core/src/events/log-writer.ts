@@ -33,7 +33,7 @@ export class LogWriter implements Subscriber {
     // redactSecrets is a recursive walker that returns the redacted value at the same shape.
     const redactedRecord = redactSecrets(record) as Record<string, unknown>;
     try { this.writer.writeLine(redactedRecord); } catch (err) {
-      process.stderr.write(`[mmagent] log_writer_error: ${(err as Error).message}\n`);
+      process.stderr.write(`[mma] log_writer_error: ${(err as Error).message}\n`);
     }
   }
 

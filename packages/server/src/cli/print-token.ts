@@ -1,12 +1,12 @@
 /**
- * print-token.ts — `mmagent print-token` subcommand.
+ * print-token.ts — `mma print-token` subcommand.
  *
  * Reads the bearer auth token and prints it to stdout.
  * Env override (MMAGENT_AUTH_TOKEN) wins over any file.
  * Missing file → prints an error message to stderr and exits 1.
  *
  * Usage:
- *   mmagent print-token [--config <path>]
+ *   mma print-token [--config <path>]
  */
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -65,7 +65,7 @@ export function printToken(deps: PrintTokenDeps = {}): number {
     if (code === 'ENOENT') {
       stderr(
         `mmagent: token file not found: ${tokenFile}\n` +
-        `Run 'mmagent serve' once to generate a token, or set MMAGENT_AUTH_TOKEN.\n`,
+        `Run 'mma serve' once to generate a token, or set MMAGENT_AUTH_TOKEN.\n`,
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);

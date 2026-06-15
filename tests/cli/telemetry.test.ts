@@ -1,7 +1,7 @@
 /**
  * tests/cli/telemetry.test.ts
  *
- * Tests for Task 7.1 — `mmagent telemetry` subcommands.
+ * Tests for Task 7.1 — `mma telemetry` subcommands.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
@@ -40,7 +40,7 @@ function readConfig(homeDir: string): unknown {
 
 // ─── status ──────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry status', () => {
+describe('mma telemetry status', () => {
   let savedEnv: string | undefined;
 
   beforeEach(() => { savedEnv = process.env.MMAGENT_TELEMETRY; });
@@ -192,7 +192,7 @@ describe('mmagent telemetry status', () => {
 
 // ─── enable ───────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry enable', () => {
+describe('mma telemetry enable', () => {
   it('writes config.telemetry.enabled=true when no config exists', async () => {
     const tmp = setupTempHome();
     try {
@@ -254,7 +254,7 @@ describe('mmagent telemetry enable', () => {
 
 // ─── disable ──────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry disable', () => {
+describe('mma telemetry disable', () => {
   it('writes config.telemetry.enabled=false + bumps generation + deletes queue', async () => {
     const tmp = setupTempHome();
     try {
@@ -327,7 +327,7 @@ describe('mmagent telemetry disable', () => {
 
 // ─── reset-id ─────────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry reset-id', () => {
+describe('mma telemetry reset-id', () => {
   it('revokeIdentity (bumps generation + deletes queue) + deletes install-id', async () => {
     const tmp = setupTempHome();
     try {
@@ -381,7 +381,7 @@ describe('mmagent telemetry reset-id', () => {
 
 // ─── dump-queue ───────────────────────────────────────────────────────────────
 
-describe('mmagent telemetry dump-queue', () => {
+describe('mma telemetry dump-queue', () => {
   it('prints queue records as JSON to stdout', async () => {
     const tmp = setupTempHome();
     try {

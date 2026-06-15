@@ -39,7 +39,7 @@ export class TelemetryUploader implements Subscriber {
       this.opts.recorder.enqueue(record);
       this.uploaded.add(env.taskId);
     } catch (err) {
-      process.stderr.write(`[mmagent] telemetry_upload_error task=${env.taskId} err=${(err as Error).message}\n`);
+      process.stderr.write(`[mma] telemetry_upload_error task=${env.taskId} err=${(err as Error).message}\n`);
     }
   }
 }

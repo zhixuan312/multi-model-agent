@@ -12,7 +12,7 @@
  *   await handle.stop(); // graceful shutdown; no process.exit
  *
  * Usage (CLI):
- *   mmagent serve [--config <path>]
+ *   mma serve [--config <path>]
  *   // this module owns signal handling and process.exit
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -56,7 +56,7 @@ export async function maybeAutoUpdateSkills(
     entries = listEntries();
   } catch (err) {
     if (err instanceof FutureManifestError) {
-      stderr(`[mmagent] warning: ${err.message}; skipping skill auto-sync\n`);
+      stderr(`[mma] warning: ${err.message}; skipping skill auto-sync\n`);
       return;
     }
     return; // best-effort — never let manifest IO issues block serve
@@ -71,8 +71,8 @@ export async function maybeAutoUpdateSkills(
     if (behind.length > 0) drift.push(`${behind.length} out of date (${behind.map((e) => e.name).join(', ')})`);
     if (missing.length > 0) drift.push(`${missing.length} new (${missing.map((m) => m.name).join(', ')})`);
     stderr(
-      `[mmagent] skill drift: ${drift.join('; ')}. ` +
-      `Run 'mmagent sync-skills' to reconcile (or set server.autoUpdateSkills=true in config).\n`,
+      `[mma] skill drift: ${drift.join('; ')}. ` +
+      `Run 'mma sync-skills' to reconcile (or set server.autoUpdateSkills=true in config).\n`,
     );
     return;
   }
@@ -83,8 +83,8 @@ export async function maybeAutoUpdateSkills(
       runSyncSkills({ silent: true, bestEffort: true, ifExists: true }),
       new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
     ]);
-    if (behind.length > 0) process.stdout.write(`[mmagent] auto-synced ${behind.length} updated skill(s)\n`);
-    if (missing.length > 0) process.stdout.write(`[mmagent] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
+    if (behind.length > 0) process.stdout.write(`[mma] auto-synced ${behind.length} updated skill(s)\n`);
+    if (missing.length > 0) process.stdout.write(`[mma] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
   }
@@ -162,7 +162,7 @@ export async function startServe(
     const drift = sync.driftReport();
     if (drift.length > 0) {
       const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
-      stderr(`[mmagent] WARN: skill manifest drift detected: ${summary}. Re-run 'mmagent sync-skills' to reconcile.\n`);
+      stderr(`[mma] WARN: skill manifest drift detected: ${summary}. Re-run 'mma sync-skills' to reconcile.\n`);
     }
   } catch {
     // best-effort — never let drift check block serve
@@ -191,7 +191,7 @@ export async function startServe(
   const onStdoutError = (err: NodeJS.ErrnoException) => {
     if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
     logShutdown('stdout_other_error');
-    try { process.stderr.write(`[mmagent] stdout error: ${err.message}\n`); } catch { /* stderr may also be dead */ }
+    try { process.stderr.write(`[mma] stdout error: ${err.message}\n`); } catch { /* stderr may also be dead */ }
     exit(1);
   };
   const onStderrError = (err: NodeJS.ErrnoException) => {
@@ -205,7 +205,7 @@ export async function startServe(
     logShutdown('uncaughtException');
     try {
       const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
-      process.stderr.write(`[mmagent] uncaught exception: ${msg}\n`);
+      process.stderr.write(`[mma] uncaught exception: ${msg}\n`);
     } catch { /* best-effort */ }
     exit(1);
   };
@@ -215,7 +215,7 @@ export async function startServe(
     logShutdown('unhandledRejection');
     try {
       const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
-      process.stderr.write(`[mmagent] unhandled rejection: ${msg}\n`);
+      process.stderr.write(`[mma] unhandled rejection: ${msg}\n`);
     } catch { /* best-effort */ }
     exit(1);
   };
@@ -243,7 +243,7 @@ export async function startServe(
       fs.mkdirSync(homeDir, { recursive: true });
       fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });
     } catch (err) {
-      stderr(`[mmagent] warning: failed to write last-version at ${lastVersionPath}: ${err instanceof Error ? err.message : String(err)}\n`);
+      stderr(`[mma] warning: failed to write last-version at ${lastVersionPath}: ${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
 
@@ -275,7 +275,7 @@ export async function startServe(
   if (inlineOffenders.length > 0) {
     const firstHint = envVarHint(inlineOffenders[0]!);
     stderr(
-      `[mmagent] WARNING: inline apiKey in config for agent(s): ${inlineOffenders.join(', ')}.\n` +
+      `[mma] WARNING: inline apiKey in config for agent(s): ${inlineOffenders.join(', ')}.\n` +
       `  Fix:\n` +
       `    export ${firstHint}='<your-key>'\n` +
       `    # then in config.json, replace\n` +
@@ -288,14 +288,14 @@ export async function startServe(
   const cleanupSignal = (sig: 'SIGTERM' | 'SIGINT') => {
     if (stopInFlight) return;
     stopInFlight = true;
-    stderr(`[mmagent] received ${sig}, shutting down gracefully\u2026\n`);
+    stderr(`[mma] received ${sig}, shutting down gracefully\u2026\n`);
     // 1) Refuse new dispatches immediately so they don't compound the drain.
     setDraining(true);
     // 2) TaskRegistry tracks in-flight tasks (no execution contexts).
     //    Log what's still running for operators, then proceed to shutdown.
     const inflight = running.taskRegistry?.allInFlight?.() ?? [];
     if (inflight.length > 0) {
-      stderr(`[mmagent] draining ${inflight.length} in-flight task(s)\n`);
+      stderr(`[mma] draining ${inflight.length} in-flight task(s)\n`);
     }
     const drainSessions = Promise.resolve();
 
@@ -308,7 +308,7 @@ export async function startServe(
       .then(() => exit(0))
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        stderr(`[mmagent] shutdown failed: ${msg}\n`);
+        stderr(`[mma] shutdown failed: ${msg}\n`);
         exit(1);
       });
   };
@@ -335,7 +335,7 @@ export async function startServe(
     const bootId = randomUUID();
     const version = readServerVersion();
     process.stdout.write(
-      `[mmagent] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
+      `[mma] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
     );
   } catch {
     // Token load shouldn't fail here (startServer already validated it), but
@@ -353,7 +353,7 @@ export async function startServe(
     return `${cfg.model} [${cfg.type ?? 'unknown'}]`;
   };
   const mainLabel = config.agents.main ? ` | main=${fmtTier('main')}` : '';
-  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}${mainLabel}\n`);
+  process.stdout.write(`[mma] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}${mainLabel}\n`);
 
   // A4a.4 (4.2.2+): warn when stale Claude Code project siblings exist
   // under /tmp/claude/G--*. These come from prior Claude Code test runs
@@ -367,14 +367,14 @@ export async function startServe(
       const stale = fs.readdirSync(root).filter(e => e.startsWith('G--'));
       if (stale.length > 0) {
         process.stdout.write(
-          `[mmagent] WARNING: ${stale.length} stale Claude Code project sibling(s) under ${root}/G--*. ` +
+          `[mma] WARNING: ${stale.length} stale Claude Code project sibling(s) under ${root}/G--*. ` +
           `These can confuse cwd resolution; clean up with: rm -rf ${root}/G--*\n`
         );
       }
     } catch { /* swallow — log-only */ }
   }
 
-  process.stdout.write(`[mmagent] listening on ${host}:${running.port}\n`);
+  process.stdout.write(`[mma] listening on ${host}:${running.port}\n`);
 
   return {
     port: running.port,

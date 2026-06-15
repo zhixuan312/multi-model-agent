@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * CLI entry point for `mmagent` / `multi-model-agent`.
+ * CLI entry point for `mma` (multi-model-agent).
  *
  * Usage:
- *   mmagent serve [--config <path>]
- *   mmagent --help
- *   mmagent --version
+ *   mma [--config <path>]       # starts the server (serve is the default command)
+ *   mma --help
+ *   mma --version
  *
  * Config discovery order (highest priority → lowest):
  *   1. --config <path>          (explicit flag)
@@ -78,7 +78,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
-    // `mmagent serve --config ./config.json` would lose --config.
+    // `mma serve --config ./config.json` would lose --config.
   });
 }
 
@@ -168,17 +168,17 @@ export async function loadConfig(
 }
 
 const HELP_TEXT = `\
-mmagent — multi-model-agent HTTP server
+mma — multi-model-agent HTTP server
 
 Usage:
-  mmagent [command] [options]
+  mma [command] [options]
 
 Commands:
-  serve            Start the HTTP server (default)
+  serve            Start the HTTP server (default — just \`mma\` with no command)
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  sync-skills      Install + update + reconcile all shipped skills (single upsert command, replaces 4.0.x install-skill / update-skills)
+  sync-skills      Install + update + reconcile all shipped skills
   disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
@@ -290,7 +290,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const jsonFlag = opts['json'] === true;
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mmagent info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
         exit(1);
         break;
       }
@@ -310,7 +310,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     case 'logs': {
       const config = await loadConfig(configArg, deps).catch(() => null);
       if (!config) {
-        stderr(`mmagent logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        stderr(`mma logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
         exit(1);
         break;
       }
@@ -364,7 +364,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {
-        stderr(`mmagent telemetry: unknown subcommand '${telemetrySubcommand}'\nValid: ${validSubcommands.join(', ')}\n`);
+        stderr(`mma telemetry: unknown subcommand '${telemetrySubcommand}'\nValid: ${validSubcommands.join(', ')}\n`);
         exit(1);
         break;
       }
@@ -378,7 +378,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     default: {
-      stderr(`Unknown command: ${subcommand}\nRun 'mmagent --help' for usage.\n`);
+      stderr(`Unknown command: ${subcommand}\nRun 'mma --help' for usage.\n`);
       exit(1);
     }
   }
@@ -407,7 +407,7 @@ function isMain(): boolean {
 if (isMain()) {
   void main().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`mmagent: ${msg}\n`);
+    process.stderr.write(`mma: ${msg}\n`);
     process.exit(1);
   });
 }
