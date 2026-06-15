@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.1] - 2026-06-15
+
+**Token embedding + lint cleanup.** `sync-skills` now embeds the live auth token directly into installed skill files — clients read one file instead of shelling out to `mmagent print-token`. Response field renamed `usable` → `verified` for clarity. All 12 pre-existing lint warnings fixed. Inaccurate token-rotation claims corrected in skill docs. `SCHEMA_VERSION` unchanged.
+
+### Changed
+- `POST /configure-provider` response field renamed: `usable` → `verified`.
+- `sync-skills` embeds the live auth token from `~/.multi-model/auth-token` into installed skill files at install time, replacing shell helper patterns with the actual token value.
+- Skill docs corrected: token persists across restarts (only changes if the file is manually deleted), not "rotates on every restart".
+
+### Fixed
+- 12 pre-existing ESLint warnings: unused eslint-disable directives, inline `import()` type annotations replaced with top-level `import type`, value imports changed to `import type` where only used as types.
+
 ## [5.4.0] - 2026-06-14
 
 **Runtime provider configuration.** New `POST /configure-provider` endpoint validates and hot-swaps a provider/model/auth combination for any agent tier at runtime. Live API probe verifies credentials and model availability before applying. Changes auto-persist to config.json — no server restart needed. Repository-wide documentation refresh and dead golden cleanup. `SCHEMA_VERSION` unchanged.
