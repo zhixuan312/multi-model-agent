@@ -34,7 +34,7 @@ export interface ProbeResult {
 }
 
 export interface ConfigureProviderResponse {
-  usable: boolean;
+  verified: boolean;
   reason: string;
   applied: boolean;
   tier: string;
@@ -53,34 +53,34 @@ const CLAUDE_NATIVE_FAMILIES = new Set(['claude']);
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_CODEX_BASE_URL = 'https://api.openai.com';
 
-function validate(input: ConfigureProviderRequest): { usable: boolean; reason: string } {
+function validate(input: ConfigureProviderRequest): { verified: boolean; reason: string } {
   const profile = findModelProfile(input.model);
   const family = profile.family;
   const recognized = family !== 'other';
   const hasBaseUrl = input.auth.mode === 'api-key' && !!input.auth.baseUrl;
 
   if (!recognized && !hasBaseUrl) {
-    return { usable: false, reason: `Unrecognized model "${input.model}"; provide a baseUrl for custom models` };
+    return { verified: false, reason: `Unrecognized model "${input.model}"; provide a baseUrl for custom models` };
   }
 
   if (!hasBaseUrl) {
     if (input.provider === 'claude' && !CLAUDE_NATIVE_FAMILIES.has(family)) {
-      return { usable: false, reason: `${family} model requires codex provider, not claude` };
+      return { verified: false, reason: `${family} model requires codex provider, not claude` };
     }
     if (input.provider === 'codex' && CLAUDE_NATIVE_FAMILIES.has(family)) {
-      return { usable: false, reason: `claude model requires claude provider, not codex` };
+      return { verified: false, reason: `claude model requires claude provider, not codex` };
     }
   }
 
   if (input.auth.mode === 'oauth') {
     const oauthResult = checkOAuth(input.provider);
     if (!oauthResult.available) {
-      return { usable: false, reason: oauthResult.reason };
+      return { verified: false, reason: oauthResult.reason };
     }
-    return { usable: true, reason: `${input.model} is available on ${input.provider} provider via OAuth` };
+    return { verified: true, reason: `${input.model} is available on ${input.provider} provider via OAuth` };
   }
 
-  return { usable: true, reason: `${input.model} is available on ${input.provider} provider via API key` };
+  return { verified: true, reason: `${input.model} is available on ${input.provider} provider via API key` };
 }
 
 async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
@@ -217,22 +217,22 @@ export function buildConfigureProviderHandler(config: MultiModelConfig | undefin
       recognized: profile.family !== 'other',
     };
 
-    let { usable, reason } = validate(input);
+    let { verified, reason } = validate(input);
 
     let probeResult: ProbeResult | undefined;
-    if (usable) {
+    if (verified) {
       probeResult = await probeApi(input);
       if (!probeResult.reachable) {
-        usable = false;
+        verified = false;
         reason = probeResult.detail;
       } else if (probeResult.modelListed === false) {
-        usable = false;
+        verified = false;
         reason = `Model "${input.model}" not listed at endpoint; ${probeResult.detail}`;
       }
     }
 
     let applied = false;
-    if (usable && !input.dryRun) {
+    if (verified && !input.dryRun) {
       if (!config) {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration');
         return;
@@ -249,7 +249,7 @@ export function buildConfigureProviderHandler(config: MultiModelConfig | undefin
     }
 
     const response: ConfigureProviderResponse = {
-      usable,
+      verified,
       reason: applied ? `${reason}; applied to ${input.tier} tier` : reason,
       applied,
       tier: input.tier,

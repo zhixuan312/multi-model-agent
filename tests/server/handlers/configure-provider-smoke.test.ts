@@ -62,7 +62,7 @@ describe('configure-provider smoke', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toMatchObject({
-        usable: true, applied: false,
+        verified: true, applied: false,
         tier: 'standard', provider: 'claude',
         model: { id: 'claude-opus-4-8', family: 'claude', recognized: true },
       });
@@ -81,7 +81,7 @@ describe('configure-provider smoke', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.applied).toBe(true);
       expect(body.reason).toMatch(/applied/i);
     } finally { await h.close(); }
@@ -97,7 +97,7 @@ describe('configure-provider smoke', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.applied).toBe(false);
       expect(body.probe).toBeUndefined();
     } finally { await h.close(); }
@@ -113,7 +113,7 @@ describe('configure-provider smoke', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toMatchObject({
-        usable: true, provider: 'codex',
+        verified: true, provider: 'codex',
         model: { id: 'deepseek-v4-pro', family: 'deepseek', tier: 'reasoning', recognized: true },
       });
       expect(body.probe.modelListed).toBe(true);
@@ -130,7 +130,7 @@ describe('configure-provider smoke', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toMatchObject({
-        usable: true, provider: 'codex',
+        verified: true, provider: 'codex',
         model: { id: 'MiniMax-M3', family: 'minimax', recognized: true },
       });
     } finally { await h.close(); }
@@ -145,7 +145,7 @@ describe('configure-provider smoke', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.tier).toBe('main');
     } finally { await h.close(); }
   });
