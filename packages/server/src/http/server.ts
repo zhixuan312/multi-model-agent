@@ -14,6 +14,8 @@ import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/st
 import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 import { normalizeModel } from '@zhixuan92/multi-model-agent-core';
 import type { RawHandler } from './types.js';
+import type { HandlerDeps } from './handler-deps.js';
+import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import type { ProjectRegistry } from './project-registry.js';
@@ -80,7 +82,7 @@ async function registerControlHandlers(
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+    ? (config as unknown as HandlerDeps['config'])
     : undefined;
 
   if (multiModelConfig) {
@@ -135,7 +137,7 @@ async function registerControlHandlers(
 
 export async function startServer(
   config: ServerConfig,
-  injectedManifestSync?: import('../skill-install/skill-manifest-sync.js').SkillManifestSync,
+  injectedManifestSync?: SkillManifestSync,
   configPath?: string,
 ): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
@@ -159,7 +161,7 @@ export async function startServer(
 
   // GET /health — unauthenticated liveness + skill manifest drift check
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  let skillManifestSync: import('../skill-install/skill-manifest-sync.js').SkillManifestSync;
+  let skillManifestSync: SkillManifestSync;
   if (injectedManifestSync) {
     skillManifestSync = injectedManifestSync;
   } else {
@@ -179,7 +181,7 @@ export async function startServer(
   // Register unified task handler (POST /task, GET /task/:taskId)
   {
     const multiModelConfig = (config as unknown as { agents?: unknown }).agents
-      ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+      ? (config as unknown as HandlerDeps['config'])
       : undefined;
 
     if (multiModelConfig) {
@@ -221,7 +223,7 @@ export async function startServer(
         }),
       }));
 
-      const deps: import('./handler-deps.js').HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
+      const deps: HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
       const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
@@ -238,7 +240,7 @@ export async function startServer(
   // POST /configure-provider — validate (dryRun=true) or validate+apply (dryRun=false)
   {
     const multiModelConfigForProvider = (config as unknown as { agents?: unknown }).agents
-      ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+      ? (config as unknown as HandlerDeps['config'])
       : undefined;
     const { buildConfigureProviderHandler } = await import('./handlers/introspection/configure-provider.js');
     router.register('POST', '/configure-provider', buildConfigureProviderHandler(multiModelConfigForProvider, configPath));
