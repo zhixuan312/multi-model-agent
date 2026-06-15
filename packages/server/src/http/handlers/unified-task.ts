@@ -469,7 +469,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     const blockIds = input.contextBlockIds ?? [];
     const contextBlockStore = pc.contextBlocks;
-    const { type, agentTier: _at, reviewPolicy: _rp, sessionIds, contextBlockIds: _cbi, ...payload } = input;
+    // Destructure to exclude control fields from ...payload (worker sees only task content)
+    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds, contextBlockIds: _blocks, ...payload } = input;
 
     // Register task in TaskRegistry and return 202 immediately
     const taskId = randomUUID();

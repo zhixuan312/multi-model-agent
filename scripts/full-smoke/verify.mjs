@@ -117,13 +117,13 @@ export function verify(rec) {
     const hasImplFields = typeof impl.tier === 'string'
       && typeof impl.sessionId === 'string' && impl.sessionId.length > 0
       && typeof impl.resumeSupported === 'boolean';
-    out.push(C('sessions', hasImplFields ? 'PASS' : 'WARN',
+    out.push(C('sessions', hasImplFields ? 'PASS' : 'FAIL',
       `implementer={tier:${impl.tier}, sessionId:${impl.sessionId?.slice(0, 12)}..., resume:${impl.resumeSupported}}`));
   }
 
   // ③ tier — does implementer tier match expectation?
   if (e.tier) {
-    out.push(C('tier', impl.tier === e.tier ? 'PASS' : 'WARN',
+    out.push(C('tier', impl.tier === e.tier ? 'PASS' : 'FAIL',
       `expected=${e.tier} got=${impl.tier}`));
   }
 
@@ -136,7 +136,7 @@ export function verify(rec) {
         `reviewPolicy=none; reviewer=${JSON.stringify(reviewer)}`));
     } else {
       const hasReviewer = reviewer != null && typeof reviewer === 'object';
-      out.push(C('review', hasReviewer ? 'PASS' : 'WARN',
+      out.push(C('review', hasReviewer ? 'PASS' : 'FAIL',
         `reviewer=${JSON.stringify(reviewer)}`));
     }
   }
@@ -151,8 +151,8 @@ export function verify(rec) {
 
     const wt = task0.worktree;
     if (wt && typeof wt === 'object') {
-      out.push(C('worktree', typeof wt.branch === 'string' ? 'PASS' : 'WARN',
-        `branch=${wt.branch} hasChanges=${wt.hasChanges}`));
+      out.push(C('worktree', typeof wt.branch === 'string' ? 'PASS' : 'FAIL',
+        `branch=${wt.branch} hasChanges=${wt.hasChanges} merged=${wt.merged}`));
     }
   }
 
@@ -196,14 +196,14 @@ export function verify(rec) {
     const cost = task0.cost ?? {};
     const implCost = cost.implementerUsd;
     const hasCost = typeof implCost === 'number' && implCost > 0;
-    out.push(C('cost', hasCost ? 'PASS' : 'WARN',
+    out.push(C('cost', hasCost ? 'PASS' : 'FAIL',
       `implementerUsd=${implCost}`));
   }
 
   // Session reuse check
   if (e.sessionReuse && rec.resumeSessionId) {
     const actualId = impl.sessionId;
-    out.push(C('session-reuse', actualId === rec.resumeSessionId ? 'PASS' : 'WARN',
+    out.push(C('session-reuse', actualId === rec.resumeSessionId ? 'PASS' : 'FAIL',
       `requested=${rec.resumeSessionId?.slice(0, 12)}... got=${actualId?.slice(0, 12)}...`));
   }
 
@@ -221,7 +221,7 @@ export function verify(rec) {
   out.push(C('queue', inQueue ? 'PASS' : 'NA', `records=${q?.records?.length ?? 0}`));
   if (inQueue) {
     const sv = q.records[0].schemaVersion ?? q.records[0].schema_version;
-    out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'WARN', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
+    out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
   }
   return out;
 }
