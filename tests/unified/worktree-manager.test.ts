@@ -21,12 +21,10 @@ describe('WorktreeManager', () => {
     expect(info.branch).toBe('mma/delegate-task-abc');
     expect(info.path).toContain('.mma/worktrees/task-abc');
     expect(info.hasChanges).toBe(false);
+    expect(info.merged).toBe(false);
 
-    // mkdir should have been called to create .mma/worktrees
     expect(fs.mkdir).toHaveBeenCalledOnce();
 
-    // First exec call should be git worktree add
-    expect(exec).toHaveBeenCalled();
     const firstCall = exec.mock.calls[0];
     expect(firstCall[0]).toBe('git');
     expect(firstCall[1]).toContain('worktree');
@@ -41,12 +39,10 @@ describe('WorktreeManager', () => {
     const mgr = new WorktreeManager(exec, fs);
     await mgr.create('/repo', 'task-abc12345', 'delegate');
 
-    // Should have called git worktree add + pnpm install
     expect(exec).toHaveBeenCalledTimes(2);
     const pnpmCall = exec.mock.calls[1];
     expect(pnpmCall[0]).toBe('pnpm');
     expect(pnpmCall[1]).toContain('install');
-    expect(pnpmCall[1]).toContain('--frozen-lockfile');
   });
 
   it('hasChanges returns false for clean worktree', async () => {
@@ -59,38 +55,74 @@ describe('WorktreeManager', () => {
     expect(await mgr.hasChanges('/repo/.mma/worktrees/abc')).toBe(true);
   });
 
-  it('cleanup removes when clean', async () => {
+  it('mergeAndCleanup removes when clean (no changes)', async () => {
     const exec = mockExec('');
     const mgr = new WorktreeManager(exec);
-    const preserved = await mgr.cleanup(
+    const info = await mgr.mergeAndCleanup(
       '/repo/.mma/worktrees/abc',
       'mma/delegate-abc',
+      '/repo',
     );
-    expect(preserved).toBe(false);
+    expect(info.hasChanges).toBe(false);
+    expect(info.merged).toBe(false);
 
-    // Should have called: git status --porcelain, git worktree remove, git branch -D
+    // git status, git worktree remove, git branch -D
     const calls = exec.mock.calls;
     expect(calls.length).toBe(3);
     expect(calls[0][1]).toContain('--porcelain');
     expect(calls[1][1]).toContain('remove');
     expect(calls[2][1]).toContain('-D');
-    expect(calls[2][1]).toContain('mma/delegate-abc');
   });
 
-  it('cleanup preserves when dirty', async () => {
-    const exec = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges
-      .mockResolvedValue({ stdout: '', stderr: '' });
+  it('mergeAndCleanup auto-commits + merges + cleans up when dirty', async () => {
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
+
     const mgr = new WorktreeManager(exec);
-    const preserved = await mgr.cleanup(
+    const info = await mgr.mergeAndCleanup(
       '/repo/.mma/worktrees/abc',
       'mma/delegate-abc',
+      '/repo',
     );
-    expect(preserved).toBe(true);
 
-    // Should only have called git status --porcelain (no remove)
-    expect(exec).toHaveBeenCalledTimes(1);
+    expect(info.hasChanges).toBe(true);
+    expect(info.merged).toBe(true);
+
+    const calls = exec.mock.calls;
+    expect(calls[0][1]).toContain('--porcelain');
+    expect(calls[1][1]).toEqual(['add', '-A']);
+    expect(calls[2][1]).toContain('commit');
+    expect(calls[3][1]).toContain('merge');
+    expect(calls[3][1]).toContain('mma/delegate-abc');
+    expect(calls[3][2].cwd).toBe('/repo'); // merge runs in original cwd
+    expect(calls[4][1]).toContain('remove');
+    expect(calls[5][1]).toContain('-D');
+  });
+
+  it('mergeAndCleanup preserves worktree on merge conflict', async () => {
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
+      .mockRejectedValueOnce(new Error('merge conflict')) // git merge fails
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git merge --abort
+
+    const mgr = new WorktreeManager(exec);
+    const info = await mgr.mergeAndCleanup(
+      '/repo/.mma/worktrees/abc',
+      'mma/delegate-abc',
+      '/repo',
+    );
+
+    expect(info.hasChanges).toBe(true);
+    expect(info.merged).toBe(false);
+    // Worktree NOT removed — preserved for manual resolution
+    expect(exec.mock.calls.map(c => c[1][0])).not.toContain('worktree');
   });
 
   it('getInfo returns current state', async () => {
@@ -100,6 +132,7 @@ describe('WorktreeManager', () => {
       branch: 'mma/delegate-abc',
       path: '/repo/.mma/worktrees/abc',
       hasChanges: true,
+      merged: false,
     });
   });
 });

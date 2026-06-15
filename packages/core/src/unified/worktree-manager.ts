@@ -9,6 +9,7 @@ export interface WorktreeInfo {
   branch: string;
   path: string;
   hasChanges: boolean;
+  merged: boolean;
 }
 
 export type ExecFn = (
@@ -41,23 +42,14 @@ export class WorktreeManager {
     this.fs = fs ?? defaultFs;
   }
 
-  /**
-   * Create a git worktree for a task.
-   * Runs `git worktree add` off current HEAD with a task-specific branch.
-   * If the worktree has a package.json, runs `pnpm install --frozen-lockfile`.
-   */
   async create(cwd: string, taskId: string, type: string): Promise<WorktreeInfo> {
     const shortId = taskId.slice(0, 8);
     const branch = `mma/${type}-${shortId}`;
     const worktreeDir = join(cwd, '.mma', 'worktrees', shortId);
 
-    // Ensure parent dir exists
     await this.fs.mkdir(join(cwd, '.mma', 'worktrees'), { recursive: true });
-
-    // Create worktree with a new branch off HEAD
     await this.exec('git', ['worktree', 'add', worktreeDir, '-b', branch], { cwd, windowsHide: true });
 
-    // Install dependencies if package.json exists
     try {
       await this.fs.access(join(worktreeDir, 'package.json'));
       await this.exec('pnpm', ['install', '--frozen-lockfile'], { cwd: worktreeDir });
@@ -65,41 +57,53 @@ export class WorktreeManager {
       // No package.json — skip install
     }
 
-    return { branch, path: worktreeDir, hasChanges: false };
+    return { branch, path: worktreeDir, hasChanges: false, merged: false };
   }
 
-  /**
-   * Check whether a worktree has uncommitted changes.
-   */
   async hasChanges(worktreePath: string): Promise<boolean> {
     const { stdout } = await this.exec('git', ['status', '--porcelain'], { cwd: worktreePath, windowsHide: true });
     return stdout.trim().length > 0;
   }
 
   /**
-   * Remove a worktree and its branch if there are no uncommitted changes.
-   * Returns true if the worktree was preserved (dirty), false if removed.
+   * Merge worktree branch back into the original branch, remove worktree, delete branch.
+   * Returns the merge result. On merge conflict, preserves the worktree for manual resolution.
    */
-  async cleanup(worktreePath: string, branch: string): Promise<boolean> {
+  async mergeAndCleanup(worktreePath: string, branch: string, originalCwd: string): Promise<WorktreeInfo> {
     const dirty = await this.hasChanges(worktreePath);
-    if (dirty) {
-      return true;
+
+    if (!dirty) {
+      // No changes — just remove worktree + branch
+      await this.exec('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath, windowsHide: true });
+      await this.exec('git', ['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+      return { branch, path: worktreePath, hasChanges: false, merged: false };
     }
 
-    await this.exec('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath, windowsHide: true });
-    // Branch delete uses the parent repo; worktreePath's parent is fine since
-    // the worktree itself was just removed.  Use dirname twice to reach the
-    // repo root (.mma/worktrees/<id> → .mma/worktrees → .mma → repo).
-    const repoRoot = join(worktreePath, '..', '..', '..');
-    await this.exec('git', ['branch', '-D', branch], { cwd: repoRoot, windowsHide: true });
-    return false;
+    // Commit any uncommitted changes in the worktree
+    await this.exec('git', ['add', '-A'], { cwd: worktreePath, windowsHide: true });
+    try {
+      await this.exec('git', ['commit', '-m', `[mma] auto-commit before merge`], { cwd: worktreePath, windowsHide: true });
+    } catch {
+      // Already committed or nothing to commit
+    }
+
+    // Merge worktree branch into original branch from the main cwd
+    try {
+      await this.exec('git', ['merge', branch, '--no-edit'], { cwd: originalCwd, windowsHide: true });
+    } catch {
+      // Merge conflict — preserve worktree for manual resolution
+      await this.exec('git', ['merge', '--abort'], { cwd: originalCwd, windowsHide: true }).catch(() => {});
+      return { branch, path: worktreePath, hasChanges: true, merged: false };
+    }
+
+    // Merge succeeded — remove worktree + branch
+    await this.exec('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
+    await this.exec('git', ['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+    return { branch, path: worktreePath, hasChanges: true, merged: true };
   }
 
-  /**
-   * Get current info for an existing worktree.
-   */
   async getInfo(worktreePath: string, branch: string): Promise<WorktreeInfo> {
     const dirty = await this.hasChanges(worktreePath);
-    return { branch, path: worktreePath, hasChanges: dirty };
+    return { branch, path: worktreePath, hasChanges: dirty, merged: false };
   }
 }

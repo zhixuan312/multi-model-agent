@@ -89,11 +89,10 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
   const sessions: Session[] = [];
 
-  // --- Worktree cleanup helper ---
+  // --- Worktree merge + cleanup helper ---
   const resolveWorktree = async (): Promise<WorktreeInfo | null> => {
     if (!wtManager || !wtInfo) return null;
-    const preserved = await wtManager.cleanup(wtInfo.path, wtInfo.branch);
-    return { branch: wtInfo.branch, path: wtInfo.path, hasChanges: preserved };
+    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd);
   };
 
   // Close all opened sessions — best-effort, errors swallowed.
