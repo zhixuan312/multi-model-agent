@@ -44,6 +44,7 @@ export function inlineIncludes(
   skillContext: string,
   content: string,
   skillsRoot: string,
+  authToken?: string,
 ): string {
   const lines = content.split('\n');
   const result: string[] = [];
@@ -104,5 +105,22 @@ export function inlineIncludes(
     }
   }
 
-  return result.join('\n');
+  let output = result.join('\n');
+
+  if (authToken) {
+    output = output.replace(
+      /TOKEN="\$\{MMAGENT_AUTH_TOKEN:-\$\(mmagent print-token\)\}"/g,
+      `TOKEN="${authToken}"`,
+    );
+    output = output.replace(
+      /MMAGENT_AUTH_TOKEN=\$\(mmagent print-token\)/g,
+      `MMAGENT_AUTH_TOKEN="${authToken}"`,
+    );
+    output = output.replace(
+      /MMAGENT_AUTH_TOKEN=<token>/g,
+      `MMAGENT_AUTH_TOKEN=${authToken}`,
+    );
+  }
+
+  return output;
 }

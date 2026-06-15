@@ -38,33 +38,12 @@ import { inlineIncludes } from '../include-utils.js';
  * keep Cursor rules scoped to the project directory.
  */
 export interface CursorInstallOpts {
-  /**
-   * Raw skill content. May contain `@include _shared/<file>.md` directives
-   * which are inlined before writing.
-   */
   content: string;
-  /**
-   * Working directory — replaces `process.cwd()`.
-   * Used to construct the CWD-relative target path:
-   * `<cwd>/.cursor/rules/multi-model-agent.mdc`
-   */
   cwd: string;
-  /**
-   * Home directory. Accepted for API signature compatibility with other
-   * skill writers, but NOT used by this writer. Cursor rules are always
-   * written relative to `cwd`, not `homeDir`.
-   */
   homeDir: string;
-  /**
-   * Where shared files live. The writer reads `<skillsRoot>/_shared/<path>`
-   * when inlining `@include` directives.
-   */
   skillsRoot: string;
-  /**
-   * If true, overwrite the existing file. If false (default), skip writing
-   * when the file already exists.
-   */
   force?: boolean;
+  authToken?: string;
 }
 
 /**
@@ -92,7 +71,7 @@ export interface CursorInstallResult {
  * @param opts  Installation options (see `CursorInstallOpts`).
  */
 export function installCursor(opts: CursorInstallOpts): CursorInstallResult {
-  const { content, cwd, skillsRoot, force } = opts;
+  const { content, cwd, skillsRoot, force, authToken } = opts;
 
   const targetPath = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
 
@@ -106,7 +85,7 @@ export function installCursor(opts: CursorInstallOpts): CursorInstallResult {
   const rulesDir = path.join(cwd, '.cursor', 'rules');
   fs.mkdirSync(rulesDir, { recursive: true, mode: 0o700 });
 
-  const finalContent = inlineIncludes('Cursor skill writer', content, skillsRoot);
+  const finalContent = inlineIncludes('Cursor skill writer', content, skillsRoot, authToken);
   fs.writeFileSync(targetPath, finalContent, 'utf-8');
 
   return { written: true, targetPath };

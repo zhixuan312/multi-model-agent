@@ -121,22 +121,23 @@ export function writeSkillToClient(
   version: string = '0.0.0',
   cwd: string = process.cwd(),
   force: boolean = false,
+  authToken?: string,
 ): void {
   switch (target) {
     case 'claude-code':
-      installClaudeCode({ skillName, content, homeDir, skillsRoot });
+      installClaudeCode({ skillName, content, homeDir, skillsRoot, authToken });
       notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'gemini':
-      installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot });
+      installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot, authToken });
       notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'codex':
-      installCodexCli({ skillName, content, homeDir, skillsRoot });
+      installCodexCli({ skillName, content, homeDir, skillsRoot, authToken });
       notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'cursor':
-      installCursor({ content, cwd, homeDir, skillsRoot, force });
+      installCursor({ content, cwd, homeDir, skillsRoot, force, authToken });
       notifySkillInstalled({ skillId: skillName, client: target });
       break;
     default: {

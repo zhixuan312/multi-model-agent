@@ -24,20 +24,11 @@ import { inlineIncludes } from '../include-utils.js';
  * Options for installing a Claude Code skill.
  */
 export interface ClaudeCodeInstallOpts {
-  /** Human-readable name of the skill (used in file path). */
   skillName: string;
-  /**
-   * Raw skill content. May contain `@include _shared/<file>.md` directives
-   * which are inlined before writing.
-   */
   content: string;
-  /**
-   * Home directory — replaces `os.homedir()` in all file operations.
-   * Must NOT default to `os.homedir()`.
-   */
   homeDir: string;
-  /** Root of the skills directory for @include resolution. */
   skillsRoot: string;
+  authToken?: string;
 }
 
 /**
@@ -48,10 +39,9 @@ export interface ClaudeCodeInstallOpts {
  * @param opts  Installation options (see `ClaudeCodeInstallOpts`).
  */
 export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
-  const { skillName, content, homeDir, skillsRoot } = opts;
+  const { skillName, content, homeDir, skillsRoot, authToken } = opts;
 
-  // Inline @include directives before writing
-  const inlinedContent = inlineIncludes('Claude Code skill writer', content, skillsRoot);
+  const inlinedContent = inlineIncludes('Claude Code skill writer', content, skillsRoot, authToken);
 
   // Determine target path: <homeDir>/.claude/skills/<skillName>/SKILL.md
   const skillDir = path.join(homeDir, '.claude', 'skills', skillName);
