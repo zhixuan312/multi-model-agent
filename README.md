@@ -313,10 +313,10 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.4.0
+## What's new in 5.4.2
 
-- **`POST /configure-provider`.** Validate and hot-swap a provider/model/auth for any agent tier at runtime — no restart needed. Live API probe verifies credentials and model availability before applying.
-- **Unified task API (5.2.0).** All 11 task types go through a single `POST /task` endpoint with a `type` discriminator. Two-phase pipeline with cross-agent review.
+- **`mma` CLI.** Primary binary renamed from `mmagent` to `mma`. All env vars (`MMA_*`), data directory (`~/.mma/`), and wire fields aligned. Auto-migration moves `~/.multi-model/` transparently on first run.
+- **`POST /configure-provider` (5.4.0).** Validate and hot-swap a provider/model/auth for any agent tier at runtime — no restart needed. Live API probe verifies credentials and model availability.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
