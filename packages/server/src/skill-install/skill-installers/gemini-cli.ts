@@ -26,27 +26,12 @@ import { inlineIncludes } from '../include-utils.js';
  * Options for installing a skill via the Gemini CLI writer.
  */
 export interface GeminiCliInstallOpts {
-  /** Skill name (currently informational; writes always go to multi-model-agent extension). */
   skillName: string;
-  /**
-   * Raw SKILL.md content. May contain `@include _shared/<file>.md` directives
-   * which are inlined before writing.
-   */
   content: string;
-  /**
-   * Version string for the extension manifest's `version` field.
-   */
   skillVersion: string;
-  /**
-   * The "home directory" that replaces `os.homedir()`.
-   * Must NOT default to `os.homedir()` — always required explicitly.
-   */
   homeDir: string;
-  /**
-   * Where shared files live. The writer reads `<skillsRoot>/_shared/<file>.md`
-   * when inlining `@include` directives.
-   */
   skillsRoot: string;
+  authToken?: string;
 }
 
 /**
@@ -63,7 +48,7 @@ export interface GeminiCliInstallOpts {
  * @param opts  Installation options (see `GeminiCliInstallOpts`).
  */
 export function installGeminiCli(opts: GeminiCliInstallOpts): void {
-  const { skillName: _skillName, content, skillVersion, homeDir, skillsRoot } = opts;
+  const { skillName: _skillName, content, skillVersion, homeDir, skillsRoot, authToken } = opts;
 
   const extDir = path.join(homeDir, '.gemini', 'extensions', 'multi-model-agent');
   fs.mkdirSync(extDir, { recursive: true, mode: 0o700 });
@@ -82,7 +67,7 @@ export function installGeminiCli(opts: GeminiCliInstallOpts): void {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
 
   // Write the skill content with @include directives inlined.
-  const finalContent = inlineIncludes('Gemini CLI skill writer', content, skillsRoot);
+  const finalContent = inlineIncludes('Gemini CLI skill writer', content, skillsRoot, authToken);
   const skillPath = path.join(extDir, 'SKILL.md');
   fs.writeFileSync(skillPath, finalContent, 'utf-8');
 }

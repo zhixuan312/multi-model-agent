@@ -7,6 +7,7 @@ import type {
   ToolMode,
 } from '../types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
+import type { HeadlineSnapshot } from '../bounded-execution/activity-tracker-types.js';
 export type { TokenUsage } from '../types/run-result.js';
 
 export type RunStatus =
@@ -173,5 +174,5 @@ export type ProgressEvent = {
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number
   /** Lightweight state snapshot for use by recordHeartbeat. */
-  snapshot: import('../bounded-execution/activity-tracker-types.js').HeadlineSnapshot
+  snapshot: HeadlineSnapshot
 }

@@ -157,6 +157,14 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
 
   if (deps.ifExists && !manifestPresent(homeDir)) return ExitCode.SUCCESS;
 
+  let authToken: string | undefined;
+  try {
+    const tokenPath = path.join(homeDir, '.multi-model', 'auth-token');
+    if (fs.existsSync(tokenPath)) {
+      authToken = fs.readFileSync(tokenPath, 'utf-8').trim();
+    }
+  } catch { /* best-effort — skills work without embedded token */ }
+
   const parsed = parseArgs(argv);
 
   let targets: Client[];
@@ -280,7 +288,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       }
 
       try {
-        writeSkillToClient(skillName, content, target, homeDir, skillsRoot, canonicalVersion);
+        writeSkillToClient(skillName, content, target, homeDir, skillsRoot, canonicalVersion, process.cwd(), false, authToken);
         appendEntry(skillName, canonicalVersion, [target], homeDir);
         if (action === 'install') {
           outcome.installed.push({ skill: skillName, target, version: canonicalVersion });

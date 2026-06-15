@@ -36,6 +36,6 @@ curl \
 
 ### Errors
 
-- `401 unauthorized` — re-run `mmagent print-token`; the token may have changed after a server restart.
+- `401 unauthorized` — verify the token matches `~/.multi-model/auth-token`. The token persists across restarts; it only changes if the file is manually deleted.
 - `400 client_required` — `X-MMA-Client` header is missing on a tool route. Set it to one of: `claude-code`, `cursor`, `codex-cli`, `gemini-cli`.
 - `400 main_model_required` — `X-MMA-Main-Model` header is missing on a tool route. Set it to the calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`).

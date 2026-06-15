@@ -7,6 +7,7 @@ import {
   type HeartbeatTickInfo,
   type ActivityTrackerOptions,
   type TransitionFields,
+  type HeadlineSnapshot,
 } from './activity-tracker-types.js';
 
 export {
@@ -357,7 +358,7 @@ export class ActivityTracker {
     return null;
   }
 
-  public getHeadlineSnapshot(): import('./activity-tracker-types.js').HeadlineSnapshot {
+  public getHeadlineSnapshot(): HeadlineSnapshot {
     const prefix = this.composeHeadlinePrefix();
     const statsClause = this.composeStatsClause();
     const dispatchedAt = Number.isFinite(this.startTime) && this.startTime > 0

@@ -61,13 +61,13 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'good-key', baseUrl: mockBaseUrl() },
       });
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.probe.reachable).toBe(true);
       expect(body.probe.modelListed).toBe(true);
     } finally { await h.close(); }
   });
 
-  it('valid key + model NOT in list → usable false', async () => {
+  it('valid key + model NOT in list → verified false', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await post(h.baseUrl, h.token, {
@@ -75,7 +75,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'good-key', baseUrl: mockBaseUrl() },
       });
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.probe.reachable).toBe(true);
       expect(body.probe.modelListed).toBe(false);
       expect(body.reason).toMatch(/not listed/i);
@@ -90,7 +90,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'bad-key', baseUrl: mockBaseUrl() },
       });
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.probe.reachable).toBe(false);
       expect(body.probe.detail).toMatch(/401/);
     } finally { await h.close(); }
@@ -104,7 +104,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'sk-test', baseUrl: 'http://127.0.0.1:19999' },
       });
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.probe.reachable).toBe(false);
     } finally { await h.close(); }
   });
@@ -117,7 +117,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'sk-test' },
       });
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.probe).toBeUndefined();
     } finally { await h.close(); }
   });
@@ -130,7 +130,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'good-key', baseUrl: mockBaseUrl() },
       });
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.probe.reachable).toBe(true);
       expect(body.probe.modelListed).toBe(true);
     } finally { await h.close(); }
@@ -144,7 +144,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'api-key', apiKey: 'good-key', baseUrl: mockBaseUrl() },
       });
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.probe.reachable).toBe(true);
       expect(body.probe.modelListed).toBe(true);
     } finally { await h.close(); }
@@ -159,7 +159,7 @@ describe('POST /configure-provider probe (always on)', () => {
         dryRun: false,
       });
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.applied).toBe(true);
       expect(body.probe.reachable).toBe(true);
     } finally { await h.close(); }
@@ -174,7 +174,7 @@ describe('POST /configure-provider probe (always on)', () => {
         dryRun: false,
       });
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.applied).toBe(false);
     } finally { await h.close(); }
   });
@@ -187,7 +187,7 @@ describe('POST /configure-provider probe (always on)', () => {
         auth: { mode: 'oauth' },
       });
       const body = await res.json();
-      expect(typeof body.usable).toBe('boolean');
+      expect(typeof body.verified).toBe('boolean');
       if (body.probe) {
         expect(typeof body.probe.reachable).toBe('boolean');
       }

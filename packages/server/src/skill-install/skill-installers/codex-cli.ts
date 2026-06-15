@@ -20,17 +20,11 @@ const LEGACY_MANAGED_BEGIN = '<!-- multi-model-agent:BEGIN -->';
 const LEGACY_MANAGED_END = '<!-- multi-model-agent:END -->';
 
 export interface CodexCliInstallOpts {
-  /** Human-readable name of the skill (used in file path). */
   skillName: string;
-  /** Raw skill content, possibly containing @include directives. */
   content: string;
-  /**
-   * Home directory — replaces `os.homedir()` in all file operations.
-   * Must NOT default to `os.homedir()`.
-   */
   homeDir: string;
-  /** Root of the skills directory for @include resolution. */
   skillsRoot: string;
+  authToken?: string;
 }
 
 function codexSkillsBase(homeDir: string): string {
@@ -76,14 +70,14 @@ function removeLegacyManagedAgentsBlock(homeDir: string): void {
  * Target path: `<homeDir>/.codex/skills/<skillName>/SKILL.md`
  */
 export function installCodexCli(opts: CodexCliInstallOpts): void {
-  const { skillName, content, homeDir, skillsRoot } = opts;
+  const { skillName, content, homeDir, skillsRoot, authToken } = opts;
   const skillDir = resolveSkillDir(homeDir, skillName);
   if (skillDir === null) {
     throw new Error(`Invalid Codex CLI skill name: ${skillName}`);
   }
 
   removeLegacyManagedAgentsBlock(homeDir);
-  const inlinedContent = inlineIncludes('Codex CLI skill writer', content, skillsRoot);
+  const inlinedContent = inlineIncludes('Codex CLI skill writer', content, skillsRoot, authToken);
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, 'SKILL.md'), inlinedContent, 'utf-8');
 }

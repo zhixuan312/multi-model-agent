@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { Queue } from './queue.js';
+import type { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
 import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';

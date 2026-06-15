@@ -111,12 +111,12 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.applied).toBe(false);
     } finally { await h.close(); }
   });
 
-  it('dryRun false + usable → applied true', async () => {
+  it('dryRun false + verified → applied true', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -126,13 +126,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.applied).toBe(true);
       expect(body.reason).toMatch(/applied/i);
     } finally { await h.close(); }
   });
 
-  it('dryRun false + not usable → applied false', async () => {
+  it('dryRun false + not verified → applied false', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -142,14 +142,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.applied).toBe(false);
     } finally { await h.close(); }
   });
 
   // ── Claude provider ───────────────────────────────────────────────────────
 
-  it('claude + claude model + api-key → usable', async () => {
+  it('claude + claude model + api-key → verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -158,7 +158,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.tier).toBe('standard');
       expect(body.provider).toBe('claude');
       expect(body.model.id).toBe('claude-opus-4-8');
@@ -169,7 +169,7 @@ describe('POST /configure-provider', () => {
     } finally { await h.close(); }
   });
 
-  it('claude + claude-sonnet + api-key → usable, tier standard', async () => {
+  it('claude + claude-sonnet + api-key → verified, tier standard', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -178,14 +178,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.tier).toBe('complex');
       expect(body.model.family).toBe('claude');
       expect(body.model.tier).toBe('standard');
     } finally { await h.close(); }
   });
 
-  it('claude + openai model (no baseUrl) → not usable (static fail, no probe)', async () => {
+  it('claude + openai model (no baseUrl) → not verified (static fail, no probe)', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -194,14 +194,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.reason).toMatch(/codex/i);
       expect(body.model.family).toBe('openai');
       expect(body.probe).toBeUndefined();
     } finally { await h.close(); }
   });
 
-  it('claude + deepseek model (no baseUrl) → not usable', async () => {
+  it('claude + deepseek model (no baseUrl) → not verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -210,13 +210,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.reason).toMatch(/codex/i);
       expect(body.model.family).toBe('deepseek');
     } finally { await h.close(); }
   });
 
-  it('claude + minimax model (no baseUrl) → not usable', async () => {
+  it('claude + minimax model (no baseUrl) → not verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -225,7 +225,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.reason).toMatch(/codex/i);
       expect(body.model.family).toBe('minimax');
     } finally { await h.close(); }
@@ -233,7 +233,7 @@ describe('POST /configure-provider', () => {
 
   // ── Codex provider ────────────────────────────────────────────────────────
 
-  it('codex + openai model + api-key → usable', async () => {
+  it('codex + openai model + api-key → verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -242,13 +242,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('openai');
       expect(body.model.tier).toBe('reasoning');
     } finally { await h.close(); }
   });
 
-  it('codex + deepseek + baseUrl → usable', async () => {
+  it('codex + deepseek + baseUrl → verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -257,13 +257,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('deepseek');
       expect(body.model.recognized).toBe(true);
     } finally { await h.close(); }
   });
 
-  it('codex + deepseek-v4-pro → usable, reasoning tier', async () => {
+  it('codex + deepseek-v4-pro → verified, reasoning tier', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -272,13 +272,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('deepseek');
       expect(body.model.tier).toBe('reasoning');
     } finally { await h.close(); }
   });
 
-  it('codex + MiniMax-M3 + baseUrl → usable', async () => {
+  it('codex + MiniMax-M3 + baseUrl → verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -287,7 +287,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('minimax');
       expect(body.model.recognized).toBe(true);
     } finally { await h.close(); }
@@ -302,13 +302,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('minimax');
       expect(body.model.tier).toBe('reasoning');
     } finally { await h.close(); }
   });
 
-  it('codex + claude model (no baseUrl) → not usable', async () => {
+  it('codex + claude model (no baseUrl) → not verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -317,14 +317,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.reason).toMatch(/claude/i);
     } finally { await h.close(); }
   });
 
   // ── Custom baseUrl bypasses family check ──────────────────────────────────
 
-  it('claude + non-claude model + baseUrl → usable (proxy)', async () => {
+  it('claude + non-claude model + baseUrl → verified (proxy)', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -333,12 +333,12 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('deepseek');
     } finally { await h.close(); }
   });
 
-  it('codex + claude model + baseUrl → usable (proxy)', async () => {
+  it('codex + claude model + baseUrl → verified (proxy)', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -347,14 +347,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('claude');
     } finally { await h.close(); }
   });
 
   // ── Unrecognized model ────────────────────────────────────────────────────
 
-  it('unrecognized model + baseUrl → usable, recognized false', async () => {
+  it('unrecognized model + baseUrl → verified, recognized false', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -363,13 +363,13 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.model.family).toBe('other');
       expect(body.model.recognized).toBe(false);
     } finally { await h.close(); }
   });
 
-  it('unrecognized model + no baseUrl → not usable', async () => {
+  it('unrecognized model + no baseUrl → not verified', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -378,7 +378,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.reason).toMatch(/unrecognized|unknown/i);
     } finally { await h.close(); }
   });
@@ -394,7 +394,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(true);
+      expect(body.verified).toBe(true);
       expect(body.tier).toBe('main');
     } finally { await h.close(); }
   });
@@ -410,7 +410,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(typeof body.usable).toBe('boolean');
+      expect(typeof body.verified).toBe('boolean');
       expect(body.provider).toBe('claude');
       expect(body.model.id).toBe('claude-opus-4-8');
       expect(typeof body.reason).toBe('string');
@@ -427,14 +427,14 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(typeof body.usable).toBe('boolean');
+      expect(typeof body.verified).toBe('boolean');
       expect(body.provider).toBe('codex');
     } finally { await h.close(); }
   });
 
   // ── Response shape ────────────────────────────────────────────────────────
 
-  it('response always has usable, reason, applied, tier, provider, model, probe fields', async () => {
+  it('response always has verified, reason, applied, tier, provider, model, probe fields', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -443,7 +443,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toHaveProperty('usable');
+      expect(body).toHaveProperty('verified');
       expect(body).toHaveProperty('reason');
       expect(body).toHaveProperty('applied');
       expect(body).toHaveProperty('tier');
@@ -462,7 +462,7 @@ describe('POST /configure-provider', () => {
 
   // ── Probe: bad key detected ───────────────────────────────────────────────
 
-  it('bad api key → probe catches 401, usable false', async () => {
+  it('bad api key → probe catches 401, verified false', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(h.baseUrl, h.token, {
@@ -471,7 +471,7 @@ describe('POST /configure-provider', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.usable).toBe(false);
+      expect(body.verified).toBe(false);
       expect(body.probe.reachable).toBe(false);
       expect(body.probe.detail).toMatch(/401/);
     } finally { await h.close(); }

@@ -137,7 +137,7 @@ Idempotent: already-running daemon → curl succeeds → no-op. Background `mmag
 export MMAGENT_AUTH_TOKEN=$(mmagent print-token)
 ```
 
-Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token rotates on every `mmagent serve` restart — re-export after a `pkill`/upgrade.
+Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token is generated once on first `mmagent serve` and persists at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
 
 ## Worker tier: `agentType`
 
