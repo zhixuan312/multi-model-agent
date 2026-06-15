@@ -5,7 +5,7 @@
 | Status | Code | Action |
 |---|---|---|
 | `400` | `invalid_request` | Fix the request body or query params |
-| `401` | `unauthorized` | Re-fetch token; check `MMAGENT_AUTH_TOKEN` |
+| `401` | `unauthorized` | Verify token matches `~/.multi-model/auth-token` |
 | `403` | `forbidden` | `cwd` query param missing or out of scope |
 | `404` | `not_found` | Wrong `taskId` or resource does not exist |
 | `409` | `invalid_task_state` / `pinned` | Task in wrong state; check current state first |
@@ -28,4 +28,4 @@ curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — 
 export MMAGENT_AUTH_TOKEN=$(mmagent print-token)
 ```
 
-The token changes on every server restart. Re-export before retrying.
+The token persists across restarts at `~/.multi-model/auth-token`. It only changes if the file is manually deleted.
