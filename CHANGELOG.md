@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.3] - 2026-06-16
+
+**Codebase hygiene + worktree lifecycle + session resume + sandbox enforcement.** Full audit: dead code removed, error code schema aligned with runtime, docs updated, duplicate code extracted. Worktree auto-merge, cross-call session resume, and cwd-confinement hook added. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- Worktree auto-merge: write-route tasks auto-commit, merge the worktree branch back into the caller branch, then clean up. On merge conflict, preserves for manual resolution.
+- Cross-call session resume: callers can pass `sessionIds` to resume a prior Claude/Codex session.
+- cwd-confinement hook for Claude workers: `PreToolUse` hook denies writes outside the worktree (the SDK equivalent of codex `-s workspace-write`).
+- `disallowedTools` enforcement for cwd-only tasks: blocks `Agent`, `EnterWorktree`, `ExitWorktree`.
+- Idempotent worktree-add with cleanup-aware retry for concurrent same-repo operations.
+- `FindingsOutcome` type in `types/enums.ts` (single source of truth, was duplicated 4×).
+- `session-helpers.ts` shared module (busOf/envelopeOf extracted from 2 copies).
+
+### Changed
+- `ErrorCodeSchema` aligned with runtime: 28 aspirational codes replaced by the 12 actually emitted by providers + terminal-status-deriver.
+- `TerminalStatusDeriver` rewired to handle actual runtime codes (`wall_clock_exceeded`, `sdk_max_turns`, `exit_N`, etc.) instead of dead code paths.
+- Server `registerControlHandlers` no longer creates a dead EnvelopeBus stack.
+- Config extraction in `server.ts` deduplicated via `extractMultiModelConfig()`.
+
+### Removed
+- Dead `types/goal.ts` (Goal/GoalTask/GoalPhase — never constructed; goalCondition strings are the active mechanism).
+- Dead `buildTaskCompletedEvent` stub + `recordTaskCompleted` method in recorder.
+- Dead npm deps: `@mozilla/readability`, `jsdom`, `@types/jsdom` (core), `@asteasolutions/zod-to-openapi` (server).
+- 4 orphaned test fixtures, 2 stale vitest config aliases, stale test imports.
+
+### Fixed
+- README: removed deleted `openai-compatible`/`claude-compatible` agent types.
+- PRIVACY.md: schema version 5→6, reviewPolicy/route enums, env var/path renames.
+- ARCHITECTURE.md: 8 stale file paths, missing `main` type, dead `docs/refactor/` references.
+- DIRECTION.md: lifecycle description updated to two-phase pipeline.
+- CONTRIBUTING.md: sandbox description accuracy.
+- SKILL_WRITING_GUIDELINES.md: stale reviewPolicy values and nonexistent skill reference.
+
 ## [5.4.2] - 2026-06-15
 
 **CLI rename + full naming alignment.** The primary CLI binary is now `mma` (with `multi-model-agent` as alias). All internal naming aligned: env vars `MMA_*`, data directory `~/.mma/`, journal at `.mma/journal/`, log prefix `[mma]`, wire field `mmaVersion`, HTTP headers `X-Mma-*`. Auto-migration moves `~/.multi-model/` → `~/.mma/` transparently on first run. `SCHEMA_VERSION` unchanged.
