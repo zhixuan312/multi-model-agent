@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FindingsOutcome } from '../types/enums.js';
 
 export const structuredReportSuffix = `
 ## Summary
@@ -59,7 +60,7 @@ export interface ParsedStructuredReport {
   extraSections: Record<string, string[]>;
   commit?: CommitFields;
   commitDiagnostic?: string;
-  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcome?: FindingsOutcome;
   findingsOutcomeReason?: string | null;
   outcomeInferred?: boolean;
   outcomeMalformed?: boolean;

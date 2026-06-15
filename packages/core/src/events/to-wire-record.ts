@@ -7,6 +7,7 @@ import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.
 import type { TaskEnvelope } from './task-envelope.js';
 import type { TaskCompletedEventType } from './wire-schema.js';
 import { ValidatedTaskCompletedEventSchema } from './wire-schema.js';
+import type { FindingsOutcome } from '../types/enums.js';
 
 // === clamp helpers (copied from clamp.ts, sans clampReasoningTokens) ===
 export const clampStageCost = (n: number): number =>
@@ -313,7 +314,7 @@ export function toWireRecord(
       const outcomePriority: Array<'reviewing' | 'annotating' | 'implementing'> = ['reviewing', 'annotating', 'implementing'];
       type StageWithOutcome = {
         name: string;
-        findingsOutcome?: 'found' | 'clean' | 'not_applicable' | null;
+        findingsOutcome?: FindingsOutcome | null;
         findingsOutcomeReason?: string | null;
         outcomeInferred?: boolean;
         outcomeMalformed?: boolean;

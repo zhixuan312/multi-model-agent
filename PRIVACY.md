@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 5** · **Last revised:** 2026-05-18 — 4.7.7 (wire-record honesty pass: `verifyCommandPresent` + `validationsRun` removed, `reviewPolicy` reframed as per-task intent, `errorCode` preserved through seal)
+**Schema version: 6** · **Last revised:** 2026-06-15 — 5.4.2 (wire-record honesty pass: `verifyCommandPresent` + `validationsRun` removed, `reviewPolicy` reframed as per-task intent, `errorCode` preserved through seal)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -12,14 +12,14 @@ Every uploaded event is a single `task.completed` event. Install metadata travel
 
 ### Task lifecycle event (`task.completed`)
 
-Emitted at the end of every delegate, audit, review, verify, debug, execute-plan, investigate, research, journal-record, journal-recall, retry, and register-context-block run. The event has 27 top-level scalar fields plus a `stages` array.
+Emitted at the end of every delegate, audit, review, debug, execute-plan, investigate, research, journal-record, journal-recall, retry, register-context-block, and orchestrate run. The event has 27 top-level scalar fields plus a `stages` array.
 
 #### Identity (4 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `eventId` | UUIDv4 string | At-most-once dedup within the 90-day retention window |
-| `route` | enum: `delegate`, `audit`, `review`, `verify`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `journal-record`, `journal-recall`, `register-context-block` | Route distribution + per-route quality metrics |
+| `route` | enum: `delegate`, `audit`, `review`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `journal-record`, `journal-recall`, `register-context-block`, `orchestrate` | Route distribution + per-route quality metrics |
 | `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
 | `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
 
@@ -30,7 +30,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `agentType` | enum: `standard`, `complex` | Tier distribution → model selection defaults |
 | `toolMode` | enum: `none`, `readonly`, `no-shell`, `full` | Safety surface tracking |
 | `capabilities` | string array: `web_search`, `web_fetch`, `other` | Feature usage → investment decisions |
-| `reviewPolicy` | The per-task review policy that was requested. One of `full`, `quality_only`, `diff_only`, `none`. This is intent, not outcome — whether review actually ran is captured in `stages.review.outcome`. |
+| `reviewPolicy` | The per-task review policy that was requested. One of `reviewed`, `none`. This is intent, not outcome — whether review actually ran is captured in `stages.review.outcome`. |
 
 #### Model (3 fields)
 
@@ -47,7 +47,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `terminalStatus` | enum: `ok`, `incomplete`, `timeout`, `error`, `cost_exceeded`, `brief_too_vague`, `unavailable` | Success/failure rate per route |
 | `workerStatus` | enum: `done`, `done_with_concerns`, `needs_context`, `blocked`, `failed`, `review_loop_aborted` | Worker outcome quality |
 | `errorCode` | enum or null — values include `verify_command_error`, `commit_metadata_invalid`, `commit_metadata_repair_modified_files`, `dirty_worktree`, `diff_review_rejected`, `runner_crash`, `executor_error`, `api_error`, `network_error`, `rate_limit_exceeded`, `incomplete_no_summary`, `reviewer_separation_unsatisfiable`, `other` | Failure attribution (no raw error messages). `incomplete_no_summary` and `reviewer_separation_unsatisfiable` were added in 3.12.1 to surface previously-silent failure modes. |
-| `mainModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
+| `mainModelFamily` | enum: 32 model family values + `other` | Parent-model diversity tracking |
 
 **Note on completion semantics (4.7.8+):** `terminal_status` and `worker_status` are derived from objective lifecycle signals — review verdict, commit-gate outcome, rework state, and per-stage `implement.outcome`. Worker self-assessment (whether the sub-agent said it was "done" or "failed") is recorded in the wire record for telemetry analytics but does NOT gate completion. A worker that says "failed" because it couldn't run verification, but whose code was approved by the reviewer and committed, will still record `terminal_status='ok'` / `worker_status='done'`.
 
@@ -151,7 +151,7 @@ Stage-type-specific extras:
 
 | Field | Type |
 |-------|------|
-| `schemaVersion` | integer literal `5` (was `4` pre-4.3.1). mma is forward-only on the new vocabulary; the backend normalises legacy v4 records on read. |
+| `schemaVersion` | integer literal `6` (was `5` pre-5.4.2). mma is forward-only on the new vocabulary; the backend normalises legacy v4/v5 records on read. |
 | `installId` | UUIDv4 — pseudonymous, generated locally, rotates every 365 days |
 | `mmaVersion` | SemVer string |
 | `os` | enum: `darwin`, `linux`, `win32`, `other` |
@@ -220,17 +220,17 @@ Delete the `.mma/` directory at any time to wipe local context blocks.
 
 ## How to opt out
 
-Telemetry is **disabled by default**. Run `mma telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 5` atomically. To opt out:
+Telemetry is **disabled by default**. Run `mma telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 6` atomically. To opt out:
 
 ```bash
 # Option 1: CLI (immediate)
 mma telemetry disable
 
 # Option 2: Environment variable (takes effect next start)
-export MMAGENT_TELEMETRY=0
+export MMA_TELEMETRY=0
 
 # Option 3: Config file (immediate)
-# Set "telemetry": { "enabled": false } in ~/.multi-model/config.json
+# Set "telemetry": { "enabled": false } in ~/.mma/config.json
 ```
 
 To reset your pseudonymous identifier without disabling telemetry: `mma telemetry reset-id`.

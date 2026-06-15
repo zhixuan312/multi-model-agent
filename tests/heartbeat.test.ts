@@ -338,8 +338,6 @@ describe('ActivityTracker', () => {
 
   // Regression: callers must not shrink stageCount below stageIndex after a
   // post-implementing stage (verifying/diff_review/committing) auto-grew it.
-  // See reviewed-lifecycle.ts: when worker writes 0 files but autoCommit=true,
-  // verifying has already advanced stageIndex past the initial start() cap.
   it('off policy + advance to verifying: stageCount auto-grows and is not shrunk', () => {
     const events: ProgressEvent[] = [];
     const timer = new ActivityTracker((e) => events.push(e), {

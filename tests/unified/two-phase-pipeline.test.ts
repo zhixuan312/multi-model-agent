@@ -5,7 +5,7 @@ import { WorktreeManager } from '../../packages/core/src/unified/worktree-manage
 vi.mock('../../packages/core/src/unified/worktree-manager.js', () => {
   const WorktreeManager = vi.fn();
   WorktreeManager.prototype.create = vi.fn();
-  WorktreeManager.prototype.cleanup = vi.fn();
+  WorktreeManager.prototype.mergeAndCleanup = vi.fn();
   return { WorktreeManager };
 });
 
@@ -114,15 +114,20 @@ describe('runTwoPhasePipeline', () => {
 
   it('creates worktree when worktreeEnabled=true and cleans up', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);
+    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
 
     createMock.mockResolvedValue({
       branch: 'mma/delegate-abcd1234',
       path: '/tmp/test/.mma/worktrees/abcd1234',
       hasChanges: false,
+      merged: false,
     });
-    // cleanup returns true = preserved (has changes)
-    cleanupMock.mockResolvedValue(true);
+    cleanupMock.mockResolvedValue({
+      branch: 'mma/delegate-abcd1234',
+      path: '/tmp/test/.mma/worktrees/abcd1234',
+      hasChanges: true,
+      merged: true,
+    });
 
     const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
     const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
@@ -149,25 +154,35 @@ describe('runTwoPhasePipeline', () => {
     // Worktree was created with the worktree path
     expect(createMock).toHaveBeenCalledWith('/tmp/test', 'abcd1234-5678-9abc-def0-1234567890ab', 'delegate');
 
-    // Sessions opened with worktree cwd, not original cwd
+    // Implementer runs in worktree cwd, with cwd-only tools disallowed
     expect(implProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/test/.mma/worktrees/abcd1234' }),
+      expect.objectContaining({
+        cwd: '/tmp/test/.mma/worktrees/abcd1234',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
     );
+    // Reviewer ALSO runs in the worktree cwd: it reviews AND fixes, so its edits
+    // must land on the worktree branch that gets merged. Same cwd-only sandbox.
     expect(revProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/test/.mma/worktrees/abcd1234' }),
+      expect.objectContaining({
+        cwd: '/tmp/test/.mma/worktrees/abcd1234',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
     );
 
-    // Cleanup was called
+    // mergeAndCleanup was called with original cwd
     expect(cleanupMock).toHaveBeenCalledWith(
       '/tmp/test/.mma/worktrees/abcd1234',
       'mma/delegate-abcd1234',
+      '/tmp/test',
     );
 
-    // Result includes worktree info
+    // Result includes worktree info with merged=true
     expect(result.worktree).toEqual({
       branch: 'mma/delegate-abcd1234',
       path: '/tmp/test/.mma/worktrees/abcd1234',
       hasChanges: true,
+      merged: true,
     });
 
     expect(result.status).toBe('done');
@@ -200,7 +215,7 @@ describe('runTwoPhasePipeline', () => {
 
   it('BUG REPRO: implementer prompt has original-cwd paths while session cwd is worktree', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);
+    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
 
     const ORIGINAL_CWD = '/project/repo';
     const WORKTREE_CWD = '/project/repo/.mma/worktrees/abcd1234';
@@ -209,8 +224,14 @@ describe('runTwoPhasePipeline', () => {
       branch: 'mma/execute_plan-abcd1234',
       path: WORKTREE_CWD,
       hasChanges: false,
+      merged: false,
     });
-    cleanupMock.mockResolvedValue(true);
+    cleanupMock.mockResolvedValue({
+      branch: 'mma/execute_plan-abcd1234',
+      path: WORKTREE_CWD,
+      hasChanges: true,
+      merged: true,
+    });
 
     const impl = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done"}');
     const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
@@ -318,15 +339,20 @@ describe('runTwoPhasePipeline', () => {
 
   it('creates worktree with reviewPolicy=none and cleans up', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.cleanup);
+    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
 
     createMock.mockResolvedValue({
       branch: 'mma/audit-abcd1234',
       path: '/tmp/test/.mma/worktrees/abcd1234',
       hasChanges: false,
+      merged: false,
     });
-    // cleanup returns false = removed (no changes)
-    cleanupMock.mockResolvedValue(false);
+    cleanupMock.mockResolvedValue({
+      branch: 'mma/audit-abcd1234',
+      path: '/tmp/test/.mma/worktrees/abcd1234',
+      hasChanges: false,
+      merged: false,
+    });
 
     const impl = mockSession('done');
 
@@ -352,6 +378,7 @@ describe('runTwoPhasePipeline', () => {
       branch: 'mma/audit-abcd1234',
       path: '/tmp/test/.mma/worktrees/abcd1234',
       hasChanges: false,
+      merged: false,
     });
   });
 });

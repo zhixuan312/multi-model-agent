@@ -3,6 +3,8 @@
 // `RunResult` — the wire envelope shape (unified handler response).
 // `RuntimeRunResult` — the internal fat shape for test mock providers.
 
+import type { FindingsOutcome } from './enums.js';
+
 export type RunResult = {
   completed: boolean;
   message: string;
@@ -11,7 +13,7 @@ export type RunResult = {
   filesChanged: string[];
   commitSha: string | null;
   blockId: string | null;
-  findingsOutcome?: 'found' | 'clean' | 'not_applicable';
+  findingsOutcome?: FindingsOutcome;
   findingsOutcomeReason?: string | null;
   outcomeInferred?: boolean;
   outcomeMalformed?: boolean;
@@ -96,6 +98,15 @@ export interface SessionOpts {
   envelope?: TaskEnvelopeStore;
   /** Present only when the task requested skills and resolution succeeded. */
   skills?: ResolvedSkillBundle;
+  /** Session ID from a prior task — seeds the provider session so the first
+   *  send() resumes the prior conversation instead of starting fresh. */
+  resume?: string;
+  /** Tools the worker is NOT allowed to use (sandbox enforcement). */
+  disallowedTools?: string[];
+  /** Filesystem policy for the session. `cwd-only` adds a PreToolUse confinement
+   *  hook (claude) that denies writes escaping the cwd — the SDK analog of codex
+   *  `-s workspace-write`. Typed inline to avoid importing from `unified/`. */
+  sandboxPolicy?: 'cwd-only' | 'read-only';
 }
 
 export interface TurnOpts {

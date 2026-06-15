@@ -24,18 +24,8 @@ import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
-
-interface BusLike { emitPlainEntry(entry: unknown): void }
-
-function busOf(opts: SessionOpts): BusLike | undefined {
-  const b = opts.bus as { emitPlainEntry?: unknown } | undefined;
-  return b && typeof b.emitPlainEntry === 'function' ? (b as BusLike) : undefined;
-}
-
-function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
-  const e = opts.envelope as { recordToolCall?: unknown } | undefined;
-  return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
-}
+import { buildCwdConfinementHook } from './claude-cwd-confinement.js';
+import { busOf, envelopeOf } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
   private closed = false;
@@ -58,6 +48,7 @@ export class ClaudeSession implements Session {
   }) {
     this.bus = busOf(args.opts);
     this.envelope = envelopeOf(args.opts);
+    if (args.opts.resume) this.sessionId = args.opts.resume;
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
       model: args.model,
       cwd: args.opts.cwd,
@@ -105,28 +96,33 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
-    // Build goal-mode Stop hook if a goalCondition is provided.
-    // This replicates /goal behavior: after each turn, evaluate whether
-    // the condition is met. If not, block the stop and keep the agent working.
-    const goalHooks: Record<string, unknown> = {};
+    // Assemble SDK hooks. Two independent concerns, merged into one `hooks` map:
+    //   1. Goal-mode Stop hook (replicates /goal): re-block stop until the
+    //      goalCondition is met.
+    //   2. cwd confinement (cwd-only tasks): a PreToolUse hook that denies writes
+    //      escaping the worktree — the SDK equivalent of codex `-s workspace-write`,
+    //      since `bypassPermissions` itself applies no filesystem boundary.
+    const hookMap: Record<string, unknown> = {};
     if (_opts?.goalCondition) {
       const condition = _opts.goalCondition;
-      goalHooks.hooks = {
-        Stop: [{
-          hooks: [async (input: { stop_hook_active?: boolean }) => {
-            if (input.stop_hook_active) return {};
-            return {
-              continue: true,
-              hookSpecificOutput: {
-                hookEventName: 'Stop',
-                decision: 'block',
-                reason: `Goal not yet met. Continue working toward: ${condition}`,
-              },
-            };
-          }],
+      hookMap.Stop = [{
+        hooks: [async (input: { stop_hook_active?: boolean }) => {
+          if (input.stop_hook_active) return {};
+          return {
+            continue: true,
+            hookSpecificOutput: {
+              hookEventName: 'Stop',
+              decision: 'block',
+              reason: `Goal not yet met. Continue working toward: ${condition}`,
+            },
+          };
         }],
-      };
+      }];
     }
+    if (this.args.opts.sandboxPolicy === 'cwd-only' && this.args.opts.cwd) {
+      Object.assign(hookMap, buildCwdConfinementHook(this.args.opts.cwd));
+    }
+    const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 
     const q = query({
       prompt: promptIterable(),
@@ -143,6 +139,7 @@ export class ClaudeSession implements Session {
         ...skillOptions,
         ...(this.sessionId && { resume: this.sessionId }),
         ...goalHooks,
+        ...(this.args.opts.disallowedTools?.length && { disallowedTools: this.args.opts.disallowedTools }),
       } as Parameters<typeof query>[0]['options'],
     });
     this.activeQuery = q as unknown as { close?: () => unknown };

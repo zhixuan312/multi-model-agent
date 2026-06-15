@@ -42,17 +42,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-interface BusLike { emitPlainEntry(entry: unknown): void }
-
-function busOf(opts: SessionOpts): BusLike | undefined {
-  const b = opts.bus as { emitPlainEntry?: unknown } | undefined;
-  return b && typeof b.emitPlainEntry === 'function' ? (b as BusLike) : undefined;
-}
-
-function envelopeOf(opts: SessionOpts): TaskEnvelopeStore | undefined {
-  const e = opts.envelope as { recordToolCall?: unknown } | undefined;
-  return e && typeof e.recordToolCall === 'function' ? (e as TaskEnvelopeStore) : undefined;
-}
+import { busOf, envelopeOf } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;
@@ -71,7 +61,9 @@ export class CodexCliSession implements Session {
   private codexSkillHomeReady = false;
   private skillHomePath: string | undefined;
 
-  constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {}
+  constructor(private readonly args: { cfg: CodexCliConfig; opts: SessionOpts }) {
+    if (args.opts.resume) this.threadId = args.opts.resume;
+  }
 
   /** Returns task identity (taskId/taskIndex) from SessionOpts for event tagging.
    *  The stall watchdog filters bus events by these fields — every emit must carry them

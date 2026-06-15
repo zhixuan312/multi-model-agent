@@ -7,14 +7,7 @@ import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
 import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
-import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
-// event-builder.ts was removed in the events unification refactor. Recorder.recordTaskCompleted
-// is now only called via the TelemetryUploader subscriber path; this BuildContext type alias is
-// kept temporarily for any in-flight callers and will be removed when those are migrated.
-type BuildContext = unknown;
-function buildTaskCompletedEvent(_ctx: BuildContext): WireTelemetryRecord {
-  throw new Error('buildTaskCompletedEvent removed — use TelemetryUploader → toWireRecord path');
-}
+import type { TaskCompletedEventType } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
 
 export interface ValidationWarningsResult {
   warnings: Array<{ rule: string; path: string }>;
@@ -84,7 +77,6 @@ function checkR6b(event: TaskCompletedEventType): Array<{ rule: string; path: st
 
 export interface Recorder {
   readonly signal: AbortSignal;
-  recordTaskCompleted(ctx: BuildContext): void;
   enqueue(event: Record<string, unknown>): void;
   revokeIdentity(options?: { deleteInstallId?: boolean }): Promise<void>;
 }
@@ -148,53 +140,6 @@ function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder
     },
 
     enqueue,
-
-    recordTaskCompleted(ctx) {
-      try {
-        const d = decide(homeDir);
-        if (!d.enabled) return;
-        const event: WireTelemetryRecord = buildTaskCompletedEvent(ctx);
-        const ev = event as unknown as TaskCompletedEventType;
-
-        const { warnings, baseIssues, refinedIssues } = collectValidationWarnings(ev);
-
-        if (baseIssues.length > 0) {
-          console.warn('mma-telemetry: schema warning (event still emitted)', {
-            eventId: ev.eventId,
-            issues: baseIssues,
-          });
-        }
-
-        if (refinedIssues.length > 0) {
-          const stageModelsByName = (ev.stages ?? []).reduce(
-            (acc: Record<string, string>, s: { name: string; model?: string }) => {
-              if (s.name && s.model) acc[s.name] = s.model;
-              return acc;
-            },
-            {},
-          );
-          console.warn('mma-telemetry: cross-field warning (event still emitted)', {
-            eventId: ev.eventId,
-            implementerModel: ev.implementerModel,
-            stageModels: stageModelsByName,
-            totalDurationMs: ev.totalDurationMs,
-            inputTokens: ev.inputTokens,
-            outputTokens: ev.outputTokens,
-            issues: refinedIssues.map((e) => ({
-              rule: e.message,
-              path: e.path,
-            })),
-          });
-        }
-
-        const enrichedEvent = warnings.length > 0
-          ? { ...event, validation_warnings: warnings }
-          : event;
-        enqueue(enrichedEvent as unknown as Record<string, unknown>);
-      } catch {
-        dropped++;
-      }
-    },
 
     async revokeIdentity(options) {
       await bumpGeneration(homeDir);

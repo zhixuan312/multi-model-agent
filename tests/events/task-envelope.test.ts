@@ -27,7 +27,7 @@ describe('TaskEnvelope reviewPolicy + errorCode honesty', () => {
 
   it('seal preserves errorCode when supplied', () => {
     const store = TaskEnvelopeStore.create({ ...baseSeed, reviewPolicy: 'reviewed' });
-    store.seal({ status: 'failed', stopReason: 'incomplete', structuredError: null, errorCode: 'review_quality_findings_unresolved', realFilesChanged: [] });
-    expect(store.snapshot().errorCode).toBe('review_quality_findings_unresolved');
+    store.seal({ status: 'failed', stopReason: 'incomplete', structuredError: null, errorCode: 'sdk_max_turns', realFilesChanged: [] });
+    expect(store.snapshot().errorCode).toBe('sdk_max_turns');
   });
 });

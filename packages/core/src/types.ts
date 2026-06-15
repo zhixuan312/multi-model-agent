@@ -22,15 +22,6 @@ export type {
 } from './types/task-spec.js';
 
 export type {
-  Goal,
-  GoalTask,
-  GoalPhase,
-  GoalSource,
-  GoalPhaseMode,
-  GoalReviewPolicy,
-} from './types/goal.js';
-
-export type {
   AgentConfig,
   CodexProviderConfig,
   ClaudeProviderConfig,

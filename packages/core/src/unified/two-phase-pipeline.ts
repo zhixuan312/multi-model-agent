@@ -1,6 +1,8 @@
 import type { Provider, Session, TurnResult } from '../types/run-result.js';
 import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
+
+const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
 import { parseReviewerOutput, type ReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
 
@@ -89,11 +91,10 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
   const sessions: Session[] = [];
 
-  // --- Worktree cleanup helper ---
+  // --- Worktree merge + cleanup helper ---
   const resolveWorktree = async (): Promise<WorktreeInfo | null> => {
     if (!wtManager || !wtInfo) return null;
-    const preserved = await wtManager.cleanup(wtInfo.path, wtInfo.branch);
-    return { branch: wtInfo.branch, path: wtInfo.path, hasChanges: preserved };
+    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd);
   };
 
   // Close all opened sessions — best-effort, errors swallowed.
@@ -109,6 +110,9 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
       bus: input.bus,
+      sandboxPolicy: input.sandboxPolicy,
+      ...(input.resumeImplementer && { resume: input.resumeImplementer }),
+      ...(input.sandboxPolicy === 'cwd-only' && { disallowedTools: CWD_ONLY_DISALLOWED_TOOLS }),
     });
     sessions.push(implSession);
 
@@ -137,6 +141,16 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       };
     }
 
+    // Reviewer runs IN the worktree (effectiveCwd), not the original cwd: it
+    // both reviews AND fixes the implementer's diff, so its edits must land on
+    // the worktree branch that gets merged into the PR. Running it in the
+    // original cwd would (a) lose its fixes — they'd never reach the merged
+    // branch — and (b) expose the parent `.mma/worktrees/<id>` to a writing
+    // reviewer (e.g. codex treats it as untracked scope-creep and `rm -rf`s it,
+    // destroying the worktree → `spawn git ENOENT` at merge). The worktree's
+    // workspace-write sandbox confines the reviewer to the worktree, so the
+    // parent worktree metadata is out of reach. Same cwd-only tool restriction
+    // as the implementer applies.
     const revSession = input.reviewerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
@@ -144,6 +158,9 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
       bus: input.bus,
+      sandboxPolicy: input.sandboxPolicy,
+      ...(input.resumeReviewer && { resume: input.resumeReviewer }),
+      ...(input.sandboxPolicy === 'cwd-only' && { disallowedTools: CWD_ONLY_DISALLOWED_TOOLS }),
     });
     sessions.push(revSession);
 

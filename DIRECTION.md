@@ -96,7 +96,7 @@ If the agent wrote the files and the work evidence is there, the status should r
 
 ### 9. Every tool call is a self-contained unit
 
-Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`register_context_block`, task polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
+Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`POST /context-blocks`, task polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
 
 ---
 
@@ -131,14 +131,12 @@ These are labor categories, not intelligence tiers. The user decides what "stand
 
 ### The reviewed lifecycle
 
-Every task goes through intake and implementation. Artifact-producing tasks also go through cross-agent review:
+Every task flows through a two-phase pipeline. Phase one always runs; phase two is the structural default but can be opted out:
 
-1. **Intake** — We interpret the request, infer missing details, and compile it into a concrete execution plan. The intake pipeline normalizes the brief and routes the work; ambiguous briefs proceed with the most likely interpretation rather than pausing for confirmation.
-2. **Implement** — The actual work. Full tool access, cost ceiling enforcement, sandbox confinement. The intake pipeline shapes effort from task signals and progress heartbeats stream during execution.
-3. **Spec review** — Did the output satisfy the brief? Run by the *other* agent (cross-agent review).
-4. **Quality review** — Is the work safe, correct, maintainable? Also the *other* agent. Review continues until approved, findings plateau, or the safety limit is reached.
+1. **Implement** — The actual work. Full tool access, cost ceiling enforcement, sandbox confinement. The pipeline normalizes the brief, infers missing details, shapes effort from task signals, and routes the work; ambiguous briefs proceed with the most likely interpretation rather than pausing for confirmation. Progress heartbeats stream during execution.
+2. **Review** — A *different* agent checks both spec compliance and code quality (cross-agent review). Review continues until approved, findings plateau, or the safety limit is reached.
 
-All task types go through the same pipeline by default. Callers may opt out of review for task classes where a single-phase run is sufficient.
+All task types go through both phases by default. Callers may opt out of review (`reviewPolicy: "none"`) for task classes where a single-phase run is sufficient.
 
 ### The rods, today
 
@@ -148,7 +146,7 @@ The specialized tools are the harness's current rods over the lifecycle — this
 
 **Specialized rods**: `audit`, `review`, `debug`, `execute_plan`, `research`, `investigate` — opinionated gates for common lifecycle stages. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed.
 
-**Orchestration**: `register_context_block`, `retry_tasks` — context management and task operations. These help the caller manage state across calls without us maintaining workflow state.
+**Orchestration**: `retry_tasks` — task retry operations. Context blocks are managed via a dedicated HTTP endpoint (`POST /context-blocks`), not a task type. These help the caller manage state across calls without us maintaining workflow state.
 
 ### What comes back
 
@@ -208,7 +206,7 @@ We execute, review, audit, and report. We don't decide what to build, which appr
 Rods are thin presets over generic primitives. The set of rods grows, but each one stays a thin gate — if a workflow can be achieved by combining existing primitives, it doesn't become a parameter. New rods earn their place by proving a pattern is universal, not by anticipating hypothetical needs.
 
 **We won't maintain workflow state.**
-Each request is a self-contained unit — everything it needs comes in, the result goes out. We provide tools that help the caller manage its own state across calls. We never infer workflow continuity: no implicit session, no conversation memory. The caller owns the workflow. We own individual task execution.
+Each request is a self-contained unit — everything it needs comes in, the result goes out. We provide endpoints that help the caller manage its own state across calls (`POST /context-blocks` for content registration, `GET /task/:taskId` for polling). We never infer workflow continuity: no implicit session, no conversation memory. The caller owns the workflow. We own individual task execution.
 
 **We won't chase autonomy.**
 The industry is racing toward fully autonomous agents that run for hours. We're building the opposite: bounded execution with structured checkpoints. We run a task, review it, and return. The engineer decides what happens next.
