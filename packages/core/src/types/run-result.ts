@@ -101,6 +101,10 @@ export interface SessionOpts {
   resume?: string;
   /** Tools the worker is NOT allowed to use (sandbox enforcement). */
   disallowedTools?: string[];
+  /** Filesystem policy for the session. `cwd-only` adds a PreToolUse confinement
+   *  hook (claude) that denies writes escaping the cwd — the SDK analog of codex
+   *  `-s workspace-write`. Typed inline to avoid importing from `unified/`. */
+  sandboxPolicy?: 'cwd-only' | 'read-only';
 }
 
 export interface TurnOpts {

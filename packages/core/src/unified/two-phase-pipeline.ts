@@ -110,6 +110,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
       bus: input.bus,
+      sandboxPolicy: input.sandboxPolicy,
       ...(input.resumeImplementer && { resume: input.resumeImplementer }),
       ...(input.sandboxPolicy === 'cwd-only' && { disallowedTools: CWD_ONLY_DISALLOWED_TOOLS }),
     });
@@ -140,18 +141,26 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       };
     }
 
-    // Reviewer runs in the original cwd, not the worktree — it only reads
-    // the implementer's output text and doesn't need worktree file access.
-    // Using original cwd also avoids ENOENT crashes if the worktree's temp
-    // directory is cleaned by the OS during a long-running implementer.
+    // Reviewer runs IN the worktree (effectiveCwd), not the original cwd: it
+    // both reviews AND fixes the implementer's diff, so its edits must land on
+    // the worktree branch that gets merged into the PR. Running it in the
+    // original cwd would (a) lose its fixes — they'd never reach the merged
+    // branch — and (b) expose the parent `.mma/worktrees/<id>` to a writing
+    // reviewer (e.g. codex treats it as untracked scope-creep and `rm -rf`s it,
+    // destroying the worktree → `spawn git ENOENT` at merge). The worktree's
+    // workspace-write sandbox confines the reviewer to the worktree, so the
+    // parent worktree metadata is out of reach. Same cwd-only tool restriction
+    // as the implementer applies.
     const revSession = input.reviewerProvider.openSession({
-      cwd: input.cwd,
+      cwd: effectiveCwd,
       wallClockDeadline: deadline,
       abortSignal: ac.signal,
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
       bus: input.bus,
+      sandboxPolicy: input.sandboxPolicy,
       ...(input.resumeReviewer && { resume: input.resumeReviewer }),
+      ...(input.sandboxPolicy === 'cwd-only' && { disallowedTools: CWD_ONLY_DISALLOWED_TOOLS }),
     });
     sessions.push(revSession);
 

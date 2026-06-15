@@ -24,6 +24,7 @@ import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
+import { buildCwdConfinementHook } from './claude-cwd-confinement.js';
 
 interface BusLike { emitPlainEntry(entry: unknown): void }
 
@@ -106,28 +107,33 @@ export class ClaudeSession implements Session {
     }
     const skillOptions = skillBundle ? buildClaudeSkillOptions(skillBundle.stagedRoot, skillBundle.names) : {};
 
-    // Build goal-mode Stop hook if a goalCondition is provided.
-    // This replicates /goal behavior: after each turn, evaluate whether
-    // the condition is met. If not, block the stop and keep the agent working.
-    const goalHooks: Record<string, unknown> = {};
+    // Assemble SDK hooks. Two independent concerns, merged into one `hooks` map:
+    //   1. Goal-mode Stop hook (replicates /goal): re-block stop until the
+    //      goalCondition is met.
+    //   2. cwd confinement (cwd-only tasks): a PreToolUse hook that denies writes
+    //      escaping the worktree — the SDK equivalent of codex `-s workspace-write`,
+    //      since `bypassPermissions` itself applies no filesystem boundary.
+    const hookMap: Record<string, unknown> = {};
     if (_opts?.goalCondition) {
       const condition = _opts.goalCondition;
-      goalHooks.hooks = {
-        Stop: [{
-          hooks: [async (input: { stop_hook_active?: boolean }) => {
-            if (input.stop_hook_active) return {};
-            return {
-              continue: true,
-              hookSpecificOutput: {
-                hookEventName: 'Stop',
-                decision: 'block',
-                reason: `Goal not yet met. Continue working toward: ${condition}`,
-              },
-            };
-          }],
+      hookMap.Stop = [{
+        hooks: [async (input: { stop_hook_active?: boolean }) => {
+          if (input.stop_hook_active) return {};
+          return {
+            continue: true,
+            hookSpecificOutput: {
+              hookEventName: 'Stop',
+              decision: 'block',
+              reason: `Goal not yet met. Continue working toward: ${condition}`,
+            },
+          };
         }],
-      };
+      }];
     }
+    if (this.args.opts.sandboxPolicy === 'cwd-only' && this.args.opts.cwd) {
+      Object.assign(hookMap, buildCwdConfinementHook(this.args.opts.cwd));
+    }
+    const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 
     const q = query({
       prompt: promptIterable(),

@@ -154,14 +154,20 @@ describe('runTwoPhasePipeline', () => {
     // Worktree was created with the worktree path
     expect(createMock).toHaveBeenCalledWith('/tmp/test', 'abcd1234-5678-9abc-def0-1234567890ab', 'delegate');
 
-    // Implementer runs in worktree cwd
+    // Implementer runs in worktree cwd, with cwd-only tools disallowed
     expect(implProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/test/.mma/worktrees/abcd1234' }),
+      expect.objectContaining({
+        cwd: '/tmp/test/.mma/worktrees/abcd1234',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
     );
-    // Reviewer runs in original cwd (doesn't need worktree file access,
-    // avoids ENOENT if worktree dir is cleaned by OS during long runs)
+    // Reviewer ALSO runs in the worktree cwd: it reviews AND fixes, so its edits
+    // must land on the worktree branch that gets merged. Same cwd-only sandbox.
     expect(revProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/test' }),
+      expect.objectContaining({
+        cwd: '/tmp/test/.mma/worktrees/abcd1234',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
     );
 
     // mergeAndCleanup was called with original cwd

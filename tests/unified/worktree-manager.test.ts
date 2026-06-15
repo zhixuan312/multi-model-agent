@@ -45,6 +45,39 @@ describe('WorktreeManager', () => {
     expect(pnpmCall[1]).toContain('install');
   });
 
+  it('create retries worktree-add on lock contention, cleaning partial state between attempts', async () => {
+    // 1st add: partial run hit the .git/config lock (branch left behind).
+    // 2nd add (after cleanup): "branch already exists" (the non-idempotent trap).
+    // 3rd add: succeeds.
+    const exec = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('add failed'), { stderr: 'could not lock config file .git/config: File exists' }))
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree prune
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: branch -D
+      .mockRejectedValueOnce(Object.assign(new Error('add failed'), { stderr: "fatal: a branch named 'mma/delegate-task-abc' already exists" }))
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree prune
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: branch -D
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // 3rd add succeeds
+    const mgr = new WorktreeManager(exec, mockFs(false));
+    const info = await mgr.create('/repo', 'task-abc12345', 'delegate');
+    expect(info.branch).toBe('mma/delegate-task-abc');
+    // Verify it actually retried the add (3 add calls) + cleaned up between them.
+    const addCalls = exec.mock.calls.filter((c) => c[1][0] === 'worktree' && c[1][1] === 'add');
+    expect(addCalls.length).toBe(3);
+    expect(exec.mock.calls.some((c) => c[1][0] === 'branch' && c[1][1] === '-D')).toBe(true);
+  });
+
+  it('create throws immediately on a non-retryable add error', async () => {
+    const exec = vi.fn().mockRejectedValueOnce(
+      Object.assign(new Error('add failed'), { stderr: "fatal: invalid reference: bogus-base" }),
+    );
+    const mgr = new WorktreeManager(exec, mockFs(false));
+    await expect(mgr.create('/repo', 'task-abc12345', 'delegate')).rejects.toThrow();
+    const addCalls = exec.mock.calls.filter((c) => c[1][0] === 'worktree' && c[1][1] === 'add');
+    expect(addCalls.length).toBe(1); // no retry on a real error
+  });
+
   it('hasChanges returns false for clean worktree', async () => {
     const mgr = new WorktreeManager(mockExec(''));
     expect(await mgr.hasChanges('/repo/.mma/worktrees/abc')).toBe(false);
@@ -57,7 +90,7 @@ describe('WorktreeManager', () => {
 
   it('mergeAndCleanup removes when clean (no changes)', async () => {
     const exec = mockExec('');
-    const mgr = new WorktreeManager(exec);
+    const mgr = new WorktreeManager(exec, mockFs(true));
     const info = await mgr.mergeAndCleanup(
       '/repo/.mma/worktrees/abc',
       'mma/delegate-abc',
@@ -83,7 +116,7 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
       .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
 
-    const mgr = new WorktreeManager(exec);
+    const mgr = new WorktreeManager(exec, mockFs(true));
     const info = await mgr.mergeAndCleanup(
       '/repo/.mma/worktrees/abc',
       'mma/delegate-abc',
@@ -112,7 +145,7 @@ describe('WorktreeManager', () => {
       .mockRejectedValueOnce(new Error('merge conflict')) // git merge fails
       .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git merge --abort
 
-    const mgr = new WorktreeManager(exec);
+    const mgr = new WorktreeManager(exec, mockFs(true));
     const info = await mgr.mergeAndCleanup(
       '/repo/.mma/worktrees/abc',
       'mma/delegate-abc',
@@ -123,6 +156,27 @@ describe('WorktreeManager', () => {
     expect(info.merged).toBe(false);
     // Worktree NOT removed — preserved for manual resolution
     expect(exec.mock.calls.map(c => c[1][0])).not.toContain('worktree');
+  });
+
+  it('mergeAndCleanup degrades gracefully when the worktree dir is gone', async () => {
+    // Worktree directory vanished (OS reap, or an agent deleted it). Must NOT
+    // crash with `spawn git ENOENT` — prune the stale registration + branch and
+    // report not-merged.
+    const exec = mockExec('');
+    const fs = mockFs(false); // access rejects → dir missing
+    const mgr = new WorktreeManager(exec, fs);
+    const info = await mgr.mergeAndCleanup(
+      '/repo/.mma/worktrees/abc',
+      'mma/delegate-abc',
+      '/repo',
+    );
+
+    expect(info.merged).toBe(false);
+    expect(info.hasChanges).toBe(false);
+    // No git ran with cwd=worktree path; prune + branch -D ran in the original cwd.
+    const calls = exec.mock.calls;
+    expect(calls.every((c) => c[2].cwd === '/repo')).toBe(true);
+    expect(calls.map((c) => c[1].join(' '))).toEqual(['worktree prune', 'branch -D mma/delegate-abc']);
   });
 
   it('getInfo returns current state', async () => {
