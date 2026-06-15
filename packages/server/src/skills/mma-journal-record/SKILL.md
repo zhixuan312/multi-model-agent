@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Record team knowledge to the persistent journal via a fire-and-forget mmagent worker. The worker integrates the entry into the knowledge graph and returns immediately; you continue on your main context.
+Record team knowledge to the persistent journal via a fire-and-forget mma worker. The worker integrates the entry into the knowledge graph and returns immediately; you continue on your main context.
 
 **Core principle:** The journal is the centralized team knowledge graph — decisions, design rationale, user behavior patterns, process learnings, research findings, and style conventions. Record once per insight; don't re-investigate.
 

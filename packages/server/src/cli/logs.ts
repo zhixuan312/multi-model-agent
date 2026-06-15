@@ -31,7 +31,7 @@ function todayUtc(): string {
 }
 
 function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
-  const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.multi-model', 'logs');
+  const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.mma', 'logs');
   return path.join(dir, `mma-${todayUtc()}.jsonl`);
 }
 

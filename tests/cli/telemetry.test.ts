@@ -390,7 +390,7 @@ describe('mma telemetry dump-queue', () => {
         schemaVersion: 1,
         install: {
           installId: 'test-id',
-          mmagentVersion: '3.6.0',
+          mmaVersion: '3.6.0',
           os: 'darwin',
           nodeMajor: '22',
           language: 'en',

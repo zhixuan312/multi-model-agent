@@ -97,7 +97,7 @@ async function registerControlHandlers(
       const envVal = process.env.MMA_TELEMETRY;
       let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
       try {
-        const cfgPath = join(homedir(), '.multi-model', 'config.json');
+        const cfgPath = join(homedir(), '.mma', 'config.json');
         const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
         if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
           configState = { enabled: cfg.telemetry.enabled };
@@ -129,7 +129,7 @@ async function registerControlHandlers(
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
     router.register('POST', '/context-blocks', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
     });
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   }
@@ -200,7 +200,7 @@ export async function startServer(
         const envVal = process.env.MMA_TELEMETRY;
         let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
         try {
-          const cfgPath = join(homedir(), '.multi-model', 'config.json');
+          const cfgPath = join(homedir(), '.mma', 'config.json');
           const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
           if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
             configState = { enabled: cfg.telemetry.enabled };
@@ -229,10 +229,10 @@ export async function startServer(
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
     } else {
       router.register('POST', '/task', (_req, res) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
       router.register('GET', '/task/:taskId', (_req, res) => {
-        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
     }
   }

@@ -27,13 +27,13 @@ which terminal state you're in:
 DELAY=1
 START=$(date +%s)
 TIMEOUT_S=${MMA_POLL_TIMEOUT_S:-1800}
-BODY_FILE=$(mktemp -t mmagent-poll.XXXXXX)
+BODY_FILE=$(mktemp -t mma-poll.XXXXXX)
 trap 'rm -f "$BODY_FILE"' EXIT
 
 while true; do
   NOW=$(date +%s)
   if [ $((NOW - START)) -ge "$TIMEOUT_S" ]; then
-    echo "mmagent: poll timed out after ${TIMEOUT_S}s" >&2
+    echo "mma: poll timed out after ${TIMEOUT_S}s" >&2
     exit 124
   fi
 
@@ -52,9 +52,9 @@ while true; do
       exit 0
       ;;
     "")
-      echo "mmagent: unreachable (curl failed)" >&2; exit 1 ;;
+      echo "mma: unreachable (curl failed)" >&2; exit 1 ;;
     *)
-      echo "mmagent: HTTP $STATUS"; cat "$BODY_FILE" >&2; exit 1 ;;
+      echo "mma: HTTP $STATUS"; cat "$BODY_FILE" >&2; exit 1 ;;
   esac
 done
 ```

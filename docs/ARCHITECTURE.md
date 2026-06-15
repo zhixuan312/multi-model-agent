@@ -212,7 +212,7 @@ Where to add:
 
 ### Git worktrees + a shared daemon
 
-`mmagent serve` writes worker output relative to the dispatched `?cwd=`. Pairing a
+`mma serve` writes worker output relative to the dispatched `?cwd=`. Pairing a
 **git worktree** with a daemon started from a *different* worktree is not currently
 guaranteed to isolate filesystem writes on every platform (observed escaping to the
 daemon's startup cwd under some Bun/Windows configurations). Until the root cause is

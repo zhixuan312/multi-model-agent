@@ -153,7 +153,7 @@ Stage-type-specific extras:
 |-------|------|
 | `schemaVersion` | integer literal `5` (was `4` pre-4.3.1). mma is forward-only on the new vocabulary; the backend normalises legacy v4 records on read. |
 | `installId` | UUIDv4 — pseudonymous, generated locally, rotates every 365 days |
-| `mmagentVersion` | SemVer string |
+| `mmaVersion` | SemVer string |
 | `os` | enum: `darwin`, `linux`, `win32`, `other` |
 | `nodeMajor` | integer 22–99 — Node.js major version |
 
@@ -220,11 +220,11 @@ Delete the `.mma/` directory at any time to wipe local context blocks.
 
 ## How to opt out
 
-Telemetry is **disabled by default**. Run `mmagent telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 5` atomically. To opt out:
+Telemetry is **disabled by default**. Run `mma telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 5` atomically. To opt out:
 
 ```bash
 # Option 1: CLI (immediate)
-mmagent telemetry disable
+mma telemetry disable
 
 # Option 2: Environment variable (takes effect next start)
 export MMAGENT_TELEMETRY=0
@@ -233,7 +233,7 @@ export MMAGENT_TELEMETRY=0
 # Set "telemetry": { "enabled": false } in ~/.multi-model/config.json
 ```
 
-To reset your pseudonymous identifier without disabling telemetry: `mmagent telemetry reset-id`.
+To reset your pseudonymous identifier without disabling telemetry: `mma telemetry reset-id`.
 
 ## How long we keep data
 

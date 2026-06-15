@@ -106,14 +106,14 @@ A public npm package you install and serve locally in minutes — a horizontal l
 
 multi-model-agent ships as a **public npm package** — `@zhixuan92/multi-model-agent`. Any engineer can install it (`npm install -g @zhixuan92/multi-model-agent`, or run it with `npx`) and have the entire layer running locally in minutes. No accounts to provision, no service to sign up for: you bring your own provider keys, install the package, and serve it.
 
-It is a horizontal connection layer delivered as a **local HTTP service**. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent sync-skills`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
+It is a horizontal connection layer delivered as a **local HTTP service**. The engineer runs `mma serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mma sync-skills`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
 
 ### Delivery model
 
 ```
 npm install -g @zhixuan92/multi-model-agent   # public npm package — get it, install it, serve it
-mmagent serve                                  # daemon, stays running on loopback
-mmagent sync-skills                            # writes (and reconciles) skill files in detected clients
+mma serve                                  # daemon, stays running on loopback
+mma sync-skills                            # writes (and reconciles) skill files in detected clients
 ```
 
 The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache) survive.

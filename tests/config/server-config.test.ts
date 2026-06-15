@@ -8,7 +8,7 @@ describe('server config', () => {
       server: {
         bind: '127.0.0.1',
         port: 7337,
-        auth: { tokenFile: '~/.multi-model/auth-token' },
+        auth: { tokenFile: '~/.mma/auth-token' },
         limits: {
           maxBodyBytes: 10_485_760,
           batchTtlMs: 3_600_000,

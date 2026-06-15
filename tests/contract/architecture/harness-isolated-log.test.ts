@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { startTestServer } from '../fixtures/start-test-server.js';
 
-describe('harness writes no events to user global mmagent log', () => {
+describe('harness writes no events to user global mma log', () => {
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const userLog = join(homedir(), '.multi-model', 'logs', `mma-${todayUtc}.jsonl`);
+  const userLog = join(homedir(), '.mma', 'logs', `mma-${todayUtc}.jsonl`);
 
   // Read bytes appended to `path` in the [from, to) range. Returns empty
   // string if the range is empty or the file is gone. Reading by offset

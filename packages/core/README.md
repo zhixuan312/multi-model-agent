@@ -66,7 +66,7 @@ Diagnostic logging is OFF by default.
 }
 ```
 
-When `diagnostics.log` is `true`, JSONL records are appended to `mmagent-YYYY-MM-DD.jsonl` under `diagnostics.logDir` (defaults to `~/.multi-model/logs/`).
+When `diagnostics.log` is `true`, JSONL records are appended to `mma-YYYY-MM-DD.jsonl` under `diagnostics.logDir` (defaults to `~/.mma/logs/`).
 
 ```bash
 mma serve --log       # persist to JSONL

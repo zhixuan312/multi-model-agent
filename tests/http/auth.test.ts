@@ -33,8 +33,8 @@ describe('loadToken', () => {
 
   it('expands ~ to homedir', () => {
     const filename = 'test-token-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    const tildePath = `~/.multi-model/runtime/${filename}`;
-    const resolvedPath = path.join(os.homedir(), '.multi-model/runtime', filename);
+    const tildePath = `~/.mma/runtime/${filename}`;
+    const resolvedPath = path.join(os.homedir(), '.mma/runtime', filename);
     try {
       const tok = loadToken(tildePath);
       expect(tok).toBeTruthy();

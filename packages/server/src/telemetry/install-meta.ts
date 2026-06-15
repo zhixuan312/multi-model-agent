@@ -4,10 +4,10 @@ function bucketOs(): 'darwin' | 'linux' | 'win32' | 'other' {
   return 'other';
 }
 
-export function buildInstallMeta(args: { installId: string; mmagentVersion: string }) {
+export function buildInstallMeta(args: { installId: string; mmaVersion: string }) {
   return {
     installId: args.installId,
-    mmagentVersion: args.mmagentVersion,
+    mmaVersion: args.mmaVersion,
     os: bucketOs(),
     nodeMajor: Number(process.versions.node.split('.')[0]),
   };

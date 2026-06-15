@@ -23,12 +23,12 @@ const INITIAL_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
 function groupKey(record: {
   schemaVersion: number;
   installId: string;
-  mmagentVersion: string;
+  mmaVersion: string;
   os: string;
   nodeMajor: number;
   generation: number;
 }): string {
-  return `${record.schemaVersion}|${record.installId}|${record.mmagentVersion}|${record.os}|${record.nodeMajor}|${record.generation}`;
+  return `${record.schemaVersion}|${record.installId}|${record.mmaVersion}|${record.os}|${record.nodeMajor}|${record.generation}`;
 }
 
 interface UploadResult {
@@ -236,7 +236,7 @@ export class Flusher {
     const jsonBody = JSON.stringify({
       schemaVersion: first.schemaVersion,
       installId: first.installId,
-      mmagentVersion: first.mmagentVersion,
+      mmaVersion: first.mmaVersion,
       os: first.os,
       nodeMajor: first.nodeMajor,
       events,
@@ -250,9 +250,9 @@ export class Flusher {
         headers: {
           'Content-Encoding': 'gzip',
           'Content-Type': 'application/json',
-          'X-Mmagent-Install-Id': identity.installId,
-          'X-Mmagent-Signature': signature,
-          'X-Mmagent-Pubkey': identity.publicKeyRaw,
+          'X-Mma-Install-Id': identity.installId,
+          'X-Mma-Signature': signature,
+          'X-Mma-Pubkey': identity.publicKeyRaw,
         },
         body,
         signal,

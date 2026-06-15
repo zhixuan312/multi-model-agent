@@ -56,7 +56,7 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 
 ### 2. Choose your main model — intentionally (4.0.3+)
 
-Your **main model** is **the model you'd use without mmagent** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
+Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
 
 - Heavy Claude Code user → `claude-opus-4-8`
 - ChatGPT-led workflow → `gpt-5.5`
@@ -71,10 +71,10 @@ export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
 
 ### 3. Write the config
 
-Paste this into your shell — it creates `~/.multi-model/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
+Paste this into your shell — it creates `~/.mma/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
+mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
 {
   "agents": {
     "standard": {
@@ -118,7 +118,7 @@ mma sync-skills                 # reconcile installed skills with the new bundle
 # next AI-client session respawns the daemon via the skill preflight
 ```
 
-A drift warning prints on `mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mma serve` (a new token is regenerated on boot).
+A drift warning prints on `mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.mma/auth-token && mma serve` (a new token is regenerated on boot).
 
 ## Disabling / re-enabling
 
@@ -129,7 +129,7 @@ mma disable        # removes the skills from every detected client; your AI stop
 mma enable         # restores them
 ```
 
-`disable` is **sticky**: it records a sentinel at `~/.multi-model/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
+`disable` is **sticky**: it records a sentinel at `~/.mma/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
 
 A bare `mma disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
 
@@ -168,7 +168,7 @@ You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
 ↓
 Client picks mma-execute-plan (plan file on disk, multiple tasks)
 ↓
-mmagent runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
+mma runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
 implements each task in order and commits it (`[task N] …`), then the complex agent
 reviews every task and fixes anything left — returning one structured report.
 ↓
@@ -200,7 +200,7 @@ Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the ve
 
 ### Lookup order
 
-`--config <path>` → `$MMA_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
+`--config <path>` → `$MMA_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.mma/config.json`.
 
 ### Agent types
 
@@ -240,7 +240,7 @@ Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUT
 
 ### Telemetry
 
-**Off by default.** Opt in via `mma telemetry enable` (or `MMA_TELEMETRY=1`), or add the `telemetry` block directly to `~/.multi-model/config.json`:
+**Off by default.** Opt in via `mma telemetry enable` (or `MMA_TELEMETRY=1`), or add the `telemetry` block directly to `~/.mma/config.json`:
 
 ```json
 {
@@ -251,13 +251,13 @@ Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUT
 }
 ```
 
-When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
+When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.mma/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
 
 **Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mma telemetry enable` to opt in to the current wire schema (v6).
 
 ### Verbose / diagnostics
 
-Add the `diagnostics` block to `~/.multi-model/config.json`:
+Add the `diagnostics` block to `~/.mma/config.json`:
 
 ```json
 {
@@ -269,7 +269,7 @@ Add the `diagnostics` block to `~/.multi-model/config.json`:
 }
 ```
 
-Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<taskId>.json`.
+Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.mma/logs/requests/<taskId>.json`.
 
 > **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
@@ -285,7 +285,7 @@ mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # ide
 mma disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
 mma enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
 mma telemetry status                         # show consent state + source (env / config / default)
-mma telemetry enable                         # opt in (writes ~/.multi-model/config.json)
+mma telemetry enable                         # opt in (writes ~/.mma/config.json)
 mma telemetry disable                       # opt out + delete local queue
 mma telemetry reset-id                      # rotate the local Ed25519 identity (new install-id next run)
 mma telemetry dump-queue                    # print the locally-queued events as JSON (pre-upload inspection)
@@ -309,7 +309,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | Daemon stale after upgrade | `pkill -f "mma serve"`; the skill preflight respawns it on next client session |
 | Skill version mismatch | `mma sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMA_AUTH_TOKEN=$(mma print-token)` |
-| `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
+| `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mma-info>` directly |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Bun process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 

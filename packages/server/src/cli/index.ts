@@ -10,8 +10,8 @@
  * Config discovery order (highest priority → lowest):
  *   1. --config <path>          (explicit flag)
  *   2. $MMA_CONFIG env var
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
+ *   3. CWD/.mma.json (or .multi-model-agent.json)
+ *   4. ~/.mma/config.json
  *
  * All side effects (process.exit, stdout/stderr writes) are contained in the
  * bootstrap at the bottom of this file. The internal `main()` function is
@@ -55,7 +55,7 @@ export interface CliDeps {
   cwd?: () => string;
   /**
    * Home directory. Defaults to os.homedir().
-   * Used only for resolving the ~/.multi-model/config.json discovery path.
+   * Used only for resolving the ~/.mma/config.json discovery path.
    */
   homeDir?: () => string;
   /**
@@ -101,9 +101,10 @@ function buildCandidatePaths(
   const envVal = (env['MMA_CONFIG'] ?? '').trim();
   if (envVal) paths.push(envVal);
 
+  paths.push(path.join(cwd, '.mma.json'));
   paths.push(path.join(cwd, '.multi-model-agent.json'));
 
-  paths.push(path.join(home, '.multi-model', 'config.json'));
+  paths.push(path.join(home, '.mma', 'config.json'));
 
   return paths;
 }
@@ -112,8 +113,8 @@ function buildCandidatePaths(
  * Resolve the config file path using the discovery order:
  *   1. --config <path>   (explicit flag)
  *   2. $MMA_CONFIG   (env var)
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
+ *   3. CWD/.mma.json (or .multi-model-agent.json)
+ *   4. ~/.mma/config.json
  *
  * Returns the first path that exists, or undefined if none exist.
  * Does NOT validate or parse the file — caller uses loadConfigFromFile().
@@ -230,6 +231,28 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     return;
   }
 
+  // Auto-migrate ~/.multi-model → ~/.mma (one-time, clean cut)
+  {
+    const home = deps.homeDir?.() ?? os.homedir();
+    const oldDir = path.join(home, '.multi-model');
+    const newDir = path.join(home, '.mma');
+    try {
+      const oldStat = fs.lstatSync(oldDir);
+      if (oldStat.isSymbolicLink()) {
+        fs.unlinkSync(oldDir);
+      } else if (oldStat.isDirectory()) {
+        const newIsSymlink = fs.existsSync(newDir) && fs.lstatSync(newDir).isSymbolicLink();
+        if (newIsSymlink) fs.unlinkSync(newDir);
+        if (!fs.existsSync(newDir)) {
+          fs.renameSync(oldDir, newDir);
+          stderr(`[mma] migrated ~/.multi-model → ~/.mma\n`);
+        } else {
+          stderr(`[mma] warning: both ~/.multi-model and ~/.mma exist; remove ~/.multi-model manually\n`);
+        }
+      }
+    } catch { /* best-effort */ }
+  }
+
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
@@ -240,7 +263,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         deps.homeDir?.() ?? os.homedir(),
       );
       // Stderr event streaming is always on (4.7.3+; no --verbose flag).
-      // --log enables JSONL persistence to ~/.multi-model/logs/mma-YYYY-MM-DD.jsonl.
+      // --log enables JSONL persistence to ~/.mma/logs/mma-YYYY-MM-DD.jsonl.
       if (opts['log'] === true) {
         if (!config.diagnostics) config.diagnostics = { log: false };
         config.diagnostics.log = true;
@@ -253,7 +276,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const config = await loadConfig(configArg, deps).catch(() => null);
       const tokenFile = config
         ? config.server.auth.tokenFile
-        : path.join(deps.homeDir?.() ?? os.homedir(), '.multi-model', 'auth-token');
+        : path.join(deps.homeDir?.() ?? os.homedir(), '.mma', 'auth-token');
       const code = printToken({
         homeDir: deps.homeDir?.() ?? os.homedir(),
         tokenFile,
@@ -270,7 +293,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const home = deps.homeDir?.() ?? os.homedir();
       const tokenFile = config
         ? config.server.auth.tokenFile
-        : path.join(home, '.multi-model', 'auth-token');
+        : path.join(home, '.mma', 'auth-token');
       const serverUrl = config
         ? buildServerUrl(config.server.bind, config.server.port)
         : buildServerUrl('127.0.0.1', 7337);
@@ -360,7 +383,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     case 'telemetry': {
-      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.multi-model');
+      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.mma');
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {

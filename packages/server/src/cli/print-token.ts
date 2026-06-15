@@ -49,13 +49,13 @@ export function printToken(deps: PrintTokenDeps = {}): number {
   }
 
   // Fall back to token file
-  const rawTokenFile = deps.tokenFile ?? path.join(homeDir, '.multi-model', 'auth-token');
+  const rawTokenFile = deps.tokenFile ?? path.join(homeDir, '.mma', 'auth-token');
   const tokenFile = expandHome(rawTokenFile, homeDir);
 
   try {
     const token = fs.readFileSync(tokenFile, 'utf-8').trim();
     if (token.length === 0) {
-      stderr(`mmagent: token file is empty: ${tokenFile}\n`);
+      stderr(`mma: token file is empty: ${tokenFile}\n`);
       return 1;
     }
     stdout(token + '\n');
@@ -64,12 +64,12 @@ export function printToken(deps: PrintTokenDeps = {}): number {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
       stderr(
-        `mmagent: token file not found: ${tokenFile}\n` +
+        `mma: token file not found: ${tokenFile}\n` +
         `Run 'mma serve' once to generate a token, or set MMA_AUTH_TOKEN.\n`,
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      stderr(`mmagent: cannot read token file ${tokenFile}: ${msg}\n`);
+      stderr(`mma: cannot read token file ${tokenFile}: ${msg}\n`);
     }
     return 1;
   }

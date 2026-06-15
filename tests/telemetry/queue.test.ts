@@ -10,7 +10,7 @@ function makeRecord(overrides: Partial<QueueRecord> = {}): QueueRecord {
     schemaVersion: 1,
     install: {
       installId: '00000000-0000-4000-a000-000000000001',
-      mmagentVersion: '3.6.0',
+      mmaVersion: '3.6.0',
       os: 'darwin',
       nodeMajor: '22',
       language: 'en',
@@ -58,7 +58,7 @@ describe('queue', () => {
       schemaVersion: 1,
       install: {
         installId: '00000000-0000-4000-a000-000000000001',
-        mmagentVersion: '3.6.0',
+        mmaVersion: '3.6.0',
         os: 'darwin',
         nodeMajor: '22',
         language: 'en',

@@ -14,7 +14,7 @@ import type { ProjectRegistry } from '../../project-registry.js';
  * We read it at /status request time — if absent, skillVersion and
  * skillCompatible are both null.
  */
-const SKILL_MANIFEST_PATH = join(homedir(), '.multi-model', 'skills-install-manifest.json');
+const SKILL_MANIFEST_PATH = join(homedir(), '.mma', 'skills-install-manifest.json');
 
 /**
  * SemVer range this server is compatible with for installed skills.

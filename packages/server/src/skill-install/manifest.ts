@@ -1,7 +1,7 @@
 /**
  * Install manifest management.
  *
- * The manifest lives at `<homeDir>/.multi-model/install-manifest.json` and records
+ * The manifest lives at `<homeDir>/.mma/install-manifest.json` and records
  * every skill ever installed so `install-skill --uninstall` can reverse
  * the operation without leaving orphaned files.
  *
@@ -62,10 +62,10 @@ const installManifestSchema = z.object({
 export type InstallManifest = z.infer<typeof installManifestSchema>;
 export type ManifestEntry = z.infer<typeof manifestEntrySchema>;
 
-/** Thrown when the manifest declares a version newer than this mmagent supports. */
+/** Thrown when the manifest declares a version newer than this mma supports. */
 export class FutureManifestError extends Error {
   constructor(version: number) {
-    super(`install-manifest.json was written by a newer mmagent (version ${version}); upgrade mmagent or remove the file to continue`);
+    super(`install-manifest.json was written by a newer mma (version ${version}); upgrade mma or remove the file to continue`);
     this.name = 'FutureManifestError';
   }
 }
@@ -83,7 +83,7 @@ export class ManifestSchemaValidationError extends Error {
 
 /** The directory where the manifest file lives. */
 export function manifestDir(homeDir?: string): string {
-  return path.join(homeDir ?? os.homedir(), '.multi-model');
+  return path.join(homeDir ?? os.homedir(), '.mma');
 }
 
 /** Full path to the manifest file. */
@@ -139,7 +139,7 @@ function readManifest(homeDir?: string): InstallManifest {
     return result.data;
   }
 
-  // Unrecognized shape (or pre-v2 manifest from an older mmagent) — back up and rebuild empty.
+  // Unrecognized shape (or pre-v2 manifest from an older mma) — back up and rebuild empty.
   const backup = backupCorrupted(p);
   process.stderr.write(`[mma] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
   const empty = emptyManifest();

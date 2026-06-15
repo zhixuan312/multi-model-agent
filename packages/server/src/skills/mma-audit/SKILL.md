@@ -1,7 +1,7 @@
 ---
 name: mma-audit
 description: Use when the user asks to audit a spec / plan / design doc / skill file. The `subtype` field picks the criteria set. `default` (prose-coherence) is the general doc auditor. `plan` verifies a code-execution plan against the actual codebase — run this before any `mma-execute-plan` dispatch. `spec` audits requirement prose for testability and decision-trace. `skill` audits a SKILL.md against reader-effectiveness criteria.
-when_to_use: User asks for a doc / spec / plan / skill audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code. Audit a CODE-EXECUTION PLAN against the codebase — use subtype=plan.
+when_to_use: User asks for a doc / spec / plan / skill audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mma is running. Audit on PROSE/SPEC docs — use mma-review for source code. Audit a CODE-EXECUTION PLAN against the codebase — use subtype=plan.
 version: "0.0.0-unreleased"
 ---
 

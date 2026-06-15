@@ -127,7 +127,7 @@ const defaultsSchema = z.object({
 export const COMPRESSED_BODY_LIMIT_BYTES = 256 * 1024;
 
 const DEFAULT_SERVER_AUTH = {
-  tokenFile: '~/.multi-model/auth-token',
+  tokenFile: '~/.mma/auth-token',
 };
 
 const DEFAULT_SERVER_LIMITS = {

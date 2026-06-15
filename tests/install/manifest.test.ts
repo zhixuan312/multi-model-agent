@@ -11,9 +11,9 @@ import {
 
 function mkHome(content?: unknown): string {
   const home = mkdtempSync(join(tmpdir(), 'mfm-'));
-  mkdirSync(join(home, '.multi-model'), { recursive: true });
+  mkdirSync(join(home, '.mma'), { recursive: true });
   if (content !== undefined) {
-    writeFileSync(join(home, '.multi-model', 'install-manifest.json'), typeof content === 'string' ? content : JSON.stringify(content));
+    writeFileSync(join(home, '.mma', 'install-manifest.json'), typeof content === 'string' ? content : JSON.stringify(content));
   }
   return home;
 }
@@ -38,7 +38,7 @@ describe('install manifest v2', () => {
   it('future version throws FutureManifestError', () => {
     const home = mkHome({ version: 99, entries: [] });
     expect(() => listEntries(home)).toThrow(FutureManifestError);
-    expect(() => listEntries(home)).toThrow(/newer mmagent/);
+    expect(() => listEntries(home)).toThrow(/newer mma/);
   });
 
   it('malformed JSON is backed up and rebuilt as empty v2', () => {

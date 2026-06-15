@@ -17,7 +17,7 @@ export function decideConsent({ env, config }: ConsentInputs): ConsentDecision {
   //                         "unset or empty string → fall through")
   //   - recognized value  → decide here
   //   - unrecognized      → fail-closed disabled
-  // The CLI `mmagent telemetry status` (Phase 7) surfaces the distinction by
+  // The CLI `mma telemetry status` (Phase 7) surfaces the distinction by
   // also reading the env directly and reporting "MMA_TELEMETRY is set to ''
   // (no effect — falls through to config)" when applicable, so users don't
   // mistake the fall-through for a silent-disable.

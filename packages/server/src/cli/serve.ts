@@ -172,9 +172,9 @@ export async function startServe(
   // subscriber (TelemetryUploader) calls getRecorder() during startServer →
   // if recorder is null at that moment, the uploader is wired with
   // recorder=null and silently drops every event for the daemon's lifetime.
-  const homeDir = path.join(os.homedir(), '.multi-model');
-  const mmagentVersion = readServerVersion();
-  createRecorder({ homeDir, mmagentVersion });
+  const homeDir = path.join(os.homedir(), '.mma');
+  const mmaVersion = readServerVersion();
+  createRecorder({ homeDir, mmaVersion });
 
   // Pass the full MultiModelConfig (not just the server block) so
   // registerToolHandlers sees `agents` and registers real tool endpoints.
@@ -228,7 +228,7 @@ export async function startServe(
   onUncaughtRef = onUncaught;
   onUnhandledRejectionRef = onUnhandledRejection;
 
-  // Recorder was created above (BEFORE startServer). homeDir + mmagentVersion
+  // Recorder was created above (BEFORE startServer). homeDir + mmaVersion
   // are computed there and reused here for the version-pin file + Flusher.
   const lastVersionPath = path.join(homeDir, 'last-version');
   let lastVersion: string | null = null;
@@ -238,10 +238,10 @@ export async function startServe(
     // first run — no last-version file yet
   }
 
-  if (lastVersion !== mmagentVersion) {
+  if (lastVersion !== mmaVersion) {
     try {
       fs.mkdirSync(homeDir, { recursive: true });
-      fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });
+      fs.writeFileSync(lastVersionPath, mmaVersion + '\n', { mode: 0o600 });
     } catch (err) {
       stderr(`[mma] warning: failed to write last-version at ${lastVersionPath}: ${err instanceof Error ? err.message : String(err)}\n`);
     }
@@ -250,7 +250,7 @@ export async function startServe(
   // Telemetry uploader. Default endpoint ships to the project's hosted
   // dashboard. MMA_TELEMETRY_ENDPOINT overrides for self-hosted backends;
   // setting it to an empty string disables shipping entirely (events stay in
-  // ~/.multi-model/telemetry-queue.ndjson). The real off-switch for telemetry
+  // ~/.mma/telemetry-queue.ndjson). The real off-switch for telemetry
   // is the consent flag (MMA_TELEMETRY=0 / config.telemetry.enabled =
   // false) — when consent is off the recorder enqueues nothing, so the
   // flusher's tick is a no-op even with the default endpoint set.

@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Recall relevant project learnings from the journal via a read-only mmagent worker. The worker reads the learnings graph at `.mma/journal/` and synthesizes answers to vague conceptual queries.
+Recall relevant project learnings from the journal via a read-only mma worker. The worker reads the learnings graph at `.mma/journal/` and synthesizes answers to vague conceptual queries.
 
 **Core principle:** Recall is retrieval (read, traverse graph, synthesize). Delegate it. The main agent stays on using the results — deciding what to do with the prior lessons.
 

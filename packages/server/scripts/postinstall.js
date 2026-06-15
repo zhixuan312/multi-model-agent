@@ -4,7 +4,7 @@
  *
  * Runs on every `npm install @zhixuan92/multi-model-agent`.
  *
- * Calls `mmagent sync-skills --if-exists --silent --best-effort` so that
+ * Calls `mma sync-skills --if-exists --silent --best-effort` so that
  * users who previously installed skills get their Claude Code / Gemini /
  * Codex / Cursor copies refreshed to match this release. Exits 0 on every
  * failure mode so npm install never breaks the user's environment.

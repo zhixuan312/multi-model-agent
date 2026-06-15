@@ -18,7 +18,7 @@
  * Exit codes:
  *   0 — success (or no clients detected)
  *   1 — one or more skills failed to write/remove
- *   2 — manifest was written by a newer mmagent (FutureManifestError)
+ *   2 — manifest was written by a newer mma (FutureManifestError)
  *   3 — explicit --target was not a known client
  */
 import * as os from 'node:os';
@@ -123,7 +123,7 @@ function versionFromContent(content: string): string {
 }
 
 function manifestPresent(homeDir: string): boolean {
-  return fs.existsSync(path.join(homeDir, '.multi-model', 'install-manifest.json'));
+  return fs.existsSync(path.join(homeDir, '.mma', 'install-manifest.json'));
 }
 
 function readInstalledVersion(skillName: string, target: Client, homeDir: string): string | null {
@@ -159,7 +159,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
 
   let authToken: string | undefined;
   try {
-    const tokenPath = path.join(homeDir, '.multi-model', 'auth-token');
+    const tokenPath = path.join(homeDir, '.mma', 'auth-token');
     if (fs.existsSync(tokenPath)) {
       authToken = fs.readFileSync(tokenPath, 'utf-8').trim();
     }

@@ -13,13 +13,13 @@ describe('flusher signing', () => {
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mma-flush-')); });
   afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
-  it('sets X-Mmagent-Install-Id, X-Mmagent-Signature, X-Mmagent-Pubkey on every batch', async () => {
+  it('sets X-Mma-Install-Id, X-Mma-Signature, X-Mma-Pubkey on every batch', async () => {
     const identity = getOrCreateIdentity(dir);
     const queue = new Queue(dir);
     await queue.append({
       schemaVersion: 6,
       installId: identity.installId,
-      mmagentVersion: '0.2.0',
+      mmaVersion: '0.2.0',
       os: 'linux',
       nodeMajor: 22,
       generation: 0,
@@ -33,26 +33,26 @@ describe('flusher signing', () => {
     (globalThis as any).fetch = fakeServer.fetch;
     const flusher = new Flusher({ queue, dir, endpoint: 'http://test/ingest' });
     await flusher.flush();
-    expect(captured.headers['X-Mmagent-Install-Id']).toBe(identity.installId);
-    expect(typeof captured.headers['X-Mmagent-Signature']).toBe('string');
-    expect(captured.headers['X-Mmagent-Pubkey']).toBe(identity.publicKeyRaw);
+    expect(captured.headers['X-Mma-Install-Id']).toBe(identity.installId);
+    expect(typeof captured.headers['X-Mma-Signature']).toBe('string');
+    expect(captured.headers['X-Mma-Pubkey']).toBe(identity.publicKeyRaw);
     // Verify signature against the gunzipped JSON body (not the gzipped bytes).
     const json = gunzipSync(captured.body).toString('utf8');
     const key = createPublicKey({ key: Buffer.from(identity.publicKeyRaw, 'base64'), format: 'der', type: 'spki' });
-    expect(edVerify(null, Buffer.from(json, 'utf8'), key, Buffer.from(captured.headers['X-Mmagent-Signature'], 'base64'))).toBe(true);
+    expect(edVerify(null, Buffer.from(json, 'utf8'), key, Buffer.from(captured.headers['X-Mma-Signature'], 'base64'))).toBe(true);
   });
 
   it('drops legacy-schema records at the queue head and unblocks subsequent V3 records', async () => {
     const identity = getOrCreateIdentity(dir);
     const queue = new Queue(dir);
     // Two legacy records (V1, V2) stuck at the head — these would 401 forever.
-    await (queue.append as any)({ schemaVersion: 1, install: { installId: identity.installId, mmagentVersion: '0.2.0', os: 'linux', nodeMajor: '22' }, generation: 0, event: { eventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } });
-    await (queue.append as any)({ schemaVersion: 2, install: { installId: identity.installId, mmagentVersion: '1.0.0', os: 'linux', nodeMajor: '22' }, generation: 0, events: [{ eventId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] });
+    await (queue.append as any)({ schemaVersion: 1, install: { installId: identity.installId, mmaVersion: '0.2.0', os: 'linux', nodeMajor: '22' }, generation: 0, event: { eventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } });
+    await (queue.append as any)({ schemaVersion: 2, install: { installId: identity.installId, mmaVersion: '1.0.0', os: 'linux', nodeMajor: '22' }, generation: 0, events: [{ eventId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] });
     // One current-schema record behind them.
     await queue.append({
       schemaVersion: 6,
       installId: identity.installId,
-      mmagentVersion: '3.10.0',
+      mmaVersion: '3.10.0',
       os: 'linux',
       nodeMajor: 22,
       generation: 0,

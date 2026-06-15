@@ -16,7 +16,7 @@ export function collectResponse(envelope) {
 function diagLines() {
   const days = [0, 1].map((d) => {
     const t = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
-    return join(DIAG_DIR, `mmagent-${t}.jsonl`);
+    return join(DIAG_DIR, `mma-${t}.jsonl`);
   });
   let lines = [];
   for (const f of days) if (existsSync(f)) lines = lines.concat(readFileSync(f, 'utf8').split('\n').filter(Boolean));

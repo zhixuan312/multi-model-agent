@@ -98,14 +98,14 @@ export function getRecorder(): Recorder {
   return _recorder;
 }
 
-export function createRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
+export function createRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder {
   const recorder = _buildRecorder(opts);
   _recorder = recorder;
   return recorder;
 }
 
-function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
-  const { homeDir, mmagentVersion } = opts;
+function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder {
+  const { homeDir, mmaVersion } = opts;
   const queue = new Queue(homeDir);
   const controller = new AbortController();
   let _installId: string | null = null;
@@ -123,13 +123,13 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
       const d = decide(homeDir);
       if (!d.enabled) return;
       const id = resolveInstallId();
-      const meta = buildInstallMeta({ installId: id, mmagentVersion });
+      const meta = buildInstallMeta({ installId: id, mmaVersion });
       const gen = readGeneration(homeDir);
 
       queue.append({
         schemaVersion: SCHEMA_VERSION,
         installId: meta.installId,
-        mmagentVersion: meta.mmagentVersion,
+        mmaVersion: meta.mmaVersion,
         os: meta.os,
         nodeMajor: meta.nodeMajor,
         generation: gen,

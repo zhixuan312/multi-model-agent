@@ -21,7 +21,7 @@ function expandTilde(p: string): string {
  * prevents hard-to-diagnose bearer-token mismatches later.
  *
  * A leading `~/` in `tokenFile` is expanded to `os.homedir()` so configs using
- * the common `~/.multi-model/auth-token` pattern work without the caller
+ * the common `~/.mma/auth-token` pattern work without the caller
  * having to resolve it first.
  */
 export function loadAuthToken(opts: { tokenFile: string }): string {

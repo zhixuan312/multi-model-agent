@@ -7,14 +7,14 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const HOME_MM = join(homedir(), '.multi-model');
+const HOME_MM = join(homedir(), '.mma');
 
 export const PORT = 7337;
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
 export const TOKEN_FILE = join(HOME_MM, 'auth-token');
 export const QUEUE_FILE = process.env.SMOKE_QUEUE_FILE || join(HOME_MM, 'telemetry-queue.ndjson');
 export const INSTALL_ID_FILE = join(HOME_MM, 'install-id');
-export const DIAG_DIR = process.env.MMAGENT_LOG_DIR || join(HOME_MM, 'logs'); // mmagent-YYYY-MM-DD.jsonl
+export const DIAG_DIR = process.env.MMA_LOG_DIR || join(HOME_MM, 'logs'); // mma-YYYY-MM-DD.jsonl
 
 export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
 

@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/mmagent serve --http
+ExecStart=/usr/local/bin/mma serve --http
 Restart=always
 RestartSec=5
 StandardOutput=append:%h/.multi-model/logs/daemon.stdout.log

@@ -83,8 +83,8 @@ describe('print-token', () => {
   it('uses default token path under homeDir when no tokenFile is provided', () => {
     const fakeHome = mkdtempSync(join(tmpdir(), 'mma-fake-home-'));
     try {
-      mkdirSync(join(fakeHome, '.multi-model'), { recursive: true });
-      const tokenFile = join(fakeHome, '.multi-model', 'auth-token');
+      mkdirSync(join(fakeHome, '.mma'), { recursive: true });
+      const tokenFile = join(fakeHome, '.mma', 'auth-token');
       writeFileSync(tokenFile, 'home-token', { mode: 0o600 });
       const { stdoutFn, stderrFn, stdout, stderr } = captureOutput();
       const code = printToken({

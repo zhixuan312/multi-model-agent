@@ -38,7 +38,7 @@ mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli |
 
 ### 2. Choose your main model — intentionally
 
-Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
+Your **main model** is **the model you'd use without mma** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
 Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing).
 
@@ -50,7 +50,7 @@ export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
 ### 3. Write the config
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
+mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
 {
   "agents": {
     "standard": {
