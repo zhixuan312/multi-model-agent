@@ -154,12 +154,14 @@ describe('runTwoPhasePipeline', () => {
     // Worktree was created with the worktree path
     expect(createMock).toHaveBeenCalledWith('/tmp/test', 'abcd1234-5678-9abc-def0-1234567890ab', 'delegate');
 
-    // Sessions opened with worktree cwd, not original cwd
+    // Implementer runs in worktree cwd
     expect(implProvider.openSession).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: '/tmp/test/.mma/worktrees/abcd1234' }),
     );
+    // Reviewer runs in original cwd (doesn't need worktree file access,
+    // avoids ENOENT if worktree dir is cleaned by OS during long runs)
     expect(revProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/test/.mma/worktrees/abcd1234' }),
+      expect.objectContaining({ cwd: '/tmp/test' }),
     );
 
     // mergeAndCleanup was called with original cwd

@@ -99,6 +99,8 @@ export interface SessionOpts {
   /** Session ID from a prior task — seeds the provider session so the first
    *  send() resumes the prior conversation instead of starting fresh. */
   resume?: string;
+  /** Tools the worker is NOT allowed to use (sandbox enforcement). */
+  disallowedTools?: string[];
 }
 
 export interface TurnOpts {

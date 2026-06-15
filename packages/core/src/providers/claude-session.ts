@@ -144,6 +144,7 @@ export class ClaudeSession implements Session {
         ...skillOptions,
         ...(this.sessionId && { resume: this.sessionId }),
         ...goalHooks,
+        ...(this.args.opts.disallowedTools?.length && { disallowedTools: this.args.opts.disallowedTools }),
       } as Parameters<typeof query>[0]['options'],
     });
     this.activeQuery = q as unknown as { close?: () => unknown };

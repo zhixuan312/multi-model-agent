@@ -1,6 +1,8 @@
 import type { Provider, Session, TurnResult } from '../types/run-result.js';
 import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
+
+const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
 import { parseReviewerOutput, type ReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
 
@@ -109,6 +111,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       taskIndex: 0,
       bus: input.bus,
       ...(input.resumeImplementer && { resume: input.resumeImplementer }),
+      ...(input.sandboxPolicy === 'cwd-only' && { disallowedTools: CWD_ONLY_DISALLOWED_TOOLS }),
     });
     sessions.push(implSession);
 
@@ -137,8 +140,12 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       };
     }
 
+    // Reviewer runs in the original cwd, not the worktree — it only reads
+    // the implementer's output text and doesn't need worktree file access.
+    // Using original cwd also avoids ENOENT crashes if the worktree's temp
+    // directory is cleaned by the OS during a long-running implementer.
     const revSession = input.reviewerProvider.openSession({
-      cwd: effectiveCwd,
+      cwd: input.cwd,
       wallClockDeadline: deadline,
       abortSignal: ac.signal,
       taskId: input.taskId ?? 'pipeline',
