@@ -9,15 +9,15 @@ Read [DIRECTION.md](./DIRECTION.md) first; it's the north star for what we build
 ```bash
 git clone https://github.com/zhixuan312/multi-model-agent.git
 cd multi-model-agent
-npm install
-npm run build
-npm test
+pnpm install
+pnpm run build
+pnpm test
 ```
 
 Requirements:
 
 - Node.js `>= 22`
-- npm `>= 10` (ships with Node 22)
+- pnpm `>= 10`
 
 ## Repo layout
 
@@ -33,19 +33,20 @@ tests/    Vitest suite. Mirrors the src/ tree under each package.
 docs/     ARCHITECTURE.md (layered map) + SKILL_WRITING_GUIDELINES.md.
 ```
 
-The two packages are linked via npm workspaces; `npm install` from the repo root sets up the symlinks. Both packages bump together on every release.
+The two packages are linked via pnpm workspaces; `pnpm install` from the repo root sets up the symlinks. Both packages bump together on every release.
 
 ## Common commands
 
 | Command | What it does |
 | --- | --- |
-| `npm run build` | TypeScript compile both packages (writes to `packages/*/dist`) |
-| `npm test` | Run the full Vitest suite once |
-| `npm run test:watch` | Watch mode |
-| `npm run serve` | Start the HTTP daemon on `127.0.0.1:7337` (uses the freshly built `dist/`) |
-| `npx vitest run tests/some.test.ts` | Run a single test file |
+| `pnpm run build` | TypeScript compile both packages (writes to `packages/*/dist`) |
+| `pnpm test` | Run the full Vitest suite once |
+| `pnpm run test:watch` | Watch mode |
+| `pnpm run serve` | Start the HTTP daemon on `127.0.0.1:7337` (uses the freshly built `dist/`) |
+| `pnpm run dev` | Dev mode with auto-restart on source changes (via `tsx watch`) |
+| `pnpm vitest run tests/some.test.ts` | Run a single test file |
 
-**Always run both `npm run build` and `npm test` before opening a PR** — TypeScript errors that don't surface in tests will surface in the build.
+**Always run both `pnpm run build` and `pnpm test` before opening a PR** — TypeScript errors that don't surface in tests will surface in the build.
 
 ## Coding conventions
 

@@ -27,7 +27,7 @@ function dbHostApproved(url) {
 
 export async function preflight({ skipBackend = false, expectBranch = null, allowMismatch = false } = {}) {
   const health = await fetch(`${BASE_URL}/health`).then((r) => r.status).catch(() => 0);
-  if (health !== 200) throw new AbortError('health', `GET /health -> ${health}`, 'start `npm run serve`');
+  if (health !== 200) throw new AbortError('health', `GET /health -> ${health}`, 'start `pnpm run serve`');
 
   const token = readToken();
   const status = await fetch(`${BASE_URL}/status`, { headers: { Authorization: `Bearer ${token}` } })

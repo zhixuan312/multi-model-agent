@@ -27,21 +27,23 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "pnpm -r run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:perf": "MMA_PERF_CHECK=1 vitest run tests/perf/",
     "test:perf:baseline": "MMA_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
     "serve": "node packages/server/dist/cli/index.js serve",
+    "dev": "pnpm tsx watch --clear-screen=false packages/server/src/cli/index.ts serve",
     "smoke:full": "node scripts/full-smoke/index.mjs",
     "smoke:disable-enable": "node scripts/demo-disable-enable.mjs",
-    "regen:observability-golden": "npx tsx tests/contract/regen-observability-golden.ts",
+    "regen:observability-golden": "pnpm tsx tests/contract/regen-observability-golden.ts",
     "lint": "eslint packages",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages"
   },
   "engines": {
     "node": ">=22.0.0"
   },
+  "packageManager": "pnpm@10.33.0",
   "devDependencies": {
     "@openai/agents": "^0.8.0",
     "dependency-cruiser": "^17.4.0",
