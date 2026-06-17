@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.5] - 2026-06-17
+
+**pnpm migration + codex probe + request logging.** Toolchain switched from npm to pnpm. Pre-existing BusLike type error fixed. Codex OAuth probe and per-request stderr logging added. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `pnpm run dev` script for auto-restart development mode (tsx watch).
+- Codex OAuth probe in `POST /configure-provider`: reads `~/.codex/auth.json` to detect subscription credentials.
+- Per-request stderr logging in request-pipeline.ts: `[mma] METHOD /path STATUS Nms`.
+
+### Changed
+- Toolchain migrated from npm to pnpm: all scripts, docs, and CI references updated; `pnpm-workspace.yaml` and `.npmrc` added; `package-lock.json` replaced by `pnpm-lock.yaml`.
+- CONTRIBUTING.md updated for pnpm commands.
+- README.md and server README.md install instructions updated to `pnpm i -g`.
+
+### Fixed
+- `BusLike` type imported in claude-session.ts and codex-cli-session.ts (was used without import; tsc flagged it).
+
 ## [5.4.4] - 2026-06-17
 
 **Sandbox confinement hardening.** Four new escape-detection vectors in the Claude PreToolUse hook, read-only enforcement for non-write tasks, dead sandbox config removed. `SCHEMA_VERSION` unchanged (still 6).

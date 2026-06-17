@@ -23,7 +23,7 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
+pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
 mma sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -81,7 +81,7 @@ curl -s http://localhost:7337/health   # → {"status":"ok"}
 ## Updating
 
 ```bash
-npm install -g @zhixuan92/multi-model-agent@latest
+pnpm install -g @zhixuan92/multi-model-agent@latest
 pkill -f "mma serve"            # stop the running daemon
 mma sync-skills                 # reconcile installed skills with the new bundle
 ```
