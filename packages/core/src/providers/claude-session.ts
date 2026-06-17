@@ -25,7 +25,7 @@ import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
 import { buildConfinementHook } from './claude-cwd-confinement.js';
-import { busOf, envelopeOf } from './session-helpers.js';
+import { type BusLike, busOf, envelopeOf } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
   private closed = false;
