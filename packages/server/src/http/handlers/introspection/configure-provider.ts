@@ -110,7 +110,11 @@ async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
       headers['authorization'] = `Bearer ${creds.accessToken}`;
       headers['anthropic-version'] = '2023-06-01';
     } else {
-      return { reachable: false, modelListed: null, detail: 'Codex OAuth probe not supported; auth managed by codex CLI' };
+      const token = readCodexOAuthToken();
+      if (!token) {
+        return { reachable: false, modelListed: null, detail: 'Codex OAuth token not found at ~/.codex/auth.json' };
+      }
+      return { reachable: true, modelListed: null, detail: 'Codex subscription auth present; model listing not available via session token' };
     }
   }
 
@@ -174,6 +178,17 @@ function persistConfig(configPath: string, config: MultiModelConfig): { ok: bool
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function readCodexOAuthToken(): string | null {
+  try {
+    const authPath = join(homedir(), '.codex', 'auth.json');
+    if (!existsSync(authPath)) return null;
+    const data = JSON.parse(readFileSync(authPath, 'utf8'));
+    return data.OPENAI_API_KEY || data.tokens?.access_token || null;
+  } catch {
+    return null;
   }
 }
 
