@@ -188,5 +188,8 @@ export async function handleRequest(
     mainModel: identity.mainModel,
   };
 
+  const t0 = Date.now();
   await match.handler(req, res, match.params, ctx);
+  const ms = Date.now() - t0;
+  process.stderr.write(`[mma] ${method} ${pathname} ${res.statusCode} ${ms}ms\n`);
 }
