@@ -42,7 +42,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-import { busOf, envelopeOf } from './session-helpers.js';
+import { type BusLike, busOf, envelopeOf } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;

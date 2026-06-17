@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 
 const dist = path.resolve('packages/server/dist');
 if (!existsSync(path.join(dist, 'cli', 'toggle.js'))) {
-  console.error('Built output not found. Run `npm run build` first, then re-run this script.');
+  console.error('Built output not found. Run `pnpm run build` first, then re-run this script.');
   process.exit(1);
 }
 const imp = (p) => import(pathToFileURL(path.join(dist, p)).href);

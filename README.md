@@ -39,7 +39,7 @@ Four steps, in order.
 ### 1. Install CLI + skills
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
+pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
 mma sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
 mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
@@ -112,7 +112,7 @@ For a long-running background install (always-on, survives reboots), use [the la
 ## Updating
 
 ```bash
-npm install -g @zhixuan92/multi-model-agent@latest
+pnpm install -g @zhixuan92/multi-model-agent@latest
 pkill -f "mma serve"            # stop the running daemon
 mma sync-skills                 # reconcile installed skills with the new bundle
 # next AI-client session respawns the daemon via the skill preflight
@@ -312,10 +312,12 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.4.4
+## What's new in 5.4.5
 
-- **Sandbox hardening.** Four new escape-detection vectors in the Claude confinement hook: cd-chain tracking, interpreter subshells, download tools, URL fragment filtering. Read-only tasks now get write enforcement too.
-- **Dead config removed.** Parallel `SandboxPolicy` type and unused `sandboxPolicy` config fields eliminated — `TYPE_REGISTRY` is the single source of truth.
+- **pnpm migration.** Toolchain switched from npm to pnpm; dev mode added (`pnpm run dev`).
+- **BusLike type fix.** Pre-existing tsc error in claude-session and codex-cli-session resolved.
+- **Codex OAuth probe.** `POST /configure-provider` now detects `~/.codex/auth.json` credentials.
+- **Request logging.** Every HTTP request logged to stderr with method/path/status/duration.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
