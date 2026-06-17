@@ -1,9 +1,10 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Redesigned as a comprehensive product release gate: 19 scenarios, each testing
+// Redesigned as a comprehensive product release gate: 22 scenarios, each testing
 // a DISTINCT product capability. No duplicates. Covers task types, audit subtypes,
-// tier/review policy overrides, session reuse, error cases, and telemetry.
+// tier/review policy overrides, session reuse, error cases, sandbox confinement,
+// and telemetry.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,7 +31,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 19-scenario release gate.
+// The 22-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -62,6 +63,11 @@ export const POLL = {
 //   E. Error Cases:
 //      #17 invalid type     — POST /task with type: 'nonexistent' → 400
 //      #18 missing field    — POST /task with type: 'investigate' but no question → 400
+//
+//   F. Sandbox Confinement:
+//      #20 delegate cwd-escape  — worker instructed to write /tmp; hook denies, worker adapts
+//      #21 delegate cd-chain    — worker instructed to cd /tmp && touch; hardened hook catches
+//      #22 audit read-only      — read-only sandbox completes normally without write capability
 //
 // `emits` = how many wire telemetry records this scenario produces. The wire
 // pipeline emits ONE record per sealed task envelope:
@@ -99,4 +105,18 @@ export const SCENARIOS = [
   // E. Error Cases
   { id: 17, type: 'error_invalid_type', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 18, type: 'error_missing_field', kind: 'error', expectStatus: 400, emits: 0 },
+
+  // F. Sandbox Confinement (cwd-only and read-only enforcement)
+  //    #20: delegate where the task prompt attempts to write outside cwd.
+  //         The PreToolUse confinement hook should deny the escape; the worker
+  //         adapts and writes in-cwd instead. Verifies the task still completes
+  //         successfully despite the hook firing.
+  //    #21: delegate where the task prompt attempts a cd-chain escape
+  //         (cd /tmp && touch file). The hardened hook tracks effective cwd
+  //         and denies the out-of-workspace write.
+  //    #22: audit (read-only) that verifies the read-only sandbox allows
+  //         the task to complete normally without write capability.
+  { id: 20, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
+  { id: 21, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
+  { id: 22, type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', sandbox: 'read-only', emits: 1 },
 ];

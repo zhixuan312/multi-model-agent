@@ -3,7 +3,6 @@
 import type { BriefQualityPolicy } from './brief-quality-policy.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
-export type SandboxPolicy = 'none' | 'cwd-only';
 export type AgentType = 'standard' | 'complex' | 'main';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
@@ -24,7 +23,6 @@ export interface TaskSpec {
   timeoutMs?: number
   cwd?: string
   effort?: Effort
-  sandboxPolicy?: SandboxPolicy
   reviewPolicy?: 'reviewed' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
   mainModel?: string

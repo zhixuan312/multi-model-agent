@@ -104,7 +104,9 @@ These layers underlie every stage and every tool. They aren't on either axis; th
 C.1  Identity & sandboxing      core/src/identity/{claude-oauth,secret-redactor}.ts,
                                 server/src/http/auth.ts,
                                 server/src/http/cwd-validator.ts,
-                                core/src/transport/loopback-enforcer.ts
+                                core/src/transport/loopback-enforcer.ts,
+                                core/src/providers/claude-cwd-confinement.ts
+                                (PreToolUse hook: cwd-only + read-only enforcement)
 C.2  Bounded execution           core/src/bounded-execution/{activity-tracker,
                                 cost-compute}.ts,
                                 core/src/error-codes.ts

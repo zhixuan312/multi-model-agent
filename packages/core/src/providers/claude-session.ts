@@ -24,7 +24,7 @@ import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
-import { buildCwdConfinementHook } from './claude-cwd-confinement.js';
+import { buildConfinementHook } from './claude-cwd-confinement.js';
 import { busOf, envelopeOf } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
@@ -119,8 +119,8 @@ export class ClaudeSession implements Session {
         }],
       }];
     }
-    if (this.args.opts.sandboxPolicy === 'cwd-only' && this.args.opts.cwd) {
-      Object.assign(hookMap, buildCwdConfinementHook(this.args.opts.cwd));
+    if (this.args.opts.sandboxPolicy && this.args.opts.cwd) {
+      Object.assign(hookMap, buildConfinementHook(this.args.opts.sandboxPolicy, this.args.opts.cwd));
     }
     const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 

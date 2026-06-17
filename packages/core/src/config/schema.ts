@@ -67,7 +67,6 @@ export const ResearchConfigSchema = z.object({
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
 
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
-const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // Per-million-token pricing for cost computation. Must be non-negative; zero
 // is allowed (free agents can set both rates to 0 to get a deterministic
 // costUSD: 0 instead of null).
@@ -79,7 +78,6 @@ const baseAgentFields = {
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
   timeoutMs: z.number().int().positive().optional(),
-  sandboxPolicy: sandboxPolicySchema,
   inputTokenSoftLimit: z.number().int().positive().optional(),
 };
 

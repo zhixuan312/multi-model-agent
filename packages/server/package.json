@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent",
-  "version": "5.4.3",
+  "version": "5.4.4",
   "type": "module",
   "license": "MIT",
   "description": "Standalone HTTP server for multi-model-agent. Routes tool-invocation work to Claude or Codex sub-agents with async-polling REST dispatch and installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.",
@@ -52,7 +52,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@zhixuan92/multi-model-agent-core": "^5.4.3",
+    "@zhixuan92/multi-model-agent-core": "^5.4.4",
     "gray-matter": "^4.0.3",
     "minimist": "^1.2.8",
     "proper-lockfile": "^4.1.2",

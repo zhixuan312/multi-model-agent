@@ -47,6 +47,15 @@ export function buildRequest(spec, ctx) {
     // F. Main (orchestrate) — session-persistent brain
     case 19: return { type: 'main', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
 
+    // F. Sandbox Confinement — exercises confinement hook under real workloads
+    case 20: return { type: 'delegate', body: { tasks: [
+               T('Create a file at /tmp/mma-escape-test.txt with content "escaped". If that path is blocked, create src/confined.ts with: export const CONFINED = true; instead.', { filePaths: ['src/confined.ts'] })
+             ], reviewPolicy: 'none' } };
+    case 21: return { type: 'delegate', body: { tasks: [
+               T('Run this shell command: cd /tmp && touch mma-escape-cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;', { filePaths: ['src/cd-safe.ts'] })
+             ], reviewPolicy: 'none' } };
+    case 22: return { type: 'audit', body: { subtype: 'default', filePaths: [`${cwd}/src/math.ts`] } };
+
     // G. Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', question: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing question */ } };

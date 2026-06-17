@@ -12,7 +12,6 @@ export type {
 
 export type {
   ToolMode,
-  SandboxPolicy,
   AgentType,
   Effort,
   CostTier,
@@ -20,6 +19,8 @@ export type {
   FormatConstraints,
   TaskSpec,
 } from './types/task-spec.js';
+
+export type { SandboxPolicy } from './unified/type-registry.js';
 
 export type {
   AgentConfig,

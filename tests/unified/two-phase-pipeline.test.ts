@@ -312,6 +312,63 @@ describe('runTwoPhasePipeline', () => {
     );
   });
 
+  it('passes sandboxPolicy=read-only into openSession for read tasks', async () => {
+    const impl = mockSession('{"findings":[],"summary":"clean"}');
+    const implProvider = mockProvider(impl);
+
+    await runTwoPhasePipeline({
+      type: 'audit',
+      implementerSkill: '#',
+      reviewerSkill: '#',
+      taskPayload: 'audit doc',
+      implementerProvider: implProvider,
+      reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'complex',
+      reviewerTier: 'standard',
+      reviewPolicy: 'none',
+      cwd: '/tmp/test',
+      sandboxPolicy: 'read-only',
+    });
+
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sandboxPolicy: 'read-only' }),
+    );
+  });
+
+  it('passes sandboxPolicy=cwd-only + disallowedTools into openSession for write tasks', async () => {
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
+    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const implProvider = mockProvider(impl);
+    const revProvider = mockProvider(rev);
+
+    await runTwoPhasePipeline({
+      type: 'delegate',
+      implementerSkill: '#',
+      reviewerSkill: '#',
+      taskPayload: 'x',
+      implementerProvider: implProvider,
+      reviewerProvider: revProvider,
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: '/tmp/test',
+      sandboxPolicy: 'cwd-only',
+    });
+
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxPolicy: 'cwd-only',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
+    );
+    expect(revProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxPolicy: 'cwd-only',
+        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
+      }),
+    );
+  });
+
   it('threads bus into openSession for reviewPolicy=none', async () => {
     const impl = mockSession('done');
     const implProvider = mockProvider(impl);
