@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.4] - 2026-06-17
+
+**Sandbox confinement hardening.** Four new escape-detection vectors in the Claude PreToolUse hook, read-only enforcement for non-write tasks, dead sandbox config removed. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- cd-chain tracking: `resolveEffectiveCwd()` follows `cd` segments through `&&`/`;`/`||` chains, denies when effective cwd escapes the workspace and a mutating command follows.
+- Interpreter subshell detection: `python -c`, `node -e`, `ruby -e`, `perl -e`/`--eval` with out-of-cwd absolute paths are now caught.
+- Download tool detection: `curl -o/-O`, `wget -O/-P` writing to out-of-cwd paths are now caught.
+- `evaluateReadOnly()`: blocks ALL write tools (Write/Edit/MultiEdit/NotebookEdit) and mutating Bash for read-only tasks (audit, investigate, review, debug, research, journal_recall, main).
+- `buildConfinementHook(policy, cwd)`: unified hook builder dispatching to cwd-only or read-only evaluator. Replaces `buildCwdConfinementHook`.
+- URL fragment filtering (`isUrlFragment`): prevents false positives from `https://` URLs parsed by the absolute-path regex.
+- Smoke harness scenarios #20–22: cwd-escape, cd-chain escape, and read-only sandbox verification.
+
+### Changed
+- `claude-session.ts` now wires confinement hooks for ALL sandbox policies (was cwd-only only); read-only tasks now get write enforcement too.
+- `SandboxPolicy` canonical type is now `type-registry.ts` (`'read-only' | 'cwd-only'`); the dead parallel definition in `task-spec.ts` (`'none' | 'cwd-only'`) is removed.
+- Smoke harness verify: audit quality check accepts prose output (not just JSON findings blocks); research-sources check treats empty evidence packs as PASS when the task completed.
+
+### Removed
+- Dead `SandboxPolicy` type from `types/task-spec.ts` (runtime never used it; `TYPE_REGISTRY` is the source of truth).
+- Dead `sandboxPolicy` field from `TaskSpec` interface (never read by any runtime code).
+- Dead `sandboxPolicy` from provider config types (`CodexProviderConfig`, `ClaudeProviderConfig`) and Zod config schema (never read at runtime).
+- Deprecated `buildCwdConfinementHook` shim (replaced by `buildConfinementHook`).
+
 ## [5.4.3] - 2026-06-16
 
 **Codebase hygiene + worktree lifecycle + session resume + sandbox enforcement.** Full audit: dead code removed, error code schema aligned with runtime, docs updated, duplicate code extracted. Worktree auto-merge, cross-call session resume, and cwd-confinement hook added. `SCHEMA_VERSION` unchanged (still 6).

@@ -312,12 +312,10 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.4.3
+## What's new in 5.4.4
 
-- **Codebase hygiene.** Dead code removed, error code schema aligned with runtime, docs corrected, duplicate code extracted. Net −660 lines.
-- **Worktree auto-merge.** Write-route tasks auto-commit and merge the worktree branch back; on conflict, preserves for manual resolution.
-- **Session resume.** Callers can pass `sessionIds` to resume a prior Claude/Codex conversation.
-- **cwd-confinement.** Claude workers confined to the worktree via a PreToolUse hook — reads anywhere, writes only inside the workspace.
+- **Sandbox hardening.** Four new escape-detection vectors in the Claude confinement hook: cd-chain tracking, interpreter subshells, download tools, URL fragment filtering. Read-only tasks now get write enforcement too.
+- **Dead config removed.** Parallel `SandboxPolicy` type and unused `sandboxPolicy` config fields eliminated — `TYPE_REGISTRY` is the single source of truth.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
