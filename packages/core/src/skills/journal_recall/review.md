@@ -4,23 +4,30 @@ Verify the implementer's recall, improve quality, re-output the answer in the sa
 
 **Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
 
+## Critical: journal location
+
+The journal is at `.mma/journal/` relative to your working directory. Nodes are at `.mma/journal/nodes/`. The index is at `.mma/journal/index.md`.
+
+**If you cannot find or read `.mma/journal/`, re-output the implementer's answer unchanged as your JSON block. Do NOT narrate your search or try alternative paths.**
+
 ## Checks
 
-1. **Citation accuracy** — every `nodeId`/`nodePath` references a real node file in `.mma/journal/nodes/` read this session. Remove hallucinated citations (highest priority).
+1. **Citation accuracy** — read `.mma/journal/nodes/` to verify each `nodeId`/`nodePath` references a real node file. Remove results citing non-existent nodes.
 
-2. **Relevance** — each result answers the query, not tangential. Relevance rating calibrated to how directly the node answers (not general importance). Downgrade tangential results.
+2. **Relevance** — each result answers the query, not tangential. Downgrade tangential results.
 
-3. **Missed entries** — check index for nodes matching query terms. Check graph neighborhoods. Add missed relevant nodes.
+3. **Missed entries** — check `.mma/journal/index.md` for nodes matching query terms. Add missed relevant nodes.
 
-4. **Supersession** — superseded nodes excluded by default. Supersedes chains followed to current head. Status labels correct.
+4. **Supersession** — superseded nodes excluded by default. Status labels correct.
 
-5. **Synthesis quality** — summary represents the cited evidence. Names how nodes relate (edges, chains). If "no prior learnings" returned, verify no relevant nodes exist.
+5. **Synthesis quality** — summary represents the cited evidence. Names how nodes relate.
 
 ## Refinement rules
 
 - Remove results citing non-existent nodes. Add missed nodes. Adjust relevance ratings.
-- Fix incorrect `status`/`category` fields. Rewrite `summary` only if cited facts changed.
-- Improve `learning` and `context` text if you can add clarity or correct errors. Don't rephrase for style.
+- Fix incorrect `status`/`category` fields.
+- Improve `learning` and `context` text if you can add clarity. Don't rephrase for style.
+- **If you cannot verify any citations (journal inaccessible), re-output the implementer's answer unchanged.**
 
 ## Output (REQUIRED)
 

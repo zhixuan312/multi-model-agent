@@ -179,7 +179,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       implementerOutput: implTurn.output,
       implementerTurn: implTurn,
       reviewerOutput: parsed.ok ? parsed.data : null,
-      reviewerRaw: revTurn.output,
+      reviewerRaw: parsed.ok ? revTurn.output : null,
       reviewerTurn: revTurn,
       reviewerParseError: parsed.ok ? null : parsed.error,
       sessions: {

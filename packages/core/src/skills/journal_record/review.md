@@ -4,13 +4,19 @@ Verify the implementer's journal recording, fix issues in the worktree, re-outpu
 
 **Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
 
+## Critical: journal location
+
+The journal is at `.mma/journal/` relative to your working directory. Nodes are at `.mma/journal/nodes/`. Index at `.mma/journal/index.md`. Log at `.mma/journal/log.md`.
+
+**If you cannot find or read `.mma/journal/`, re-output the implementer's answer unchanged as your JSON block. Do NOT narrate your search or try alternative paths.**
+
 ## Checks
 
 1. **Classification** — correct operation for each learning? supersede=invalidates prior conclusion, refine=adds evidence to existing, merge=no new causal claim, create=no existing node covers it. Reclassify if graph contradicts.
 
 2. **Graph integrity** — superseded nodes marked with `supersededBy`. Edges use only: supersedes, refines, relates, depends-on, contradicts, parent. Edge targets exist. Node IDs collision-free, sequential, zero-padded 4 digits.
 
-3. **Node quality** — correct YAML frontmatter (id, title, category, status, tags, date, links). Category is one of: decision, design, behavior, process, knowledge, style. Nodes are actionable (not just observations). Secrets redacted.
+3. **Node quality** — correct YAML frontmatter (id, title, category, status, tags, date, links). Category is one of: decision, design, behavior, process, knowledge, style. Nodes are actionable. Secrets redacted.
 
 4. **Catalog consistency** — index.md lists all nodes sorted by id. log.md has entry for each operation.
 
@@ -24,6 +30,7 @@ Verify and correct the implementer's existing recordings. Do NOT record addition
 - Reclassify operations if the existing graph contradicts them. Fix edge types and missing supersededBy links.
 - Fix catalog inconsistencies in existing entries only.
 - Keep the implementer's `recorded`, `failed`, and `filesChanged` unless an entry is wrong.
+- **If you cannot verify recordings (journal inaccessible), re-output the implementer's answer unchanged.**
 
 ## Output (REQUIRED)
 

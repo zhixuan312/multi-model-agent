@@ -7,9 +7,8 @@ export function parseReviewerOutput(raw: string, taskType: TaskType): ParseResul
   const json = extractJson(raw);
   if (!json) return { ok: false, error: 'No JSON found in reviewer output', raw };
 
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); }
-  catch { return { ok: false, error: 'Invalid JSON in reviewer output', raw }; }
+  const parsed = tryParse(json);
+  if (parsed === undefined) return { ok: false, error: 'Invalid JSON in reviewer output', raw };
 
   const schema = REFINER_SCHEMAS[taskType];
   if (!schema) {
@@ -20,6 +19,19 @@ export function parseReviewerOutput(raw: string, taskType: TaskType): ParseResul
   if (!result.success) return { ok: false, error: `Schema: ${result.error.message}`, raw };
 
   return { ok: true, data: result.data };
+}
+
+function tryParse(json: string): unknown | undefined {
+  try { return JSON.parse(json); }
+  catch { /* fall through to recovery */ }
+
+  let trimmed = json;
+  for (let i = 0; i < 3; i++) {
+    trimmed = trimmed.replace(/\}\s*$/, '');
+    try { return JSON.parse(trimmed + '}'); }
+    catch { /* try next */ }
+  }
+  return undefined;
 }
 
 function extractJson(text: string): string | null {
