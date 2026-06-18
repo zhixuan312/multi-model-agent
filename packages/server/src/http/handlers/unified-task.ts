@@ -56,7 +56,8 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       'You have checked for hallucinated findings (claims without evidence in the source material).',
       'You have validated evidence quality (every finding cites actual file:line or quoted text).',
       'You have checked severity calibration against the skill definitions.',
-      'You have produced the required JSON output block with findings, summary, and verdict.',
+      'You have verified the implementer\'s draft and output the refined answer in the same JSON format as the implementer.',
+      'No findings, verdict, or meta-commentary -- only the final answer in a ```json fenced block.',
     ].join(' ');
   }
 
