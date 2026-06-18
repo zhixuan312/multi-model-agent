@@ -1,3 +1,4 @@
+// r3-test
 // smoke-test
 import type { AgentType } from '../types/task-spec.js';
 
