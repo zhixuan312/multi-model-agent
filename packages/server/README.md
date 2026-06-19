@@ -137,7 +137,7 @@ All task types dispatch through the unified `POST /task` endpoint with a `type` 
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, main) |
+| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, orchestrate) |
 | `GET /task/:taskId` | Poll task status and results |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
