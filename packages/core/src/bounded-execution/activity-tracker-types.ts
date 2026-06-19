@@ -1,6 +1,5 @@
 /**
  * Lightweight headline state snapshot for running-task progress display.
- * Previously defined in batch-registry.ts; inlined here after batch system removal.
  */
 export interface HeadlineSnapshot {
   /** Static prefix of the headline up to but not including the live elapsed slot. */

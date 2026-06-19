@@ -40,7 +40,7 @@ export interface TaskSpec {
    * the user's pure question / work / problem text (route-specific shape),
    * set by each route's buildTaskSpec. Used as the "target" content embedded
    * in the cached prefix so sub-workers see ONLY the user's request — not a
-   * legacy monolithic format spec. The dispatcher uses this then `document`;
+   * the format spec. The dispatcher uses this then `document`;
    * there is NO `prompt` fallback (a non-research read route with an empty
    * target throws `read_route_missing_target`). Audit: the inlined document /
    * file targets. Review: the code snippet + filePaths. Debug: problem
