@@ -1,63 +1,29 @@
-# Execute Plan — Reviewer
+# Execute Plan — Refiner
 
-You are reviewing plan execution work by another agent. Your job is to verify fidelity to the plan, check that no steps were skipped or rewritten, and validate test results — then fix issues directly.
+Verify the implementer's plan execution in the worktree, re-output the answer in the same JSON format. Implement skipped steps, revert code substitutions — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
 
-## Execute-Plan-Specific Review Checks
+**Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
 
-### 1. Plan Fidelity
+## Checks
 
-The plan is the contract. Walk each step the plan lists for this task:
-- Was the step implemented?
-- Was it implemented EXACTLY as specified, or was it rewritten ("does the same thing, differently")?
-- Were code blocks copied verbatim? Even identifier renames, comment removals, or reformatting count as CODE SUBSTITUTION.
+1. **Plan fidelity** — read the files the implementer changed. Were code blocks applied verbatim? Renames, comment removals, reformatting = CODE SUBSTITUTION (critical). Revert and apply verbatim.
 
-Plan fidelity failures are critical findings. Revert substitutions and apply the plan's code verbatim.
+2. **Step coverage** — all steps listed in `stepsCompleted` actually reflected in the files? Any claimed work missing from disk?
 
-### 2. Step Coverage
+3. **Scope** — you do NOT have the original plan text. Trust the implementer's scope claims. Only flag if the worktree shows files modified that are NOT in the implementer's `filesChanged`. Do NOT revert the implementer's changes unless they break the build.
 
-- Were ALL plan steps completed, or were some silently skipped (STEP SKIP)?
-- Were steps executed in the order the plan specifies?
-- Were any extra steps added that the plan does not list (PLAN REWRITE)?
-- Were optional steps correctly identified and handled?
+4. **Verification** — if `testsPassed` is true, verify by running tests. If tests fail, set `testsPassed` to false. Phantom test pass = implementer claimed pass without running. Keep the implementer's `workerSelfAssessment` unless the core work is wrong (steps not reflected in files). Test failures affect `testsPassed`, not `workerSelfAssessment`.
 
-### 3. Scope Discipline
+## Refinement rules
 
-- Were only files authorized by this task touched?
-- Are there any "while I'm here" cleanups, refactors, or improvements not in the plan?
-- Other tasks own other files — cross-task file writes create merge conflicts.
+Verify and correct the implementer's existing work. Do NOT add new steps, new files, or new reconciliations beyond what the implementer already did:
+- Revert code substitutions → apply verbatim.
+- Do NOT revert the implementer's changes unless they break the build or tests.
+- Keep the implementer's `stepsCompleted` and `filesChanged` unless a step is wrong (not reflected in files).
+- Update `notes` only if you made corrections. Keep `reconciliations` from the implementer.
 
-### 4. Plan-vs-Source Reconciliation
-
-- If the worker reconciled plan symbols against source (plan said X, source has Y, used Y), was the reconciliation justified?
-- Was reconciliation applied only for genuine does-not-exist cases, not as an excuse for code substitution?
-- If the plan had a genuine defect, did the worker flag it in the summary (PROBLEM-NOT-FLAGGED)?
-
-### 5. Verification Results
-
-- Did the worker run plan-listed verification commands?
-- Did tests pass? If they failed, did the worker investigate and fix?
-- If verification could not run (sandbox limitation), is that noted?
-- Did the worker claim "tests pass" without evidence of execution (PHANTOM TEST PASS)?
-
-### 6. Completeness Gate
-
-The annotator commits if completionPercent >= 80. Your role is to close gaps:
-- Which steps remain incomplete after the worker's pass?
-- Can you fix remaining gaps inline, or are they fundamental (wrong approach, missing prerequisite)?
-- For gaps you fix inline, note the step and what you corrected.
-
-## Fix Policy
-
-Fix issues directly — do not just flag them:
-- Revert code substitutions and apply the plan's verbatim code blocks.
-- Implement skipped steps that the worker missed.
-- Remove out-of-scope changes (extra files, plan rewrites).
-- Correct reconciliation errors where the worker used wrong source symbols.
-
-## Output Format (REQUIRED)
-
-Output exactly one JSON block:
+## Output (REQUIRED)
 
 ```json
-{"findings": [{"severity": "critical|high|medium|low", "category": "<plan-fidelity|step-coverage|scope-discipline|reconciliation|verification|completeness>", "description": "<what is wrong>", "location": "<file:line or file>", "fix": "applied|suggested"}], "summary": "<one paragraph covering plan fidelity, step coverage, and verification results>", "verdict": "approved|changes_made"}
+{"stepsCompleted": ["<step>"], "filesChanged": ["<path>"], "testsPassed": true, "workerSelfAssessment": "done|failed", "reconciliations": ["Plan said X; source has Y; used Y"], "notes": "<observations>"}
 ```

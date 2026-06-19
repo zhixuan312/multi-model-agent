@@ -11,13 +11,13 @@ describe('SkillLoader', () => {
   it('loads delegate skills', async () => {
     const pair = await loadSkill('delegate', SKILLS_DIR);
     expect(pair.implement).toContain('Implementer');
-    expect(pair.review).toContain('Reviewer');
+    expect(pair.review).toContain('Refiner');
   });
 
   it('loads audit skills', async () => {
     const pair = await loadSkill('audit', SKILLS_DIR);
     expect(pair.implement).toContain('Implementer');
-    expect(pair.review).toContain('Reviewer');
+    expect(pair.review).toContain('Refiner');
   });
 
   it('caches on second call', async () => {
@@ -41,7 +41,7 @@ describe('SkillLoader', () => {
   it('loads audit subtype implement-plan.md when subtype=plan', async () => {
     const pair = await loadSkill('audit', SKILLS_DIR, 'plan');
     expect(pair.implement).toContain('PLAN');
-    expect(pair.review).toContain('Reviewer');
+    expect(pair.review).toContain('Refiner');
   });
 
   it('loads audit subtype implement-spec.md when subtype=spec', async () => {

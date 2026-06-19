@@ -126,32 +126,32 @@ describe('taskInputSchema', () => {
     }).success).toBe(false);
   });
 
-  it('accepts main with prompt', () => {
+  it('accepts orchestrate with prompt', () => {
     expect(taskInputSchema.safeParse({
-      type: 'main',
+      type: 'orchestrate',
       prompt: 'Synthesize the exploration results into a specification.',
     }).success).toBe(true);
   });
 
-  it('accepts main with prompt and outputFormat', () => {
+  it('accepts orchestrate with prompt and outputFormat', () => {
     const r = taskInputSchema.safeParse({
-      type: 'main',
+      type: 'orchestrate',
       prompt: 'List all API endpoints.',
       outputFormat: 'json',
     });
     expect(r.success).toBe(true);
   });
 
-  it('rejects main with empty prompt', () => {
+  it('rejects orchestrate with empty prompt', () => {
     expect(taskInputSchema.safeParse({
-      type: 'main',
+      type: 'orchestrate',
       prompt: '',
     }).success).toBe(false);
   });
 
-  it('accepts main with agentTier override', () => {
+  it('accepts orchestrate with agentTier override', () => {
     expect(taskInputSchema.safeParse({
-      type: 'main',
+      type: 'orchestrate',
       prompt: 'Do something.',
       agentTier: 'main',
     }).success).toBe(true);

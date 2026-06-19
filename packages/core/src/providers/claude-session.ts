@@ -132,6 +132,7 @@ export class ClaudeSession implements Session {
         cwd: this.args.opts.cwd,
         abortSignal: this.args.opts.abortSignal,
         env: {
+          ...process.env,
           ...(this.args.apiKey && { ANTHROPIC_API_KEY: this.args.apiKey }),
           ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
           ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),

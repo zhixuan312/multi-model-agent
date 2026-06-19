@@ -292,7 +292,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `main`) go through the same two-phase pipeline: implement on one tier, review on the other. The `main` type is a session-persistent orchestrator (no reviewer, no worktree) for multi-phase frontend workflows. Write types run as sequential goal-sets; read types fan out per file/criterion. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `orchestrate`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree) for multi-phase frontend workflows. Write types run in worktrees; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -312,12 +312,12 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.4.5
+## What's new in 5.5.0
 
-- **pnpm migration.** Toolchain switched from npm to pnpm; dev mode added (`pnpm run dev`).
-- **BusLike type fix.** Pre-existing tsc error in claude-session and codex-cli-session resolved.
-- **Codex OAuth probe.** `POST /configure-provider` now detects `~/.codex/auth.json` credentials.
-- **Request logging.** Every HTTP request logged to stderr with method/path/status/duration.
+- **Refiner pipeline.** Reviewers rewritten from critics to refiners — both phases output the same JSON schema. The final answer reads as if one agent did the work.
+- **Route rename.** Task type `main` renamed to `orchestrate` — route names now describe functionality, not agent tier.
+- **Claude auth fix.** Subprocess inherits full environment (fixes intermittent "Not logged in").
+- **Real cost delta.** `costDeltaVsMainUSD` computed from the caller's main model rate card (was hardcoded 0).
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

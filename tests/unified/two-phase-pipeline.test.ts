@@ -38,8 +38,8 @@ describe('runTwoPhasePipeline', () => {
   });
 
   it('runs both phases when reviewPolicy=reviewed', async () => {
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
-    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
+    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
@@ -60,14 +60,15 @@ describe('runTwoPhasePipeline', () => {
     expect(result.sessions.implementer.tier).toBe('standard');
     expect(result.sessions.reviewer?.sessionId).toBe('sess-mock');
     expect(result.sessions.reviewer?.tier).toBe('complex');
-    expect(result.reviewerOutput?.verdict).toBe('approved');
+    const revData = result.reviewerOutput as { workerSelfAssessment: string } | null;
+    expect(revData?.workerSelfAssessment).toBe('done');
     expect(result.worktree).toBeNull();
     expect(impl.send).toHaveBeenCalledOnce();
     expect(rev.send).toHaveBeenCalledOnce();
   });
 
   it('skips reviewer when reviewPolicy=none', async () => {
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
 
     const result = await runTwoPhasePipeline({
       type: 'audit',
@@ -129,8 +130,8 @@ describe('runTwoPhasePipeline', () => {
       merged: true,
     });
 
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
-    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
+    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
 
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
@@ -191,7 +192,7 @@ describe('runTwoPhasePipeline', () => {
   it('returns worktree=null when worktreeEnabled=false', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
 
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
@@ -233,8 +234,8 @@ describe('runTwoPhasePipeline', () => {
       merged: true,
     });
 
-    const impl = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done"}');
-    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const impl = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","testsPassed":true,"reconciliations":[],"notes":"done"}');
+    const rev = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","testsPassed":true,"reconciliations":[],"notes":"reviewed"}');
 
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
@@ -283,8 +284,8 @@ describe('runTwoPhasePipeline', () => {
   });
 
   it('threads bus into both openSession calls', async () => {
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
-    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
+    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
     const fakeBus = { emitPlainEntry: vi.fn() };
@@ -336,8 +337,8 @@ describe('runTwoPhasePipeline', () => {
   });
 
   it('passes sandboxPolicy=cwd-only + disallowedTools into openSession for write tasks', async () => {
-    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"notes":"done"}');
-    const rev = mockSession('{"findings":[],"summary":"clean","verdict":"approved"}');
+    const impl = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"done"}');
+    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
 

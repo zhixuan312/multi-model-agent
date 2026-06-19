@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "5.4.5",
+  "version": "5.5.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex), routing logic, config schema, and sandbox primitives.",
@@ -52,6 +52,10 @@
     "./bounded-execution/activity-tracker": {
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
+    },
+    "./bounded-execution/cost-compute": {
+      "types": "./dist/bounded-execution/cost-compute.d.ts",
+      "import": "./dist/bounded-execution/cost-compute.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",

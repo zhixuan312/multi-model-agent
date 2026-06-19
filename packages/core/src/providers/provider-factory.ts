@@ -212,7 +212,6 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
       throw new Error(`Unknown agent type for slot "${slot}": ${(agentConfig as { type: string }).type}`);
   }
 
-  // Preserve the legacy convention: `name = slot` (not `<provider>:<model>`)
-  // so existing call sites (e.g., `p.name === 'standard'`) keep working.
+  // Provider name = tier slot so call sites can match by tier (e.g. `p.name === 'standard'`).
   return wrapWithSafetyCeiling({ ...provider, name: slot });
 }

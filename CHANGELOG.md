@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.0] - 2026-06-19
+
+**Refiner pipeline + route rename + auth fix + cost delta.** Reviewers rewritten from critics (output findings/verdict) to refiners (output same format as implementer). Task type `main` renamed to `orchestrate`. Claude subprocess auth fixed. Real cost-delta-vs-main computation. Full 22-scenario smoke gate passed. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `refiner-schemas.ts`: 9 per-type Zod schemas for the implementer/refiner answer format.
+- `tryParse` recovery in reviewer-output-parser: handles LLM trailing-brace errors.
+- Real `costDeltaVsMainUSD` computation using caller's main model rate card (was hardcoded 0).
+- Per-result `mainEquivalentUsd` and `savedVsMainUsd` fields in the HTTP envelope.
+- `cost-compute` export path from core package.
+- Contract test for cost-delta-vs-main.
+
+### Changed
+- **BREAKING:** Task type `main` renamed to `orchestrate`. The agent tier `main` is unchanged. Callers must send `{"type": "orchestrate"}` instead of `{"type": "main"}`.
+- All 9 review.md skills rewritten: reviewers now output the same JSON schema as the implementer (refiner model) instead of the old `{findings, summary, verdict}` critic format.
+- `parseReviewerOutput` is now type-aware: validates reviewer JSON against per-type schemas.
+- Reviewer goal condition updated: instructs refiners to output the answer format, not findings/verdict.
+- `reviewerRaw` set to null on parse failure so the envelope falls through to implementer output (proper fallback).
+- Journal recall/record refiner skills: explicit `.mma/journal/` path instructions and graceful degradation when journal is inaccessible.
+- Skill text reduced ~50% (audit 5.6K→2.2K, investigate 4.1K→1.9K, etc.) for lower refiner cost.
+- Full-smoke scenario #19 updated from `main` to `orchestrate`.
+
+### Fixed
+- Claude subprocess auth: `...process.env` spread in `claude-session.ts` so the subprocess inherits HOME/PATH/keychain (fixes intermittent "Not logged in" errors).
+- Removed stale legacy comments (batch-registry provenance, legacy convention, legacy monolithic format).
+
 ## [5.4.5] - 2026-06-17
 
 **pnpm migration + codex probe + request logging.** Toolchain switched from npm to pnpm. Pre-existing BusLike type error fixed. Codex OAuth probe and per-request stderr logging added. `SCHEMA_VERSION` unchanged (still 6).

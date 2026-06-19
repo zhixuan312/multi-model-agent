@@ -24,8 +24,8 @@ describe('TypeRegistry', () => {
     expect(c).toEqual({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
   });
 
-  it('main defaults to main/no-worktree/read-only', () => {
-    const c = getTypeConfig('main');
+  it('orchestrate defaults to main/no-worktree/read-only', () => {
+    const c = getTypeConfig('orchestrate');
     expect(c).toEqual({ defaultTier: 'main', worktree: false, sandbox: 'read-only' });
   });
 

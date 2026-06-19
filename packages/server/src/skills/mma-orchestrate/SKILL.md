@@ -33,7 +33,7 @@ The orchestrate endpoint provides a session-persistent, high-quality LLM agent f
 
 ```json
 {
-  "type": "main",
+  "type": "orchestrate",
   "prompt": "Synthesize the exploration results into a requirements specification...",
   "outputFormat": "json"
 }
@@ -41,7 +41,7 @@ The orchestrate endpoint provides a session-persistent, high-quality LLM agent f
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `type` | `"main"` | yes | Discriminator |
+| `type` | `"orchestrate"` | yes | Discriminator |
 | `prompt` | string | yes | The full instruction for this workflow phase |
 | `outputFormat` | string | no | Hint for desired output format (e.g. `"json"`, `"markdown"`) |
 | `sessionIds` | object | no | `{ implementer: "<session-id>" }` — reuse a prior session |
@@ -55,11 +55,11 @@ To maintain context across workflow phases, capture the session ID from the firs
 
 ```bash
 # Phase 1: Exploration
-RESULT=$(curl ... -d '{"type":"main","prompt":"Explore the codebase for auth patterns..."}' ...)
+RESULT=$(curl ... -d '{"type":"orchestrate","prompt":"Explore the codebase for auth patterns..."}' ...)
 SESSION_ID=$(echo "$RESULT" | jq -r '.sessions.implementer.sessionId')
 
 # Phase 2: Specification (reuse session)
-RESULT=$(curl ... -d '{"type":"main","prompt":"Based on your exploration, write a spec...","sessionIds":{"implementer":"'"$SESSION_ID"'"}}' ...)
+RESULT=$(curl ... -d '{"type":"orchestrate","prompt":"Based on your exploration, write a spec...","sessionIds":{"implementer":"'"$SESSION_ID"'"}}' ...)
 ```
 
 @include _shared/auth.md

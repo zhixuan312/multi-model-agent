@@ -3,7 +3,7 @@ import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
 
 const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
-import { parseReviewerOutput, type ReviewerOutput } from './reviewer-output-parser.js';
+import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
 
 export interface PipelineInput {
@@ -41,7 +41,7 @@ export interface PipelineResult {
   status: 'done' | 'done_with_concerns' | 'failed';
   implementerOutput: string;
   implementerTurn: TurnResult;
-  reviewerOutput: ReviewerOutput | null;
+  reviewerOutput: unknown | null;
   reviewerRaw: string | null;
   reviewerTurn: TurnResult | null;
   reviewerParseError: string | null;
@@ -170,7 +170,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     const revId = revSession.getSessionId();
 
-    const parsed = parseReviewerOutput(revTurn.output);
+    const parsed = parseReviewerOutput(revTurn.output, input.type);
 
     const worktree = await resolveWorktree();
 
@@ -179,7 +179,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       implementerOutput: implTurn.output,
       implementerTurn: implTurn,
       reviewerOutput: parsed.ok ? parsed.data : null,
-      reviewerRaw: revTurn.output,
+      reviewerRaw: parsed.ok ? revTurn.output : null,
       reviewerTurn: revTurn,
       reviewerParseError: parsed.ok ? null : parsed.error,
       sessions: {

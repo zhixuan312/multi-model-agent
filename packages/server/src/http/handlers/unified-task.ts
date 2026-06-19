@@ -9,6 +9,7 @@ import {
   resolveAgent,
   runTwoPhasePipeline,
 } from '@zhixuan92/multi-model-agent-core';
+import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model-agent-core';
 import type { TaskEnvelope, StageRecord, Route } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import type { Provider } from '@zhixuan92/multi-model-agent-core';
@@ -40,7 +41,6 @@ function taskTypeToRoute(type: TaskType): Route {
     journal_recall: 'journal-recall',
     journal_record: 'journal-record',
     retry_tasks: 'retry',
-    main: 'orchestrate',
   };
   return (map[type] ?? type) as Route;
 }
@@ -56,7 +56,8 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       'You have checked for hallucinated findings (claims without evidence in the source material).',
       'You have validated evidence quality (every finding cites actual file:line or quoted text).',
       'You have checked severity calibration against the skill definitions.',
-      'You have produced the required JSON output block with findings, summary, and verdict.',
+      'You have verified the implementer\'s draft and output the refined answer in the same JSON format as the implementer.',
+      'No findings, verdict, or meta-commentary -- only the final answer in a ```json fenced block.',
     ].join(' ');
   }
 
@@ -132,7 +133,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
         'Each result includes the learning, context, and relevance assessment.',
         'You have produced the required JSON output block.',
       ].join(' ');
-    case 'main':
+    case 'orchestrate':
       return [
         'You have fully processed the prompt and produced the requested output.',
         'If an output format was specified, your response conforms to that format.',
@@ -438,7 +439,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const typeConfig = getTypeConfig(input.type);
     const implTier = input.agentTier ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
-    const reviewPolicy = input.type === 'main' ? 'none' : (input.reviewPolicy ?? 'reviewed');
+    const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
 
     let implAgent, revAgent;
     try {
@@ -555,6 +556,21 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             } catch { /* best-effort — store may be at capacity */ }
           }
 
+          const totalActualCostUSD = result.cost.implementerUsd + (result.cost.reviewerUsd ?? 0);
+
+          // Compute main-model equivalent cost using the caller's declared main model
+          // (from X-MMA-Main-Model header) — same computation as to-wire-record.ts
+          const mainModelId = ctx.mainModel ?? deps.config.agents[implTier]?.model ?? 'unknown';
+          const mainCard = resolveRateCard(mainModelId);
+          const totalUsage = {
+            inputTokens: result.implementerTurn.usage.inputTokens + (result.reviewerTurn?.usage.inputTokens ?? 0),
+            outputTokens: result.implementerTurn.usage.outputTokens + (result.reviewerTurn?.usage.outputTokens ?? 0),
+            cachedReadTokens: result.implementerTurn.usage.cachedReadTokens + (result.reviewerTurn?.usage.cachedReadTokens ?? 0),
+            cachedNonReadTokens: result.implementerTurn.usage.cachedNonReadTokens + (result.reviewerTurn?.usage.cachedNonReadTokens ?? 0),
+          };
+          const mainEquivalentUSD = mainCard ? priceTokens(totalUsage, mainCard) : null;
+          const costDeltaVsMain = mainEquivalentUSD !== null ? mainEquivalentUSD - totalActualCostUSD : null;
+
           const resultObj = {
             headline: `${input.type}: ${result.status}`,
             results: [{
@@ -568,14 +584,19 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               },
               sessions: result.sessions,
               worktree: result.worktree,
-              cost: result.cost,
+              cost: {
+                ...result.cost,
+                mainEquivalentUsd: mainEquivalentUSD,
+                savedVsMainUsd: costDeltaVsMain,
+              },
               contextBlockId,
               error: null,
             }],
             taskTimings: { wallClockMs: durationMs, sumOfTaskMs: durationMs, estimatedParallelSavingsMs: 0 },
             costSummary: {
-              totalActualCostUSD: result.cost.implementerUsd + (result.cost.reviewerUsd ?? 0),
-              totalCostDeltaVsMainUSD: 0,
+              totalActualCostUSD,
+              totalCostDeltaVsMainUSD: costDeltaVsMain,
+              totalMainEquivalentUSD: mainEquivalentUSD,
             },
             structuredReport: {
               summary: result.reviewerRaw ?? result.implementerOutput,
@@ -593,7 +614,6 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           try {
             const implModelId = deps.config.agents[implTier]?.model ?? 'unknown';
             const revModelId = deps.config.agents[revTier]?.model ?? 'unknown';
-            const mainModelId = deps.config.defaults?.mainModel ?? implModelId;
             const envelope = buildEnvelopeSnapshot(
               taskId, input.type, result,
               implTier, revTier, reviewPolicy,
