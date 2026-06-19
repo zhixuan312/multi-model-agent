@@ -77,7 +77,7 @@ function checkQuality(type, subtype, task0, structuredReport) {
       if (outputLen < 20) return ['WARN', `execute_plan output very short (${outputLen} chars)`];
       return ['PASS', `${outputLen} chars output`];
     }
-    case 'main': {
+    case 'orchestrate': {
       if (outputLen < 50) return ['FAIL', `orchestrate output too short (${outputLen} chars) — expected structured response`];
       return ['PASS', `${outputLen} chars output`];
     }

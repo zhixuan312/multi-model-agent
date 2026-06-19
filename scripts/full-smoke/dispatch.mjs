@@ -44,8 +44,8 @@ export function buildRequest(spec, ctx) {
       } };
     }
 
-    // F. Main (orchestrate) — session-persistent brain
-    case 19: return { type: 'main', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
+    // Orchestrate — session-persistent brain
+    case 19: return { type: 'orchestrate', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
 
     // F. Sandbox Confinement — exercises confinement hook under real workloads
     case 20: return { type: 'delegate', body: { tasks: [

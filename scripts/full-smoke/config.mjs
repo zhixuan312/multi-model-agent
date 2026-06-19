@@ -46,7 +46,7 @@ export const POLL = {
 //      #8  debug            — debugging (read, complex)
 //      #9  journal_record   — record a learning (write, complex)
 //      #10 journal_recall   — recall learnings (read, complex, depends on #9)
-//      #19 main             — orchestration brain (read, main tier, no reviewer)
+//      #19 orchestrate       — orchestration brain (read, main tier, no reviewer)
 //
 //   B. Audit Subtypes (each loads a different skill file):
 //      #11 audit/spec       — requirement prose executability
@@ -88,7 +88,7 @@ export const SCENARIOS = [
   { id: 8,  type: 'debug', tier: 'complex', kind: 'read', emits: 1 },
   { id: 9,  type: 'journal_record', tier: 'complex', kind: 'write', emits: 1 },
   { id: 10, type: 'journal_recall', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 19, type: 'main', tier: 'main', kind: 'read', emits: 1 },
+  { id: 19, type: 'orchestrate', tier: 'main', kind: 'read', emits: 1 },
 
   // B. Audit Subtypes (spec, plan, skill — each loads a different skill file)
   { id: 11, type: 'audit', subtype: 'spec', tier: 'complex', kind: 'read', emits: 1 },
