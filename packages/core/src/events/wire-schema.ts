@@ -215,7 +215,7 @@ export const TaskCompletedEventSchema = z.object({
 
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'journal-recall']);
 // Every route EXCEPT orchestrate defaults to reviewPolicy='reviewed' (see
-// unified-task.ts: `type === 'main' ? 'none' : reviewed`), so every one of them
+// unified-task.ts: `type === 'orchestrate' ? 'none' : reviewed`), so every one of them
 // can legitimately emit a `review` stage. Omitting journal-recall / research /
 // retry here made `toWireRecord` throw "R9: review stage only allowed on reviewed
 // routes" and silently DROP their telemetry. List all reviewable routes.

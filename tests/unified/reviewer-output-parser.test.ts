@@ -131,8 +131,8 @@ describe('parseReviewerOutput', () => {
       expect(r.ok).toBe(false);
     });
 
-    it('main accepts any valid JSON', () => {
-      const r = parseReviewerOutput('{"result": "ok"}', 'main');
+    it('orchestrate accepts any valid JSON', () => {
+      const r = parseReviewerOutput('{"result": "ok"}', 'orchestrate');
       expect(r.ok).toBe(true);
     });
   });

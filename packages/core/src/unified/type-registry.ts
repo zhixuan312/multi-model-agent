@@ -1,12 +1,9 @@
-// verify-all
-// r3-test
-// smoke-test
 import type { AgentType } from '../types/task-spec.js';
 
 export const TASK_TYPES = [
   'audit', 'investigate', 'delegate', 'execute_plan',
   'review', 'debug', 'research', 'journal_recall', 'journal_record',
-  'retry_tasks', 'main',
+  'retry_tasks', 'orchestrate',
 ] as const;
 
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -29,7 +26,7 @@ export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
   journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
   journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only'  },
   retry_tasks:    { defaultTier: 'standard', worktree: false, sandbox: 'cwd-only'  },
-  main:           { defaultTier: 'main',     worktree: false, sandbox: 'read-only' },
+  orchestrate:    { defaultTier: 'main',     worktree: false, sandbox: 'read-only' },
 };
 
 export function getTypeConfig(type: TaskType): TypeConfig {

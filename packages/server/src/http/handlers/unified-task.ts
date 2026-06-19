@@ -41,7 +41,6 @@ function taskTypeToRoute(type: TaskType): Route {
     journal_recall: 'journal-recall',
     journal_record: 'journal-record',
     retry_tasks: 'retry',
-    main: 'orchestrate',
   };
   return (map[type] ?? type) as Route;
 }
@@ -134,7 +133,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
         'Each result includes the learning, context, and relevance assessment.',
         'You have produced the required JSON output block.',
       ].join(' ');
-    case 'main':
+    case 'orchestrate':
       return [
         'You have fully processed the prompt and produced the requested output.',
         'If an output format was specified, your response conforms to that format.',
@@ -440,7 +439,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const typeConfig = getTypeConfig(input.type);
     const implTier = input.agentTier ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
-    const reviewPolicy = input.type === 'main' ? 'none' : (input.reviewPolicy ?? 'reviewed');
+    const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
 
     let implAgent, revAgent;
     try {
