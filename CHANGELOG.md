@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.5.0] - 2026-06-19
+## [5.5.1] - 2026-06-19
 
 **Refiner pipeline + route rename + auth fix + cost delta.** Reviewers rewritten from critics (output findings/verdict) to refiners (output same format as implementer). Task type `main` renamed to `orchestrate`. Claude subprocess auth fixed. Real cost-delta-vs-main computation. Full 22-scenario smoke gate passed. `SCHEMA_VERSION` unchanged (still 6).
 
