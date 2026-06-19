@@ -53,6 +53,10 @@
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
     },
+    "./bounded-execution/cost-compute": {
+      "types": "./dist/bounded-execution/cost-compute.d.ts",
+      "import": "./dist/bounded-execution/cost-compute.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
