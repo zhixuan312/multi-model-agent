@@ -77,7 +77,7 @@ Read the document. Do similar items in a list/table follow the same shape? If on
 Read the document. For living/revised documents: is there a "last updated" / "as of" / version stamp? When findings claim "still unfixed in version X", is there a date timeline that supports the claim? Append findings to scratch file.
 
 ### Step 13: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings across all failure modes, assign severities, produce the final JSON output.
+Read `/tmp/audit-findings.md`. Collect all findings across all failure modes, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED for every finding)
 
@@ -115,7 +115,7 @@ Findings that fail any check should be downgraded or dropped. However, logical-c
 
 ## Output Format
 
-After consolidating all failure-mode passes, output exactly one JSON block:
+After consolidating all failure-mode passes, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["recommendation-coherence", "internal-contradiction", "cross-item-duplication", "independence-claimed-without-evidence", "argument-soundness", "completeness-against-constraints", "fix-actionability", "drift-staleness", "scope-creep-framing", "structural-consistency", "metadata-completeness"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted text or absence reference>", "suggestion": "<concrete fix>"}]}

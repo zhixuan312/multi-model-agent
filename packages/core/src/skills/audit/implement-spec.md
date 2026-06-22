@@ -59,7 +59,7 @@ Read the spec. Flag when any load-bearing dimension is missing:
 Severity HIGH when planner must invent the architecture; MEDIUM when partial. Append.
 
 ### Step 11: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce the final JSON output.
+Read `/tmp/audit-findings.md`. Collect all findings, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED for every finding)
 
@@ -84,7 +84,7 @@ Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce 
 
 ## Output Format
 
-After consolidating all criterion passes, output exactly one JSON block:
+After consolidating all criterion passes, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["requirement-testability", "scope-explicitness-and-decomposability", "acceptance-criteria-coverage", "non-functional-captured", "requirement-conflict", "decision-trace", "assumption-exposure", "placeholder-scan", "design-decomposition-present"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted clause>", "suggestion": "<the missing sentence>"}]}

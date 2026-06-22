@@ -123,7 +123,7 @@ Every load-bearing spec requirement maps to at least one plan task, and no task 
 Append findings to scratch file.
 
 ### Step 14: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings across all perspectives, assign per-task verdicts, produce the final JSON output.
+Read `/tmp/audit-findings.md`. Collect all findings across all perspectives, assign per-task verdicts. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED — varies by perspective group)
 
@@ -174,7 +174,7 @@ Findings on perspectives 1-8 missing source-side evidence are downgraded to LOW 
 
 ## Output Format
 
-After consolidating all perspective passes, output exactly one JSON block:
+After consolidating all perspective passes, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["path-existence", "symbol-existence", "signature-match", "import-graph", "test-harness", "step-sequence", "cross-task-deps", "verify-cmd", "task-granularity", "spec-coverage", "placeholder-language", "plan-skeleton"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<plan claim + source reality + task ID>", "suggestion": "<concrete edit>"}]}

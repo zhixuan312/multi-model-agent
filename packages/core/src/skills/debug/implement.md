@@ -74,7 +74,7 @@ Findings that fail any check should be downgraded or dropped. However, partial-e
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"answer": "<one-line root cause summary>", "criteriaCovered": ["symptom-location", "recent-change", "test-failure", "reproduction", "concurrency-configuration"], "findings": [{"weight": "critical|high|medium|low", "category": "<angle-slug>", "claim": "<one sentence>", "evidence": "<extracted text from file>", "file": "<path or null>", "line": 0}]}

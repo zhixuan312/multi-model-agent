@@ -54,7 +54,7 @@ Report `status: "failed"` ONLY when you could not complete the requested code ch
 
 ## Output Format
 
-After completing work, output exactly one JSON block:
+After completing work, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"status": "done|failed", "notes": "<observations, scope deviations>"}

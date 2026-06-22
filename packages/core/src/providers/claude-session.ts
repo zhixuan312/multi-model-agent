@@ -146,6 +146,11 @@ export class ClaudeSession implements Session {
     this.activeQuery = q as unknown as { close?: () => unknown };
 
     const events: SDKMessage[] = [];
+    // Accumulate assistant text live — the SDK may mutate event objects
+    // after yielding them, so reading .message.content post-loop can
+    // return empty blocks. This captures text at yield time (same moment
+    // emitEventTelemetry reads it) as a reliable fallback.
+    let liveOutputText = '';
     try {
       for await (const ev of q) {
         events.push(ev);
@@ -155,6 +160,13 @@ export class ClaudeSession implements Session {
         if (!this.sessionId) {
           const sid = (ev as { session_id?: unknown }).session_id;
           if (typeof sid === 'string' && sid.length > 0) this.sessionId = sid;
+        }
+        // Capture text blocks live before the SDK can mutate the event.
+        if ((ev as { type?: string }).type === 'assistant') {
+          const msg = (ev as { message?: { content?: Array<{ type: string; text?: string }> } }).message;
+          for (const b of msg?.content ?? []) {
+            if (b.type === 'text' && b.text) liveOutputText += b.text;
+          }
         }
         this.emitEventTelemetry(ev);
         if ((ev as { type?: string }).type === 'result') break;
@@ -179,6 +191,9 @@ export class ClaudeSession implements Session {
       costUSD: 0,
       model: this.args.model,
     });
+    // If normalizeClaudeTurn got empty output but we captured text live,
+    // the SDK mutated the event objects after yielding — use the live capture.
+    if (!norm.output && liveOutputText) norm.output = liveOutputText;
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {

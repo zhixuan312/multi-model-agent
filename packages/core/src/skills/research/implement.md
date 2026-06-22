@@ -103,7 +103,7 @@ A single research question should produce a mix of strategies — broad web quer
 
 ## Output Format
 
-After completing research, output exactly one JSON block:
+After completing research, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"answer": "<coherent narrative answer>", "criteriaCovered": ["primary-sources", "practitioner-consensus", "recent-developments", "counter-perspectives", "cross-domain"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<cited excerpt>", "url": "<source URL>", "source": "<adapter: brave|arxiv|semantic_scholar|github_search|openalex|crossref|pubmed>"}]}

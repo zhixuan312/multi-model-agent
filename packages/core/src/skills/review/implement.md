@@ -80,7 +80,7 @@ Findings that fail any check should be downgraded or dropped. However, cross-fil
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["test-gap", "cross-file-ripple", "pre-existing-vs-regression", "missing-edge-case", "race-concurrency", "resource-leak", "backward-compat-break", "security-regression", "performance-regression", "implicit-contract"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted code>", "file": "<path>", "line": 0, "suggestion": "<fix>", "preExisting": false}]}

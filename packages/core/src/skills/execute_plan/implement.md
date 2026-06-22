@@ -60,7 +60,7 @@ Report `status: "done"` when the requested code changes are complete. Mark `"fai
 
 ## Output Format
 
-After completing work, output exactly one JSON block:
+After completing work, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"tasks": [{"title": "<task heading>", "status": "done|failed"}], "notes": "<observations, plan defects found, verification results>"}

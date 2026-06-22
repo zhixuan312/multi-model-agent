@@ -46,7 +46,7 @@ Read the skill. Are `name` / `description` / `when_to_use` / `version` frontmatt
 Read the skill. Do internal cross-references (`./_shared/...`, `mma-other-skill`) point at files that exist? For each broken internal link: name the link text, target path, and whether the target should exist or the link should be updated. Append findings.
 
 ### Step 9: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce final JSON.
+Read `/tmp/audit-findings.md`. Collect all findings, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED)
 
@@ -65,7 +65,7 @@ Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce 
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["when-to-use-specificity", "input-shape-completeness", "output-shape-contract", "anti-pattern-coverage", "recipe-vs-skill-scope", "version-frontmatter", "link-integrity"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted section+line>", "suggestion": "<missing or replacement text>"}]}

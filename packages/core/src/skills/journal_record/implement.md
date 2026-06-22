@@ -69,7 +69,7 @@ Before finishing, verify:
 
 ## Output Format
 
-Output exactly one JSON block (a single OBJECT, not an array):
+Your FINAL text response must be exactly one JSON block — a single OBJECT, not an array (do NOT write it to a file):
 
 ```json
 {"recorded": [{"learning": "<lesson text>", "category": "<decision|design|behavior|process|knowledge|style>", "nodeId": "<0012>", "nodePath": "<file path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
