@@ -169,6 +169,21 @@ describe('matchTasks', () => {
     expect(matched.map(m => m.normalized)).toEqual(['Task 1: A', 'Task 2: B']);
   });
 
+  it('falls back to unnumbered headings when plan has zero numbered tasks', () => {
+    const plan = `# My Plan\n\n## Define the types\n\nContent.\n\n## Implement the adapter\n\nMore content.\n\n## Wire it up\n\nFinal.\n`;
+    const h = parsePlanHeadings(plan);
+    const matched = matchTasks(h, []);
+    expect(matched.length).toBe(3);
+    expect(matched.map(m => m.normalized)).toEqual(['Define the types', 'Implement the adapter', 'Wire it up']);
+  });
+
+  it('excludes structural headings (Problem, Design, etc.) from fallback', () => {
+    const plan = `# Plan\n\n## Problem\n\nDesc.\n\n## Design\n\nApproach.\n\n## Create the schema\n\nTask.\n\n## Add tests\n\nTask.\n`;
+    const h = parsePlanHeadings(plan);
+    const matched = matchTasks(h, []);
+    expect(matched.map(m => m.normalized)).toEqual(['Create the schema', 'Add tests']);
+  });
+
   it('skips non-numbered structural headings from empty selection', () => {
     const matched = matchTasks(headings, []);
     const titles = matched.map(m => m.normalized);

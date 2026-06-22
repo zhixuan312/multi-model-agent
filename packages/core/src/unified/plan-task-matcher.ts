@@ -19,9 +19,12 @@ export function parsePlanHeadings(planContent: string): PlanHeading[] {
   const lines = planContent.split('\n');
   const headings: PlanHeading[] = [];
   const phaseStack: Array<{ level: number; normalized: string }> = [];
+  let inFencedBlock = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (/^```/.test(line.trim())) { inFencedBlock = !inFencedBlock; continue; }
+    if (inFencedBlock) continue;
     const match = line.match(/^(#{1,6})\s+(.+)/);
     if (!match) continue;
 
@@ -65,9 +68,23 @@ export class MatchError extends Error {
   }
 }
 
+const STRUCTURAL_HEADINGS = new Set([
+  'problem', 'design', 'overview', 'architecture', 'tech stack',
+  'file structure', 'files to change', 'tests', 'test additions',
+  'what doesn\'t change', 'what doesn\'t change', 'further reading',
+  'known limitations', 'implementation plan', 'references',
+]);
+
+function isStructuralHeading(h: PlanHeading): boolean {
+  if (h.level === 1) return true;
+  return STRUCTURAL_HEADINGS.has(h.normalized.toLowerCase());
+}
+
 export function matchTasks(headings: PlanHeading[], selectors: string[]): PlanHeading[] {
   if (selectors.length === 0) {
-    return headings.filter(h => h.isNumbered);
+    const numbered = headings.filter(h => h.isNumbered);
+    if (numbered.length > 0) return numbered;
+    return headings.filter(h => !isStructuralHeading(h));
   }
 
   const matchedSet = new Set<number>();
