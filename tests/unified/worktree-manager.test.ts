@@ -113,6 +113,7 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge
+      .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
       .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
 
@@ -125,6 +126,7 @@ describe('WorktreeManager', () => {
 
     expect(info.hasChanges).toBe(true);
     expect(info.merged).toBe(true);
+    expect(info.filesChanged).toEqual(['file.ts']);
 
     const calls = exec.mock.calls;
     expect(calls[0][1]).toContain('--porcelain');
@@ -133,8 +135,9 @@ describe('WorktreeManager', () => {
     expect(calls[3][1]).toContain('merge');
     expect(calls[3][1]).toContain('mma/delegate-abc');
     expect(calls[3][2].cwd).toBe('/repo'); // merge runs in original cwd
-    expect(calls[4][1]).toContain('remove');
-    expect(calls[5][1]).toContain('-D');
+    expect(calls[4][1]).toContain('diff'); // git diff --name-only for filesChanged
+    expect(calls[5][1]).toContain('remove');
+    expect(calls[6][1]).toContain('-D');
   });
 
   it('mergeAndCleanup preserves worktree on merge conflict', async () => {

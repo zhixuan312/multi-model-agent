@@ -216,11 +216,12 @@ describe('runTwoPhasePipeline', () => {
       }),
     );
 
-    // mergeAndCleanup was called with original cwd
+    // mergeAndCleanup was called with original cwd + commit message
     expect(cleanupMock).toHaveBeenCalledWith(
       '/tmp/test/.mma/worktrees/abcd1234',
       'mma/delegate-abcd1234',
       '/tmp/test',
+      expect.any(String),
     );
 
     // Result includes worktree info with merged=true

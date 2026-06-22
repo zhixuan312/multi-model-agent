@@ -623,7 +623,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             },
             output: {
               summary: result.reviewerOutput ?? tryParseJson(result.reviewerTurn?.output ?? result.implementerOutput),
-              filesChanged: result.implementerTurn.filesWritten,
+              filesChanged: result.worktree?.filesChanged ?? result.implementerTurn.filesWritten,
               contextBlockId,
             },
             execution: {

@@ -94,10 +94,22 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   const sessions: Session[] = [];
 
   // --- Worktree merge + cleanup helper ---
-  const resolveWorktree = async (): Promise<WorktreeInfo | null> => {
+  const resolveWorktree = async (commitMsg?: string): Promise<WorktreeInfo | null> => {
     if (!wtManager || !wtInfo) return null;
-    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd);
+    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd, commitMsg);
   };
+
+  function buildCommitMessage(output: string): string {
+    try {
+      const m = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/(\{[\s\S]*\})/);
+      if (m) {
+        const parsed = JSON.parse(m[1]);
+        const notes = parsed.notes ?? parsed.answer ?? '';
+        if (notes && notes.length > 5 && notes.length < 200) return `[mma] ${input.type}: ${notes}`;
+      }
+    } catch { /* fallback */ }
+    return `[mma] ${input.type}: task completed`;
+  }
 
   // Close all opened sessions — best-effort, errors swallowed.
   const closeSessions = async (): Promise<void> => {
@@ -119,14 +131,17 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(implSession);
 
-    const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${effectivePayload}`;
+    const worktreeNotice = wtInfo
+      ? `\n\n## Working Directory\n\nYou are working in a worktree at \`${effectiveCwd}\`. All files you create or edit must be under this directory.\n`
+      : '';
+    const implPrompt = `${input.implementerSkill}${worktreeNotice}\n\n---\n\n## Task\n\n${effectivePayload}`;
     const implTurn = await implSession.send(implPrompt, {
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
     const implId = implSession.getSessionId();
 
     if (input.reviewPolicy === 'none') {
-      const worktree = await resolveWorktree();
+      const worktree = await resolveWorktree(buildCommitMessage(implTurn.output));
       return {
         status: 'done',
         implementerOutput: implTurn.output,
@@ -176,7 +191,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 
-    const worktree = await resolveWorktree();
+    const worktree = await resolveWorktree(buildCommitMessage(revTurn.output));
 
     return {
       status: parsed.ok ? 'done' : 'done_with_concerns',
