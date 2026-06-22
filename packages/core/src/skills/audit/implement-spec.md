@@ -7,30 +7,27 @@ You are auditing a requirement spec for executability. A finding is a place wher
 You MUST work through the 9 criteria **one at a time, sequentially**. For each criterion:
 
 1. Read the spec through the lens of ONLY that criterion
-2. Write any findings to a scratch file at `/tmp/audit-findings.md` (append mode)
-3. If no findings for that criterion, write "Criterion N: No findings." to the scratch file
+2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+3. If no findings for that criterion, note "Criterion N: No findings."
 4. Move to the next criterion
 
-After all 9 criteria are complete, read the scratch file and consolidate into the final JSON output.
+After all 9 criteria are complete, consolidate into the final JSON output.
 
 **Do NOT try to evaluate all criteria in one pass.** The sequential approach ensures thorough coverage — each criterion gets your full attention before moving on.
 
 ## Execution Steps
 
-### Step 1: Create scratch file
-Write to `/tmp/audit-findings.md`:
-```
-# Spec Audit Findings (scratch)
-```
+### Step 1: Set up scratch notes
+Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
 
 ### Step 2: Criterion 1 — REQUIREMENT-TESTABILITY
-Read the spec. For every `shall` / `must` / `should` requirement, check: does it have a concrete, observable outcome that a test can assert? Vague verbs ("supports", "handles", "is reliable") without a measurable outcome are findings. Append findings to `/tmp/audit-findings.md`.
+Read the spec. For every `shall` / `must` / `should` requirement, check: does it have a concrete, observable outcome that a test can assert? Vague verbs ("supports", "handles", "is reliable") without a measurable outcome are findings. Record findings.
 
 ### Step 3: Criterion 2 — SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY
 Read the spec. Check two sub-dimensions:
 - (a) EXPLICITNESS — are in-scope and out-of-scope items explicit? Implied scope (mentioned-once-then-dropped, referenced without definition) is a finding.
 - (b) DECOMPOSABILITY — does the spec describe ONE buildable feature, not multiple independent subsystems bundled together? Signals: orthogonal subsystems mixed, multiple top-level "Goals", architecture names >5 net-new modules across non-overlapping concerns.
-Append findings to scratch file.
+Record findings.
 
 ### Step 4: Criterion 3 — ACCEPTANCE-CRITERIA-COVERAGE
 Read the spec. Does every requirement map to at least one acceptance criterion (or does the spec call out why it is non-acceptance-testable)? Missing mapping is a finding. Append.
@@ -59,7 +56,7 @@ Read the spec. Flag when any load-bearing dimension is missing:
 Severity HIGH when planner must invent the architecture; MEDIUM when partial. Append.
 
 ### Step 11: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
+Collect all findings from your notes (scratch file or memory), assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED for every finding)
 

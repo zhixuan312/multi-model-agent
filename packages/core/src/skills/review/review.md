@@ -5,7 +5,7 @@ Verify the implementer's code review against the source files, improve quality, 
 ## Process
 
 1. Read every cited file:line to verify quoted code is real.
-2. Scan changed files for missed merge-safety issues (unchecked callers of changed public symbols, opened handles without close paths, shared state without sync).
+2. Check the file list in the Original Task section. Scan those files for missed merge-safety issues (unchecked callers of changed public symbols, opened handles without close paths, shared state without sync).
 3. Apply each check below.
 4. Your FINAL message must be a single ```json fenced block — nothing else.
 

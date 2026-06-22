@@ -27,57 +27,54 @@ A finding that points at any of these failure-mode triggers is high-value EVEN I
 You MUST work through the 11 failure modes **one at a time, sequentially**. For each failure mode:
 
 1. Read the document through the lens of ONLY that failure mode
-2. Write any findings to a scratch file at `/tmp/audit-findings.md` (append mode)
-3. If no findings for that failure mode, write "Criterion N: No findings." to the scratch file
+2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+3. If no findings for that failure mode, note "Criterion N: No findings."
 4. Move to the next failure mode
 
-After all 11 failure modes are complete, read the scratch file and consolidate into the final JSON output.
+After all 11 failure modes are complete, consolidate into the final JSON output.
 
 **Do NOT try to evaluate all failure modes in one pass.** The sequential approach ensures thorough coverage — each failure mode gets your full attention before moving on.
 
 ## Execution Steps
 
-### Step 1: Create scratch file
-Write to `/tmp/audit-findings.md`:
-```
-# Prose-Coherence Audit Findings (scratch)
-```
+### Step 1: Set up scratch notes
+Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
 
 ### Step 2: Criterion 1 — RECOMMENDATION-COHERENCE
-Read the document. Does the proposed fix actually solve the stated problem given the doc's own stated constraints? A fix requiring X when the doc forbids X is logically incomplete. Always check fixes against any explicit principles, constraints, invariants, or "what we won't do" sections. Example: a doc listing "no persistence" as a principle cannot have a fix that disambiguates "id existed before" from "id never existed" without persistence. Append findings to `/tmp/audit-findings.md`.
+Read the document. Does the proposed fix actually solve the stated problem given the doc's own stated constraints? A fix requiring X when the doc forbids X is logically incomplete. Always check fixes against any explicit principles, constraints, invariants, or "what we won't do" sections. Example: a doc listing "no persistence" as a principle cannot have a fix that disambiguates "id existed before" from "id never existed" without persistence. Record findings.
 
 ### Step 3: Criterion 2 — INTERNAL CONTRADICTION
-Read the document. Does section A say something incompatible with section B? Does a methodology disclaimer ("these numbers are approximations") undercut a load-bearing claim built on those numbers? Does a "do not auto-X" rule sit next to an "auto-X above threshold" recommendation? Append findings to scratch file.
+Read the document. Does section A say something incompatible with section B? Does a methodology disclaimer ("these numbers are approximations") undercut a load-bearing claim built on those numbers? Does a "do not auto-X" rule sit next to an "auto-X above threshold" recommendation? Record findings.
 
 ### Step 4: Criterion 3 — CROSS-ITEM DUPLICATION
-Read the document. Are two items addressing the same root cause without acknowledging each other? Should they be merged or cross-referenced? Look across the WHOLE doc for items targeting the same underlying problem from different angles. Append findings to scratch file.
+Read the document. Are two items addressing the same root cause without acknowledging each other? Should they be merged or cross-referenced? Look across the WHOLE doc for items targeting the same underlying problem from different angles. Record findings.
 
 ### Step 5: Criterion 4 — INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE
-Read the document. Is X asserted as independent of Y when the evidence shows correlation, co-occurrence, or shared mechanism? Append findings to scratch file.
+Read the document. Is X asserted as independent of Y when the evidence shows correlation, co-occurrence, or shared mechanism? Record findings.
 
 ### Step 6: Criterion 5 — ARGUMENT SOUNDNESS
-Read the document. Does the evidence chain support the conclusion? Does a headline ("95% wasted") rest on data the doc itself flags as unreliable? Does a severity rating match the evidence depth? Append findings to scratch file.
+Read the document. Does the evidence chain support the conclusion? Does a headline ("95% wasted") rest on data the doc itself flags as unreliable? Does a severity rating match the evidence depth? Record findings.
 
 ### Step 7: Criterion 6 — COMPLETENESS AGAINST CONSTRAINTS
-Read the document. Does any constraint stated elsewhere render a recommendation infeasible? Is a fix step that depends on persistence proposed in a doc that forbids persistence? If the doc has a principles/invariants/constraints section, walk every recommendation through every constraint and flag mismatches. Append findings to scratch file.
+Read the document. Does any constraint stated elsewhere render a recommendation infeasible? Is a fix step that depends on persistence proposed in a doc that forbids persistence? If the doc has a principles/invariants/constraints section, walk every recommendation through every constraint and flag mismatches. Record findings.
 
 ### Step 8: Criterion 7 — FIX ACTIONABILITY
-Read the document. Is the proposed fix complete enough to implement, or does it stop at "fix it" / vague verbs? Does it leave open which subsystem owns the change? Are step-by-step actions or only goals? Append findings to scratch file.
+Read the document. Is the proposed fix complete enough to implement, or does it stop at "fix it" / vague verbs? Does it leave open which subsystem owns the change? Are step-by-step actions or only goals? Record findings.
 
 ### Step 9: Criterion 8 — DRIFT / STALENESS
-Read the document. Does any claim in one section contradict more recently revised material in the same doc? Count items the doc claims to discuss (e.g. "across all three sessions", "the four highest-impact items") and verify the count against the actual list. If the count is wrong, that's drift. Other signals: version labels, renamed sections, references to removed items. Append findings to scratch file.
+Read the document. Does any claim in one section contradict more recently revised material in the same doc? Count items the doc claims to discuss (e.g. "across all three sessions", "the four highest-impact items") and verify the count against the actual list. If the count is wrong, that's drift. Other signals: version labels, renamed sections, references to removed items. Record findings.
 
 ### Step 10: Criterion 9 — SCOPE-CREEP / FRAMING
-Read the document. Do recommendations exceed what the evidence supports? Does the framing (table title, bucket label, headline) misrepresent what the row contents actually say? Append findings to scratch file.
+Read the document. Do recommendations exceed what the evidence supports? Does the framing (table title, bucket label, headline) misrepresent what the row contents actually say? Record findings.
 
 ### Step 11: Criterion 10 — STRUCTURAL CONSISTENCY
-Read the document. Do similar items in a list/table follow the same shape? If one row has a Verification subsection and the others don't, that's structural inconsistency. Duplicate numbering ("1, 1b, 2, 3") is a structural break. A column labeled "Fix direction" but one row holds verification criteria is a column-content mismatch. Append findings to scratch file.
+Read the document. Do similar items in a list/table follow the same shape? If one row has a Verification subsection and the others don't, that's structural inconsistency. Duplicate numbering ("1, 1b, 2, 3") is a structural break. A column labeled "Fix direction" but one row holds verification criteria is a column-content mismatch. Record findings.
 
 ### Step 12: Criterion 11 — METADATA COMPLETENESS
-Read the document. For living/revised documents: is there a "last updated" / "as of" / version stamp? When findings claim "still unfixed in version X", is there a date timeline that supports the claim? Append findings to scratch file.
+Read the document. For living/revised documents: is there a "last updated" / "as of" / version stamp? When findings claim "still unfixed in version X", is there a date timeline that supports the claim? Record findings.
 
 ### Step 13: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings across all failure modes, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
+Collect all findings from your notes (scratch file or memory) across all failure modes, assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED for every finding)
 
