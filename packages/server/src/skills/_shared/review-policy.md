@@ -1,13 +1,14 @@
 ### `reviewPolicy` — review lifecycle per task
 
-**Applies to write routes only** (`delegate`, `execute-plan`, `retry`).
-Read-only routes (audit, review, debug, investigate, research) do not expose
-this field — they are hardcoded to `"none"` because the review stage is
-write-routes-only. They still run the always-on **annotate** judge (a
-standard-tier LLM pass that summarizes the worker's report); their findings
-come from the worker itself, not from a second-pass code review.
+All task types default to `"reviewed"` (two-phase pipeline: implementer + refiner).
+Only `orchestrate` forces `"none"`. Callers can override per-request.
+
+For read-only routes (audit, review, debug, investigate, research, journal_recall),
+the refiner verifies the implementer's output against source material — checking
+citations, evidence accuracy, and completeness. For write routes (delegate,
+execute_plan, journal_record), the refiner also fixes issues in the worktree.
 
 | Value | Behavior | Use when |
 |---|---|---|
-| `"reviewed"` | Two-phase pipeline: implement + review (default) | Default for new code or risky edits |
+| `"reviewed"` | Two-phase pipeline: implement + review (default) | Default for all types |
 | `"none"` | Skip the review stage | Trivially mechanical edits or throwaway scripts where a second-pass reviewer adds nothing |

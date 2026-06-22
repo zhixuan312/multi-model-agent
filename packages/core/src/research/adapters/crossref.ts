@@ -1,7 +1,7 @@
 import { request } from 'undici';
 import { USER_AGENT } from '../user-agent.js';
 import type { AdapterResult } from './types.js';
-import { RESEARCH_HTTP_TIMEOUT_MS, redactAdapterUrl } from './redact-adapter-url.js';
+import { RESEARCH_HTTP_TIMEOUT_MS } from './redact-adapter-url.js';
 
 export interface CrossrefOpts { maxResults?: number; contactEmail?: string; }
 

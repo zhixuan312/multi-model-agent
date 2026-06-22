@@ -5,7 +5,7 @@ const severityEnum = z.enum(['critical', 'high', 'medium', 'low']);
 
 // --- Read route schemas (criteriaCovered + findings) ---
 
-export const auditAnswerSchema = z.object({
+const auditAnswerSchema = z.object({
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
     weight: severityEnum,
@@ -16,7 +16,7 @@ export const auditAnswerSchema = z.object({
   })),
 });
 
-export const investigateAnswerSchema = z.object({
+const investigateAnswerSchema = z.object({
   answer: z.string().min(1),
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
@@ -29,7 +29,7 @@ export const investigateAnswerSchema = z.object({
   })),
 });
 
-export const reviewAnswerSchema = z.object({
+const reviewAnswerSchema = z.object({
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
     weight: severityEnum,
@@ -43,7 +43,7 @@ export const reviewAnswerSchema = z.object({
   })),
 });
 
-export const debugAnswerSchema = z.object({
+const debugAnswerSchema = z.object({
   answer: z.string().min(1),
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
@@ -56,7 +56,7 @@ export const debugAnswerSchema = z.object({
   })),
 });
 
-export const researchAnswerSchema = z.object({
+const researchAnswerSchema = z.object({
   answer: z.string().min(1),
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
@@ -69,7 +69,7 @@ export const researchAnswerSchema = z.object({
   })),
 });
 
-export const journalRecallAnswerSchema = z.object({
+const journalRecallAnswerSchema = z.object({
   answer: z.string().min(1),
   criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
@@ -84,12 +84,12 @@ export const journalRecallAnswerSchema = z.object({
 
 // --- Write route schemas (per-item status) ---
 
-export const delegateAnswerSchema = z.object({
+const delegateAnswerSchema = z.object({
   status: z.enum(['done', 'failed']),
   notes: z.string(),
 });
 
-export const executePlanAnswerSchema = z.object({
+const executePlanAnswerSchema = z.object({
   tasks: z.array(z.object({
     title: z.string().min(1),
     status: z.enum(['done', 'failed']),
@@ -97,7 +97,7 @@ export const executePlanAnswerSchema = z.object({
   notes: z.string().default(''),
 });
 
-export const journalRecordAnswerSchema = z.object({
+const journalRecordAnswerSchema = z.object({
   recorded: z.array(z.object({
     learning: z.string().min(1),
     category: z.string().min(1),

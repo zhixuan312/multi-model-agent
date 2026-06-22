@@ -40,7 +40,7 @@ export const STAGE_LABELS: Record<HeartbeatStage, string> = {
   terminal:     'Done',
 };
 
-export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set(['review']);
+export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set(['review', 'rework']);
 
 /**
  * Lightweight state snapshot passed to `recordHeartbeat` on every tick (including

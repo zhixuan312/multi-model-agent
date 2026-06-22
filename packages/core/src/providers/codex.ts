@@ -9,7 +9,7 @@
 // refresh for path (1) — mma does not parse ~/.codex/auth.json.
 
 import type { Provider, SessionOpts } from '../types/run-result.js';
-import type { CodexProviderConfig, ProviderConfig } from '../types/config.js';
+import type { CodexProviderConfig } from '../types/config.js';
 import { CodexCliSession } from './codex-cli-session.js';
 
 export function makeCodexProvider(cfg: CodexProviderConfig): Provider {

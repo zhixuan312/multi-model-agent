@@ -104,7 +104,7 @@ export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unifi
 export type { TaskType, TypeConfig, TargetAcceptance } from './unified/type-registry.js';
 export { taskInputSchema } from './unified/task-input-schema.js';
 export type { TaskInput } from './unified/task-input-schema.js';
-export { loadSkill, validateSkillsExist, clearSkillCache } from './unified/skill-loader.js';
+export { loadSkill, validateSkillsExist } from './unified/skill-loader.js';
 export type { SkillPair } from './unified/skill-loader.js';
 export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
