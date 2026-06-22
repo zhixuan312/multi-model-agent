@@ -54,7 +54,7 @@ Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
                           project-context-registry}.ts
 ```
 
-Stages 3+4+5 are gated by each task's `reviewPolicy` (`reviewed | none`). Read-only types set `none`; artifact-producing types keep `reviewed`. The two-phase pipeline inspects the policy and skips the review phase accordingly.
+Stages 3+4+5 are gated by each task's `reviewPolicy` (`reviewed | none`). All types default to `reviewed` (except `orchestrate` which forces `none`). The two-phase pipeline inspects the policy and skips the review phase accordingly. Callers can override to `none` per-request for any type.
 
 ## Vertical axis — the type stack
 
@@ -78,14 +78,14 @@ Per-type fill of the stack:
 | Type | Review policy | Worktree | Sandbox | Skill |
 |---|---|---|---|---|
 | `delegate` | reviewed | yes | cwd-only | mma-delegate |
-| `audit` | none | no | read-only | mma-audit |
-| `review` | none | no | read-only | mma-review |
-| `debug` | none | no | read-only | mma-debug |
+| `audit` | reviewed | no | read-only | mma-audit |
+| `review` | reviewed | no | read-only | mma-review |
+| `debug` | reviewed | no | read-only | mma-debug |
 | `execute_plan` | reviewed | yes | cwd-only | mma-execute-plan |
-| `investigate` | none | no | read-only | mma-investigate |
-| `research` | none | no | read-only | mma-research |
-| `journal_recall` | none | no | read-only | mma-journal-recall |
-| `journal_record` | none | no | cwd-only | mma-journal-record |
+| `investigate` | reviewed | no | read-only | mma-investigate |
+| `research` | reviewed | no | read-only | mma-research |
+| `journal_recall` | reviewed | no | read-only | mma-journal-recall |
+| `journal_record` | reviewed | no | cwd-only | mma-journal-record |
 | `retry_tasks` | reviewed | no | cwd-only | mma-retry |
 | `orchestrate` | none | no | read-only | mma-orchestrate |
 

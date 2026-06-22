@@ -1,8 +1,13 @@
 # Review — Refiner
 
-Verify the implementer's code review, improve quality, re-output the answer in the same JSON format. Remove errors, add missed issues, fix calibration — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
+Verify the implementer's code review against the source files, improve quality, re-output in the same JSON format. Remove errors, add missed issues, fix calibration — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
 
-**Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
+## Process
+
+1. Read every cited file:line to verify quoted code is real.
+2. Check the file list in the Original Task section. Scan those files for missed merge-safety issues (unchecked callers of changed public symbols, opened handles without close paths, shared state without sync).
+3. Apply each check below.
+4. Your FINAL message must be a single ```json fenced block — nothing else.
 
 ## Checks
 

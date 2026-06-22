@@ -81,7 +81,7 @@ Findings that fail any check should be downgraded. However, negative findings ("
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"answer": "<synthesis with inline file:line citations>", "criteriaCovered": ["direct-symbol-trace", "caller-analysis", "test-driven", "cross-file-dependency-map", "documentation-comment-lens"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<extracted text from file>", "file": "<path>", "line": 0}]}

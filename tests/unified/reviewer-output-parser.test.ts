@@ -16,6 +16,39 @@ const VALID_DELEGATE = JSON.stringify({
   status: 'done', notes: 'All good',
 });
 
+const VALID_EXECUTE_PLAN = JSON.stringify({
+  tasks: [{ title: 'Add error handler', status: 'done' }],
+  notes: 'Applied verbatim',
+});
+
+const VALID_REVIEW = JSON.stringify({
+  criteriaCovered: ['test-gap'],
+  findings: [{ weight: 'high', category: 'test-gap', claim: 'No tests for X', evidence: 'function X()', file: 'src/x.ts', line: 5, suggestion: 'Add test', preExisting: false }],
+});
+
+const VALID_DEBUG = JSON.stringify({
+  answer: 'Root cause: off-by-one in loop',
+  criteriaCovered: ['symptom-location'],
+  findings: [{ weight: 'critical', category: 'symptom-location', claim: 'Crash at line 42', evidence: 'arr[i+1]', file: 'src/loop.ts', line: 42 }],
+});
+
+const VALID_RESEARCH = JSON.stringify({
+  answer: 'The consensus is to use approach X',
+  criteriaCovered: ['primary-sources'],
+  findings: [{ weight: 'high', category: 'primary-sources', claim: 'Paper describes X', evidence: 'Section 3.2', url: 'https://arxiv.org/abs/2024.1234', source: 'arxiv' }],
+});
+
+const VALID_JOURNAL_RECALL = JSON.stringify({
+  answer: 'Prior decision: use sequential dispatch',
+  criteriaCovered: ['decision'],
+  findings: [{ weight: 'high', category: 'decision', claim: 'Sequential chosen over parallel', evidence: 'Node 0012 relates to 0008', nodeId: '0012', nodePath: '.mma/journal/nodes/0012-dispatch-order.md' }],
+});
+
+const VALID_JOURNAL_RECORD = JSON.stringify({
+  recorded: [{ learning: 'Haiku cannot verify citations', category: 'process', nodeId: '0015', nodePath: '.mma/journal/nodes/0015-refiner-limitation.md' }],
+  failed: [],
+});
+
 const LEGACY_CRITIC = JSON.stringify({
   findings: [{ severity: 'high', category: 'bug', description: 'off by one', location: 'f.ts:10', fix: 'applied' }],
   summary: 'fixed',
@@ -32,6 +65,18 @@ describe('parseReviewerOutput', () => {
     it('extracts bare JSON', () => {
       const r = parseReviewerOutput(VALID_AUDIT, 'audit');
       expect(r.ok).toBe(true);
+    });
+
+    it('extracts LAST fenced JSON when multiple blocks present (draft + final)', () => {
+      const draft = JSON.stringify({ criteriaCovered: ['x'], findings: [{ weight: 'low', category: 'x', claim: 'draft', evidence: 'e', suggestion: 's' }] });
+      const final = JSON.stringify({ criteriaCovered: ['scope-explicitness'], findings: [{ weight: 'high', category: 'scope-explicitness', claim: 'real finding', evidence: 'quoted text', suggestion: 'fix it' }] });
+      const output = `Verification narrative...\n\`\`\`json\n${draft}\n\`\`\`\nAll verified.\n\`\`\`json\n${final}\n\`\`\``;
+      const r = parseReviewerOutput(output, 'audit');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { findings: { claim: string }[] };
+        expect(data.findings[0].claim).toBe('real finding');
+      }
     });
 
     it('fails on prose-only output', () => {
@@ -68,6 +113,66 @@ describe('parseReviewerOutput', () => {
       if (r.ok) {
         const data = r.data as { status: string };
         expect(data.status).toBe('done');
+      }
+    });
+
+    it('validates execute_plan output', () => {
+      const r = parseReviewerOutput(VALID_EXECUTE_PLAN, 'execute_plan');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { tasks: { title: string; status: string }[] };
+        expect(data.tasks).toHaveLength(1);
+        expect(data.tasks[0].status).toBe('done');
+      }
+    });
+
+    it('validates review output', () => {
+      const r = parseReviewerOutput(VALID_REVIEW, 'review');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { criteriaCovered: string[]; findings: { preExisting: boolean }[] };
+        expect(data.criteriaCovered).toContain('test-gap');
+        expect(data.findings[0].preExisting).toBe(false);
+      }
+    });
+
+    it('validates debug output', () => {
+      const r = parseReviewerOutput(VALID_DEBUG, 'debug');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { answer: string; findings: { file: string }[] };
+        expect(data.answer).toContain('off-by-one');
+        expect(data.findings[0].file).toBe('src/loop.ts');
+      }
+    });
+
+    it('validates research output', () => {
+      const r = parseReviewerOutput(VALID_RESEARCH, 'research');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { findings: { url: string; source: string }[] };
+        expect(data.findings[0].url).toContain('arxiv.org');
+        expect(data.findings[0].source).toBe('arxiv');
+      }
+    });
+
+    it('validates journal_recall output', () => {
+      const r = parseReviewerOutput(VALID_JOURNAL_RECALL, 'journal_recall');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { findings: { nodeId: string; nodePath: string }[] };
+        expect(data.findings[0].nodeId).toBe('0012');
+        expect(data.findings[0].nodePath).toContain('.mma/journal');
+      }
+    });
+
+    it('validates journal_record output', () => {
+      const r = parseReviewerOutput(VALID_JOURNAL_RECORD, 'journal_record');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { recorded: { nodeId: string }[]; failed: unknown[] };
+        expect(data.recorded).toHaveLength(1);
+        expect(data.failed).toHaveLength(0);
       }
     });
 

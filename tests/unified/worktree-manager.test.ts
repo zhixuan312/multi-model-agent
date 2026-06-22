@@ -182,14 +182,4 @@ describe('WorktreeManager', () => {
     expect(calls.map((c) => c[1].join(' '))).toEqual(['worktree prune', 'branch -D mma/delegate-abc']);
   });
 
-  it('getInfo returns current state', async () => {
-    const mgr = new WorktreeManager(mockExec(' M dirty.ts\n'));
-    const info = await mgr.getInfo('/repo/.mma/worktrees/abc', 'mma/delegate-abc');
-    expect(info).toEqual({
-      branch: 'mma/delegate-abc',
-      path: '/repo/.mma/worktrees/abc',
-      hasChanges: true,
-      merged: false,
-    });
-  });
 });

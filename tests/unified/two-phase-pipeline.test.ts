@@ -90,6 +90,59 @@ describe('runTwoPhasePipeline', () => {
     expect(result.worktree).toBeNull();
   });
 
+  it('reviewer receives implementer output + Original Task, and final output is reviewer version', async () => {
+    const implFindings = JSON.stringify({
+      criteriaCovered: ['requirement-testability'],
+      findings: [{ weight: 'high', category: 'requirement-testability', claim: 'impl found this', evidence: 'spec says X', suggestion: 'fix X' }],
+    });
+    const revFindings = JSON.stringify({
+      criteriaCovered: ['requirement-testability', 'scope-explicitness-and-decomposability'],
+      findings: [
+        { weight: 'high', category: 'requirement-testability', claim: 'impl found this', evidence: 'spec says X', suggestion: 'fix X' },
+        { weight: 'medium', category: 'scope-explicitness-and-decomposability', claim: 'reviewer added this', evidence: 'section 2', suggestion: 'clarify scope' },
+      ],
+    });
+
+    const impl = mockSession(`\`\`\`json\n${implFindings}\n\`\`\``);
+    const rev = mockSession(`\`\`\`json\n${revFindings}\n\`\`\``);
+
+    const taskPayload = '{"target":{"paths":["/project/spec.md"]},"subtype":"spec"}';
+
+    const result = await runTwoPhasePipeline({
+      type: 'audit',
+      implementerSkill: '# Audit Implement',
+      reviewerSkill: '# Audit Review',
+      taskPayload,
+      implementerProvider: mockProvider(impl),
+      reviewerProvider: mockProvider(rev),
+      implementerTier: 'complex',
+      reviewerTier: 'standard',
+      reviewPolicy: 'reviewed',
+      cwd: '/project',
+      sandboxPolicy: 'read-only',
+    });
+
+    // 1. Implementer received the skill + task payload
+    const implPrompt = impl.send.mock.calls[0][0] as string;
+    expect(implPrompt).toContain('# Audit Implement');
+    expect(implPrompt).toContain('spec.md');
+
+    // 2. Reviewer received: skill + Original Task + implementer output
+    const revPrompt = rev.send.mock.calls[0][0] as string;
+    expect(revPrompt).toContain('# Audit Review');
+    expect(revPrompt).toContain('## Original Task');
+    expect(revPrompt).toContain('spec.md');
+    expect(revPrompt).toContain('## Implementer Output');
+    expect(revPrompt).toContain('impl found this');
+
+    // 3. Final output is the REVIEWER's version (2 findings, not 1)
+    expect(result.status).toBe('done');
+    const final = result.reviewerOutput as { findings: { claim: string }[] };
+    expect(final.findings).toHaveLength(2);
+    expect(final.findings[0].claim).toBe('impl found this');
+    expect(final.findings[1].claim).toBe('reviewer added this');
+  });
+
   it('calls onPhaseChange with implementing then reviewing', async () => {
     const phases: string[] = [];
     const impl = mockSession('{"status":"done","notes":"done"}');

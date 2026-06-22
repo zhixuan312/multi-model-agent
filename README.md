@@ -312,13 +312,12 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.1
+## What's new in 5.6.2
 
-- **Unified route contract.** All 11 routes share `prompt` + `target` input, layered 200 response (`task`/`output`/`execution`/`metrics`/`raw`/`error`), and structured 202 JSON polling.
-- **Smart plan matching.** Execute-plan accepts numbered (`### 1.`), prefixed (`### Task 1:`), and unnumbered (`##`) heading formats. Fenced code blocks skipped.
-- **Reviewer completeness gate.** Execute-plan reviewer receives the full dispatched task list and implements any the implementer missed.
-- **Flat delegate.** One task per request — `prompt` + `target` + `done`, no array. Callers send multiple requests for multiple tasks.
-- **Unified `weight` field.** Replaces `severity`/`confidence` on all read-route findings (`critical`|`high`|`medium`|`low`).
+- **Refiner verification.** Reviewers can now read source files and verify implementer claims — tool-use suppression lifted, source context injected.
+- **Last-JSON-block extraction.** LLM preamble text no longer corrupts parsed output — extractors use last JSON match instead of first.
+- **Input-based commit messages.** Worktree auto-commits derive messages from task type + plan file + task titles, not generic fallback.
+- **Dead code removed.** TaskSpec trimmed (7 unused fields), commented-out code cleaned, duplicate set entry fixed.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

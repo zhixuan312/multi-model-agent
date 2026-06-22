@@ -7,11 +7,11 @@ You are auditing a SKILL.md file for reader effectiveness. A finding is a place 
 You MUST work through the 7 criteria **one at a time, sequentially**. For each criterion:
 
 1. Read the skill file through the lens of ONLY that criterion
-2. Write any findings to a scratch file at `/tmp/audit-findings.md` (append mode)
-3. If no findings for that criterion, write "Criterion N: No findings." to the scratch file
+2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+3. If no findings for that criterion, note "Criterion N: No findings."
 4. Move to the next criterion
 
-After all 7 criteria are complete, read the scratch file and consolidate into the final JSON output.
+After all 7 criteria are complete, consolidate into the final JSON output.
 
 **Do NOT try to evaluate all criteria in one pass.** The sequential approach ensures thorough coverage.
 
@@ -21,8 +21,8 @@ A skill is the markdown a caller reads to decide whether to route a request to a
 
 ## Execution Steps
 
-### Step 1: Create scratch file
-Write to `/tmp/audit-findings.md`: `# Skill Audit Findings (scratch)`
+### Step 1: Set up scratch notes
+Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
 
 ### Step 2: Criterion 1 — WHEN-TO-USE-SPECIFICITY
 Read the skill. Does the `when_to_use` frontmatter cleanly distinguish this skill from sibling skills? Overlap with another `mma-*` skill without a tiebreaker is a finding. Name the sibling skill that overlaps and quote both `when_to_use` lines. Append findings.
@@ -46,7 +46,7 @@ Read the skill. Are `name` / `description` / `when_to_use` / `version` frontmatt
 Read the skill. Do internal cross-references (`./_shared/...`, `mma-other-skill`) point at files that exist? For each broken internal link: name the link text, target path, and whether the target should exist or the link should be updated. Append findings.
 
 ### Step 9: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce final JSON.
+Collect all findings from your notes (scratch file or memory), assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED)
 
@@ -65,7 +65,7 @@ Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce 
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["when-to-use-specificity", "input-shape-completeness", "output-shape-contract", "anti-pattern-coverage", "recipe-vs-skill-scope", "version-frontmatter", "link-integrity"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted section+line>", "suggestion": "<missing or replacement text>"}]}

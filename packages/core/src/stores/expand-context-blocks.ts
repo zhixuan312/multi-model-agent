@@ -45,7 +45,6 @@ export function expandContextBlocks(
   // Strip contextBlockIds from the returned task so a second pass through
   // expandContextBlocks is a no-op (defence in depth against double-
   // expansion if runtime-plumbing calls it twice).
-  const { contextBlockIds, ...rest } = task;
-  void contextBlockIds;
+  const { contextBlockIds: _, ...rest } = task;
   return { ...rest, prompt: expanded };
 }

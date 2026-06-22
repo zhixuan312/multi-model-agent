@@ -37,7 +37,7 @@ export const clampDurationMsStage = (n: number): number =>
 export const clampDurationMsTotal = (n: number): number =>
   Math.min(Math.max(0, n), 86_400_000);
 
-// === normalize model (verbatim from packages/core/src/events/normalize.ts) ===
+// === normalize model ===
 /**
  * Normalize a raw model ID into its canonical name and family.
  *

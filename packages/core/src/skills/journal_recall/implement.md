@@ -53,7 +53,7 @@ Before finishing, verify:
 
 ## Output Format
 
-Output exactly one JSON block:
+Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"answer": "<synthesis answering the query, naming how nodes relate>", "criteriaCovered": ["decision", "design", "behavior", "process", "knowledge", "style"], "findings": [{"weight": "critical|high|medium|low", "category": "<decision|design|behavior|process|knowledge|style>", "claim": "<lesson from node>", "evidence": "<surrounding edges and related nodes>", "nodeId": "<id>", "nodePath": "<file path>"}]}

@@ -1,14 +1,18 @@
 # Journal Record — Refiner
 
-Verify the implementer's journal recording, fix issues in the worktree, re-output the answer in the same JSON format. Fix classification errors, repair graph integrity, complete missing entries — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
-
-**Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
+Verify the implementer's journal recording, fix issues in the worktree, re-output in the same JSON format. Fix classification errors, repair graph integrity, complete missing entries — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
 
 ## Critical: journal location
 
 The journal is at `.mma/journal/` relative to your working directory. Nodes are at `.mma/journal/nodes/`. Index at `.mma/journal/index.md`. Log at `.mma/journal/log.md`.
 
-**If you cannot find or read `.mma/journal/`, re-output the implementer's answer unchanged as your JSON block. Do NOT narrate your search or try alternative paths.**
+## Process
+
+1. Read the journal files the implementer created or modified.
+2. Cross-check against existing nodes and the index.
+3. Apply each check below.
+4. Your FINAL message must be a single ```json fenced block — nothing else.
+5. **If you cannot find or read `.mma/journal/`, re-output the implementer's answer unchanged as your JSON block.**
 
 ## Checks
 

@@ -35,8 +35,8 @@ function tryParse(json: string): unknown | undefined {
 }
 
 function extractJson(text: string): string | null {
-  const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (fenced) return fenced[1]!.trim();
+  const fenced = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/g)];
+  if (fenced.length) return fenced[fenced.length - 1][1]!.trim();
   const bare = text.match(/\{[\s\S]*\}/);
   if (bare) return bare[0]!.trim();
   return null;

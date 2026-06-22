@@ -18,10 +18,10 @@ const C = (checkId, status, detail = '') => ({ checkId, status, detail });
 // Quality assertions per task type. Returns [status, detail].
 function extractFindingsFromOutput(output) {
   if (!output) return [];
-  const m = output.match(/```json\s*([\s\S]*?)```/);
-  if (!m) return [];
+  const blocks = [...output.matchAll(/```json\s*([\s\S]*?)```/g)];
+  if (!blocks.length) return [];
   try {
-    const parsed = JSON.parse(m[1]);
+    const parsed = JSON.parse(blocks[blocks.length - 1][1]);
     return parsed.findings ?? [];
   } catch { return []; }
 }
@@ -180,6 +180,20 @@ export function verify(rec) {
   if (e.kind === 'read' || e.kind === 'write') {
     const [qStatus, qDetail] = checkQuality(e.type, e.subtype, r);
     out.push(C('quality', qStatus, qDetail));
+  }
+
+  // ⑤b pipeline-collaboration — did the reviewer receive implementer output?
+  //    The two-phase pipeline should produce non-empty implementer output AND
+  //    non-empty reviewer output. If either is empty, the collaborative pipeline
+  //    is broken (reviewer rubber-stamped or implementer produced nothing).
+  if ((e.kind === 'read' || e.kind === 'write') && e.reviewPolicy !== 'none' && e.type !== 'orchestrate') {
+    const rawImpl = r?.raw?.implementer ?? '';
+    const rawRev = r?.raw?.reviewer ?? '';
+    const implLen = typeof rawImpl === 'string' ? rawImpl.length : 0;
+    const revLen = typeof rawRev === 'string' ? rawRev.length : 0;
+    const bothPresent = implLen > 50 && revLen > 50;
+    out.push(C('pipeline-collaboration', bothPresent ? 'PASS' : 'FAIL',
+      `implementer=${implLen}chars reviewer=${revLen}chars — both must produce substantive output`));
   }
 
   // ⑥ contextBlockId

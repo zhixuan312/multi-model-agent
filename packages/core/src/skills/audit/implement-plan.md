@@ -44,86 +44,83 @@ Before ANY finding on perspectives 2-5, classify each symbol mention. Confusing 
 You MUST work through the 12 perspectives **one at a time, sequentially**. For each perspective:
 
 1. Read the plan through the lens of ONLY that perspective
-2. Write any findings to a scratch file at `/tmp/audit-findings.md` (append mode)
-3. If no findings for that perspective, write "Perspective N: No findings." to the scratch file
+2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+3. If no findings for that perspective, note "Perspective N: No findings."
 4. Move to the next perspective
 
-After all 12 perspectives are complete, read the scratch file and consolidate into the final JSON output.
+After all 12 perspectives are complete, consolidate into the final JSON output.
 
 **Do NOT try to evaluate all perspectives in one pass.** The sequential approach ensures thorough coverage — each perspective gets your full attention before moving on.
 
 ## Execution Steps
 
-### Step 1: Create scratch file
-Write to `/tmp/audit-findings.md`:
-```
-# Plan Audit Findings (scratch)
-```
+### Step 1: Set up scratch notes
+Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
 
 ### Step 2: Perspective 1 — PATH EXISTENCE
 Every "Files:" line must resolve. Sub-rules: (a) `Modify: <path>` -> file MUST exist (missing = CRITICAL). (b) `Test: <path>` or `Test: <path> (new)` -> parent dir MUST exist; test file itself may or may not. (c) `New: <path>` or `Create: <path>` -> parent dir MUST exist AND file MUST NOT exist (already exists = MEDIUM, plan needs trimming).
 
-Use `read_file` or `grep` to verify each path. Append findings to `/tmp/audit-findings.md`.
+Use `read_file` or `grep` to verify each path. Record findings.
 
 ### Step 3: Perspective 2 — SYMBOL EXISTENCE
 For every method/type/class/function/imported identifier in code blocks: FIRST classify as USE or DEFINE. ONLY flag USE-intent mentions where grep against the named source file returns no match. Include nearest match (Levenshtein) so the plan can be fixed in one edit.
 
-Use `grep` to verify each USE-intent symbol. Append findings to scratch file.
+Use `grep` to verify each USE-intent symbol. Record findings.
 
 ### Step 4: Perspective 3 — SIGNATURE MATCH
 When the plan's code uses a method with specific parameters or expects a specific return shape, the actual source signature must match. Same intent rule: ONLY flag USE-intent (calls/imports). Plan DEFINES a method? That's the deliverable — don't flag. Flag if a call appears BEFORE the interface-extension step within the task's sequence (out-of-order, see perspective 6).
 
-Use `grep` / `read_file` to verify actual signatures. Append findings to scratch file.
+Use `grep` / `read_file` to verify actual signatures. Record findings.
 
 ### Step 5: Perspective 4 — IMPORT GRAPH
 Every `import { X } from '...'` in code blocks must resolve under the intent rule. Imports of NEW modules the task creates (listed in "Files: New:") are DEFINE-adjacent. But DO flag if the task forgets to add the corresponding `exports` entry in the workspace package.json (HIGH).
 
-Use `grep` / `read_file` to verify imports. Append findings to scratch file.
+Use `grep` / `read_file` to verify imports. Record findings.
 
 ### Step 6: Perspective 5 — TEST HARNESS AVAILABILITY
 Every helper/factory/fixture the test USES must exist at the named path. Verify via grep. If the task explicitly adds a new option to an existing helper, that's DEFINE — don't flag the new option. DO flag if test code uses the new option BEFORE the task step that adds it. Helper truly missing = HIGH.
 
-Use `grep` to verify test helpers. Append findings to scratch file.
+Use `grep` to verify test helpers. Record findings.
 
 ### Step 7: Perspective 6 — STEP SEQUENCE WITHIN TASK
 Numbered steps must be executable in order. No step depends on output from a later step. MEDIUM unless dependency would halt execution (then HIGH).
 
-Analyze step ordering within each task. Append findings to scratch file.
+Analyze step ordering within each task. Record findings.
 
 ### Step 8: Perspective 7 — CROSS-TASK DEPENDENCIES
 When task B's code uses something task A introduces, the plan's task ordering must reflect the dependency. B before A = CRITICAL. Dependency exists but undeclared = MEDIUM.
 
-Trace inter-task symbol/file dependencies. Append findings to scratch file.
+Trace inter-task symbol/file dependencies. Record findings.
 
 ### Step 9: Perspective 8 — VERIFICATION COMMAND VALIDITY
 Every "Run: <command>" / "verify" instruction must work with the project's actual tooling. Plan says `npm run validate-things` but no such script exists? CRITICAL. Vague verification ("run the test") with no concrete command? MEDIUM.
 
-Use `grep` / `read_file` on `package.json` to verify commands exist. Append findings to scratch file.
+Use `grep` / `read_file` on `package.json` to verify commands exist. Record findings.
 
 ### Step 10: Perspective 9 — TASK GRANULARITY
 Each task should be implementable in one focused sub-agent run. Signals of oversized tasks: touches >3 source files; >40 net lines of diff; mixes unrelated concerns; >6 numbered steps. HIGH when task clearly exceeds standard-tier capacity; MEDIUM when borderline. Suggested fix: split into atomic sub-tasks.
 
-Analyze task size from plan text only (no codebase tools needed). Append findings to scratch file.
+Analyze task size from plan text only (no codebase tools needed). Record findings.
 
 ### Step 11: Perspective 11 — PLACEHOLDER LANGUAGE
 Scan for prose patterns that leave a literal-following worker unable to act. Signals: `TBD`, `TODO`, `implement later`, `fill in details`, `Add appropriate error handling`, `add validation`, `handle edge cases`, `Similar to Task N` (without repeating code), `Write tests for the above` (without test code); steps describing what to do without showing how (missing code block); verification like `make sure it works`. HIGH on load-bearing steps that cannot execute without invention; MEDIUM on vague verification; LOW on cosmetic placeholders in non-load-bearing prose.
 
-Scan plan text only. Append findings to scratch file.
+Scan plan text only. Record findings.
 
 ### Step 12: Perspective 12 — PLAN SKELETON
 The plan must carry required structural scaffolding. Flag: missing top-level header (`Goal:` / `Architecture:` / `Tech Stack:`); missing File Structure section; a task with no `Files:` block; a task with no commit step. HIGH when missing structure forces ambiguous file-scope decisions; MEDIUM for missing header fields and per-task `Files:` blocks; LOW for missing commit steps.
 
-Scan plan text only. Append findings to scratch file.
+Scan plan text only. Record findings.
 
 ### Step 13: Perspective 10 — SPEC COVERAGE
 **Only if a spec context block is present in your context.** If no spec is available, write "Perspective 10: No spec in context — no findings for this criterion." to the scratch file and skip.
 
 Every load-bearing spec requirement maps to at least one plan task, and no task implements something the spec did not ask for. For unmapped load-bearing requirements: CRITICAL. For supporting requirements (test coverage, observability, non-functional): HIGH. For scope-creep: HIGH if substantive (>1 task or new deliverable), MEDIUM if minor. Implicit mapping (task plausibly covers requirement but doesn't say so) = MEDIUM with suggested fix: add "Covers spec requirement: <quote>" line.
 
-Append findings to scratch file.
+Record findings.
 
 ### Step 14: Consolidate
-Read `/tmp/audit-findings.md`. Collect all findings across all perspectives, assign per-task verdicts, produce the final JSON output.
+Collect all findings from your notes (scratch file or memory) across all perspectives, assign per-task verdicts. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
 ## Evidence Grounding (REQUIRED — varies by perspective group)
 
@@ -174,7 +171,7 @@ Findings on perspectives 1-8 missing source-side evidence are downgraded to LOW 
 
 ## Output Format
 
-After consolidating all perspective passes, output exactly one JSON block:
+After consolidating all perspective passes, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
 {"criteriaCovered": ["path-existence", "symbol-existence", "signature-match", "import-graph", "test-harness", "step-sequence", "cross-task-deps", "verify-cmd", "task-granularity", "spec-coverage", "placeholder-language", "plan-skeleton"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<plan claim + source reality + task ID>", "suggestion": "<concrete edit>"}]}

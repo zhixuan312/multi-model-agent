@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.2] - 2026-06-22
+
+**Refiner verification + JSON extraction + dead code cleanup.** Reviewers can now read source files and run tools (tool-use suppression lifted). Last-JSON-block extraction prevents LLM preamble from corrupting parsed output. Dead code removed across TaskSpec, provider-factory, and plan-task-matcher. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- Reviewer source-context injection: reviewer prompt receives plan file path + context blocks so it can verify implementer claims against real files.
+- Multi-block JSON extraction test for reviewer output parser.
+- Pipeline collaboration check in smoke test: verifies reviewer can catch implementer mistakes.
+
+### Fixed
+- JSON block extraction uses last match (not first) — LLM preamble blocks no longer corrupt `extractStructuredBlock`, `tryParseJson`, and `parseReviewerOutput`.
+- Provider-agnostic scratch files: skills reference `/tmp/` paths instead of hardcoded provider-specific paths.
+- Empty `.mma/` directory cleaned up after worktree merge (both merge and no-changes paths).
+- Commit messages built from task INPUT (type + plan file + task titles) instead of worker output.
+- Duplicate entry in `STRUCTURAL_HEADINGS` set removed.
+- Stale test mock data updated (old delegate/execute_plan schema → new).
+- 3 doc inaccuracies fixed (core README task type, server README DeepSeek URL, DIRECTION.md agentTier).
+
+### Removed
+- Dead `TaskSpec` fields: `filePaths`, `researchQuestion`, `background`, `readTarget`, `research` object, `taskDescriptor`, `planBasename`.
+- Commented-out code in `provider-factory.ts`.
+
 ## [5.6.1] - 2026-06-22
 
 **Route contract standardization.** All 11 task types now share uniform input naming (`prompt` + `target`), a layered 200 response envelope (`task`/`output`/`execution`/`metrics`/`raw`/`error`), and structured 202 JSON polling. Delegate flattened to single-task. Execute-plan gains smart heading matching and reviewer completeness gate. `SCHEMA_VERSION` unchanged (still 6).

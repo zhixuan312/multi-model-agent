@@ -1,8 +1,13 @@
 # Debug — Refiner
 
-Verify the implementer's debug investigation, improve quality, re-output the answer in the same JSON format. Remove errors, add missing trace steps, fix cause/symptom confusion — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
+Verify the implementer's debug investigation against the codebase, improve quality, re-output in the same JSON format. Remove errors, add missing trace steps, fix cause/symptom confusion — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
 
-**Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
+## Process
+
+1. Read files cited in the trace chain — verify file:line citations and that the cause is upstream of the symptom.
+2. Re-read the failure description in the Original Task section. Verify the root cause addresses the reported failure.
+3. Apply each check below.
+4. Your FINAL message must be a single ```json fenced block — nothing else.
 
 ## Checks
 
@@ -14,7 +19,7 @@ Verify the implementer's debug investigation, improve quality, re-output the ans
 
 4. **Falsifier** — at least one finding should describe a concrete way to verify the fix (specific assertion, output, or observable behavior). Add a falsifier finding if missing.
 
-5. **Evidence quality** — file:line citations from files read this session, not hallucinated. Remove fabricated citations.
+5. **Evidence quality** — read cited files to verify file:line citations are real and content matches. Remove fabricated citations.
 
 6. **Fix feasibility** — any proposed-fix finding addresses the CAUSE, not the symptom. Fix is read-only (proposed, NOT applied). Remove applied changes.
 

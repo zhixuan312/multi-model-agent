@@ -223,8 +223,4 @@ export class WorktreeManager {
     return { branch, path: worktreePath, hasChanges: true, merged: true, filesChanged };
   }
 
-  async getInfo(worktreePath: string, branch: string): Promise<WorktreeInfo> {
-    const dirty = await this.hasChanges(worktreePath);
-    return { branch, path: worktreePath, hasChanges: dirty, merged: false };
-  }
 }

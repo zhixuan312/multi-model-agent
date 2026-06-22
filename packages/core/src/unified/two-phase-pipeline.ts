@@ -1,10 +1,10 @@
 import type { Provider, Session, TurnResult } from '../types/run-result.js';
 import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
-
-const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
 import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
+
+const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
 
 export interface PipelineInput {
   type: TaskType;
@@ -62,8 +62,8 @@ export interface PipelineResult {
 }
 
 function extractStructuredBlock(raw: string): string {
-  const fenceMatch = raw.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (fenceMatch) return fenceMatch[1]!.trim();
+  const fenced = [...raw.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/g)];
+  if (fenced.length) return fenced[fenced.length - 1][1]!.trim();
   return raw;
 }
 
@@ -201,7 +201,8 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const completenessSection = input.dispatchedTasks?.length
       ? `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${input.dispatchedTasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
       : '';
-    const revPrompt = `${input.reviewerSkill}${completenessSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
+    const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
+    const revPrompt = `${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });
