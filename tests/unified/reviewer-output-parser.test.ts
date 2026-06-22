@@ -67,6 +67,18 @@ describe('parseReviewerOutput', () => {
       expect(r.ok).toBe(true);
     });
 
+    it('extracts LAST fenced JSON when multiple blocks present (draft + final)', () => {
+      const draft = JSON.stringify({ criteriaCovered: ['x'], findings: [{ weight: 'low', category: 'x', claim: 'draft', evidence: 'e', suggestion: 's' }] });
+      const final = JSON.stringify({ criteriaCovered: ['scope-explicitness'], findings: [{ weight: 'high', category: 'scope-explicitness', claim: 'real finding', evidence: 'quoted text', suggestion: 'fix it' }] });
+      const output = `Verification narrative...\n\`\`\`json\n${draft}\n\`\`\`\nAll verified.\n\`\`\`json\n${final}\n\`\`\``;
+      const r = parseReviewerOutput(output, 'audit');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const data = r.data as { findings: { claim: string }[] };
+        expect(data.findings[0].claim).toBe('real finding');
+      }
+    });
+
     it('fails on prose-only output', () => {
       const r = parseReviewerOutput('Looks fine to me.', 'audit');
       expect(r.ok).toBe(false);
