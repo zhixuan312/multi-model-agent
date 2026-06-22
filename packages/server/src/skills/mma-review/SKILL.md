@@ -66,7 +66,7 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 
 Either `target.inline` or `target.paths` (or both) must be provided.
 
-> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ## Full example
 
@@ -87,26 +87,7 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Review complete; 3 findings.",
-  "findings": [
-    { "id": "F1", "weight": "critical", "category": "test-gap",
-      "claim": "login.ts has no test for null username edge case.",
-      "evidence": "Worker read login.ts and grepped for test files — no null-case test found.",
-      "suggestion": "Add test case: `login(null) throws ValidationError`.",
-      "source": "reviewer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-review` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -158,7 +139,7 @@ Self-review and cross-model review are not the same thing. The whole reason to d
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

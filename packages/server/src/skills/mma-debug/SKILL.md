@@ -55,7 +55,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 | `target.paths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 
-> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ## Full example
 
@@ -76,26 +76,7 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Investigation complete; 1 finding.",
-  "findings": [
-    { "id": "F1", "weight": "high", "category": "root-cause",
-      "claim": "bcrypt binding fails on non-ASCII input in the Docker image.",
-      "evidence": "Worker reproduced the failure with `pass='café'`; strace shows EINVAL on encode call.",
-      "suggestion": "Normalize input to NFC form before calling bcrypt.",
-      "source": "implementer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-debug` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -152,7 +133,7 @@ Often the obvious cause isn't the real one. **Fix:** a 30-second debug pass cost
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

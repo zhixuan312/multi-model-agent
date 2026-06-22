@@ -97,13 +97,9 @@ The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
-| `202 text/plain` | Still pending — body is the running headline string |
+| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
 | `200 application/json` | Terminal — body is the task envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
-
-### GET /task/:taskId?taskIndex=N — single task slice
-
-Same envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 
@@ -132,7 +128,7 @@ Anti-pattern alert: **`full-batch-redispatch`** (AP4). Re-dispatching the entire
 TTL elapsed → original task specs are gone. **Fix:** re-dispatch fresh; the retry endpoint returns 404.
 
 ❌ **Retrying without addressing the root cause**
-A flaky task that failed once will likely fail again. **Fix:** investigate (`mma-debug` or read the original `result.error.message`), then retry — or escalate `agentType` to `complex` by re-dispatching.
+A flaky task that failed once will likely fail again. **Fix:** investigate (`mma-debug` or read the original `result.error.message`), then retry — or escalate `agentTier` to `complex` by re-dispatching.
 
 ❌ **Confusing the new and original `taskId`**
 Retry produces a NEW taskId; polling the original returns the old terminal state. **Fix:** save the retry's `taskId` and poll that one.
@@ -142,7 +138,7 @@ Retry preserves the ORIGINAL config (prompt, target, reviewPolicy). **Fix:** if 
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (`commitSha` + changed files). The per-task result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 Note: a re-run **read-route** task registers its own terminal context block (`contextBlockId`); re-run write tasks register none. Original-task blocks remain intact and are not overwritten.
 

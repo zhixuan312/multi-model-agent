@@ -53,12 +53,12 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 |---|---|---|---|
 | `target.inline` | string | no | Inline document content |
 | `subtype` | `'default' \| 'plan' \| 'spec' \| 'skill'` | no (defaults to `'default'`) | See "Picking subtype" below. |
-| `target.paths` | string[] | no | Files to audit (one worker per file, parallel) |
+| `target.paths` | string[] | no | Files to audit (one audit per dispatch) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
 Either `target.inline` or `target.paths` (or both) must be provided.
 
-> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ### Picking subtype
 
@@ -140,26 +140,7 @@ RESULT=$(curl -f --show-error -s -X POST \
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Plan audit complete; 2 findings.",
-  "findings": [
-    { "id": "F1", "weight": "high", "category": "path-existence",
-      "claim": "Step 3 names `src/utils/foo.ts` which does not exist.",
-      "evidence": "Worker grepped for the file under cwd — no match found.",
-      "suggestion": "Use `src/utils/bar.ts` instead.",
-      "source": "implementer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-audit` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -215,7 +196,7 @@ Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 fin
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

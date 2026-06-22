@@ -14,7 +14,7 @@ The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
-| `202 text/plain` | Still pending — body is the running headline string (e.g. `"1/2 running, 47s elapsed"`) |
+| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
 | `200 application/json` | Terminal — body is the layered envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
 
@@ -37,10 +37,6 @@ Read the envelope by the shape of `error`:
 |---|---|
 | `error` is `null` or absent | Task succeeded — read `output` |
 | `error` is a real object (with `code` / `message`) | Task failed — read `error.code` + `error.message` |
-
-### GET /task/:taskId?taskIndex=N — single task slice
-
-Same 6-field envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 

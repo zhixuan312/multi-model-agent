@@ -74,7 +74,7 @@ If the Semantic Scholar API key is not configured:
 | `prompt` | string | yes | 20+ chars — the research question; context can be inline or via contextBlockIds |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` for large background context |
 
-> Worker tier is hardcoded `complex`. Sending `agentType` or `tools` is rejected with HTTP 400.
+> Worker tier is hardcoded `complex`. Sending `agentTier` or `tools` is rejected with HTTP 400.
 
 The `default` subtype's criteria target primary-source preference, practitioner consensus, recency, counter-perspectives, and cross-domain analogues — the worker is bibliographic, not opinionated.
 
@@ -100,7 +100,7 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

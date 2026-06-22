@@ -49,7 +49,7 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta recall |
 | `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'full'` and `'no-shell'` are rejected — recall is read-only |
 
-> Worker tier for `mma-journal-recall` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-journal-recall` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 **Why `prompt` is vague, not keyword-filtered:**
 
@@ -105,7 +105,7 @@ If the project hasn't used `mma-journal-record`, the journal is empty. The worke
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry / journal-record) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry / journal-record) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

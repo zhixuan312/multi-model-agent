@@ -1,7 +1,7 @@
 ---
 name: mma-delegate
-description: Use when you have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk and you want them to run on cheap workers in parallel instead of consuming main-context tokens
-when_to_use: You have ad-hoc implementation or research tasks (no plan file on disk) AND mma is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — workers are cheaper, parallel-safe, and keep main context free. If a plan file exists → use mma-execute-plan. If the task is audit / review / verify / debug / investigate → use the matching specialized skill.
+description: Use when you have an ad-hoc implementation or research task WITHOUT a plan file on disk and you want it to run on a cheap worker instead of consuming main-context tokens
+when_to_use: You have ad-hoc implementation or research tasks (no plan file on disk) AND mma is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — workers are cheaper and keep main context free. If a plan file exists → use mma-execute-plan. If the task is audit / review / verify / debug / investigate → use the matching specialized skill.
 version: "0.0.0-unreleased"
 ---
 
@@ -11,19 +11,19 @@ version: "0.0.0-unreleased"
 
 Dispatch a single ad-hoc task to a worker. The request is flat — prompt, target paths, acceptance criteria, and optional context blocks.
 
-**Core principle:** Workers run on cheap providers; the main agent consumes only the structured per-task report. Parallelize freely as long as tasks don't write the same files.
+**Core principle:** Workers run on cheap providers; the main agent consumes only the structured per-task report. Each request dispatches one task; callers send multiple requests for multiple tasks.
 
 ## When to Use
 
 **Use when:**
-- 2+ unrelated implementation tasks (parallel speedup)
+- An implementation task you want off the main context (send one request per task)
 - A research task you'd otherwise spend tokens reading and grepping
 - A focused refactor that fits in one prompt
 - The task does NOT match audit / review / verify / debug / investigate (those have specialized skills)
 
 **Don't use when:**
 - A plan file exists on disk → `mma-execute-plan` (descriptors auto-match plan headings)
-- Two tasks write the same file → dispatch sequentially, not in one batch (workers race)
+- Two sequential tasks that share files → dispatch one after the other (each is a separate request)
 - The work needs to read across many files for synthesis only → `mma-investigate` is cheaper (read-only)
 
 ## Endpoint
@@ -87,13 +87,9 @@ The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
-| `202 text/plain` | Still pending — body is the running headline string |
+| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
 | `200 application/json` | Terminal — body is the task envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
-
-### GET /task/:taskId?taskIndex=N — single task slice
-
-Same envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 
@@ -130,7 +126,7 @@ The reviewer sees the full diff with the original prompt as context. Reading inl
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (`commitSha` + changed files). The per-task result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
 @include _shared/error-handling.md

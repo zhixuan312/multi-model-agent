@@ -84,7 +84,7 @@ If a task needs 3+ file reads or any grep, it goes to a worker. Inline `Read` is
 
 ### C2 — Parallel for independence, sequential for iteration
 
-Independent fan-out (5 unrelated audits, 5 unrelated bugs) → parallel batch. Coupled rounds where round N's fix produces round N+1's input (audit → fix → re-audit, debug → fix → verify) → sequential.
+Independent fan-out (5 unrelated audits, 5 unrelated bugs) → multiple dispatches. Coupled rounds where round N's fix produces round N+1's input (audit → fix → re-audit, debug → fix → verify) → sequential.
 
 ### C3 — Shared content lives in a context block, not in caller tokens
 
@@ -112,9 +112,9 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 
 2. **`inline-labor-leakage`** — Caller does 3+ `Read` calls, or any `grep`, in main context "just to understand the situation." Main tokens get burned on labor; the answer the caller actually needs is one paragraph of synthesis. Corrective: `mma-investigate` for codebase Q&A; if the goal is implementation, jump straight to `mma-delegate` with file paths and let the worker read.
 
-3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 task prompts in one batch (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
+3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 separate task dispatches (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
 
-4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multi-task `mma-delegate` batches; `mma-retry` is the corrective there too.)
+4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multiple `mma-delegate` dispatches; `mma-retry` is the corrective there too.)
 
 ## Preflight: auto-start the daemon if it is not running
 
@@ -139,15 +139,15 @@ export MMA_AUTH_TOKEN=$(mma print-token)
 
 Every request requires `Authorization: Bearer $MMA_AUTH_TOKEN`. The token is generated once on first `mma serve` and persists at `~/.mma/auth-token`. It only changes if the file is manually deleted.
 
-## Worker tier: `agentType`
+## Worker tier: `agentTier`
 
-Only `mma-delegate` accepts `agentType: "standard" | "complex"` per task — default `"standard"` (cheaper, faster). Pick `"complex"` when:
+Only `mma-delegate` accepts `agentTier: "standard" | "complex"` per task — default `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
 - A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"timeout"`.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
-Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
+Every other route hardcodes its tier and rejects `agentTier` with HTTP 400:
 
 | Route | Hardcoded tier |
 |---|---|
@@ -158,7 +158,7 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 | `mma-investigate` | `complex` |
 | `mma-explore` | `complex` (all three workers — internal, external, synthesizer) |
 
-If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
+If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentTier: "complex"`.
 
 ## Context block defaults
 
@@ -172,7 +172,7 @@ Context blocks are immutable after creation. To update content, register a new b
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 
@@ -181,7 +181,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 ## General flow
 
 1. Call the matching `mma-*` skill → receive `{ taskId, statusUrl }`.
-2. Poll `GET /task/:taskId`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
+2. Poll `GET /task/:taskId`: `202 application/json` while pending (body is structured progress JSON), `200 application/json` on terminal.
 3. Read `output` / `error` from the layered terminal envelope.
 
 ## Common pitfalls
