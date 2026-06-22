@@ -36,7 +36,7 @@ describe('session cache invariant — one open per (task, tier)', () => {
       const dispatch = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
+        body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(dispatch.status).toBe(202);
       const { taskId } = (await dispatch.json()) as { taskId: string };

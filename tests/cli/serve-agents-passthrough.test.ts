@@ -45,13 +45,13 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
     const handle = await startServe(config, (() => {}) as (code: number) => never);
 
     try {
-      const res = await fetch(`http://127.0.0.1:${handle.port}/delegate?cwd=${encodeURIComponent(dir)}`, {
+      const res = await fetch(`http://127.0.0.1:${handle.port}/task?cwd=${encodeURIComponent(dir)}`, {
         method: 'POST',
         headers: {
           'X-MMA-Main-Model': 'claude-opus-4-7', 'X-MMA-Client': 'claude-code', Authorization: 'Bearer test-token',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ tasks: [{ prompt: 'noop' }] }),
+        body: JSON.stringify({ type: 'delegate', prompt: 'noop' }),
       });
       // Before the regression fix: 503 no_agent_config.
       // After: real handler accepts → 202 { batchId }. 400/422 also acceptable

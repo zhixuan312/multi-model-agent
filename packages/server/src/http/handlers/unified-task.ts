@@ -8,6 +8,9 @@ import {
   loadSkill,
   resolveAgent,
   runTwoPhasePipeline,
+  parsePlanHeadings,
+  matchTasks,
+  MatchError,
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model-agent-core';
@@ -34,6 +37,12 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+function tryParseJson(raw: string): unknown {
+  const match = raw.match(/```json\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+  if (!match) return raw;
+  try { return JSON.parse(match[1]); } catch { return raw; }
+}
+
 /** Map unified TaskType (underscores) to wire Route (hyphens). */
 function taskTypeToRoute(type: TaskType): Route {
   const map: Record<string, Route> = {
@@ -55,7 +64,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       'You have verified every criterion the implementer was supposed to cover.',
       'You have checked for hallucinated findings (claims without evidence in the source material).',
       'You have validated evidence quality (every finding cites actual file:line or quoted text).',
-      'You have checked severity calibration against the skill definitions.',
+      'You have checked weight calibration against the skill definitions.',
       'You have verified the implementer\'s draft and output the refined answer in the same JSON format as the implementer.',
       'No findings, verdict, or meta-commentary -- only the final answer in a ```json fenced block.',
     ].join(' ');
@@ -78,7 +87,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
         'You have applied ALL 5 investigation perspectives: direct-symbol-trace, caller-analysis, test-driven, cross-file dependency-map, documentation/comment-lens.',
         'Every finding cites file:line from files you actually read (no training-data citations).',
         'Absent things are evidenced with "searched <pattern> in <path>, no matches."',
-        'You have calibrated confidence (high/medium/low) based on evidence strength.',
+        'You have calibrated weight (critical/high/medium/low) based on evidence strength.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'review':
@@ -437,7 +446,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     }
 
     const typeConfig = getTypeConfig(input.type);
-    const implTier = input.agentTier ?? typeConfig.defaultTier;
+    const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
     const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
 
@@ -470,8 +479,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     const blockIds = input.contextBlockIds ?? [];
     const contextBlockStore = pc.contextBlocks;
-    // Destructure to exclude control fields from ...payload (worker sees only task content)
-    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds, contextBlockIds: _blocks, ...payload } = input;
+    const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
+    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, ...payload } = input as Record<string, unknown>;
 
     // Register task in TaskRegistry and return 202 immediately
     const taskId = randomUUID();
@@ -494,15 +503,42 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const implementerGoal = buildGoalCondition(input.type, 'implementer', skills.implement);
           const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
 
+          // ── Execute-plan pre-processing: parse plan + smart match ──
+          if (input.type === 'execute_plan') {
+            const epPayload = payload as { target: { paths: string[] }; tasks: string[] };
+            const planPath = epPayload.target.paths[0];
+            const resolvedPlanPath = path.isAbsolute(planPath) ? planPath : path.resolve(cwd, planPath);
+            let planContent: string;
+            try {
+              planContent = fs.readFileSync(resolvedPlanPath, 'utf-8');
+            } catch {
+              deps.taskRegistry.fail(taskId, { code: 'plan_not_found', message: `Plan file not found: ${planPath}` });
+              return;
+            }
+            const headings = parsePlanHeadings(planContent);
+            let matched;
+            try {
+              matched = matchTasks(headings, epPayload.tasks);
+            } catch (err) {
+              if (err instanceof MatchError) {
+                deps.taskRegistry.fail(taskId, { code: err.code, message: err.message, ...(err.matches && { matches: err.matches }) });
+                return;
+              }
+              throw err;
+            }
+            const entry = deps.taskRegistry.get(taskId);
+            if (entry) entry.totalTasks = matched.length;
+          }
+
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
           let researchCtx: ResearchContext | null = null;
           let enrichedPayload = JSON.stringify(payload, null, 2);
 
           if (input.type === 'research') {
-            const researchPayload = payload as { researchQuestion: string; background: string };
+            const researchPayload = payload as { prompt: string };
             researchCtx = await prepareResearchContext(
-              researchPayload.researchQuestion,
-              researchPayload.background,
+              researchPayload.prompt,
+              '',
               implAgent.provider,
               deps.config.research,
               taskId,
@@ -523,6 +559,10 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             }
           }
 
+          const onPhaseChange = (phase: 'implementing' | 'reviewing') => {
+            deps.taskRegistry.setPhase(taskId, phase);
+          };
+
           const result = await runTwoPhasePipeline({
             type: input.type,
             implementerSkill: skills.implement,
@@ -540,6 +580,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             implementerGoal,
             reviewerGoal,
             bus: deps.bus,
+            onPhaseChange,
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
           });
@@ -572,41 +613,58 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const costDeltaVsMain = mainEquivalentUSD !== null ? mainEquivalentUSD - totalActualCostUSD : null;
 
           const resultObj = {
-            headline: `${input.type}: ${result.status}`,
-            results: [{
+            task: {
               taskId,
               type: input.type,
+              ...(input.type === 'audit' && (input as Record<string, unknown>).subtype
+                ? { subtype: (input as Record<string, unknown>).subtype }
+                : {}),
               status: result.status,
-              report: {
-                implementer: result.implementerOutput,
-                reviewer: result.reviewerOutput,
-                reviewerParseError: result.reviewerParseError,
-              },
-              sessions: result.sessions,
-              worktree: result.worktree,
-              cost: {
-                ...result.cost,
-                mainEquivalentUsd: mainEquivalentUSD,
-                savedVsMainUsd: costDeltaVsMain,
-              },
-              contextBlockId,
-              error: null,
-            }],
-            taskTimings: { wallClockMs: durationMs, sumOfTaskMs: durationMs, estimatedParallelSavingsMs: 0 },
-            costSummary: {
-              totalActualCostUSD,
-              totalCostDeltaVsMainUSD: costDeltaVsMain,
-              totalMainEquivalentUSD: mainEquivalentUSD,
             },
-            structuredReport: {
-              summary: result.reviewerRaw ?? result.implementerOutput,
-              workerStatus: result.status,
+            output: {
+              summary: result.reviewerOutput ?? tryParseJson(result.reviewerTurn?.output ?? result.implementerOutput),
               filesChanged: result.implementerTurn.filesWritten,
+              contextBlockId,
             },
-            sourcesUsed: researchCtx?.sourcesUsed ?? [],
-            error: result.status === 'failed'
-              ? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' }
-              : { kind: 'not_applicable' as const, reason: 'task succeeded' },
+            execution: {
+              sessions: {
+                implementer: result.sessions.implementer.sessionId,
+                reviewer: result.sessions.reviewer?.sessionId ?? null,
+              },
+              worktree: result.worktree
+                ? {
+                    merged: result.status !== 'failed',
+                    branch: result.worktree.branch,
+                    ...(result.status === 'failed' ? { path: result.worktree.path } : {}),
+                  }
+                : null,
+            },
+            metrics: {
+              totalDurationMs: durationMs,
+              totalCostUsd: totalActualCostUSD,
+              implementer: {
+                durationMs: result.implementerTurn.durationMs,
+                costUsd: result.cost.implementerUsd,
+                usage: result.implementerTurn.usage,
+              },
+              reviewer: result.reviewerTurn ? {
+                durationMs: result.reviewerTurn.durationMs,
+                costUsd: result.cost.reviewerUsd!,
+                usage: result.reviewerTurn.usage,
+              } : null,
+              totalUsage: totalUsage,
+              mainEquivalentCostUsd: mainEquivalentUSD,
+              savedVsMainCostUsd: costDeltaVsMain,
+            },
+            raw: {
+              implementer: result.implementerOutput,
+              reviewer: result.reviewerTurn?.output ?? null,
+            },
+            error: result.reviewerParseError
+              ? { code: 'reviewer_parse_failed' as const, message: result.reviewerParseError }
+              : result.status === 'failed'
+                ? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' }
+                : null,
           };
 
           // Emit telemetry via the bus — TelemetryUploader picks up the
@@ -678,8 +736,19 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
     if (deps.taskRegistry.isTerminal(taskId)) {
       sendJson(res, 200, entry.result ?? { taskId, status: entry.state, error: null });
     } else {
-      res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end(entry.runningHeadline || 'Running...');
+      const now = Date.now();
+      const polling: Record<string, unknown> = {
+        taskId,
+        status: 'running',
+        phase: entry.phase ?? 'implementing',
+        elapsedMs: now - entry.startedAt,
+        phaseElapsedMs: entry.phaseStartedAt ? now - entry.phaseStartedAt : now - entry.startedAt,
+        startedAt: new Date(entry.startedAt).toISOString(),
+      };
+      if (entry.tool === 'execute_plan' && entry.totalTasks != null) {
+        polling.totalTasks = entry.totalTasks;
+      }
+      sendJson(res, 202, polling);
     }
   };
 }

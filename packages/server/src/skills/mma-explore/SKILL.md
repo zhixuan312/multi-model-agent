@@ -86,28 +86,26 @@ The main agent (you) issues a single message with three parallel tool calls:
 
 ```
 [parallel tool use]
-  mma-investigate    { question: "How does our streaming JSON parser handle backpressure?", filePaths: ["src/parsers/"] }
-  mma-research       { researchQuestion: "State-of-the-art streaming JSON parsers with backpressure?", background: "We use a single-pass push parser." }
-  mma-journal-recall { query: "what have we learned about streaming-parser backpressure or buffering tradeoffs?" }
+  mma-investigate    { prompt: "How does our streaming JSON parser handle backpressure?", target: { paths: ["src/parsers/"] } }
+  mma-research       { prompt: "State-of-the-art streaming JSON parsers with backpressure?" }
+  mma-journal-recall { prompt: "what have we learned about streaming-parser backpressure or buffering tradeoffs?" }
 ```
 
 ## Reading the leg results
 
-All three legs (`mma-investigate`, `mma-research`, `mma-journal-recall`) return the v5 wire envelope (see `mma-investigate/SKILL.md` → "v5 wire shape"). Each sub-task result is a `ComposePayload` with the standard seven fields. The authoritative citation source is **`results[0].findings`** — an array of `{ id, severity, category, claim, evidence, suggestion, source }`.
-
-Explore top-level orchestration aggregates sub-task results into a valid `ImplementPayload` (read-route shape) before the final `annotate` stage runs. Each sub-task follows the same v5 wire shape; the top-level result is a composition of those sub-tasks.
+All three legs (`mma-investigate`, `mma-research`, `mma-journal-recall`) return the standard response envelope (see `@include _shared/response-shape.md` in each skill). The authoritative citation source is **`output.findings`** — an array of `{ id, weight, category, claim, evidence, suggestion, source }`. The `output.summary` field carries the worker's synthesised narrative.
 
 | Check | How |
 |---|---|
-| Did the leg succeed? | `results[0].completed === true` — findings may be zero on a read route; finding nothing wrong is a valid completion |
-| Internal citation source | `results[0].findings[i].claim` plus a `file:LINE` token from `results[0].findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
-| External citation source | `results[0].findings[i].claim` plus a source name / URL from `results[0].findings[i].evidence` |
-| Prior-learning source | `results[0].findings[i].claim` plus a journal node id from `results[0].findings[i].evidence` (recall cites `` `.mma/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
-| Divergence axis | `results[0].findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
+| Did the leg succeed? | `output.completed === true` — findings may be zero on a read route; finding nothing wrong is a valid completion |
+| Internal citation source | `output.findings[i].claim` plus a `file:LINE` token from `output.findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
+| External citation source | `output.findings[i].claim` plus a source name / URL from `output.findings[i].evidence` |
+| Prior-learning source | `output.findings[i].claim` plus a journal node id from `output.findings[i].evidence` (recall cites `` `.mma/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
+| Divergence axis | `output.findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
 
-Apply a sentinel only when `findings` is empty AND `results[0].message` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `results[0].message` reads tersely or `results[0].telemetry.workerSelfAssessment === 'failed'` — a worker can say `'failed'` with usable partial findings.
+Apply a sentinel only when `findings` is empty AND `output.summary` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `output.summary` reads tersely — partial findings may still be usable.
 
-## Per-task report shape
+## Synthesis output shape
 
 Synthesis output (REQUIRED — your reply MUST contain these):
 
@@ -115,13 +113,13 @@ Produce **3–5 threads**. Each thread MUST have:
 
 - A **title** and **one-paragraph summary**.
 - One **internal citation** (from investigate) — `file/path.ts:LINE — claim`.
-  - Pick from `results[0].findings`: take `claim` as the citation claim and pull a `file:LINE` token out of `evidence`.
-  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `results[0].findings` is empty AND `results[0].message` contains no finding-level content. The top-level `message` alone is not evidence — see "Reading the leg results" above.
+  - Pick from `output.findings`: take `claim` as the citation claim and pull a `file:LINE` token out of `evidence`.
+  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `output.findings` is empty AND `output.summary` contains no finding-level content.
 - One **external citation** (from research) — `<source> — claim`.
-  - Pick from `results[0].findings`: take `claim` as the citation claim and pull a source name / URL out of `evidence`.
-  - Use the sentinel `(no external source found)` only when `results[0].findings` is empty for the research leg.
+  - Pick from `output.findings`: take `claim` as the citation claim and pull a source name / URL out of `evidence`.
+  - Use the sentinel `(no external source found)` only when `output.findings` is empty for the research leg.
 - One **prior-learning citation** (from journal-recall) WHEN a relevant node exists — `(journal) node NNNN — claim`.
-  - Pick from the recall leg's `results[0].findings`: take `claim` as the citation and pull the node id out of `evidence`.
+  - Pick from the recall leg's `output.findings`: take `claim` as the citation and pull the node id out of `evidence`.
   - If the cited node is **superseded**, say so inline (e.g. `(journal) node 0012 [superseded by 0013] — …`) so the thread carries the "we already moved past this" signal.
   - Use the sentinel `(no prior learning)` when the recall leg returned no relevant node — most threads on a young project will use this, and that's fine.
 - A **one-line divergence reason** — what makes this thread different from
@@ -173,7 +171,7 @@ directions in the data.
 | Both investigate and research failed | Report both errors to the user. Do NOT fabricate threads. |
 | Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need to the user. Do NOT synthesise over an unfinished investigation. |
 | Research returned 0 usable sources | Sentinel on external lines. Add a one-line note in synthesis preamble: *"External research returned no usable sources — threads anchor on internal findings only."* |
-| Investigate headline reads "0 citations" / "confidence unparseable" but `results[0].findings.length > 0` | Known stage-sync noise — IGNORE the headline. The leg succeeded; read `results[0].findings` directly. |
+| Investigate headline reads "0 citations" / "confidence unparseable" but `output.findings.length > 0` | Known stage-sync noise — IGNORE the headline. The leg succeeded; read `output.findings` directly. |
 
 See `superpowers:brainstorming` as the natural follow-up — convergent narrowing
 on a chosen thread.

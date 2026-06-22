@@ -11,22 +11,22 @@ describe('TypeRegistry', () => {
 
   it('delegate defaults to standard/worktree/cwd-only', () => {
     const c = getTypeConfig('delegate');
-    expect(c).toEqual({ defaultTier: 'standard', worktree: true, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'standard', worktree: true, sandbox: 'cwd-only' });
   });
 
   it('audit defaults to complex/no-worktree/read-only', () => {
     const c = getTypeConfig('audit');
-    expect(c).toEqual({ defaultTier: 'complex', worktree: false, sandbox: 'read-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'read-only' });
   });
 
   it('journal_record defaults to complex/no-worktree/cwd-only', () => {
     const c = getTypeConfig('journal_record');
-    expect(c).toEqual({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
   });
 
   it('orchestrate defaults to main/no-worktree/read-only', () => {
     const c = getTypeConfig('orchestrate');
-    expect(c).toEqual({ defaultTier: 'main', worktree: false, sandbox: 'read-only' });
+    expect(c).toMatchObject({ defaultTier: 'main', worktree: false, sandbox: 'read-only' });
   });
 
   it('throws for unknown type', () => {
@@ -39,12 +39,37 @@ describe('TypeRegistry', () => {
     expect(oppositeAgent('main')).toBe('complex');
   });
 
-  it('every registered type has complete config', () => {
+  it('every registered type has complete config including targetAcceptance', () => {
     for (const t of TASK_TYPES) {
       const c = getTypeConfig(t);
       expect(['standard', 'complex', 'main']).toContain(c.defaultTier);
       expect(typeof c.worktree).toBe('boolean');
       expect(['read-only', 'cwd-only']).toContain(c.sandbox);
+      expect(typeof c.targetAcceptance.paths).toBe('boolean');
+      expect(typeof c.targetAcceptance.inline).toBe('boolean');
+      expect(typeof c.targetAcceptance.required).toBe('boolean');
     }
+  });
+
+  it('targetAcceptance: read routes with targets accept paths', () => {
+    for (const t of ['audit', 'investigate', 'review', 'debug'] as const) {
+      expect(getTypeConfig(t).targetAcceptance.paths).toBe(true);
+      expect(getTypeConfig(t).targetAcceptance.required).toBe(true);
+    }
+  });
+
+  it('targetAcceptance: routes without targets reject all', () => {
+    for (const t of ['research', 'journal_recall', 'journal_record', 'retry_tasks', 'orchestrate'] as const) {
+      expect(getTypeConfig(t).targetAcceptance.paths).toBe(false);
+      expect(getTypeConfig(t).targetAcceptance.inline).toBe(false);
+      expect(getTypeConfig(t).targetAcceptance.required).toBe(false);
+    }
+  });
+
+  it('targetAcceptance: only audit and review accept inline', () => {
+    expect(getTypeConfig('audit').targetAcceptance.inline).toBe(true);
+    expect(getTypeConfig('review').targetAcceptance.inline).toBe(true);
+    expect(getTypeConfig('investigate').targetAcceptance.inline).toBe(false);
+    expect(getTypeConfig('debug').targetAcceptance.inline).toBe(false);
   });
 });

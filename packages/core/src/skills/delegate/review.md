@@ -6,7 +6,7 @@ Verify the implementer's work in the worktree, re-output the answer in the same 
 
 ## Checks
 
-1. **Completeness** — read the files the implementer changed. Did the changes accomplish what `tasksCompleted` claims? If not, complete the missing work. Keep the implementer's `workerSelfAssessment` unless the core work is wrong (claimed changes not in files).
+1. **Completeness** — read the files the implementer changed. Did the changes accomplish what the implementer's `status` and `notes` claim? If not, complete the missing work. Keep the implementer's `status` unless the core work is wrong (claimed changes not in files).
 
 2. **Correctness** — does the implementation work? No off-by-one, wrong references, type mismatches. Tests not modified to mask bugs.
 
@@ -24,5 +24,5 @@ Fix issues in the worktree. Report CUMULATIVE state (both passes combined):
 ## Output (REQUIRED)
 
 ```json
-{"tasksCompleted": ["<description>"], "filesChanged": ["<path>"], "workerSelfAssessment": "done|failed", "notes": "<observations>"}
+{"status": "done|failed", "notes": "<observations>"}
 ```

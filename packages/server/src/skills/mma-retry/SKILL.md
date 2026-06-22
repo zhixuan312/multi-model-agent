@@ -103,72 +103,7 @@ The HTTP status is the state discriminator:
 
 ### GET /task/:taskId?taskIndex=N — single task slice
 
-Same envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
-
-### Reading the task result
-
-Each task result is the per-task wire object (`ComposePayload`):
-
-```json
-{
-  "completed": true,
-  "message": "Task completed; tests passed; one file changed.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "high",
-      "category": "correctness",
-      "claim": "The function does not handle empty input",
-      "evidence": "function foo() { ... } // no null check",
-      "suggestion": "Add an explicit null guard at the top",
-      "source": "reviewer"
-    }
-  ],
-  "summary": "Refactored utils.ts — removed 3 dead branches, added JSDoc",
-  "filesChanged": ["/project/src/utils.ts"],
-  "commitSha": "abc123def",
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 12400,
-    "totalCostUSD": 0.08,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": "approved",
-    "commitOutcome": "committed",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [
-      { "name": "prepare",        "outcome": "advance", "durationMs": 2,    "costUSD": 0 },
-      { "name": "register-block", "outcome": "skip",    "comment": "register-block does not apply to route=delegate", "durationMs": 0, "costUSD": 0 },
-      { "name": "implement",      "outcome": "advance", "durationMs": 8900, "costUSD": 0.05 },
-      { "name": "review",         "outcome": "advance", "durationMs": 2100, "costUSD": 0.02 },
-      { "name": "rework",         "outcome": "skip",    "comment": "rework skipped because review approved", "durationMs": 0, "costUSD": 0 },
-      { "name": "commit",         "outcome": "advance", "durationMs": 340,  "costUSD": 0 },
-      { "name": "annotate",       "outcome": "advance", "durationMs": 890,  "costUSD": 0.01 },
-      { "name": "compose",        "outcome": "advance", "durationMs": 68,   "costUSD": 0 },
-      { "name": "terminal",       "outcome": "advance", "durationMs": 100,  "costUSD": 0 }
-    ]
-  }
-}
-```
-
-**Top-level fields to read for the main-agent verdict:**
-
-| Field | When `true` / populated |
-|---|---|
-| `completed: true` | Task succeeded. `message` is the summary; `findings` are post-review issues (if any). |
-| `completed: false` | Task did not complete. `message` names the blocking gate or finding; `findings` carry any discovered issues. |
-| `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
-| `filesChanged` | File paths modified (empty for read-only routes). |
-| `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-| `blockId` | Always `null` for write tasks (retry replays write tasks; `contextBlockId` is `null` too — no terminal block). |
-
-**The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
-- `advance` — stage ran and produced its payload
-- `skip` — stage did not run; `comment` explains why
-- `halt` — stage stopped the chain; `comment` is the failure message
-- `not_run` — stage was not reached because a prior stage halted
-
-Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to find why.
+Same envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 
@@ -203,7 +138,7 @@ A flaky task that failed once will likely fail again. **Fix:** investigate (`mma
 Retry produces a NEW taskId; polling the original returns the old terminal state. **Fix:** save the retry's `taskId` and poll that one.
 
 ❌ **Using retry to change task config**
-Retry preserves the ORIGINAL config (prompt, agentTier, filePaths, reviewPolicy). **Fix:** if you want different config, re-dispatch with `mma-delegate` / `mma-execute-plan`.
+Retry preserves the ORIGINAL config (prompt, target, reviewPolicy). **Fix:** if you want different config, re-dispatch with `mma-delegate` / `mma-execute-plan`.
 
 ## Terminal context block
 

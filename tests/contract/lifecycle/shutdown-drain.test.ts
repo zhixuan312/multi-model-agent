@@ -29,7 +29,7 @@ describe('shutdown drain', () => {
     try {
       // Sanity: dispatch works pre-drain.
       const ok = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
-        method: 'POST', headers, body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
+        method: 'POST', headers, body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(ok.status).toBe(202);
 
@@ -37,7 +37,7 @@ describe('shutdown drain', () => {
       setDraining(true);
       try {
         const denied = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
-          method: 'POST', headers, body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
+          method: 'POST', headers, body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
         });
         expect(denied.status).toBe(503);
         const body = await denied.json() as { error?: string | { code?: string } };

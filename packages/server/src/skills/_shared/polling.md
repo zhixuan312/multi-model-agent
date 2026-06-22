@@ -7,7 +7,7 @@ reaches a terminal state.
 
 | Status | Content-Type | Meaning |
 |---|---|---|
-| `202` | `text/plain` | Still working — body is the running headline (e.g. `1/1 running, 47s elapsed`) |
+| `202` | `application/json` | Still working — body is structured progress: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
 | `200` | `application/json` | Terminal — body is the uniform 6-field envelope (see `response-shape.md`) |
 | `404` / `401` / other | — | Error — stop polling |
 
@@ -19,7 +19,7 @@ which terminal state you're in:
 | Shape | Meaning |
 |---|---|
 | `error` is a real object | Task failed — read `error.code` + `error.message` |
-| `error` is `{kind: "not_applicable", ...}` | Task succeeded — read `results` |
+| `error` is `null` | Task succeeded — read `output.summary` |
 
 ### Poll loop (POSIX sh)
 

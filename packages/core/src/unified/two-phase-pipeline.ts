@@ -29,6 +29,8 @@ export interface PipelineInput {
   reviewerGoal?: string;
   /** EnvelopeBus for provider-level event streaming (stderr + JSONL + telemetry). */
   bus?: object;
+  /** Called before each phase starts. */
+  onPhaseChange?: (phase: 'implementing' | 'reviewing') => void;
 }
 
 export interface SessionInfo {
@@ -103,6 +105,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   };
 
   try {
+    input.onPhaseChange?.('implementing');
     const implSession = input.implementerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
@@ -151,6 +154,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // workspace-write sandbox confines the reviewer to the worktree, so the
     // parent worktree metadata is out of reach. Same cwd-only tool restriction
     // as the implementer applies.
+    input.onPhaseChange?.('reviewing');
     const revSession = input.reviewerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,

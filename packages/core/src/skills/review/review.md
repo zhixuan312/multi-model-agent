@@ -22,10 +22,10 @@ Verify the implementer's code review, improve quality, re-output the answer in t
 
 - Remove fabricated-evidence findings. Add missed merge-blocking issues.
 - Move pre-existing bugs to `preExisting`. Correct severities.
-- Update `findingsCount`. Improve finding wording if you can add clarity. Don't rephrase for style.
+- Update `criteriaCovered` and `findings` to match corrected state. Improve finding wording if you can add clarity. Don't rephrase for style.
 
 ## Output (REQUIRED)
 
 ```json
-{"findingsCount": 0, "focusArea": "<area>", "findings": [{"severity": "critical|high|medium|low", "category": "<slug>", "claim": "<sentence>", "evidence": "<quoted code>", "location": "<file:line>", "suggestion": "<fix>"}], "preExisting": ["<noted>"]}
+{"criteriaCovered": ["<criterion-slug>"], "findings": [{"weight": "critical|high|medium|low", "category": "<slug>", "claim": "<sentence>", "evidence": "<quoted code>", "file": "<path>", "line": 0, "suggestion": "<fix>", "preExisting": false}]}
 ```

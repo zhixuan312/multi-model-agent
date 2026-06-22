@@ -83,5 +83,5 @@ Findings that fail any check should be downgraded or dropped. However, cross-fil
 Output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "focusArea": "<security|correctness|performance|style>", "findings": [{"severity": "critical|high|medium|low", "category": "<test-gap|cross-file-ripple|pre-existing-vs-regression|missing-edge-case|race-concurrency|resource-leak|backward-compat-break|security-regression|performance-regression|implicit-contract>", "claim": "<one sentence>", "evidence": "<quoted code>", "location": "<file:line>", "suggestion": "<fix>"}], "preExisting": ["<noted but out of scope>"]}
+{"criteriaCovered": ["test-gap", "cross-file-ripple", "pre-existing-vs-regression", "missing-edge-case", "race-concurrency", "resource-leak", "backward-compat-break", "security-regression", "performance-regression", "implicit-contract"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted code>", "file": "<path>", "line": 0, "suggestion": "<fix>", "preExisting": false}]}
 ```

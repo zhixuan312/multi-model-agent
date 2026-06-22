@@ -118,6 +118,6 @@ Findings that fail any check should be downgraded or dropped. However, logical-c
 After consolidating all failure-mode passes, output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "criteriaCovered": ["recommendation-coherence", "internal-contradiction", "cross-item-duplication", "independence-claimed-without-evidence", "argument-soundness", "completeness-against-constraints", "fix-actionability", "drift-staleness", "scope-creep-framing", "structural-consistency", "metadata-completeness"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted text or absence reference>", "suggestion": "<concrete fix>"}]}
+{"criteriaCovered": ["recommendation-coherence", "internal-contradiction", "cross-item-duplication", "independence-claimed-without-evidence", "argument-soundness", "completeness-against-constraints", "fix-actionability", "drift-staleness", "scope-creep-framing", "structural-consistency", "metadata-completeness"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted text or absence reference>", "suggestion": "<concrete fix>"}]}
 ```
 </output>

@@ -38,23 +38,23 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 ```json
 {
   "type": "journal_recall",
-  "query": "what have we learned about dispatch cancellation reliability?",
+  "prompt": "what have we learned about dispatch cancellation reliability?",
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `query` | string | yes | A vague conceptual question about prior learnings. No tags or keywords needed. |
+| `prompt` | string | yes | A vague conceptual question about prior learnings. No tags or keywords needed. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta recall |
 | `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'full'` and `'no-shell'` are rejected — recall is read-only |
 
 > Worker tier for `mma-journal-recall` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
 
-**Why `query` is vague, not keyword-filtered:**
+**Why `prompt` is vague, not keyword-filtered:**
 
-❌ `{ "query": "dispatch" }` — too narrow, might miss "cancellation reliability" nodes that don't mention the word "dispatch" in title.
-✅ `{ "query": "what have we learned about dispatch cancellation reliability?" }` — the worker understands the concept and finds related nodes.
+❌ `{ "prompt": "dispatch" }` — too narrow, might miss "cancellation reliability" nodes that don't mention the word "dispatch" in title.
+✅ `{ "prompt": "what have we learned about dispatch cancellation reliability?" }` — the worker understands the concept and finds related nodes.
 
 **Why:** the worker traverses the journal's typed graph (supersedes, refines, contradicts, depends-on) and synthesizes across related nodes. Semantic matching is the LLM's job, just like `mma-investigate`.
 
@@ -66,7 +66,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"journal_recall","query":"what have we learned about dispatch cancellation reliability?"}' \
+  -d '{"type":"journal_recall","prompt":"what have we learned about dispatch cancellation reliability?"}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -74,91 +74,6 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 @include _shared/polling.md
 
 @include _shared/response-shape.md
-
-## Per-task report shape
-
-Each task carries a `investigation` field on its per-task report (same shape as `mma-investigate`):
-
-```json
-{
-  "investigation": {
-    "citations": [
-      { "file": "nodes/0012-dispatch-cancellation-lifecycle.md", "lines": "1-50", "claim": "Cancellation handlers must check context before writing." }
-    ],
-    "confidence": { "level": "high", "rationale": "Direct citations from journal nodes." },
-    "diagnostics": {
-      "malformedCitationLines": 0,
-      "missingRequiredSections": [],
-      "invalidRequiredSections": []
-    }
-  }
-}
-```
-
-The authoritative success signals are `completed`, `message`, and `findings`. See "v5 wire shape" below for the full envelope.
-
-## v5 wire shape (read route)
-
-Every task result is a `ComposePayload` — seven main-agent fields plus a telemetry block.
-The main-agent fields are authoritative; the telemetry block is diagnostics.
-
-```json
-{
-  "completed": true,
-  "message": "Recall complete; 4 relevant learnings found.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "critical",
-      "category": "correctness",
-      "claim": "Cancellation handlers must check context before writing to avoid corruption.",
-      "evidence": "nodes/0012-dispatch-cancellation-lifecycle.md:20-35 — verbatim substring from journal node.",
-      "suggestion": null,
-      "source": "implementer"
-    }
-  ],
-  "summary": "The project learned that dispatch cancellation must synchronize context reads (node 0012) and never write without checking. Related node 0008 (refines) adds that timeout-based cancellation has race conditions under high load.",
-  "filesChanged": [],
-  "commitSha": null,
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 1234,
-    "totalCostUSD": 0.08,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": null,
-    "commitOutcome": "not_applicable",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [...]
-  }
-}
-```
-
-### Key fields
-
-| Field | When populated | Notes |
-|---|---|---|
-| `completed` | always | `true` when at least one criterion succeeded; `false` on annotator transport failure OR unmet annotate preconditions |
-| `message` | always | human-readable summary; names blocking gates or finding IDs on failure |
-| `findings` | always | `source: 'implementer'` for recall; findings are the deliverable on read routes |
-| `workerSelfAssessment` | always | `'done'` or `'failed'` — never `done_with_concerns` |
-| `blockId` | always `null` (for write routes); string (for read routes) | recall is a read route, so `blockId` is a string — a reusable context block for delta follow-up |
-
-### No second review
-
-The LLM-judge stage (`annotate`) runs once, after the worker's output. Its preconditions for read-route `completed: true`:
-
-```
-gates.implement.outcome === 'advance'
-&& gates.implement.payload.workerSelfAssessment === 'done'
-&& (criteriaSucceeded.length > 0 || criteriaErrors.length === 0)
-```
-
-Findings are the deliverable — a recall that surfaces 5 relevant lessons is `completed: true`. Finding nothing relevant is also a valid completion (returns `findings: []`).
-
-### `completed: false` — what it means
-
-Only on annotator transport failure, or if the journal is inaccessible/corrupted. The `message` names the blocking gate. Re-dispatch with a broader `query` if the worker's findings were too narrow.
 
 ## Best practices
 
@@ -173,18 +88,18 @@ Anti-pattern alert: **Misusing recall as codebase search.** Recall is for the *p
 ## Common pitfalls
 
 ❌ **Using exact tags instead of a conceptual question**
-> query: "dispatch cancellation"
+> prompt: "dispatch cancellation"
 
 The worker expects a sentence with context, not keywords. **Fix:** phrase it as a question:
-> query: "what have we learned about dispatch cancellation and how it interacts with timeouts?"
+> prompt: "what have we learned about dispatch cancellation and how it interacts with timeouts?"
 
 ❌ **Asking about the codebase instead of the journal**
-> query: "where is DispatchCanceller called?"
+> prompt: "where is DispatchCanceller called?"
 
 That's a codebase question. Use `mma-investigate` instead. Journal recall is for *learnings* stored in `.mma/journal/`, not code.
 
 ❌ **Assuming the journal exists**
-> query: "what do we know about X?"
+> prompt: "what do we know about X?"
 
 If the project hasn't used `mma-journal-record`, the journal is empty. The worker will return `not_applicable`. **Fix:** check whether the journal is active in the project first, or start recording learnings with `mma-journal-record`.
 

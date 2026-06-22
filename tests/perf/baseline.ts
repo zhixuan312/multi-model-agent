@@ -22,10 +22,10 @@ export async function captureDelegateLatency(): Promise<number> {
   const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
   try {
     const t0 = performance.now();
-    const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+    const d = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
-      body: JSON.stringify({ tasks: [{ prompt: 'p' }] }),
+      body: JSON.stringify({ type: 'delegate', prompt: 'p' }),
     });
     const { taskId } = (await d.json()) as { taskId: string };
     while (true) {
@@ -44,13 +44,17 @@ export async function captureDelegateLatency(): Promise<number> {
 export async function capturePeakRssFor10Tasks(): Promise<number> {
   const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
   try {
-    const tasks = Array.from({ length: 10 }, (_, i) => ({ prompt: `perf-${i}` }));
-    const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
-      body: JSON.stringify({ tasks }),
-    });
-    const { taskId } = (await d.json()) as { taskId: string };
+    const taskIds: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const d = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({ type: 'delegate', prompt: `perf-${i}` }),
+      });
+      const { taskId: id } = (await d.json()) as { taskId: string };
+      taskIds.push(id);
+    }
+    const taskId = taskIds[0];
     let peak = process.memoryUsage().rss;
     const poll = setInterval(() => {
       peak = Math.max(peak, process.memoryUsage().rss);

@@ -64,19 +64,15 @@ If the Semantic Scholar API key is not configured:
 ```json
 {
   "type": "research",
-  "researchQuestion": "What approaches exist for streaming JSON parsing under 100KB?",
-  "background": "We currently use a single-pass push parser; we want to evaluate alternatives.",
-  "subtype": "default",
+  "prompt": "What approaches exist for streaming JSON parsing under 100KB? We currently use a single-pass push parser; we want to evaluate alternatives.",
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `researchQuestion` | string | yes | 20–8000 chars |
-| `background` | string | yes | 20–8000 chars; what you already know / are trying to do |
-| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `prompt` | string | yes | 20+ chars — the research question; context can be inline or via contextBlockIds |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` for large background context |
 
 > Worker tier is hardcoded `complex`. Sending `agentType` or `tools` is rejected with HTTP 400.
 
@@ -92,8 +88,7 @@ RESULT=$(curl -f -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "type": "research",
-    "researchQuestion": "State-of-the-art SIMD JSON parsers under 100KB?",
-    "background": "We use a single-pass push parser; want SIMD alternatives."
+    "prompt": "State-of-the-art SIMD JSON parsers under 100KB? We use a single-pass push parser; want SIMD alternatives."
   }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
@@ -102,64 +97,6 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 @include _shared/polling.md
 
 @include _shared/response-shape.md
-
-## Per-task report shape (v5 envelope)
-
-Each `results[N]` is the v5 `ComposePayload`:
-
-```json
-{
-  "completed": true,
-  "message": "Research complete; 4 sources synthesised.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "medium",
-      "category": "evidence",
-      "claim": "Pattern X is the canonical approach as of 2026 per upstream RFC.",
-      "evidence": "https://example.org/rfc/...",
-      "source": "implementer"
-    }
-  ],
-  "summary": "Pattern X dominates; pattern Y is a 2024 fork.",
-  "filesChanged": [],
-  "commitSha": null,
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 12400,
-    "totalCostUSD": 0.06,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": null,
-    "commitOutcome": "not_applicable",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [
-      { "name": "prepare",    "outcome": "advance" },
-      { "name": "implement",  "outcome": "advance" },
-      { "name": "annotate",   "outcome": "advance" },
-      { "name": "compose",    "outcome": "advance" },
-      { "name": "terminal",   "outcome": "advance" }
-    ]
-  }
-}
-```
-
-| Field | Notes |
-|---|---|
-| `completed: true` | At least one criterion succeeded; sources synthesised. |
-| `completed: false` | Annotator transport failure OR worker self-assessed as `failed`. `message` names the blocking gate. |
-| `findings` | The deliverable. `source: 'implementer'`. Empty `findings` on a research route means "no signal found" — still a valid completion. |
-| `workerSelfAssessment` | `'done'` or `'failed'` — never `done_with_concerns`. |
-| `blockId` | Always `null` — research is a task route, not register-context-block. |
-| `contextBlockId` | The terminal context block id for this read-route task (its report as a reusable block). Pass it into a later call's `contextBlockIds` for delta follow-ups. |
-
-Legacy aliases (still emitted for back-compat):
-
-```
-results[0].structuredReport.findings[]    // mirror of findings above
-results[0].structuredReport.sourcesUsed[] // table of sources tried
-results[0].output                          // raw narrative report
-```
 
 ## Terminal context block
 
@@ -171,8 +108,8 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Best practices
 
-- Keep `researchQuestion` topical (keywords, not full sentences).
-- Use `background` to give the worker context that helps it phrase queries.
+- Keep `prompt` topical (keywords, not full sentences).
+- For large background context, register it via `mma-context-blocks` and pass `contextBlockIds`.
 - For multi-round research, register the previous round's findings via
   `mma-context-blocks` and pass `contextBlockIds`.
 

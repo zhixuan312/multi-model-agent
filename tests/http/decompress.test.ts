@@ -100,7 +100,7 @@ describe('decompress pipeline integration', () => {
   it('decompresses gzip body through the full HTTP pipeline', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const body = JSON.stringify({ type: 'review', filePaths: ['/tmp/gzip-test.ts'] });
+      const body = JSON.stringify({ type: 'review', target: { paths: ['/tmp/gzip-test.ts'] } });
       const compressed = gzipSync(Buffer.from(body));
       const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
@@ -142,7 +142,7 @@ describe('decompress pipeline integration', () => {
   it('returns 415 for unsupported content-encoding through HTTP', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const body = JSON.stringify({ type: 'review', filePaths: ['/tmp/br-test.ts'] });
+      const body = JSON.stringify({ type: 'review', target: { paths: ['/tmp/br-test.ts'] } });
       const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {

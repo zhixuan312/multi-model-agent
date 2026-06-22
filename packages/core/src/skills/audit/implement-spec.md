@@ -87,5 +87,5 @@ Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce 
 After consolidating all criterion passes, output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "criteriaCovered": ["requirement-testability", "scope-explicitness-and-decomposability", "acceptance-criteria-coverage", "non-functional-captured", "requirement-conflict", "decision-trace", "assumption-exposure", "placeholder-scan", "design-decomposition-present"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted clause>", "suggestion": "<the missing sentence>"}]}
+{"criteriaCovered": ["requirement-testability", "scope-explicitness-and-decomposability", "acceptance-criteria-coverage", "non-functional-captured", "requirement-conflict", "decision-trace", "assumption-exposure", "placeholder-scan", "design-decomposition-present"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted clause>", "suggestion": "<the missing sentence>"}]}
 ```

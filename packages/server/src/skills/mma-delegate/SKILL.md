@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an independent instruction with optional file scope, acceptance criteria, and context blocks.
+Dispatch a single ad-hoc task to a worker. The request is flat — prompt, target paths, acceptance criteria, and optional context blocks.
 
 **Core principle:** Workers run on cheap providers; the main agent consumes only the structured per-task report. Parallelize freely as long as tasks don't write the same files.
 
@@ -37,27 +37,22 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 ```json
 {
   "type": "delegate",
-  "tasks": [
-    {
-      "prompt": "Add input validation to the login handler",
-      "agentType": "standard",
-      "filePaths": ["/project/src/auth/login.ts"],
-      "done": "All inputs validated; unit tests pass",
-      "contextBlockIds": ["cb_abc123"]
-    }
-  ]
+  "prompt": "Add input validation to the login handler",
+  "target": { "paths": ["/project/src/auth/login.ts"] },
+  "done": "All inputs validated; unit tests pass",
+  "contextBlockIds": ["cb_abc123"],
+  "reviewPolicy": "reviewed"
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `tasks` | array | yes | At least one task |
-| `tasks[].prompt` | string | yes | The task instruction |
-| `tasks[].agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"`. Pick `"complex"` when the task is ambiguous, security-sensitive, touches many files, or a prior standard run came back with `filesWritten: 0` / hit `incompleteReason: "turn_cap"`. |
-| `tasks[].filePaths` | string[] | no | Files the worker focuses on |
-| `tasks[].done` | string | no | Acceptance criteria |
-| `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `tasks[].reviewPolicy` | `"reviewed"` / `"none"` | no | See review-policy snippet below. Default `"reviewed"` |
+| `prompt` | string | yes | The task instruction |
+| `target` | object | no | Target scope for the worker |
+| `target.paths` | string[] | no | Files the worker focuses on |
+| `done` | string | no | Acceptance criteria |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `reviewPolicy` | `"reviewed"` / `"none"` | no | See review-policy snippet below. Default `"reviewed"` |
 
 @include _shared/review-policy.md
 
@@ -69,7 +64,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"delegate","tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \
+  -d '{"type":"delegate","prompt":"Refactor utils.ts to remove dead code","target":{"paths":["/project/src/utils.ts"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -98,73 +93,7 @@ The HTTP status is the state discriminator:
 
 ### GET /task/:taskId?taskIndex=N — single task slice
 
-Same envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
-
-### Reading the task result
-
-Each task result is the per-task wire object (`ComposePayload`):
-
-```json
-{
-  "completed": true,
-  "message": "Task completed; tests passed; one file changed.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "high",
-      "category": "correctness",
-      "claim": "The function does not handle empty input",
-      "evidence": "function foo() { ... } // no null check",
-      "suggestion": "Add an explicit null guard at the top",
-      "source": "reviewer"
-    }
-  ],
-  "summary": "Refactored utils.ts — removed 3 dead branches, added JSDoc",
-  "filesChanged": ["/project/src/utils.ts"],
-  "commitSha": "abc123def",
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 12400,
-    "totalCostUSD": 0.08,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": "approved",
-    "commitOutcome": "committed",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [
-      { "name": "prepare",        "outcome": "advance", "durationMs": 2,    "costUSD": 0 },
-      { "name": "register-block", "outcome": "skip",    "comment": "register-block does not apply to route=delegate", "durationMs": 0, "costUSD": 0 },
-      { "name": "implement",      "outcome": "advance", "durationMs": 8900, "costUSD": 0.05 },
-      { "name": "review",         "outcome": "advance", "durationMs": 2100, "costUSD": 0.02 },
-      { "name": "rework",         "outcome": "skip",    "comment": "rework skipped because review approved", "durationMs": 0, "costUSD": 0 },
-      { "name": "commit",         "outcome": "advance", "durationMs": 340,  "costUSD": 0 },
-      { "name": "annotate",       "outcome": "advance", "durationMs": 890,  "costUSD": 0.01 },
-      { "name": "compose",        "outcome": "advance", "durationMs": 68,   "costUSD": 0 },
-      { "name": "terminal",       "outcome": "advance", "durationMs": 100,  "costUSD": 0 }
-    ]
-  }
-}
-```
-
-**Top-level fields to read for the main-agent verdict:**
-
-| Field | When `true` / populated |
-|---|---|
-| `completed: true` | Task succeeded. `message` is the summary; `findings` are post-review issues (if any). |
-| `completed: false` | Task did not complete. `message` names the blocking gate or finding; `findings` carry any discovered issues. |
-| `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
-| `filesChanged` | File paths modified (empty for read-only routes). |
-| `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-
-`blockId` is not used for the delegate route — it is always `null`, as is `contextBlockId` (write routes register no terminal block). To carry inputs forward, register them explicitly via `mma-context-blocks` and pass `contextBlockIds`.
-
-**The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
-- `advance` — stage ran and produced its payload
-- `skip` — stage did not run; `comment` explains why
-- `halt` — stage stopped the chain; `comment` is the failure message
-- `not_run` — stage was not reached because a prior stage halted
-
-Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to find why.
+Same envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 
@@ -189,13 +118,12 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're reading 3+ files
 
 ## Common pitfalls
 
-❌ **Two tasks writing the same file in one batch**
-> tasks: [{prompt:"add JWT to login.ts"}, {prompt:"add logging to login.ts"}]
+❌ **Two delegate calls writing the same file concurrently**
 
 Workers run concurrently and race on the file. **Fix:** dispatch sequentially, or merge into one prompt.
 
-❌ **Two tasks writing the same file in one batch**
-N tasks × 50KB = N transmissions. **Fix:** register the doc once via `mma-context-blocks`, pass the `contextBlockIds` to each task.
+❌ **Re-inlining large content across calls**
+N calls × 50KB = N transmissions. **Fix:** register the doc once via `mma-context-blocks`, pass the `contextBlockIds` to each call.
 
 ❌ **Reading the worker's diff inline before review**
 The reviewer sees the full diff with the original prompt as context. Reading inline burns main-context tokens for no quality gain.

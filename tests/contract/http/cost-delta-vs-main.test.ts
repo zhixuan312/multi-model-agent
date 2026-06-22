@@ -15,7 +15,7 @@ async function pollToTerminal(baseUrl: string, token: string, taskId: string): P
 }
 
 describe('costDeltaVsMainUSD in HTTP response', () => {
-  it('costSummary.totalCostDeltaVsMainUSD is non-zero when main model has a known rate card', async () => {
+  it('metrics.savedVsMainCostUsd is non-zero when main model has a known rate card', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
@@ -26,47 +26,32 @@ describe('costDeltaVsMainUSD in HTTP response', () => {
           'X-MMA-Client': 'claude-code',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/add.ts'] }),
+        body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/add.ts'] } }),
       });
       expect(dispatch.status).toBe(202);
       const { taskId } = (await dispatch.json()) as { taskId: string };
       const envelope = (await pollToTerminal(h.baseUrl, h.token, taskId)) as {
-        costSummary: {
-          totalActualCostUSD: number;
-          totalCostDeltaVsMainUSD: number | null;
-          totalMainEquivalentUSD: number | null;
+        metrics: {
+          totalCostUsd: number;
+          mainEquivalentCostUsd: number | null;
+          savedVsMainCostUsd: number | null;
+          implementer: { costUsd: number };
+          reviewer: { costUsd: number } | null;
         };
-        results: Array<{
-          cost: {
-            implementerUsd: number;
-            reviewerUsd: number | null;
-            mainEquivalentUsd: number | null;
-            savedVsMainUsd: number | null;
-          };
-        }>;
       };
 
-      // totalCostDeltaVsMainUSD should no longer be hardcoded 0
-      // It should be non-null (claude-opus-4-8 has a known rate card)
-      expect(envelope.costSummary.totalCostDeltaVsMainUSD).not.toBeNull();
-      expect(typeof envelope.costSummary.totalCostDeltaVsMainUSD).toBe('number');
+      expect(envelope.metrics.savedVsMainCostUsd).not.toBeNull();
+      expect(typeof envelope.metrics.savedVsMainCostUsd).toBe('number');
 
-      // totalMainEquivalentUSD should be present and positive
-      expect(envelope.costSummary.totalMainEquivalentUSD).not.toBeNull();
-      expect(envelope.costSummary.totalMainEquivalentUSD).toBeGreaterThan(0);
+      expect(envelope.metrics.mainEquivalentCostUsd).not.toBeNull();
+      expect(envelope.metrics.mainEquivalentCostUsd).toBeGreaterThan(0);
 
-      // The delta should equal mainEquivalent - actual
-      if (envelope.costSummary.totalMainEquivalentUSD !== null) {
-        expect(envelope.costSummary.totalCostDeltaVsMainUSD).toBeCloseTo(
-          envelope.costSummary.totalMainEquivalentUSD - envelope.costSummary.totalActualCostUSD,
+      if (envelope.metrics.mainEquivalentCostUsd !== null) {
+        expect(envelope.metrics.savedVsMainCostUsd).toBeCloseTo(
+          envelope.metrics.mainEquivalentCostUsd - envelope.metrics.totalCostUsd,
           6,
         );
       }
-
-      // Per-result cost should also have the new fields
-      const resultCost = envelope.results[0].cost;
-      expect(resultCost.mainEquivalentUsd).not.toBeNull();
-      expect(resultCost.savedVsMainUsd).not.toBeNull();
     } finally {
       await h.close();
     }

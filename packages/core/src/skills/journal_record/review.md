@@ -35,5 +35,5 @@ Verify and correct the implementer's existing recordings. Do NOT record addition
 ## Output (REQUIRED)
 
 ```json
-{"summary": "<e.g. recorded 3, failed 0>", "filesChanged": ["<paths>"], "recorded": [{"learningIndex": 0, "op": "create|refine|supersede|merge", "ids": ["0012"]}], "failed": [{"learningIndex": 1, "learning": "<verbatim>", "reason": "<why>"}]}
+{"recorded": [{"learning": "<lesson text>", "category": "<category>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
 ```

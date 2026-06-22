@@ -182,7 +182,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 1. Call the matching `mma-*` skill → receive `{ taskId, statusUrl }`.
 2. Poll `GET /task/:taskId`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
-3. Read `results` / `error` from the 6-field terminal envelope.
+3. Read `output` / `error` from the layered terminal envelope.
 
 ## Common pitfalls
 

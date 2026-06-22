@@ -10,24 +10,31 @@ export const TASK_TYPES = [
 export type TaskType = (typeof TASK_TYPES)[number];
 export type SandboxPolicy = 'read-only' | 'cwd-only';
 
+export interface TargetAcceptance {
+  paths: boolean;
+  inline: boolean;
+  required: boolean;
+}
+
 export interface TypeConfig {
   defaultTier: AgentType;
   worktree: boolean;
   sandbox: SandboxPolicy;
+  targetAcceptance: TargetAcceptance;
 }
 
 export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
-  audit:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  investigate:    { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  delegate:       { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only'  },
-  execute_plan:   { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only'  },
-  review:         { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  debug:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  research:       { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only' },
-  journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only'  },
-  retry_tasks:    { defaultTier: 'standard', worktree: false, sandbox: 'cwd-only'  },
-  orchestrate:    { defaultTier: 'main',     worktree: false, sandbox: 'read-only' },
+  audit:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  investigate:    { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: true  } },
+  delegate:       { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: false } },
+  execute_plan:   { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: true  } },
+  review:         { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  debug:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: true  } },
+  research:       { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
+  journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
+  journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
+  retry_tasks:    { defaultTier: 'standard', worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
+  orchestrate:    { defaultTier: 'main',     worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
 };
 
 export function getTypeConfig(type: TaskType): TypeConfig {

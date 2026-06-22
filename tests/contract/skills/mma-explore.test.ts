@@ -17,7 +17,7 @@ describe('mma-explore SKILL.md', () => {
   it('contains required sections (skill-template parity)', () => {
     for (const section of [
       '## Overview', '## When to Use', '## How to run',
-      '## Per-task report shape', '## Best practices', '## Common pitfalls',
+      '## Synthesis output shape', '## Best practices', '## Common pitfalls',
       '## Failure handling',
     ]) {
       expect(content).toContain(section);

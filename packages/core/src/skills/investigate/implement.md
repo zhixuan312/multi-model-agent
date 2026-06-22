@@ -84,5 +84,5 @@ Findings that fail any check should be downgraded. However, negative findings ("
 Output exactly one JSON block:
 
 ```json
-{"question": "<restated question>", "answer": "<synthesis with inline file:line citations>", "citations": [{"file": "<path>", "line": 0, "content": "<quoted excerpt>"}], "confidence": "high|medium|low", "negativeFindings": ["<searched X in Y, not found>"], "subAnswers": [{"perspective": "<perspective name>", "finding": "<candidate answer>", "confidence": "high|medium|low"}]}
+{"answer": "<synthesis with inline file:line citations>", "criteriaCovered": ["direct-symbol-trace", "caller-analysis", "test-driven", "cross-file-dependency-map", "documentation-comment-lens"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<extracted text from file>", "file": "<path>", "line": 0}]}
 ```

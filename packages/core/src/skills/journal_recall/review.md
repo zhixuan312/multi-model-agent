@@ -32,5 +32,5 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 ## Output (REQUIRED)
 
 ```json
-{"results": [{"learning": "<lesson>", "context": "<edges and related nodes>", "relevance": "critical|high|medium|low", "nodeId": "<id>", "nodePath": "<path>", "category": "decision|design|behavior|process|knowledge|style", "status": "adopted|dropped|inconclusive|superseded"}], "summary": "<synthesis>"}
+{"answer": "<synthesis>", "criteriaCovered": ["decision", "design", "behavior", "process", "knowledge", "style"], "findings": [{"weight": "critical|high|medium|low", "category": "<category>", "claim": "<lesson>", "evidence": "<edges and related nodes>", "nodeId": "<id>", "nodePath": "<path>"}]}
 ```

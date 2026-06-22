@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import type { TaskType } from './type-registry.js';
 
-const severity = z.enum(['critical', 'high', 'medium', 'low']);
+const severityEnum = z.enum(['critical', 'high', 'medium', 'low']);
+
+// --- Read route schemas (criteriaCovered + findings) ---
 
 export const auditAnswerSchema = z.object({
-  findingsCount: z.number().int().min(0),
-  criteriaCovered: z.array(z.string().min(1)),
-  overallAssessment: z.enum(['found', 'clean']),
+  criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
-    severity,
+    weight: severityEnum,
     category: z.string().min(1),
     claim: z.string().min(1),
     evidence: z.string().min(1),
@@ -17,117 +17,97 @@ export const auditAnswerSchema = z.object({
 });
 
 export const investigateAnswerSchema = z.object({
-  question: z.string().min(1),
   answer: z.string().min(1),
-  citations: z.array(z.object({
-    file: z.string().min(1),
-    line: z.number().int().min(0).default(0),
-    content: z.string().min(1),
-  })),
-  confidence: z.enum(['high', 'medium', 'low']),
-  negativeFindings: z.array(z.string()).default([]),
-  subAnswers: z.array(z.object({
-    perspective: z.string().min(1),
-    finding: z.string().min(1),
-    confidence: z.enum(['high', 'medium', 'low']),
-  })).default([]),
-});
-
-export const reviewAnswerSchema = z.object({
-  findingsCount: z.number().int().min(0),
-  focusArea: z.string().min(1),
+  criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
-    severity,
+    weight: severityEnum,
     category: z.string().min(1),
     claim: z.string().min(1),
     evidence: z.string().min(1),
-    location: z.string().min(1),
-    suggestion: z.string().min(1),
+    file: z.string().min(1),
+    line: z.number().int().nonnegative().default(0),
   })),
-  preExisting: z.array(z.string()).default([]),
+});
+
+export const reviewAnswerSchema = z.object({
+  criteriaCovered: z.array(z.string().min(1)).min(1),
+  findings: z.array(z.object({
+    weight: severityEnum,
+    category: z.string().min(1),
+    claim: z.string().min(1),
+    evidence: z.string().min(1),
+    file: z.string().min(1),
+    line: z.number().int().nonnegative().default(0),
+    suggestion: z.string().min(1),
+    preExisting: z.boolean().default(false),
+  })),
 });
 
 export const debugAnswerSchema = z.object({
-  reproduction: z.string().min(1),
-  symptom: z.object({
-    file: z.string().min(1),
-    line: z.number().int().min(0).default(0),
-    description: z.string().min(1),
-  }),
-  cause: z.object({
-    file: z.string().min(1),
-    line: z.number().int().min(0).default(0),
-    description: z.string().min(1),
-  }),
-  trace: z.array(z.object({
-    file: z.string().min(1),
-    line: z.number().int().min(0).default(0),
-    observation: z.string().min(1),
+  answer: z.string().min(1),
+  criteriaCovered: z.array(z.string().min(1)).min(1),
+  findings: z.array(z.object({
+    weight: severityEnum,
+    category: z.string().min(1),
+    claim: z.string().min(1),
+    evidence: z.string().min(1),
+    file: z.string().nullable().default(null),
+    line: z.number().int().nonnegative().nullable().default(null),
   })),
-  proposedFix: z.string().min(1),
-  falsifier: z.string().min(1),
-  otherDefects: z.array(z.string()).default([]),
 });
 
 export const researchAnswerSchema = z.object({
-  sources: z.array(z.object({
-    title: z.string().min(1),
-    url: z.string().min(1),
-    attempted: z.boolean(),
-    used: z.boolean(),
-    note: z.string().optional(),
-  })),
+  answer: z.string().min(1),
+  criteriaCovered: z.array(z.string().min(1)).min(1),
   findings: z.array(z.object({
-    perspective: z.string().min(1),
-    insight: z.string().min(1),
-    sourceUrl: z.string().min(1),
-    suggestion: z.string().optional(),
+    weight: severityEnum,
+    category: z.string().min(1),
+    claim: z.string().min(1),
+    evidence: z.string().min(1),
+    url: z.string().min(1),
+    source: z.string().min(1),
   })),
-  synthesis: z.string().min(1),
 });
 
+export const journalRecallAnswerSchema = z.object({
+  answer: z.string().min(1),
+  criteriaCovered: z.array(z.string().min(1)).min(1),
+  findings: z.array(z.object({
+    weight: severityEnum,
+    category: z.string().min(1),
+    claim: z.string().min(1),
+    evidence: z.string().min(1),
+    nodeId: z.string().min(1),
+    nodePath: z.string().min(1),
+  })),
+});
+
+// --- Write route schemas (per-item status) ---
+
 export const delegateAnswerSchema = z.object({
-  tasksCompleted: z.array(z.string()),
-  filesChanged: z.array(z.string()),
-  workerSelfAssessment: z.enum(['done', 'failed']),
+  status: z.enum(['done', 'failed']),
   notes: z.string(),
 });
 
 export const executePlanAnswerSchema = z.object({
-  stepsCompleted: z.array(z.string()),
-  filesChanged: z.array(z.string()),
-  testsPassed: z.boolean(),
-  workerSelfAssessment: z.enum(['done', 'failed']),
-  reconciliations: z.array(z.string()).default([]),
-  notes: z.string(),
-});
-
-export const journalRecallAnswerSchema = z.object({
-  results: z.array(z.object({
-    learning: z.string().min(1),
-    context: z.string().min(1),
-    relevance: severity,
-    nodeId: z.string().min(1),
-    nodePath: z.string().min(1),
-    category: z.enum(['decision', 'design', 'behavior', 'process', 'knowledge', 'style']),
-    status: z.enum(['adopted', 'dropped', 'inconclusive', 'superseded']),
+  tasks: z.array(z.object({
+    title: z.string().min(1),
+    status: z.enum(['done', 'failed']),
   })),
-  summary: z.string().min(1),
+  notes: z.string().default(''),
 });
 
 export const journalRecordAnswerSchema = z.object({
-  summary: z.string().min(1),
-  filesChanged: z.array(z.string()),
   recorded: z.array(z.object({
-    learningIndex: z.number().int().min(0),
-    op: z.enum(['create', 'refine', 'supersede', 'merge']),
-    ids: z.array(z.string().min(1)),
+    learning: z.string().min(1),
+    category: z.string().min(1),
+    nodeId: z.string().min(1),
+    nodePath: z.string().min(1),
   })),
   failed: z.array(z.object({
-    learningIndex: z.number().int().min(0),
     learning: z.string().min(1),
     reason: z.string().min(1),
-  })),
+  })).default([]),
 });
 
 export const REFINER_SCHEMAS: Partial<Record<TaskType, z.ZodType>> = {
@@ -136,8 +116,8 @@ export const REFINER_SCHEMAS: Partial<Record<TaskType, z.ZodType>> = {
   review: reviewAnswerSchema,
   debug: debugAnswerSchema,
   research: researchAnswerSchema,
+  journal_recall: journalRecallAnswerSchema,
   delegate: delegateAnswerSchema,
   execute_plan: executePlanAnswerSchema,
-  journal_recall: journalRecallAnswerSchema,
   journal_record: journalRecordAnswerSchema,
 };

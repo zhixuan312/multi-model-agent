@@ -2,39 +2,55 @@ import { describe, it, expect } from 'vitest';
 import { taskInputSchema } from '../../packages/core/src/unified/task-input-schema.js';
 
 describe('taskInputSchema', () => {
-  it('accepts delegate with tasks', () => {
+  it('accepts delegate with prompt', () => {
     expect(taskInputSchema.safeParse({
       type: 'delegate',
-      tasks: [{ prompt: 'do X' }],
+      prompt: 'do X',
     }).success).toBe(true);
   });
 
-  it('accepts audit with filePaths', () => {
+  it('accepts delegate with prompt + target + done', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'delegate',
+      prompt: 'Add validation',
+      target: { paths: ['src/auth.ts'] },
+      done: 'tests pass',
+    }).success).toBe(true);
+  });
+
+  it('accepts audit with target.paths', () => {
     expect(taskInputSchema.safeParse({
       type: 'audit',
-      filePaths: ['/doc.md'],
+      target: { paths: ['/doc.md'] },
     }).success).toBe(true);
   });
 
-  it('accepts audit with document', () => {
+  it('accepts audit with target.inline', () => {
     expect(taskInputSchema.safeParse({
       type: 'audit',
-      document: 'some content',
+      target: { inline: 'some content' },
     }).success).toBe(true);
   });
 
-  it('rejects audit without document or filePaths', () => {
+  it('rejects audit without target', () => {
     expect(taskInputSchema.safeParse({ type: 'audit' }).success).toBe(false);
+  });
+
+  it('rejects audit with both paths and inline', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'audit',
+      target: { paths: ['/doc.md'], inline: 'text' },
+    }).success).toBe(false);
   });
 
   it('rejects unknown type', () => {
     expect(taskInputSchema.safeParse({ type: 'bogus' }).success).toBe(false);
   });
 
-  it('accepts common optional fields', () => {
+  it('accepts common optional fields including agentTier', () => {
     const r = taskInputSchema.safeParse({
       type: 'delegate',
-      tasks: [{ prompt: 'x' }],
+      prompt: 'do X',
       agentTier: 'complex',
       reviewPolicy: 'none',
       sessionIds: { implementer: 'sess-1' },
@@ -46,60 +62,133 @@ describe('taskInputSchema', () => {
   it('rejects legacy reviewPolicy values', () => {
     expect(taskInputSchema.safeParse({
       type: 'delegate',
-      tasks: [{ prompt: 'x' }],
+      prompt: 'x',
       reviewPolicy: 'full',
     }).success).toBe(false);
   });
 
-  it('accepts investigate with question', () => {
+  it('accepts investigate with prompt + target.paths', () => {
     expect(taskInputSchema.safeParse({
       type: 'investigate',
-      question: 'How does auth work?',
+      prompt: 'How does auth work?',
+      target: { paths: ['src/auth.ts'] },
     }).success).toBe(true);
   });
 
-  it('accepts execute_plan', () => {
+  it('rejects investigate with deprecated question field', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'investigate',
+      question: 'How does auth work?',
+    }).success).toBe(false);
+  });
+
+  it('accepts execute_plan with target.paths + tasks', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'execute_plan',
+      target: { paths: ['/plan.md'] },
+      tasks: ['Task 1'],
+    }).success).toBe(true);
+  });
+
+  it('accepts execute_plan with empty tasks (run all)', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'execute_plan',
+      target: { paths: ['/plan.md'] },
+    }).success).toBe(true);
+  });
+
+  it('rejects execute_plan with multiple paths', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'execute_plan',
+      target: { paths: ['/a.md', '/b.md'] },
+    }).success).toBe(false);
+  });
+
+  it('rejects execute_plan with deprecated taskDescriptors', () => {
     expect(taskInputSchema.safeParse({
       type: 'execute_plan',
       filePaths: ['/plan.md'],
       taskDescriptors: ['Task 1'],
-    }).success).toBe(true);
+    }).success).toBe(false);
   });
 
-  it('accepts research', () => {
+  it('accepts research with prompt', () => {
     expect(taskInputSchema.safeParse({
       type: 'research',
-      researchQuestion: 'What are the best practices for X in the industry?',
-      background: 'We are building a system that does Y and need to understand Z.',
+      prompt: 'What are the best practices for X in the industry?',
     }).success).toBe(true);
   });
 
-  it('accepts journal_recall', () => {
+  it('rejects research with deprecated researchQuestion', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'research',
+      researchQuestion: 'What?',
+      background: 'Some context for the question here.',
+    }).success).toBe(false);
+  });
+
+  it('accepts journal_recall with prompt', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_recall',
-      query: 'What did we learn about caching?',
+      prompt: 'What did we learn about caching?',
     }).success).toBe(true);
   });
 
-  it('accepts journal_record', () => {
+  it('rejects journal_recall with deprecated query', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      query: 'caching?',
+    }).success).toBe(false);
+  });
+
+  it('accepts journal_record with prompt', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_record',
-      entry: 'We decided to use Redis for caching because...',
+      prompt: 'We decided to use Redis for caching because...',
     }).success).toBe(true);
   });
 
-  it('accepts review', () => {
+  it('rejects journal_record with deprecated entry', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      entry: 'learning',
+    }).success).toBe(false);
+  });
+
+  it('accepts review with target.paths', () => {
     expect(taskInputSchema.safeParse({
       type: 'review',
-      filePaths: ['/src/main.ts'],
+      target: { paths: ['/src/main.ts'] },
     }).success).toBe(true);
   });
 
-  it('accepts debug', () => {
+  it('accepts review with target.inline', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'review',
+      target: { inline: 'const x = 1;' },
+    }).success).toBe(true);
+  });
+
+  it('rejects review with deprecated code field', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'review',
+      code: 'const x = 1;',
+    }).success).toBe(false);
+  });
+
+  it('accepts debug with prompt + target.paths', () => {
     expect(taskInputSchema.safeParse({
       type: 'debug',
-      errorMessage: 'TypeError: cannot read property',
+      prompt: 'TypeError: cannot read property',
+      target: { paths: ['src/auth.ts'] },
     }).success).toBe(true);
+  });
+
+  it('rejects debug with deprecated errorMessage', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'debug',
+      errorMessage: 'TypeError',
+    }).success).toBe(false);
   });
 
   it('accepts retry_tasks with taskId and taskIndices', () => {
@@ -147,13 +236,5 @@ describe('taskInputSchema', () => {
       type: 'orchestrate',
       prompt: '',
     }).success).toBe(false);
-  });
-
-  it('accepts orchestrate with agentTier override', () => {
-    expect(taskInputSchema.safeParse({
-      type: 'orchestrate',
-      prompt: 'Do something.',
-      agentTier: 'main',
-    }).success).toBe(true);
   });
 });

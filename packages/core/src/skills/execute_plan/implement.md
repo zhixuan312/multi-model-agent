@@ -46,7 +46,7 @@ Self-verification:
 
 If a command FAILS for a real reason (the code is wrong): investigate, fix, re-run. A failing test is your output, not the reviewer's problem.
 
-If you CANNOT run a command (shell unavailable, dependency missing, sandbox denied): say so explicitly in your summary AND still report `workerSelfAssessment: "done"` if the code changes are complete. Inability to verify is not the same as failure.
+If you CANNOT run a command (shell unavailable, dependency missing, sandbox denied): say so explicitly in your summary AND still report `status: "done"` if the code changes are complete. Inability to verify is not the same as failure.
 
 ## Turn Budget
 
@@ -54,14 +54,14 @@ A typical plan task completes in 5-15 tool calls total: read each file once, edi
 
 Trust your prior reads. Trust your prior edits. The most common cheap-worker failure is restart-looping ("let me re-read both files first" repeated 50 times) instead of editing.
 
-## Worker Self-Assessment
+## Task Status
 
-Report `workerSelfAssessment: "done"` when the requested code changes are complete. Mark `"failed"` ONLY when you could not complete the requested code changes (you got stuck on the implementation itself, the brief was impossible, you decided to bail). Inability to independently verify is not failure.
+Report `status: "done"` when the requested code changes are complete. Mark `"failed"` ONLY when you could not complete the requested code changes (you got stuck on the implementation itself, the brief was impossible, you decided to bail). Inability to independently verify is not failure.
 
 ## Output Format
 
 After completing work, output exactly one JSON block:
 
 ```json
-{"stepsCompleted": ["<step description>"], "filesChanged": ["<path>"], "testsPassed": true, "workerSelfAssessment": "done|failed", "reconciliations": ["Plan said X; source has Y; used Y"], "notes": "<observations, plan defects found, verification results>"}
+{"tasks": [{"title": "<task heading>", "status": "done|failed"}], "notes": "<observations, plan defects found, verification results>"}
 ```

@@ -57,27 +57,27 @@ digraph when_to_use {
 ```json
 {
   "type": "investigate",
-  "question": "How does the auth middleware handle token refresh?",
+  "prompt": "How does the auth middleware handle token refresh?",
   "subtype": "default",
-  "filePaths": ["/project/src/auth/"],
+  "target": { "paths": ["/project/src/auth/"] },
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `question` | string | yes | Natural-language investigation question |
+| `prompt` | string | yes | Natural-language investigation question |
 | `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
-| `filePaths` | string[] | no | Anchor paths the worker starts from. Worker may grep beyond. |
+| `target.paths` | string[] | no | Anchor paths the worker starts from. Worker may grep beyond. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta investigation |
 | `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'no-shell'` and `'full'` are rejected — investigation is read-only |
 
 > Worker tier for `mma-investigate` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
 
-**Anchor narrow questions with `filePaths`:**
+**Anchor narrow questions with `target.paths`:**
 
-❌ `{ "question": "Where is parseConfig called?" }` — searches the whole repo
-✅ `{ "question": "Where is parseConfig called?", "filePaths": ["src/"] }` — bounded
+❌ `{ "prompt": "Where is parseConfig called?" }` — searches the whole repo
+✅ `{ "prompt": "Where is parseConfig called?", "target": { "paths": ["src/"] } }` — bounded
 
 **Why:** the worker greps and reads under a turn and wall-clock budget. Without anchors, broad questions exhaust those budgets before they finish.
 
@@ -89,7 +89,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"investigate","question":"How does the auth middleware handle token refresh?"}' \
+  -d '{"type":"investigate","prompt":"How does the auth middleware handle token refresh?"}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -97,91 +97,6 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 @include _shared/polling.md
 
 @include _shared/response-shape.md
-
-## Per-task report shape
-
-Each task carries an `investigation` field on its per-task report:
-
-```json
-{
-  "investigation": {
-    "citations": [
-      { "file": "src/auth/refresh.ts", "lines": "45-72", "claim": "Refresh handler reads bearer." }
-    ],
-    "confidence": { "level": "high", "rationale": "All claims directly cited." },
-    "diagnostics": {
-      "malformedCitationLines": 0,
-      "missingRequiredSections": [],
-      "invalidRequiredSections": []
-    }
-  }
-}
-```
-
-The authoritative success signals are `completed`, `message`, and `findings`. See "v5 wire shape" above for the full envelope.
-
-## v5 wire shape (read route)
-
-Every task result is a `ComposePayload` — seven main-agent fields plus a telemetry block.
-The main-agent fields are authoritative; the telemetry block is diagnostics.
-
-```json
-{
-  "completed": true,
-  "message": "Investigation complete; 3 files analysed.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "high",
-      "category": "correctness",
-      "claim": "The refresh handler reads bearer from Authorization header unconditionally.",
-      "evidence": "src/auth/refresh.ts:45-72 — verbatim substring from worker output.",
-      "suggestion": "Add a guard to handle missing Authorization header gracefully.",
-      "source": "implementer"
-    }
-  ],
-  "summary": "...",
-  "filesChanged": [],
-  "commitSha": null,
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 1234,
-    "totalCostUSD": 0.08,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": null,
-    "commitOutcome": "not_applicable",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [...]
-  }
-}
-```
-
-### Key fields
-
-| Field | When populated | Notes |
-|---|---|---|
-| `completed` | always | `true` when at least one criterion succeeded; `false` on annotator transport failure OR unmet annotate preconditions (e.g. non-`done` worker self-assessment on a read route) |
-| `message` | always | human-readable summary; names blocking gates or finding IDs on failure |
-| `findings` | always | `source: 'implementer'` for investigate; findings are the deliverable on read routes |
-| `workerSelfAssessment` | always | `'done'` or `'failed'` — never `done_with_concerns` |
-| `blockId` | always `null` | investigate is a task route, not register-context-block |
-
-### No second review
-
-The LLM-judge stage (`annotate`) runs once, after the worker's output. Its preconditions for read-route `completed: true`:
-
-```
-gates.implement.outcome === 'advance'
-&& gates.implement.payload.workerSelfAssessment === 'done'
-&& (criteriaSucceeded.length > 0 || criteriaErrors.length === 0)
-```
-
-Findings are the deliverable — a task that surfaces 5 issues is `completed: true`. Finding nothing wrong is also a valid completion.
-
-### `completed: false` — what it means
-
-Only on annotator transport failure. The `message` names the blocking gate. Re-dispatch with tighter `filePaths` if the worker's citations were unusable.
 
 ## Best practices
 
@@ -194,7 +109,7 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you find yourself readi
 ## Common pitfalls
 
 ❌ **Asking for a fix instead of an answer**
-> question: "Refactor the auth middleware to use JWT"
+> prompt: "Refactor the auth middleware to use JWT"
 
 The investigator can't write — `tools: 'readonly'`. **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
 

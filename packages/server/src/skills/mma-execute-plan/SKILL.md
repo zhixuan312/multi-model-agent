@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string must match a heading in the plan verbatim (e.g. `"1. Setup database schema"`). All tasks run in parallel; duplicate descriptors are rejected.
+Dispatch named tasks from a plan file to workers. Each `tasks` string must match a heading in the plan verbatim (e.g. `"1. Setup database schema"`). All tasks run in parallel; duplicate descriptors are rejected.
 
 **Core principle:** The plan IS the prompt. Workers re-read the plan file in-process and find their named task — you don't need to inline the task body.
 
@@ -36,21 +36,21 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 ```json
 {
   "type": "execute_plan",
-  "taskDescriptors": [
+  "tasks": [
     "1. Add input validation to login handler",
     "2. Write unit tests for the auth module"
   ],
-  "filePaths": [
-    "/project/docs/plan.md"
-  ],
+  "target": {
+    "paths": ["/project/docs/plan.md"]
+  },
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `taskDescriptors` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
-| `filePaths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
+| `tasks` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
+| `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
 | `perTaskReviewPolicy` | `Record<string, 'reviewed'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"reviewed"` |
 | `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
@@ -67,7 +67,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"execute_plan","taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
+  -d '{"type":"execute_plan","tasks":["3. Migrate database schema"],"target":{"paths":["/project/docs/plan.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -96,72 +96,7 @@ The HTTP status is the state discriminator:
 
 ### GET /task/:taskId?taskIndex=N — single task slice
 
-Same envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
-
-### Reading the task result
-
-Each task result is the per-task wire object (`ComposePayload`):
-
-```json
-{
-  "completed": true,
-  "message": "Task completed; tests passed; one file changed.",
-  "findings": [
-    {
-      "id": "F1",
-      "severity": "high",
-      "category": "correctness",
-      "claim": "The function does not handle empty input",
-      "evidence": "function foo() { ... } // no null check",
-      "suggestion": "Add an explicit null guard at the top",
-      "source": "reviewer"
-    }
-  ],
-  "summary": "Refactored utils.ts — removed 3 dead branches, added JSDoc",
-  "filesChanged": ["/project/src/utils.ts"],
-  "commitSha": "abc123def",
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 12400,
-    "totalCostUSD": 0.08,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": "approved",
-    "commitOutcome": "committed",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [
-      { "name": "prepare",        "outcome": "advance", "durationMs": 2,    "costUSD": 0 },
-      { "name": "register-block", "outcome": "skip",    "comment": "register-block does not apply to route=execute-plan", "durationMs": 0, "costUSD": 0 },
-      { "name": "implement",      "outcome": "advance", "durationMs": 8900, "costUSD": 0.05 },
-      { "name": "review",         "outcome": "advance", "durationMs": 2100, "costUSD": 0.02 },
-      { "name": "rework",         "outcome": "skip",    "comment": "rework skipped because review approved", "durationMs": 0, "costUSD": 0 },
-      { "name": "commit",         "outcome": "advance", "durationMs": 340,  "costUSD": 0 },
-      { "name": "annotate",       "outcome": "advance", "durationMs": 890,  "costUSD": 0.01 },
-      { "name": "compose",        "outcome": "advance", "durationMs": 68,   "costUSD": 0 },
-      { "name": "terminal",       "outcome": "advance", "durationMs": 100,  "costUSD": 0 }
-    ]
-  }
-}
-```
-
-**Top-level fields to read for the main-agent verdict:**
-
-| Field | When `true` / populated |
-|---|---|
-| `completed: true` | Task succeeded. `message` is the summary; `findings` are post-review issues (if any). |
-| `completed: false` | Task did not complete. `message` names the blocking gate or finding; `findings` carry any discovered issues. |
-| `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
-| `filesChanged` | File paths modified (empty for read-only routes). |
-| `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-| `blockId` | Always `null` (execute-plan is a write route; `contextBlockId` is `null` too — no terminal block). |
-
-**The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
-- `advance` — stage ran and produced its payload
-- `skip` — stage did not run; `comment` explains why
-- `halt` — stage stopped the chain; `comment` is the failure message
-- `not_run` — stage was not reached because a prior stage halted
-
-Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to find why.
+Same envelope scoped to the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 
@@ -187,14 +122,14 @@ Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the batch returns mi
 ## Common pitfalls
 
 ❌ **Task descriptor doesn't match plan heading verbatim**
-> taskDescriptors: ["Migrate db schema"]    ← plan heading is "3. Migrate database schema"
+> tasks: ["Migrate db schema"]    ← plan heading is "3. Migrate database schema"
 
 Worker rejects with "no matching task" or matches the wrong one. **Fix:** copy the heading from the plan, including the leading number.
 
-❌ **Forgetting the plan file in `filePaths`**
-> filePaths: ["/project/src/db/schema.sql"]    ← no plan file
+❌ **Forgetting the plan file in `target.paths`**
+> target.paths: ["/project/src/db/schema.sql"]    ← no plan file
 
-Worker can't read the task body. **Fix:** always include the plan path: `filePaths: ["/project/docs/plan.md", "/project/src/db/schema.sql"]`.
+Worker can't read the task body. **Fix:** always include the plan path: `target.paths: ["/project/docs/plan.md"]`.
 
 ❌ **Dispatching dependent tasks in one batch**
 Task 5 depends on Task 4's output → workers race; Task 5 might run before Task 4 finishes. **Fix:** dispatch Task 4, wait for terminal, then dispatch Task 5.

@@ -177,6 +177,6 @@ Findings on perspectives 1-8 missing source-side evidence are downgraded to LOW 
 After consolidating all perspective passes, output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "perspectivesCovered": [1,2,3,4,5,6,7,8,9,10,11,12], "overallAssessment": "found|clean", "taskVerdicts": {"A1.1": "EXECUTABLE|PARTIAL|BLOCKED"}, "findings": [{"taskId": "A1.1|META", "perspective": 1, "perspectiveName": "PATH EXISTENCE|SYMBOL EXISTENCE|SIGNATURE MATCH|IMPORT GRAPH|TEST HARNESS|STEP SEQUENCE|CROSS-TASK DEPS|VERIFY CMD|TASK GRANULARITY|SPEC COVERAGE|PLACEHOLDER LANGUAGE|PLAN SKELETON", "severity": "critical|high|medium|low", "planClaim": "<quoted plan line with task+section ref>", "sourceReality": "<file:line + actual content, or spec clause, or plan-side-only for 9/11/12>", "suggestedFix": "<concrete edit>"}]}
+{"criteriaCovered": ["path-existence", "symbol-existence", "signature-match", "import-graph", "test-harness", "step-sequence", "cross-task-deps", "verify-cmd", "task-granularity", "spec-coverage", "placeholder-language", "plan-skeleton"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<plan claim + source reality + task ID>", "suggestion": "<concrete edit>"}]}
 ```
 </output>
