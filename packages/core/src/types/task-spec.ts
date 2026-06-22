@@ -1,5 +1,3 @@
-// Per-task brief shape — what callers send to /delegate, /audit, etc.
-// Matches spec architecture.md `types/task-spec.ts` slot.
 import type { BriefQualityPolicy } from './brief-quality-policy.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -16,7 +14,6 @@ export interface FormatConstraints {
 export interface TaskSpec {
   prompt: string
   agentType?: AgentType
-  filePaths?: string[]
   done?: string
   contextBlockIds?: string[]
   tools?: ToolMode
@@ -32,35 +29,7 @@ export interface TaskSpec {
   testCommand?: string
   planContext?: string
   outputTargets?: string[]
-  /** Skill names the worker should be equipped with (delegate route only).
-   *  Resolved + staged before the session opens. */
   skills?: string[]
-  /**
-   * For read-only routes that go through the read-route dispatcher, this is
-   * the user's pure question / work / problem text (route-specific shape),
-   * set by each route's buildTaskSpec. Used as the "target" content embedded
-   * in the cached prefix so sub-workers see ONLY the user's request — not a
-   * the format spec. The dispatcher uses this then `document`;
-   * there is NO `prompt` fallback (a non-research read route with an empty
-   * target throws `read_route_missing_target`). Audit: the inlined document /
-   * file targets. Review: the code snippet + filePaths. Debug: problem
-   * statement. Investigate: question. Research: the research question (the
-   * actual worker input is built from `research`).
-   */
-  readTarget?: string
   subtype?: string
-  /**
-   * Research-specific metadata passed from the /research dispatcher to perform-implementation.
-   * Contains question, background, user sources, and resolved context blocks needed by the
-   * two-turn driver before the N-criterion synthesis loop begins. Only set for /research route.
-   */
-  research?: {
-    researchQuestion: string;
-    background?: string;
-    resolvedContextBlocks?: Array<{ id: string; content: string }>;
-  }
-  taskDescriptor?: string
-  planBasename?: string
-  /** Per-task idle-stall override; falls back to config default. */
   idleStallMs?: number
 }

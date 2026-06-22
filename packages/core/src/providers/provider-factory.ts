@@ -22,12 +22,6 @@ export class SafetyCeilingExceededError extends Error {
   }
 }
 
-// REMOVE: let liveChildren = 0;
-// REMOVE: export function __liveChildren(): number { return liveChildren; }
-// REMOVE: export function __safetyCeiling(): number { return SAFETY_CEILING; }
-
-// ADD: per-task accounting. Values are Maps of sessionId → underlying Session
-// so releaseTask() can iterate them and force-close.
 const liveByTask = new Map<string, Map<string, Session>>();
 
 export class TaskSessionLimitExceededError extends Error {
