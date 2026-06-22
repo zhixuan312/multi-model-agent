@@ -38,7 +38,8 @@ import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function tryParseJson(raw: string): unknown {
-  const match = raw.match(/```json\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+  const fenced = [...raw.matchAll(/```json\s*([\s\S]*?)```/g)];
+  const match = fenced.length ? fenced[fenced.length - 1] : raw.match(/(\{[\s\S]*\})/);
   if (!match) return raw;
   try { return JSON.parse(match[1]); } catch { return raw; }
 }

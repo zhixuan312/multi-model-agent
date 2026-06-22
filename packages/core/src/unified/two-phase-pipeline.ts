@@ -62,8 +62,8 @@ export interface PipelineResult {
 }
 
 function extractStructuredBlock(raw: string): string {
-  const fenceMatch = raw.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (fenceMatch) return fenceMatch[1]!.trim();
+  const fenced = [...raw.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/g)];
+  if (fenced.length) return fenced[fenced.length - 1][1]!.trim();
   return raw;
 }
 
