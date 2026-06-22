@@ -201,7 +201,8 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const completenessSection = input.dispatchedTasks?.length
       ? `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${input.dispatchedTasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
       : '';
-    const revPrompt = `${input.reviewerSkill}${completenessSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
+    const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
+    const revPrompt = `${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });

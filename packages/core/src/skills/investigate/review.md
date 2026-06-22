@@ -1,16 +1,21 @@
 # Investigate — Refiner
 
-Verify the implementer's investigation, improve quality, re-output the answer in the same JSON format. Remove errors, add missed citations, fix calibration — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
+Verify the implementer's investigation against the codebase, improve quality, re-output in the same JSON format. Remove errors, add missed citations, fix calibration — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
 
-**Your entire response must be a single ```json fenced block. No text before or after it. No verification narrative, no reasoning, no tool-call commentary.**
+## Process
+
+1. Read every cited file:line to verify quoted content matches.
+2. Re-read the question in the Original Task section. Verify every part is answered.
+3. Apply each check below.
+4. Your FINAL message must be a single ```json fenced block — nothing else.
 
 ## Checks
 
-1. **Citation accuracy** — read cited files to verify `file:line` content matches. Only remove a citation if you confirmed the content does NOT match. Keep citations you could not verify — do NOT remove them.
+1. **Citation accuracy** — read cited files to verify `file:line` content matches. Remove citations where the content does NOT match.
 
 2. **Evidence grounding** — claims need: present-thing (file:line + quote), absent-thing (explicit "searched X, not found"), or synthesis (each chain link cited). Downgrade ungrounded claims.
 
-3. **Completeness** — does the answer address the full question? All parts answered? If not, fill gaps.
+3. **Completeness** — compare against the Original Task question. Does the answer address every part? Fill gaps.
 
 4. **Negative findings** — absent-thing searches must be explicit, not silently omitted. Do NOT remove legitimate negative findings.
 
@@ -20,7 +25,7 @@ Verify the implementer's investigation, improve quality, re-output the answer in
 
 ## Refinement rules
 
-- Only remove citations you confirmed are wrong by reading the file. Keep unverified ones.
+- Remove citations confirmed wrong by reading the file.
 - Adjust per-finding `confidence` if miscalibrated. Merge duplicate findings.
 - Do NOT add meta-commentary findings about the implementer's quality. Every finding must answer the original question.
 - Improve the answer text if you can add clarity or correct errors. Don't rephrase for style.
