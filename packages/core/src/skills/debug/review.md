@@ -12,23 +12,23 @@ Verify the implementer's debug investigation, improve quality, re-output the ans
 
 3. **Reproduction** — specific enough to trigger the failure (exact command, input, state)? Not vague ("run the tests")?
 
-4. **Falsifier** — concrete way to verify the fix. Names a specific assertion, output, or observable behavior. Add one if missing.
+4. **Falsifier** — at least one finding should describe a concrete way to verify the fix (specific assertion, output, or observable behavior). Add a falsifier finding if missing.
 
 5. **Evidence quality** — file:line citations from files read this session, not hallucinated. Remove fabricated citations.
 
-6. **Fix feasibility** — proposed fix addresses the CAUSE, not the symptom. Fix is read-only (proposed, NOT applied). Remove applied changes.
+6. **Fix feasibility** — any proposed-fix finding addresses the CAUSE, not the symptom. Fix is read-only (proposed, NOT applied). Remove applied changes.
 
-7. **Pre-existing separation** — entangled bugs in `otherDefects`, not mixed into the main trace.
+7. **Pre-existing separation** — entangled pre-existing bugs belong in separate findings with their own category, not mixed into the main trace findings.
 
 ## Refinement rules
 
 - Fix cause/symptom misidentification. Add missing trace steps.
-- Add missing falsifiers. Separate pre-existing bugs into `otherDefects`.
-- Only correct `proposedFix` if it targets the wrong file:line or the wrong defect. Do NOT expand, elaborate, or rewrite a correct fix — a shorter correct fix is better than a longer rewritten one.
-- Only correct `falsifier` if it tests the wrong thing. Do NOT rewrite a correct falsifier.
+- Add missing falsifier findings. Separate pre-existing bugs into distinct findings with appropriate categories.
+- Only correct proposed-fix findings if they target the wrong file:line or the wrong defect. Do NOT expand, elaborate, or rewrite a correct fix — a shorter correct fix is better than a longer rewritten one.
+- Only correct falsifier findings if they test the wrong thing. Do NOT rewrite a correct falsifier.
 
 ## Output (REQUIRED)
 
 ```json
-{"reproduction": "<steps>", "symptom": {"file": "<path>", "line": 0, "description": "<what fails>"}, "cause": {"file": "<path>", "line": 0, "description": "<defect>"}, "trace": [{"file": "<path>", "line": 0, "observation": "<what happens>"}], "proposedFix": "<change at cause>", "falsifier": "<verification>", "otherDefects": ["<out of scope>"]}
+{"answer": "<one-line root cause summary>", "criteriaCovered": ["symptom-location", "recent-change", "test-failure", "reproduction", "concurrency-configuration"], "findings": [{"weight": "critical|high|medium|low", "category": "<angle-slug>", "claim": "<one sentence>", "evidence": "<extracted text>", "file": "<path or null>", "line": 0}]}
 ```

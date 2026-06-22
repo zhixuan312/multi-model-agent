@@ -68,5 +68,5 @@ Read `/tmp/audit-findings.md`. Collect all findings, assign severities, produce 
 Output exactly one JSON block:
 
 ```json
-{"findingsCount": 0, "criteriaCovered": ["when-to-use-specificity", "input-shape-completeness", "output-shape-contract", "anti-pattern-coverage", "recipe-vs-skill-scope", "version-frontmatter", "link-integrity"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted section+line>", "suggestion": "<missing or replacement text>"}]}
+{"criteriaCovered": ["when-to-use-specificity", "input-shape-completeness", "output-shape-contract", "anti-pattern-coverage", "recipe-vs-skill-scope", "version-frontmatter", "link-integrity"], "findings": [{"weight": "critical|high|medium|low", "category": "<criterion-slug>", "claim": "<one sentence>", "evidence": "<quoted section+line>", "suggestion": "<missing or replacement text>"}]}
 ```

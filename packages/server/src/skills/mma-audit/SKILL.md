@@ -42,23 +42,23 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 ```json
 {
   "type": "audit",
-  "document": "inline content to audit (optional if filePaths given)",
+  "prompt": "optional audit instruction",
   "subtype": "default",
-  "filePaths": ["/project/docs/spec.md"],
+  "target": { "paths": ["/project/docs/spec.md"] },
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `document` | string | no | Inline document content |
+| `target.inline` | string | no | Inline document content |
 | `subtype` | `'default' \| 'plan' \| 'spec' \| 'skill'` | no (defaults to `'default'`) | See "Picking subtype" below. |
-| `filePaths` | string[] | no | Files to audit (one worker per file, parallel) |
+| `target.paths` | string[] | no | Files to audit (one audit per dispatch) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
-Either `document` or `filePaths` (or both) must be provided.
+Either `target.inline` or `target.paths` (or both) must be provided.
 
-> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ### Picking subtype
 
@@ -77,8 +77,8 @@ The legacy `auditType` field and its `correctness` / `style` / `general` / `secu
 
 When `subtype: 'plan'`:
 
-- `filePaths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
-- `document` (inline content) is not used in plan mode — the plan must be on disk so workers can reference it by `?cwd=`-relative path.
+- `target.paths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
+- `target.inline` (inline content) is not used in plan mode — the plan must be on disk so workers can reference it by `?cwd=`-relative path.
 - The worker runs the sequential-criteria loop with the plan-audit criteria set across 12 perspectives in three groups: **EXTERNAL CODEBASE COHERENCE** (1 PATH EXISTENCE, 2 SYMBOL EXISTENCE, 3 SIGNATURE MATCH, 4 IMPORT GRAPH, 5 TEST HARNESS AVAILABILITY, 6 STEP SEQUENCE WITHIN TASK, 7 CROSS-TASK DEPENDENCIES, 8 VERIFICATION COMMAND VALIDITY), **INTRA-PLAN STRUCTURE** (9 TASK GRANULARITY, 11 PLACEHOLDER LANGUAGE, 12 PLAN SKELETON), and **SPEC ALIGNMENT** (10 SPEC COVERAGE).
 - To enable perspective 10 (SPEC COVERAGE), register the upstream spec as a context block via `mma-context-blocks` and pass its `blockId` in `contextBlockIds`. Without a spec in context, perspective 10 emits "No findings for this criterion." and the other 11 still run.
 - Read the findings list. Fix the plan and re-audit if any `critical` or `high` plan-audit findings remain.
@@ -93,7 +93,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"default","filePaths":["/project/docs/api-spec.md"]}' \
+  -d '{"type":"audit","subtype":"default","target":{"paths":["/project/docs/api-spec.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -106,7 +106,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"spec","filePaths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}' \
+  -d '{"type":"audit","subtype":"spec","target":{"paths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 ```
 
@@ -118,7 +118,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"skill","filePaths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}' \
+  -d '{"type":"audit","subtype":"skill","target":{"paths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 ```
 
@@ -130,7 +130,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"plan","filePaths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}' \
+  -d '{"type":"audit","subtype":"plan","target":{"paths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 ```
 
@@ -140,26 +140,7 @@ RESULT=$(curl -f --show-error -s -X POST \
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Plan audit complete; 2 findings.",
-  "findings": [
-    { "id": "F1", "severity": "high", "category": "path-existence",
-      "claim": "Step 3 names `src/utils/foo.ts` which does not exist.",
-      "evidence": "Worker grepped for the file under cwd — no match found.",
-      "suggestion": "Use `src/utils/bar.ts` instead.",
-      "source": "implementer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-audit` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -204,8 +185,8 @@ Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel audi
 ❌ **Auditing source code with `mma-audit`**
 The auditor lacks codebase context (no type info, no call-site lookup, no test awareness). Findings are speculative. **Fix:** use `mma-review` — it pulls in surrounding source context and validates against the actual types.
 
-❌ **Single huge `document` string instead of `filePaths`**
-Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `filePaths`.
+❌ **Single huge `target.inline` string instead of `target.paths`**
+Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `target.paths`.
 
 ❌ **Sending the legacy `auditType` field**
 The field was renamed to `subtype` and the value set was narrowed. **Fix:** use `subtype` with one of `default` / `plan` / `spec` / `skill`. For "security only" / "performance only" lenses, put the bias in the free-text prompt — there is no narrow-lens subtype.
@@ -215,7 +196,7 @@ Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 fin
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

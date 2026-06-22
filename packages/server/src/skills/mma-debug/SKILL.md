@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Submit a problem, context, and hypothesis to a worker for focused debugging. Unlike `mma-audit` and `mma-review`, all `filePaths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
+Submit a problem, context, and hypothesis to a worker for focused debugging. Unlike `mma-audit` and `mma-review`, all `target.paths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
 
 **Core principle:** The hypothesis is judgment (your job). Reading files and reproducing the failure is labor (the worker's job). Pass the hypothesis as input; receive structured findings.
 
@@ -37,23 +37,25 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 ```json
 {
   "type": "debug",
-  "errorMessage": "POST /login returns 500 when password contains special characters",
-  "filePaths": [
-    "/project/src/auth/login.ts",
-    "/project/src/auth/password.ts"
-  ],
+  "prompt": "POST /login returns 500 when password contains special characters",
+  "target": {
+    "paths": [
+      "/project/src/auth/login.ts",
+      "/project/src/auth/password.ts"
+    ]
+  },
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `errorMessage` | string | yes | What is broken (one sentence; concrete symptom) |
+| `prompt` | string | yes | What is broken (one sentence; concrete symptom) |
 | `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
-| `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
+| `target.paths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 
-> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ## Full example
 
@@ -63,7 +65,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"debug","errorMessage":"Tests fail on CI only","filePaths":["/project/src/config.ts"]}' \
+  -d '{"type":"debug","prompt":"Tests fail on CI only","target":{"paths":["/project/src/config.ts"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -74,26 +76,7 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Investigation complete; 1 finding.",
-  "findings": [
-    { "id": "F1", "severity": "high", "category": "root-cause",
-      "claim": "bcrypt binding fails on non-ASCII input in the Docker image.",
-      "evidence": "Worker reproduced the failure with `pass='café'`; strace shows EINVAL on encode call.",
-      "suggestion": "Normalize input to NFC form before calling bcrypt.",
-      "source": "implementer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-debug` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -140,7 +123,7 @@ Worker has no symptom to chase. **Fix:** specific reproducer — `"POST /login w
 The worker explores blindly, often investigates the wrong area first. **Fix:** even a weak hypothesis ("might be encoding-related") narrows the search space.
 
 ❌ **Splitting one bug across multiple `mma-debug` calls**
-Debug intentionally bundles `filePaths` for cross-file reasoning. Splitting defeats this. **Fix:** one call with all suspect files; if you really have N independent failures, use `mma-delegate` with N tasks.
+Debug intentionally bundles `target.paths` for cross-file reasoning. Splitting defeats this. **Fix:** one call with all suspect files; if you really have N independent failures, use `mma-delegate` with N tasks.
 
 ❌ **Treating `mma-debug` as the fix step**
 Debug investigates and proposes; it doesn't necessarily write the fix. **Fix:** if the worker identifies a fix, dispatch `mma-delegate` to implement it (or write it inline if you understand it).
@@ -150,7 +133,7 @@ Often the obvious cause isn't the real one. **Fix:** a 30-second debug pass cost
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

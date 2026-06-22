@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.0] - 2026-06-22
+
+**Route contract standardization.** All 11 task types now share uniform input naming (`prompt` + `target`), a layered 200 response envelope (`task`/`output`/`execution`/`metrics`/`raw`/`error`), and structured 202 JSON polling. Delegate flattened to single-task. Execute-plan gains smart heading matching and reviewer completeness gate. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `plan-task-matcher.ts`: smart heading matching for execute_plan — normalizes `### N.`, `### Task N:`, and unnumbered `##` headings; skips fenced code blocks; phase selection; dedup; ambiguous/no-match errors.
+- `TargetAcceptance` in type-registry: per-route policy for which target fields (paths/inline) are accepted.
+- `onPhaseChange` callback on `PipelineInput` — handler wires it to `TaskRegistry.setPhase()` for structured 202 polling.
+- `TaskRegistry.phase`, `phaseStartedAt`, `totalTasks` fields for live polling progress.
+- Token usage in 200 metrics: per-phase `usage` object + `totalUsage` with all 4 token counts.
+- Reviewer completeness gate: execute_plan reviewer receives the full dispatched task list and implements any the implementer missed; programmatic count check flags partial completion as `done_with_concerns`.
+- Git-diff `filesChanged`: worktree merge computes changed files from `git diff --name-only` (source of truth) instead of tool-call tracking.
+- Meaningful commit messages: 5-strategy extraction from worker output (notes → answer → task titles → recorded learnings → first raw line → fallback).
+- Worktree path injected into implementer prompt: eliminates cwd-discovery tool calls.
+- Parallel smoke test: 2 phases, 14 threads (~12 min vs ~35 min sequential). `--sequential` flag preserves old behavior.
+- `route-contract.test.ts`: 14 HTTP contract tests (202 shape, layered 200, target validation, deprecated field rejection, delegate flat, unknown taskId 404).
+- `metrics-contract.test.ts`: merged cost-delta + cost-summary into one round-trip test.
+- Weight enum exhaustive test + Task N: format recognition test for plan-task-matcher.
+
+### Changed
+- **BREAKING:** All input field names renamed: `question` → `prompt`, `errorMessage` → `prompt`, `filePaths` → `target.paths`, `document` → `target.inline`, `code` → `target.inline`, `researchQuestion` → `prompt`, `background` → removed (use `contextBlockIds`), `query` → `prompt`, `entry` → `prompt`, `taskDescriptors` → `tasks`. Old field names rejected with 400.
+- **BREAKING:** Delegate is flat — `prompt` + `target` + `done`, no `tasks` array. One task per request; callers send multiple requests for multiple tasks.
+- **BREAKING:** 200 response is layered: `{task, output, execution, metrics, raw, error}` replaces `{headline, results[], costSummary, structuredReport, sourcesUsed}`.
+- **BREAKING:** 202 polling returns structured JSON (`{taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt}`) instead of text/plain headline.
+- **BREAKING:** Finding weight field unified: `severity` and `confidence` both replaced by `weight` (`critical`|`high`|`medium`|`low`) across all read-route refiner schemas.
+- `output.workerStatus` removed (redundant with `task.status`); `output.filesChanged` in write-route summaries removed (redundant with envelope-level `output.filesChanged`).
+- `findingsCount` and `overallAssessment` removed from audit refiner schema.
+- Execute-plan input: `target.paths` (exactly 1 plan file), `tasks` defaults to `[]` (run all), `perTaskReviewPolicy` removed.
+- `agentTier` remains as optional override (not removed as initially planned).
+- All 18 skill implement/review.md files updated to new output schemas.
+- All 15 SKILL.md + shared docs updated: new field names, layered response, structured 202, `agentTier` (was `agentType`), no `taskIndex`/`commitSha`.
+- Full-smoke suite updated for new contract (all 22 scenarios).
+
+### Removed
+- `compose-running-headline.ts` and `compose-terminal-headline.ts` — replaced by structured 202 JSON and `task.status`.
+- Legacy `ComposePayload` / v5 envelope documentation sections from all SKILL.md files.
+
 ## [5.5.1] - 2026-06-19
 
 **Refiner pipeline + route rename + auth fix + cost delta.** Reviewers rewritten from critics (output findings/verdict) to refiners (output same format as implementer). Task type `main` renamed to `orchestrate`. Claude subprocess auth fixed. Real cost-delta-vs-main computation. Full 22-scenario smoke gate passed. `SCHEMA_VERSION` unchanged (still 6).

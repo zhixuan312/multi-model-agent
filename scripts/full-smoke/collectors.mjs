@@ -3,14 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { QUEUE_FILE, DIAG_DIR, EVENTS_RAW_COLUMNS, POLL } from './config.mjs';
 
-// ① response: the terminal envelope (already polled)
+// ① response: the terminal envelope (already polled).
+// The new unified response is already layered: { task, output, execution, metrics, raw, error }.
+// Pass it through as-is.
 export function collectResponse(envelope) {
-  return {
-    error: envelope.error,
-    structuredReport: envelope.structuredReport,
-    results: Array.isArray(envelope.results) ? envelope.results : [],
-    costSummary: envelope.costSummary,
-  };
+  return envelope;
 }
 
 function diagLines() {

@@ -46,8 +46,7 @@ Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
   5.1  Output parsing     core/src/reporting/structured-report.ts
   5.2  Status derivation  core/src/reporting/terminal-status-deriver.ts
-  5.3  Headline           core/src/reporting/compose-{terminal,running}-headline.ts,
-                          not-applicable.ts
+  5.3  Sentinels          core/src/reporting/not-applicable.ts
   5.4  Telemetry emit     core/src/events/{envelope-bus,task-envelope,wire-schema,
                           to-wire-record,consent-rules,telemetry-uploader}.ts
   5.5  Persistence        core/src/unified/task-registry.ts,
@@ -66,8 +65,7 @@ Layer L.1  Type registry    core/src/unified/type-registry.ts           (TASK_TY
 Layer L.2  Zod schema       core/src/unified/task-input-schema.ts       (discriminated union per type)
 Layer L.3  Skill prompts    core/src/skills/<type>/implement.md + review.md  (worker criteria)
 Layer L.4  Pipeline         core/src/unified/two-phase-pipeline.ts      (unified two-phase pipeline)
-Layer L.5  Bespoke output   core/src/reporting/parse-<type>-report.ts +
-                            compose-<type>-headline.ts                   (types w/ custom output)
+Layer L.5  Refiner schema   core/src/unified/refiner-schemas.ts          (per-type output Zod validation)
 Layer L.6  Skill markdown   server/src/skills/mma-<type>/SKILL.md        (caller-facing prompt)
 Layer L.7  Installer hook   server/src/skill-install/skill-installers/{claude-code,
                             cursor,codex-cli,gemini-cli}.ts via manifest.ts  (per-client writer)
@@ -198,7 +196,7 @@ Bounded execution moved from a dedicated lifecycle layer to provider-level `wall
 Where to add:
 
 - **A new provider:** `core/src/providers/<name>.ts`. Update `providers/provider-factory.ts`.
-- **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Optional: `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
+- **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` (including `targetAcceptance`) in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add refiner schema in `core/src/unified/refiner-schemas.ts` if the output shape is typed. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
 - **A new observability event:** emit structured log line from a handler; add required fields to `tests/contract/goldens/observability/event-manifest.json`; the replay test picks it up automatically.
 

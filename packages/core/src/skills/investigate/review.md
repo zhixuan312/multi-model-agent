@@ -14,19 +14,19 @@ Verify the implementer's investigation, improve quality, re-output the answer in
 
 4. **Negative findings** — absent-thing searches must be explicit, not silently omitted. Do NOT remove legitimate negative findings.
 
-5. **Confidence calibration** — high=multiple grounded citations, medium=cited with 1-2 inferred steps, low=minimal evidence. Adjust if inflated.
+5. **Confidence calibration** — each finding's `confidence` should reflect evidence strength: critical/high=multiple grounded citations, medium=cited with 1-2 inferred steps, low=minimal evidence. Adjust if inflated.
 
 6. **Scope** — remove fix proposals or improvement suggestions (investigate is read-only Q&A).
 
 ## Refinement rules
 
 - Only remove citations you confirmed are wrong by reading the file. Keep unverified ones.
-- Adjust `confidence` if miscalibrated. Merge duplicate subAnswers.
-- Do NOT add meta-commentary subAnswers about the implementer's quality. Every subAnswer must answer the original question.
+- Adjust per-finding `confidence` if miscalibrated. Merge duplicate findings.
+- Do NOT add meta-commentary findings about the implementer's quality. Every finding must answer the original question.
 - Improve the answer text if you can add clarity or correct errors. Don't rephrase for style.
 
 ## Output (REQUIRED)
 
 ```json
-{"question": "<restated>", "answer": "<synthesis>", "citations": [{"file": "<path>", "line": 0, "content": "<quote>"}], "confidence": "high|medium|low", "negativeFindings": ["<searched X, not found>"], "subAnswers": [{"perspective": "<name>", "finding": "<answer>", "confidence": "high|medium|low"}]}
+{"answer": "<synthesis>", "criteriaCovered": ["direct-symbol-trace", "caller-analysis", "test-driven", "cross-file-dependency-map", "documentation-comment-lens"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<extracted text>", "file": "<path>", "line": 0}]}
 ```

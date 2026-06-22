@@ -29,6 +29,11 @@ export interface PipelineInput {
   reviewerGoal?: string;
   /** EnvelopeBus for provider-level event streaming (stderr + JSONL + telemetry). */
   bus?: object;
+  /** Called before each phase starts. */
+  onPhaseChange?: (phase: 'implementing' | 'reviewing') => void;
+  /** For execute_plan: the full list of dispatched task titles (from plan matching).
+   *  Injected into the reviewer prompt for completeness verification. */
+  dispatchedTasks?: string[];
 }
 
 export interface SessionInfo {
@@ -92,10 +97,42 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   const sessions: Session[] = [];
 
   // --- Worktree merge + cleanup helper ---
-  const resolveWorktree = async (): Promise<WorktreeInfo | null> => {
+  const resolveWorktree = async (commitMsg?: string): Promise<WorktreeInfo | null> => {
     if (!wtManager || !wtInfo) return null;
-    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd);
+    return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd, commitMsg);
   };
+
+  function buildCommitMessage(output: string): string {
+    try {
+      const m = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/(\{[\s\S]*\})/);
+      if (m) {
+        const parsed = JSON.parse(m[1]);
+        // 1. Try notes (delegate, execute_plan)
+        if (parsed.notes && parsed.notes.length > 5 && parsed.notes.length < 200) {
+          return `[mma] ${input.type}: ${parsed.notes}`;
+        }
+        // 2. Try answer (read routes: investigate, debug, research, journal_recall)
+        if (parsed.answer && parsed.answer.length > 5) {
+          return `[mma] ${input.type}: ${parsed.answer.slice(0, 150)}`;
+        }
+        // 3. Try task titles (execute_plan, delegate)
+        const tasks = parsed.tasks ?? parsed.tasksExecuted;
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          const titles = tasks.map((t: Record<string, unknown>) => t.title ?? t.prompt ?? '').filter(Boolean);
+          if (titles.length > 0) return `[mma] ${input.type}: ${titles.join(', ').slice(0, 150)}`;
+        }
+        // 4. Try recorded learnings (journal_record)
+        if (Array.isArray(parsed.recorded) && parsed.recorded.length > 0) {
+          const first = parsed.recorded[0]?.learning;
+          if (first) return `[mma] ${input.type}: ${first.slice(0, 150)}`;
+        }
+      }
+    } catch { /* fallback */ }
+    // 5. Last resort: extract first meaningful line from raw output
+    const firstLine = output.split('\n').find(l => l.trim().length > 10 && !l.startsWith('```') && !l.startsWith('#'));
+    if (firstLine && firstLine.length < 200) return `[mma] ${input.type}: ${firstLine.trim().slice(0, 150)}`;
+    return `[mma] ${input.type}: task completed`;
+  }
 
   // Close all opened sessions — best-effort, errors swallowed.
   const closeSessions = async (): Promise<void> => {
@@ -103,6 +140,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   };
 
   try {
+    input.onPhaseChange?.('implementing');
     const implSession = input.implementerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
@@ -116,14 +154,17 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(implSession);
 
-    const implPrompt = `${input.implementerSkill}\n\n---\n\n## Task\n\n${effectivePayload}`;
+    const worktreeNotice = wtInfo
+      ? `\n\n## Working Directory\n\nYou are working in a worktree at \`${effectiveCwd}\`. All files you create or edit must be under this directory.\n`
+      : '';
+    const implPrompt = `${input.implementerSkill}${worktreeNotice}\n\n---\n\n## Task\n\n${effectivePayload}`;
     const implTurn = await implSession.send(implPrompt, {
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
     const implId = implSession.getSessionId();
 
     if (input.reviewPolicy === 'none') {
-      const worktree = await resolveWorktree();
+      const worktree = await resolveWorktree(buildCommitMessage(implTurn.output));
       return {
         status: 'done',
         implementerOutput: implTurn.output,
@@ -151,6 +192,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // workspace-write sandbox confines the reviewer to the worktree, so the
     // parent worktree metadata is out of reach. Same cwd-only tool restriction
     // as the implementer applies.
+    input.onPhaseChange?.('reviewing');
     const revSession = input.reviewerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
@@ -164,7 +206,10 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(revSession);
 
-    const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
+    const completenessSection = input.dispatchedTasks?.length
+      ? `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${input.dispatchedTasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
+      : '';
+    const revPrompt = `${input.reviewerSkill}${completenessSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });
@@ -172,10 +217,20 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 
-    const worktree = await resolveWorktree();
+    const worktree = await resolveWorktree(buildCommitMessage(revTurn.output));
+
+    // Completeness check: if dispatched tasks > reported tasks, flag as partial
+    let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
+    if (parsed.ok && input.dispatchedTasks?.length) {
+      const reported = parsed.data as Record<string, unknown>;
+      const reportedTasks = Array.isArray(reported.tasks) ? reported.tasks.length : 0;
+      if (reportedTasks < input.dispatchedTasks.length) {
+        status = 'done_with_concerns';
+      }
+    }
 
     return {
-      status: parsed.ok ? 'done' : 'done_with_concerns',
+      status,
       implementerOutput: implTurn.output,
       implementerTurn: implTurn,
       reviewerOutput: parsed.ok ? parsed.data : null,

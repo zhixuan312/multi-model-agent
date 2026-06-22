@@ -2,26 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { parseReviewerOutput } from '../../packages/core/src/unified/reviewer-output-parser.js';
 
 const VALID_AUDIT = JSON.stringify({
-  findingsCount: 1,
   criteriaCovered: ['scope-explicitness'],
-  overallAssessment: 'found',
-  findings: [{ severity: 'high', category: 'scope-explicitness', claim: 'Missing scope', evidence: 'Section 2 lacks boundary', suggestion: 'Add scope section' }],
+  findings: [{ weight: 'high', category: 'scope-explicitness', claim: 'Missing scope', evidence: 'Section 2 lacks boundary', suggestion: 'Add scope section' }],
 });
 
 const VALID_INVESTIGATE = JSON.stringify({
-  question: 'What does X do?',
   answer: 'X does Y per file.ts:10',
-  citations: [{ file: 'file.ts', line: 10, content: 'function X()' }],
-  confidence: 'high',
-  negativeFindings: [],
-  subAnswers: [{ perspective: 'direct', finding: 'X does Y', confidence: 'high' }],
+  criteriaCovered: ['direct-symbol-trace'],
+  findings: [{ weight: 'high', category: 'direct-symbol-trace', claim: 'X does Y', evidence: 'function X()', file: 'file.ts', line: 10 }],
 });
 
 const VALID_DELEGATE = JSON.stringify({
-  tasksCompleted: ['Added comment'],
-  filesChanged: ['a.ts'],
-  workerSelfAssessment: 'done',
-  notes: 'All good',
+  status: 'done', notes: 'All good',
 });
 
 const LEGACY_CRITIC = JSON.stringify({
@@ -54,9 +46,9 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput(VALID_AUDIT, 'audit');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { findingsCount: number; overallAssessment: string };
-        expect(data.findingsCount).toBe(1);
-        expect(data.overallAssessment).toBe('found');
+        const data = r.data as { criteriaCovered: string[]; findings: unknown[] };
+        expect(data.criteriaCovered).toContain('scope-explicitness');
+        expect(data.findings).toHaveLength(1);
       }
     });
 
@@ -64,9 +56,9 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput(VALID_INVESTIGATE, 'investigate');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { question: string; confidence: string };
-        expect(data.question).toBe('What does X do?');
-        expect(data.confidence).toBe('high');
+        const data = r.data as { answer: string; criteriaCovered: string[] };
+        expect(data.answer).toBe('X does Y per file.ts:10');
+        expect(data.criteriaCovered).toContain('direct-symbol-trace');
       }
     });
 
@@ -74,8 +66,8 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput(VALID_DELEGATE, 'delegate');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { workerSelfAssessment: string };
-        expect(data.workerSelfAssessment).toBe('done');
+        const data = r.data as { status: string };
+        expect(data.status).toBe('done');
       }
     });
 
@@ -92,23 +84,34 @@ describe('parseReviewerOutput', () => {
 
     it('rejects invalid enum values', () => {
       const bad = JSON.stringify({
-        findingsCount: 0, criteriaCovered: ['x'], overallAssessment: 'maybe',
-        findings: [],
+        criteriaCovered: ['x'],
+        findings: [{ weight: 'maybe', category: 'x', claim: 'y', evidence: 'z', suggestion: 'w' }],
       });
       const r = parseReviewerOutput(bad, 'audit');
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error).toContain('Schema');
     });
 
+    it('accepts all four weight values: critical, high, medium, low', () => {
+      for (const w of ['critical', 'high', 'medium', 'low']) {
+        const data = JSON.stringify({
+          criteriaCovered: ['x'],
+          findings: [{ weight: w, category: 'x', claim: 'y', evidence: 'z', suggestion: 'w' }],
+        });
+        const r = parseReviewerOutput(data, 'audit');
+        expect(r.ok, `weight=${w} should be accepted`).toBe(true);
+      }
+    });
+
     it('rejects missing required fields', () => {
-      const partial = JSON.stringify({ findingsCount: 0 });
+      const partial = JSON.stringify({ criteriaCovered: ['x'] });
       const r = parseReviewerOutput(partial, 'audit');
       expect(r.ok).toBe(false);
     });
 
-    it('accepts empty arrays (zero findings)', () => {
+    it('accepts empty findings array', () => {
       const clean = JSON.stringify({
-        findingsCount: 0, criteriaCovered: ['all'], overallAssessment: 'clean', findings: [],
+        criteriaCovered: ['all'], findings: [],
       });
       const r = parseReviewerOutput(clean, 'audit');
       expect(r.ok).toBe(true);

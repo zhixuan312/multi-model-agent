@@ -11,7 +11,7 @@ version: "0.0.0-unreleased"
 
 mma-review is the **pre-merge gate**. Send code files (or a diff) to a worker for structured review against an executability bar: would a maintainer who reads only the verdict and the diff understand which changes are required, why each is required, and where each lives — well enough to apply the fix and re-merge without re-investigating?
 
-Each file is reviewed independently in parallel; results are index-aligned with `filePaths`.
+Each file is reviewed independently in parallel; results are index-aligned with `target.paths`.
 
 **Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses regardless of `focus`.
 
@@ -32,8 +32,8 @@ Each file is reviewed independently in parallel; results are index-aligned with 
 
 The cross-file ripple pass (changed-symbol → broken caller) only fires when the worker can identify what changed. Two patterns:
 
-- **Diff-as-input (preferred for cross-file ripple)**: pass the diff via the `code` field, plus the named files via `filePaths`. The worker treats the diff as the change-set and greps for callers of changed public symbols.
-- **Files-only (static review)**: pass only `filePaths`. The worker reviews the files in their current state without a change-set, so cross-file ripple is degenerate. Test gap, missing edge case, race, leak, and security/performance findings still fire.
+- **Diff-as-input (preferred for cross-file ripple)**: pass the diff via the `target.inline` field, plus the named files via `target.paths`. The worker treats the diff as the change-set and greps for callers of changed public symbols.
+- **Files-only (static review)**: pass only `target.paths`. The worker reviews the files in their current state without a change-set, so cross-file ripple is degenerate. Test gap, missing edge case, race, leak, and security/performance findings still fire.
 
 ## Endpoint
 
@@ -46,25 +46,27 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 ```json
 {
   "type": "review",
-  "code": "inline code snippet (optional if filePaths given)",
+  "target": {
+    "inline": "inline code snippet (optional if target.paths given)",
+    "paths": ["/project/src/auth/login.ts"]
+  },
   "focus": ["correctness", "security"],
   "subtype": "default",
-  "filePaths": ["/project/src/auth/login.ts"],
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `code` | string | no | Inline code snippet to review |
+| `target.inline` | string | no | Inline code snippet to review |
 | `focus` | string[] | no | Any of `security`, `performance`, `correctness`, `style`. Omit for general review. |
 | `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
-| `filePaths` | string[] | no | Files to review (one worker per file, parallel) |
+| `target.paths` | string[] | no | Files to review (one worker per file, parallel) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — useful for design docs the reviewer should validate against |
 
-Either `code` or `filePaths` (or both) must be provided.
+Either `target.inline` or `target.paths` (or both) must be provided.
 
-> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
 
 ## Full example
 
@@ -74,7 +76,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"review","focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \
+  -d '{"type":"review","focus":["security","correctness"],"target":{"paths":["/project/src/auth/login.ts"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -85,26 +87,7 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
-read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
-
-```json
-{
-  "completed": true,
-  "message": "Review complete; 3 findings.",
-  "findings": [
-    { "id": "F1", "severity": "critical", "category": "test-gap",
-      "claim": "login.ts has no test for null username edge case.",
-      "evidence": "Worker read login.ts and grepped for test files — no null-case test found.",
-      "suggestion": "Add test case: `login(null) throws ValidationError`.",
-      "source": "reviewer" }
-  ],
-  "filesChanged": [],
-  "commitSha": null,
-  "summary": "...",
-  "telemetry": { ... }
-}
-```
+The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-review` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
@@ -156,7 +139,7 @@ Self-review and cross-model review are not the same thing. The whole reason to d
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on each per-task result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

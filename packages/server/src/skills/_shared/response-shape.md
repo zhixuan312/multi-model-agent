@@ -14,20 +14,20 @@ The HTTP status is the state discriminator:
 
 | Status | Meaning |
 |---|---|
-| `202 text/plain` | Still pending — body is the running headline string (e.g. `"1/2 running, 47s elapsed"`) |
-| `200 application/json` | Terminal — body is the uniform 7-field envelope below |
+| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
+| `200 application/json` | Terminal — body is the layered envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
 
-The terminal JSON envelope always has these 6 fields. Each may be a real value or a `not_applicable` sentinel:
+The terminal JSON envelope always has these 6 top-level fields:
 
 ```json
 {
-  "headline": "<string>",
-  "results": [ /* per-task result objects */ ],
-  "batchTimings": { /* timings */ },
-  "costSummary": { /* cost roll-up */ },
-  "structuredReport": { /* parsed sections */ },
-  "error": { "kind": "not_applicable", "reason": "task succeeded" }
+  "task":      { "taskId": "<uuid>", "type": "<route>", "status": "completed" },
+  "output":    { "summary": { /* refiner JSON */ }, "findings": [...] },
+  "execution": { "stages": [...], "stopReason": "normal", "haltedStage": null },
+  "metrics":   { "totalDurationMs": 12400, "totalCostUSD": 0.08 },
+  "raw":       { /* provider-level detail; not for main-agent consumption */ },
+  "error":     null
 }
 ```
 
@@ -35,12 +35,8 @@ Read the envelope by the shape of `error`:
 
 | Shape | Meaning |
 |---|---|
+| `error` is `null` or absent | Task succeeded — read `output` |
 | `error` is a real object (with `code` / `message`) | Task failed — read `error.code` + `error.message` |
-| `error` is `{kind: "not_applicable", ...}` | Task succeeded — read `results` |
-
-### GET /task/:taskId?taskIndex=N — single task slice
-
-Same 6-field envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 

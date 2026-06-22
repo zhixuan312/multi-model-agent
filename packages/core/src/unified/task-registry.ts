@@ -9,6 +9,9 @@ export interface TaskEntry {
   runningHeadline: string | null;
   startedAt: number;
   terminalAt: number | null;
+  phase: 'implementing' | 'reviewing' | null;
+  phaseStartedAt: number | null;
+  totalTasks: number | null;
 }
 
 function isTerminal(state: TaskState): boolean {
@@ -26,6 +29,9 @@ export class TaskRegistry {
       runningHeadline: null,
       startedAt: Date.now(),
       terminalAt: null,
+      phase: null,
+      phaseStartedAt: null,
+      totalTasks: null,
     });
   }
 
@@ -47,6 +53,13 @@ export class TaskRegistry {
     e.state = 'failed';
     e.result = result;
     e.terminalAt = Date.now();
+  }
+
+  setPhase(taskId: string, phase: 'implementing' | 'reviewing'): void {
+    const e = this.entries.get(taskId);
+    if (!e || isTerminal(e.state)) return;
+    e.phase = phase;
+    e.phaseStartedAt = Date.now();
   }
 
   setHeadline(taskId: string, headline: string): void {

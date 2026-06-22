@@ -26,11 +26,11 @@ Verify the implementer's audit, improve quality, re-output the answer in the sam
 ## Refinement rules
 
 - Remove hallucinated/wrong-evidence findings. Add missed issues. Correct severities.
-- Update `findingsCount`, `criteriaCovered`, `overallAssessment` to match corrected findings.
+- Update `criteriaCovered` and `findings` to match corrected state.
 - Improve finding wording if you can add clarity. Don't rephrase correct findings for style.
 
 ## Output (REQUIRED)
 
 ```json
-{"findingsCount": 0, "criteriaCovered": ["<slug>"], "overallAssessment": "found|clean", "findings": [{"severity": "critical|high|medium|low", "category": "<slug>", "claim": "<one sentence>", "evidence": "<quoted text>", "suggestion": "<fix>"}]}
+{"criteriaCovered": ["<slug>"], "findings": [{"weight": "critical|high|medium|low", "category": "<slug>", "claim": "<one sentence>", "evidence": "<quoted text>", "suggestion": "<fix>"}]}
 ```

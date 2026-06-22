@@ -46,16 +46,16 @@ A typical delegate task completes in 5-15 tool calls total: read each file once,
 
 Trust your prior reads. Trust your prior edits. The most common cheap-worker failure is restart-looping instead of editing.
 
-## Worker Self-Assessment
+## Task Status
 
-Report `workerSelfAssessment: "done"` when the requested code changes are complete. Verification (running tests, checking build) is the system's job, not yours. Environment limitations (sandbox denials, missing commands) go in the summary field, not into a "failed" self-assessment.
+Report `status: "done"` when the requested code changes are complete. Verification (running tests, checking build) is the system's job, not yours. Environment limitations (sandbox denials, missing commands) go in the `notes` field, not into a `"failed"` status.
 
-Report `workerSelfAssessment: "failed"` ONLY when you could not complete the requested code changes (you got stuck, the brief was impossible, you decided to bail). Inability to independently verify is not failure.
+Report `status: "failed"` ONLY when you could not complete the requested code changes (you got stuck, the brief was impossible, you decided to bail). Inability to independently verify is not failure.
 
 ## Output Format
 
 After completing work, output exactly one JSON block:
 
 ```json
-{"tasksCompleted": ["<description>"], "filesChanged": ["<path>"], "workerSelfAssessment": "done|failed", "notes": "<observations, scope deviations, incomplete-refactor warnings>"}
+{"status": "done|failed", "notes": "<observations, scope deviations>"}
 ```

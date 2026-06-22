@@ -72,4 +72,38 @@ describe('TaskRegistry', () => {
     reg.complete('t1', { second: true });
     expect(reg.get('t1')!.result).toEqual({ first: true });
   });
+
+  it('initializes phase fields as null', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/a', 'delegate');
+    const e = reg.get('t1')!;
+    expect(e.phase).toBeNull();
+    expect(e.phaseStartedAt).toBeNull();
+    expect(e.totalTasks).toBeNull();
+  });
+
+  it('setPhase updates phase and phaseStartedAt', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/a', 'delegate');
+    reg.setPhase('t1', 'implementing');
+    const e = reg.get('t1')!;
+    expect(e.phase).toBe('implementing');
+    expect(e.phaseStartedAt).toBeTypeOf('number');
+  });
+
+  it('setPhase transitions from implementing to reviewing', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/a', 'delegate');
+    reg.setPhase('t1', 'implementing');
+    reg.setPhase('t1', 'reviewing');
+    expect(reg.get('t1')!.phase).toBe('reviewing');
+  });
+
+  it('setPhase does not update terminal tasks', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/a', 'delegate');
+    reg.complete('t1', {});
+    reg.setPhase('t1', 'implementing');
+    expect(reg.get('t1')!.phase).toBeNull();
+  });
 });

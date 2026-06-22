@@ -72,7 +72,7 @@ Before finishing, verify:
 Output exactly one JSON block (a single OBJECT, not an array):
 
 ```json
-{"summary": "<e.g. recorded 3, failed 0; created 0012-0014>", "filesChanged": ["<paths>"], "recorded": [{"learningIndex": 0, "op": "create|refine|supersede|merge", "ids": ["0012"]}], "failed": [{"learningIndex": 1, "learning": "<verbatim>", "reason": "<why>"}]}
+{"recorded": [{"learning": "<lesson text>", "category": "<decision|design|behavior|process|knowledge|style>", "nodeId": "<0012>", "nodePath": "<file path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
 ```
 
 Every input learning MUST appear exactly once across `recorded` and `failed`, keyed by its `learningIndex`.

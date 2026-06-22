@@ -25,5 +25,5 @@ Verify the implementer's research, improve quality, re-output the answer in the 
 ## Output (REQUIRED)
 
 ```json
-{"sources": [{"title": "<name>", "url": "<url>", "attempted": true, "used": true, "note": "<optional>"}], "findings": [{"perspective": "<criterion>", "insight": "<cited paragraph>", "sourceUrl": "<url>", "suggestion": "<optional>"}], "synthesis": "<narrative answer>"}
+{"answer": "<narrative answer>", "criteriaCovered": ["primary-sources", "practitioner-consensus", "recent-developments", "counter-perspectives", "cross-domain"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<cited excerpt>", "url": "<source URL>", "source": "<adapter>"}]}
 ```

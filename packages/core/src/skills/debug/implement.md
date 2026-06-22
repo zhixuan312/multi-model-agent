@@ -77,5 +77,5 @@ Findings that fail any check should be downgraded or dropped. However, partial-e
 Output exactly one JSON block:
 
 ```json
-{"reproduction": "<steps to trigger the failure>", "symptom": {"file": "<path>", "line": 0, "description": "<what fails and how>"}, "cause": {"file": "<path>", "line": 0, "description": "<the actual defect>"}, "trace": [{"file": "<path>", "line": 0, "observation": "<what happens at this step>"}], "proposedFix": "<specific change to make at the cause — do NOT apply>", "falsifier": "<how to verify the fix works>", "otherDefects": ["<pre-existing or entangled bugs, out of scope>"]}
+{"answer": "<one-line root cause summary>", "criteriaCovered": ["symptom-location", "recent-change", "test-failure", "reproduction", "concurrency-configuration"], "findings": [{"weight": "critical|high|medium|low", "category": "<angle-slug>", "claim": "<one sentence>", "evidence": "<extracted text from file>", "file": "<path or null>", "line": 0}]}
 ```

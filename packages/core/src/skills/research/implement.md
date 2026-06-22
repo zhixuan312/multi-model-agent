@@ -106,5 +106,5 @@ A single research question should produce a mix of strategies — broad web quer
 After completing research, output exactly one JSON block:
 
 ```json
-{"sources": [{"title": "<name>", "url": "<url>", "attempted": true, "used": true, "note": "<optional>"}], "findings": [{"perspective": "<criterion name>", "insight": "<cited insight paragraph>", "sourceUrl": "<primary source URL>", "suggestion": "<optional follow-up>"}], "synthesis": "<coherent narrative answer>"}
+{"answer": "<coherent narrative answer>", "criteriaCovered": ["primary-sources", "practitioner-consensus", "recent-developments", "counter-perspectives", "cross-domain"], "findings": [{"weight": "critical|high|medium|low", "category": "<perspective-slug>", "claim": "<one sentence>", "evidence": "<cited excerpt>", "url": "<source URL>", "source": "<adapter: brave|arxiv|semantic_scholar|github_search|openalex|crossref|pubmed>"}]}
 ```

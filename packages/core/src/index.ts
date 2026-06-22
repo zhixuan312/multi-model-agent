@@ -34,9 +34,8 @@ export type {
 } from './types/brief-quality-policy.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
-export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
-export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
 export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
+export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanHeading } from './unified/plan-task-matcher.js';
 // Context blocks
 export {
   InMemoryContextBlockStore,
@@ -102,7 +101,7 @@ export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from
 
 // Unified task engine
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';
-export type { TaskType, TypeConfig } from './unified/type-registry.js';
+export type { TaskType, TypeConfig, TargetAcceptance } from './unified/type-registry.js';
 export { taskInputSchema } from './unified/task-input-schema.js';
 export type { TaskInput } from './unified/task-input-schema.js';
 export { loadSkill, validateSkillsExist, clearSkillCache } from './unified/skill-loader.js';

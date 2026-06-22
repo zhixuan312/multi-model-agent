@@ -3,11 +3,6 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { preflight, AbortError } from './preflight.mjs';
 
-// Harness hygiene: the smoke shares ONE git workspace across all scenarios. In
-// goal mode a write scenario where the worker under-commits leaves the tree
-// dirty, which would fail the NEXT goal-set's clean-tree precondition. Commit
-// any leftover here so each scenario's verdict stays independent (the failing
-// scenario's own result already records the miss; this just unblocks the rest).
 function keepWorkspaceClean(dir) {
   try {
     const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim();
@@ -32,11 +27,9 @@ const opts = {
   strict: argv.includes('--strict'),
   expectBranch: (argv.find((a) => a.startsWith('--branch=')) || '').split('=')[1] || null,
   allowMismatch: argv.includes('--allow-mismatch'),
-  // --only=1,13 limits the run to a subset of scenario ids (for quick checks).
   only: onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null,
-  // --wait-flush waits out the server's 5-min telemetry flush, then verifies the
-  // run's events actually landed in events_raw (the mma->backend->DB leg).
   waitFlush: argv.includes('--wait-flush'),
+  sequential: argv.includes('--sequential'),
 };
 
 let ctx;
@@ -51,14 +44,91 @@ ctx.contextBlockIds = [];
 const records = [];
 const checksByScenario = {};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// Run-level wire-record tally: ids already in the queue at run start are the
-// baseline (prior runs / unrelated activity) and excluded; seenIds accumulates
-// THIS run's ids via full-file reads, so a flusher drain can't lose them.
 const baselineIds = new Set(allQueueEventIds());
 const seenIds = new Set();
 let totalCostUSD = 0;
 let expectedEmits = 0;
 let backendSummary = null;
+
+// ── Run a single scenario to completion and record results ──
+async function runScenario(spec, ctx, log) {
+  expectedEmits += spec.emits ?? 0;
+  try {
+    log(`#${spec.id}  ${spec.type ?? spec.kind ?? '?'}  dispatching...`);
+
+    if (spec.kind === 'error') {
+      const res = await runDispatch(spec, ctx);
+      const rec = normalize(spec, {});
+      rec.errorStatus = res.status;
+      rec.errorJson = res.json;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  ${spec.type ?? '?'}  → HTTP ${res.status}`);
+      return;
+    }
+
+    const queueBefore = queueLineCount();
+    const res = await runDispatch(spec, ctx);
+
+    if (res.blockId) {
+      ctx.blockId = res.blockId;
+      ctx.contextBlockIds.push(res.blockId);
+      records.push(normalize(spec, {}));
+      checksByScenario[spec.id] = [{ checkId: 'register', status: res.blockId ? 'PASS' : 'FAIL', detail: `blockId=${res.blockId}` }];
+      log(`#${spec.id}  context-blocks  → registered blockId=${res.blockId}`);
+      return;
+    }
+
+    log(`#${spec.id}  ${spec.type}  → taskId=${res.taskId}  polling...`);
+    const envelope = await pollTask(ctx.token, res.taskId);
+
+    if (spec.id === 2) {
+      const implSessionId = envelope.execution?.sessions?.implementer;
+      if (implSessionId) ctx.sessionFromScenario2 = implSessionId;
+    }
+
+    const queue = collectQueue(queueBefore);
+    const want = spec.emits ?? 0;
+    const startSeen = seenIds.size;
+    const settleUntil = Date.now() + 8000;
+    for (;;) {
+      for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
+      if (seenIds.size - startSeen >= want || Date.now() >= settleUntil) break;
+      await sleep(300);
+    }
+    const rec = normalize(spec, {
+      response: collectResponse(envelope),
+      diagnostics: collectDiagnostics(res.taskId),
+      queue, backend: null,
+    });
+    if (spec.sessionReuse && ctx.sessionFromScenario2) {
+      rec.resumeSessionId = ctx.sessionFromScenario2;
+    }
+    records.push(rec);
+    const checks = verify(rec);
+    checksByScenario[spec.id] = checks;
+    const fails = checks.filter(c => c.status === 'FAIL').length;
+    const warns = checks.filter(c => c.status === 'WARN').length;
+    const cost = envelope.metrics?.implementer?.costUsd ?? 0;
+    const status = envelope.task?.status ?? '?';
+    log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
+    if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
+    totalCostUSD += envelope.metrics?.totalCostUsd ?? 0;
+  } catch (err) {
+    records.push(normalize(spec, {}));
+    checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];
+    log(`#${spec.id}  ${spec.type ?? '?'}  → DISPATCH FAILED: ${err.message}`);
+  }
+}
+
+// ── Run a sequential chain of scenario ids ──
+async function runChain(ids, allScenarios, ctx, log) {
+  for (const id of ids) {
+    const spec = allScenarios.find(s => s.id === id);
+    if (!spec) continue;
+    await runScenario(spec, ctx, log);
+  }
+}
 
 try {
   const { dir } = createProject();
@@ -67,89 +137,75 @@ try {
 
   const log = (msg) => { process.stderr.write(msg + '\n'); };
   const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
-  log(`Full-pipeline smoke — ${scenarios.length} scenarios queued`);
-  for (const spec of scenarios) {
-    expectedEmits += spec.emits ?? 0;
-    try {
-      log(`\n#${spec.id}  ${spec.type ?? spec.kind ?? '?'}  dispatching...`);
 
-      // ─── Error scenarios: dispatch and check status inline ───
-      if (spec.kind === 'error') {
-        const res = await runDispatch(spec, ctx);
-        const rec = normalize(spec, {});
-        rec.errorStatus = res.status;
-        rec.errorJson = res.json;
-        records.push(rec);
-        checksByScenario[spec.id] = verify(rec);
-        log(`#${spec.id}  ${spec.type ?? '?'}  → HTTP ${res.status}`);
-        continue;
-      }
+  if (opts.sequential) {
+    // Legacy sequential mode
+    log(`Full-pipeline smoke — ${scenarios.length} scenarios (sequential)`);
+    for (const spec of scenarios) await runScenario(spec, ctx, log);
+  } else {
+    // ── Parallel phased execution ──
+    //
+    // Phase 1: #1 context-blocks (prerequisite for #11, #12 blockId)
+    // Phase 2: 14 parallel threads (dependencies chain within a thread)
+    //   Thread A: #2 investigate → #16 investigate/resume  (session reuse needs #2)
+    //   Thread B: #3 research
+    //   Thread C: #4 audit/default
+    //   Thread D: #5 delegate → #6 execute_plan → #9 journal_record → #10 journal_recall
+    //   Thread E: #7 review
+    //   Thread F: #8 debug
+    //   Thread G: #11 audit/spec
+    //   Thread H: #12 audit/plan
+    //   Thread I: #13 audit/skill
+    //   Thread J: #14 delegate/complex → #15 delegate/none → #20 sandbox-escape → #21 sandbox-cd
+    //   Thread K: #17 error/invalid
+    //   Thread L: #18 error/missing
+    //   Thread M: #19 orchestrate
+    //   Thread N: #22 audit/read-only-sandbox
 
-      const queueBefore = queueLineCount();
-      const res = await runDispatch(spec, ctx);
+    const phase2Threads = [
+      [2, 16],       // investigate → session reuse
+      [3],           // research
+      [4],           // audit/default
+      [5, 6, 9, 10], // write chain → journal_recall
+      [7],           // review
+      [8],           // debug
+      [11],          // audit/spec
+      [12],          // audit/plan
+      [13],          // audit/skill
+      [14, 15, 20, 21], // write chain → sandbox tests
+      [17],          // error/invalid
+      [18],          // error/missing
+      [19],          // orchestrate
+      [22],          // audit/read-only-sandbox
+    ];
 
-      // ─── Context-block registration (synchronous 201) ───
-      if (res.blockId) {
-        ctx.blockId = res.blockId;
-        ctx.contextBlockIds.push(res.blockId);
-        records.push(normalize(spec, {}));
-        checksByScenario[spec.id] = [{ checkId: 'register', status: res.blockId ? 'PASS' : 'FAIL', detail: `blockId=${res.blockId}` }];
-        log(`#${spec.id}  context-blocks  → registered blockId=${res.blockId}`);
-        continue;
-      }
+    // Filter threads if --only is active
+    const filterThread = (thread) => {
+      if (!opts.only) return thread;
+      return thread.filter(id => opts.only.has(String(id)));
+    };
 
-      log(`#${spec.id}  ${spec.type}  → taskId=${res.taskId}  polling...`);
-      // ─── Normal task: poll to terminal ───
-      const envelope = await pollTask(ctx.token, res.taskId);
+    const totalCount = 1 + phase2Threads.reduce((n, t) => n + filterThread(t).length, 0);
+    log(`Full-pipeline smoke — ${totalCount} scenarios (2 phases, parallel)`);
 
-      // Capture session from scenario #2 for session reuse in scenario #16
-      if (spec.id === 2) {
-        const implSession = envelope.results?.[0]?.sessions?.implementer;
-        if (implSession?.sessionId) {
-          ctx.sessionFromScenario2 = implSession.sessionId;
-        }
-      }
-
-      const queue = collectQueue(queueBefore);
-      // Run-level capture: settle until this scenario's expected `emits` new ids
-      // appear (or time out) before moving on.
-      const want = spec.emits ?? 0;
-      const startSeen = seenIds.size;
-      const settleUntil = Date.now() + 8000;
-      for (;;) {
-        for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
-        if (seenIds.size - startSeen >= want || Date.now() >= settleUntil) break;
-        await sleep(300);
-      }
-      const rec = normalize(spec, {
-        response: collectResponse(envelope),
-        diagnostics: collectDiagnostics(res.taskId),
-        queue, backend: null, // verified run-level after the loop
-      });
-      // For session reuse scenario, attach the requested session ID for verify
-      if (spec.sessionReuse && ctx.sessionFromScenario2) {
-        rec.resumeSessionId = ctx.sessionFromScenario2;
-      }
-      records.push(rec);
-      const checks = verify(rec);
-      checksByScenario[spec.id] = checks;
-      const fails = checks.filter(c => c.status === 'FAIL').length;
-      const warns = checks.filter(c => c.status === 'WARN').length;
-      const cost = envelope.results?.[0]?.cost?.implementerUsd ?? 0;
-      const status = envelope.results?.[0]?.status ?? '?';
-      log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
-      if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
-      totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
-        ?? envelope.costSummary?.totalActualCostUSD ?? 0;
-    } catch (err) {
-      records.push(normalize(spec, {}));
-      checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];
-      log(`#${spec.id}  ${spec.type ?? '?'}  → DISPATCH FAILED: ${err.message}`);
+    // Phase 1: context-blocks
+    const phase1 = scenarios.find(s => s.id === 1);
+    if (phase1 && (!opts.only || opts.only.has('1'))) {
+      log('\n── Phase 1 (1 task) ──');
+      await runScenario(phase1, ctx, log);
     }
+
+    // Phase 2: parallel threads
+    const p2Threads = phase2Threads
+      .map(filterThread)
+      .filter(t => t.length > 0);
+    if (p2Threads.length > 0) {
+      log(`\n── Phase 2 (${p2Threads.length} parallel threads, ${p2Threads.reduce((n, t) => n + t.length, 0)} tasks) ──`);
+      await Promise.all(p2Threads.map(thread => runChain(thread, scenarios, ctx, log)));
+    }
+
   }
 
-  // Run-level backend: correlate by event_id. The flusher uploads every 5 min,
-  // so without --wait-flush these rows won't have landed yet.
   const allEventIds = [...seenIds];
   ctx.allEventIds = allEventIds;
   if (!opts.skipBackend) {

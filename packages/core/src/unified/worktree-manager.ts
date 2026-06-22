@@ -10,6 +10,7 @@ export interface WorktreeInfo {
   path: string;
   hasChanges: boolean;
   merged: boolean;
+  filesChanged?: string[];
 }
 
 export type ExecFn = (
@@ -145,7 +146,7 @@ export class WorktreeManager {
    * Merge worktree branch back into the original branch, remove worktree, delete branch.
    * Returns the merge result. On merge conflict, preserves the worktree for manual resolution.
    */
-  async mergeAndCleanup(worktreePath: string, branch: string, originalCwd: string): Promise<WorktreeInfo> {
+  async mergeAndCleanup(worktreePath: string, branch: string, originalCwd: string, commitMessage?: string): Promise<WorktreeInfo> {
     // Defensive: if the worktree directory is gone (e.g. an OS temp-dir reap, or
     // an agent that deleted it), every `git` spawn with `cwd: worktreePath` would
     // throw `spawn git ENOENT` and crash the whole pipeline. Detect it first and
@@ -171,7 +172,7 @@ export class WorktreeManager {
     // Commit any uncommitted changes in the worktree
     await this.exec('git', ['add', '-A'], { cwd: worktreePath, windowsHide: true });
     try {
-      await this.exec('git', ['commit', '-m', `[mma] auto-commit before merge`], { cwd: worktreePath, windowsHide: true });
+      await this.exec('git', ['commit', '-m', commitMessage ?? `[mma] auto-commit before merge`], { cwd: worktreePath, windowsHide: true });
     } catch {
       // Already committed or nothing to commit
     }
@@ -185,10 +186,17 @@ export class WorktreeManager {
       return { branch, path: worktreePath, hasChanges: true, merged: false };
     }
 
+    // Compute filesChanged from the merge commit (source of truth, not tool-call tracking)
+    let filesChanged: string[] = [];
+    try {
+      const { stdout } = await this.exec('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: originalCwd, windowsHide: true });
+      filesChanged = stdout.trim().split('\n').filter(Boolean);
+    } catch { /* best-effort — empty list on failure */ }
+
     // Merge succeeded — remove worktree + branch (shared `.git` registry → retry on lock)
     await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
     await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
-    return { branch, path: worktreePath, hasChanges: true, merged: true };
+    return { branch, path: worktreePath, hasChanges: true, merged: true, filesChanged };
   }
 
   async getInfo(worktreePath: string, branch: string): Promise<WorktreeInfo> {

@@ -13,7 +13,7 @@ describe('contract: tool routes require X-MMA-Main-Model header', () => {
           'X-MMA-Client': 'claude-code',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
+        body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error?: { code?: string } | string };
@@ -35,7 +35,7 @@ describe('contract: tool routes require X-MMA-Main-Model header', () => {
           'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ type: 'review', filePaths: ['/tmp/noop.ts'] }),
+        body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(res.status).toBe(202);
     } finally {

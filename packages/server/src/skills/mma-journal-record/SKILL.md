@@ -42,13 +42,13 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 ```json
 {
   "type": "journal_record",
-  "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged. Also: Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
+  "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged. Also: Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `entry` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
+| `prompt` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
 
 **What gets stored & where:**
 
@@ -69,7 +69,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "type": "journal_record",
-    "entry": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
+    "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
   }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
@@ -78,84 +78,6 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 @include _shared/polling.md
 
 @include _shared/response-shape.md
-
-## Per-task report shape
-
-Each task carries a structured report containing the graph operation metadata:
-
-```json
-{
-  "summary": "recorded 2, failed 0; created 0012, superseded 0009",
-  "filesChanged": [".mma/journal/nodes/0012.md", ".mma/journal/index.md", ".mma/journal/log.md"],
-  "recorded": [
-    { "learningIndex": 0, "op": "create", "ids": ["0012"] },
-    { "learningIndex": 1, "op": "supersede", "ids": ["0013"] }
-  ],
-  "failed": []
-}
-```
-
-`recorded` and `failed` partition the input learnings by `learningIndex`. To retry, re-send the `failed[]` entries' `learning` text as a new `learnings[]` batch (reuse the original `tagHints`/`contextBlockIds`).
-
-The authoritative success signal is `completed` + the presence of `filesChanged`. See "v5 wire shape" below for the full envelope.
-
-## v5 wire shape (reviewed write route)
-
-Every task result is a `ComposePayload` — seven main-agent fields plus a telemetry block.
-The main-agent fields are authoritative; the telemetry block is diagnostics.
-
-```json
-{
-  "completed": true,
-  "message": "Journal entry created (node 0012); superseded prior learning (node 0009)",
-  "findings": [],
-  "summary": "created 0012; superseded 0009",
-  "filesChanged": [".mma/journal/nodes/0012.md", ".mma/journal/index.md", ".mma/journal/log.md"],
-  "commitSha": null,
-  "blockId": null,
-  "telemetry": {
-    "totalDurationMs": 5400,
-    "totalCostUSD": 0.04,
-    "workerSelfAssessment": "done",
-    "reviewVerdict": "approved",
-    "commitOutcome": "not_applicable",
-    "stopReason": "normal",
-    "haltedStage": null,
-    "stages": [
-      { "name": "prepare",        "outcome": "advance", "durationMs": 2,    "costUSD": 0 },
-      { "name": "register-block", "outcome": "skip",    "comment": "register-block does not apply to route=journal", "durationMs": 0, "costUSD": 0 },
-      { "name": "implement",      "outcome": "advance", "durationMs": 3200, "costUSD": 0.02 },
-      { "name": "review",         "outcome": "advance", "durationMs": 1800, "costUSD": 0.01 },
-      { "name": "rework",         "outcome": "skip",    "comment": "rework skipped because review approved", "durationMs": 0, "costUSD": 0 },
-      { "name": "commit",         "outcome": "skip",    "comment": "commit does not apply to non-git routes", "durationMs": 0, "costUSD": 0 },
-      { "name": "annotate",       "outcome": "advance", "durationMs": 340,  "costUSD": 0.01 },
-      { "name": "compose",        "outcome": "advance", "durationMs": 56,   "costUSD": 0 },
-      { "name": "terminal",       "outcome": "advance", "durationMs": 2,    "costUSD": 0 }
-    ]
-  }
-}
-```
-
-### Key fields
-
-| Field | When populated | Notes |
-|---|---|---|
-| `completed` | always | `true` when entry is created/refined/superseded and approved; `false` on review rejection, path traversal, or write failure |
-| `message` | always | human-readable summary (e.g., "created 0012; superseded 0009"); read on failure for diagnostic |
-| `findings` | always | issues surfaced by the reviewer (e.g., unclear learning, duplicate with 0009). Empty if approved as-is. |
-| `filesChanged` | always | graph journal paths modified: `nodes/`, `index.md`, `log.md` (relative to `cwd`) |
-| `workerSelfAssessment` | always | `'done'` or `'failed'` — worker's assessment of completeness |
-| `blockId` | always `null` | journal is a task route, not register-context-block |
-| `commitSha` | always `null` | journal entries are graph mutations, not git commits |
-| `reviewVerdict` | via telemetry | `'approved'` \| `'rejected_with_rework'` \| `'rejected'` — reviewer's verdict on the learned entry |
-
-### Reviewed write lifecycle
-
-Unlike read routes (audit/investigate/debug), journal runs a full review cycle: **implement** → **review** → [optional **rework**] → **commit** (skipped for non-git routes) → **annotate**. If the reviewer finds issues (e.g., the learning is ambiguous, the node supersedes multiple prior entries), a rework round applies targeted edits before finalization.
-
-### `completed: false` — what it means
-
-Path traversal detected, write permission denied, or directory creation failed. The `message` names the blocking issue.
 
 ## Best practices
 

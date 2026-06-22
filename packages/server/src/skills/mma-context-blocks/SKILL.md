@@ -74,39 +74,15 @@ ID=$(curl -f --show-error -s -X POST \
   -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
   "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
 
-# Reference from N delegate tasks
+# Reference from a delegate call
 curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"type\":\"delegate\",\"tasks\":[
-    {\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]},
-    {\"prompt\":\"Implement section 4 per spec\",\"contextBlockIds\":[\"$ID\"]}
-  ]}" \
+  -d "{\"type\":\"delegate\",\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]}" \
   "http://localhost:$PORT/task?cwd=/project"
 ```
-
-## v5 wire shape (register-context-block route)
-
-Every task result is a `ComposePayload`. For the `register-context-block` route, the envelope has one additional field beyond the standard seven:
-
-```json
-{
-  "completed": true,
-  "message": "Context block cb_abc123 registered (12345 bytes)",
-  "findings": [],
-  "summary": "",
-  "filesChanged": [],
-  "commitSha": null,
-  "blockId": "cb_abc123",
-  "telemetry": { ... }
-}
-```
-
-`blockId` is **non-null only for the `register-context-block` route**. For every other route (`delegate`, `execute-plan`, `investigate`, etc.), `blockId` is `null`. This is the only signal that distinguishes a register-context-block result from any other route — no route-keyed discriminated union, just one extra nullable field on the shared shape.
-
-The terminal context block (per-task, auto-registered) uses a different ID format and is separate from the `blockId` in the wire envelope.
 
 ## Best practices
 
@@ -122,9 +98,9 @@ Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec
 ## Common pitfalls
 
 ❌ **Inlining the same 50KB spec into every task prompt**
-> tasks: [{prompt: "Implement section 3:\n[50KB spec]"}, {prompt: "Implement section 4:\n[50KB spec]"}]
+Inlining a 50KB spec into every delegate call's prompt.
 
-N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each task.
+N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each call.
 
 ❌ **Forgetting to delete unused blocks**
 Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent tasks finish — or let idle expiry (24 h) evict them.

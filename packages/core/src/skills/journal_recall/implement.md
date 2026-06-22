@@ -56,5 +56,5 @@ Before finishing, verify:
 Output exactly one JSON block:
 
 ```json
-{"results": [{"learning": "<lesson from node>", "context": "<surrounding edges and related nodes>", "relevance": "critical|high|medium|low", "nodeId": "<id>", "nodePath": "<file path>", "category": "<decision|design|behavior|process|knowledge|style>", "status": "<adopted|dropped|inconclusive|superseded>"}], "summary": "<synthesis answering the query, naming how nodes relate>"}
+{"answer": "<synthesis answering the query, naming how nodes relate>", "criteriaCovered": ["decision", "design", "behavior", "process", "knowledge", "style"], "findings": [{"weight": "critical|high|medium|low", "category": "<decision|design|behavior|process|knowledge|style>", "claim": "<lesson from node>", "evidence": "<surrounding edges and related nodes>", "nodeId": "<id>", "nodePath": "<file path>"}]}
 ```
