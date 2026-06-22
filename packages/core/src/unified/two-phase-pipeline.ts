@@ -102,36 +102,28 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     return wtManager.mergeAndCleanup(wtInfo.path, wtInfo.branch, input.cwd, commitMsg);
   };
 
-  function buildCommitMessage(output: string): string {
+  function buildCommitMessage(): string {
+    const prefix = `[mma] ${input.type}`;
     try {
-      const m = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/(\{[\s\S]*\})/);
-      if (m) {
-        const parsed = JSON.parse(m[1]);
-        // 1. Try notes (delegate, execute_plan)
-        if (parsed.notes && parsed.notes.length > 5 && parsed.notes.length < 200) {
-          return `[mma] ${input.type}: ${parsed.notes}`;
-        }
-        // 2. Try answer (read routes: investigate, debug, research, journal_recall)
-        if (parsed.answer && parsed.answer.length > 5) {
-          return `[mma] ${input.type}: ${parsed.answer.slice(0, 150)}`;
-        }
-        // 3. Try task titles (execute_plan, delegate)
-        const tasks = parsed.tasks ?? parsed.tasksExecuted;
-        if (Array.isArray(tasks) && tasks.length > 0) {
-          const titles = tasks.map((t: Record<string, unknown>) => t.title ?? t.prompt ?? '').filter(Boolean);
-          if (titles.length > 0) return `[mma] ${input.type}: ${titles.join(', ').slice(0, 150)}`;
-        }
-        // 4. Try recorded learnings (journal_record)
-        if (Array.isArray(parsed.recorded) && parsed.recorded.length > 0) {
-          const first = parsed.recorded[0]?.learning;
-          if (first) return `[mma] ${input.type}: ${first.slice(0, 150)}`;
-        }
+      const payload = JSON.parse(input.taskPayload);
+      if (input.type === 'execute_plan') {
+        // Use plan file name + selected task titles
+        const planPath = payload.target?.paths?.[0] ?? '';
+        const planName = planPath.split('/').pop() ?? 'plan';
+        const tasks = input.dispatchedTasks;
+        if (tasks?.length) return `${prefix}: ${planName} — ${tasks.join(', ').slice(0, 120)}`;
+        return `${prefix}: ${planName} (all tasks)`;
       }
-    } catch { /* fallback */ }
-    // 5. Last resort: extract first meaningful line from raw output
-    const firstLine = output.split('\n').find(l => l.trim().length > 10 && !l.startsWith('```') && !l.startsWith('#'));
-    if (firstLine && firstLine.length < 200) return `[mma] ${input.type}: ${firstLine.trim().slice(0, 150)}`;
-    return `[mma] ${input.type}: task completed`;
+      if (input.type === 'delegate') {
+        const prompt = payload.prompt ?? '';
+        if (prompt.length > 5) return `${prefix}: ${prompt.slice(0, 150)}`;
+      }
+      if (input.type === 'journal_record') {
+        const prompt = payload.prompt ?? '';
+        if (prompt.length > 5) return `${prefix}: ${prompt.slice(0, 150)}`;
+      }
+    } catch { /* payload not JSON — fall through */ }
+    return `${prefix}: task completed`;
   }
 
   // Close all opened sessions — best-effort, errors swallowed.
@@ -164,7 +156,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const implId = implSession.getSessionId();
 
     if (input.reviewPolicy === 'none') {
-      const worktree = await resolveWorktree(buildCommitMessage(implTurn.output));
+      const worktree = await resolveWorktree(buildCommitMessage());
       return {
         status: 'done',
         implementerOutput: implTurn.output,
@@ -217,7 +209,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 
-    const worktree = await resolveWorktree(buildCommitMessage(revTurn.output));
+    const worktree = await resolveWorktree(buildCommitMessage());
 
     // Completeness check: if dispatched tasks > reported tasks, flag as partial
     let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';

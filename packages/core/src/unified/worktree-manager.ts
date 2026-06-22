@@ -1,7 +1,7 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, access, rmdir, readdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 
 const execFileAsync = promisify(execFileCb);
 
@@ -166,6 +166,17 @@ export class WorktreeManager {
       // No changes — just remove worktree + branch
       await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath, windowsHide: true });
       await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+      // Clean up empty parent directories
+      try {
+        const worktreesDir = dirname(worktreePath);
+        const entries = await readdir(worktreesDir);
+        if (entries.length === 0) {
+          await rmdir(worktreesDir);
+          const mmaDir = dirname(worktreesDir);
+          const mmaEntries = await readdir(mmaDir);
+          if (mmaEntries.length === 0) await rmdir(mmaDir);
+        }
+      } catch { /* best-effort */ }
       return { branch, path: worktreePath, hasChanges: false, merged: false };
     }
 
@@ -196,6 +207,19 @@ export class WorktreeManager {
     // Merge succeeded — remove worktree + branch (shared `.git` registry → retry on lock)
     await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
     await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+
+    // Clean up empty parent directories (.mma/worktrees/, .mma/)
+    try {
+      const worktreesDir = dirname(worktreePath);
+      const entries = await readdir(worktreesDir);
+      if (entries.length === 0) {
+        await rmdir(worktreesDir);
+        const mmaDir = dirname(worktreesDir);
+        const mmaEntries = await readdir(mmaDir);
+        if (mmaEntries.length === 0) await rmdir(mmaDir);
+      }
+    } catch { /* best-effort */ }
+
     return { branch, path: worktreePath, hasChanges: true, merged: true, filesChanged };
   }
 
