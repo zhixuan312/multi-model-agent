@@ -25,7 +25,7 @@ const mockSession = (output: string, sessionId: string | null = null) => ({
 describe('Session resume', () => {
   it('passes resumeImplementer to implementer openSession', async () => {
     const openSession = vi.fn().mockReturnValue(
-      mockSession('{"tasksCompleted":[],"filesChanged":[],"notes":"ok"}', 'sess-resumed'),
+      mockSession('{"status":"done","notes":"ok"}', 'sess-resumed'),
     );
     const provider = { name: 'mock', config: {}, openSession };
     const revProvider = {
@@ -60,7 +60,7 @@ describe('Session resume', () => {
     const implProvider = {
       name: 'mock', config: {},
       openSession: vi.fn().mockReturnValue(
-        mockSession('{"tasksCompleted":[],"filesChanged":[],"notes":"ok"}'),
+        mockSession('{"status":"done","notes":"ok"}'),
       ),
     };
     const revOpenSession = vi.fn().mockReturnValue(
@@ -89,7 +89,7 @@ describe('Session resume', () => {
 
   it('returns session IDs from both providers', async () => {
     const implSession = mockSession(
-      '{"tasksCompleted":[],"filesChanged":[],"notes":"ok"}',
+      '{"status":"done","notes":"ok"}',
       'impl-sess-id',
     );
     const revSession = mockSession(
@@ -127,7 +127,7 @@ describe('Session resume', () => {
 
   it('reports resumeSupported=false when provider returns null sessionId', async () => {
     const implSession = mockSession(
-      '{"tasksCompleted":[],"filesChanged":[],"notes":"ok"}',
+      '{"status":"done","notes":"ok"}',
       null,
     );
 

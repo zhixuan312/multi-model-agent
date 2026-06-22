@@ -56,7 +56,7 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
     "standard": {
       "type": "codex",
       "model": "deepseek-v4-pro",
-      "baseUrl": "https://api.deepseek.com/v1",
+      "baseUrl": "https://api.deepseek.com/anthropic",
       "apiKeyEnv": "DEEPSEEK_API_KEY"
     },
     "complex": {

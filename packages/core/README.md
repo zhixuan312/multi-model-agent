@@ -24,7 +24,7 @@ const config = await loadConfigFromFile();
 ## What's inside
 
 - **Provider runners** — Claude (via agent-sdk) and Codex (via CLI subprocess), plus any OpenAI-compatible endpoint
-- **Unified task API** — all 11 task types (delegate, audit, review, debug, execute-plan, investigate, research, journal-record, journal-recall, retry, main) flow through a single two-phase pipeline
+- **Unified task API** — all 11 task types (delegate, audit, review, debug, execute-plan, investigate, research, journal-record, journal-recall, retry, orchestrate) flow through a single two-phase pipeline
 - **Skill-driven prompts** — each task type has `implement.md` + `review.md` skill files that drive worker behavior
 - **Model profile registry** — 32 model families with cost/tier/effort metadata for routing and cost computation
 - **Bounded execution** — per-task wall-clock deadlines, idle-stall detection, abort signals, and cost tracking

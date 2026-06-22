@@ -280,8 +280,8 @@ describe('runTwoPhasePipeline', () => {
       merged: true,
     });
 
-    const impl = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","testsPassed":true,"reconciliations":[],"notes":"done"}');
-    const rev = mockSession('{"stepsCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","testsPassed":true,"reconciliations":[],"notes":"reviewed"}');
+    const impl = mockSession('{"tasks":[{"title":"x","status":"done"}],"notes":"done"}');
+    const rev = mockSession('{"tasks":[{"title":"x","status":"done"}],"notes":"reviewed"}');
 
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
@@ -331,7 +331,7 @@ describe('runTwoPhasePipeline', () => {
 
   it('threads bus into both openSession calls', async () => {
     const impl = mockSession('{"status":"done","notes":"done"}');
-    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
+    const rev = mockSession('{"status":"done","notes":"reviewed"}');
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
     const fakeBus = { emitPlainEntry: vi.fn() };
@@ -384,7 +384,7 @@ describe('runTwoPhasePipeline', () => {
 
   it('passes sandboxPolicy=cwd-only + disallowedTools into openSession for write tasks', async () => {
     const impl = mockSession('{"status":"done","notes":"done"}');
-    const rev = mockSession('{"tasksCompleted":["x"],"filesChanged":[],"workerSelfAssessment":"done","notes":"reviewed"}');
+    const rev = mockSession('{"status":"done","notes":"reviewed"}');
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
 

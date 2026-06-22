@@ -60,7 +60,7 @@ Nine rules that protect the insight — the right agent per task, structural qua
 
 ### 1. Right agent for the right task
 
-Not every task needs the most capable model. Not every task can be handled by the cheapest. Routine execution — implementation, file writes, mechanical work — runs on lean standard-tier agents; deep reasoning, review, and audit run on complex-tier agents. The caller declares intent (`agentType`), the system enforces capability floors silently and infers effort from task shape. The caller's judgment about task complexity is respected; the system ensures the chosen agent can actually do it and is configured to work efficiently. This routing is the engine of The Bet: it is how full-harness quality stays affordable.
+Not every task needs the most capable model. Not every task can be handled by the cheapest. Routine execution — implementation, file writes, mechanical work — runs on lean standard-tier agents; deep reasoning, review, and audit run on complex-tier agents. The caller optionally overrides the tier (`agentTier`), the system enforces capability floors silently and infers effort from task shape. The caller's judgment about task complexity is respected; the system ensures the chosen agent can actually do it and is configured to work efficiently. This routing is the engine of The Bet: it is how full-harness quality stays affordable.
 
 ### 2. We help, we don't replace
 
