@@ -312,12 +312,13 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.5.0
+## What's new in 5.6.0
 
-- **Refiner pipeline.** Reviewers rewritten from critics to refiners — both phases output the same JSON schema. The final answer reads as if one agent did the work.
-- **Route rename.** Task type `main` renamed to `orchestrate` — route names now describe functionality, not agent tier.
-- **Claude auth fix.** Subprocess inherits full environment (fixes intermittent "Not logged in").
-- **Real cost delta.** `costDeltaVsMainUSD` computed from the caller's main model rate card (was hardcoded 0).
+- **Unified route contract.** All 11 routes share `prompt` + `target` input, layered 200 response (`task`/`output`/`execution`/`metrics`/`raw`/`error`), and structured 202 JSON polling.
+- **Smart plan matching.** Execute-plan accepts numbered (`### 1.`), prefixed (`### Task 1:`), and unnumbered (`##`) heading formats. Fenced code blocks skipped.
+- **Reviewer completeness gate.** Execute-plan reviewer receives the full dispatched task list and implements any the implementer missed.
+- **Flat delegate.** One task per request — `prompt` + `target` + `done`, no array. Callers send multiple requests for multiple tasks.
+- **Unified `weight` field.** Replaces `severity`/`confidence` on all read-route findings (`critical`|`high`|`medium`|`low`).
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
