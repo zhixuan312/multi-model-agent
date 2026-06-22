@@ -104,9 +104,9 @@ try {
 
       // Capture session from scenario #2 for session reuse in scenario #16
       if (spec.id === 2) {
-        const implSession = envelope.results?.[0]?.sessions?.implementer;
-        if (implSession?.sessionId) {
-          ctx.sessionFromScenario2 = implSession.sessionId;
+        const implSessionId = envelope.execution?.sessions?.implementer;
+        if (implSessionId) {
+          ctx.sessionFromScenario2 = implSessionId;
         }
       }
 
@@ -135,12 +135,11 @@ try {
       checksByScenario[spec.id] = checks;
       const fails = checks.filter(c => c.status === 'FAIL').length;
       const warns = checks.filter(c => c.status === 'WARN').length;
-      const cost = envelope.results?.[0]?.cost?.implementerUsd ?? 0;
-      const status = envelope.results?.[0]?.status ?? '?';
+      const cost = envelope.metrics?.implementer?.costUsd ?? 0;
+      const status = envelope.task?.status ?? '?';
       log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
       if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
-      totalCostUSD += envelope.results?.[0]?.telemetry?.totalCostUSD
-        ?? envelope.costSummary?.totalActualCostUSD ?? 0;
+      totalCostUSD += envelope.metrics?.totalCostUsd ?? 0;
     } catch (err) {
       records.push(normalize(spec, {}));
       checksByScenario[spec.id] = [{ checkId: 'dispatch', status: 'FAIL', detail: String(err.message || err) }];

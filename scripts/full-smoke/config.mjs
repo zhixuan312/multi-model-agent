@@ -62,7 +62,7 @@ export const POLL = {
 //
 //   E. Error Cases:
 //      #17 invalid type     — POST /task with type: 'nonexistent' → 400
-//      #18 missing field    — POST /task with type: 'investigate' but no question → 400
+//      #18 missing field    — POST /task with type: 'investigate' but no prompt/target → 400
 //
 //   F. Sandbox Confinement:
 //      #20 delegate cwd-escape  — worker instructed to write /tmp; hook denies, worker adapts
