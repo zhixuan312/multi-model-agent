@@ -7,8 +7,8 @@ Type=simple
 ExecStart=/usr/local/bin/mma serve --http
 Restart=always
 RestartSec=5
-StandardOutput=append:%h/.multi-model/logs/daemon.stdout.log
-StandardError=append:%h/.multi-model/logs/daemon.stderr.log
+StandardOutput=append:%h/.mma/logs/daemon.stdout.log
+StandardError=append:%h/.mma/logs/daemon.stderr.log
 
 [Install]
 WantedBy=default.target

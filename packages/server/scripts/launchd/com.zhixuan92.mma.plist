@@ -15,8 +15,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>PLACEHOLDER_HOME/.multi-model/logs/daemon.stdout.log</string>
+  <string>PLACEHOLDER_HOME/.mma/logs/daemon.stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>PLACEHOLDER_HOME/.multi-model/logs/daemon.stderr.log</string>
+  <string>PLACEHOLDER_HOME/.mma/logs/daemon.stderr.log</string>
 </dict>
 </plist>
