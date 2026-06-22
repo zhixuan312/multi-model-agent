@@ -198,7 +198,7 @@ Bounded execution moved from a dedicated lifecycle layer to provider-level `wall
 Where to add:
 
 - **A new provider:** `core/src/providers/<name>.ts`. Update `providers/provider-factory.ts`.
-- **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Optional: `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
+- **A new task type:** Add to `TASK_TYPES` + `TYPE_REGISTRY` (including `targetAcceptance`) in `core/src/unified/type-registry.ts`. Add Zod schema variant in `core/src/unified/task-input-schema.ts`. Add refiner schema in `core/src/unified/refiner-schemas.ts` if the output shape is typed. Add skill prompts at `core/src/skills/<name>/implement.md` + `review.md`. Add `server/skills/mma-<name>/SKILL.md` for the caller-facing prompt.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
 - **A new observability event:** emit structured log line from a handler; add required fields to `tests/contract/goldens/observability/event-manifest.json`; the replay test picks it up automatically.
 
