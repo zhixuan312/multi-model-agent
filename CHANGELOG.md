@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.6.0] - 2026-06-22
+## [5.6.1] - 2026-06-22
 
 **Route contract standardization.** All 11 task types now share uniform input naming (`prompt` + `target`), a layered 200 response envelope (`task`/`output`/`execution`/`metrics`/`raw`/`error`), and structured 202 JSON polling. Delegate flattened to single-task. Execute-plan gains smart heading matching and reviewer completeness gate. `SCHEMA_VERSION` unchanged (still 6).
 
