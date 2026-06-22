@@ -92,6 +92,17 @@ describe('parseReviewerOutput', () => {
       if (!r.ok) expect(r.error).toContain('Schema');
     });
 
+    it('accepts all four weight values: critical, high, medium, low', () => {
+      for (const w of ['critical', 'high', 'medium', 'low']) {
+        const data = JSON.stringify({
+          criteriaCovered: ['x'],
+          findings: [{ weight: w, category: 'x', claim: 'y', evidence: 'z', suggestion: 'w' }],
+        });
+        const r = parseReviewerOutput(data, 'audit');
+        expect(r.ok, `weight=${w} should be accepted`).toBe(true);
+      }
+    });
+
     it('rejects missing required fields', () => {
       const partial = JSON.stringify({ criteriaCovered: ['x'] });
       const r = parseReviewerOutput(partial, 'audit');

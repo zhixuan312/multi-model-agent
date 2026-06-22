@@ -153,6 +153,22 @@ describe('matchTasks', () => {
     }
   });
 
+  it('recognizes Task N: prefix as numbered heading', () => {
+    const plan = `# Plan\n\n## Phase 1\n\n### Task 1: Setup schema\n\n### Task 2: Add tests\n`;
+    const h = parsePlanHeadings(plan);
+    const numbered = h.filter(x => x.isNumbered);
+    expect(numbered.length).toBe(2);
+    expect(numbered[0].normalized).toBe('Task 1: Setup schema');
+  });
+
+  it('empty selector on Task N: plan returns all tasks', () => {
+    const plan = `# Plan\n\n## Phase 1\n\n### Task 1: A\n\n### Task 2: B\n\n## What Doesn't Change\n`;
+    const h = parsePlanHeadings(plan);
+    const matched = matchTasks(h, []);
+    expect(matched.length).toBe(2);
+    expect(matched.map(m => m.normalized)).toEqual(['Task 1: A', 'Task 2: B']);
+  });
+
   it('skips non-numbered structural headings from empty selection', () => {
     const matched = matchTasks(headings, []);
     const titles = matched.map(m => m.normalized);
