@@ -71,7 +71,7 @@ export class MatchError extends Error {
 const STRUCTURAL_HEADINGS = new Set([
   'problem', 'design', 'overview', 'architecture', 'tech stack',
   'file structure', 'files to change', 'tests', 'test additions',
-  'what doesn\'t change', 'what doesn\'t change', 'further reading',
+  'what doesn\'t change', 'further reading',
   'known limitations', 'implementation plan', 'references',
 ]);
 
