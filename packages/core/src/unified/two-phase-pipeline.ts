@@ -31,6 +31,9 @@ export interface PipelineInput {
   bus?: object;
   /** Called before each phase starts. */
   onPhaseChange?: (phase: 'implementing' | 'reviewing') => void;
+  /** For execute_plan: the full list of dispatched task titles (from plan matching).
+   *  Injected into the reviewer prompt for completeness verification. */
+  dispatchedTasks?: string[];
 }
 
 export interface SessionInfo {
@@ -203,7 +206,10 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(revSession);
 
-    const revPrompt = `${input.reviewerSkill}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
+    const completenessSection = input.dispatchedTasks?.length
+      ? `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${input.dispatchedTasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
+      : '';
+    const revPrompt = `${input.reviewerSkill}${completenessSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });
@@ -213,8 +219,18 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const worktree = await resolveWorktree(buildCommitMessage(revTurn.output));
 
+    // Completeness check: if dispatched tasks > reported tasks, flag as partial
+    let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
+    if (parsed.ok && input.dispatchedTasks?.length) {
+      const reported = parsed.data as Record<string, unknown>;
+      const reportedTasks = Array.isArray(reported.tasks) ? reported.tasks.length : 0;
+      if (reportedTasks < input.dispatchedTasks.length) {
+        status = 'done_with_concerns';
+      }
+    }
+
     return {
-      status: parsed.ok ? 'done' : 'done_with_concerns',
+      status,
       implementerOutput: implTurn.output,
       implementerTurn: implTurn,
       reviewerOutput: parsed.ok ? parsed.data : null,

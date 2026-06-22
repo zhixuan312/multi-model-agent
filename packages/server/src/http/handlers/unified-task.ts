@@ -504,6 +504,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
 
           // ── Execute-plan pre-processing: parse plan + smart match ──
+          let dispatchedTasks: string[] | undefined;
           if (input.type === 'execute_plan') {
             const epPayload = payload as { target: { paths: string[] }; tasks: string[] };
             const planPath = epPayload.target.paths[0];
@@ -526,6 +527,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               }
               throw err;
             }
+            dispatchedTasks = matched.map(h => h.normalized);
             const entry = deps.taskRegistry.get(taskId);
             if (entry) entry.totalTasks = matched.length;
           }
@@ -581,6 +583,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             reviewerGoal,
             bus: deps.bus,
             onPhaseChange,
+            ...(dispatchedTasks && { dispatchedTasks }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
           });
