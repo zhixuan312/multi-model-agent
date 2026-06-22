@@ -115,7 +115,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
     case 'delegate':
       return [
         'You have implemented ALL requested changes in the task description.',
-        'Only the declared filePaths were modified (no scope creep).',
+        'Only the declared target paths were modified (no scope creep).',
         'If tests exist for the changed area, you have verified they pass.',
         'You have produced the required JSON output block listing tasks completed and files changed.',
       ].join(' ');
