@@ -104,10 +104,30 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       const m = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/(\{[\s\S]*\})/);
       if (m) {
         const parsed = JSON.parse(m[1]);
-        const notes = parsed.notes ?? parsed.answer ?? '';
-        if (notes && notes.length > 5 && notes.length < 200) return `[mma] ${input.type}: ${notes}`;
+        // 1. Try notes (delegate, execute_plan)
+        if (parsed.notes && parsed.notes.length > 5 && parsed.notes.length < 200) {
+          return `[mma] ${input.type}: ${parsed.notes}`;
+        }
+        // 2. Try answer (read routes: investigate, debug, research, journal_recall)
+        if (parsed.answer && parsed.answer.length > 5) {
+          return `[mma] ${input.type}: ${parsed.answer.slice(0, 150)}`;
+        }
+        // 3. Try task titles (execute_plan, delegate)
+        const tasks = parsed.tasks ?? parsed.tasksExecuted;
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          const titles = tasks.map((t: Record<string, unknown>) => t.title ?? t.prompt ?? '').filter(Boolean);
+          if (titles.length > 0) return `[mma] ${input.type}: ${titles.join(', ').slice(0, 150)}`;
+        }
+        // 4. Try recorded learnings (journal_record)
+        if (Array.isArray(parsed.recorded) && parsed.recorded.length > 0) {
+          const first = parsed.recorded[0]?.learning;
+          if (first) return `[mma] ${input.type}: ${first.slice(0, 150)}`;
+        }
       }
     } catch { /* fallback */ }
+    // 5. Last resort: extract first meaningful line from raw output
+    const firstLine = output.split('\n').find(l => l.trim().length > 10 && !l.startsWith('```') && !l.startsWith('#'));
+    if (firstLine && firstLine.length < 200) return `[mma] ${input.type}: ${firstLine.trim().slice(0, 150)}`;
     return `[mma] ${input.type}: task completed`;
   }
 
