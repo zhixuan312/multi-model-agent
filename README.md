@@ -312,12 +312,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.2
+## What's new in 5.6.3
 
-- **Refiner verification.** Reviewers can now read source files and verify implementer claims — tool-use suppression lifted, source context injected.
-- **Last-JSON-block extraction.** LLM preamble text no longer corrupts parsed output — extractors use last JSON match instead of first.
-- **Input-based commit messages.** Worktree auto-commits derive messages from task type + plan file + task titles, not generic fallback.
-- **Dead code removed.** TaskSpec trimmed (7 unused fields), commented-out code cleaned, duplicate set entry fixed.
+- **Optional target for investigate/debug.** No longer required to specify file paths — the worker searches from `cwd` when no `target.paths` given.
+- **Execute-plan prompt.** Optional `prompt` field for caller context alongside the plan file (e.g. "focus on backend tasks").
+- **Service template fix.** Launchd/systemd log paths corrected from `~/.multi-model/` to `~/.mma/`.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

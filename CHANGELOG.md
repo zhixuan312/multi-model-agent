@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.3] - 2026-06-24
+
+**Input flexibility + service template fix.** Investigate and debug no longer require `target.paths` — the worker searches from `cwd` when no paths given. Execute-plan gains an optional `prompt` field for caller context. Launchd/systemd service templates updated from `.multi-model` to `.mma`. `SCHEMA_VERSION` unchanged (still 6).
+
+### Changed
+- **investigate**: `target` now optional — worker searches from `cwd` when no paths provided.
+- **debug**: `target` now optional — same as investigate.
+- **execute_plan**: gains optional `prompt` field for caller-side context alongside the plan file.
+
+### Fixed
+- Launchd plist and systemd service templates: log paths updated from `~/.multi-model/logs/` to `~/.mma/logs/`.
+
 ## [5.6.2] - 2026-06-22
 
 **Refiner verification + JSON extraction + dead code cleanup.** Reviewers can now read source files and run tools (tool-use suppression lifted). Last-JSON-block extraction prevents LLM preamble from corrupting parsed output. Dead code removed across TaskSpec, provider-factory, and plan-task-matcher. `SCHEMA_VERSION` unchanged (still 6).
