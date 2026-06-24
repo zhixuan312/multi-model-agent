@@ -75,6 +75,13 @@ describe('taskInputSchema', () => {
     }).success).toBe(true);
   });
 
+  it('accepts investigate with prompt only (no target)', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'investigate',
+      prompt: 'How does auth work?',
+    }).success).toBe(true);
+  });
+
   it('rejects investigate with deprecated question field', () => {
     expect(taskInputSchema.safeParse({
       type: 'investigate',
@@ -181,6 +188,13 @@ describe('taskInputSchema', () => {
       type: 'debug',
       prompt: 'TypeError: cannot read property',
       target: { paths: ['src/auth.ts'] },
+    }).success).toBe(true);
+  });
+
+  it('accepts debug with prompt only (no target)', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'debug',
+      prompt: 'TypeError: cannot read property verify of undefined',
     }).success).toBe(true);
   });
 

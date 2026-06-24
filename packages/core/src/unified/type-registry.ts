@@ -25,11 +25,11 @@ export interface TypeConfig {
 
 export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
   audit:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  investigate:    { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: true  } },
+  investigate:    { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
   delegate:       { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: false } },
   execute_plan:   { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: true  } },
   review:         { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  debug:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: true  } },
+  debug:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
   research:       { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
   journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
   journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },

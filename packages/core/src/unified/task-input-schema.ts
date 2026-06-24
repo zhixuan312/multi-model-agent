@@ -39,7 +39,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('investigate'),
     prompt: z.string().min(1),
-    target: z.object({ paths: z.array(z.string().min(1)).min(1) }),
+    target: z.object({ paths: z.array(z.string().min(1)).min(1) }).optional(),
     ...commonFields,
   }).strict(),
 
@@ -53,7 +53,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('debug'),
     prompt: z.string().min(1),
-    target: z.object({ paths: z.array(z.string().min(1)).min(1) }),
+    target: z.object({ paths: z.array(z.string().min(1)).min(1) }).optional(),
     ...commonFields,
   }).strict(),
 
@@ -81,6 +81,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
 
   z.object({
     type: z.literal('execute_plan'),
+    prompt: z.string().optional(),
     target: z.object({ paths: z.array(z.string().min(1)).length(1) }),
     tasks: z.array(z.string()).default([]),
     ...commonFields,

@@ -35,6 +35,7 @@ Dispatch tasks from a plan file to a single worker session. The `tasks` array se
 ```json
 {
   "type": "execute_plan",
+  "prompt": "Focus on the backend tasks only",
   "tasks": [
     "1. Add input validation to login handler",
     "2. Write unit tests for the auth module"
@@ -48,10 +49,10 @@ Dispatch tasks from a plan file to a single worker session. The `tasks` array se
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `tasks` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
-| `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
+| `prompt` | string | no | Optional caller context for the worker (e.g. "focus on backend tasks", "skip tests") — injected alongside the plan content |
+| `tasks` | string[] | no | Task selectors matching plan headings. Empty or omitted = run all tasks in the plan |
+| `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
-| `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
 
 @include _shared/review-policy.md
 

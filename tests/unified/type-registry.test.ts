@@ -54,8 +54,14 @@ describe('TypeRegistry', () => {
   it('targetAcceptance: read routes with targets accept paths', () => {
     for (const t of ['audit', 'investigate', 'review', 'debug'] as const) {
       expect(getTypeConfig(t).targetAcceptance.paths).toBe(true);
-      expect(getTypeConfig(t).targetAcceptance.required).toBe(true);
     }
+  });
+
+  it('targetAcceptance: target required for audit and review, optional for investigate and debug', () => {
+    expect(getTypeConfig('audit').targetAcceptance.required).toBe(true);
+    expect(getTypeConfig('review').targetAcceptance.required).toBe(true);
+    expect(getTypeConfig('investigate').targetAcceptance.required).toBe(false);
+    expect(getTypeConfig('debug').targetAcceptance.required).toBe(false);
   });
 
   it('targetAcceptance: routes without targets reject all', () => {
