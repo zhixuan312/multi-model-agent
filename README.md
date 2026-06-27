@@ -312,11 +312,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.3
+## What's new in 5.6.4
 
-- **Optional target for investigate/debug.** No longer required to specify file paths — the worker searches from `cwd` when no `target.paths` given.
-- **Execute-plan prompt.** Optional `prompt` field for caller context alongside the plan file (e.g. "focus on backend tasks").
-- **Service template fix.** Launchd/systemd log paths corrected from `~/.multi-model/` to `~/.mma/`.
+- **Audit evidence routing.** Findings include `[### Heading]` section prefixes so callers can route fixes to the exact document section.
+- **Empty tasks = run all.** Execute-plan skill now explicitly instructs the worker that an empty task list means execute everything.
+- **6 new smoke checks.** Layered-200 shape, token usage, structured-202 polling, weight field, evidence prefix, and files-changed verification.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
