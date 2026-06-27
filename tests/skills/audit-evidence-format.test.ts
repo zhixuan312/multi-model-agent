@@ -45,6 +45,12 @@ describe('audit evidence section-prefix format', () => {
       expect(result.text).toBe('"No acceptance criteria defined"');
     });
 
+    it('handles # document-level headings (preamble)', () => {
+      const result = extractEvidenceSections('[# Implementation Plan] "Goal contradicts Architecture"');
+      expect(result.sections).toEqual(['# Implementation Plan']);
+      expect(result.text).toBe('"Goal contradicts Architecture"');
+    });
+
     it('trims whitespace from extracted text', () => {
       const result = extractEvidenceSections('[### Setup]   quoted text with spaces  ');
       expect(result.sections).toEqual(['### Setup']);

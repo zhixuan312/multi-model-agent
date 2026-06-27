@@ -66,7 +66,7 @@ Collect all findings from your notes (scratch file or memory), assign severities
 - For acceptance-criteria: name the requirement lacking a mapping.
 - A "the spec seems to imply" claim without a quoted clause is NOT evidence — drop it.
 
-**Section prefix (REQUIRED).** Every evidence string MUST start with the `###` heading (or `##` if no `###` applies) where the issue lives, in square brackets. Format: `[### Heading] "quoted evidence"`. Multi-section: `[### Goals] [### Scope] "Both reference..."`.
+**Section prefix (REQUIRED).** Every evidence string MUST start with the nearest heading above the issue, in square brackets. Prefer `###` over `##` over `#`. Format: `[### Goals] "quoted evidence"`. Preamble: `[# Spec Title]`. Multi-section: `[### Goals] [### Scope] "Both reference..."`.
 
 ## Severity Calibration
 

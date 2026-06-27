@@ -139,7 +139,7 @@ Collect all findings from your notes (scratch file or memory) across all perspec
 - Quote the exact plan line with task ID + section reference. No codebase evidence needed.
 - For absence findings: name the section that SHOULD contain it and confirm it does not.
 
-**Section prefix (REQUIRED).** Every evidence string MUST start with the `###` heading (or `##` if no `###` applies) of the plan task where the issue lives, in square brackets. Format: `[### Task 3: Wire up handler] "Plan says registerBlock but source has register"`. Multi-section: `[### Task 3] [### Task 7] "Both depend on a missing export"`.
+**Section prefix (REQUIRED).** Every evidence string MUST start with the nearest heading above the issue, in square brackets. Prefer `###` (task) over `##` (phase) over `#` (title/preamble). Format: `[### Task 3: Wire up handler] "Plan says registerBlock but source has register"`. Preamble: `[# Plan Title] "Goal contradicts Architecture"`. Multi-section: `[### Task 3] [### Task 7] "Both depend on a missing export"`.
 
 ## Severity Calibration
 

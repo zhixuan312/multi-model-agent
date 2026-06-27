@@ -56,7 +56,7 @@ Collect all findings from your notes (scratch file or memory), assign severities
 - For link-integrity: name the broken link + the file that should exist.
 - A finding without a concrete section reference is opinion — drop it.
 
-**Section prefix (REQUIRED).** Every evidence string MUST start with the `###` or `##` heading where the issue lives, in square brackets. Format: `[## Request body] "Field X is undocumented"`. Multi-section: `[## When to Use] [## Common pitfalls] "Contradictory guidance"`.
+**Section prefix (REQUIRED).** Every evidence string MUST start with the nearest heading above the issue, in square brackets. Prefer `###` over `##` over `#`. Format: `[## Request body] "Field X is undocumented"`. Preamble: `[# mma-audit] "Description contradicts when_to_use"`. Multi-section: `[## When to Use] [## Common pitfalls] "Contradictory guidance"`.
 
 ## Severity Calibration
 
