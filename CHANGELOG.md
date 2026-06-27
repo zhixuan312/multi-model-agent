@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.4] - 2026-06-28
+
+**Audit evidence routing + smoke verification.** Audit findings now include `[### Heading]` section prefixes in evidence strings, enabling callers to route fixes to the correct document section. Execute-plan skill explicitly states empty tasks = run all. Full smoke test gains 6 new verification checks. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `extractEvidenceSections()` utility: parses `[### Heading]` prefixes from evidence strings for finding-to-section routing.
+- 6 new smoke verification checks: layered-200 shape, token-usage, structured-202 polling, weight field, evidence-prefix, audit subtype, files-changed.
+- Smoke `pollTask` captures first 202 JSON body for structured-202 verification.
+
+### Changed
+- All 4 audit subtypes (default, plan, spec, skill) require evidence strings to start with the nearest heading in square brackets (`[### ...]`, falling back to `[## ...]` then `[# ...]`).
+- Audit reviewer verifies section prefixes are present and correct.
+- Execute-plan implementer skill explicitly states: empty task list = execute all tasks in the plan.
+
 ## [5.6.3] - 2026-06-24
 
 **Input flexibility + service template fix.** Investigate and debug no longer require `target.paths` — the worker searches from `cwd` when no paths given. Execute-plan gains an optional `prompt` field for caller context. Launchd/systemd service templates updated from `.multi-model` to `.mma`. `SCHEMA_VERSION` unchanged (still 6).
