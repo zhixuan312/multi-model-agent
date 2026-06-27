@@ -80,7 +80,7 @@ async function runScenario(spec, ctx, log) {
     }
 
     log(`#${spec.id}  ${spec.type}  → taskId=${res.taskId}  polling...`);
-    const envelope = await pollTask(ctx.token, res.taskId);
+    const { envelope, polling202 } = await pollTask(ctx.token, res.taskId);
 
     if (spec.id === 2) {
       const implSessionId = envelope.execution?.sessions?.implementer;
@@ -101,6 +101,7 @@ async function runScenario(spec, ctx, log) {
       diagnostics: collectDiagnostics(res.taskId),
       queue, backend: null,
     });
+    if (polling202) rec.polling202 = polling202;
     if (spec.sessionReuse && ctx.sessionFromScenario2) {
       rec.resumeSessionId = ctx.sessionFromScenario2;
     }

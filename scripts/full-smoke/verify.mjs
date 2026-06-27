@@ -259,6 +259,62 @@ export function verify(rec) {
     }
   }
 
+  // ⑩ Layered 200 shape — top-level keys must be exactly the 6 categories
+  if (e.kind === 'read' || e.kind === 'write') {
+    const keys = Object.keys(r ?? {}).sort();
+    const expected = ['error', 'execution', 'metrics', 'output', 'raw', 'task'];
+    const match = JSON.stringify(keys) === JSON.stringify(expected);
+    out.push(C('layered-200', match ? 'PASS' : 'FAIL',
+      `keys=${keys.join(',')} expected=${expected.join(',')}`));
+  }
+
+  // ⑪ Token usage — metrics must include per-phase usage + totalUsage
+  if (e.kind === 'read' || e.kind === 'write') {
+    const m = r?.metrics ?? {};
+    const hasImplUsage = m.implementer?.usage?.inputTokens !== undefined;
+    const hasTotalUsage = m.totalUsage?.inputTokens !== undefined;
+    out.push(C('token-usage', hasImplUsage && hasTotalUsage ? 'PASS' : 'FAIL',
+      `implementer.usage=${hasImplUsage} totalUsage=${hasTotalUsage}`));
+  }
+
+  // ⑫ Structured 202 polling shape (captured during poll phase)
+  if (rec.polling202) {
+    const p = rec.polling202;
+    const hasFields = p.taskId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
+    out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
+      `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
+  }
+
+  // ⑬ Audit findings: weight field + evidence section prefix
+  if (e.type === 'audit' && (e.kind === 'read')) {
+    const summary = r?.output?.summary;
+    const findings = summary?.findings ?? [];
+    if (findings.length > 0) {
+      const allHaveWeight = findings.every(f => ['critical', 'high', 'medium', 'low'].includes(f.weight));
+      out.push(C('weight-field', allHaveWeight ? 'PASS' : 'FAIL',
+        `${findings.length} findings, all have valid weight=${allHaveWeight}`));
+
+      const withPrefix = findings.filter(f => /^\[##?#?\s/.test(f.evidence ?? ''));
+      out.push(C('evidence-prefix', withPrefix.length > 0 ? 'PASS' : 'WARN',
+        `${withPrefix.length}/${findings.length} findings have [## heading] evidence prefix`));
+    }
+  }
+
+  // ⑭ Audit subtype in task identity
+  if (e.type === 'audit' && e.subtype) {
+    const actualSubtype = r?.task?.subtype;
+    out.push(C('subtype', actualSubtype === e.subtype ? 'PASS' : 'FAIL',
+      `expected=${e.subtype} got=${actualSubtype}`));
+  }
+
+  // ⑮ Write route filesChanged — must be populated (from git diff or tool tracking)
+  if (e.kind === 'write' && e.reviewPolicy !== 'none') {
+    const fc = r?.output?.filesChanged;
+    const hasFiles = Array.isArray(fc) && fc.length > 0;
+    out.push(C('files-changed', hasFiles ? 'PASS' : 'WARN',
+      `filesChanged=${Array.isArray(fc) ? fc.length : 'missing'} files`));
+  }
+
   // Queue (per-dispatch, best-effort)
   const inQueue = (q?.records?.length ?? 0) > 0;
   out.push(C('queue', inQueue ? 'PASS' : 'NA', `records=${q?.records?.length ?? 0}`));
