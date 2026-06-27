@@ -86,6 +86,16 @@ Every finding must use one of these four evidence shapes:
 
 A finding without one of these four forms is speculation. Note "investigation needed" in your summary instead.
 
+**Section prefix (REQUIRED).** Every evidence string MUST start with the `###` heading (or `##` heading if no `###` applies) where the issue lives, in square brackets. This tells the caller exactly which section to fix.
+
+Format: `[### Heading Title] "quoted evidence text"`
+Multi-section: `[### Task 3] [### Task 5] "Both reference the same config"`
+
+Examples:
+- `[### Background] "States 'no database required' but Task 7 imports pg.Pool"`
+- `[### Functional Requirements] Section lists 5 requirements but acceptance criteria cover only 3`
+- `[### Task 3: Wire up handler] [### Task 5: Add tests] "Both assume a createPool export that doesn't exist"`
+
 ## Scope
 
 - The document itself plus any artifact the document directly references (cited code, linked spec, embedded config).

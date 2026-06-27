@@ -139,6 +139,8 @@ Collect all findings from your notes (scratch file or memory) across all perspec
 - Quote the exact plan line with task ID + section reference. No codebase evidence needed.
 - For absence findings: name the section that SHOULD contain it and confirm it does not.
 
+**Section prefix (REQUIRED).** Every evidence string MUST start with the `###` heading (or `##` if no `###` applies) of the plan task where the issue lives, in square brackets. Format: `[### Task 3: Wire up handler] "Plan says registerBlock but source has register"`. Multi-section: `[### Task 3] [### Task 7] "Both depend on a missing export"`.
+
 ## Severity Calibration
 
 - **critical**: plan contradicts codebase in a way that BLOCKS dispatch, OR load-bearing spec requirement has zero covering tasks. Missing modify-target, wrong method name, wrong signature, missing module export, out-of-order task dependency, wrong tooling, uncovered load-bearing spec requirement.
