@@ -74,7 +74,7 @@ That's the whole minimum-viable file. All other knobs have sane built-in default
 ### 4. Start the daemon + verify
 
 ```bash
-mma serve                          # 127.0.0.1:7337 by default
+mma                                # 127.0.0.1:7337 by default (serve is the default command)
 curl -s http://localhost:7337/health   # → {"status":"ok"}
 ```
 
@@ -150,7 +150,7 @@ All endpoints except `/health` require bearer auth: `Authorization: Bearer <toke
 ## Operator commands
 
 ```bash
-mma serve [--log]                            # start daemon
+mma [--log]                                  # start daemon (serve is the default command)
 mma info  [--json]                           # version, bind/port, token fingerprint
 mma status [--json]                          # health + stats from a running daemon
 mma logs  [--follow]                         # tail diagnostic log

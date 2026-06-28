@@ -103,7 +103,7 @@ Two ways — pick one:
 **Option B — start it manually.** Useful when you want the daemon up before opening a client (e.g. to inspect the queue, run `curl /health`, or attach to logs):
 
 ```bash
-mma serve                          # 127.0.0.1:7337 by default
+mma                                # 127.0.0.1:7337 by default (serve is the default command)
 curl -s http://localhost:7337/health   # → {"status":"ok"}
 ```
 
@@ -275,7 +275,7 @@ Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date
 ## Operator commands
 
 ```bash
-mma serve [--verbose] [--log]                # start daemon
+mma [--verbose] [--log]                      # start daemon (serve is the default command)
 mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
 mma status [--json]                          # health + stats from a running daemon
 mma logs  [--follow] [--task=<id>]           # tail today's diagnostic log
@@ -292,7 +292,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma serve` runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `orchestrate`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 11 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `orchestrate`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
