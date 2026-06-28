@@ -87,7 +87,7 @@ Per-type fill of the stack:
 | `journal_recall` | reviewed | no | read-only | mma-journal-recall |
 | `journal_record` | reviewed | no | cwd-only | mma-journal-record |
 | `retry_tasks` | reviewed | no | cwd-only | mma-retry |
-| `orchestrate` | none | no | read-only | mma-orchestrate |
+| `orchestrate` | none | no | cwd-only | mma-orchestrate |
 
 Two invariants the layered stack enforces:
 
