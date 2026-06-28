@@ -24,9 +24,9 @@ describe('TypeRegistry', () => {
     expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
   });
 
-  it('orchestrate defaults to main/no-worktree/read-only', () => {
+  it('orchestrate defaults to main/no-worktree/cwd-only', () => {
     const c = getTypeConfig('orchestrate');
-    expect(c).toMatchObject({ defaultTier: 'main', worktree: false, sandbox: 'read-only' });
+    expect(c).toMatchObject({ defaultTier: 'main', worktree: false, sandbox: 'cwd-only' });
   });
 
   it('throws for unknown type', () => {
