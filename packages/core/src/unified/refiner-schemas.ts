@@ -6,7 +6,7 @@ const severityEnum = z.enum(['critical', 'high', 'medium', 'low']);
 // --- Read route schemas (criteriaCovered + findings) ---
 
 const auditAnswerSchema = z.object({
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
@@ -18,7 +18,7 @@ const auditAnswerSchema = z.object({
 
 const investigateAnswerSchema = z.object({
   answer: z.string().min(1),
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
@@ -30,7 +30,7 @@ const investigateAnswerSchema = z.object({
 });
 
 const reviewAnswerSchema = z.object({
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
@@ -45,7 +45,7 @@ const reviewAnswerSchema = z.object({
 
 const debugAnswerSchema = z.object({
   answer: z.string().min(1),
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
@@ -58,20 +58,20 @@ const debugAnswerSchema = z.object({
 
 const researchAnswerSchema = z.object({
   answer: z.string().min(1),
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
     claim: z.string().min(1),
     evidence: z.string().min(1),
-    url: z.string().min(1),
+    url: z.string(),
     source: z.string().min(1),
   })),
 });
 
 const journalRecallAnswerSchema = z.object({
   answer: z.string().min(1),
-  criteriaCovered: z.array(z.string().min(1)).min(1),
+  criteriaCovered: z.array(z.string().min(1)),
   findings: z.array(z.object({
     weight: severityEnum,
     category: z.string().min(1),
