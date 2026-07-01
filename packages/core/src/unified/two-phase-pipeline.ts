@@ -1,3 +1,7 @@
+import { copyFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import type { Provider, Session, TurnResult } from '../types/run-result.js';
 import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
@@ -34,6 +38,9 @@ export interface PipelineInput {
   /** For execute_plan: the full list of dispatched task titles (from plan matching).
    *  Injected into the reviewer prompt for completeness verification. */
   dispatchedTasks?: string[];
+  /** Files to copy from original cwd into the worktree if they're missing
+   *  (e.g. plan files that aren't committed to git). Paths relative to cwd. */
+  copyToWorktree?: string[];
 }
 
 export interface SessionInfo {
@@ -81,6 +88,18 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const created = await wtManager.create(input.cwd, input.taskId, input.type);
     effectiveCwd = created.path;
     wtInfo = { branch: created.branch, path: created.path };
+
+    // Copy uncommitted files (e.g. plan files) into the worktree
+    if (input.copyToWorktree?.length) {
+      for (const relPath of input.copyToWorktree) {
+        const src = join(input.cwd, relPath);
+        const dst = join(effectiveCwd, relPath);
+        if (existsSync(src) && !existsSync(dst)) {
+          await mkdir(dirname(dst), { recursive: true });
+          await copyFile(src, dst);
+        }
+      }
+    }
   }
 
   // --- Rewrite file paths in the payload to use the worktree cwd ---

@@ -506,6 +506,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
           // ── Execute-plan pre-processing: parse plan + smart match ──
           let dispatchedTasks: string[] | undefined;
+          let copyToWorktree: string[] | undefined;
           if (input.type === 'execute_plan') {
             const epPayload = payload as { target: { paths: string[] }; tasks: string[] };
             const planPath = epPayload.target.paths[0];
@@ -529,6 +530,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               throw err;
             }
             dispatchedTasks = matched.map(h => h.normalized);
+            copyToWorktree = [path.isAbsolute(planPath) ? path.relative(cwd, planPath) : planPath];
             const entry = deps.taskRegistry.get(taskId);
             if (entry) entry.totalTasks = matched.length;
           }
@@ -585,6 +587,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             bus: deps.bus,
             onPhaseChange,
             ...(dispatchedTasks && { dispatchedTasks }),
+            ...(copyToWorktree && { copyToWorktree }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
           });
