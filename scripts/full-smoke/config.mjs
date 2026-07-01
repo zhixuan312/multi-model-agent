@@ -88,7 +88,7 @@ export const SCENARIOS = [
   { id: 8,  type: 'debug', tier: 'complex', kind: 'read', emits: 1 },
   { id: 9,  type: 'journal_record', tier: 'complex', kind: 'write', emits: 1 },
   { id: 10, type: 'journal_recall', tier: 'complex', kind: 'read', emits: 1 },
-  { id: 19, type: 'orchestrate', tier: 'main', kind: 'read', emits: 1 },
+  { id: 19, type: 'orchestrate', tier: 'main', kind: 'write', reviewPolicy: 'none', emits: 1 },
 
   // B. Audit Subtypes (spec, plan, skill — each loads a different skill file)
   { id: 11, type: 'audit', subtype: 'spec', tier: 'complex', kind: 'read', emits: 1 },

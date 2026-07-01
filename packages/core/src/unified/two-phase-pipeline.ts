@@ -92,6 +92,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // Copy uncommitted files (e.g. plan files) into the worktree
     if (input.copyToWorktree?.length) {
       for (const relPath of input.copyToWorktree) {
+        if (relPath.startsWith('..') || relPath.startsWith('/')) continue;
         const src = join(input.cwd, relPath);
         const dst = join(effectiveCwd, relPath);
         if (existsSync(src) && !existsSync(dst)) {

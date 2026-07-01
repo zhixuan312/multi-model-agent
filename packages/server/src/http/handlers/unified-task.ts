@@ -530,7 +530,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               throw err;
             }
             dispatchedTasks = matched.map(h => h.normalized);
-            copyToWorktree = [path.isAbsolute(planPath) ? path.relative(cwd, planPath) : planPath];
+            copyToWorktree = [path.isAbsolute(planPath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(resolvedPlanPath)) : planPath];
             const entry = deps.taskRegistry.get(taskId);
             if (entry) entry.totalTasks = matched.length;
           }
