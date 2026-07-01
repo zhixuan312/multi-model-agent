@@ -312,11 +312,12 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.4
+## What's new in 5.6.5
 
-- **Audit evidence routing.** Findings include `[### Heading]` section prefixes so callers can route fixes to the exact document section.
-- **Empty tasks = run all.** Execute-plan skill now explicitly instructs the worker that an empty task list means execute everything.
-- **6 new smoke checks.** Layered-200 shape, token usage, structured-202 polling, weight field, evidence prefix, and files-changed verification.
+- **Orchestrate writes.** Sandbox changed to `cwd-only` — orchestrate can write files (e.g. generated plans/specs) without a worktree or git repo.
+- **Linear git history.** Worktree merges use fast-forward (no rainbow merge branches). Falls back to rebase if target moved.
+- **Uncommitted plan support.** Plan files not yet committed to git are auto-copied into the worktree before execution.
+- **Reviewer hardened.** Investigate reviewer must call Read tool before claiming files exist/don't exist.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

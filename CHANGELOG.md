@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.5] - 2026-07-01
+
+**Worktree + pipeline reliability.** Orchestrate gains cwd-only sandbox (can write files). Worktree merges use fast-forward for linear git history. Uncommitted plan files auto-copied into worktrees. Refiner schema relaxed for edge cases. Reviewer tool-use instruction hardened. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `copyToWorktree` pipeline mechanism: copies uncommitted files (e.g. plan files) from original cwd into the worktree before execution.
+- Smoke scenario #23: execute_plan with uncommitted plan file (verifies copyToWorktree).
+- 4 unit tests for copy-to-worktree logic.
+
+### Changed
+- **Orchestrate sandbox**: `read-only` → `cwd-only` — orchestrate workers can now write files to the provided cwd directory (no worktree, no git required).
+- **Worktree merge**: uses `--ff-only` for linear git history (no rainbow merge branches). Falls back to rebase if target moved.
+- **Investigate reviewer skill**: must call Read tool before claiming files exist/don't exist. "I searched" without a tool call is hallucination.
+- **Refiner schemas**: `criteriaCovered` no longer requires `.min(1)` — empty array valid when reviewer catches full hallucination. Research `url` allows empty string for gap-analysis findings.
+- **`mma` default command**: docs updated to show `mma` as primary (serve is implicit default).
+- **Plan audit SKILL.md**: explicit callout that `cwd` = target repo, `target.paths` = plan file (may be different directories).
+
+### Fixed
+- macOS `/var` → `/private/var` symlink: `copyToWorktree` path computation used `fs.realpathSync` to avoid EACCES on `mkdir`.
+- Cross-tier reviewer restored for all routes (same-tier revert).
+
 ## [5.6.4] - 2026-06-28
 
 **Audit evidence routing + smoke verification.** Audit findings now include `[### Heading]` section prefixes in evidence strings, enabling callers to route fixes to the correct document section. Execute-plan skill explicitly states empty tasks = run all. Full smoke test gains 6 new verification checks. `SCHEMA_VERSION` unchanged (still 6).
