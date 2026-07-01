@@ -11,7 +11,7 @@ Verify the implementer's investigation against the codebase, improve quality, re
 
 ## Checks
 
-1. **Citation accuracy** — read cited files to verify `file:line` content matches. Remove citations where the content does NOT match.
+1. **Citation accuracy** — you MUST call the Read tool on each cited file to verify `file:line` content matches. Do NOT claim a file exists or doesn't exist without reading it first. Saying "I searched" without a tool call is hallucination. Remove citations only where you confirmed by reading that the content does NOT match.
 
 2. **Evidence grounding** — claims need: present-thing (file:line + quote), absent-thing (explicit "searched X, not found"), or synthesis (each chain link cited). Downgrade ungrounded claims.
 

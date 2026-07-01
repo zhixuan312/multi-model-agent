@@ -448,7 +448,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     const typeConfig = getTypeConfig(input.type);
     const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
-    const revTier = oppositeAgent(implTier);
+    const revTier = typeConfig.sandbox === 'read-only' ? implTier : oppositeAgent(implTier);
     const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
 
     let implAgent, revAgent;
