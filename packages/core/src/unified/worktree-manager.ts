@@ -188,13 +188,20 @@ export class WorktreeManager {
       // Already committed or nothing to commit
     }
 
-    // Merge worktree branch into original branch from the main cwd
+    // Merge worktree branch into original branch — prefer fast-forward for linear history.
+    // If the target moved while the worker ran, rebase the worktree branch first.
     try {
-      await this.exec('git', ['merge', branch, '--no-edit'], { cwd: originalCwd, windowsHide: true });
+      await this.exec('git', ['merge', '--ff-only', branch], { cwd: originalCwd, windowsHide: true });
     } catch {
-      // Merge conflict — preserve worktree for manual resolution
-      await this.exec('git', ['merge', '--abort'], { cwd: originalCwd, windowsHide: true }).catch(() => {});
-      return { branch, path: worktreePath, hasChanges: true, merged: false };
+      // Fast-forward failed — target branch moved. Rebase worktree onto target, then retry ff.
+      try {
+        await this.exec('git', ['rebase', 'HEAD', branch], { cwd: originalCwd, windowsHide: true });
+        await this.exec('git', ['merge', '--ff-only', branch], { cwd: originalCwd, windowsHide: true });
+      } catch {
+        // Rebase conflict — preserve worktree for manual resolution
+        await this.exec('git', ['rebase', '--abort'], { cwd: originalCwd, windowsHide: true }).catch(() => {});
+        return { branch, path: worktreePath, hasChanges: true, merged: false };
+      }
     }
 
     // Compute filesChanged from the merge commit (source of truth, not tool-call tracking)

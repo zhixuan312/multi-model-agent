@@ -145,8 +145,9 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
-      .mockRejectedValueOnce(new Error('merge conflict')) // git merge fails
-      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git merge --abort
+      .mockRejectedValueOnce(new Error('not fast-forward')) // git merge --ff-only fails
+      .mockRejectedValueOnce(new Error('rebase conflict')) // git rebase fails
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git rebase --abort
 
     const mgr = new WorktreeManager(exec, mockFs(true));
     const info = await mgr.mergeAndCleanup(
