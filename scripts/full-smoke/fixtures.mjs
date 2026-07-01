@@ -19,6 +19,12 @@ export function createProject() {
   writeFileSync(join(dir, 'spec.md'),
     `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
   git('add', '.'); git('commit', '-qm', 'seed');
+
+  // Write an UNCOMMITTED plan file for scenario #23 (worktree copy test)
+  writeFileSync(join(dir, 'uncommitted-plan.md'),
+    '# Uncommitted Plan\n\n### Task 1: add modulo\nAdd `modulo(a,b)` to `src/math.ts` that returns `a % b`.\n');
+  // Intentionally NOT git-added — tests the copyToWorktree mechanism
+
   return { dir };
 }
 

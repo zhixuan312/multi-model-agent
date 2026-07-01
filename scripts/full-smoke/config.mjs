@@ -119,4 +119,10 @@ export const SCENARIOS = [
   { id: 20, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
   { id: 21, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
   { id: 22, type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', sandbox: 'read-only', emits: 1 },
+
+  // G. Uncommitted plan file (worktree copy)
+  //    #23: execute_plan with a plan file that exists on disk but is NOT committed
+  //         to git. The pipeline must copy it into the worktree before the worker
+  //         can read it. Verifies the copyToWorktree mechanism.
+  { id: 23, type: 'execute_plan', tier: 'standard', kind: 'write', uncommittedPlan: true, emits: 1 },
 ];

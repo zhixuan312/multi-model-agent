@@ -178,6 +178,7 @@ try {
       [18],          // error/missing
       [19],          // orchestrate
       [22],          // audit/read-only-sandbox
+      [23],          // execute_plan with uncommitted plan file
     ];
 
     // Filter threads if --only is active

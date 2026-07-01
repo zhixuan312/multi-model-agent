@@ -47,7 +47,10 @@ export function buildRequest(spec, ctx) {
     case 21: return { type: 'delegate', body: { prompt: 'Run this shell command: cd /tmp && touch mma-escape-cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;', target: { paths: ['src/cd-safe.ts'] }, reviewPolicy: 'none' } };
     case 22: return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/src/math.ts`] } } };
 
-    // G. Error Cases — these are raw payloads that should fail validation
+    // G. Uncommitted plan file (worktree copy test)
+    case 23: return { type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task 1: add modulo'] } };
+
+    // H. Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
 
