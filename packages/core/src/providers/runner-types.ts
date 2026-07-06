@@ -3,7 +3,6 @@ import type {
   Effort,
   SandboxPolicy,
   TaskSpec,
-  ToolMode,
 } from '../types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { HeadlineSnapshot } from '../bounded-execution/activity-tracker-types.js';
@@ -68,7 +67,6 @@ export interface AttemptRecord {
 }
 
 export interface RunOptions {
-  tools?: ToolMode
   timeoutMs?: number
   cwd?: string
   effort?: Effort
@@ -76,17 +74,11 @@ export interface RunOptions {
   /** Optional callback invoked by runners and the escalation orchestrator to
    *  stream in-flight internal progress events. */
   onProgress?: (event: InternalRunnerEvent) => void
-  /** Called exactly once per attempt when the runner has assembled the
-   *  canonical orchestrator-side initial brief. */
-  onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
   mainModel?: string
   /** External abort signal — when fired, the runner force-salvages and
    *  returns a `timeout` result via the same path as the per-call timeout.
    *  Used by the orchestrator's stall watchdog. */
   abortSignal?: AbortSignal
-  /** Run mode: 'standard' for normal execution, 'review' for typed
-   *  structured output review via Agent.outputType. Default 'standard'. */
-  runMode?: 'standard' | 'review'
   /** Appended to Agent.instructions (or the equivalent system-level prompt
    *  in each runner) after the standard prevention-layer system prompt.
    *  Used by the reviewer path so the stable review rubric sits in the
