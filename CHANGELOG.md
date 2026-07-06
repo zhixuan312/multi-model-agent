@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.6] - 2026-07-06
+
+**OKF journal + full codebase audit.** Journal nodes now use Google OKF-compliant frontmatter (`type` instead of `category`, plus `description` and `timestamp`). Full line-by-line audit of 176+ files yielded 9 fixes across production code, skills, docs, and config. `SCHEMA_VERSION` unchanged (still 6).
+
+### Changed
+- **BREAKING (journal):** Node frontmatter field `category` renamed to `type` (OKF v0.1 required field). Values unchanged: decision, design, behavior, process, knowledge, style.
+- Journal nodes gain `description` (one-line summary) and `timestamp` (ISO-8601) frontmatter fields (OKF recommended).
+- Refiner schemas: `suggestion` allows empty string (audit/review); `reviewer_parse_failed` is WARN not FAIL in smoke.
+- Investigate reviewer skill: `confidence` → `weight` (matches output schema).
+- Delegate implementer skill: `filePaths` → `target.paths` (matches input schema).
+- Dependency-cruiser rules updated for current architecture (removed 6 deleted directory refs).
+
+### Fixed
+- worktree-manager: `git worktree remove` cwd changed from worktreePath to originalCwd (fragile on deletion).
+- config/schema.ts: removed orphaned comment from deleted regex.
+- index.ts: value export → type export for `ParsedStructuredReport`.
+- mma-journal-record SKILL.md: "not searchable" → points to mma-journal-recall.
+- multi-model-agent router SKILL.md: removed nonexistent `mma-verify` references.
+- server/README.md: DeepSeek starter config type `codex` → `claude`.
+- Smoke verify: `hasCategory` → `hasType` variable rename.
+
 ## [5.6.5] - 2026-07-01
 
 **Worktree + pipeline reliability.** Orchestrate gains cwd-only sandbox (can write files). Worktree merges use fast-forward for linear git history. Uncommitted plan files auto-copied into worktrees. Refiner schema relaxed for edge cases. Reviewer tool-use instruction hardened. `SCHEMA_VERSION` unchanged (still 6).

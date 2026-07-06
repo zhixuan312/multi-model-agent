@@ -312,12 +312,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.5
+## What's new in 5.6.6
 
-- **Orchestrate writes.** Sandbox changed to `cwd-only` — orchestrate can write files (e.g. generated plans/specs) without a worktree or git repo.
-- **Linear git history.** Worktree merges use fast-forward (no rainbow merge branches). Falls back to rebase if target moved.
-- **Uncommitted plan support.** Plan files not yet committed to git are auto-copied into the worktree before execution.
-- **Reviewer hardened.** Investigate reviewer must call Read tool before claiming files exist/don't exist.
+- **OKF-compliant journal.** Node frontmatter uses `type` (was `category`), plus `description` and `timestamp` fields — aligned with Google Open Knowledge Format v0.1.
+- **Full codebase audit.** 176+ files reviewed line by line, 9 issues fixed across production code, skills, docs, and config.
+- **Refiner schema relaxed.** Empty `suggestion` and `reviewer_parse_failed` as WARN (not FAIL) — reduces false negatives on valid task output.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
