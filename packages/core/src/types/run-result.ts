@@ -36,8 +36,8 @@ export type RunResult = {
 };
 
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
-// ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
-// `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
+// ── Runtime mirror — what the SDK runners + two-phase pipeline produce ────────
+// `RuntimeRunResult` is the internal shape. Renamed from `RunResult` so the
 // public type name is the wire envelope; the runtime mirror keeps the
 // fields handlers/recorder/runners actually populate.
 
