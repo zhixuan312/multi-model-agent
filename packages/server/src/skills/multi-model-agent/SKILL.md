@@ -1,6 +1,6 @@
 ---
 name: multi-model-agent
-description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
+description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
 when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mma is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
 version: "0.0.0-unreleased"
 ---
@@ -63,7 +63,7 @@ digraph picker {
 
 ### The unifying principle
 
-The main session is for judgment, orchestration, and dialogue with the engineer. Everything else — read, grep, audit, review, debug, implement, verify — gets delegated. If you're about to do labor in main context, you've already taken the wrong turn.
+The main session is for judgment, orchestration, and dialogue with the engineer. Everything else — read, grep, audit, review, debug, implement — gets delegated. If you're about to do labor in main context, you've already taken the wrong turn.
 
 ### Judgment vs labor — what NEVER delegates
 
@@ -188,7 +188,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ❌ **Defaulting to inline Agent dispatch when mma is up.** mma workers cost ~10× less and don't pollute main context. **Why:** every inline tool call burns flagship-model tokens; that's exactly what mma exists to avoid.
 
-❌ **Picking `mma-delegate` when a more specific skill fits.** Audit / review / verify / debug / investigate workers know their route's defaults and emit structured reports. **Why:** specialized skills require less input and produce richer output.
+❌ **Picking `mma-delegate` when a more specific skill fits.** Audit / review / debug / investigate workers know their route's defaults and emit structured reports. **Why:** specialized skills require less input and produce richer output.
 
 ❌ **Starting an investigation that needs to write code.** `mma-investigate` is read-only. **Fix:** dispatch `mma-delegate` with research-then-edit framing, or split: investigate → digest → edit.
 

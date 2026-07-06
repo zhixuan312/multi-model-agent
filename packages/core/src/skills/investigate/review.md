@@ -19,14 +19,14 @@ Verify the implementer's investigation against the codebase, improve quality, re
 
 4. **Negative findings** — absent-thing searches must be explicit, not silently omitted. Do NOT remove legitimate negative findings.
 
-5. **Confidence calibration** — each finding's `confidence` should reflect evidence strength: critical/high=multiple grounded citations, medium=cited with 1-2 inferred steps, low=minimal evidence. Adjust if inflated.
+5. **Confidence calibration** — each finding's `weight` should reflect evidence strength: critical/high=multiple grounded citations, medium=cited with 1-2 inferred steps, low=minimal evidence. Adjust if inflated.
 
 6. **Scope** — remove fix proposals or improvement suggestions (investigate is read-only Q&A).
 
 ## Refinement rules
 
 - Remove citations confirmed wrong by reading the file.
-- Adjust per-finding `confidence` if miscalibrated. Merge duplicate findings.
+- Adjust per-finding `weight` if miscalibrated. Merge duplicate findings.
 - Do NOT add meta-commentary findings about the implementer's quality. Every finding must answer the original question.
 - Improve the answer text if you can add clarity or correct errors. Don't rephrase for style.
 

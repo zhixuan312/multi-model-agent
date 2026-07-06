@@ -32,7 +32,7 @@ export type {
 export type {
   BriefQualityPolicy,
 } from './types/brief-quality-policy.js';
-export { ParsedStructuredReport } from './reporting/structured-report.js';
+export type { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';

@@ -28,7 +28,7 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 **Don't use when:**
 - You're asking a question → `mma-investigate`
 - You're dispatching work → `mma-delegate`
-- You want to retrieve past entries → journal is append-only, not searchable; use `git log` or `.mma/journal/` files directly
+- You want to retrieve past entries → `mma-journal-recall` (the read route for the journal graph)
 - You're mid-task and want to pause → that's what `blockedBy` is for; journal is for conclusions, not temporary blockers
 
 ## Endpoint

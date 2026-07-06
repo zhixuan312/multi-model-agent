@@ -23,10 +23,6 @@ export const MAX_TIME_PRESTOP_RATIO = 0.80;
 
 const TrimmedNonEmpty = z.string().trim().min(1);
 
-// `://` is already covered by the character class (the `:` and `/` matches),
-// kept here only as a defensive belt-and-braces against future class edits
-// that might accidentally drop one of those characters. If you simplify the
-// class, drop the alternation too. Both branches reject the same inputs today.
 // === Research config schema ===
 
 export const ResearchConfigSchema = z.object({

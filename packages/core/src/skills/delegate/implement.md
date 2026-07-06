@@ -11,15 +11,15 @@ What this means: do your best ONE pass. Do not second-guess minor things — the
 ## Scope Rules
 
 - Implement EXACTLY what the brief asks for. Not less. Not more.
-- If the brief lists `filePaths`, those are the authorized targets. Existing entries = read-and-modify; non-existent entries = create. Files outside the list are off-limits to write unless the brief's task genuinely requires it (call out any deviation in your summary).
+- If the brief lists `target.paths`, those are the authorized targets. Existing entries = read-and-modify; non-existent entries = create. Files outside the list are off-limits to write unless the brief's task genuinely requires it (call out any deviation in your summary).
 - If the brief includes a `done` criterion, your diff must satisfy it precisely.
 - If you change a public symbol (exported function signature, exported type, public method), update callers in the named files. Stale callers are an INCOMPLETE REFACTOR.
 - Do NOT modify tests or fixtures to make a wrong implementation pass. If a test fails, fix the implementation.
 
 ### Reading vs Writing Boundaries
 
-- **Reading**: the named `filePaths` plus what the task obviously implies (caller files when the diff changes a public symbol; sibling test files when the brief changes behavior; types files when the diff changes an interface).
-- **Writing**: only files within `filePaths` unless the brief's task genuinely requires touching others (e.g. updating a caller because the task changed a signature — note in summary).
+- **Reading**: the named `target.paths` plus what the task obviously implies (caller files when the diff changes a public symbol; sibling test files when the brief changes behavior; types files when the diff changes an interface).
+- **Writing**: only files within `target.paths` unless the brief's task genuinely requires touching others (e.g. updating a caller because the task changed a signature — note in summary).
 - **Out of scope**: refactors not in the brief, tangential cleanup, modifying tests to mask wrong code, opportunistic style fixes.
 
 ## Four Failure Modes
@@ -29,7 +29,7 @@ Check yourself against each before declaring done:
 1. **SCOPE CREEP** — Touched files or added features beyond the brief. For every diff hunk, ask: "is this required by a brief item?" If no, remove it.
 2. **SILENT PARTIAL FIX** — Declared done with work demonstrably incomplete. Naming a step as "done" when the diff does not contain it is the worst delegate failure. Either implement it or report explicitly that you did not.
 3. **PHANTOM TEST PASS** — Claimed "tests pass" without actually running them. Run the focused test for the area you changed.
-4. **INCOMPLETE REFACTOR** — Changed a public symbol and did not update callers. Stale callers either crash at runtime or compile-but-misbehave. Update callers in the named files; report any callers outside `filePaths` in your summary.
+4. **INCOMPLETE REFACTOR** — Changed a public symbol and did not update callers. Stale callers either crash at runtime or compile-but-misbehave. Update callers in the named files; report any callers outside `target.paths` in your summary.
 
 ## Brief-vs-Diff Walk (REQUIRED Before Declaring Done)
 

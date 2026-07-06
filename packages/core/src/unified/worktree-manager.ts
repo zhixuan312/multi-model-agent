@@ -164,7 +164,7 @@ export class WorktreeManager {
 
     if (!dirty) {
       // No changes — just remove worktree + branch
-      await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: worktreePath, windowsHide: true });
+      await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
       await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
       // Clean up empty parent directories
       try {

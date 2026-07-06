@@ -1,16 +1,10 @@
 module.exports = {
   forbidden: [
     {
-      name: 'no-substrate-to-pipeline',
+      name: 'no-substrate-to-unified',
       severity: 'error',
       from: { path: '^packages/core/src/(transport|config|identity|stores|providers|bounded-execution|events)/' },
-      to:   { path: '^packages/core/src/(intake|escalation|lifecycle|review|reporting|tool-surface)/' },
-    },
-    {
-      name: 'no-pipeline-to-tools',
-      severity: 'error',
-      from: { path: '^packages/core/src/(intake|escalation|lifecycle|review|reporting)/' },
-      to:   { path: '^packages/core/src/tools/' },
+      to:   { path: '^packages/core/src/unified/' },
     },
     {
       name: 'no-circular',
