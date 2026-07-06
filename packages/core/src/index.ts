@@ -78,7 +78,7 @@ export type {
 // Agent resolution
 export { resolveAgent } from './providers/agent-resolver.js';
 export type { ResolvedAgent } from './providers/agent-resolver.js';
-export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
+export { findModelProfile } from './config/model-profile-registry.js';
 
 // Identity
 export { getClaudeOAuth } from './identity/claude-oauth.js';

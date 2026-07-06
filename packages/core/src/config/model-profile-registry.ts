@@ -449,10 +449,6 @@ export function findModelProfile(modelId: string): ModelProfile {
   return FROZEN_DEFAULT_PROFILE;
 }
 
-export function getEffectiveCostTier(config: ProviderConfig): CostTier {
-  return config.costTier ?? findModelProfile(config.model).defaultCost;
-}
-
 function stripLeadingNamespace(raw: string): string {
   let result = raw;
   let changed = true;
