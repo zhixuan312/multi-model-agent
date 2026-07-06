@@ -62,7 +62,7 @@ Dispatch the accepted investigations in parallel. When results return, present f
 - What the project already decided (from journal-recall, if run)
 - How these findings inform the design
 
-If no investigations were run, proceed directly to Phase 2 using only the brain dump content.
+If no investigations were run, proceed directly to Phase 2 using only the brain dump content. The main agent can still dispatch **targeted** investigations during Phase 2 to resolve specific mechanical questions — the Phase 1 batch is the upfront sweep, not the only opportunity.
 
 ### Phase 2: Structured interview — clarify, resolve, lock decisions
 
@@ -109,7 +109,10 @@ Interview rules:
 - Skip sections the user already locked. "Option A because X" = confirmed decision. Don't re-debate.
 
 **Step 3: Lock each decision.**
-As the user answers each question, record the confirmed decision. When all sections are filled (clear from brain dump + confirmed through dialogue), you have a complete set of decisions ready for Phase 3.
+As the user answers each question, record the confirmed decision.
+
+**Step 4: Present the decision summary.**
+When all sections are filled, present the complete set of confirmed decisions to the user as a numbered list — one line per section. This is the last checkpoint before formal spec writing. The user may revise any decision, add constraints, or adjust scope. Only proceed to Phase 3 when the user confirms the summary.
 
 ### Phase 3: Write Spec (dispatch to mma-spec)
 
@@ -121,12 +124,12 @@ Once all sections are confirmed:
    { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
    ```
 3. Poll `GET /task/:taskId` until terminal. The `output.summary` contains `{ specPath, sections, acceptanceCriteriaCount, notes }` — `specPath` is the written spec file path
-4. Present the resulting spec file to the user for review
-5. If the user requests changes, edit the spec and re-present
+4. Read the spec file and present a summary to the user for review
+5. If the user requests changes: small edits (wording, constraints, scope tweaks) → edit the file directly. Large structural changes → re-dispatch to mma-spec with updated decisions.
 
 ### Phase 4: Write Plan (dispatch to mma-plan)
 
-After the user approves the spec:
+After the user approves the spec. The user may want to audit the spec first (`mma-audit subtype:spec`) — that's their call, not built into this workflow. When the user is ready for the plan:
 
 1. Dispatch:
    ```json
