@@ -59,6 +59,22 @@ describe('taskInputSchema', () => {
     expect(r.success).toBe(true);
   });
 
+  it('accepts up to 2 contextBlockIds', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'delegate',
+      prompt: 'do X',
+      contextBlockIds: ['blk-1', 'blk-2'],
+    }).success).toBe(true);
+  });
+
+  it('rejects more than 2 contextBlockIds', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'delegate',
+      prompt: 'do X',
+      contextBlockIds: ['blk-1', 'blk-2', 'blk-3'],
+    }).success).toBe(false);
+  });
+
   it('rejects legacy reviewPolicy values', () => {
     expect(taskInputSchema.safeParse({
       type: 'delegate',

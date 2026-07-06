@@ -23,7 +23,7 @@ const commonFields = {
   agentTier: agentTierSchema.optional(),
   reviewPolicy: reviewPolicySchema.optional(),
   sessionIds: sessionIdsSchema,
-  contextBlockIds: z.array(z.string()).optional(),
+  contextBlockIds: z.array(z.string()).max(2).optional(),
 };
 
 export const taskInputSchema = z.discriminatedUnion('type', [

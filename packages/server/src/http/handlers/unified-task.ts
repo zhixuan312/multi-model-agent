@@ -606,9 +606,9 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             }
           }
 
-          // ── Context block resolution: prepend resolved block content to the payload ──
+          // ── Context block resolution: resolve IDs → content, pin for duration ──
           const inputBlockIds = (input.contextBlockIds ?? []) as string[];
-          let resolvedBlockContent = '';
+          let resolvedContextBlocks: string[] | undefined;
           if (inputBlockIds.length > 0) {
             const missing: string[] = [];
             const blocks: string[] = [];
@@ -616,20 +616,22 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               const content = contextBlockStore.get(id);
               if (content === undefined) { missing.push(id); continue; }
               blocks.push(content);
+              contextBlockStore.pin(id);
             }
             if (missing.length > 0) {
+              for (const id of inputBlockIds) contextBlockStore.unpin(id);
               deps.taskRegistry.fail(taskId, {
                 code: 'context_block_not_found',
                 message: `Context block(s) not found: ${missing.join(', ')}`,
               });
               return;
             }
-            resolvedBlockContent = blocks.join('\n\n---\n\n') + '\n\n---\n\n';
+            resolvedContextBlocks = blocks;
           }
 
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
           let researchCtx: ResearchContext | null = null;
-          let enrichedPayload = resolvedBlockContent + JSON.stringify(payload, null, 2);
+          let enrichedPayload = JSON.stringify(payload, null, 2);
 
           if (input.type === 'research') {
             const researchPayload = payload as { prompt: string };
@@ -682,16 +684,21 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             ...(copyToWorktree && { copyToWorktree }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
+            ...(resolvedContextBlocks && { contextBlocks: resolvedContextBlocks }),
           });
           const durationMs = Date.now() - startedAtMs;
 
+          // Unpin context blocks now that the pipeline is done
+          for (const id of inputBlockIds) contextBlockStore.unpin(id);
+
           // Auto-register a terminal context block for read-only routes
-          // (investigate, audit, review, debug, research, journal_recall)
-          // so callers can reference the output in subsequent dispatches.
+          // so callers can reference the output in subsequent dispatches (delta mode).
+          // Uses the reviewer output (quality-gated) when available, falls back to implementer.
           let contextBlockId: string | null = null;
-          if (typeConfig.sandbox === 'read-only' && result.implementerOutput.trim().length > 0) {
+          const terminalContent = result.reviewerRaw ?? result.implementerOutput;
+          if (typeConfig.sandbox === 'read-only' && terminalContent.trim().length > 0) {
             try {
-              const block = contextBlockStore.register(result.implementerOutput);
+              const block = contextBlockStore.register(terminalContent);
               contextBlockId = block.id;
             } catch { /* best-effort — store may be at capacity */ }
           }
