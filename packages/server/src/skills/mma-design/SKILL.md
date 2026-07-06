@@ -114,9 +114,9 @@ As the user answers each question, record the confirmed decision.
 **Step 4: Present the decision summary.**
 When all sections are filled, present the complete set of confirmed decisions to the user as a numbered list — one line per section. This is the last checkpoint before formal spec writing. The user may revise any decision, add constraints, or adjust scope. Only proceed to Phase 3 when the user confirms the summary.
 
-### Phase 3: Write Spec (dispatch to mma-spec)
+### Phase 3: Dispatch spec (terminal step)
 
-Once all sections are confirmed:
+Once the decision summary is confirmed:
 
 1. Gather all confirmed sections into a structured markdown document with `##` headings for: Context, Problem, Goals & Requirements (with Scope/Constraints/Success Metrics as `###` subsections), Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria
 2. Dispatch:
@@ -124,25 +124,19 @@ Once all sections are confirmed:
    { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
    ```
 3. Poll `GET /task/:taskId` until terminal. The `output.summary` contains `{ specPath, sections, acceptanceCriteriaCount, notes }` — `specPath` is the written spec file path
-4. Read the spec file and present a summary to the user for review
-5. If the user requests changes: small edits (wording, constraints, scope tweaks) → edit the file directly. Large structural changes → re-dispatch to mma-spec with updated decisions.
+4. Present the spec file path to the user. **mma-design ends here.**
 
-### Phase 4: Write Plan (dispatch to mma-plan)
-
-After the user approves the spec. The user may want to audit the spec first (`mma-audit subtype:spec`) — that's their call, not built into this workflow. When the user is ready for the plan:
-
-1. Dispatch:
-   ```json
-   { "type": "plan", "prompt": "<goal description>", "target": { "paths": ["<spec file path>"] } }
-   ```
-2. Poll `GET /task/:taskId` until terminal. The `output.summary` contains `{ planPath, taskCount, tasks: [{title, verdict}], notes }` — check `verdict` per task: `executable` (ready), `partial` (review first), `blocked` (fix plan)
-3. Present the resulting plan to the user
-4. The plan is ready for `mma-execute-plan`
+**What comes next is the user's decision** — not part of this skill:
+- Review the spec → read the file
+- Audit the spec → `mma-audit subtype:spec`
+- Write a plan → `mma-plan`
+- Execute the plan → `mma-execute-plan`
 
 ## What this skill does NOT include
 
-- **Built-in audit loops.** If the user wants to audit the spec or plan, they dispatch `mma-audit subtype:spec` or `mma-audit subtype:plan` separately.
-- **Automatic execution.** The skill produces a spec and plan. Execution (`mma-execute-plan`) is the user's next step.
+- **Plan writing.** This skill ends at the spec. Plan writing is a separate step via `mma-plan`.
+- **Audit loops.** Spec auditing is a separate step via `mma-audit subtype:spec`.
+- **Execution.** Plan execution is a separate step via `mma-execute-plan`.
 - **Design decisions by the agent.** The main agent presents, proposes, and recommends — but never selects without user confirmation.
 
 ## Anti-patterns
@@ -155,4 +149,6 @@ After the user approves the spec. The user may want to audit the spec first (`mm
 
 ❌ **Dispatching investigations without consent.** Always propose the three investigations and wait for user agreement before dispatching.
 
-❌ **Writing the spec inline instead of dispatching mma-spec.** The main agent gathers and structures decisions. The worker writes the formal document. Don't burn flagship tokens on formatting labor.
+❌ **Writing the spec inline.** The main agent gathers and structures decisions. The worker writes the formal document via `mma-spec`. Don't burn flagship tokens on formatting labor.
+
+❌ **Continuing past spec dispatch.** mma-design ends when the spec is written. Plan writing, auditing, and execution are separate skills the user invokes next.
