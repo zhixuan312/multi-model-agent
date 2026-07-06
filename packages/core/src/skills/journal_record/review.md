@@ -20,7 +20,7 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 
 2. **Graph integrity** — superseded nodes marked with `supersededBy`. Edges use only: supersedes, refines, relates, depends-on, contradicts, parent. Edge targets exist. Node IDs collision-free, sequential, zero-padded 4 digits.
 
-3. **Node quality** — correct YAML frontmatter (id, title, category, status, tags, date, links). Category is one of: decision, design, behavior, process, knowledge, style. Nodes are actionable. Secrets redacted.
+3. **Node quality** — correct YAML frontmatter (id, title, type, status, description, timestamp, tags, links). Type is one of: decision, design, behavior, process, knowledge, style. Nodes are actionable. Secrets redacted.
 
 4. **Catalog consistency** — index.md lists all nodes sorted by id. log.md has entry for each operation.
 
@@ -39,5 +39,5 @@ Verify and correct the implementer's existing recordings. Do NOT record addition
 ## Output (REQUIRED)
 
 ```json
-{"recorded": [{"learning": "<lesson text>", "category": "<category>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
+{"recorded": [{"learning": "<lesson text>", "type": "<type>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
 ```

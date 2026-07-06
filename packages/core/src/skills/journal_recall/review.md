@@ -30,7 +30,7 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 ## Refinement rules
 
 - Remove results citing non-existent nodes. Add missed nodes. Adjust relevance ratings.
-- Fix incorrect `status`/`category` fields.
+- Fix incorrect `status`/`type` fields.
 - Improve `learning` and `context` text if you can add clarity. Don't rephrase for style.
 - **If you cannot verify any citations (journal inaccessible), re-output the implementer's answer unchanged.**
 

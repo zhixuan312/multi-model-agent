@@ -100,7 +100,7 @@ const executePlanAnswerSchema = z.object({
 const journalRecordAnswerSchema = z.object({
   recorded: z.array(z.object({
     learning: z.string().min(1),
-    category: z.string().min(1),
+    type: z.string().min(1),
     nodeId: z.string().min(1),
     nodePath: z.string().min(1),
   })),

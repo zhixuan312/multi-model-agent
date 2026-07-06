@@ -130,10 +130,10 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'journal_record':
       return [
-        'You have classified the entry by category (decision/design/behavior/process/knowledge/style) and operation (create/refine/supersede/merge).',
+        'You have classified the entry by type (decision/design/behavior/process/knowledge/style) and operation (create/refine/supersede/merge).',
         'You have checked the existing journal for supersede/refine/merge candidates.',
-        'You have written the node file with proper YAML frontmatter (including category) and edges.',
-        'You have updated the journal catalog (log.md and index.md with category column).',
+        'You have written the node file with proper YAML frontmatter (including type) and edges.',
+        'You have updated the journal catalog (log.md and index.md with type column).',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'journal_recall':

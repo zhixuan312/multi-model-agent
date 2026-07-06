@@ -20,9 +20,9 @@ Process learnings IN ORDER (learningIndex 0, 1, 2, ...). For EACH learning:
    - **merge**: adds no new causal claim/constraint/consequence. Fold into the existing node.
    - **create**: matches no existing node.
 
-4. **Write node files** as `nodes/<id>-<kebab-title>.md` with YAML frontmatter (`id`, `title`, `category`, `status`, `tags` [lowercase-kebab], `date`, `links` [typed edges], `supersededBy`) + `## Context` and `## Consequences`. id = max(existing)+1, zero-padded 4 digits (collision-free because you integrate strictly in order).
+4. **Write node files** as `nodes/<id>-<kebab-title>.md` with YAML frontmatter (`id`, `title`, `type`, `status`, `description`, `timestamp`, `tags` [lowercase-kebab], `links` [typed edges], `supersededBy`) + `## Context` and `## Consequences`. id = max(existing)+1, zero-padded 4 digits (collision-free because you integrate strictly in order).
 
-5. **Update catalog.** Append ONE `log.md` line (`<ISO-8601 date>  <op>  <id>  <title>`), then update `index.md` (table: id | date | category | status | title | tags, sorted by id asc). FLUSH all writes for this learning to disk BEFORE starting the next learning.
+5. **Update catalog.** Append ONE `log.md` line (`<ISO-8601 timestamp>  <op>  <id>  <title>`), then update `index.md` (table: id | timestamp | type | status | title | tags, sorted by id asc). FLUSH all writes for this learning to disk BEFORE starting the next learning.
 
 6. **Handle failures.** If a single learning cannot be integrated, record it in `failed` (see report format) and CONTINUE to the next learning — do not abort the batch.
 
@@ -34,15 +34,15 @@ Process learnings IN ORDER (learningIndex 0, 1, 2, ...). For EACH learning:
 
 - **Edge types** (only): `supersedes`, `refines`, `relates`, `depends-on`, `contradicts`, `parent`.
 - **Status values** (only): `adopted`, `dropped`, `inconclusive`, `superseded`.
-- **Category values** (only): `decision`, `design`, `behavior`, `process`, `knowledge`, `style`.
+- **Type values** (only): `decision`, `design`, `behavior`, `process`, `knowledge`, `style`.
 
-Do not invent edge types, status values, or categories outside these vocabularies.
+Do not invent edge types, status values, or types outside these vocabularies.
 
-## Category Classification
+## Type Classification
 
-Every node MUST have a `category` field. Classify based on what the entry captures:
+Every node MUST have a `type` field. Classify based on what the entry captures:
 
-| Category | Signal words / patterns | `## Context` describes | `## Consequences` describes |
+| Type | Signal words / patterns | `## Context` describes | `## Consequences` describes |
 |----------|------------------------|------------------------|---------------------------|
 | `decision` | tried, dropped, chose, trade-off, instead | What was tried and what happened | What to do instead, when this applies |
 | `design` | architecture, pattern, why, rationale, layer | Why the system is structured this way | Constraints this creates, what breaks if violated |
@@ -51,7 +51,7 @@ Every node MUST have a `category` field. Classify based on what the entry captur
 | `knowledge` | found, API, library, feasibility, ecosystem | What was discovered, the evidence | How to apply it, where it's relevant |
 | `style` | convention, naming, format, documentation | What the convention is, where it applies | When to follow it, exceptions |
 
-When an entry spans categories (e.g., a design decision informed by user behavior), pick the **primary** category and use `relates` edges to connect to nodes in the other category.
+When an entry spans types (e.g., a design decision informed by user behavior), pick the **primary type** and use `relates` edges to connect to nodes of the other type.
 
 ## Trust Boundary
 
@@ -72,7 +72,7 @@ Before finishing, verify:
 Your FINAL text response must be exactly one JSON block — a single OBJECT, not an array (do NOT write it to a file):
 
 ```json
-{"recorded": [{"learning": "<lesson text>", "category": "<decision|design|behavior|process|knowledge|style>", "nodeId": "<0012>", "nodePath": "<file path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
+{"recorded": [{"learning": "<lesson text>", "type": "<decision|design|behavior|process|knowledge|style>", "nodeId": "<0012>", "nodePath": "<file path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
 ```
 
 Every input learning MUST appear exactly once across `recorded` and `failed`, keyed by its `learningIndex`.

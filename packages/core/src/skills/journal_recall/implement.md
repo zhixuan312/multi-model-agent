@@ -12,7 +12,7 @@ mma-journal-recall is the read side of the team knowledge graph. The caller is a
 
 Apply ALL perspectives regardless of the question. Each may yield candidate answers:
 
-1. **KEYWORD-MATCH** — Read `index.md` (or list `nodes/`), then open nodes whose title/tags/body/category share the query's key terms. When the query targets a specific knowledge type (e.g., "what conventions do we follow" → `style` category, "how does the user prefer to work" → `behavior` category), prioritize nodes in that category. Your candidate answers are those nodes, each cited with its id, category, status, and the lesson that answers the query.
+1. **KEYWORD-MATCH** — Read `index.md` (or list `nodes/`), then open nodes whose title/tags/body/type share the query's key terms. When the query targets a specific knowledge type (e.g., "what conventions do we follow" → `style` type, "how does the user prefer to work" → `behavior` type), prioritize nodes of that type. Your candidate answers are those nodes, each cited with its id, type, status, and the lesson that answers the query.
 
 2. **GRAPH-NEIGHBORHOOD** — From the nodes that match the query, follow `refines`/`depends-on`/`parent` edges and supersedes chains (to the current head) to gather connected context. Your candidate answers are the neighborhood nodes that explain or qualify the direct matches.
 

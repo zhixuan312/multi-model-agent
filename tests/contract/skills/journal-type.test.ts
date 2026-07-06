@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 const CATEGORIES = ['decision', 'design', 'behavior', 'process', 'knowledge', 'style'] as const;
 
-describe('contract: journal category vocabulary', () => {
+describe('contract: journal type vocabulary', () => {
   const schemaPath = resolve('.mma/journal/schema.md');
   const implPath = resolve('packages/core/src/skills/journal_record/implement.md');
   const reviewPath = resolve('packages/core/src/skills/journal_record/review.md');
@@ -21,43 +21,43 @@ describe('contract: journal category vocabulary', () => {
   const skill = readFileSync(skillPath, 'utf8');
   const handler = readFileSync(handlerPath, 'utf8');
 
-  it('schema.md defines all 6 categories', () => {
+  it('schema.md defines all 6 types', () => {
     for (const cat of CATEGORIES) {
-      expect(schema, `schema.md missing category: ${cat}`).toContain(cat);
+      expect(schema, `schema.md missing type: ${cat}`).toContain(cat);
     }
   });
 
-  it('schema.md index format includes category column', () => {
-    expect(schema).toContain('id | date | category | status | title | tags');
+  it('schema.md index format includes type column', () => {
+    expect(schema).toContain('id | timestamp | type | status | title | tags');
   });
 
-  it('implement.md references category in frontmatter spec', () => {
-    expect(impl).toContain('`category`');
+  it('implement.md references type in frontmatter spec', () => {
+    expect(impl).toContain('`type`');
   });
 
-  it('implement.md has category classification table', () => {
+  it('implement.md has type classification table', () => {
     for (const cat of CATEGORIES) {
-      expect(impl, `implement.md missing category row: ${cat}`).toContain(`\`${cat}\``);
+      expect(impl, `implement.md missing type row: ${cat}`).toContain(`\`${cat}\``);
     }
   });
 
-  it('implement.md index format includes category column', () => {
-    expect(impl).toContain('id | date | category | status | title | tags');
+  it('implement.md index format includes type column', () => {
+    expect(impl).toContain('id | timestamp | type | status | title | tags');
   });
 
-  it('review.md validates category field', () => {
-    expect(review).toContain('category');
+  it('review.md validates type field', () => {
+    expect(review).toContain('type');
     for (const cat of CATEGORIES) {
-      expect(review, `review.md missing category: ${cat}`).toContain(cat);
+      expect(review, `review.md missing type: ${cat}`).toContain(cat);
     }
   });
 
-  it('recall implement.md is category-aware', () => {
-    expect(recall).toContain('category');
+  it('recall implement.md is type-aware', () => {
+    expect(recall).toContain('type');
   });
 
-  it('recall review.md checks category accuracy', () => {
-    expect(recallReview).toContain('category');
+  it('recall review.md checks type accuracy', () => {
+    expect(recallReview).toContain('type');
   });
 
   it('SKILL.md mentions all 6 knowledge types', () => {
@@ -69,11 +69,11 @@ describe('contract: journal category vocabulary', () => {
     expect(skill).toContain('style convention');
   });
 
-  it('handler goal condition references category classification', () => {
-    expect(handler).toContain('category (decision/design/behavior/process/knowledge/style)');
+  it('handler goal condition references type classification', () => {
+    expect(handler).toContain('type (decision/design/behavior/process/knowledge/style)');
   });
 
-  it('recall output format includes category field', () => {
+  it('recall output format includes category field in findings', () => {
     expect(recall).toContain('"category"');
   });
 });

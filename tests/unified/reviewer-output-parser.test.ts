@@ -45,7 +45,7 @@ const VALID_JOURNAL_RECALL = JSON.stringify({
 });
 
 const VALID_JOURNAL_RECORD = JSON.stringify({
-  recorded: [{ learning: 'Haiku cannot verify citations', category: 'process', nodeId: '0015', nodePath: '.mma/journal/nodes/0015-refiner-limitation.md' }],
+  recorded: [{ learning: 'Haiku cannot verify citations', type: 'process', nodeId: '0015', nodePath: '.mma/journal/nodes/0015-refiner-limitation.md' }],
   failed: [],
 });
 
