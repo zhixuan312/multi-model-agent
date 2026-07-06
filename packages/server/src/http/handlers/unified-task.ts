@@ -36,6 +36,17 @@ import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFileCb);
+
+async function isGitRepo(cwd: string): Promise<boolean> {
+  try {
+    await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd });
+    return true;
+  } catch { return false; }
+}
 
 function tryParseJson(raw: string): unknown {
   const fenced = [...raw.matchAll(/```json\s*([\s\S]*?)```/g)];
@@ -141,6 +152,24 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
         'You have searched from ALL 3 perspectives: keyword-match, graph-neighborhood, contradiction-and-history.',
         'Superseded nodes are excluded from results.',
         'Each result includes the learning, context, and relevance assessment.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'spec':
+      return [
+        'You have read the structured design decisions from the input.',
+        'You have written a complete spec file with YAML frontmatter and ALL required sections: Context, Problem, Goals & Requirements, Scope, Constraints, Success Metrics, Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria.',
+        'Every functional requirement uses must/should/may language and maps to an acceptance criterion.',
+        'No placeholder language exists (no TBD, TODO, or vague verbs).',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'plan':
+      return [
+        'You have read the spec and explored the codebase to discover ground truth at HEAD.',
+        'You have written a complete plan file with Goal/Architecture/Tech Stack header, File Structure section, and Track-organized TDD tasks.',
+        'Every task has the exact structure: failing test → verify fail → minimal code → verify pass.',
+        'Every code block is complete — no placeholders, no "similar to Task N".',
+        'Every file path was verified against the codebase.',
+        'Every verification command uses the project actual test runner.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'orchestrate':
@@ -478,7 +507,6 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    const blockIds = input.contextBlockIds ?? [];
     const contextBlockStore = pc.contextBlocks;
     const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
     const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, ...payload } = input as Record<string, unknown>;
@@ -535,6 +563,70 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             if (entry) entry.totalTasks = matched.length;
           }
 
+          // ── Spec/Plan pre-processing: outputPath derivation + copyToWorktree ──
+          if (input.type === 'spec' || input.type === 'plan') {
+            const spPayload = payload as { prompt: string; target?: { paths?: string[]; inline?: string }; outputPath?: string };
+            const hasInline = spPayload.target?.inline !== undefined;
+            const hasPaths = spPayload.target?.paths !== undefined && spPayload.target.paths.length > 0;
+
+            // Validate outputPath if provided
+            if (spPayload.outputPath) {
+              if (spPayload.outputPath.includes('..') || path.isAbsolute(spPayload.outputPath)) {
+                deps.taskRegistry.fail(taskId, { code: 'invalid_output_path', message: `outputPath must be relative to cwd and must not contain '..': ${spPayload.outputPath}` });
+                return;
+              }
+            }
+
+            // For plan + inline, outputPath is required
+            if (input.type === 'plan' && hasInline && !spPayload.outputPath) {
+              deps.taskRegistry.fail(taskId, { code: 'invalid_request', message: 'outputPath is required when type=plan uses target.inline (cannot derive basename from inline content)' });
+              return;
+            }
+
+            // Derive outputPath if not provided
+            if (!spPayload.outputPath) {
+              const today = new Date().toISOString().slice(0, 10);
+              if (input.type === 'spec') {
+                const slug = spPayload.prompt.split(/[.!?\n]/)[0].trim().toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+                (payload as Record<string, unknown>).outputPath = `docs/mma/specs/${today}-${slug || 'spec'}.md`;
+              } else if (hasPaths) {
+                const specBase = path.basename(spPayload.target!.paths![0], path.extname(spPayload.target!.paths![0]));
+                const hasDatePrefix = /^\d{4}-\d{2}-\d{2}-/.test(specBase);
+                (payload as Record<string, unknown>).outputPath = hasDatePrefix
+                  ? `docs/mma/plans/${specBase}.md`
+                  : `docs/mma/plans/${today}-${specBase}.md`;
+              }
+            }
+
+            // Set up copyToWorktree for target.paths
+            if (hasPaths) {
+              const filePath = spPayload.target!.paths![0];
+              copyToWorktree = [path.isAbsolute(filePath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath))) : filePath];
+            }
+          }
+
+          // ── Context block resolution: resolve IDs → content, pin for duration ──
+          // Missing blocks are skipped (soft) — the in-memory store loses blocks
+          // on server restart, and a stale block should not kill the task.
+          const inputBlockIds = (input.contextBlockIds ?? []) as string[];
+          let resolvedContextBlocks: string[] | undefined;
+          const pinnedIds: string[] = [];
+          if (inputBlockIds.length > 0) {
+            const blocks: string[] = [];
+            for (const id of inputBlockIds) {
+              const content = contextBlockStore.get(id);
+              if (content === undefined) {
+                process.stderr.write(`[mma] context_block_skipped id=${id} task=${taskId} reason=not_found\n`);
+                continue;
+              }
+              blocks.push(content);
+              contextBlockStore.pin(id);
+              pinnedIds.push(id);
+            }
+            if (blocks.length > 0) resolvedContextBlocks = blocks;
+          }
+
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
           let researchCtx: ResearchContext | null = null;
           let enrichedPayload = JSON.stringify(payload, null, 2);
@@ -580,7 +672,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             reviewPolicy,
             cwd,
             sandboxPolicy: typeConfig.sandbox,
-            worktreeEnabled: typeConfig.worktree,
+            worktreeEnabled: typeConfig.worktree && await isGitRepo(cwd),
             taskId,
             implementerGoal,
             reviewerGoal,
@@ -590,16 +682,21 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             ...(copyToWorktree && { copyToWorktree }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
+            ...(resolvedContextBlocks && { contextBlocks: resolvedContextBlocks }),
           });
           const durationMs = Date.now() - startedAtMs;
 
+          // Unpin context blocks now that the pipeline is done
+          for (const id of pinnedIds) contextBlockStore.unpin(id);
+
           // Auto-register a terminal context block for read-only routes
-          // (investigate, audit, review, debug, research, journal_recall)
-          // so callers can reference the output in subsequent dispatches.
+          // so callers can reference the output in subsequent dispatches (delta mode).
+          // Uses the reviewer output (quality-gated) when available, falls back to implementer.
           let contextBlockId: string | null = null;
-          if (typeConfig.sandbox === 'read-only' && result.implementerOutput.trim().length > 0) {
+          const terminalContent = result.reviewerRaw ?? result.implementerOutput;
+          if (typeConfig.sandbox === 'read-only' && terminalContent.trim().length > 0) {
             try {
-              const block = contextBlockStore.register(result.implementerOutput);
+              const block = contextBlockStore.register(terminalContent);
               contextBlockId = block.id;
             } catch { /* best-effort — store may be at capacity */ }
           }

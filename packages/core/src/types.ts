@@ -1,22 +1,14 @@
 // Public type barrel. Matches spec architecture.md `types/` slot — the
-// real declarations live in `types/{stage-stats,task-spec,config,run-result}.ts`,
+// real declarations live in `types/{task-spec,config,run-result}.ts`,
 // each focused on one cohesive group. This file is the entry point so
 // existing consumers can keep importing from `'../types.js'` unchanged.
 
-export type {
-  ReviewVerdict,
-  StageName,
-  RawStageStats,
-  StageStatsMap,
-} from './types/stage-stats.js';
 
 export type {
-  ToolMode,
   AgentType,
   Effort,
   CostTier,
   WorkerStatus,
-  FormatConstraints,
   TaskSpec,
 } from './types/task-spec.js';
 

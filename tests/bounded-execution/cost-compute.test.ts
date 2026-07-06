@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { priceTokens, subtractTokens, type RateCard } from '../../packages/core/src/bounded-execution/cost-compute.js';
+import { priceTokens, type RateCard } from '../../packages/core/src/bounded-execution/cost-compute.js';
 import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
 
 const card: RateCard = {
@@ -37,44 +37,5 @@ describe('priceTokens', () => {
     };
     // 0.5 + 1.25 + 0.5 + 1.25 = 3.5
     expect(priceTokens(t, card)).toBeCloseTo(3.5, 10);
-  });
-});
-
-describe('subtractTokens', () => {
-  it('computes per-field delta, clamped at zero', () => {
-    const cur: TokenUsage = { inputTokens: 200, outputTokens: 100, cachedReadTokens: 50, cachedNonReadTokens: 0 };
-    const prev: TokenUsage = { inputTokens: 100, outputTokens: 60, cachedReadTokens: 30, cachedNonReadTokens: 0 };
-    const d = subtractTokens(cur, prev);
-    expect(d.inputTokens).toBe(100);
-    expect(d.outputTokens).toBe(40);
-    expect(d.cachedReadTokens).toBe(20);
-    expect(d.cachedNonReadTokens).toBe(0);
-  });
-
-  it('clamps single-field regression to 0', () => {
-    const cur: TokenUsage = { inputTokens: 100, outputTokens: 80, cachedReadTokens: 5, cachedNonReadTokens: 0 };
-    const prev: TokenUsage = { inputTokens: 120, outputTokens: 60, cachedReadTokens: 3, cachedNonReadTokens: 0 };
-    const d = subtractTokens(cur, prev);
-    expect(d.inputTokens).toBe(0);
-    expect(d.outputTokens).toBe(20);
-    expect(d.cachedReadTokens).toBe(2);
-  });
-
-  it('detects counter reset when all fields decrease', () => {
-    const cur: TokenUsage = { inputTokens: 50, outputTokens: 30, cachedReadTokens: 10, cachedNonReadTokens: 0 };
-    const prev: TokenUsage = { inputTokens: 500, outputTokens: 300, cachedReadTokens: 100, cachedNonReadTokens: 0 };
-    const d = subtractTokens(cur, prev);
-    // All fields decreased → treat cur as full delta (counter reset)
-    expect(d.inputTokens).toBe(50);
-    expect(d.outputTokens).toBe(30);
-    expect(d.cachedReadTokens).toBe(10);
-  });
-
-  it('returns zero delta when cur === prev', () => {
-    const cur: TokenUsage = { inputTokens: 100, outputTokens: 50, cachedReadTokens: 20, cachedNonReadTokens: 0 };
-    const d = subtractTokens(cur, cur);
-    expect(d.inputTokens).toBe(0);
-    expect(d.outputTokens).toBe(0);
-    expect(d.cachedReadTokens).toBe(0);
   });
 });

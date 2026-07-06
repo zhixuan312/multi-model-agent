@@ -44,15 +44,18 @@ const ACTIONABLE_SKILLS = [
   'mma-context-blocks',
   'mma-debug',
   'mma-delegate',
+  'mma-design',
   'mma-execute-plan',
   'mma-explore',
   'mma-journal-record',
   'mma-journal-recall',
   'mma-orchestrate',
+  'mma-plan',
   'mma-retry',
   'mma-review',
   'mma-investigate',
   'mma-research',
+  'mma-spec',
 ];
 
 describe('contract: skill manifest surface', () => {

@@ -55,37 +55,6 @@ export function resolveRateCard(
 }
 
 /**
- * Per-field max(0, cur − prev) — for incremental delta-from-cumulative tracking.
- *
- * Two anomaly cases:
- * - Single field decreases: provider reporting glitch. Clamp that field to 0;
- *   warn; carry on. Other fields' deltas remain valid.
- * - All fields decrease (counter reset, e.g., new sub-agent session with fresh
- *   counters): treat `prev` as if it were zero — the entire `cur` becomes the
- *   new delta. Without this branch, lastCumulative would never re-anchor and
- *   every subsequent turn would also produce zero deltas, freezing the meter.
- */
-export function subtractTokens(cur: TokenUsage, prev: TokenUsage): TokenUsage {
-  const fields: Array<keyof TokenUsage> = [
-    'inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedNonReadTokens',
-  ];
-  const allDecreased = fields.every(f => cur[f] <= prev[f]) && fields.some(f => cur[f] < prev[f]);
-  if (allDecreased) {
-    console.warn(`[cost] subtractTokens: detected counter reset (all fields ≤ prev); treating cur as full delta`);
-    return { ...cur };
-  }
-  const out = {} as TokenUsage;
-  for (const f of fields) {
-    const raw = cur[f] - prev[f];
-    if (raw < 0) {
-      console.warn(`[cost] subtractTokens: ${f} went negative (cur=${cur[f]}, prev=${prev[f]}); clamping to 0`);
-    }
-    out[f] = Math.max(0, raw);
-  }
-  return out;
-}
-
-/**
  * Pure pricing — multiplies each token class by its rate. No defaults applied here.
  * Defaults live in resolveRateCard. reasoningTokens are folded into outputTokens
  * by each runner before emission, so there is no separate reasoning term.

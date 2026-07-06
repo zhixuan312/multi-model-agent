@@ -1,13 +1,10 @@
 import type {
   AgentType,
   Effort,
-  FormatConstraints,
   SandboxPolicy,
   TaskSpec,
-  ToolMode,
 } from '../types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
-import type { HeadlineSnapshot } from '../bounded-execution/activity-tracker-types.js';
 export type { TokenUsage } from '../types/run-result.js';
 
 export type RunStatus =
@@ -69,28 +66,15 @@ export interface AttemptRecord {
 }
 
 export interface RunOptions {
-  tools?: ToolMode
   timeoutMs?: number
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  expectedCoverage?: TaskSpec['expectedCoverage']
-  skipCompletionHeuristic?: boolean
-  /** Optional callback invoked by runners and the escalation orchestrator to
-   *  stream in-flight internal progress events. */
-  onProgress?: (event: InternalRunnerEvent) => void
-  /** Called exactly once per attempt when the runner has assembled the
-   *  canonical orchestrator-side initial brief. */
-  onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
   mainModel?: string
-  formatConstraints?: FormatConstraints
   /** External abort signal — when fired, the runner force-salvages and
    *  returns a `timeout` result via the same path as the per-call timeout.
    *  Used by the orchestrator's stall watchdog. */
   abortSignal?: AbortSignal
-  /** Run mode: 'standard' for normal execution, 'review' for typed
-   *  structured output review via Agent.outputType. Default 'standard'. */
-  runMode?: 'standard' | 'review'
   /** Appended to Agent.instructions (or the equivalent system-level prompt
    *  in each runner) after the standard prevention-layer system prompt.
    *  Used by the reviewer path so the stable review rubric sits in the
@@ -111,68 +95,3 @@ export interface RunOptions {
   stageLabel?: string
 }
 
-/** Internal progress events emitted by runners and the escalation orchestrator. */
-export type InternalRunnerEvent =
-  | {
-      kind: 'worker_start'
-      model: string
-      providerType: 'claude' | 'codex'
-      tier: AgentType
-    }
-  | { kind: 'turn_start'; turn: number; provider: string; model: string }
-  | { kind: 'tool_call'; turn: number; toolSummary: string }
-  | { kind: 'text_emission'; turn: number; chars: number; preview: string }
-  | {
-      kind: 'turn_complete'
-      turn: number
-      cumulativeInputTokens: number
-      cumulativeOutputTokens: number
-      cumulativeCachedReadTokens?: number
-      cumulativeCachedNonReadTokens?: number
-      cumulativeReasoningTokens?: number
-    }
-  | {
-      kind: 'injection'
-      injectionType:
-        | 'reground'
-        | 'supervise_empty'
-        | 'supervise_thinking'
-        | 'supervise_fragment'
-        | 'supervise_insufficient_coverage'
-      turn: number
-      contentLengthChars: number
-    }
-  | {
-      kind: 'escalation_start'
-      previousProvider: string
-      previousReason: string
-      nextProvider: string
-    }
-  | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
-  | { kind: 'done'; status: RunStatus }
-
-/** Single progress event shape emitted by ActivityTracker during task execution. */
-export type ProgressEvent = {
-  kind: 'heartbeat'
-  elapsed: string
-  provider: string
-  idleSinceLlmMs: number
-  idleSinceToolMs: number
-  idleSinceTextMs: number
-  stage: 'implementing' | 'review' | 'rework' | 'annotating' | 'committing' | 'terminal'
-  stageIndex: number
-  stageCount: number
-  reviewRound?: number
-  attemptCap?: number
-  progress: {
-    filesWritten: number
-  }
-  costUSD: number | null
-  costDeltaVsMainUSD: number | null
-  final: boolean
-  headline: string
-  /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
-  stageIdleMs: number
-  /** Lightweight state snapshot for use by recordHeartbeat. */
-  snapshot: HeadlineSnapshot
-}

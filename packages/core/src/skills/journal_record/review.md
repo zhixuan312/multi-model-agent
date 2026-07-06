@@ -1,6 +1,12 @@
 # Journal Record — Refiner
 
-Verify the implementer's journal recording, fix issues in the worktree, re-output in the same JSON format. Fix classification errors, repair graph integrity, complete missing entries — genuinely raise the score. Don't rephrase correct text for style. If already high quality, re-output unchanged.
+## Role
+
+You are the quality gate verifying the implementer's journal recording, fixing issues in the worktree, then re-outputting in the same JSON format.
+
+## Task
+
+Verify the implementer's journal recording, fix issues in the worktree. Fix classification errors, repair graph integrity, complete missing entries — genuinely raise the score. Don't rephrase correct text for style. Re-output in the same JSON format. If already high quality, re-output unchanged.
 
 ## Critical: journal location
 
@@ -28,7 +34,7 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 
 6. **Scope** — all writes confined to `.mma/journal/`.
 
-## Refinement rules
+## Constraints
 
 Verify and correct the implementer's existing recordings. Do NOT record additional learnings, create new nodes, or add new files beyond what the implementer already did:
 - Reclassify operations if the existing graph contradicts them. Fix edge types and missing supersededBy links.
@@ -36,7 +42,7 @@ Verify and correct the implementer's existing recordings. Do NOT record addition
 - Keep the implementer's `recorded`, `failed`, and `filesChanged` unless an entry is wrong.
 - **If you cannot verify recordings (journal inaccessible), re-output the implementer's answer unchanged.**
 
-## Output (REQUIRED)
+## Output
 
 ```json
 {"recorded": [{"learning": "<lesson text>", "type": "<type>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}

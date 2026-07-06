@@ -46,6 +46,7 @@ describe('SkillManifestSync.driftReport', () => {
       'mma-debug', 'mma-execute-plan', 'mma-retry',
       'mma-context-blocks', 'mma-investigate', 'mma-research', 'mma-explore',
       'mma-journal-record', 'mma-journal-recall', 'mma-orchestrate',
+      'mma-spec', 'mma-plan', 'mma-design',
     ];
     for (const s of supported) {
       writeSkill(claudeSkillsDir, s, canonicalVersion);

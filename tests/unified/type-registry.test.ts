@@ -5,8 +5,8 @@ import {
 } from '../../packages/core/src/unified/type-registry.js';
 
 describe('TypeRegistry', () => {
-  it('has 11 task types', () => {
-    expect(TASK_TYPES).toHaveLength(11);
+  it('has 13 task types', () => {
+    expect(TASK_TYPES).toHaveLength(13);
   });
 
   it('delegate defaults to standard/worktree/cwd-only', () => {
@@ -72,10 +72,24 @@ describe('TypeRegistry', () => {
     }
   });
 
-  it('targetAcceptance: only audit and review accept inline', () => {
+  it('targetAcceptance: only audit, review, spec, and plan accept inline', () => {
     expect(getTypeConfig('audit').targetAcceptance.inline).toBe(true);
     expect(getTypeConfig('review').targetAcceptance.inline).toBe(true);
+    expect(getTypeConfig('spec').targetAcceptance.inline).toBe(true);
+    expect(getTypeConfig('plan').targetAcceptance.inline).toBe(true);
     expect(getTypeConfig('investigate').targetAcceptance.inline).toBe(false);
     expect(getTypeConfig('debug').targetAcceptance.inline).toBe(false);
+  });
+
+  it('spec defaults to complex/worktree/cwd-only with required target', () => {
+    const c = getTypeConfig('spec');
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: true, sandbox: 'cwd-only' });
+    expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
+  });
+
+  it('plan defaults to complex/worktree/cwd-only with required target', () => {
+    const c = getTypeConfig('plan');
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: true, sandbox: 'cwd-only' });
+    expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
   });
 });

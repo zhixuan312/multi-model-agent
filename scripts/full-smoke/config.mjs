@@ -125,4 +125,22 @@ export const SCENARIOS = [
   //         to git. The pipeline must copy it into the worktree before the worker
   //         can read it. Verifies the copyToWorktree mechanism.
   { id: 23, type: 'execute_plan', tier: 'standard', kind: 'write', uncommittedPlan: true, emits: 1 },
+
+  // H. New task types (spec + plan)
+  //    #24: spec — write a formal spec from structured design decisions (inline)
+  //    #25: plan — write a TDD plan from a spec file
+  { id: 24, type: 'spec', tier: 'complex', kind: 'write', emits: 1 },
+  { id: 25, type: 'plan', tier: 'complex', kind: 'write', emits: 1 },
+
+  // I. Context block delta mode
+  //    #26: audit round 2 with contextBlockId from round 1 (#4).
+  //         Verifies the delta flow: round 1 produces contextBlockId →
+  //         round 2 passes it → worker sees ## Prior Context section.
+  { id: 26, type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', delta: true, emits: 1 },
+
+  // J. Error: too many context blocks (>2 rejected)
+  { id: 27, type: 'error_too_many_blocks', kind: 'error', expectStatus: 400, emits: 0 },
+
+  // K. Non-git cwd: delegate works without a git repo (no worktree)
+  { id: 28, type: 'delegate', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
 ];

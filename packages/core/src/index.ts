@@ -6,7 +6,6 @@ export type { ServerConfig } from './config/schema.js';
 
 // Types (re-export all)
 export type {
-  ToolMode,
   SandboxPolicy,
   AgentType,
   AgentConfig,
@@ -25,16 +24,10 @@ export type {
   RunStatus,
   TokenUsage,
   RunOptions,
-  ProgressEvent,
-  InternalRunnerEvent,
   AttemptRecord,
 } from './providers/runner-types.js';
-export type {
-  BriefQualityPolicy,
-} from './types/brief-quality-policy.js';
 export type { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
-export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';
 export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanHeading } from './unified/plan-task-matcher.js';
 // Context blocks
@@ -47,7 +40,6 @@ export type {
   RegisteredBlock,
   InMemoryContextBlockStoreOptions,
 } from './stores/context-block-tool.js';
-export { expandContextBlocks } from './stores/expand-context-blocks.js';
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
@@ -69,19 +61,11 @@ export {
 } from './transport/index.js';
 export { RouteDispatcher } from './transport/route-dispatcher.js';
 
-// Heartbeat
-export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
-export type {
-  ActivityTrackerOptions,
-  HeartbeatStage,
-  TransitionFields,
-  HeartbeatTickInfo,
-} from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
 export { resolveAgent } from './providers/agent-resolver.js';
 export type { ResolvedAgent } from './providers/agent-resolver.js';
-export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
+export { findModelProfile } from './config/model-profile-registry.js';
 
 // Identity
 export { getClaudeOAuth } from './identity/claude-oauth.js';

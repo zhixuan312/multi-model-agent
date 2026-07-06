@@ -17,13 +17,17 @@ Local HTTP service that fans out tool-using work to workers on different LLM pro
 
 ```dot
 digraph picker {
-    "Plan/spec file on disk?" [shape=diamond];
+    "New idea / feature?" [shape=diamond];
+    "Spec on disk?" [shape=diamond];
+    "Plan on disk?" [shape=diamond];
     "Audit a doc?" [shape=diamond];
     "Review code?" [shape=diamond];
-    "Verify a checklist?" [shape=diamond];
     "Debug a failure?" [shape=diamond];
     "Codebase question?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
+    "mma-design" [shape=box];
+    "mma-spec" [shape=box];
+    "mma-plan" [shape=box];
     "mma-execute-plan" [shape=box];
     "mma-audit" [shape=box];
     "mma-review" [shape=box];
@@ -32,8 +36,12 @@ digraph picker {
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
 
-    "Plan/spec file on disk?" -> "mma-execute-plan" [label="yes"];
-    "Plan/spec file on disk?" -> "Audit a doc?" [label="no"];
+    "New idea / feature?" -> "mma-design" [label="yes — need spec + plan"];
+    "New idea / feature?" -> "Spec on disk?" [label="no"];
+    "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
+    "Spec on disk?" -> "Plan on disk?" [label="no"];
+    "Plan on disk?" -> "mma-execute-plan" [label="yes"];
+    "Plan on disk?" -> "Audit a doc?" [label="no"];
     "Audit a doc?" -> "mma-audit" [label="yes"];
     "Audit a doc?" -> "Review code?" [label="no"];
     "Review code?" -> "mma-review" [label="yes"];
@@ -49,12 +57,15 @@ digraph picker {
 
 | Skill | Purpose |
 |---|---|
-| `mma-execute-plan` | Implement tasks from a plan or spec file (descriptors match plan headings) |
+| `mma-design` | Interactive design workflow — brain dump → investigate → structure → write spec → write plan |
+| `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
+| `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
+| `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
 | `mma-audit` | Audit a document/spec/config for security, correctness, style, or performance |
 | `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
-| `mma-explore` | Divergent ideation from codebase + web research + prior-learnings recall — use before `superpowers:brainstorming` |
+| `mma-explore` | Divergent ideation from codebase + web research + prior-learnings recall |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous dispatch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |

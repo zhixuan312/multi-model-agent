@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.7.0] - 2026-07-06
+
+**Spec + plan task types, mma-design skill, prompt standardization, dead code sweep, context block delta mode.** Two new task types (`spec`, `plan`) fill the front half of the SDLC lifecycle. Three new skills (`mma-design`, `mma-spec`, `mma-plan`) enable any client to drive the full idea→spec→plan→execute flow. All 29 skill prompts restructured to a consistent 6-part format. Major dead code cleanup removes ~2,700 lines of lifecycle-era types, functions, and stale tests. Context block resolution wired into the unified pipeline for delta mode. `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- **`spec` task type** — complex worker writes a formal spec from structured design decisions (inline or file). Cross-agent review verifies using 9 audit:spec criteria.
+- **`plan` task type** — complex worker writes a TDD implementation plan from a spec file. Cross-agent review verifies against the codebase using 12 audit:plan perspectives.
+- **`mma-design` orchestration skill** — teaches the main agent the interactive design workflow (brain dump → investigate → structure → dispatch spec → dispatch plan).
+- **`mma-spec` / `mma-plan` caller-facing skills** — document how to dispatch the new task types.
+- Context block delta mode: `contextBlockIds` now resolved and injected as `## Prior Context` section in the worker prompt. Terminal blocks register the reviewer output (quality-gated).
+- Pin/unpin for active context blocks — prevents eviction during running tasks.
+- Smoke scenarios #26 (delta mode), #27 (>2 blocks error), #28 (non-git cwd delegate).
+- `contextBlockIds` capped at max 2 per request.
+
+### Changed
+- All 16 implement.md + 13 review.md skill prompts restructured to consistent Role/Task/Context/Constraints/Execution/Output format (no content removed, structural headers added).
+- Write routes skip worktree when cwd is not a git repo (delegate works in non-git directories).
+- Missing context blocks are soft-skipped (logged, not hard failure) — handles server restart.
+- Router SKILL.md updated with mma-design/mma-spec/mma-plan in the picker graph.
+- README, server README, ARCHITECTURE.md updated for 13→15 task types and new skill sections.
+
+### Removed
+- **Dead types:** ToolMode, FormatConstraints, BriefQualityPolicy, StageStatsMap, RawStageStats, BaseStageStats, InternalRunnerEvent, ProgressEvent (lifecycle era).
+- **Dead files:** types/stage-stats.ts, types/brief-quality-policy.ts, bounded-execution/activity-tracker.ts + types, reporting/terminal-status-deriver.ts, stores/expand-context-blocks.ts.
+- **Dead fields:** 8 TaskSpec fields, 6 RunOptions fields, 13 RuntimeRunResult fields.
+- **Dead functions:** getEffectiveCostTier, subtractTokens, ActivityTracker class.
+- **Dead error codes:** validator_no_artifacts, validator_silent_incomplete.
+- **Stale tests:** heartbeat.test.ts, heartbeat-snapshot.test.ts, terminal-status-deriver tests, per-round-snapshot.test.ts.
+
+### Fixed
+- Context block resolution wired into unified handler (was silently dropped since v5.2.0).
+- Terminal context blocks now register reviewer output instead of raw implementer draft.
+- Plan outputPath no longer double-prefixes date when spec filename already includes one.
+- Stale comments referencing deleted lifecycle layer updated.
+- Mock-providers.ts: removed dead fields, stale comments, dead switch cases.
+
 ## [5.6.6] - 2026-07-06
 
 **OKF journal + full codebase audit.** Journal nodes now use Google OKF-compliant frontmatter (`type` instead of `category`, plus `description` and `timestamp`). Full line-by-line audit of 176+ files yielded 9 fixes across production code, skills, docs, and config. `SCHEMA_VERSION` unchanged (still 6).

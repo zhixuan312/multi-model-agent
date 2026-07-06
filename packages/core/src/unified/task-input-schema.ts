@@ -23,7 +23,7 @@ const commonFields = {
   agentTier: agentTierSchema.optional(),
   reviewPolicy: reviewPolicySchema.optional(),
   sessionIds: sessionIdsSchema,
-  contextBlockIds: z.array(z.string()).optional(),
+  contextBlockIds: z.array(z.string()).max(2).optional(),
 };
 
 export const taskInputSchema = z.discriminatedUnion('type', [
@@ -104,6 +104,22 @@ export const taskInputSchema = z.discriminatedUnion('type', [
     type: z.literal('orchestrate'),
     prompt: z.string().min(1),
     outputFormat: z.string().optional(),
+    ...commonFields,
+  }).strict(),
+
+  z.object({
+    type: z.literal('spec'),
+    prompt: z.string().min(1),
+    target: targetSchema,
+    outputPath: z.string().optional(),
+    ...commonFields,
+  }).strict(),
+
+  z.object({
+    type: z.literal('plan'),
+    prompt: z.string().min(1),
+    target: targetSchema,
+    outputPath: z.string().optional(),
     ...commonFields,
   }).strict(),
 ]);

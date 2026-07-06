@@ -21,6 +21,9 @@ export const SUPPORTED_SKILLS = [
   'mma-journal-record',
   'mma-journal-recall',
   'mma-orchestrate',
+  'mma-spec',
+  'mma-plan',
+  'mma-design',
 ] as const;
 
 /** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */

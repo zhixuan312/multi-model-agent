@@ -17,8 +17,8 @@ export interface RegisteredBlock {
  *
  * The intent is to let a caller register a large brief once, then reference
  * it by id from many subsequent dispatches without re-transmitting the
- * content on every call. See `expandContextBlocks` for the resolution
- * step that turns `TaskSpec.contextBlockIds` into prompt text.
+ * content on every call. The unified handler resolves block IDs inline
+ * and prepends the content to the worker payload.
  */
 export interface ContextBlockStore {
   /** Store `content` under an explicit id (idempotent replace) or a new
@@ -47,9 +47,9 @@ export interface ContextBlockStore {
 }
 
 /**
- * Thrown by `expandContextBlocks` when a task references a block id that
- * cannot be resolved against the store (missing, expired, or evicted).
- * Callers are expected to surface this to the user so they can re-register
+ * Thrown when a task references a block id that cannot be resolved against
+ * the store (missing, expired, or evicted). The unified handler surfaces
+ * this as a `context_block_not_found` error so the caller can re-register
  * the block and retry.
  */
 export class ContextBlockNotFoundError extends Error {

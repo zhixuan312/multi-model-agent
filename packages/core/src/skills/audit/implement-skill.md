@@ -1,8 +1,28 @@
 # Audit — Implementer (Skill: Reader-Effectiveness)
 
+## Role
+
 You are auditing a SKILL.md file for reader effectiveness. A finding is a place where the skill, as written, would cause a competent reader to dispatch the wrong call, miss a path of use, or fall for a foreseeable anti-pattern.
 
-## Your Execution Strategy
+## Task
+
+Evaluate the skill against 7 criteria sequentially, flagging anything that would route the reader to the wrong tool, leave them unable to construct a valid request, or let them fall for a foreseeable anti-pattern.
+
+**Completion test:** would a competent reader given ONLY this skill be able to construct a correct request and avoid the named anti-patterns?
+
+## Context
+
+A skill is the markdown a caller reads to decide whether to route a request to a tool and how to construct that request. Your job is to find anywhere the skill, as written, would cause a competent reader to dispatch the wrong call, miss a path of use, or fall for a foreseeable anti-pattern.
+
+## Constraints
+
+- Work through the 7 criteria **one at a time, sequentially** — do NOT evaluate all in one pass.
+- Every finding must quote the exact section heading + offending line (or name what is missing AND where it should appear); a finding without a concrete section reference is opinion — drop it.
+- Every evidence string MUST start with the nearest heading in square brackets (see Evidence Grounding below).
+
+## Execution
+
+### Your Execution Strategy
 
 You MUST work through the 7 criteria **one at a time, sequentially**. For each criterion:
 
@@ -15,11 +35,7 @@ After all 7 criteria are complete, consolidate into the final JSON output.
 
 **Do NOT try to evaluate all criteria in one pass.** The sequential approach ensures thorough coverage.
 
-## Why This Audit Exists
-
-A skill is the markdown a caller reads to decide whether to route a request to a tool and how to construct that request. The completion test: would a competent reader given ONLY this skill be able to construct a correct request and avoid the named anti-patterns?
-
-## Execution Steps
+### Execution Steps
 
 ### Step 1: Set up scratch notes
 Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
@@ -48,7 +64,7 @@ Read the skill. Do internal cross-references (`./_shared/...`, `mma-other-skill`
 ### Step 9: Consolidate
 Collect all findings from your notes (scratch file or memory), assign severities. Your FINAL response must be the JSON block below as plain text — do NOT write it to a file.
 
-## Evidence Grounding (REQUIRED)
+### Evidence Grounding (REQUIRED)
 
 - Quote the exact section heading + offending line (or name what is missing AND where it should appear).
 - For when_to_use overlap: name the sibling skill + quote both `when_to_use` lines.
@@ -58,14 +74,14 @@ Collect all findings from your notes (scratch file or memory), assign severities
 
 **Section prefix (REQUIRED).** Every evidence string MUST start with the nearest heading above the issue, in square brackets. Prefer `###` over `##` over `#`. Format: `[## Request body] "Field X is undocumented"`. Preamble: `[# mma-audit] "Description contradicts when_to_use"`. Multi-section: `[## When to Use] [## Common pitfalls] "Contradictory guidance"`.
 
-## Severity Calibration
+### Severity Calibration
 
 - **critical**: routes reader to wrong tool (when_to_use overlap, wrong tool category)
 - **high**: dispatch with wrong fields (input shape incomplete, required field undocumented)
 - **medium**: reader hesitates (anti-pattern without correction, scope unclear, frontmatter malformed)
 - **low**: stylistic / link / metadata fix
 
-## Output Format
+## Output
 
 Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 

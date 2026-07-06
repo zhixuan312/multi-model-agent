@@ -86,6 +86,18 @@ function checkQuality(type, subtype, r) {
       if (outputLen < 50) return ['FAIL', `orchestrate output too short (${outputLen} chars) — expected structured response`];
       return ['PASS', `${outputLen} chars output`];
     }
+    case 'spec': {
+      if (outputLen < 20) return ['WARN', `spec output very short (${outputLen} chars)`];
+      const specSummary = r?.output?.summary;
+      const hasSpecPath = specSummary?.specPath != null;
+      return ['PASS', `${outputLen} chars output; specPath=${hasSpecPath}`];
+    }
+    case 'plan': {
+      if (outputLen < 20) return ['WARN', `plan output very short (${outputLen} chars)`];
+      const planSummary = r?.output?.summary;
+      const hasPlanPath = planSummary?.planPath != null;
+      return ['PASS', `${outputLen} chars output; planPath=${hasPlanPath}`];
+    }
     default:
       return ['PASS', `${outputLen} chars output (no type-specific quality check)`];
   }
@@ -315,6 +327,21 @@ export function verify(rec) {
     const hasFiles = Array.isArray(fc) && fc.length > 0;
     out.push(C('files-changed', hasFiles ? 'PASS' : 'WARN',
       `filesChanged=${Array.isArray(fc) ? fc.length : 'missing'} files`));
+  }
+
+  // ⑯ Delta mode — verify that round 2 audit (with contextBlockId) still produces findings
+  if (e.delta) {
+    const summary = r?.output?.summary;
+    const findings = summary?.findings ?? [];
+    out.push(C('delta-mode', findings.length >= 0 ? 'PASS' : 'FAIL',
+      `delta round 2: ${findings.length} findings (task completed with prior context injected)`));
+  }
+
+  // ⑰ Non-git cwd — verify delegate completed without worktree
+  if (e.nonGitCwd) {
+    const wt = r?.execution?.worktree;
+    out.push(C('non-git-cwd', wt === null ? 'PASS' : 'FAIL',
+      `worktree=${JSON.stringify(wt)} (expect null — no git repo)`));
   }
 
   // Queue (per-dispatch, best-effort)

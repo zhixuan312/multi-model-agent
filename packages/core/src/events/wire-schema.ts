@@ -127,7 +127,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate']),
+  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
   subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
