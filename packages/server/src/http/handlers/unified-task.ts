@@ -606,9 +606,30 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             }
           }
 
+          // ── Context block resolution: prepend resolved block content to the payload ──
+          const inputBlockIds = (input.contextBlockIds ?? []) as string[];
+          let resolvedBlockContent = '';
+          if (inputBlockIds.length > 0) {
+            const missing: string[] = [];
+            const blocks: string[] = [];
+            for (const id of inputBlockIds) {
+              const content = contextBlockStore.get(id);
+              if (content === undefined) { missing.push(id); continue; }
+              blocks.push(content);
+            }
+            if (missing.length > 0) {
+              deps.taskRegistry.fail(taskId, {
+                code: 'context_block_not_found',
+                message: `Context block(s) not found: ${missing.join(', ')}`,
+              });
+              return;
+            }
+            resolvedBlockContent = blocks.join('\n\n---\n\n') + '\n\n---\n\n';
+          }
+
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
           let researchCtx: ResearchContext | null = null;
-          let enrichedPayload = JSON.stringify(payload, null, 2);
+          let enrichedPayload = resolvedBlockContent + JSON.stringify(payload, null, 2);
 
           if (input.type === 'research') {
             const researchPayload = payload as { prompt: string };

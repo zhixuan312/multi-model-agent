@@ -40,7 +40,6 @@ export type {
   RegisteredBlock,
   InMemoryContextBlockStoreOptions,
 } from './stores/context-block-tool.js';
-export { expandContextBlocks } from './stores/expand-context-blocks.js';
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
