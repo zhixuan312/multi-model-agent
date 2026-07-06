@@ -71,8 +71,8 @@ function checkQuality(type, subtype, r) {
     }
     case 'journal_record': {
       if (outputLen < 10) return ['WARN', `record output very short (${outputLen} chars)`];
-      const hasCategory = /category/.test(output) || /decision|design|behavior|process|knowledge|style/.test(output);
-      return ['PASS', `${outputLen} chars output; category-aware=${hasCategory}`];
+      const hasType = /\btype\b/.test(output) || /decision|design|behavior|process|knowledge|style/.test(output);
+      return ['PASS', `${outputLen} chars output; type-aware=${hasType}`];
     }
     case 'delegate': {
       if (outputLen < 20) return ['WARN', `delegate output very short (${outputLen} chars)`];
