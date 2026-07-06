@@ -36,8 +36,6 @@ export type RunResult = {
 };
 
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
-import type { StageStatsMap } from './stage-stats.js';
-
 // ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
 // `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
 // public type name is the wire envelope; the runtime mirror keeps the
@@ -175,7 +173,6 @@ export interface RuntimeRunResult {
     fallbackOverrides?: Array<{ role: string; assigned: string }>;
     [key: string]: unknown;
   };
-  stageStats?: Partial<StageStatsMap>;
   reviewVerdict?: string;
   qualityReviewStatus?: string;
   specReviewStatus?: string;

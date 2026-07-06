@@ -1,25 +1,7 @@
-import { describe, it, expect, expectTypeOf } from 'vitest';
-import type { RuntimeRunResult, RawStageStats } from '../packages/core/src/types.js';
+import { describe, it, expect } from 'vitest';
+import type { RuntimeRunResult } from '../packages/core/src/types.js';
 
 describe('RuntimeRunResult shape (Phase 0 contract)', () => {
-  it('exposes stageStats keyed by every stage name the telemetry schema reads', () => {
-    type StageName =
-      | 'implementing' | 'annotating' | 'review' | 'rework'
-      | 'review' | 'rework' | 'review' | 'committing';
-    expectTypeOf<keyof NonNullable<RuntimeRunResult['stageStats']>>().toEqualTypeOf<StageName>();
-  });
-
-  it('RawStageStats carries raw cost / duration / agent / model fields', () => {
-    expectTypeOf<RawStageStats>().toMatchTypeOf<{
-      entered:     boolean;
-      durationMs:  number | null;
-      costUSD:     number | null;
-      agentTier:   'standard' | 'complex' | 'main' | null;
-      modelFamily: string | null;
-      model:       string | null;
-    }>();
-  });
-
   it('every field the event-builder reads is present on a real RuntimeRunResult', () => {
     const sample: RuntimeRunResult = {
       output: '',
@@ -41,13 +23,11 @@ describe('RuntimeRunResult shape (Phase 0 contract)', () => {
       qualityReviewStatus: 'not_applicable',
       workerStatus:        'done',
       terminationReason:   { cause: 'finished', turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
-      stageStats:          undefined,
     };
 
     const required = [
       'agents','escalationLog','models','reviewRounds','specReviewStatus',
-      'qualityReviewStatus','workerStatus','terminationReason',
-      'usage','stageStats',
+      'qualityReviewStatus','workerStatus','terminationReason','usage',
     ];
     for (const key of required) {
       expect(sample, `field ${key} must exist on RuntimeRunResult`).toHaveProperty(key);

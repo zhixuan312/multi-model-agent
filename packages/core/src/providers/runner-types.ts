@@ -1,7 +1,6 @@
 import type {
   AgentType,
   Effort,
-  FormatConstraints,
   SandboxPolicy,
   TaskSpec,
   ToolMode,
@@ -74,8 +73,6 @@ export interface RunOptions {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  expectedCoverage?: TaskSpec['expectedCoverage']
-  skipCompletionHeuristic?: boolean
   /** Optional callback invoked by runners and the escalation orchestrator to
    *  stream in-flight internal progress events. */
   onProgress?: (event: InternalRunnerEvent) => void
@@ -83,7 +80,6 @@ export interface RunOptions {
    *  canonical orchestrator-side initial brief. */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
   mainModel?: string
-  formatConstraints?: FormatConstraints
   /** External abort signal — when fired, the runner force-salvages and
    *  returns a `timeout` result via the same path as the per-call timeout.
    *  Used by the orchestrator's stall watchdog. */
