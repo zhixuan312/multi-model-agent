@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.7.1] - 2026-07-06
+
+**mma-design skill refinements + context block soft-skip.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Changed
+- `mma-design` scope narrowed: ends at spec dispatch (plan writing removed — separate skill).
+- Phase 2 rewritten as structured interview: assess clear/ambiguous/missing, ask only decision questions, resolve mechanical questions via investigate/research/recall.
+- Core principle: mechanical questions → resolve yourself; decision questions → ask with options + recommendation.
+- Investigations are optional enrichment (user can skip all), targeted investigations can run during Phase 2.
+- Decision summary checkpoint added before spec dispatch.
+
+### Fixed
+- Missing context blocks are now soft-skipped (logged) instead of hard-failing the task — handles server restart gracefully.
+
 ## [5.7.0] - 2026-07-06
 
 **Spec + plan task types, mma-design skill, prompt standardization, dead code sweep, context block delta mode.** Two new task types (`spec`, `plan`) fill the front half of the SDLC lifecycle. Three new skills (`mma-design`, `mma-spec`, `mma-plan`) enable any client to drive the full idea→spec→plan→execute flow. All 29 skill prompts restructured to a consistent 6-part format. Major dead code cleanup removes ~2,700 lines of lifecycle-era types, functions, and stale tests. Context block resolution wired into the unified pipeline for delta mode. `SCHEMA_VERSION` unchanged (still 6).

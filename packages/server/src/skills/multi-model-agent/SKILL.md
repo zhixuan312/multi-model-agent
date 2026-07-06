@@ -36,7 +36,7 @@ digraph picker {
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
 
-    "New idea / feature?" -> "mma-design" [label="yes — need spec + plan"];
+    "New idea / feature?" -> "mma-design" [label="yes — need a spec"];
     "New idea / feature?" -> "Spec on disk?" [label="no"];
     "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
     "Spec on disk?" -> "Plan on disk?" [label="no"];
@@ -57,7 +57,7 @@ digraph picker {
 
 | Skill | Purpose |
 |---|---|
-| `mma-design` | Interactive design workflow — brain dump → investigate → structure → write spec → write plan |
+| `mma-design` | Interactive design workflow — brain dump → investigate → structured interview → write spec |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
