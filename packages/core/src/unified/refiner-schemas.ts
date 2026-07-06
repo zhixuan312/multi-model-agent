@@ -12,7 +12,7 @@ const auditAnswerSchema = z.object({
     category: z.string().min(1),
     claim: z.string().min(1),
     evidence: z.string().min(1),
-    suggestion: z.string().min(1),
+    suggestion: z.string(),
   })),
 });
 
@@ -38,7 +38,7 @@ const reviewAnswerSchema = z.object({
     evidence: z.string().min(1),
     file: z.string().min(1),
     line: z.number().int().nonnegative().default(0),
-    suggestion: z.string().min(1),
+    suggestion: z.string(),
     preExisting: z.boolean().default(false),
   })),
 });

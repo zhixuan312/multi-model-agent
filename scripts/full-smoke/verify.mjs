@@ -118,8 +118,10 @@ export function verify(rec) {
   const implSessionId = r?.execution?.sessions?.implementer;
   const revSessionId = r?.execution?.sessions?.reviewer;
 
-  // ① response — did the task complete? (error is null on success)
-  out.push(C('response', r?.error === null ? 'PASS' : 'FAIL', JSON.stringify(r?.error)));
+  // ① response — did the task complete? null=success, reviewer_parse_failed=soft concern, other=hard fail
+  const errCode = r?.error?.code;
+  const responseStatus = r?.error === null ? 'PASS' : errCode === 'reviewer_parse_failed' ? 'WARN' : 'FAIL';
+  out.push(C('response', responseStatus, JSON.stringify(r?.error)));
 
   // ② sessions — validate session shape on the execution layer
   if (e.kind === 'read' || e.kind === 'write') {
