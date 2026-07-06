@@ -11,7 +11,7 @@ function baseOpts() {
   };
 }
 
-function failedEnvelopeWithCode(code: 'sdk_max_turns' | 'validator_no_artifacts' | 'codex_error') {
+function failedEnvelopeWithCode(code: 'sdk_max_turns' | 'codex_error') {
   const store = TaskEnvelopeStore.create({
     taskId: 't1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
@@ -36,11 +36,6 @@ describe('toWireRecord errorCode preservation', () => {
     const wire = toWireRecord(failedEnvelopeWithCode('sdk_max_turns'), baseOpts());
     expect(wire.terminalStatus).toBe('error');
     expect(wire.errorCode).toBe('sdk_max_turns');
-  });
-
-  it('emits errorCode=validator_no_artifacts', () => {
-    const wire = toWireRecord(failedEnvelopeWithCode('validator_no_artifacts'), baseOpts());
-    expect(wire.errorCode).toBe('validator_no_artifacts');
   });
 
   it('emits errorCode=codex_error', () => {

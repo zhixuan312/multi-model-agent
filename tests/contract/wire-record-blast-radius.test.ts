@@ -97,7 +97,7 @@ describe('wire-record blast radius — only status fields differ pre/post A+B+C'
     // Annotating was skipped because of the hard worker-self-assessment precondition.
     const pre = buildEnvelope({
       status: 'failed',
-      errorCode: 'validator_no_artifacts',
+      errorCode: 'sdk_execution_error',
       annotatingOutcome: 'skipped',
     });
     // POST: how the SAME execution now looks after A+B+C — envelope
