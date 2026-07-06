@@ -61,30 +61,42 @@ Dispatch the accepted investigations in parallel. When results return, present f
 
 If no investigations were run, proceed directly to Phase 2 using only the brain dump content.
 
-### Phase 2: Design (interactive — one section at a time)
+### Phase 2: Structured interview — clarify, resolve, lock decisions
 
-Structure the idea into spec sections. Present each section to the user, propose options where relevant, and let the user confirm or redirect before moving on.
+The brain dump gives the raw material. Your job is to turn it into concrete, unambiguous decisions by asking the right questions. You are an **interviewer**, not a form-filler.
 
-**The sections (in order):**
+**Step 1: Assess what's clear vs. ambiguous.**
+Read the brain dump (and investigation results, if any). Map what the user said against the spec sections below. Mark each as:
+- **Clear** — the brain dump already answers it. Don't re-ask. Confirm briefly and move on.
+- **Ambiguous** — the user said something but it's vague, contradictory, or incomplete. Ask a focused question.
+- **Missing** — the user didn't address it at all. Raise it.
 
-1. **Context/Background** — who, what, why
-2. **Problem** — one clear statement + business impact
-3. **Goals & Requirements** — numbered goals + functional requirements (must/should/may)
-4. **Scope** — in/out explicitly enumerated
-5. **Constraints** — compatibility, performance, data safety, timeline
-6. **Success Metrics** — measurable table (metric | target | how measured)
-7. **Alternatives** — 2-3 approaches with driving factors + comparison matrix. Present all options with your recommendation and reasoning. **The user picks — you do not.**
-8. **Decision Records** — lock in choices with rationale
-9. **Technical Design** — current state → proposed architecture → interfaces → data model
-10. **Testing Plan** — layered strategy (unit/integration/E2E)
-11. **Acceptance Criteria** — numbered AC-X.X with checkboxes
+**The spec sections (all must be filled before dispatch):**
 
-**Rules for this phase:**
-- One section per message. Do not overwhelm with multiple sections.
-- Present information and propose structure. Do not decide.
-- When alternatives exist, present all with a recommendation and reasoning. The user picks.
-- If the user redirects, incorporate their feedback and re-present the section.
-- Every substantive design choice must be explicitly confirmed by the user.
+1. Context/Background — who, what, why
+2. Problem — one clear statement + business impact
+3. Goals & Requirements — numbered goals + functional requirements
+4. Scope — in/out explicitly enumerated
+5. Constraints — compatibility, performance, data safety, timeline
+6. Success Metrics — measurable targets
+7. Alternatives — 2-3 approaches with tradeoffs
+8. Decision Records — locked choices with rationale
+9. Technical Design — current state → proposed architecture → interfaces
+10. Testing Plan — layered strategy
+11. Acceptance Criteria — numbered, testable
+
+**Step 2: Ask focused questions for ambiguous/missing sections.**
+
+Interview rules:
+- **One question at a time.** Don't dump 5 questions in one message.
+- **Multiple choice when possible.** "Should we (A) throw on zero or (B) return NaN?" is easier to answer than "how should we handle zero?"
+- **Surface contradictions.** "You said no breaking changes, but the proposed rename IS a breaking change — which takes priority?"
+- **Propose alternatives with tradeoffs** when there's a design choice. Recommend one. The user picks.
+- **Confirm clear sections briefly.** "Your brain dump covers Context, Problem, and Goals clearly — I'll carry those forward. Let me ask about Scope..."
+- **Skip sections the user already locked.** If the brain dump says "Option A, because X" — that's a confirmed decision. Record it, don't re-debate it.
+
+**Step 3: Lock each decision.**
+As the user answers each question, record the confirmed decision. When all sections are filled (clear from brain dump + confirmed through dialogue), you have a complete set of decisions ready for Phase 3.
 
 ### Phase 3: Write Spec (dispatch to mma-spec)
 
@@ -123,7 +135,7 @@ After the user approves the spec:
 
 ❌ **Deciding for the user.** "I'll go with Option A since it's simpler" — NO. Present all options, recommend one with reasoning, and wait for the user to pick.
 
-❌ **Bundling multiple sections.** Present one section at a time. If the user wants to go faster, they'll say so.
+❌ **Marching through all 11 sections mechanically.** If the brain dump already covers 8 sections, don't re-ask them. Focus the dialogue on what's ambiguous or missing. Confirm the clear ones briefly and move on.
 
 ❌ **Dispatching investigations without consent.** Always propose the three investigations and wait for user agreement before dispatching.
 
