@@ -151,15 +151,11 @@ export interface RuntimeRunResult {
   actualCostUSD: number;
   turns: number;
   filesWritten: string[];
-  outputIsDiagnostic: boolean;
-  directoriesListed: string[];
   workerStatus?: 'done' | 'failed' | 'blocked';
   terminationReason?: { cause: _TerminationCause; turnsUsed: number; hasFileArtifacts: boolean; usedShell: boolean; workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped' | null; wasPromoted: boolean; wallClockMs?: number };
   usedShell?: boolean;
   errorCode?: string;
   error?: string;
-  retryable?: boolean;
-  incompleteReason?: string;
   escalationLog: EscalationRecord[];
   durationMs?: number;
   models?: {
@@ -170,24 +166,11 @@ export interface RuntimeRunResult {
   agents?: {
     implementer?: string;
     implementerToolMode?: string;
-    fallbackOverrides?: Array<{ role: string; assigned: string }>;
     [key: string]: unknown;
   };
-  reviewVerdict?: string;
-  qualityReviewStatus?: string;
-  specReviewStatus?: string;
-  reviewRounds?: { spec: number; quality: number };
-  structuredReport?: {
-    findings?: Array<{ severity?: string; category?: string; claim?: string }>;
-    reviewConcerns?: string[];
-  };
-  implementationReport?: unknown;
-  commits?: Array<{ filesChanged?: string[] }>;
   stallCount?: number;
-  stallTriggered?: boolean;
   taskMaxIdleMs?: number;
   structuredError?: { code: string; message: string; where?: string };
-  verifyResult?: unknown;
   cost?: { costUSD: number | null; costDeltaVsMainUSD: number | null };
 }
 

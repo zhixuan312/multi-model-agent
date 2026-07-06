@@ -1,13 +1,4 @@
 // Deterministic mock providers for contract tests.
-//
-// Provider / RuntimeRunResult shapes inspected from packages/core/src/types.ts on
-// 2026-04-24:
-//   - Provider has: name, config, run(prompt, options?) => Promise<RuntimeRunResult>
-//   - RuntimeRunResult required fields: output, status, usage, turns, filesRead,
-//     filesWritten, toolCalls, outputIsDiagnostic, escalationLog
-//   - Stage-specific optional fields: terminationReason, specReviewStatus,
-//     qualityReviewStatus, workerStatus, etc.
-//   - Usage: { inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens }
 
 import type {
   Provider,
@@ -36,24 +27,20 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
     turns: rr.turns ?? 1,
     durationMs: rr.durationMs ?? 0,
     costUSD: rr.actualCostUSD ?? rr.cost?.costUSD ?? null,
-    terminationReason: statusToTermination(rr.status, rr.incompleteReason),
+    terminationReason: statusToTermination(rr.status),
     ...(rr.errorCode && { errorCode: rr.errorCode }),
     ...(rr.error && { errorMessage: rr.error }),
     ...(rr.workerStatus && { workerSelfAssessment: rr.workerStatus }),
-    ...(rr.outputIsDiagnostic !== undefined && { outputIsDiagnostic: rr.outputIsDiagnostic }),
   };
 }
 
 function statusToTermination(
   status: RuntimeRunResult['status'],
-  incompleteReason?: RuntimeRunResult['incompleteReason'],
 ): TurnResult['terminationReason'] {
   switch (status) {
     case 'ok': return 'ok';
     case 'timeout': return 'time_exceeded';
-    case 'incomplete':
-      if (incompleteReason === 'stall') return 'stalled';
-      return 'cap_exhausted';
+    case 'incomplete': return 'cap_exhausted';
     case 'error':
     case 'auth_error':
     case 'rate_limited':
@@ -86,8 +73,6 @@ export interface SequenceItem {
   output?: string;
   filesWritten?: string[];
   workerStatus?: WorkerStatus;
-  specReviewStatus?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
-  qualityReviewStatus?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
 }
 
 export interface MockProviderOptions {
@@ -135,10 +120,8 @@ function buildOk(opts: MockProviderOptions): RuntimeRunResult {
     usage: usage(cost),
     turns: 1,
     filesWritten: [],
-    outputIsDiagnostic: false,
     escalationLog: [attempt('ok', 1, cost)],
     durationMs: 0,
-    directoriesListed: [],
     workerStatus: 'done',
     terminationReason: {
       cause: 'finished',
@@ -158,10 +141,8 @@ function buildIncomplete(opts: MockProviderOptions): RuntimeRunResult {
     usage: usage(0.001),
     turns: 1,
     filesWritten: [],
-    outputIsDiagnostic: true,
     escalationLog: [attempt('incomplete', 1, 0.001)],
     durationMs: 0,
-    directoriesListed: [],
     terminationReason: {
       cause: 'incomplete',
       turnsUsed: 1,
@@ -180,10 +161,8 @@ function buildMaxTurns(opts: MockProviderOptions): RuntimeRunResult {
     usage: usage(0.002),
     turns: 99,
     filesWritten: [],
-    outputIsDiagnostic: true,
     escalationLog: [attempt('incomplete', 99, 0.002)],
     durationMs: 0,
-    directoriesListed: [],
     terminationReason: {
       cause: 'incomplete',
       turnsUsed: 99,
@@ -207,8 +186,6 @@ function buildReviewRework(opts: MockProviderOptions): RuntimeRunResult {
     durationMs: 0,
     directoriesListed: [],
     workerStatus: 'done',
-    specReviewStatus: 'changes_required',
-    qualityReviewStatus: 'changes_required',
     terminationReason: {
       cause: 'finished',
       turnsUsed: 1,
@@ -251,13 +228,9 @@ function buildFromSequenceItem(item: SequenceItem): RuntimeRunResult {
     usage: usage(cost),
     turns: 1,
     filesWritten: item.filesWritten ?? [],
-    outputIsDiagnostic: item.status !== 'ok',
     escalationLog: [attempt(item.status ?? 'ok', 1, cost)],
     durationMs: 0,
-    directoriesListed: [],
     workerStatus: item.workerStatus ?? 'done',
-    specReviewStatus: item.specReviewStatus,
-    qualityReviewStatus: item.qualityReviewStatus,
     terminationReason: {
       cause: item.status === 'ok' ? 'finished' : item.status ?? 'finished',
       turnsUsed: 1,
@@ -350,7 +323,6 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
       return {
         ...buildIncomplete({ stage: 'incomplete', output }),
         status: 'timeout',
-        incompleteReason: 'timeout',
         terminationReason: {
           cause: 'timeout',
           turnsUsed: 1,
@@ -361,10 +333,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
         },
       };
     }
-    return {
-      ...buildMaxTurns({ stage: 'max-turns', output }),
-      incompleteReason: 'turn_cap',
-    };
+    return buildMaxTurns({ stage: 'max-turns', output });
   };
   return {
     name: `mock-${opts.kind}-cap`,
@@ -405,10 +374,8 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
       usage: usage(null),
       turns: 1,
       filesWritten: [],
-      outputIsDiagnostic: true,
       escalationLog: [attempt(statusFinal, 1, null)],
       durationMs: 0,
-      directoriesListed: [],
       workerStatus: 'failed',
       terminationReason: {
         cause: statusFinal,
