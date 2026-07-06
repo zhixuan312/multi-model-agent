@@ -54,7 +54,20 @@ export function buildRequest(spec, ctx) {
     case 24: return { type: 'spec', body: { prompt: 'Input validation for math module — guard division by zero', target: { paths: [`${cwd}/design-decisions.md`] } } };
     case 25: return { type: 'plan', body: { prompt: 'Write a TDD plan for the input validation spec', target: { paths: [`${cwd}/spec.md`] } } };
 
-    // I. Error Cases — these are raw payloads that should fail validation
+    // I. Context block delta mode — audit round 2 using round 1's contextBlockId
+    case 26: {
+      const blockId = ctx.auditContextBlockId;
+      if (!blockId) throw new Error('scenario #26 requires ctx.auditContextBlockId from scenario #4');
+      return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/spec.md`] }, contextBlockIds: [blockId] } };
+    }
+
+    // J. Error: too many context blocks (>2 rejected)
+    case 27: return { type: 'error_too_many_blocks', body: {}, rawPayload: { type: 'audit', target: { paths: [`${cwd}/spec.md`] }, contextBlockIds: ['a', 'b', 'c'] } };
+
+    // K. Non-git cwd: delegate without worktree
+    case 28: return { type: 'delegate', body: { prompt: 'Create file src/output.ts with: export const OUT = 1;', target: { paths: ['src/output.ts'] }, reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
+
+    // Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
 
@@ -65,7 +78,8 @@ export function buildRequest(spec, ctx) {
 // register-context-block is synchronous (201 { id }); error scenarios return 400;
 // all other types return 202 { taskId }.
 export async function runDispatch(spec, ctx) {
-  const { type, body, rawPayload } = buildRequest(spec, ctx);
+  const buildResult = buildRequest(spec, ctx);
+  const { type, body, rawPayload } = buildResult;
 
   // Error scenarios: send raw payload directly to POST /task and expect 400
   if (spec.kind === 'error') {
@@ -87,7 +101,8 @@ export async function runDispatch(spec, ctx) {
     return { errorResponse: true, status: res.status, json };
   }
 
-  const { status, json } = await dispatch(ctx.token, type, body, ctx.dir);
+  const effectiveCwd = buildResult.cwd ?? ctx.dir;
+  const { status, json } = await dispatch(ctx.token, type, body, effectiveCwd);
   if (type === 'context-blocks') {
     if (!json.id) throw new Error(`register-context-block failed: HTTP ${status} ${JSON.stringify(json)}`);
     return { blockId: json.id };

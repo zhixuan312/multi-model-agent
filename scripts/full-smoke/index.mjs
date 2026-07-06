@@ -86,6 +86,10 @@ async function runScenario(spec, ctx, log) {
       const implSessionId = envelope.execution?.sessions?.implementer;
       if (implSessionId) ctx.sessionFromScenario2 = implSessionId;
     }
+    if (spec.id === 4) {
+      const cb = envelope.output?.contextBlockId;
+      if (cb) ctx.auditContextBlockId = cb;
+    }
 
     const queue = collectQueue(queueBefore);
     const want = spec.emits ?? 0;
@@ -132,8 +136,9 @@ async function runChain(ids, allScenarios, ctx, log) {
 }
 
 try {
-  const { dir } = createProject();
+  const { dir, nonGitDir } = createProject();
   ctx.dir = dir;
+  ctx.nonGitDir = nonGitDir;
   ctx.specMd = readFileSync(`${dir}/spec.md`, 'utf8');
 
   const log = (msg) => { process.stderr.write(msg + '\n'); };
@@ -166,7 +171,7 @@ try {
     const phase2Threads = [
       [2, 16],       // investigate → session reuse
       [3],           // research
-      [4],           // audit/default
+      [4, 26],       // audit/default → delta round 2
       [5, 6, 9, 10], // write chain → journal_recall
       [7],           // review
       [8],           // debug
@@ -181,6 +186,8 @@ try {
       [23],          // execute_plan with uncommitted plan file
       [24],          // spec task type
       [25],          // plan task type
+      [27],          // error: too many context blocks
+      [28],          // delegate in non-git cwd
     ];
 
     // Filter threads if --only is active
