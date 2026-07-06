@@ -1,7 +1,7 @@
 ---
 name: mma-design
-description: Use when the user has an idea, problem, or feature request that needs to be turned into a spec and plan — orchestrates the full interactive design workflow from brain dump through spec writing to plan generation
-when_to_use: The user describes something they want to build, fix, or improve AND it needs structured design work before implementation. This is the front door to the MMA SDLC — from idea to spec to plan. If the user already has a spec → skip to mma-plan. If the user already has a plan → use mma-execute-plan.
+description: Use when the user has an idea, problem, or feature request that needs to be turned into a formal spec — orchestrates the interactive design workflow from brain dump through structured interview to spec writing
+when_to_use: The user describes something they want to build, fix, or improve AND it needs structured design work before implementation. This skill takes the idea to a written spec. If the user already has a spec → skip to mma-plan. If the user already has a plan → use mma-execute-plan.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Interactive design workflow that takes a raw idea and produces a formal spec + implementation plan. The main agent handles the judgment (dialogue, decisions, structuring); MMA workers handle the labor (investigation, spec writing, plan writing).
+Interactive design workflow that takes a raw idea and produces a formal spec. The main agent handles the judgment (dialogue, decisions, structuring); MMA workers handle the labor (investigation, spec writing).
 
 **Core principle — two question types, two resolution paths:**
 
@@ -21,7 +21,7 @@ Interactive design workflow that takes a raw idea and produces a formal spec + i
 **Use when:**
 - The user has an idea, problem, or feature request
 - The work needs structured design before implementation
-- You want the full lifecycle: idea → spec → plan → (then execute)
+- You want to go from idea to a written spec
 
 **Don't use when:**
 - The user already has a spec → `mma-plan`
@@ -33,7 +33,7 @@ Interactive design workflow that takes a raw idea and produces a formal spec + i
 
 `mma-design` is an orchestration skill — it teaches the main agent a workflow that dispatches other MMA skills/task types. There is no `POST /task { type: "design" }`.
 
-## The Workflow (4 Phases)
+## The Workflow (3 Phases)
 
 ### Phase 1: Discover
 
