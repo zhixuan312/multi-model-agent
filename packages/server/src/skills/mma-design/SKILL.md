@@ -11,7 +11,10 @@ version: "0.0.0-unreleased"
 
 Interactive design workflow that takes a raw idea and produces a formal spec + implementation plan. The main agent handles the judgment (dialogue, decisions, structuring); MMA workers handle the labor (investigation, spec writing, plan writing).
 
-**Core principle:** Only ask the user what you cannot find out yourself. Facts about the codebase (what exists, what's the current signature, what pattern is used) — investigate, don't ask. Facts about external approaches — research, don't ask. Prior project decisions — recall, don't ask. Only escalate to the user when the answer requires **human judgment**: tradeoff choices, scope decisions, priority calls, "should we X or Y?" The user's time is for decisions, not for answering questions MMA can resolve with its own tools.
+**Core principle — two question types, two resolution paths:**
+
+- **Mechanical questions** (facts, patterns, signatures, prior art, what exists) → **resolve yourself** via mma-investigate, mma-research, mma-journal-recall. Never ask the user to look something up for you.
+- **Decision questions** (tradeoffs, scope, priority, approach choices) → **ask the user** with concrete options, your recommendation, and reasoning. Never decide for the user.
 
 ## When to Use
 
@@ -88,14 +91,22 @@ Read the brain dump (and investigation results, if any). Map what the user said 
 **Step 2: Ask focused questions for ambiguous/missing sections.**
 
 Interview rules:
-- **Investigate before asking.** If a question can be answered by reading the codebase, searching external sources, or recalling journal decisions — do it yourself (via mma-investigate, mma-research, mma-journal-recall). Only ask the user questions that require human judgment.
-- **One question at a time.** Don't dump 5 questions in one message.
-- **Multiple choice when possible.** "Should we (A) throw on zero or (B) return NaN?" is easier to answer than "how should we handle zero?"
-- **Surface contradictions.** "You said no breaking changes, but the proposed rename IS a breaking change — which takes priority?"
-- **Propose alternatives with tradeoffs** when there's a design choice. Recommend one with reasoning. The user picks.
-- **Confirm clear sections briefly.** "Your brain dump covers Context, Problem, and Goals clearly — I'll carry those forward. Let me ask about Scope..."
-- **Skip sections the user already locked.** If the brain dump says "Option A, because X" — that's a confirmed decision. Record it, don't re-debate it.
-- **Fill in facts yourself.** If the brain dump says "use the existing interface" but doesn't name it, investigate and fill in the actual interface name/signature — don't ask the user to look it up for you.
+
+**For mechanical questions — resolve yourself:**
+- If the brain dump says "use the existing interface" — investigate and fill in the name, signature, file path. Don't ask the user.
+- If you need to know the tech stack, test framework, import style — read the codebase. Don't ask.
+- If you need prior art or external approaches — research. Don't ask.
+- If you need what the project already decided — recall from journal. Don't ask.
+
+**For decision questions — ask the user:**
+- One question at a time. Don't dump 5 questions in one message.
+- Multiple choice when possible. "Should we (A) throw on zero or (B) return NaN?" beats "how should we handle zero?"
+- Always include your recommendation with reasoning. The user picks.
+- Surface contradictions. "You said no breaking changes, but the proposed rename IS breaking — which takes priority?"
+
+**General:**
+- Confirm clear sections briefly. "Brain dump covers Context, Problem, Goals — carrying forward. Let me ask about Scope..."
+- Skip sections the user already locked. "Option A because X" = confirmed decision. Don't re-debate.
 
 **Step 3: Lock each decision.**
 As the user answers each question, record the confirmed decision. When all sections are filled (clear from brain dump + confirmed through dialogue), you have a complete set of decisions ready for Phase 3.
