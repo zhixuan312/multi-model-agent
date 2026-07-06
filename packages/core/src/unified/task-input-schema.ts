@@ -106,6 +106,22 @@ export const taskInputSchema = z.discriminatedUnion('type', [
     outputFormat: z.string().optional(),
     ...commonFields,
   }).strict(),
+
+  z.object({
+    type: z.literal('spec'),
+    prompt: z.string().min(1),
+    target: targetSchema,
+    outputPath: z.string().optional(),
+    ...commonFields,
+  }).strict(),
+
+  z.object({
+    type: z.literal('plan'),
+    prompt: z.string().min(1),
+    target: targetSchema,
+    outputPath: z.string().optional(),
+    ...commonFields,
+  }).strict(),
 ]);
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

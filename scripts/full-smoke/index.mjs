@@ -179,6 +179,8 @@ try {
       [19],          // orchestrate
       [22],          // audit/read-only-sandbox
       [23],          // execute_plan with uncommitted plan file
+      [24],          // spec task type
+      [25],          // plan task type
     ];
 
     // Filter threads if --only is active

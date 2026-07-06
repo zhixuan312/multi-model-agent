@@ -143,6 +143,24 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
         'Each result includes the learning, context, and relevance assessment.',
         'You have produced the required JSON output block.',
       ].join(' ');
+    case 'spec':
+      return [
+        'You have read the structured design decisions from the input.',
+        'You have written a complete spec file with YAML frontmatter and ALL required sections: Context, Problem, Goals & Requirements, Scope, Constraints, Success Metrics, Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria.',
+        'Every functional requirement uses must/should/may language and maps to an acceptance criterion.',
+        'No placeholder language exists (no TBD, TODO, or vague verbs).',
+        'You have produced the required JSON output block.',
+      ].join(' ');
+    case 'plan':
+      return [
+        'You have read the spec and explored the codebase to discover ground truth at HEAD.',
+        'You have written a complete plan file with Goal/Architecture/Tech Stack header, File Structure section, and Track-organized TDD tasks.',
+        'Every task has the exact structure: failing test → verify fail → minimal code → verify pass.',
+        'Every code block is complete — no placeholders, no "similar to Task N".',
+        'Every file path was verified against the codebase.',
+        'Every verification command uses the project actual test runner.',
+        'You have produced the required JSON output block.',
+      ].join(' ');
     case 'orchestrate':
       return [
         'You have fully processed the prompt and produced the requested output.',
@@ -533,6 +551,49 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             copyToWorktree = [path.isAbsolute(planPath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(resolvedPlanPath)) : planPath];
             const entry = deps.taskRegistry.get(taskId);
             if (entry) entry.totalTasks = matched.length;
+          }
+
+          // ── Spec/Plan pre-processing: outputPath derivation + copyToWorktree ──
+          if (input.type === 'spec' || input.type === 'plan') {
+            const spPayload = payload as { prompt: string; target?: { paths?: string[]; inline?: string }; outputPath?: string };
+            const hasInline = spPayload.target?.inline !== undefined;
+            const hasPaths = spPayload.target?.paths !== undefined && spPayload.target.paths.length > 0;
+
+            // Validate outputPath if provided
+            if (spPayload.outputPath) {
+              if (spPayload.outputPath.includes('..') || path.isAbsolute(spPayload.outputPath)) {
+                deps.taskRegistry.fail(taskId, { code: 'invalid_output_path', message: `outputPath must be relative to cwd and must not contain '..': ${spPayload.outputPath}` });
+                return;
+              }
+            }
+
+            // For plan + inline, outputPath is required
+            if (input.type === 'plan' && hasInline && !spPayload.outputPath) {
+              deps.taskRegistry.fail(taskId, { code: 'invalid_request', message: 'outputPath is required when type=plan uses target.inline (cannot derive basename from inline content)' });
+              return;
+            }
+
+            // Derive outputPath if not provided
+            if (!spPayload.outputPath) {
+              const today = new Date().toISOString().slice(0, 10);
+              if (input.type === 'spec') {
+                const slug = spPayload.prompt.split(/[.!?\n]/)[0].trim().toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+                (payload as Record<string, unknown>).outputPath = `docs/mma/specs/${today}-${slug || 'spec'}.md`;
+              } else if (hasPaths) {
+                const specBase = path.basename(spPayload.target!.paths![0], path.extname(spPayload.target!.paths![0]));
+                const hasDatePrefix = /^\d{4}-\d{2}-\d{2}-/.test(specBase);
+                (payload as Record<string, unknown>).outputPath = hasDatePrefix
+                  ? `docs/mma/plans/${specBase}.md`
+                  : `docs/mma/plans/${today}-${specBase}.md`;
+              }
+            }
+
+            // Set up copyToWorktree for target.paths
+            if (hasPaths) {
+              const filePath = spPayload.target!.paths![0];
+              copyToWorktree = [path.isAbsolute(filePath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath))) : filePath];
+            }
           }
 
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──

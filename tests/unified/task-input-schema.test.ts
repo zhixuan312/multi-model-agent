@@ -251,4 +251,103 @@ describe('taskInputSchema', () => {
       prompt: '',
     }).success).toBe(false);
   });
+
+  // ── spec task type ──
+
+  it('accepts spec with prompt + target.inline', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      prompt: 'Input validation for math module',
+      target: { inline: '## Context\ntest' },
+    }).success).toBe(true);
+  });
+
+  it('accepts spec with prompt + target.paths', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      prompt: 'Input validation for math module',
+      target: { paths: ['/project/design-decisions.md'] },
+    }).success).toBe(true);
+  });
+
+  it('accepts spec with optional outputPath', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      prompt: 'Input validation for math module',
+      target: { inline: '## Context\ntest' },
+      outputPath: 'docs/mma/specs/2026-07-06-input-validation.md',
+    }).success).toBe(true);
+  });
+
+  it('rejects spec without prompt', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      target: { inline: 'content' },
+    }).success).toBe(false);
+  });
+
+  it('rejects spec without target', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      prompt: 'test',
+    }).success).toBe(false);
+  });
+
+  it('rejects spec with both paths and inline', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'spec',
+      prompt: 'test',
+      target: { paths: ['/doc.md'], inline: 'text' },
+    }).success).toBe(false);
+  });
+
+  // ── plan task type ──
+
+  it('accepts plan with prompt + target.paths', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      prompt: 'Write a TDD plan for this spec',
+      target: { paths: ['/project/docs/spec.md'] },
+    }).success).toBe(true);
+  });
+
+  it('accepts plan with prompt + target.inline + outputPath', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      prompt: 'Write a TDD plan',
+      target: { inline: '# Spec content...' },
+      outputPath: 'docs/mma/plans/2026-07-06-feature.md',
+    }).success).toBe(true);
+  });
+
+  it('accepts plan with optional outputPath', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      prompt: 'Write a TDD plan',
+      target: { paths: ['/spec.md'] },
+      outputPath: 'docs/mma/plans/custom.md',
+    }).success).toBe(true);
+  });
+
+  it('rejects plan without prompt', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      target: { paths: ['/spec.md'] },
+    }).success).toBe(false);
+  });
+
+  it('rejects plan without target', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      prompt: 'test',
+    }).success).toBe(false);
+  });
+
+  it('rejects plan with both paths and inline', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'plan',
+      prompt: 'test',
+      target: { paths: ['/doc.md'], inline: 'text' },
+    }).success).toBe(false);
+  });
 });

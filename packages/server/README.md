@@ -90,6 +90,14 @@ mma sync-skills                 # reconcile installed skills with the new bundle
 
 Skills are the surface your AI client sees. `mma sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the unified `POST /task` endpoint.
 
+### Design & planning skills
+
+| Skill | Task type | Use when |
+|---|---|---|
+| `mma-design` | *(orchestrator)* | Interactive design workflow — brain dump → investigate → structure → spec → plan |
+| `mma-spec` | `spec` | Write a formal spec from structured design decisions |
+| `mma-plan` | `plan` | Write a TDD implementation plan from a spec file |
+
 ### Work-delegation skills
 
 | Skill | Task type | Use when |
@@ -137,7 +145,7 @@ All task types dispatch through the unified `POST /task` endpoint with a `type` 
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, orchestrate) |
+| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, orchestrate, spec, plan) |
 | `GET /task/:taskId` | Poll task status and results |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |

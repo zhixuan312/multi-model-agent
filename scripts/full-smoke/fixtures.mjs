@@ -25,6 +25,11 @@ export function createProject() {
     '# Uncommitted Plan\n\n### Task 1: add modulo\nAdd `modulo(a,b)` to `src/math.ts` that returns `a % b`.\n');
   // Intentionally NOT git-added — tests the copyToWorktree mechanism
 
+  // Write a structured design decisions file for scenario #24 (spec task type)
+  writeFileSync(join(dir, 'design-decisions.md'),
+    '## Context\n\n### Background\nThe math module in src/math.ts provides arithmetic functions.\n\n## Problem\nThe divide function has no zero-divisor guard.\n\n## Goals & Requirements\n\n### Goals\n1. Guard all arithmetic functions against invalid inputs\n\n### Functional requirements\n- divide must throw on zero divisor\n\n### Scope\n\n#### In scope\n- Input validation for divide\n\n#### Out of scope\n- New arithmetic functions\n\n### Constraints\n- No breaking changes to return types\n\n### Success metrics\n| Metric | Target |\n|---|---|\n| Zero-divisor guard | throws Error |\n\n## Alternatives\n\n### Option A: throw Error (recommended)\nSimple, explicit.\n\n### Option B: return NaN\nSilent failure.\n\n## Decision Records\n| Decision | Rationale |\n|---|---|\n| throw Error | Explicit failures are easier to debug |\n\n## Technical Design\n\n### Current state\ndivide(a,b) returns a/b with no guard.\n\n### Proposed\nAdd if (b===0) throw new Error(\'Division by zero\') before return.\n\n## Testing Plan\nUnit test: expect(() => divide(1,0)).toThrow()\n\n## Acceptance Criteria\n- [ ] AC-1: divide(1,0) throws\n- [ ] AC-2: divide(6,3) still returns 2\n');
+  git('add', 'design-decisions.md'); git('commit', '-qm', 'add design decisions');
+
   return { dir };
 }
 

@@ -110,6 +110,23 @@ const journalRecordAnswerSchema = z.object({
   })).default([]),
 });
 
+const specAnswerSchema = z.object({
+  specPath: z.string().min(1),
+  sections: z.array(z.string().min(1)),
+  acceptanceCriteriaCount: z.number().int().nonnegative(),
+  notes: z.string().default(''),
+});
+
+const planAnswerSchema = z.object({
+  planPath: z.string().min(1),
+  taskCount: z.number().int().nonnegative(),
+  tasks: z.array(z.object({
+    title: z.string().min(1),
+    verdict: z.enum(['executable', 'partial', 'blocked']),
+  })),
+  notes: z.string().default(''),
+});
+
 export const REFINER_SCHEMAS: Partial<Record<TaskType, z.ZodType>> = {
   audit: auditAnswerSchema,
   investigate: investigateAnswerSchema,
@@ -120,4 +137,6 @@ export const REFINER_SCHEMAS: Partial<Record<TaskType, z.ZodType>> = {
   delegate: delegateAnswerSchema,
   execute_plan: executePlanAnswerSchema,
   journal_record: journalRecordAnswerSchema,
+  spec: specAnswerSchema,
+  plan: planAnswerSchema,
 };

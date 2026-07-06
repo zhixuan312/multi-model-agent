@@ -125,4 +125,10 @@ export const SCENARIOS = [
   //         to git. The pipeline must copy it into the worktree before the worker
   //         can read it. Verifies the copyToWorktree mechanism.
   { id: 23, type: 'execute_plan', tier: 'standard', kind: 'write', uncommittedPlan: true, emits: 1 },
+
+  // H. New task types (spec + plan)
+  //    #24: spec — write a formal spec from structured design decisions (inline)
+  //    #25: plan — write a TDD plan from a spec file
+  { id: 24, type: 'spec', tier: 'complex', kind: 'write', emits: 1 },
+  { id: 25, type: 'plan', tier: 'complex', kind: 'write', emits: 1 },
 ];

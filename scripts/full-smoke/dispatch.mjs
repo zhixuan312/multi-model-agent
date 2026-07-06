@@ -50,7 +50,11 @@ export function buildRequest(spec, ctx) {
     // G. Uncommitted plan file (worktree copy test)
     case 23: return { type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task 1: add modulo'] } };
 
-    // H. Error Cases — these are raw payloads that should fail validation
+    // H. New task types (spec + plan)
+    case 24: return { type: 'spec', body: { prompt: 'Input validation for math module — guard division by zero', target: { paths: [`${cwd}/design-decisions.md`] } } };
+    case 25: return { type: 'plan', body: { prompt: 'Write a TDD plan for the input validation spec', target: { paths: [`${cwd}/spec.md`] } } };
+
+    // I. Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
 

@@ -86,6 +86,16 @@ function checkQuality(type, subtype, r) {
       if (outputLen < 50) return ['FAIL', `orchestrate output too short (${outputLen} chars) — expected structured response`];
       return ['PASS', `${outputLen} chars output`];
     }
+    case 'spec': {
+      if (outputLen < 20) return ['WARN', `spec output very short (${outputLen} chars)`];
+      const hasSpecPath = raw.includes('specPath');
+      return ['PASS', `${outputLen} chars output; specPath=${hasSpecPath}`];
+    }
+    case 'plan': {
+      if (outputLen < 20) return ['WARN', `plan output very short (${outputLen} chars)`];
+      const hasPlanPath = raw.includes('planPath');
+      return ['PASS', `${outputLen} chars output; planPath=${hasPlanPath}`];
+    }
     default:
       return ['PASS', `${outputLen} chars output (no type-specific quality check)`];
   }
