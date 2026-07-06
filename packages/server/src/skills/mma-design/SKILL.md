@@ -37,29 +37,29 @@ Interactive design workflow that takes a raw idea and produces a formal spec + i
 **Step 1: Capture the brain dump.**
 Let the user describe their idea, problem, or request. Don't interrupt — capture everything.
 
-**Step 2: Propose investigations.**
-After the brain dump, propose running three parallel investigations and explain what each brings:
+**Step 2: Propose investigations (optional — user can skip).**
+After the brain dump, propose running up to three parallel investigations:
 
-> "To ground this design in what exists, I'd like to run three investigations:
+> "To ground this design in what exists, I can run:
 > 1. **mma-investigate** — what exists in the codebase today that relates to this
 > 2. **mma-research** — what's been done externally (prior art, approaches, libraries)
 > 3. **mma-journal-recall** — what this project already decided or learned about related topics
 >
-> Shall I run these?"
+> Want me to run any or all of these? Or skip straight to structuring the spec?"
 
-**Wait for user agreement.** Do NOT dispatch investigations without user consent.
+The user may:
+- **Accept all three** — dispatch in parallel, synthesize results, then proceed to Phase 2.
+- **Accept some** — dispatch only the accepted ones. Skip the rest.
+- **Skip all** — proceed directly to Phase 2. The brain dump already contains the decisions; investigations are enrichment, not prerequisites.
 
-**Step 3: Dispatch and synthesize.**
-Once the user agrees, dispatch all three in parallel:
-- `mma-investigate` with a focused question about the codebase
-- `mma-research` with the external research question
-- `mma-journal-recall` with a recall query about related decisions/learnings
-
-When results return, synthesize the findings and present to the user:
-- What exists in the codebase today (from investigate)
-- What approaches exist externally (from research)
-- What the project already decided (from journal-recall)
+**Step 3: Dispatch and synthesize (if any investigations accepted).**
+Dispatch the accepted investigations in parallel. When results return, present findings to the user:
+- What exists in the codebase (from investigate, if run)
+- What approaches exist externally (from research, if run)
+- What the project already decided (from journal-recall, if run)
 - How these findings inform the design
+
+If no investigations were run, proceed directly to Phase 2 using only the brain dump content.
 
 ### Phase 2: Design (interactive — one section at a time)
 
@@ -119,7 +119,7 @@ After the user approves the spec:
 
 ## Anti-patterns
 
-❌ **Skipping Phase 1 (Discover).** Jumping straight to design without investigating the codebase and prior decisions produces specs that contradict existing code or re-propose dropped approaches. **Fix:** always run the three investigations (investigate + research + journal-recall) before structuring any design section.
+❌ **Skipping the investigation OFFER.** Always propose the three investigations after the brain dump — the user may accept all, some, or none. If the user skips all, that's fine (the brain dump has the decisions). But skipping the offer means the user never got the chance to ground the design. **Fix:** always propose; respect the user's choice.
 
 ❌ **Deciding for the user.** "I'll go with Option A since it's simpler" — NO. Present all options, recommend one with reasoning, and wait for the user to pick.
 
