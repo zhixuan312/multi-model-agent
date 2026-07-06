@@ -607,26 +607,24 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           }
 
           // ── Context block resolution: resolve IDs → content, pin for duration ──
+          // Missing blocks are skipped (soft) — the in-memory store loses blocks
+          // on server restart, and a stale block should not kill the task.
           const inputBlockIds = (input.contextBlockIds ?? []) as string[];
           let resolvedContextBlocks: string[] | undefined;
+          const pinnedIds: string[] = [];
           if (inputBlockIds.length > 0) {
-            const missing: string[] = [];
             const blocks: string[] = [];
             for (const id of inputBlockIds) {
               const content = contextBlockStore.get(id);
-              if (content === undefined) { missing.push(id); continue; }
+              if (content === undefined) {
+                process.stderr.write(`[mma] context_block_skipped id=${id} task=${taskId} reason=not_found\n`);
+                continue;
+              }
               blocks.push(content);
               contextBlockStore.pin(id);
+              pinnedIds.push(id);
             }
-            if (missing.length > 0) {
-              for (const id of inputBlockIds) contextBlockStore.unpin(id);
-              deps.taskRegistry.fail(taskId, {
-                code: 'context_block_not_found',
-                message: `Context block(s) not found: ${missing.join(', ')}`,
-              });
-              return;
-            }
-            resolvedContextBlocks = blocks;
+            if (blocks.length > 0) resolvedContextBlocks = blocks;
           }
 
           // ── Research pre-processing: Turn 1 (query plan) + orchestrator ──
@@ -689,7 +687,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const durationMs = Date.now() - startedAtMs;
 
           // Unpin context blocks now that the pipeline is done
-          for (const id of inputBlockIds) contextBlockStore.unpin(id);
+          for (const id of pinnedIds) contextBlockStore.unpin(id);
 
           // Auto-register a terminal context block for read-only routes
           // so callers can reference the output in subsequent dispatches (delta mode).
