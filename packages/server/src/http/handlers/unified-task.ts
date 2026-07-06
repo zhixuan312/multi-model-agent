@@ -36,6 +36,17 @@ import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFileCb);
+
+async function isGitRepo(cwd: string): Promise<boolean> {
+  try {
+    await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd });
+    return true;
+  } catch { return false; }
+}
 
 function tryParseJson(raw: string): unknown {
   const fenced = [...raw.matchAll(/```json\s*([\s\S]*?)```/g)];
@@ -641,7 +652,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             reviewPolicy,
             cwd,
             sandboxPolicy: typeConfig.sandbox,
-            worktreeEnabled: typeConfig.worktree,
+            worktreeEnabled: typeConfig.worktree && await isGitRepo(cwd),
             taskId,
             implementerGoal,
             reviewerGoal,
