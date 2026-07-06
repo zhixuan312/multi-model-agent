@@ -25,13 +25,10 @@ export type {
   RunStatus,
   TokenUsage,
   RunOptions,
-  ProgressEvent,
-  InternalRunnerEvent,
   AttemptRecord,
 } from './providers/runner-types.js';
 export type { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
-export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';
 export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanHeading } from './unified/plan-task-matcher.js';
 // Context blocks
@@ -66,14 +63,6 @@ export {
 } from './transport/index.js';
 export { RouteDispatcher } from './transport/route-dispatcher.js';
 
-// Heartbeat
-export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
-export type {
-  ActivityTrackerOptions,
-  HeartbeatStage,
-  TransitionFields,
-  HeartbeatTickInfo,
-} from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
 export { resolveAgent } from './providers/agent-resolver.js';
