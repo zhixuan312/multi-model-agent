@@ -1,4 +1,3 @@
-export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type AgentType = 'standard' | 'complex' | 'main';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
@@ -9,7 +8,6 @@ export interface TaskSpec {
   agentType?: AgentType
   done?: string
   contextBlockIds?: string[]
-  tools?: ToolMode
   timeoutMs?: number
   cwd?: string
   effort?: Effort

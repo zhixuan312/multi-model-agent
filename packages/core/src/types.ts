@@ -5,7 +5,6 @@
 
 
 export type {
-  ToolMode,
   AgentType,
   Effort,
   CostTier,

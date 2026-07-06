@@ -6,7 +6,6 @@ export type { ServerConfig } from './config/schema.js';
 
 // Types (re-export all)
 export type {
-  ToolMode,
   SandboxPolicy,
   AgentType,
   AgentConfig,
