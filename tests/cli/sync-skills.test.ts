@@ -330,3 +330,33 @@ describe('sync-skills — --if-exists postinstall guard', () => {
     }
   });
 });
+
+describe('sync-skills — mma-flow workflows', () => {
+  it('installs workflow helpers for claude-code but not for codex', async () => {
+    const home = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot(Object.fromEntries(SUPPORTED_SKILLS.map((skill) => [skill, '4.0.2'])));
+    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    mkdirSync(workflowDir, { recursive: true });
+    writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default "spec";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default "plan";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'segment-review.js'), 'export default "review";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'segment-execute.js'), 'export default "execute";\n', 'utf8');
+
+    try {
+      const out1 = captureOutput();
+      const code1 = await runSyncSkills({ argv: ['--target=claude-code'], homeDir: home, skillsRoot, stdout: out1.stdout, stderr: out1.stderr });
+      expect(code1).toBe(0);
+      // Check that workflows directory was created for claude-code
+      expect(existsSync(path.join(home, '.claude', 'workflows'))).toBe(true);
+
+      const out2 = captureOutput();
+      const code2 = await runSyncSkills({ argv: ['--target=codex'], homeDir: home, skillsRoot, stdout: out2.stdout, stderr: out2.stderr });
+      expect(code2).toBe(0);
+      // Codex does not install workflows
+      expect(existsSync(path.join(home, '.codex', 'workflows', 'segment-review.js'))).toBe(false);
+    } finally {
+      removeFakeHome(home);
+      rmSync(skillsRoot, { recursive: true, force: true });
+    }
+  });
+});

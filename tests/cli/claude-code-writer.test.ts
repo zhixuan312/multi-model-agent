@@ -367,4 +367,82 @@ describe('uninstallClaudeCode', () => {
       rmFakeDir(skillsRoot);
     }
   });
+
+  it('copies packaged workflow files into <homeDir>/.claude/workflows/', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    mkdirSync(workflowDir, { recursive: true });
+    writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default 1;\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default 2;\n', 'utf8');
+
+    try {
+      installClaudeCode({
+        skillName: 'mma-flow',
+        content: '# mma-flow\n',
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'), 'utf8')).toBe('export default 1;\n');
+      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'), 'utf8')).toBe('export default 2;\n');
+    } finally {
+      rmFakeDir(homeDir);
+      rmFakeDir(skillsRoot);
+    }
+  });
+
+  it('skips workflow installation when the packaged skill has no workflows directory', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+
+    try {
+      installClaudeCode({
+        skillName: 'mma-plan',
+        content: '# mma-plan\n',
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows'))).toBe(false);
+    } finally {
+      rmFakeDir(homeDir);
+      rmFakeDir(skillsRoot);
+    }
+  });
+
+  it('removes stale packaged workflow files for the same skill during reinstall and uninstall', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    mkdirSync(workflowDir, { recursive: true });
+    writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default "one";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default "two";\n', 'utf8');
+
+    try {
+      installClaudeCode({
+        skillName: 'mma-flow',
+        content: '# mma-flow\n',
+        homeDir,
+        skillsRoot,
+      });
+
+      rmSync(path.join(workflowDir, 'segment-plan-audit.js'));
+      installClaudeCode({
+        skillName: 'mma-flow',
+        content: '# mma-flow\n',
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(true);
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'))).toBe(false);
+
+      uninstallClaudeCode('mma-flow', homeDir);
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(false);
+    } finally {
+      rmFakeDir(homeDir);
+      rmFakeDir(skillsRoot);
+    }
+  });
 });

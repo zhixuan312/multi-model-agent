@@ -31,6 +31,79 @@ export interface ClaudeCodeInstallOpts {
   authToken?: string;
 }
 
+function workflowDirFor(homeDir: string): string {
+  return path.join(homeDir, '.claude', 'workflows');
+}
+
+function workflowManifestPath(homeDir: string, skillName: string): string {
+  return path.join(workflowDirFor(homeDir), `.${skillName}.json`);
+}
+
+function packagedWorkflowDir(skillsRoot: string, skillName: string): string {
+  return path.join(skillsRoot, skillName, 'workflows');
+}
+
+function listPackagedWorkflowFiles(skillsRoot: string, skillName: string): string[] {
+  const dir = packagedWorkflowDir(skillsRoot, skillName);
+  try {
+    return fs.readdirSync(dir)
+      .filter((fileName) => fileName.endsWith('.js'))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function readWorkflowManifest(homeDir: string, skillName: string): string[] {
+  try {
+    const raw = fs.readFileSync(workflowManifestPath(homeDir, skillName), 'utf-8');
+    const parsed = JSON.parse(raw) as { files?: string[] };
+    return Array.isArray(parsed.files) ? parsed.files.filter((fileName) => typeof fileName === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeWorkflowManifest(homeDir: string, skillName: string, files: string[]): void {
+  if (files.length === 0) return;
+  fs.mkdirSync(workflowDirFor(homeDir), { recursive: true });
+  fs.writeFileSync(
+    workflowManifestPath(homeDir, skillName),
+    JSON.stringify({ skillName, files }, null, 2) + '\n',
+    'utf-8',
+  );
+}
+
+function syncPackagedWorkflows(homeDir: string, skillsRoot: string, skillName: string): void {
+  const fileNames = listPackagedWorkflowFiles(skillsRoot, skillName);
+  const previousFiles = readWorkflowManifest(homeDir, skillName);
+  const targetDir = workflowDirFor(homeDir);
+
+  if (fileNames.length === 0) {
+    for (const stale of previousFiles) {
+      fs.rmSync(path.join(targetDir, stale), { force: true });
+    }
+    fs.rmSync(workflowManifestPath(homeDir, skillName), { force: true });
+    return;
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  for (const stale of previousFiles) {
+    if (!fileNames.includes(stale)) {
+      fs.rmSync(path.join(targetDir, stale), { force: true });
+    }
+  }
+
+  for (const fileName of fileNames) {
+    const sourcePath = path.join(packagedWorkflowDir(skillsRoot, skillName), fileName);
+    const targetPath = path.join(targetDir, fileName);
+    fs.copyFileSync(sourcePath, targetPath);
+  }
+
+  writeWorkflowManifest(homeDir, skillName, fileNames);
+}
+
 /**
  * Write (or overwrite) the SKILL.md file for a Claude Code skill.
  *
@@ -47,6 +120,7 @@ export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
   const skillDir = path.join(homeDir, '.claude', 'skills', skillName);
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, 'SKILL.md'), inlinedContent, 'utf-8');
+  syncPackagedWorkflows(homeDir, skillsRoot, skillName);
 }
 
 /**
@@ -65,6 +139,11 @@ export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
  */
 export function uninstallClaudeCode(skillName: string, homeDir: string): void {
   const skillsBase = path.resolve(homeDir, '.claude', 'skills');
+  const targetDir = workflowDirFor(homeDir);
+  for (const fileName of readWorkflowManifest(homeDir, skillName)) {
+    fs.rmSync(path.join(targetDir, fileName), { force: true });
+  }
+  fs.rmSync(workflowManifestPath(homeDir, skillName), { force: true });
 
   // Security: validate skillName does not escape the skills directory.
   // Normalize skillName and verify the resolved path stays within the base.
