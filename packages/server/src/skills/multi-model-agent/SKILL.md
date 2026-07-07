@@ -26,6 +26,7 @@ digraph picker {
     "Codebase question?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
     "mma-design" [shape=box];
+    "mma-flow" [shape=box];
     "mma-spec" [shape=box];
     "mma-plan" [shape=box];
     "mma-execute-plan" [shape=box];
@@ -40,6 +41,7 @@ digraph picker {
     "New idea / feature?" -> "Spec on disk?" [label="no"];
     "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
     "Spec on disk?" -> "Plan on disk?" [label="no"];
+    "Plan on disk?" -> "mma-flow" [label="no — need full SDLC playbook after design/spec"];
     "Plan on disk?" -> "mma-execute-plan" [label="yes"];
     "Plan on disk?" -> "Audit a doc?" [label="no"];
     "Audit a doc?" -> "mma-audit" [label="yes"];
@@ -58,6 +60,7 @@ digraph picker {
 | Skill | Purpose |
 |---|---|
 | `mma-design` | Interactive design workflow — brain dump → investigate → structured interview → write spec |
+| `mma-flow` | Packaged end-to-end SDLC playbook — locate → design/spec → audits → branch → execute → review → verify → PR → merge |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
@@ -126,6 +129,8 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 separate task dispatches (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multiple `mma-delegate` dispatches; `mma-retry` is the corrective there too.)
+
+When the user wants the packaged full SDLC route rather than one isolated worker step, direct them to `mma-flow`. It is the packaged path from design through PR creation and conditional merge, while the other `mma-*` skills remain the underlying primitives used inside that flow.
 
 ## Preflight: auto-start the daemon if it is not running
 

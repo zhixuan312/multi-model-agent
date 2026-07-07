@@ -47,6 +47,7 @@ const ACTIONABLE_SKILLS = [
   'mma-design',
   'mma-execute-plan',
   'mma-explore',
+  'mma-flow',
   'mma-journal-record',
   'mma-journal-recall',
   'mma-orchestrate',
