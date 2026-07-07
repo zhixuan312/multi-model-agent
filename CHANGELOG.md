@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.1] - 2026-07-07
+
+**mma-design trigger surface broadened.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Changed
+- `mma-design` skill `description` and `when_to_use` frontmatter rewritten to capture redesign/refactor/rethink intents, pain/complaint framing, greenfield projects, and explicit signal phrases. Adds concrete 3-file scope heuristic and full negative routing list.
+
 ## [5.8.0] - 2026-07-07
 
 **mma-flow command, Forge-aligned spec/design output, command install surface.** `SCHEMA_VERSION` unchanged (still 6).
