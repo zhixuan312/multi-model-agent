@@ -120,6 +120,12 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 | `mma-context-blocks` | `POST/DELETE /context-blocks` | Reuse a large doc across multiple calls |
 | `mma-retry` | `retry` task type | Re-run failed indices from a previous task |
 
+### Commands (Claude Code only)
+
+| Command | What it does |
+|---|---|
+| `/mma-flow` | Self-locating SDLC playbook — detects project stage, confirms design freeze, runs the autonomous Build chain to committed code. |
+
 ## Configuration reference
 
 ### Agent types
