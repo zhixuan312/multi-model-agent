@@ -30,14 +30,36 @@ version: "0.0.0-unreleased"
 
 Run LOCATE on every invocation. Determine the earliest incomplete coarse stage from durable evidence:
 
-- `latestSpecPath`
-- `latestPlanPath`
-- whether the working directory is inside a git repository
-- the detected source branch and project branch
-- whether the project branch has unique commits
-- whether a PR exists and whether it is merged
-- whether the Deferred-Decision Ledger has unresolved items
-- current-session evidence for clean review and whole-repo-green verification
+```ts
+type FlowStage =
+  | 'D1'
+  | 'D2'
+  | 'B1'
+  | 'B2'
+  | 'B3'
+  | 'B4'
+  | 'B5'
+  | 'B6'
+  | 'B7'
+  | 'B8'
+  | 'B9';
+
+interface LocateSignals {
+  latestSpecPath?: string | null;
+  latestPlanPath?: string | null;
+  gitRepoPresent: boolean;
+  sourceBranch?: string | null;
+  projectBranch?: string | null;
+  projectBranchHasUniqueCommits: boolean;
+  prExists: boolean;
+  prMerged: boolean;
+  deferredDecisionLedgerHasItems: boolean;
+  currentSessionEvidence: {
+    reviewPassed: boolean;
+    wholeRepoGreen: boolean;
+  };
+}
+```
 
 Resume rules:
 
@@ -52,6 +74,8 @@ Resume rules:
 | Whole-repo green is proven in the current session and no PR exists | `B8` |
 | PR exists and is not merged | `B9` |
 | PR merged | Flow complete |
+
+The rationale for the current-session evidence requirement is architectural: with no new server endpoint and no new persisted orchestration state, the skill can durably infer artifact and git boundaries, while audit and verification sub-steps remain session-local unless and until they produce the next durable artifact boundary.
 
 If only session-local review or green evidence is missing after an interruption, fall back to the nearest safe durable gate: `B6` or `B7`.
 
@@ -96,6 +120,7 @@ sourceBranch=$(git rev-parse --abbrev-ref HEAD)
 git checkout -b "mma/<slug>"
 git push -u origin "mma/<slug>"
 gh pr create --base "$sourceBranch" --head "mma/<slug>"
+gh pr merge <number> --merge
 ```
 
 The PR title must be `build(<slug>): <one-line spec summary>`.
@@ -103,6 +128,79 @@ The PR title must be `build(<slug>): <one-line spec summary>`.
 Create the PR only after `B7` passes in the current session.
 
 ## Audit And Review Loop Policy
+
+The `mma-flow` workflow script argument and return contracts are:
+
+```ts
+export interface AuditLoopRound {
+  round: number;
+  findingsSummary: string;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  fixedByAgent: boolean;
+  contextBlockId?: string | null;
+}
+
+export interface AuditLoopResultBase {
+  cwd: string;
+  roundsRun: number;
+  clean: boolean;
+  rounds: AuditLoopRound[];
+  openFindings: string[];
+  blockingRemaining: boolean;
+  proceed: boolean;
+  note: string;
+  contextBlockId?: string | null;
+}
+
+export interface SegmentSpecAuditArgs {
+  specPath: string;
+  cwd?: string;
+  cap?: number;
+  autofix?: boolean;
+  contextBlockId?: string;
+}
+
+export interface SegmentSpecAuditResult extends AuditLoopResultBase {
+  specPath: string;
+}
+
+export interface SegmentPlanAuditArgs {
+  planPath: string;
+  cwd: string;
+  cap?: number;
+  autofix?: boolean;
+  contextBlockId?: string;
+}
+
+export interface SegmentPlanAuditResult extends AuditLoopResultBase {
+  planPath: string;
+}
+
+export interface SegmentReviewArgs {
+  cwd: string;
+  sourceBranch: string;
+  cap?: number;
+  autofix?: boolean;
+  contextBlockId?: string;
+}
+
+export interface SegmentReviewResult extends AuditLoopResultBase {
+  sourceBranch: string;
+}
+```
+
+`segment-execute.js` preserves the existing grouped execution semantics and is invoked on the project branch:
+
+```ts
+export interface SegmentExecuteArgs {
+  cwd: string;
+  planPath: string;
+  contextBlockIds?: string[];
+}
+```
 
 `B1`, `B3`, and `B6` all use the same policy:
 
@@ -117,12 +215,12 @@ Create the PR only after `B7` passes in the current session.
 
 Track unresolved human decisions across `B1` through `B9` with entries shaped as:
 
-```json
-{
-  "item": "what still needs a human decision",
-  "assumptionMade": "what the flow assumed so work could continue",
-  "blastRadius": "what could be affected if the assumption is wrong",
-  "blockedWork": "what cannot finish until the decision is made"
+```ts
+export interface DeferredDecisionLedgerEntry {
+  item: string;
+  assumptionMade: string;
+  blastRadius: string;
+  blockedWork: string;
 }
 ```
 
@@ -142,3 +240,30 @@ At `B9`:
 ## Client Portability
 
 Every supported client installs this playbook. Only Claude Code installs packaged workflow helpers. Gemini, Codex, and Cursor users follow the same stage order manually from this `SKILL.md`.
+
+## Data Model
+
+The flow uses three artifact families:
+
+1. **Spec artifacts**
+
+```text
+docs/mma/specs/YYYY-MM-DD-<slug>.md
+```
+
+2. **Plan artifacts**
+
+```text
+docs/mma/plans/YYYY-MM-DD-<slug>.md
+```
+
+3. **Claude Code workflow artifacts**
+
+```text
+<homeDir>/.claude/workflows/segment-spec-audit.js
+<homeDir>/.claude/workflows/segment-plan-audit.js
+<homeDir>/.claude/workflows/segment-execute.js
+<homeDir>/.claude/workflows/segment-review.js
+```
+
+No new server-side schema, task type, or HTTP route is introduced. The only new packaged assets are skill files and client-side workflow scripts.
