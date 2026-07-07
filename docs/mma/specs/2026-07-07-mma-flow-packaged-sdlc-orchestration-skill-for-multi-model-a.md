@@ -44,13 +44,13 @@ FR-3. The packaged `mma-flow` skill must define the SDLC pipeline as Stage 0 LOC
 `B8` PR creation,
 `B9` deferred-decision gate and merge.
 
-FR-4. Stage 0 LOCATE must detect the current coarse-grained stage from durable artifacts, git state, PR state, and current conversation evidence, then resume from the earliest incomplete stage without skipping required work. The skill must treat intra-loop audit/review rounds as workflow-script state, not as independent resumable top-level stages.
+FR-4. Stage 0 LOCATE must detect the current coarse-grained stage from durable artifacts, git state, PR state, and current conversation evidence, then resume from the earliest incomplete stage without skipping required work. The skill must treat intra-loop audit/review rounds as workflow-script state, not as independent resumable top-level stages. If multiple spec or plan files exist under the default artifact roots, LOCATE shall use the pair explicitly referenced in the current conversation; if no explicit reference exists, LOCATE shall choose the most recently modified spec under `docs/mma/specs/` and the most recently modified plan under `docs/mma/plans/` whose filename slug matches that spec's slug.
 
 FR-5. The Design phase must remain git-free. `D1` must use `mma-design` as the interactive human-gated design workflow, and `D2` must use `mma-spec` to write the formal specification into `docs/mma/specs/`. Git repository validation must not be required before the flow reaches Build.
 
 FR-6. The Build phase must validate that the current working directory is inside a git repository before entering `B1`. If git is unavailable or the working directory is not a git repository, the skill must stop before Build, explain the failure, and leave Design outputs intact.
 
-FR-7. `B1` and `B3` must use Claude Code workflow scripts that implement the same audit-loop contract: dispatch `mma-audit`, inspect findings, optionally dispatch a fix agent for critical and high findings, re-dispatch audit, stop early when a round has zero critical or high findings, and cap total rounds at three.
+FR-7. `B1`, `B3`, and `B6` must follow the same audit-loop contract: dispatch `mma-audit` (or `mma-review` for `B6`), inspect findings, optionally dispatch a fix agent for critical and high findings, re-dispatch, stop early when a round has zero critical or high findings, and cap total rounds at three. For Claude Code, these stages shall use the packaged workflow scripts (`segment-spec-audit.js`, `segment-plan-audit.js`, `segment-review.js`) to automate the loop. For Gemini CLI, Codex CLI, and Cursor, the `mma-flow` `SKILL.md` shall define the equivalent manual steps inline so those clients can execute the audit-loop contract without invoking workflow scripts.
 
 FR-8. The packaged skill must ship four workflow scripts under `packages/server/src/skills/mma-flow/workflows/`: `segment-spec-audit.js`, `segment-plan-audit.js`, `segment-execute.js`, and `segment-review.js`. `segment-review.js` is new; the other three are packaged, MMA-native redesigns of the existing local-only accelerators.
 
@@ -62,9 +62,9 @@ FR-11. `segment-execute.js` must preserve the current grouped-dispatch behavior 
 
 FR-12. `B4` must create a project branch named `mma/<slug>` from the detected source branch. The slug must be derived from the spec title by lowercasing, converting all non-alphanumeric runs to `-`, collapsing repeated `-`, trimming leading and trailing `-`, and truncating to 30 characters. If truncation would leave an empty slug, the slug must be `task`.
 
-FR-13. `B8` must push the project branch and create a GitHub pull request with `gh pr create --base <sourceBranch> --head mma/<slug>`. The PR title must be `build(<slug>): <one-line spec summary>`. The PR body must include the execution checklist and the final audit/review summary.
+FR-13. Before `B8`, the flow shall verify that: (a) the repository has a writable remote named `origin` pointing to a GitHub-hosted repository, (b) the `gh` CLI is installed and authenticated, and (c) the sourceBranch still exists on the remote (verified via `git ls-remote origin <sourceBranch>`). If any prerequisite is unmet, the flow shall stop after `B7`, report which prerequisite failed, and leave the project branch intact for manual push and PR creation. When all prerequisites are met, `B8` must push the project branch and create a GitHub pull request with `gh pr create --base <sourceBranch> --head mma/<slug>`. The PR title must be `build(<slug>): <one-line spec summary>`. The PR body must include the execution checklist and the final audit/review summary.
 
-FR-14. The Build flow must maintain a Deferred-Decision Ledger across `B1` through `B9`. Each entry must record `item`, `assumptionMade`, `blastRadius`, and `blockedWork`. If the ledger is empty at `B9`, the skill must auto-merge. If the ledger contains one or more entries, the skill must present the ledger to the user, wait for decisions, apply any required code changes on the project branch, and merge only after that human gate completes.
+FR-14. The Build flow must maintain a Deferred-Decision Ledger across `B1` through `B9`. The ledger shall be stored as a JSON file at `docs/mma/ledgers/YYYY-MM-DD-<slug>.json` (where `<slug>` matches the spec slug) and committed to the project branch. Each workflow stage from `B1` through `B9` shall read, append to, and rewrite that file so ledger state survives across invocations without server persistence. The file shall be created at `B1` (as an empty array) and committed with the first Build commit. Each entry must record `item`, `assumptionMade`, `blastRadius`, and `blockedWork`. If the ledger is empty at `B9`, the skill must auto-merge. If the ledger contains one or more entries, the skill must present the ledger to the user, wait for decisions, apply any required code changes on the project branch, and merge only after that human gate completes.
 
 FR-15. `mma sync-skills` for the Claude Code target must install workflow scripts from a packaged skill's `workflows/` subdirectory into `~/.claude/workflows/`, must remove previously installed workflow scripts for that skill that are no longer present in the package, and must continue to install only `SKILL.md` for Gemini, Codex, and Cursor.
 
@@ -106,7 +106,7 @@ Blocking prerequisites: none. This feature does not depend on any external code 
 - Architecture: MMA must remain stateless per call; orchestration lives in packaged skill text and client-side workflow helpers, not server memory or a new task type.
 - Client portability: the `mma-flow` `SKILL.md` must be understandable and executable by any supported client even though workflow automation is Claude Code-only.
 - Runtime API: Claude Code workflow scripts must use the Claude Code Workflow runtime API surface `agent()`, `parallel()`, `phase()`, and `log()`.
-- Repository portability: the Build flow must work in arbitrary git repositories, not only inside the MMA repository.
+- Repository portability: the Build flow must work in arbitrary git repositories, not only inside the MMA repository. PR automation (`B8`) requires a writable GitHub remote and an authenticated `gh` CLI; the flow must degrade gracefully (stop after `B7` with the branch intact) when these are unavailable.
 - Branch naming: project branches must use the prefix `mma/`, never `forge/`.
 - Audit/review policy: spec audit, plan audit, and code review must share one policy shape with a round cap of three and early exit when no critical or high findings remain.
 - Output locations: specification and plan artifacts must use MMA defaults `docs/mma/specs/` and `docs/mma/plans/`.
@@ -430,6 +430,7 @@ type FlowStage =
 interface LocateSignals {
   latestSpecPath?: string | null;
   latestPlanPath?: string | null;
+  ledgerPath?: string | null; // docs/mma/ledgers/YYYY-MM-DD-<slug>.json
   gitRepoPresent: boolean;
   sourceBranch?: string | null;
   projectBranch?: string | null;
@@ -437,6 +438,7 @@ interface LocateSignals {
   prExists: boolean;
   prMerged: boolean;
   deferredDecisionLedgerHasItems: boolean;
+  hasWritableGitHubRemote: boolean; // verified before B8
   currentSessionEvidence: {
     reviewPassed: boolean;
     wholeRepoGreen: boolean;
@@ -454,14 +456,17 @@ The stage mapping contract is:
 | `mma/*` branch exists, no commits beyond source branch | `B5` |
 | `mma/*` branch has unique commits and no current-session clean review evidence | `B6` |
 | Review has passed in current session and whole-repo green is not yet proven in current session | `B7` |
-| Whole-repo green is proven in current session and no PR exists | `B8` |
+| Whole-repo green is proven in current session, no PR exists, and writable GitHub remote is available | `B8` |
+| Whole-repo green is proven in current session, no PR exists, and writable GitHub remote is unavailable | flow stops after `B7`; report that PR automation requires a writable GitHub remote and leave branch intact |
 | PR exists and is not merged | `B9` |
 | PR merged | flow complete; no stage rerun |
 
 The rationale for the current-session evidence requirement is architectural: with no new server endpoint and no new persisted orchestration state, the skill can durably infer artifact and git boundaries, while audit and verification sub-steps remain session-local unless and until they produce the next durable artifact boundary.
 
+**Current-session evidence storage and detection.** For Claude Code, current-session evidence shall be stored as client-side state within the workflow runtime context: the return values from `segment-review.js` (field `clean: true`) and the whole-repo-green verification step (build and test exit codes) are retained in the workflow's in-memory state for the duration of the session. For non-Claude clients executing the flow manually, current-session evidence is the operator's own confirmation within the active conversation or terminal session that review passed and whole-repo green was verified. After an interruption (session crash, timeout, or explicit user restart), if current-session evidence is missing or cannot be verified, LOCATE shall treat it as unavailable and resume from the prior safe gate: `B6` when review evidence is missing, or `B7` when whole-repo-green evidence is missing. This ensures no stage is skipped based on stale or lost transient state.
+
 #### Data model
-The flow uses three artifact families:
+The flow uses four artifact families:
 
 1. **Spec artifacts**
 
@@ -475,7 +480,15 @@ docs/mma/specs/YYYY-MM-DD-<slug>.md
 docs/mma/plans/YYYY-MM-DD-<slug>.md
 ```
 
-3. **Claude Code workflow artifacts**
+3. **Deferred-Decision Ledger artifacts**
+
+```text
+docs/mma/ledgers/YYYY-MM-DD-<slug>.json
+```
+
+Created at `B1` as an empty JSON array (`[]`), committed to the project branch, and appended to by subsequent stages. Read by `B9` to determine whether human decisions are required before merge.
+
+4. **Claude Code workflow artifacts**
 
 ```text
 <homeDir>/.claude/workflows/segment-spec-audit.js
@@ -505,15 +518,20 @@ gh pr create --base "$sourceBranch" --head "mma/<slug>"
 gh pr merge <number> --merge
 ```
 
+**sourceBranch persistence.** At `B4`, the flow shall record `sourceBranch` in the Deferred-Decision Ledger JSON file (as a top-level `sourceBranch` field alongside the `entries` array) so that later stages (`B6` through `B9`) can read it without re-deriving it. On resume, if the ledger file exists and contains `sourceBranch`, LOCATE shall use that stored value. If `sourceBranch` is missing from the ledger on resume and the current branch is `mma/<slug>`, the flow shall derive it from the branch's merge base with the remote default branch; if derivation is ambiguous, the flow shall stop before `B8` rather than guess the PR base branch.
+
 The implementation must preserve the decision that `B7` happens before PR creation. The PR is never created before a whole-repo-green check has passed in the current session.
+
+`B7` whole-repo-green verification must discover repository verification commands in this order: (1) if the user explicitly provided a verification command in the current conversation, use it; (2) otherwise, detect the repository's build and test commands from its configuration files (`package.json` scripts, `Makefile`, `pyproject.toml`, `Cargo.toml`, etc.) and run the standard build-then-test sequence; (3) if no authoritative verification command can be identified, stop and ask the user before claiming whole-repo green. The skill must document this discovery order so the executor never has to guess.
 
 The installer behavior for Claude Code must be:
 1. Write `SKILL.md` exactly as today, including include inlining.
 2. Inspect `<skillsRoot>/<skillName>/workflows/`.
-3. If the directory does not exist, perform no workflow installation.
+3. If the directory does not exist, perform no workflow installation for that skill but still run step 6.
 4. If it exists, copy every `.js` file in that directory into `<homeDir>/.claude/workflows/`.
-5. Remove previously installed workflow files for the same skill that are no longer present in the packaged `workflows/` directory.
-6. Leave Gemini, Codex, and Cursor installation behavior unchanged.
+5. After copying, update the ownership manifest at `<homeDir>/.claude/workflows/.mma-installed.json`. The manifest maps each `skillName` to an array of installed workflow basenames (e.g. `{"mma-flow": ["segment-spec-audit.js", "segment-plan-audit.js", "segment-execute.js", "segment-review.js"]}`).
+6. For stale-file cleanup: read the manifest entry for the skill being installed; any basename recorded in the manifest but absent from the current packaged `workflows/` directory must be deleted from `<homeDir>/.claude/workflows/` and removed from the manifest entry. If the skill has no packaged workflows at all, all files recorded in its manifest entry must be removed.
+7. Leave Gemini, Codex, and Cursor installation behavior unchanged.
 
 The workflow-loop policy shared by `segment-spec-audit.js`, `segment-plan-audit.js`, and `segment-review.js` must be:
 1. Run the appropriate MMA worker.
