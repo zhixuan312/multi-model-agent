@@ -56,13 +56,19 @@ The user may:
 - **Skip all** — proceed directly to Phase 2. The brain dump already contains the decisions; investigations are enrichment, not prerequisites.
 
 **Step 3: Dispatch and synthesize (if any investigations accepted).**
-Dispatch the accepted investigations in parallel. When results return, present findings to the user:
+Dispatch the accepted investigations via HTTP `POST /task` to the MMA server — **never as inline Agent dispatches** (those burn flagship-model tokens on read-only labor). Use parallel Bash tool calls, one per accepted leg:
+
+- `mma-investigate` → `POST /task?cwd=<project-root>` with `{ "type": "investigate", "prompt": "<codebase question>" }`
+- `mma-research` → `POST /task?cwd=<project-root>` with `{ "type": "research", "prompt": "<external question>" }`
+- `mma-journal-recall` → `POST /task?cwd=<workspace-root>` with `{ "type": "journal_recall", "prompt": "<what has the project decided about X>" }`
+
+Poll each `GET /task/:taskId` until terminal. When all results return, present findings to the user:
 - What exists in the codebase (from investigate, if run)
 - What approaches exist externally (from research, if run)
 - What the project already decided (from journal-recall, if run)
 - How these findings inform the design
 
-If no investigations were run, proceed directly to Phase 2 using only the brain dump content. The main agent can still dispatch **targeted** investigations during Phase 2 to resolve specific mechanical questions — the Phase 1 batch is the upfront sweep, not the only opportunity.
+If no investigations were run, proceed directly to Phase 2 using only the brain dump content. The main agent can still dispatch **targeted** investigations during Phase 2 to resolve specific mechanical questions via `POST /task` — the Phase 1 batch is the upfront sweep, not the only opportunity.
 
 ### Phase 2: Structured interview — clarify, resolve, lock decisions
 
@@ -74,29 +80,27 @@ Read the brain dump (and investigation results, if any). Map what the user said 
 - **Ambiguous** — the user said something but it's vague, contradictory, or incomplete. Ask a focused question.
 - **Missing** — the user didn't address it at all. Raise it.
 
-**The spec sections (all must be filled before dispatch):**
+**The 8 spec components (unified MMA/Forge standard — all must be filled before dispatch):**
 
-1. Context/Background — who, what, why
-2. Problem — one clear statement + business impact
-3. Goals & Requirements — numbered goals + functional requirements
-4. Scope — in/out explicitly enumerated
-5. Constraints — compatibility, performance, data safety, timeline
-6. Success Metrics — measurable targets
-7. Alternatives — 2-3 approaches with tradeoffs
-8. Decision Records — locked choices with rationale
-9. Technical Design — current state → proposed architecture → interfaces
-10. Testing Plan — layered strategy
-11. Acceptance Criteria — numbered, testable
+1. **Context** — background: who, what, why
+2. **Problem** — one clear problem statement + business impact
+3. **Goals & Requirements** — numbered goals, functional requirements, scope (in/out), constraints, success metrics
+4. **Alternatives** — driving factors, 2-3 options with tradeoffs, comparison + decision records with rationale
+5. **Technical Design** — current state → proposed architecture → interfaces → impact
+6. **Testing Plan** — layered test strategy
+7. **Risks & Mitigations** — risk table + mitigation plan, failure handling
+8. **User Stories & Tasks** — user stories with acceptance criteria (numbered AC-N.N, testable)
 
 **Step 2: Ask focused questions for ambiguous/missing sections.**
 
 Interview rules:
 
-**For mechanical questions — resolve yourself:**
-- If the brain dump says "use the existing interface" — investigate and fill in the name, signature, file path. Don't ask the user.
-- If you need to know the tech stack, test framework, import style — read the codebase. Don't ask.
-- If you need prior art or external approaches — research. Don't ask.
-- If you need what the project already decided — recall from journal. Don't ask.
+**For mechanical questions — resolve yourself via MMA workers (HTTP `POST /task`):**
+- If the brain dump says "use the existing interface" — dispatch `type: "investigate"` to fill in the name, signature, file path. Don't ask the user.
+- If you need to know the tech stack, test framework, import style — dispatch `type: "investigate"`. Don't ask.
+- If you need prior art or external approaches — dispatch `type: "research"`. Don't ask.
+- If you need what the project already decided — dispatch `type: "journal_recall"`. Don't ask.
+- **Never use inline Agent dispatches for these** — always use HTTP `POST /task` to the MMA server. Workers cost ~10x less and don't pollute main context.
 
 **For decision questions — ask the user:**
 - One question at a time. Don't dump 5 questions in one message.
@@ -118,7 +122,7 @@ When all sections are filled, present the complete set of confirmed decisions to
 
 Once the decision summary is confirmed:
 
-1. Gather all confirmed sections into a structured markdown document with `##` headings for: Context, Problem, Goals & Requirements (with Scope/Constraints/Success Metrics as `###` subsections), Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria
+1. Gather all confirmed sections into a structured markdown document using the 8-component `##` headings: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks. Use `###` for sections within each component.
 2. Dispatch:
    ```json
    { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
@@ -145,7 +149,7 @@ Once the decision summary is confirmed:
 
 ❌ **Deciding for the user.** "I'll go with Option A since it's simpler" — NO. Present all options, recommend one with reasoning, and wait for the user to pick.
 
-❌ **Marching through all 11 sections mechanically.** If the brain dump already covers 8 sections, don't re-ask them. Focus the dialogue on what's ambiguous or missing. Confirm the clear ones briefly and move on.
+❌ **Marching through all 8 components mechanically.** If the brain dump already covers most components, don't re-ask them. Focus the dialogue on what's ambiguous or missing. Confirm the clear ones briefly and move on.
 
 ❌ **Dispatching investigations without consent.** Always propose the three investigations and wait for user agreement before dispatching.
 

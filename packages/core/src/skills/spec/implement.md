@@ -35,7 +35,7 @@ The interactive design session (brain dump → investigation → structuring →
 
 ### Phase B — Write the Spec
 
-Write the spec file at the designated output path. The spec **must** follow this exact structure with YAML frontmatter:
+Write the spec file at the designated output path. The spec **must** follow this exact heading hierarchy — 8 component headings at `##` level, sections within each at `###`, sub-parts at `####`. This is the unified MMA/Forge specification standard:
 
 ```markdown
 ---
@@ -45,15 +45,17 @@ updated_at: YYYY-MM-DD
 
 # <Feature Title>
 
-### Context
+## Context
 
 ### Background
 [Who, what, why — the people, the system, the motivation]
 
+## Problem
+
 ### Problem
 [One clear problem statement + business impact]
 
-### Goals & Requirements
+## Goals & Requirements
 
 ### Goals
 [Numbered goals — what success looks like]
@@ -85,7 +87,7 @@ Executors must plan and implement each workstream as a separate feature slice wi
 ### Success metrics
 [Measurable table: metric | target | how measured]
 
-### Alternatives
+## Alternatives
 
 ### Driving factors
 [Numbered list of evaluation criteria used to compare options]
@@ -94,13 +96,10 @@ Executors must plan and implement each workstream as a separate feature slice wi
 [2-3 options with pros/cons against each driving factor]
 
 ### Comparison
-[Table comparing all options against all factors, with a verdict row]
+[Table comparing all options against all factors, with a verdict row.
+Include inlined decision records with rationale — why this approach, not just what.]
 
-### Decision Records
-[Inlined decisions with rationale — not references to external systems.
-Each record: numbered, decision statement, rationale explaining WHY.]
-
-### Technical Design
+## Technical Design
 
 ### Current state
 [What exists today at HEAD — verified by reading the codebase.
@@ -122,25 +121,45 @@ must be inlined verbatim — not "as defined in X".]
 #### Implementation details
 [Key technical decisions, algorithms, patterns]
 
-### Failure handling
-[Error cases, recovery, degraded behavior — with concrete HTTP status codes or
-error shapes where applicable]
-
 ### Impact
 [Breaking changes, migration path, rollout plan]
 
-### Testing Plan
+## Testing Plan
 
 ### Test strategy
-[Business-language summary of what the tests prove]
+[Business-language summary of what the tests prove.
+Table: layer | what is tested | tool | coverage target]
 
-### Technical details
-[Table: layer | what is tested | tool | coverage target]
+## Risks & Mitigations
 
-### Acceptance Criteria
+### Risks
+[Risk table: risk | likelihood | impact | description.
+Include failure handling — error cases, recovery, degraded behavior,
+concrete HTTP status codes or error shapes where applicable.]
+
+### Mitigations
+[Mitigation table: risk | mitigation | owner | status]
+
+## User Stories & Tasks
+
+### User stories
 [Numbered AC-N.N with checkboxes. EVERY functional requirement must map to at
-least one AC. Group by workstream if multiple workstreams exist.]
+least one acceptance criterion. Group by workstream if multiple workstreams exist.
+Format each as: **As a** role, **I want** action, **so that** benefit, with
+acceptance criteria as sub-items.]
 ```
+
+**The 8 `##` component headings are mandatory and must use these exact labels:**
+1. `## Context`
+2. `## Problem`
+3. `## Goals & Requirements`
+4. `## Alternatives`
+5. `## Technical Design`
+6. `## Testing Plan`
+7. `## Risks & Mitigations`
+8. `## User Stories & Tasks`
+
+These labels are the shared standard between MMA and Forge. Forge's `parseSpecSections` matches on `## <label>` (case-insensitive) to identify components, then reads `###` headings as sections within each component. Using different heading levels or different labels will break downstream parsing.
 
 ### Section Rules
 
@@ -155,7 +174,9 @@ least one AC. Group by workstream if multiple workstreams exist.]
 ### Phase C — Self-Validation
 
 Before finishing, verify:
-- Every section from the template is present and non-empty
+- All 8 `##` component headings are present: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks
+- Every `##` heading uses the exact label from the list above (case-insensitive match is tolerated but exact casing is preferred)
+- Sections within components use `###`, sub-parts use `####` — no other heading levels for spec content
 - Every functional requirement is numbered (FR-N) and maps to an acceptance criterion
 - Every acceptance criterion is numbered (AC-N.N) and has a checkbox
 - No section contradicts another
@@ -170,5 +191,5 @@ Before finishing, verify:
 After writing the spec file, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
-{"specPath": "<path where spec was written>", "sections": ["Context", "Problem", "Goals & Requirements", "..."], "acceptanceCriteriaCount": 15, "notes": "<any gaps found, codebase verification results, blocking prerequisites identified>"}
+{"specPath": "<path where spec was written>", "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Technical Design", "Testing Plan", "Risks & Mitigations", "User Stories & Tasks"], "acceptanceCriteriaCount": 15, "notes": "<any gaps found, codebase verification results, blocking prerequisites identified>"}
 ```
