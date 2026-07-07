@@ -90,7 +90,11 @@ function checkQuality(type, subtype, r) {
       if (outputLen < 20) return ['WARN', `spec output very short (${outputLen} chars)`];
       const specSummary = r?.output?.summary;
       const hasSpecPath = specSummary?.specPath != null;
-      return ['PASS', `${outputLen} chars output; specPath=${hasSpecPath}`];
+      const sections = specSummary?.sections ?? [];
+      const forgeComponents = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
+      const missingComponents = forgeComponents.filter(c => !sections.includes(c));
+      const forgeCompat = missingComponents.length === 0;
+      return [forgeCompat ? 'PASS' : 'WARN', `${outputLen} chars; specPath=${hasSpecPath}; forge-compat=${forgeCompat}${missingComponents.length > 0 ? ` missing=[${missingComponents.join(',')}]` : ''}`];
     }
     case 'plan': {
       if (outputLen < 20) return ['WARN', `plan output very short (${outputLen} chars)`];
@@ -337,7 +341,17 @@ export function verify(rec) {
       `delta round 2: ${findings.length} findings (task completed with prior context injected)`));
   }
 
-  // ⑰ Non-git cwd — verify delegate completed without worktree
+  // ⑰ Spec Forge-compat — spec output must list all 8 Forge-standard components
+  if (e.type === 'spec') {
+    const specSummary = r?.output?.summary;
+    const sections = specSummary?.sections ?? [];
+    const forgeComponents = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
+    const missing = forgeComponents.filter(c => !sections.includes(c));
+    out.push(C('forge-compat', missing.length === 0 ? 'PASS' : 'WARN',
+      `sections=${JSON.stringify(sections)}${missing.length > 0 ? ` missing=[${missing.join(',')}]` : ''}`));
+  }
+
+  // ⑱ Non-git cwd — verify delegate completed without worktree
   if (e.nonGitCwd) {
     const wt = r?.execution?.worktree;
     out.push(C('non-git-cwd', wt === null ? 'PASS' : 'FAIL',
