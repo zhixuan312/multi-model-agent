@@ -1,7 +1,18 @@
 ---
 name: mma-design
-description: Use when the user has an idea, problem, or feature request that needs to be turned into a formal spec — orchestrates the interactive design workflow from brain dump through structured interview to spec writing
-when_to_use: The user describes something they want to build, fix, or improve AND it needs structured design work before implementation. This skill takes the idea to a written spec. If the user already has a spec → skip to mma-plan. If the user already has a plan → use mma-execute-plan.
+description: Use when the user wants to build, change, or rethink something non-trivial — a new feature, a redesign, a refactor, a new project, or a fix to a systemic problem. Orchestrates the interactive design workflow (brain dump → investigation → structured decisions → written spec). Entry point for any work that should be designed before coded.
+when_to_use: >-
+  The user expresses intent to build, change, fix, redesign, refactor, or rethink something —
+  and the scope is large enough that jumping straight to code would be reckless (roughly: touches
+  3+ files, crosses module boundaries, or involves design choices). Trigger signals: "I want to
+  build/add X", "let's do X", "we need to rethink/redesign/refactor X", "X is broken/slow/wrong
+  and needs a proper fix", "how should we approach X" (when X is a project, not a codebase
+  question), "I have an idea", brain dumps, feature requests, problem statements, wishlists.
+  Also triggers when the user says "let's design" or "let's spec out" explicitly. Does NOT
+  trigger for: quick single-file fixes or renames (→ mma-delegate), codebase questions like
+  "how does X work" (→ mma-investigate), pure exploration "what are our options" without build
+  intent (→ mma-explore), work where a spec already exists on disk (→ mma-plan), or work where
+  a plan already exists (→ mma-execute-plan).
 version: "0.0.0-unreleased"
 ---
 
