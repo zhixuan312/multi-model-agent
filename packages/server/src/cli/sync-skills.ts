@@ -38,7 +38,9 @@ import {
 } from '../skill-install/manifest.js';
 import {
   SUPPORTED_SKILLS,
+  SUPPORTED_COMMANDS,
   readSkillContent,
+  readCommandContent,
   getSkillsRoot,
 } from '../skill-install/discover.js';
 import {
@@ -46,6 +48,8 @@ import {
   removeSkillFromClient,
   resolveClientInstallDir,
   UnknownTargetError,
+  writeCommandToClaudeCode,
+  removeCommandFromClaudeCode,
 } from '../skill-install/skill-installer-common.js';
 import { disabledTargets } from '../skill-install/disabled-state.js';
 
@@ -132,6 +136,15 @@ function readInstalledVersion(skillName: string, target: Client, homeDir: string
   const skillFile = path.join(dir, skillName, 'SKILL.md');
   try {
     return versionFromContent(fs.readFileSync(skillFile, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function readInstalledCommandVersion(commandName: string, homeDir: string): string | null {
+  const commandFile = path.join(homeDir, '.claude', 'commands', `${commandName}.md`);
+  try {
+    return versionFromContent(fs.readFileSync(commandFile, 'utf8'));
   } catch {
     return null;
   }
@@ -305,6 +318,79 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     }
   }
 
+  // Pass 3: commands — Claude Code only. Commands are installed to
+  // ~/.claude/commands/<name>.md and invoked via /<name>.
+  const claudeCodeActive = targets.includes('claude-code' as Client);
+  if (claudeCodeActive) {
+    for (const commandName of SUPPORTED_COMMANDS) {
+      const content = readCommandContent(commandName, skillsRoot);
+      if (content === null) {
+        outcome.errors.push({
+          skill: commandName,
+          target: 'claude-code' as Client,
+          reason: `Bundled command SKILL.md not found at ${path.join(skillsRoot, commandName, 'SKILL.md')}`,
+        });
+        continue;
+      }
+      const canonicalVersion = versionFromContent(content);
+      const installedVersion = readInstalledCommandVersion(commandName, homeDir);
+      const action: 'install' | 'update' | 'up-to-date' =
+        installedVersion === null
+          ? 'install'
+          : installedVersion !== canonicalVersion
+            ? 'update'
+            : 'up-to-date';
+
+      if (action === 'up-to-date') {
+        outcome.upToDate.push({ skill: commandName, target: 'claude-code' as Client });
+        continue;
+      }
+
+      if (parsed.dryRun) {
+        if (action === 'install') {
+          outcome.installed.push({ skill: commandName, target: 'claude-code' as Client, version: canonicalVersion });
+        } else {
+          outcome.updated.push({ skill: commandName, target: 'claude-code' as Client, from: installedVersion!, to: canonicalVersion });
+        }
+        continue;
+      }
+
+      try {
+        writeCommandToClaudeCode(commandName, content, homeDir, skillsRoot, authToken);
+        if (action === 'install') {
+          outcome.installed.push({ skill: commandName, target: 'claude-code' as Client, version: canonicalVersion });
+        } else {
+          outcome.updated.push({ skill: commandName, target: 'claude-code' as Client, from: installedVersion!, to: canonicalVersion });
+        }
+      } catch (err) {
+        outcome.errors.push({
+          skill: commandName,
+          target: 'claude-code' as Client,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  // Pass 4: orphan command cleanup — remove commands that are no longer in
+  // SUPPORTED_COMMANDS but were previously installed.
+  if (claudeCodeActive && !parsed.dryRun) {
+    const commandsDir = path.join(homeDir, '.claude', 'commands');
+    try {
+      const files = fs.readdirSync(commandsDir);
+      for (const file of files) {
+        if (!file.startsWith('mma-') || !file.endsWith('.md')) continue;
+        const name = file.replace(/\.md$/, '');
+        if (!(SUPPORTED_COMMANDS as readonly string[]).includes(name)) {
+          removeCommandFromClaudeCode(name, homeDir);
+          outcome.removed.push({ skill: name, target: 'claude-code' as Client });
+        }
+      }
+    } catch { /* commands dir may not exist yet */ }
+  }
+
+  const totalAssets = SUPPORTED_SKILLS.length + (claudeCodeActive ? SUPPORTED_COMMANDS.length : 0);
+
   if (parsed.json) {
     stdout(JSON.stringify({ dryRun: parsed.dryRun, targets, outcome }) + '\n');
   } else {
@@ -316,7 +402,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     if (outcome.upToDate.length > 0) parts.push(`${outcome.upToDate.length} up-to-date`);
     if (outcome.errors.length > 0) parts.push(`${outcome.errors.length} errors`);
     const summary = parts.length > 0 ? parts.join(', ') : 'nothing to do';
-    log(`${verb} ${SUPPORTED_SKILLS.length} skill(s) → ${targets.join(', ')} (${summary}).\n`);
+    log(`${verb} ${totalAssets} asset(s) → ${targets.join(', ')} (${summary}).\n`);
     for (const e of outcome.errors) stderr(`error: ${e.skill} → ${e.target}: ${e.reason}\n`);
   }
 

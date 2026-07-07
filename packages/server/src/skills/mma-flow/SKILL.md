@@ -1,30 +1,25 @@
 ---
 name: mma-flow
-description: Use when you want the packaged MMA-native design-to-merged-code flow that resumes from durable artifacts and optionally accelerates audit/review loops in Claude Code
-when_to_use: You want one packaged SDLC playbook that starts at design, writes the spec and plan, builds on an mma/* branch, reviews the diff, verifies the repository, opens a PR, and merges only after the deferred-decision gate passes.
+description: "Claude Code command: /mma-flow — packaged MMA-native design-to-merged-code SDLC playbook that resumes from durable artifacts and accelerates audit/review loops via workflow scripts"
+when_to_use: "User explicitly invokes /mma-flow. This is a Claude Code command, not an auto-matched skill."
 version: "0.0.0-unreleased"
 ---
 
-# mma-flow
+# /mma-flow
+
+This is a **Claude Code command**. The user invokes it by typing `/mma-flow`.
 
 ## Overview
 
-`mma-flow` is the packaged SDLC orchestration playbook for MMA. It is not a server endpoint and it does not add server-side workflow state. The `SKILL.md` is the cross-client source of truth; Claude Code can optionally accelerate the repetitive loop stages with packaged workflow scripts.
+`/mma-flow` is the packaged SDLC orchestration command for MMA. It is not a server endpoint and it does not add server-side workflow state. This file is the source of truth; Claude Code accelerates the repetitive loop stages with packaged workflow scripts installed alongside this command.
 
 ## When to Use
 
-**Use when:**
-- You want the full MMA-native flow from design through merged pull request
-- You need resume behavior from existing specs, plans, branches, and PR state
-- You want Design to stay git-free and Build to happen on a dedicated `mma/<slug>` branch
+The user types `/mma-flow` when they want the full MMA-native flow from design through merged pull request. Stage 0 LOCATE auto-detects the current position from durable artifacts on disk and resumes from the earliest incomplete stage.
 
-**Do not use when:**
-- You only need one lifecycle step such as `mma-design`, `mma-plan`, `mma-audit`, or `mma-review`
-- You want a new task type or server endpoint; `mma-flow` is packaged skill orchestration only
+## This is NOT an endpoint or a skill
 
-## This is NOT an endpoint
-
-`mma-flow` is a packaged orchestration skill. There is no `POST /task { "type": "flow" }`.
+`/mma-flow` is a Claude Code command installed to `~/.claude/commands/mma-flow.md`. There is no `POST /task { "type": "flow" }`. It is not auto-matched by intent — the user must explicitly invoke it. Other clients (Codex, Gemini, Cursor) do not support this command; they use the individual `mma-*` skills directly.
 
 ## Stage 0 LOCATE
 
@@ -47,6 +42,7 @@ type FlowStage =
 interface LocateSignals {
   latestSpecPath?: string | null;
   latestPlanPath?: string | null;
+  ledgerPath?: string | null;
   gitRepoPresent: boolean;
   sourceBranch?: string | null;
   projectBranch?: string | null;
@@ -54,6 +50,7 @@ interface LocateSignals {
   prExists: boolean;
   prMerged: boolean;
   deferredDecisionLedgerHasItems: boolean;
+  hasWritableGitHubRemote: boolean;
   currentSessionEvidence: {
     reviewPassed: boolean;
     wholeRepoGreen: boolean;
@@ -71,9 +68,12 @@ Resume rules:
 | `mma/*` branch exists, no commits beyond source branch | `B5` |
 | `mma/*` branch has unique commits and no current-session clean review evidence | `B6` |
 | Review passed in the current session and whole-repo green is not yet proven in the current session | `B7` |
-| Whole-repo green is proven in the current session and no PR exists | `B8` |
+| Whole-repo green is proven in the current session, no PR exists, and writable GitHub remote is available | `B8` |
+| Whole-repo green is proven in the current session, no PR exists, and writable GitHub remote is unavailable | Stop after `B7`; report that PR automation requires a writable GitHub remote and leave branch intact |
 | PR exists and is not merged | `B9` |
 | PR merged | Flow complete |
+
+**Multi-artifact disambiguation.** If multiple spec or plan files exist under the default artifact roots, LOCATE shall use the pair explicitly referenced in the current conversation. If no explicit reference exists, LOCATE shall choose the most recently modified spec under `docs/mma/specs/` and the most recently modified plan under `docs/mma/plans/` whose filename slug matches that spec's slug.
 
 The rationale for the current-session evidence requirement is architectural: with no new server endpoint and no new persisted orchestration state, the skill can durably infer artifact and git boundaries, while audit and verification sub-steps remain session-local unless and until they produce the next durable artifact boundary.
 
@@ -99,8 +99,30 @@ Build requires git. Before `B1`, confirm the working directory is inside a git r
 5. `B5` — run the packaged `segment-execute.js` on the project branch
 6. `B6` — run the packaged `segment-review.js`
 7. `B7` — run whole-repo verification on the project branch
-8. `B8` — push the project branch and create the pull request
+8. `B8` — verify PR prerequisites, push the project branch, and create the pull request
 9. `B9` — evaluate the Deferred-Decision Ledger, merge automatically only if it is empty
+
+### B1 — Ledger initialization
+
+At `B1`, create the Deferred-Decision Ledger file at `docs/mma/ledgers/YYYY-MM-DD-<slug>.json` with an empty `entries` array and commit it to the project branch. The file must also record `sourceBranch` (the branch detected at `B4` or the current branch if `B4` has not yet run) and the `slug`, `specPath`, and `planPath` so later stages can read them without re-deriving.
+
+### B7 — Whole-repo verification command discovery
+
+Discover repository verification commands in this order:
+
+1. If the user explicitly provided a verification command in the current conversation, use it.
+2. Otherwise, detect the repository's build and test commands from its configuration files (`package.json` scripts, `Makefile`, `pyproject.toml`, `Cargo.toml`, etc.) and run the standard build-then-test sequence.
+3. If no authoritative verification command can be identified, stop and ask the user before claiming whole-repo green.
+
+### B8 — Pre-PR prerequisites
+
+Before pushing or creating a PR, verify all three prerequisites:
+
+1. The repository has a writable remote named `origin` pointing to a GitHub-hosted repository.
+2. The `gh` CLI is installed and authenticated (`gh auth status` succeeds).
+3. The `sourceBranch` still exists on the remote (`git ls-remote origin <sourceBranch>` returns a ref).
+
+If any prerequisite fails, stop after `B7`, report which prerequisite failed, and leave the project branch intact for manual push and PR creation.
 
 ## Branch And PR Rules
 
@@ -243,7 +265,7 @@ Every supported client installs this playbook. Only Claude Code installs package
 
 ## Data Model
 
-The flow uses three artifact families:
+The flow uses four artifact families:
 
 1. **Spec artifacts**
 
@@ -257,7 +279,15 @@ docs/mma/specs/YYYY-MM-DD-<slug>.md
 docs/mma/plans/YYYY-MM-DD-<slug>.md
 ```
 
-3. **Claude Code workflow artifacts**
+3. **Deferred-Decision Ledger artifacts**
+
+```text
+docs/mma/ledgers/YYYY-MM-DD-<slug>.json
+```
+
+Created at `B1` as an empty `entries` array with `sourceBranch`, `slug`, `specPath`, and `planPath` metadata. Committed to the project branch. Appended to by subsequent stages. Read by `B9` to determine whether human decisions are required before merge.
+
+4. **Claude Code workflow artifacts**
 
 ```text
 <homeDir>/.claude/workflows/segment-spec-audit.js

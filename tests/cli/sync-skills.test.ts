@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
 import { listEntries, appendEntry } from '../../packages/server/src/skill-install/manifest.js';
-import { SUPPORTED_SKILLS } from '../../packages/server/src/skill-install/discover.js';
+import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
 function makeFakeHome(): string {
   const home = mkdtempSync(path.join(tmpdir(), 'mma-sync-home-'));
@@ -34,6 +34,10 @@ function writeFakeSkill(root: string, name: string, version: string, body = 'fix
 function makeFakeSkillsRoot(versionMap: Record<string, string>): string {
   const root = mkdtempSync(path.join(tmpdir(), 'mma-sync-skills-'));
   for (const [name, ver] of Object.entries(versionMap)) writeFakeSkill(root, name, ver);
+  // Also write command source files so command sync doesn't error
+  for (const cmd of SUPPORTED_COMMANDS) {
+    if (!versionMap[cmd]) writeFakeSkill(root, cmd, '4.0.2');
+  }
   return root;
 }
 
@@ -99,7 +103,7 @@ describe('sync-skills — bootstrap (empty manifest, dirs present)', () => {
       expect(e.targets.sort()).toEqual(['claude-code', 'codex']);
     }
 
-    expect(out.stdoutLines.join('')).toMatch(/Synced \d+ skill\(s\) → claude-code, codex/);
+    expect(out.stdoutLines.join('')).toMatch(/Synced \d+ asset\(s\) → claude-code, codex/);
   });
 });
 
@@ -208,6 +212,19 @@ describe('sync-skills — orphan removal', () => {
     const entries = listEntries(home);
     expect(entries.find((e) => e.name === orphanName)).toBeUndefined();
   });
+
+  it('removes orphan mma-*.md command files from ~/.claude/commands/', async () => {
+    const commandsDir = path.join(home, '.claude', 'commands');
+    mkdirSync(commandsDir, { recursive: true });
+    writeFileSync(path.join(commandsDir, 'mma-old-command.md'), '# stale command');
+
+    const code = await runSyncSkills({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
+    expect(code).toBe(0);
+
+    expect(existsSync(path.join(commandsDir, 'mma-old-command.md'))).toBe(false);
+    // mma-flow command should be installed (it's in SUPPORTED_COMMANDS)
+    expect(existsSync(path.join(commandsDir, 'mma-flow.md'))).toBe(true);
+  });
 });
 
 describe('sync-skills — dry-run', () => {
@@ -242,7 +259,7 @@ describe('sync-skills — dry-run', () => {
     // Manifest still empty (or at least no entries got appended)
     expect(listEntries(home).length).toBe(0);
 
-    expect(out.stdoutLines.join('')).toMatch(/Would sync \d+ skill\(s\)/);
+    expect(out.stdoutLines.join('')).toMatch(/Would sync \d+ asset\(s\)/);
   });
 });
 
@@ -331,11 +348,15 @@ describe('sync-skills — --if-exists postinstall guard', () => {
   });
 });
 
-describe('sync-skills — mma-flow workflows', () => {
-  it('installs workflow helpers for claude-code but not for codex', async () => {
+describe('sync-skills — mma-flow command (Claude Code only)', () => {
+  it('installs mma-flow as a command with workflows for claude-code, skips for codex', async () => {
     const home = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot(Object.fromEntries(SUPPORTED_SKILLS.map((skill) => [skill, '4.0.2'])));
-    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    // mma-flow is a command, not a skill — add its source files manually
+    const flowDir = path.join(skillsRoot, 'mma-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(path.join(flowDir, 'SKILL.md'), '---\nname: mma-flow\nversion: 4.0.2\n---\n# /mma-flow\n', 'utf8');
+    const workflowDir = path.join(flowDir, 'workflows');
     mkdirSync(workflowDir, { recursive: true });
     writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default "spec";\n', 'utf8');
     writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default "plan";\n', 'utf8');
@@ -346,13 +367,18 @@ describe('sync-skills — mma-flow workflows', () => {
       const out1 = captureOutput();
       const code1 = await runSyncSkills({ argv: ['--target=claude-code'], homeDir: home, skillsRoot, stdout: out1.stdout, stderr: out1.stderr });
       expect(code1).toBe(0);
-      // Check that workflows directory was created for claude-code
+      // Command file installed to ~/.claude/commands/
+      expect(existsSync(path.join(home, '.claude', 'commands', 'mma-flow.md'))).toBe(true);
+      // NOT installed as a skill
+      expect(existsSync(path.join(home, '.claude', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
+      // Workflows installed
       expect(existsSync(path.join(home, '.claude', 'workflows'))).toBe(true);
 
       const out2 = captureOutput();
       const code2 = await runSyncSkills({ argv: ['--target=codex'], homeDir: home, skillsRoot, stdout: out2.stdout, stderr: out2.stderr });
       expect(code2).toBe(0);
-      // Codex does not install workflows
+      // Codex does not get mma-flow command or workflows
+      expect(existsSync(path.join(home, '.codex', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
       expect(existsSync(path.join(home, '.codex', 'workflows', 'segment-review.js'))).toBe(false);
     } finally {
       removeFakeHome(home);

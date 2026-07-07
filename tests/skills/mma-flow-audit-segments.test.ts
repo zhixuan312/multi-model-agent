@@ -13,7 +13,7 @@ describe('mma-flow audit playbook assets', () => {
     const { data, content } = matter(raw);
 
     expect(data.name).toBe('mma-flow');
-    expect(String(data.description)).toMatch(/^Use when\b/);
+    expect(String(data.description)).toContain('mma-flow');
     expect(data.version).toBe('0.0.0-unreleased');
     expect(content).toContain('Stage 0 LOCATE');
     expect(content).toContain('1. `D1` — run `mma-design`');
@@ -148,5 +148,41 @@ describe('mma-flow audit playbook assets', () => {
       fixedByAgent: false,
       contextBlockId: 'cb-plan-clean',
     });
+  });
+
+  it('caps the plan audit loop at three rounds and blocks when high findings remain', async () => {
+    const { runSegmentPlanAudit } = await import(planSegmentPath);
+    let audits = 0;
+    let fixes = 0;
+    const runtime = {
+      log: () => undefined,
+      phase: async (_name: string, fn: () => Promise<unknown>) => fn(),
+      agent: async (request: { skill: string }) => {
+        if (request.skill === 'mma-audit') {
+          audits += 1;
+          return {
+            findingsSummary: `plan round ${audits}`,
+            findings: [`high-${audits}`],
+            counts: { critical: 0, high: 1, medium: 0, low: 0 },
+            contextBlockId: `cb-plan-${audits}`,
+          };
+        }
+        fixes += 1;
+        return { applied: true };
+      },
+    };
+
+    const result = await runSegmentPlanAudit(
+      { planPath: '/tmp/plan.md', cwd: '/repo', autofix: true, cap: 3 },
+      runtime,
+    );
+
+    expect(audits).toBe(3);
+    expect(fixes).toBe(2);
+    expect(result.roundsRun).toBe(3);
+    expect(result.clean).toBe(false);
+    expect(result.blockingRemaining).toBe(true);
+    expect(result.proceed).toBe(false);
+    expect(result.note).toContain('Critical or high findings remain after round 3');
   });
 });

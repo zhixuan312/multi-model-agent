@@ -36,6 +36,8 @@ import { tmpdir } from 'node:os';
 import {
   installClaudeCode,
   uninstallClaudeCode,
+  installClaudeCodeCommand,
+  uninstallClaudeCodeCommand,
 } from '../../packages/server/src/skill-install/skill-installers/claude-code.js';
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
@@ -368,7 +370,7 @@ describe('uninstallClaudeCode', () => {
     }
   });
 
-  it('copies packaged workflow files into <homeDir>/.claude/workflows/', () => {
+  it('copies packaged workflow files into <homeDir>/.claude/workflows/ via command install', () => {
     const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot();
     const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
@@ -377,13 +379,14 @@ describe('uninstallClaudeCode', () => {
     writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default 2;\n', 'utf8');
 
     try {
-      installClaudeCode({
-        skillName: 'mma-flow',
+      installClaudeCodeCommand({
+        commandName: 'mma-flow',
         content: '# mma-flow\n',
         homeDir,
         skillsRoot,
       });
 
+      expect(readFileSync(path.join(homeDir, '.claude', 'commands', 'mma-flow.md'), 'utf8')).toBe('# mma-flow\n');
       expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'), 'utf8')).toBe('export default 1;\n');
       expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'), 'utf8')).toBe('export default 2;\n');
     } finally {
@@ -411,7 +414,7 @@ describe('uninstallClaudeCode', () => {
     }
   });
 
-  it('removes stale packaged workflow files for the same skill during reinstall and uninstall', () => {
+  it('removes stale packaged workflow files for the same command during reinstall and uninstall', () => {
     const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot();
     const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
@@ -420,16 +423,16 @@ describe('uninstallClaudeCode', () => {
     writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default "two";\n', 'utf8');
 
     try {
-      installClaudeCode({
-        skillName: 'mma-flow',
+      installClaudeCodeCommand({
+        commandName: 'mma-flow',
         content: '# mma-flow\n',
         homeDir,
         skillsRoot,
       });
 
       rmSync(path.join(workflowDir, 'segment-plan-audit.js'));
-      installClaudeCode({
-        skillName: 'mma-flow',
+      installClaudeCodeCommand({
+        commandName: 'mma-flow',
         content: '# mma-flow\n',
         homeDir,
         skillsRoot,
@@ -438,8 +441,9 @@ describe('uninstallClaudeCode', () => {
       expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(true);
       expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'))).toBe(false);
 
-      uninstallClaudeCode('mma-flow', homeDir);
+      uninstallClaudeCodeCommand('mma-flow', homeDir);
       expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(false);
+      expect(existsSync(path.join(homeDir, '.claude', 'commands', 'mma-flow.md'))).toBe(false);
     } finally {
       rmFakeDir(homeDir);
       rmFakeDir(skillsRoot);
