@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "5.7.1",
+  "version": "5.8.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex), routing logic, config schema, and sandbox primitives.",

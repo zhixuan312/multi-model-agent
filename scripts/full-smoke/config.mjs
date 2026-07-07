@@ -31,7 +31,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 22-scenario release gate.
+// The 28-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //

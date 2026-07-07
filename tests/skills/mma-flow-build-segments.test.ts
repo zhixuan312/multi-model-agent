@@ -127,4 +127,59 @@ describe('mma-flow build segments', () => {
     ]);
     expect(result).toEqual({ ok: true, taskId: 'task-123' });
   });
+
+  it('caps the review loop at three rounds and blocks when critical findings remain', async () => {
+    const { runSegmentReview } = await import(reviewSegmentPath);
+    let reviews = 0;
+    let fixes = 0;
+    const runtime = {
+      log: () => undefined,
+      phase: async (_name: string, fn: () => Promise<unknown>) => fn(),
+      agent: async (request: { skill: string }) => {
+        if (request.skill === 'mma-review') {
+          reviews += 1;
+          return {
+            findingsSummary: `review round ${reviews}`,
+            findings: [`critical-${reviews}`],
+            counts: { critical: 1, high: 0, medium: 0, low: 0 },
+            contextBlockId: `cb-review-${reviews}`,
+          };
+        }
+        fixes += 1;
+        return { applied: true };
+      },
+    };
+
+    const result = await runSegmentReview(
+      { cwd: '/repo', sourceBranch: 'master', autofix: true, cap: 3 },
+      runtime,
+    );
+
+    expect(reviews).toBe(3);
+    expect(fixes).toBe(2);
+    expect(result.roundsRun).toBe(3);
+    expect(result.clean).toBe(false);
+    expect(result.blockingRemaining).toBe(true);
+    expect(result.proceed).toBe(false);
+    expect(result.sourceBranch).toBe('master');
+    expect(result.note).toContain('Critical or high findings remain after round 3');
+  });
+
+  it('returns STOP_AFTER_B7 when writable GitHub remote is unavailable', async () => {
+    const { pickResumeStage } = await import(executeSegmentPath);
+
+    expect(pickResumeStage({
+      latestSpecPath: 'docs/mma/specs/2026-07-07-demo.md',
+      latestPlanPath: 'docs/mma/plans/2026-07-07-demo.md',
+      gitRepoPresent: true,
+      sourceBranch: 'main',
+      projectBranch: 'mma/demo',
+      projectBranchHasUniqueCommits: true,
+      prExists: false,
+      prMerged: false,
+      deferredDecisionLedgerHasItems: false,
+      hasWritableGitHubRemote: false,
+      currentSessionEvidence: { reviewPassed: true, wholeRepoGreen: true },
+    })).toBe('STOP_AFTER_B7');
+  });
 });

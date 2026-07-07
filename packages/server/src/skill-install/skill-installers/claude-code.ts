@@ -124,6 +124,50 @@ export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
 }
 
 /**
+ * Options for installing a Claude Code command.
+ */
+export interface ClaudeCodeCommandOpts {
+  commandName: string;
+  content: string;
+  homeDir: string;
+  skillsRoot: string;
+  authToken?: string;
+}
+
+/**
+ * Write (or overwrite) a command file for Claude Code.
+ *
+ * Target path: `<homeDir>/.claude/commands/<commandName>.md`
+ *
+ * Commands are explicitly invoked by the user via `/<commandName>`.
+ * Also syncs any packaged workflow scripts for the command.
+ */
+export function installClaudeCodeCommand(opts: ClaudeCodeCommandOpts): void {
+  const { commandName, content, homeDir, skillsRoot, authToken } = opts;
+
+  const inlinedContent = inlineIncludes('Claude Code command writer', content, skillsRoot, authToken);
+
+  const commandsDir = path.join(homeDir, '.claude', 'commands');
+  fs.mkdirSync(commandsDir, { recursive: true });
+  fs.writeFileSync(path.join(commandsDir, `${commandName}.md`), inlinedContent, 'utf-8');
+  syncPackagedWorkflows(homeDir, skillsRoot, commandName);
+}
+
+/**
+ * Uninstall a Claude Code command by removing its file and workflow assets.
+ */
+export function uninstallClaudeCodeCommand(commandName: string, homeDir: string): void {
+  const targetDir = workflowDirFor(homeDir);
+  for (const fileName of readWorkflowManifest(homeDir, commandName)) {
+    fs.rmSync(path.join(targetDir, fileName), { force: true });
+  }
+  fs.rmSync(workflowManifestPath(homeDir, commandName), { force: true });
+
+  const commandFile = path.join(homeDir, '.claude', 'commands', `${commandName}.md`);
+  fs.rmSync(commandFile, { force: true });
+}
+
+/**
  * Uninstall a Claude Code skill by removing its directory.
  *
  * Target: `<homeDir>/.claude/skills/<skillName>/`

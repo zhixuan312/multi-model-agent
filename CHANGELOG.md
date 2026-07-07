@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.0] - 2026-07-07
+
+**mma-flow command, Forge-aligned spec/design output, command install surface.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- **`/mma-flow` Claude Code command** — self-locating SDLC playbook (explore → spec → plan → execute → verify → review → green). Installed to `~/.claude/commands/` via `mma sync-skills`, explicitly invoked (not auto-matched).
+- **Command install surface** — `SUPPORTED_COMMANDS` array in `discover.ts`, `installClaudeCodeCommand` / `uninstallClaudeCodeCommand` / `readCommandContent` in the installer. Sync-skills Pass 3 installs commands, Pass 4 removes orphan `mma-*.md` command files.
+- Smoke verify check ⑰ (`forge-compat`) validates spec output contains all 8 Forge-standard component headings.
+- TDD test coverage: `spec-forge-compat.test.ts` (4 tests), `mma-design-dispatch.test.ts` (4 tests), extended `sync-skills.test.ts` and `mma-flow-packaged-assets.test.ts`.
+
+### Changed
+- **Spec template aligned to Forge 8-component standard** — heading levels promoted (`###` → `##` for components), added `Risks & Mitigations` and `User Stories & Tasks`, folded `Decision Records` into `Alternatives`.
+- **mma-design interview aligned to 8 Forge-compatible components** and dispatch instructions now explicitly require HTTP `POST /task` (not inline Agent dispatches) for investigate/research/journal_recall workers.
+- Smoke fixture `design-decisions.md` updated to use all 8 Forge-standard component headings.
+
 ## [5.7.1] - 2026-07-06
 
 **mma-design skill refinements + context block soft-skip.** `SCHEMA_VERSION` unchanged (still 6).

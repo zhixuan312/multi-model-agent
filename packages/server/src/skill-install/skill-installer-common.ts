@@ -13,7 +13,7 @@ import {
   readSkillContent,
   SUPPORTED_SKILLS,
 } from './discover.js';
-import { installClaudeCode, uninstallClaudeCode } from './skill-installers/claude-code.js';
+import { installClaudeCode, uninstallClaudeCode, installClaudeCodeCommand, uninstallClaudeCodeCommand } from './skill-installers/claude-code.js';
 import { installGeminiCli, uninstallGeminiCli } from './skill-installers/gemini-cli.js';
 import { installCodexCli, uninstallCodexCli } from './skill-installers/codex-cli.js';
 import { installCursor, uninstallCursor } from './skill-installers/cursor.js';
@@ -171,6 +171,25 @@ export function removeSkillFromClient(
       throw new Error(`install-skill: unknown target: ${_exhaustive as string}`);
     }
   }
+}
+
+// ── Claude Code commands (explicit /slash-command invocation) ────────────────
+
+export function writeCommandToClaudeCode(
+  commandName: string,
+  content: string,
+  homeDir: string,
+  skillsRoot: string,
+  authToken?: string,
+): void {
+  installClaudeCodeCommand({ commandName, content, homeDir, skillsRoot, authToken });
+}
+
+export function removeCommandFromClaudeCode(
+  commandName: string,
+  homeDir: string,
+): void {
+  uninstallClaudeCodeCommand(commandName, homeDir);
 }
 
 // ── Orchestration (was server/src/install/orchestrate.ts) ───────────────────

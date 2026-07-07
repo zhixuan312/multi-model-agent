@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
 import { runDisable, runEnable } from '../../packages/server/src/cli/toggle.js';
 import { listEntries } from '../../packages/server/src/skill-install/manifest.js';
-import { SUPPORTED_SKILLS } from '../../packages/server/src/skill-install/discover.js';
+import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 import {
   disabledStatePath,
   readDisabledState,
@@ -51,6 +51,7 @@ function writeFakeSkill(root: string, name: string, version: string): void {
 function makeFakeSkillsRoot(): string {
   const root = mkdtempSync(path.join(tmpdir(), 'mma-toggle-skills-'));
   for (const s of SUPPORTED_SKILLS) writeFakeSkill(root, s, '4.0.2');
+  for (const c of SUPPORTED_COMMANDS) writeFakeSkill(root, c, '4.0.2');
   return root;
 }
 

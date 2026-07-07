@@ -24,6 +24,18 @@ export const SUPPORTED_SKILLS = [
   'mma-spec',
   'mma-plan',
   'mma-design',
+] as const;
+
+/**
+ * Commands are Claude Code-only packaged assets installed to
+ * `~/.claude/commands/<name>.md`. They are explicitly invoked by the user
+ * via `/<name>` — unlike skills, which are auto-matched by intent.
+ *
+ * Commands carry workflow scripts (`.js` files under `workflows/`) that
+ * Claude Code can execute. Other clients do not support commands or
+ * workflow scripts.
+ */
+export const SUPPORTED_COMMANDS = [
   'mma-flow',
 ] as const;
 
@@ -91,6 +103,19 @@ export function readSkillContent(skillName: string, skillsRoot?: string): string
   const skillFile = path.join(getSkillsRoot(skillsRoot), skillName, 'SKILL.md');
   try {
     return fs.readFileSync(skillFile, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * Read the content of a command's SKILL.md file (same source layout as skills).
+ */
+export function readCommandContent(commandName: string, skillsRoot?: string): string | null {
+  const commandFile = path.join(getSkillsRoot(skillsRoot), commandName, 'SKILL.md');
+  try {
+    return fs.readFileSync(commandFile, 'utf-8');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;

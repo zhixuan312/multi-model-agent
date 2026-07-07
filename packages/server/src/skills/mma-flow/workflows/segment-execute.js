@@ -16,7 +16,10 @@ export function pickResumeStage(signals) {
   if (!signals.projectBranchHasUniqueCommits) return 'B5';
   if (!signals.currentSessionEvidence.reviewPassed) return 'B6';
   if (!signals.currentSessionEvidence.wholeRepoGreen) return 'B7';
-  if (!signals.prExists) return 'B8';
+  if (!signals.prExists) {
+    if (signals.hasWritableGitHubRemote === false) return 'STOP_AFTER_B7';
+    return 'B8';
+  }
   if (!signals.prMerged) return 'B9';
   return 'COMPLETE';
 }

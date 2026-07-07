@@ -82,11 +82,11 @@ describe('contract: skill manifest surface', () => {
       });
 
       it('description starts with "Use when" or "Use first" (skill-discovery convention)', () => {
-        // Per docs/SKILL_WRITING_GUIDELINES.md rule #1 — description must answer
-        // "should I use this right now?" via concrete triggering conditions, not
-        // a workflow summary. Anthropic + superpowers both enforce this pattern;
-        // descriptions that summarize the workflow cause Claude to shortcut on
-        // the description and skip the body.
+        // Commands (e.g. mma-flow) are explicitly invoked via /name, not auto-matched
+        // by intent — the "Use when" convention does not apply to them.
+        const COMMANDS = ['mma-flow'];
+        if (COMMANDS.includes(skillName)) return;
+
         expect(
           fm.description,
           `${skillName} description must start with "Use when" or "Use first" — see docs/SKILL_WRITING_GUIDELINES.md rule #1`,

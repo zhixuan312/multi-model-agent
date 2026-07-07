@@ -50,5 +50,5 @@ Fix issues in the worktree spec file. Report CUMULATIVE state:
 ## Output
 
 ```json
-{"specPath": "<path>", "sections": ["Context", "Problem", "..."], "acceptanceCriteriaCount": 18, "notes": "Added AC-12 for performance target; strengthened 'should be fast' to 'p99 < 200ms'; surfaced hidden assumption about Node >= 22"}
+{"specPath": "<path>", "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Technical Design", "Testing Plan", "Risks & Mitigations", "User Stories & Tasks"], "acceptanceCriteriaCount": 18, "notes": "Added AC-12 for performance target; strengthened 'should be fast' to 'p99 < 200ms'; surfaced hidden assumption about Node >= 22"}
 ```

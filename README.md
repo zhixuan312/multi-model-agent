@@ -137,6 +137,14 @@ A bare `mma disable` covers the auto-detected clients (claude-code, codex). Curs
 
 Skills are the surface your AI client sees. `mma sync-skills` writes the table below into the client's skill index and keeps it reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
 
+### SDLC skills
+
+| Skill | Use when |
+|---|---|
+| `mma-design` | Interactive design workflow — brain dump → structured interview → investigate/research/recall → dispatch `mma-spec`. Teaches the main agent to resolve mechanical questions via workers and surface only decision questions to the user. |
+| `mma-spec` | Write a formal specification from structured design decisions. Output follows the Forge 8-component standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
+| `mma-plan` | Write a TDD implementation plan from a spec file. Output uses `### Task I-N:` headings with `**Files:**` blocks and checkbox steps. |
+
 ### Work-delegation skills
 
 | Skill | Use when |
@@ -159,6 +167,12 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
 | `mma-orchestrate` | A multi-phase workflow needs a session-persistent LLM brain for orchestration — send a structured prompt, get a structured response, reuse the session across workflow phases. Uses the `main` tier (no reviewer, no worktree). |
 | `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
+
+### Commands (Claude Code only)
+
+| Command | Invoke with | What it does |
+|---|---|---|
+| `/mma-flow` | Type `/mma-flow` in Claude Code | Self-locating SDLC playbook — detects which stage the project is at (idea → spec → plan → execute → verify → review → green), confirms the design freeze, then runs the autonomous Build chain to committed code. |
 
 ### Two generic usage samples
 
