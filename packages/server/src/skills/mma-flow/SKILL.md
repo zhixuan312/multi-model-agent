@@ -1,6 +1,6 @@
 ---
 name: mma-flow
-description: "Claude Code command: /mma-flow — packaged MMA-native design-to-merged-code SDLC playbook that resumes from durable artifacts and accelerates audit/review loops via workflow scripts"
+description: "Claude Code command: /mma-flow — MMA-native design-to-merged-code SDLC playbook that resumes from durable artifacts"
 when_to_use: "User explicitly invokes /mma-flow. This is a Claude Code command, not an auto-matched skill."
 version: "0.0.0-unreleased"
 ---
@@ -11,7 +11,7 @@ This is a **Claude Code command**. The user invokes it by typing `/mma-flow`.
 
 ## Overview
 
-`/mma-flow` is the packaged SDLC orchestration command for MMA. It is not a server endpoint and it does not add server-side workflow state. This file is the source of truth; Claude Code accelerates the repetitive loop stages with packaged workflow scripts installed alongside this command.
+`/mma-flow` is the packaged SDLC orchestration command for MMA. It is not a server endpoint and it does not add server-side workflow state. This file is the source of truth; the main agent drives all loop stages (audit→fix→re-audit) inline via the mma-* skill tools.
 
 ## When to Use
 
@@ -92,12 +92,12 @@ Do not require git validation before Build begins.
 
 Build requires git. Before `B1`, confirm the working directory is inside a git repository. If git is unavailable or the directory is not a git repository, stop before Build, explain the failure, and keep the Design artifacts intact.
 
-1. `B1` — run the packaged `segment-spec-audit.js`
+1. `B1` — run `mma-audit` (subtype: spec) in a loop (audit→fix→re-audit, cap 3)
 2. `B2` — run `mma-plan` and write the plan into `docs/mma/plans/`
-3. `B3` — run the packaged `segment-plan-audit.js`
+3. `B3` — run `mma-audit` (subtype: plan) in a loop (audit→fix→re-audit, cap 3)
 4. `B4` — create the project branch from the detected source branch
-5. `B5` — run the packaged `segment-execute.js` on the project branch
-6. `B6` — run the packaged `segment-review.js`
+5. `B5` — run `mma-execute-plan` on the project branch
+6. `B6` — run `mma-review` on changed files
 7. `B7` — run whole-repo verification on the project branch
 8. `B8` — verify PR prerequisites, push the project branch, and create the pull request
 9. `B9` — evaluate the Deferred-Decision Ledger, merge automatically only if it is empty
@@ -151,79 +151,6 @@ Create the PR only after `B7` passes in the current session.
 
 ## Audit And Review Loop Policy
 
-The `mma-flow` workflow script argument and return contracts are:
-
-```ts
-export interface AuditLoopRound {
-  round: number;
-  findingsSummary: string;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  fixedByAgent: boolean;
-  contextBlockId?: string | null;
-}
-
-export interface AuditLoopResultBase {
-  cwd: string;
-  roundsRun: number;
-  clean: boolean;
-  rounds: AuditLoopRound[];
-  openFindings: string[];
-  blockingRemaining: boolean;
-  proceed: boolean;
-  note: string;
-  contextBlockId?: string | null;
-}
-
-export interface SegmentSpecAuditArgs {
-  specPath: string;
-  cwd?: string;
-  cap?: number;
-  autofix?: boolean;
-  contextBlockId?: string;
-}
-
-export interface SegmentSpecAuditResult extends AuditLoopResultBase {
-  specPath: string;
-}
-
-export interface SegmentPlanAuditArgs {
-  planPath: string;
-  cwd: string;
-  cap?: number;
-  autofix?: boolean;
-  contextBlockId?: string;
-}
-
-export interface SegmentPlanAuditResult extends AuditLoopResultBase {
-  planPath: string;
-}
-
-export interface SegmentReviewArgs {
-  cwd: string;
-  sourceBranch: string;
-  cap?: number;
-  autofix?: boolean;
-  contextBlockId?: string;
-}
-
-export interface SegmentReviewResult extends AuditLoopResultBase {
-  sourceBranch: string;
-}
-```
-
-`segment-execute.js` preserves the existing grouped execution semantics and is invoked on the project branch:
-
-```ts
-export interface SegmentExecuteArgs {
-  cwd: string;
-  planPath: string;
-  contextBlockIds?: string[];
-}
-```
-
 `B1`, `B3`, and `B6` all use the same policy:
 
 1. Run the relevant MMA worker.
@@ -261,11 +188,11 @@ At `B9`:
 
 ## Client Portability
 
-Every supported client installs this playbook. Only Claude Code installs packaged workflow helpers. Gemini, Codex, and Cursor users follow the same stage order manually from this `SKILL.md`.
+Every supported client installs this playbook. All clients follow the same stage order from this `SKILL.md`.
 
 ## Data Model
 
-The flow uses four artifact families:
+The flow uses three artifact families:
 
 1. **Spec artifacts**
 
@@ -287,13 +214,4 @@ docs/mma/ledgers/YYYY-MM-DD-<slug>.json
 
 Created at `B1` as an empty `entries` array with `sourceBranch`, `slug`, `specPath`, and `planPath` metadata. Committed to the project branch. Appended to by subsequent stages. Read by `B9` to determine whether human decisions are required before merge.
 
-4. **Claude Code workflow artifacts**
-
-```text
-<homeDir>/.claude/workflows/segment-spec-audit.js
-<homeDir>/.claude/workflows/segment-plan-audit.js
-<homeDir>/.claude/workflows/segment-execute.js
-<homeDir>/.claude/workflows/segment-review.js
-```
-
-No new server-side schema, task type, or HTTP route is introduced. The only new packaged assets are skill files and client-side workflow scripts.
+No new server-side schema, task type, or HTTP route is introduced.

@@ -13,15 +13,15 @@ mma-review is the **pre-merge gate**. Send code files (or a diff) to a worker fo
 
 Each file is reviewed independently in parallel; results are index-aligned with `target.paths`.
 
-**Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses regardless of `focus`.
+**Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses.
 
 ## When to Use
 
 **Use when:**
 - 1+ source code files just changed (post-implementation review)
 - Pre-merge sanity check on a focused diff
-- Security-sensitive code path (`focus: ["security"]`)
-- A specialized review pass (e.g. `focus: ["performance"]` on hot-path code)
+- Security-sensitive code path (use `prompt: "focus on security"`)
+- A specialized review pass (e.g. `prompt: "focus on performance"` on hot-path code)
 
 **Don't use when:**
 - The thing being reviewed is prose / spec / config → `mma-audit` (better-suited prompt template)
@@ -46,27 +46,22 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 ```json
 {
   "type": "review",
-  "target": {
-    "inline": "inline code snippet (optional if target.paths given)",
-    "paths": ["/project/src/auth/login.ts"]
-  },
-  "focus": ["correctness", "security"],
-  "subtype": "default",
+  "prompt": "optional review instruction or focus area",
+  "target": { "paths": ["/project/src/auth/login.ts"] },
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `prompt` | string | no | Optional instruction to focus the review (e.g. "focus on security") |
 | `target.inline` | string | no | Inline code snippet to review |
-| `focus` | string[] | no | Any of `security`, `performance`, `correctness`, `style`. Omit for general review. |
-| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
-| `target.paths` | string[] | no | Files to review (one worker per file, parallel) |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — useful for design docs the reviewer should validate against |
+| `target.paths` | string[] | no | Files to review |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — useful for design docs the reviewer should validate against |
 
-Either `target.inline` or `target.paths` (or both) must be provided.
+Exactly one of `target.inline` or `target.paths` must be provided (not both).
 
-> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 ## Full example
 
@@ -76,7 +71,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"review","focus":["security","correctness"],"target":{"paths":["/project/src/auth/login.ts"]}}' \
+  -d '{"type":"review","prompt":"focus on security and correctness","target":{"paths":["/project/src/auth/login.ts"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -87,33 +82,32 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-review` do not produce commits — `execution.worktree` is always `null`.
+The main agent reads findings from the terminal envelope at `output.summary.findings` (NOT `output.findings` — that field does not exist). `output.summary` is the parsed refiner JSON; findings are nested inside it. Read-only routes like `mma-review` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
-Every finding has this shape:
+Every finding in `output.summary.findings` has this shape:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Worker-assigned, e.g. `F1`, `F2`. Stable across chain. |
-| `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
+| `weight` | `'critical' \| 'high' \| 'medium' \| 'low'` | Severity tier. |
 | `category` | string | Topical bucket, e.g. `test-gap`, `cross-file-ripple`. |
 | `claim` | string | One-sentence summary. |
-| `evidence` | string ≥20 chars | Verbatim from source when grounded. |
-| `suggestion?` | string | Optional fix recommendation. |
-| `source` | `'implementer' \| 'reviewer'` | Who produced the finding. |
-
-`annotatorConfidence` and `evidenceGrounded` are retired — they were v4 fields with no producers.
+| `evidence` | string | Verbatim from source when grounded. |
+| `file` | string | File path where the finding was observed. |
+| `line` | number | Line number in the file. |
+| `suggestion` | string | Fix recommendation. |
+| `preExisting` | boolean | `true` if the issue predates the change under review. |
 
 ### Recommended rendering by the main agent
 
-1. Show ALL findings — never silently drop. Severity and grounding are soft
+1. Show ALL findings — never silently drop. Weight and grounding are soft
    signals, not gates.
-2. Default sort: severity (critical → low), then `id` ascending.
-3. `severity` is the authoritative value — use it directly.
+2. Default sort: weight (critical → low).
+3. `weight` is the authoritative severity — use it directly.
 4. Mark findings with `evidence` shorter than 30 chars as "low-evidence"
    (lighter color or `(low evidence)` annotation). User decides what to do.
-5. Severity-tier counts feed the dashboard.
+5. Weight-tier counts feed the dashboard.
 
 ## Best practices
 
@@ -128,8 +122,8 @@ Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel revi
 ❌ **Reviewing a plan/spec markdown with `mma-review`**
 The reviewer is tuned for code constructs (types, call sites, test coverage). On prose it produces vague nits. **Fix:** use `mma-audit` for docs/specs, `mma-review` for source.
 
-❌ **Omitting `focus` and getting watery findings**
-A general review surfaces low-signal style nits alongside real bugs. **Fix:** specify `focus: ["correctness"]` or `["security"]` to bias the reviewer toward the dimension you care about.
+❌ **Omitting a focus direction and getting watery findings**
+A general review surfaces low-signal style nits alongside real bugs. **Fix:** use `prompt` to bias the reviewer toward the dimension you care about (e.g. `"focus on correctness"` or `"focus on security"`).
 
 ❌ **Inlining the spec the reviewer should validate against**
 If the reviewer needs to check the diff against a design doc, register the doc once via `mma-context-blocks` and pass the `contextBlockIds`. Inlining N times wastes tokens.
@@ -154,32 +148,8 @@ The block is registered server-side at task completion; no caller action is need
 
 ## Outcome semantics
 
-Every task result carries outcome fields that describe the code review's conclusion status:
+**Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the review uncover issues? |
-| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "Test gap: login() has no null-username case" or "Code is clean across all review criteria"). |
-| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the reviewer explicitly stated it. |
-| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
-
-### Enum values
-
-- **`found`** — the review surfaced one or more issues (findings) across one or more review categories (test gap, cross-file ripple, race, leak, security, performance, etc.). This indicates the code needs rework before merge.
-- **`clean`** — the review completed and found zero issues. The code passes the review bar and is safe to merge.
-- **`not_applicable`** — the review could not proceed (e.g., wrong input type, missing preconditions, or system error). This is rare; most reviews resolve to `found` or `clean`.
-
-### Empty findings ≠ failure
-
-A crucial semantic: **empty findings does NOT mean `completed: false` or a failed review.** Finding nothing wrong is a successful review outcome — it means the code passed inspection. A review with zero findings is `completed: true` with `findingsOutcome: 'clean'`.
-
-### Per-route legal outcomes
-
-The legal outcomes for this route are: `['found', 'clean']`
-
-- **`found`** — one or more issues were detected across the review categories.
-- **`clean`** — zero issues were detected; the code is ready to merge.
-
-The outcome `not_applicable` is not legal for `mma-review` (except on actual precondition failures) because a code review always produces a verdict: either issues found or clean.
+**Empty findings is not a failure.** A review with zero findings is a success — the code passed inspection. Check `output.summary.findings.length === 0`.
 
 @include _shared/error-handling.md

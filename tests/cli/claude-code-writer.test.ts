@@ -373,22 +373,22 @@ describe('uninstallClaudeCode', () => {
   it('copies packaged workflow files into <homeDir>/.claude/workflows/ via command install', () => {
     const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot();
-    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    const workflowDir = path.join(skillsRoot, 'test-command', 'workflows');
     mkdirSync(workflowDir, { recursive: true });
-    writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default 1;\n', 'utf8');
-    writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default 2;\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'workflow-a.js'), 'export default 1;\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'workflow-b.js'), 'export default 2;\n', 'utf8');
 
     try {
       installClaudeCodeCommand({
-        commandName: 'mma-flow',
-        content: '# mma-flow\n',
+        commandName: 'test-command',
+        content: '# test-command\n',
         homeDir,
         skillsRoot,
       });
 
-      expect(readFileSync(path.join(homeDir, '.claude', 'commands', 'mma-flow.md'), 'utf8')).toBe('# mma-flow\n');
-      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'), 'utf8')).toBe('export default 1;\n');
-      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'), 'utf8')).toBe('export default 2;\n');
+      expect(readFileSync(path.join(homeDir, '.claude', 'commands', 'test-command.md'), 'utf8')).toBe('# test-command\n');
+      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'workflow-a.js'), 'utf8')).toBe('export default 1;\n');
+      expect(readFileSync(path.join(homeDir, '.claude', 'workflows', 'workflow-b.js'), 'utf8')).toBe('export default 2;\n');
     } finally {
       rmFakeDir(homeDir);
       rmFakeDir(skillsRoot);
@@ -417,33 +417,33 @@ describe('uninstallClaudeCode', () => {
   it('removes stale packaged workflow files for the same command during reinstall and uninstall', () => {
     const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot();
-    const workflowDir = path.join(skillsRoot, 'mma-flow', 'workflows');
+    const workflowDir = path.join(skillsRoot, 'test-command', 'workflows');
     mkdirSync(workflowDir, { recursive: true });
-    writeFileSync(path.join(workflowDir, 'segment-spec-audit.js'), 'export default "one";\n', 'utf8');
-    writeFileSync(path.join(workflowDir, 'segment-plan-audit.js'), 'export default "two";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'workflow-a.js'), 'export default "one";\n', 'utf8');
+    writeFileSync(path.join(workflowDir, 'workflow-b.js'), 'export default "two";\n', 'utf8');
 
     try {
       installClaudeCodeCommand({
-        commandName: 'mma-flow',
-        content: '# mma-flow\n',
+        commandName: 'test-command',
+        content: '# test-command\n',
         homeDir,
         skillsRoot,
       });
 
-      rmSync(path.join(workflowDir, 'segment-plan-audit.js'));
+      rmSync(path.join(workflowDir, 'workflow-b.js'));
       installClaudeCodeCommand({
-        commandName: 'mma-flow',
-        content: '# mma-flow\n',
+        commandName: 'test-command',
+        content: '# test-command\n',
         homeDir,
         skillsRoot,
       });
 
-      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(true);
-      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-plan-audit.js'))).toBe(false);
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'workflow-a.js'))).toBe(true);
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'workflow-b.js'))).toBe(false);
 
-      uninstallClaudeCodeCommand('mma-flow', homeDir);
-      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'segment-spec-audit.js'))).toBe(false);
-      expect(existsSync(path.join(homeDir, '.claude', 'commands', 'mma-flow.md'))).toBe(false);
+      uninstallClaudeCodeCommand('test-command', homeDir);
+      expect(existsSync(path.join(homeDir, '.claude', 'workflows', 'workflow-a.js'))).toBe(false);
+      expect(existsSync(path.join(homeDir, '.claude', 'commands', 'test-command.md'))).toBe(false);
     } finally {
       rmFakeDir(homeDir);
       rmFakeDir(skillsRoot);

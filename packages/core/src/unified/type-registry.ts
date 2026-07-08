@@ -35,8 +35,8 @@ export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
   journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
   retry_tasks:    { defaultTier: 'standard', worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
   orchestrate:    { defaultTier: 'main',     worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
-  spec:           { defaultTier: 'complex',  worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  plan:           { defaultTier: 'complex',  worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  spec:           { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  plan:           { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
 };
 
 export function getTypeConfig(type: TaskType): TypeConfig {

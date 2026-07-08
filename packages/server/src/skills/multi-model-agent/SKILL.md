@@ -157,24 +157,29 @@ Every request requires `Authorization: Bearer $MMA_AUTH_TOKEN`. The token is gen
 
 ## Worker tier: `agentTier`
 
-Only `mma-delegate` accepts `agentTier: "standard" | "complex"` per task — default `"standard"` (cheaper, faster). Pick `"complex"` when:
+All routes accept `agentTier: "standard" | "complex" | "main"` to override the default tier. `mma-delegate` defaults to `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
 - A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"timeout"`.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
-Every other route hardcodes its tier and rejects `agentTier` with HTTP 400:
+Every route has a default tier that can be overridden by sending `agentTier`:
 
-| Route | Hardcoded tier |
+| Route | Default tier |
 |---|---|
-| `mma-execute-plan` | `standard` |
-| `mma-audit` | `complex` |
-| `mma-review` | `complex` |
-| `mma-debug` | `complex` |
-| `mma-investigate` | `complex` |
-| `mma-explore` | `complex` (all three workers — internal, external, synthesizer) |
-
-If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentTier: "complex"`.
+| `delegate` | `standard` |
+| `execute_plan` | `standard` |
+| `retry_tasks` | `standard` |
+| `audit` | `complex` |
+| `review` | `complex` |
+| `debug` | `complex` |
+| `investigate` | `complex` |
+| `research` | `complex` |
+| `journal_recall` | `complex` |
+| `journal_record` | `complex` |
+| `spec` | `complex` |
+| `plan` | `complex` |
+| `orchestrate` | `main` |
 
 ## Context block defaults
 

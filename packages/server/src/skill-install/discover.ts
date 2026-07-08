@@ -30,10 +30,6 @@ export const SUPPORTED_SKILLS = [
  * Commands are Claude Code-only packaged assets installed to
  * `~/.claude/commands/<name>.md`. They are explicitly invoked by the user
  * via `/<name>` — unlike skills, which are auto-matched by intent.
- *
- * Commands carry workflow scripts (`.js` files under `workflows/`) that
- * Claude Code can execute. Other clients do not support commands or
- * workflow scripts.
  */
 export const SUPPORTED_COMMANDS = [
   'mma-flow',

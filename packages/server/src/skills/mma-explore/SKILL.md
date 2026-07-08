@@ -93,17 +93,17 @@ The main agent (you) issues a single message with three parallel tool calls:
 
 ## Reading the leg results
 
-All three legs (`mma-investigate`, `mma-research`, `mma-journal-recall`) return the standard response envelope (see `@include _shared/response-shape.md` in each skill). The authoritative citation source is **`output.findings`** — an array of `{ id, weight, category, claim, evidence, suggestion, source }`. The `output.summary` field carries the worker's synthesised narrative.
+All three legs (`mma-investigate`, `mma-research`, `mma-journal-recall`) return the standard response envelope. The authoritative citation source is **`output.summary.findings`** — each finding has `weight`, `category`, `claim`, `evidence`, plus route-specific fields (investigate: `file`, `line`; research: `url`, `source`; recall: `nodeId`, `nodePath`). Note: findings are INSIDE `output.summary` (the parsed refiner JSON), NOT at `output.findings` (which does not exist).
 
 | Check | How |
 |---|---|
-| Did the leg succeed? | `output.completed === true` — findings may be zero on a read route; finding nothing wrong is a valid completion |
-| Internal citation source | `output.findings[i].claim` plus a `file:LINE` token from `output.findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
-| External citation source | `output.findings[i].claim` plus a source name / URL from `output.findings[i].evidence` |
-| Prior-learning source | `output.findings[i].claim` plus a journal node id from `output.findings[i].evidence` (recall cites `` `.mma/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
-| Divergence axis | `output.findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
+| Did the leg succeed? | `error` is `null` — findings may be zero on a read route; finding nothing wrong is a valid completion |
+| Internal citation source | `output.summary.findings[i].claim` plus a `file:LINE` token from `output.summary.findings[i].evidence` |
+| External citation source | `output.summary.findings[i].claim` plus a source name / URL from `output.summary.findings[i].evidence` |
+| Prior-learning source | `output.summary.findings[i].claim` plus a journal node id from `output.summary.findings[i].evidence` (recall cites `` `.mma/journal/nodes/NNNN-…` `` or `node NNNN`). Watch the node's status: a **superseded** learning is a "we tried this and moved on" signal — surface it, don't bury it |
+| Divergence axis | `output.summary.findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
 
-Apply a sentinel only when `findings` is empty AND `output.summary` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `output.summary` reads tersely — partial findings may still be usable.
+Apply a sentinel only when `output.summary.findings` is empty AND `output.summary` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `output.summary` reads tersely — partial findings may still be usable.
 
 ## Synthesis output shape
 
@@ -113,13 +113,13 @@ Produce **3–5 threads**. Each thread MUST have:
 
 - A **title** and **one-paragraph summary**.
 - One **internal citation** (from investigate) — `file/path.ts:LINE — claim`.
-  - Pick from `output.findings`: take `claim` as the citation claim and pull a `file:LINE` token out of `evidence`.
-  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `output.findings` is empty AND `output.summary` contains no finding-level content.
+  - Pick from `output.summary.findings`: take `claim` as the citation claim and pull a `file:LINE` token out of `evidence`.
+  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `output.summary.findings` is empty AND `output.summary` contains no finding-level content.
 - One **external citation** (from research) — `<source> — claim`.
-  - Pick from `output.findings`: take `claim` as the citation claim and pull a source name / URL out of `evidence`.
-  - Use the sentinel `(no external source found)` only when `output.findings` is empty for the research leg.
+  - Pick from `output.summary.findings`: take `claim` as the citation claim and pull a source name / URL out of `evidence`.
+  - Use the sentinel `(no external source found)` only when `output.summary.findings` is empty for the research leg.
 - One **prior-learning citation** (from journal-recall) WHEN a relevant node exists — `(journal) node NNNN — claim`.
-  - Pick from the recall leg's `output.findings`: take `claim` as the citation and pull the node id out of `evidence`.
+  - Pick from the recall leg's `output.summary.findings`: take `claim` as the citation and pull the node id out of `evidence`.
   - If the cited node is **superseded**, say so inline (e.g. `(journal) node 0012 [superseded by 0013] — …`) so the thread carries the "we already moved past this" signal.
   - Use the sentinel `(no prior learning)` when the recall leg returned no relevant node — most threads on a young project will use this, and that's fine.
 - A **one-line divergence reason** — what makes this thread different from
@@ -171,7 +171,7 @@ directions in the data.
 | Both investigate and research failed | Report both errors to the user. Do NOT fabricate threads. |
 | Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need to the user. Do NOT synthesise over an unfinished investigation. |
 | Research returned 0 usable sources | Sentinel on external lines. Add a one-line note in synthesis preamble: *"External research returned no usable sources — threads anchor on internal findings only."* |
-| Investigate headline reads "0 citations" / "confidence unparseable" but `output.findings.length > 0` | Known stage-sync noise — IGNORE the headline. The leg succeeded; read `output.findings` directly. |
+| Investigate headline reads "0 citations" / "confidence unparseable" but `output.summary.findings.length > 0` | Known stage-sync noise — IGNORE the headline. The leg succeeded; read `output.summary.findings` directly. |
 
 See `superpowers:brainstorming` as the natural follow-up — convergent narrowing
 on a chosen thread.

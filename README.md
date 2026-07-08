@@ -326,11 +326,10 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.6.6
+## What's new in 5.8.2
 
-- **OKF-compliant journal.** Node frontmatter uses `type` (was `category`), plus `description` and `timestamp` fields — aligned with Google Open Knowledge Format v0.1.
-- **Full codebase audit.** 176+ files reviewed line by line, 9 issues fixed across production code, skills, docs, and config.
-- **Refiner schema relaxed.** Empty `suggestion` and `reviewer_parse_failed` as WARN (not FAIL) — reduces false negatives on valid task output.
+- **Skill doc accuracy audit.** All 15 packaged SKILL.md files corrected against ground-truth schema — fixes 12 categories of stale content (finding shapes, response envelope, phantom fields, tier defaults).
+- **Segment scripts removed.** Caller-side workflow scripts no longer ship in the npm package.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

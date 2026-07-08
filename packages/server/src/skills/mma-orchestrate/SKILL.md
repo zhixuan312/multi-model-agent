@@ -45,9 +45,9 @@ The orchestrate endpoint provides a session-persistent, high-quality LLM agent f
 | `prompt` | string | yes | The full instruction for this workflow phase |
 | `outputFormat` | string | no | Hint for desired output format (e.g. `"json"`, `"markdown"`) |
 | `sessionIds` | object | no | `{ implementer: "<session-id>" }` — reuse a prior session |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) |
 
-> The orchestrate agent always uses the `main` tier (falls back to `complex` if `agents.main` is not configured). Review is always skipped — there is no reviewer phase.
+> Worker tier defaults to `main` (falls back to `complex` if `agents.main` is not configured). Send `agentTier` to override if needed. Review is always skipped — there is no reviewer phase.
 
 ## Session Reuse
 
