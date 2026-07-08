@@ -53,9 +53,9 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 | `target.paths` | string[] | alternative | Path to a structured outline file — exactly one file containing markdown with spec section headings |
 | `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `docs/mma/specs/YYYY-MM-DD-<slug>.md` |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Default `"reviewed"` (two-phase pipeline with refiner). Set `"none"` to skip review |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` for additional context |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
-> Worker tier is hardcoded `complex`. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 ### Structured decisions format
 

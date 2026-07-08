@@ -58,7 +58,6 @@ digraph when_to_use {
 {
   "type": "investigate",
   "prompt": "How does the auth middleware handle token refresh?",
-  "subtype": "default",
   "target": { "paths": ["/project/src/auth/"] },
   "contextBlockIds": []
 }
@@ -66,13 +65,11 @@ digraph when_to_use {
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt` | string | yes | Natural-language investigation question |
-| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
+| `prompt` | string | yes | Natural-language investigation question (min 1 char) |
 | `target.paths` | string[] | no | Anchor paths the worker starts from. Worker may grep beyond. |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta investigation |
-| `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'no-shell'` and `'full'` are rejected — investigation is read-only |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — enables follow-up / delta investigation |
 
-> Worker tier for `mma-investigate` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 **Anchor narrow questions with `target.paths`:**
 
@@ -131,34 +128,10 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
-## Outcome semantics
+## Interpreting the result
 
-Every task result carries outcome fields that describe the investigation's conclusion status:
+**Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the investigation produce a substantive result? |
-| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "No candidate answers found after perspective 5" or "One clear path identified at high confidence"). |
-| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the worker explicitly stated it. |
-| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
-
-### Enum values
-
-- **`found`** — the investigation produced one or more candidate answers (findings) across one or more criteria. This is the success state for a question-answering route.
-- **`clean`** — the investigation completed but produced zero findings. This is valid for issue-hunting routes but unusual for `mma-investigate`, where answering a question always produces at least one candidate.
-- **`not_applicable`** — the investigation could not proceed (e.g., the question was out of scope, the codebase provided no data to work with, or the request preconditions failed). This is the "no answer possible" state.
-
-### Empty findings ≠ failure
-
-A crucial semantic: **empty findings does NOT mean `completed: false` or a failed task.** The presence or absence of findings is orthogonal to task success. An investigation that searches thoroughly and produces zero candidate answers is a valid `completed: true` outcome; it simply answers the question with "I found no evidence for that in the codebase."
-
-### Per-route legal outcomes
-
-The legal outcomes for this route are: `['found', 'not_applicable']`
-
-- **`found`** — one or more candidate answers surfaced via the investigation criteria.
-- **`not_applicable`** — the question was out of scope, unanswerable, or the codebase provided insufficient data.
-
-The outcome `clean` (zero findings + success) is not legal for `mma-investigate` because an investigation answer is always produced in the `found` state or the task is `not_applicable`.
+**Empty findings is not a failure.** An investigation that finds nothing is a success — it answers "I found no evidence for that in the codebase." Check `output.summary.findings.length === 0`. The `output.summary.answer` field contains the narrative answer.
 
 @include _shared/error-handling.md

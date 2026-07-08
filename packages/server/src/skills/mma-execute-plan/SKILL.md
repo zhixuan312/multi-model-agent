@@ -52,11 +52,11 @@ Dispatch tasks from a plan file to a single worker session. The `tasks` array se
 | `prompt` | string | no | Optional caller context for the worker (e.g. "focus on backend tasks", "skip tests") — injected alongside the plan content |
 | `tasks` | string[] | no | Task selectors matching plan headings. Empty or omitted = run all tasks in the plan |
 | `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — the right place for source files referenced by the plan |
 
 @include _shared/review-policy.md
 
-> **No `agentTier` here.** Worker tier is hardcoded to `standard`; sending `agentTier` is rejected with HTTP 400. For tasks that need `complex` tier, dispatch via `mma-delegate` with the plan task as the prompt and `agentTier: "complex"`.
+> Worker tier defaults to `standard`. Send `agentTier` to override if needed.
 
 ## Full example
 

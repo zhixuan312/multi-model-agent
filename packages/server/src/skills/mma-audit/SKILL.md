@@ -54,11 +54,11 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 | `target.inline` | string | no | Inline document content |
 | `subtype` | `'default' \| 'plan' \| 'spec' \| 'skill'` | no (defaults to `'default'`) | See "Picking subtype" below. |
 | `target.paths` | string[] | no | Files to audit (one audit per dispatch) |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) |
 
-Either `target.inline` or `target.paths` (or both) must be provided.
+Exactly one of `target.inline` or `target.paths` must be provided (not both).
 
-> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 ### Picking subtype
 
@@ -141,33 +141,29 @@ RESULT=$(curl -f --show-error -s -X POST \
 
 ## Reading the findings
 
-The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-audit` do not produce commits — `execution.worktree` is always `null`.
+The main agent reads findings from the terminal envelope at `output.summary.findings` (NOT `output.findings` — that field does not exist). `output.summary` is the parsed refiner JSON; findings are nested inside it. Read-only routes like `mma-audit` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
-Every finding has this shape:
+Every finding in `output.summary.findings` has this shape:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Worker-assigned, e.g. `F1`, `F2`. Stable across chain. |
-| `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
+| `weight` | `'critical' \| 'high' \| 'medium' \| 'low'` | Severity tier. |
 | `category` | string | Topical bucket, e.g. `path-existence`, `prose-coherence`. |
 | `claim` | string | One-sentence summary. |
-| `evidence` | string ≥20 chars | Verbatim from source when grounded. |
-| `suggestion?` | string | Optional fix recommendation. |
-| `source` | `'implementer' \| 'reviewer'` | Who produced the finding. |
-
-`annotatorConfidence` and `evidenceGrounded` are retired — they were v4 fields with no producers.
+| `evidence` | string | Verbatim from source when grounded. |
+| `suggestion` | string | Fix recommendation. |
 
 ### Recommended rendering by the main agent
 
-1. Show ALL findings — never silently drop. Severity and grounding are soft
+1. Show ALL findings — never silently drop. Weight and grounding are soft
    signals, not gates.
-2. Default sort: severity (critical → low), then `id` ascending.
-3. `severity` is the authoritative value — use it directly.
+2. Default sort: weight (critical → low).
+3. `weight` is the authoritative severity — use it directly.
 4. Mark findings with `evidence` shorter than 30 chars as "low-evidence"
    (lighter color or `(low evidence)` annotation). User decides what to do.
-5. Severity-tier counts feed the dashboard.
+5. Weight-tier counts feed the dashboard.
 
 ## Best practices
 
@@ -210,34 +206,10 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
-## Outcome semantics
+## Interpreting the result
 
-Every task result carries outcome fields that describe the audit's conclusion status:
+**Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the audit uncover issues? |
-| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "3 critical findings: broken paths, missing symbols, mismatched signatures" or "Document is clean across all audit criteria"). |
-| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the auditor explicitly stated it. |
-| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
-
-### Enum values
-
-- **`found`** — the audit surfaced one or more issues (findings) in the artifact across one or more criteria. This indicates the artifact needs rework before downstream use.
-- **`clean`** — the audit completed and found zero issues. The artifact is clear across all audit criteria and ready for downstream use.
-- **`not_applicable`** — the audit could not proceed (e.g., wrong input type, missing preconditions, or system error). This is rare; most audits resolve to `found` or `clean`.
-
-### Empty findings ≠ failure
-
-A crucial semantic: **empty findings does NOT mean `completed: false` or a failed task.** Finding nothing wrong is a successful audit outcome — it means the document passed the bar. An audit with zero findings is `completed: true` with `findingsOutcome: 'clean'`.
-
-### Per-route legal outcomes
-
-The legal outcomes for this route are: `['found', 'clean']`
-
-- **`found`** — one or more issues were detected across the audit criteria.
-- **`clean`** — zero issues were detected; the artifact is ready for downstream use.
-
-The outcome `not_applicable` is not legal for `mma-audit` (except on actual precondition failures) because an audit always produces a verdict: either issues found or clean.
+**Empty findings is not a failure.** An audit with zero findings is a success — it means the document passed all criteria. Check `output.summary.findings.length === 0`.
 
 @include _shared/error-handling.md

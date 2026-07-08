@@ -51,7 +51,7 @@ Dispatch a single ad-hoc task to a worker. The request is flat — prompt, targe
 | `target` | object | no | Target scope for the worker |
 | `target.paths` | string[] | no | Files the worker focuses on |
 | `done` | string | no | Acceptance criteria |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) |
 | `reviewPolicy` | `"reviewed"` / `"none"` | no | See review-policy snippet below. Default `"reviewed"` |
 
 @include _shared/review-policy.md

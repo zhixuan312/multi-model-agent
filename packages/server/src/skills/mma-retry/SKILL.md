@@ -33,7 +33,7 @@ digraph when_to_use {
 ```
 
 **Use when:**
-- A previous dispatch's terminal envelope shows mixed `completed: true` / `completed: false`
+- A previous dispatch's terminal envelope shows mixed task statuses (some done, some failed)
 - 1–N tasks (but not all) need a re-run with the same config
 - You want to keep the original dispatch's diagnostics intact for comparison
 

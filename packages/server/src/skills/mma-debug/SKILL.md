@@ -50,12 +50,11 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt` | string | yes | What is broken (one sentence; concrete symptom) |
-| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
+| `prompt` | string | yes | What is broken (one sentence; concrete symptom, min 1 char) |
 | `target.paths` | string[] | no | All files investigated together (cross-file reasoning) |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — e.g. error logs, traces |
 
-> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 ## Full example
 
@@ -76,33 +75,22 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Reading the findings
 
-The main agent reads `output.summary` + `output.findings` from the layered terminal envelope (documented in `_shared/response-shape.md`). Read-only routes like `mma-debug` do not produce commits — `execution.worktree` is always `null`.
+The main agent reads findings from the terminal envelope at `output.summary.findings` (NOT `output.findings` — that field does not exist). `output.summary` is the parsed refiner JSON; findings are nested inside it. Read-only routes like `mma-debug` do not produce commits — `execution.worktree` is always `null`.
 
 ### Finding shape
 
-Every finding has this shape:
+Every finding in `output.summary.findings` has this shape:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Worker-assigned, e.g. `F1`, `F2`. Stable across chain. |
-| `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
+| `weight` | `'critical' \| 'high' \| 'medium' \| 'low'` | Severity tier. |
 | `category` | string | Topical bucket, e.g. `root-cause`, `reproduction`. |
 | `claim` | string | One-sentence summary. |
-| `evidence` | string ≥20 chars | Verbatim from source when grounded. |
-| `suggestion?` | string | Optional fix recommendation. |
-| `source` | `'implementer' \| 'reviewer'` | Who produced the finding. |
+| `evidence` | string | Verbatim from source when grounded. |
+| `file` | string or null | File path where the finding was observed. |
+| `line` | number or null | Line number in the file. |
 
-`annotatorConfidence` and `evidenceGrounded` are retired — they were v4 fields with no producers.
-
-### Recommended rendering by the main agent
-
-1. Show ALL findings — never silently drop. Severity and grounding are soft
-   signals, not gates.
-2. Default sort: severity (critical → low), then `id` ascending.
-3. `severity` is the authoritative value — use it directly.
-4. Mark findings with `evidence` shorter than 30 chars as "low-evidence"
-   (lighter color or `(low evidence)` annotation). User decides what to do.
-5. Severity-tier counts feed the dashboard.
+`output.summary` also includes an `answer` field with the debug narrative.
 
 ## Best practices
 
@@ -114,12 +102,12 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're about to read 3+
 
 ## Common pitfalls
 
-❌ **Vague `problem`**
+❌ **Vague problem in `prompt`**
 > "The login is broken"
 
 Worker has no symptom to chase. **Fix:** specific reproducer — `"POST /login with body {user:'a@b.c', pass:'café'} returns 500 with 'invalid character' in stderr"`.
 
-❌ **No `hypothesis`**
+❌ **No hypothesis in `prompt`**
 The worker explores blindly, often investigates the wrong area first. **Fix:** even a weak hypothesis ("might be encoding-related") narrows the search space.
 
 ❌ **Splitting one bug across multiple `mma-debug` calls**
@@ -148,32 +136,8 @@ The block is registered server-side at task completion; no caller action is need
 
 ## Outcome semantics
 
-Every task result carries outcome fields that describe the debugging investigation's conclusion status:
+**Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `findingsOutcome` | `'found' \| 'clean' \| 'not_applicable'` | Answers the question: did the investigation identify a root cause? |
-| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "Root cause identified with high confidence: bcrypt binding fails on non-ASCII input" or "No evidence supports the hypothesis; root cause remains unknown"). |
-| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the investigator explicitly stated it. |
-| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
-
-### Enum values
-
-- **`found`** — the investigation identified one or more root-cause hypotheses (findings) with supporting evidence. This indicates the problem has a diagnosed cause.
-- **`clean`** — the investigation completed but found zero root causes. This is rare for debug and indicates the failure remains unexplained despite thorough investigation.
-- **`not_applicable`** — the investigation could not proceed (e.g., inability to reproduce the failure, missing context, or out of scope). This is the "unable to diagnose" state.
-
-### Empty findings ≠ failure
-
-A crucial semantic: **empty findings does NOT mean `completed: false` or a failed debug session.** An investigation that proceeds thoroughly and produces zero root-cause candidates is a valid `completed: true` outcome; it means "I looked hard and found nothing." For debug, this often surfaces a `not_applicable` outcome instead (root cause is elsewhere), but zero findings is still a success.
-
-### Per-route legal outcomes
-
-The legal outcomes for this route are: `['found', 'not_applicable']`
-
-- **`found`** — one or more root-cause hypotheses were identified across the investigation criteria.
-- **`not_applicable`** — the failure could not be diagnosed (reproduction failed, wrong area, or scope issue).
-
-The outcome `clean` (zero findings + success) is not legal for `mma-debug` because a debug session always either identifies a root cause or cannot proceed.
+**Empty findings is not a failure.** A debug session with zero findings is a success — it means "I looked hard and found nothing." Check `output.summary.findings.length === 0`.
 
 @include _shared/error-handling.md

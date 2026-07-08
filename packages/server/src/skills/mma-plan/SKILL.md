@@ -51,7 +51,7 @@ Dispatch a spec file to a complex worker that writes a TDD implementation plan. 
 | `target.inline` | string | alternative | Spec content pasted directly. When using inline, `outputPath` is **required** |
 | `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. Default (when `target.paths`): `docs/mma/plans/YYYY-MM-DD-<spec-basename>.md` |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Whether the plan gets a reviewer pass. Default `"reviewed"` |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` for additional context |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
 Inline mode — `outputPath` is required because no basename can be derived:
 
@@ -64,7 +64,7 @@ Inline mode — `outputPath` is required because no basename can be derived:
 }
 ```
 
-> Worker tier is hardcoded `complex`. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 ### Output path rules
 

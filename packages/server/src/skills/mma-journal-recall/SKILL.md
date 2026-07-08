@@ -45,11 +45,10 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt` | string | yes | A vague conceptual question about prior learnings. No tags or keywords needed. |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta recall |
-| `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'full'` and `'no-shell'` are rejected — recall is read-only |
+| `prompt` | string | yes | A vague conceptual question about prior learnings (min 10 chars). No tags or keywords needed. |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — enables follow-up / delta recall |
 
-> Worker tier for `mma-journal-recall` is hardcoded to `complex` and is not caller-configurable. Sending `agentTier` is rejected with HTTP 400.
+> Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
 **Why `prompt` is vague, not keyword-filtered:**
 
@@ -118,31 +117,10 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
-## Outcome semantics
+## Interpreting the result
 
-Every task result carries outcome fields that describe the recall's conclusion status:
+**Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `findingsOutcome` | `'found' \| 'not_applicable'` | Answers the question: did the recall produce substantive learnings? |
-| `findingsOutcomeReason` | `string \| null` | When `findingsOutcome` is set, this explains why (e.g. "No relevant journal nodes found for the query" or "Journal is empty"). |
-| `outcomeInferred` | `boolean` | `true` if the system inferred the outcome from findings count; `false` if the worker explicitly stated it. |
-| `outcomeMalformed` | `boolean` | `true` if the outcome line was malformed and had to be repaired; `false` otherwise. |
-
-### Enum values
-
-- **`found`** — the recall produced one or more relevant prior learnings (findings) across one or more journal nodes.
-- **`not_applicable`** — the recall could not proceed (the journal is empty, inaccessible, or nothing in it answers the query).
-
-### Empty journal ≠ failure
-
-A recall that searches the journal and finds nothing relevant is a valid `completed: true` outcome; it simply answers "no prior learnings match that question" — which is useful information before attempting something new.
-
-### Per-route legal outcomes
-
-The legal outcomes for this route are: `['found', 'not_applicable']`
-
-- **`found`** — one or more prior learnings surfaced from the journal.
-- **`not_applicable`** — the journal is empty, inaccessible, or no learnings match the query.
+**Empty journal is not a failure.** A recall that finds nothing relevant is a success — "no prior learnings match that question." The `output.summary.answer` field contains the narrative; `output.summary.findings` contains individual learnings with `nodeId` and `nodePath` for citation.
 
 @include _shared/error-handling.md
