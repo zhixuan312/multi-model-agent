@@ -128,7 +128,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
-## Interpreting the result
+## Outcome semantics
 
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 

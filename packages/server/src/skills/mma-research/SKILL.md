@@ -121,7 +121,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ❌ **Expecting opinionated output.** This worker reports what's out there with citations. Ranking and synthesis happen elsewhere — in `mma-explore` or in your own judgment. **Fix:** if you need ranked options, use `mma-explore`.
 
-## Interpreting the result
+## Outcome semantics
 
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 

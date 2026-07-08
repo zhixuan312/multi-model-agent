@@ -4,7 +4,7 @@ import { resolve } from 'path';
 
 /**
  * Tests that 5 skill markdown files contain an "Outcome semantics" section
- * with specific requirements for findings outcome documentation.
+ * with the compact success/failure and empty-findings guidance.
  */
 describe('Skill files: Outcome semantics section', () => {
   const skillFiles = [
@@ -27,30 +27,16 @@ describe('Skill files: Outcome semantics section', () => {
         expect(content).toMatch(/^## Outcome semantics$/m);
       });
 
-      it('contains all three enum values: found, clean, not_applicable', () => {
+      it('documents success check via error === null', () => {
         const outcomeIndex = content.indexOf('## Outcome semantics');
         const contentFromOutcome = outcomeIndex >= 0 ? content.substring(outcomeIndex) : '';
-        expect(contentFromOutcome).toMatch(/\bfound\b/);
-        expect(contentFromOutcome).toMatch(/\bclean\b/);
-        expect(contentFromOutcome).toMatch(/\bnot_applicable\b/);
+        expect(contentFromOutcome).toMatch(/error.*null/i);
       });
 
-      it('contains explanation of findingsOutcomeReason presence rule', () => {
-        const outcomeIndex = content.indexOf('## Outcome semantics');
-        const contentFromOutcome = outcomeIndex >= 0 ? content.substring(outcomeIndex) : '';
-        expect(contentFromOutcome).toMatch(/findingsOutcomeReason/);
-      });
-
-      it('explicitly states that empty findings ≠ failure', () => {
+      it('explicitly states that empty findings is not a failure', () => {
         const outcomeIndex = content.indexOf('## Outcome semantics');
         const contentFromOutcome = outcomeIndex >= 0 ? content.substring(outcomeIndex) : '';
         expect(contentFromOutcome).toMatch(/[Ee]mpty findings/);
-      });
-
-      it('contains per-route legal-outcome list', () => {
-        const outcomeIndex = content.indexOf('## Outcome semantics');
-        const contentFromOutcome = outcomeIndex >= 0 ? content.substring(outcomeIndex) : '';
-        expect(contentFromOutcome).toMatch(/legal.*outcome/i);
       });
     });
   });

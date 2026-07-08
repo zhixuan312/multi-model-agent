@@ -81,15 +81,15 @@ describe('TypeRegistry', () => {
     expect(getTypeConfig('debug').targetAcceptance.inline).toBe(false);
   });
 
-  it('spec defaults to complex/worktree/cwd-only with required target', () => {
+  it('spec defaults to complex/no-worktree/cwd-only with required target', () => {
     const c = getTypeConfig('spec');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: true, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
     expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
   });
 
-  it('plan defaults to complex/worktree/cwd-only with required target', () => {
+  it('plan defaults to complex/no-worktree/cwd-only with required target', () => {
     const c = getTypeConfig('plan');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: true, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
     expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
   });
 });
