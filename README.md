@@ -326,10 +326,9 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.8.2
+## What's new in 5.8.3
 
-- **Skill doc accuracy audit.** All 15 packaged SKILL.md files corrected against ground-truth schema — fixes 12 categories of stale content (finding shapes, response envelope, phantom fields, tier defaults).
-- **Segment scripts removed.** Caller-side workflow scripts no longer ship in the npm package.
+- **B10 journal record step.** `/mma-flow` now captures learnings from the entire design-to-merge cycle via `mma-journal-record` — known unknowns resolved and tacit knowledge articulated during the flow, mapped to all 6 journal types.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

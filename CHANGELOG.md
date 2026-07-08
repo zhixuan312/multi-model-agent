@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.3] - 2026-07-09
+
+**mma-flow B10 journal record step.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- `B10` stage in `/mma-flow` — post-merge knowledge capture via `mma-journal-record`. Synthesizes learnings from the entire D1–B9 flow, focusing on known-unknowns-now-resolved and unknown-knowns-now-articulated. Maps all 6 journal types. Stage-by-stage extraction guide included.
+
 ## [5.8.2] - 2026-07-08
 
 **Skill doc accuracy audit + segment script removal.** `SCHEMA_VERSION` unchanged (still 6).
