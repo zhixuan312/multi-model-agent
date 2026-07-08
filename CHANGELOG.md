@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.2] - 2026-07-08
+
+**Skill doc accuracy audit + segment script removal.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Fixed
+- All 15 packaged SKILL.md files corrected against ground-truth schema (task-input-schema.ts, refiner-schemas.ts, type-registry.ts, unified-task.ts). Fixes 12 categories of stale content: finding field `severity` → `weight`, `output.findings` → `output.summary.findings`, `completed: true` → `error === null`, removed telemetry-only outcome fields, 202 polling Content-Type corrected, terminal envelope corrected to 6-field shape, `agentTier` documented as overridable (not rejected), removed phantom `focus`/`subtype`/`tools` fields from non-applicable routes, `contextBlockIds` max-2 documented everywhere, target constraint corrected to "not both".
+- `_shared/response-shape.md` rewritten with correct 6-field envelope and extraction guide.
+- `multi-model-agent/SKILL.md` updated with complete 13-route default tier table.
+
+### Removed
+- Packaged segment workflow scripts (`segment-execute.js`, `segment-plan-audit.js`, `segment-review.js`, `segment-spec-audit.js`) — caller-side orchestration, not server assets.
+- `spec`/`plan` `worktree: true` → `worktree: false` in type-registry (these routes run in-cwd).
+
 ## [5.8.1] - 2026-07-07
 
 **mma-design trigger surface broadened.** `SCHEMA_VERSION` unchanged (still 6).
