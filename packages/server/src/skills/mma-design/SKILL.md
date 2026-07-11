@@ -81,17 +81,18 @@ Poll each `GET /task/:taskId` until terminal. When all results return, present f
 
 If no investigations were run, proceed directly to Phase 2 using only the brain dump content. The main agent can still dispatch **targeted** investigations during Phase 2 to resolve specific mechanical questions via `POST /task` — the Phase 1 batch is the upfront sweep, not the only opportunity.
 
-### Phase 2: Structured interview — clarify, resolve, lock decisions
+## Phase 2: Structured interview — clarify, resolve, lock decisions
 
-The brain dump gives the raw material. Your job is to turn it into concrete, unambiguous decisions by asking the right questions. You are an **interviewer**, not a form-filler.
+The default scope is all eight canonical components. Narrow only when the user's initial brain dump shows explicit subset intent:
+- the brain dump names specific components, or
+- the brain dump unambiguously says it wants only some components.
 
-**Step 1: Assess what's clear vs. ambiguous.**
-Read the brain dump (and investigation results, if any). Map what the user said against the spec sections below. Mark each as:
-- **Clear** — the brain dump already answers it. Don't re-ask. Confirm briefly and move on.
-- **Ambiguous** — the user said something but it's vague, contradictory, or incomplete. Ask a focused question.
-- **Missing** — the user didn't address it at all. Raise it.
+If the user expresses subset intent without naming the exact components, ask exactly one clarifying question to obtain the explicit component list before narrowing. If it is uncertain whether the brain dump expresses explicit subset intent, treat it as no subset intent and continue with all eight components. Never narrow on a borderline or inferred signal.
 
-**The 8 spec components (unified MMA/Forge standard — all must be filled before dispatch):**
+This workflow will default to all eight components unless the user shows explicit subset intent.
+The design workflow never narrows on a borderline or inferred signal.
+
+**The 8 spec components (unified MMA/Forge standard):**
 
 1. **Context** — background: who, what, why
 2. **Problem** — one clear problem statement + business impact
@@ -102,50 +103,19 @@ Read the brain dump (and investigation results, if any). Map what the user said 
 7. **Risks & Mitigations** — risk table + mitigation plan, failure handling
 8. **User Stories & Tasks** — user stories with acceptance criteria (numbered AC-N.N, testable)
 
-**Step 2: Ask focused questions for ambiguous/missing sections.**
-
-Interview rules:
-
 **For mechanical questions — resolve yourself via MMA workers (HTTP `POST /task`):**
+- Never use inline Agent dispatches for these — always use HTTP `POST /task` to the MMA server. Workers cost ~10x less and don't pollute main context.
 - If the brain dump says "use the existing interface" — dispatch `type: "investigate"` to fill in the name, signature, file path. Don't ask the user.
 - If you need to know the tech stack, test framework, import style — dispatch `type: "investigate"`. Don't ask.
 - If you need prior art or external approaches — dispatch `type: "research"`. Don't ask.
 - If you need what the project already decided — dispatch `type: "journal_recall"`. Don't ask.
-- **Never use inline Agent dispatches for these** — always use HTTP `POST /task` to the MMA server. Workers cost ~10x less and don't pollute main context.
 
-**For decision questions — ask the user:**
-- One question at a time. Don't dump 5 questions in one message.
-- Multiple choice when possible. "Should we (A) throw on zero or (B) return NaN?" beats "how should we handle zero?"
-- Always include your recommendation with reasoning. The user picks.
-- Surface contradictions. "You said no breaking changes, but the proposed rename IS breaking — which takes priority?"
+## Phase 3: Dispatch spec (terminal step)
 
-**General:**
-- Confirm clear sections briefly. "Brain dump covers Context, Problem, Goals — carrying forward. Let me ask about Scope..."
-- Skip sections the user already locked. "Option A because X" = confirmed decision. Don't re-debate.
-
-**Step 3: Lock each decision.**
-As the user answers each question, record the confirmed decision.
-
-**Step 4: Present the decision summary.**
-When all sections are filled, present the complete set of confirmed decisions to the user as a numbered list — one line per section. This is the last checkpoint before formal spec writing. The user may revise any decision, add constraints, or adjust scope. Only proceed to Phase 3 when the user confirms the summary.
-
-### Phase 3: Dispatch spec (terminal step)
-
-Once the decision summary is confirmed:
-
-1. Gather all confirmed sections into a structured markdown document using the 8-component `##` headings: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks. Use `###` for sections within each component.
-2. Pick the carrier by size + structure, then dispatch:
-   - **Small, simple decisions → `target.inline`** (the default): pass the structured markdown directly.
-     ```json
-     { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
-     ```
-   - **Large or heavily structured decisions → write a tmp scaffold file and pass `target.paths`.** When the assembled markdown is big or rich (tables, code fences, many sections — roughly >8 KB), write it to a tmp scaffold (e.g. `<scratchpad>/spec-scaffold.md`), dispatch with the absolute path, and delete the scaffold once `specPath` returns.
-     ```json
-     { "type": "spec", "prompt": "<feature title>", "target": { "paths": ["<abs>/spec-scaffold.md"] } }
-     ```
-     **Why:** the driver is JSON-escaping fragility, not size alone — embedding a table/backtick/newline-heavy document into a shell-assembled JSON string breaks the dispatch, whereas a path has zero escaping surface (and keeps the request body small). The scaffold is throwaway — the spec worker produces the durable artifact at `specPath`.
-3. Poll `GET /task/:taskId` until terminal. The `output.summary` contains `{ specPath, sections, acceptanceCriteriaCount, notes }` — `specPath` is the written spec file path
-4. Present the spec file path to the user. **mma-design ends here.**
+When assembling the structured markdown and dispatch body:
+- If there is no explicit subset intent, interview and dispatch all eight components.
+- If explicit subset intent exists and the exact list is known, interview only those components and dispatch `mma-spec` with `"components": ["<canonical labels>"]`.
+- Preserve canonical component order in the dispatched `components` array, regardless of the order the user named them.
 
 **What comes next is the user's decision** — not part of this skill:
 - Review the spec → read the file

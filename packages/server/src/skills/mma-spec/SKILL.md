@@ -17,7 +17,7 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 
 **Use when:**
 - You have structured design decisions with all sections confirmed by the user
-- The sections cover: Context, Problem, Goals & Requirements (with Scope, Constraints, Success Metrics as subsections), Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria
+- The sections cover the eight canonical components: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks
 - You want a formal spec written to disk
 
 **Don't use when:**
@@ -37,10 +37,11 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 ```json
 {
   "type": "spec",
-  "prompt": "Database-free self-service claims demo — file-backed default with parity proof",
+  "prompt": "Subset-compatible spec request",
   "target": {
-    "inline": "## Context\n\n### Background\nThe team maintains a self-service claims demo...\n\n## Problem\n\nThe demo cannot run without a database...\n\n## Goals & Requirements\n\n### Goals\n1. Instant start...\n\n## Scope\n\n### In scope\n- File-backed default...\n\n### Out of scope\n- Write features...\n\n## Constraints\n...\n\n## Success Metrics\n...\n\n## Alternatives\n...\n\n## Decision Records\n...\n\n## Technical Design\n...\n\n## Testing Plan\n...\n\n## Acceptance Criteria\n..."
-  }
+    "inline": "## Context\n\n### Background\n..."
+  },
+  "components": ["Context", "Problem", "Technical Design"]
 }
 ```
 
@@ -52,6 +53,7 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 | `target.inline` | string | primary | The structured design decisions as markdown with section headings |
 | `target.paths` | string[] | alternative | Path to a structured outline file — exactly one file containing markdown with spec section headings |
 | `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `.mma/specs/YYYY-MM-DD-<slug>.md` |
+| `components` | string[] | no | Optional subset of canonical top-level component labels. Allowed labels: `Context`, `Problem`, `Goals & Requirements`, `Alternatives`, `Technical Design`, `Testing Plan`, `Risks & Mitigations`, `User Stories & Tasks`. Omitted or empty `components` means all eight components. |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Default `"reviewed"` (two-phase pipeline with refiner). Set `"none"` to skip review |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
@@ -59,18 +61,18 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 
 ### Structured decisions format
 
-The `target.inline` content must be a markdown document with these top-level headings (matching the spec template):
+The `target.inline` content must be a markdown document with any of these eight canonical top-level headings (in any order — the worker will preserve canonical order):
 
-- `## Context` (with `### Background`)
+- `## Context`
 - `## Problem`
-- `## Goals & Requirements` (with `### Goals`, `### Functional requirements`, `### Scope`, `### Constraints`, `### Success metrics`)
+- `## Goals & Requirements`
 - `## Alternatives`
-- `## Decision Records`
 - `## Technical Design`
 - `## Testing Plan`
-- `## Acceptance Criteria`
+- `## Risks & Mitigations`
+- `## User Stories & Tasks`
 
-The worker expands these into a formal spec. Sections can be terse (the worker adds prose) or detailed (the worker preserves and structures).
+If the `components` field is provided, only those components need to be present in the input; the worker will emit exactly the requested subset. In other words, omitted or empty `components` means all eight components. The worker expands terse sections (the worker adds prose) or preserves detailed sections.
 
 @include _shared/review-policy.md
 
@@ -85,7 +87,7 @@ RESULT=$(curl -f -sS -X POST \
   -d '{
     "type": "spec",
     "prompt": "Database-free claims demo — file-backed default with parity proof",
-    "target": { "inline": "## Context\n### Background\nThe team maintains a self-service claims demo that requires a live database...\n## Problem\nThe demo cannot run without first standing up a database...\n## Goals & Requirements\n### Goals\n1. Instant start — no database needed\n2. Unchanged experience\n3. Database still available as opt-in\n### Functional requirements\n- Must run file-backed by default\n- Must support same search/filter/paging\n### Scope\n### In scope\n- File-backed default\n- Synthetic corpus\n- Parity proof\n### Out of scope\n- Write features\n- Embedded stores\n### Constraints\n- Compatibility: identical results file vs db\n### Success metrics\n| Metric | Target |\n|---|---|\n| Setup steps | 0 |\n## Alternatives\n### Option A: Repo seam + file hydration (recommended)\n### Option B: Embedded store\n## Decision Records\n| Node | Decision |\n|---|---|\n| 0248 | Routes depend on ClaimsRepository abstraction |\n## Technical Design\n### Current state\nRoutes import pool directly\n### Proposed\nClaimsRepository interface + FileClaimsRepository + PgClaimsRepository\n## Testing Plan\nUnit + integration + parity + E2E\n## Acceptance Criteria\n- [ ] AC-1: Runs without database\n- [ ] AC-2: Identical results in both modes" }
+    "target": { "inline": "## Context\n### Background\nThe team maintains a self-service claims demo...\n## Problem\nThe demo cannot run without first standing up a database...\n## Goals & Requirements\n### Goals\n1. Instant start — no database needed\n## Alternatives\n### Option A: Repo seam + file hydration (recommended)\n### Option B: Embedded store\n## Technical Design\n### Proposed\nClaimsRepository interface + FileClaimsRepository\n## Testing Plan\nUnit + integration + parity\n## User Stories & Tasks\n- [ ] AC-1: Runs without database" }
   }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
@@ -102,7 +104,7 @@ The terminal envelope's `output.summary` contains:
 ```json
 {
   "specPath": ".mma/specs/2026-07-06-claims-demo.md",
-  "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Decision Records", "Technical Design", "Testing Plan", "Acceptance Criteria"],
+  "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Technical Design", "Testing Plan", "Risks & Mitigations", "User Stories & Tasks"],
   "acceptanceCriteriaCount": 15,
   "notes": "Verified 3 codebase paths; expanded terse Constraints section with measurable targets"
 }
@@ -124,7 +126,7 @@ The terminal envelope's `output.summary` contains:
 
 ## Common pitfalls
 
-❌ **Dispatching before all sections are confirmed.** The worker cannot make design decisions — it writes what it receives. Missing sections produce incomplete specs. **Fix:** complete the interactive design phase (all 8 top-level sections confirmed by the user, including the Scope/Constraints/Success Metrics subsections under Goals & Requirements) before dispatching.
+❌ **Dispatching before all sections are confirmed.** The worker cannot make design decisions — it writes what it receives. Missing sections produce incomplete specs. **Fix:** complete the interactive design phase (all requested top-level components confirmed by the user; if `components` is omitted or empty, that means all 8 top-level sections, including the Scope/Constraints/Success Metrics subsections under Goals & Requirements) before dispatching.
 
 ❌ **Sending raw brain dump instead of structured decisions.** The worker expects markdown with the standard section headings. An unstructured text dump produces a poorly organized spec. **Fix:** structure the content with the required `##` headings before passing as `target.inline`.
 

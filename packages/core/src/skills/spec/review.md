@@ -17,6 +17,14 @@ Verify the implementer's specification in the worktree against the original desi
 5. Fix issues inline in the worktree file.
 6. Your FINAL message must be a single ```json fenced block — nothing else.
 
+## Scope: requested components only
+
+The task context contains a `## Requested Spec Components` block. Complete and validate ONLY the requested components. The set of top-level `##` components in the file must be **exactly equal to the resolved component set** — complete any missing requested component and remove any component emitted but not requested.
+
+Apply cross-component checks only when every component the check requires is present. Acceptance-criteria coverage (every functional requirement maps to an acceptance criterion) requires both `Goals & Requirements` and `User Stories & Tasks`, and is **skipped if either is absent**. All other checks are single-component or cross-cutting and are never skipped for a missing companion.
+
+In the output JSON, `sections` must list exactly the resolved component set in canonical order.
+
 ## Checks
 
 1. **Testability** — every functional requirement can be verified by a concrete test or check. Vague requirements like "should be fast" without a measurable target are not testable. Fix: add a measurable target.
@@ -53,3 +61,5 @@ Fix issues in the worktree spec file. Report CUMULATIVE state:
 ```json
 {"specPath": "<path>", "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Technical Design", "Testing Plan", "Risks & Mitigations", "User Stories & Tasks"], "acceptanceCriteriaCount": 18, "notes": "Added AC-12 for performance target; strengthened 'should be fast' to 'p99 < 200ms'; surfaced hidden assumption about Node >= 22"}
 ```
+
+> In subset mode, `sections` lists only the requested components in canonical order; the eight-element example above is the default full-spec case, not a fixed requirement.

@@ -11,6 +11,8 @@ import {
   parsePlanHeadings,
   matchTasks,
   MatchError,
+  resolveComponents,
+  type SkillPair,
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model-agent-core';
@@ -65,6 +67,11 @@ function taskTypeToRoute(type: TaskType): Route {
     retry_tasks: 'retry',
   };
   return (map[type] ?? type) as Route;
+}
+
+function buildSpecScopeInstruction(rawComponents: unknown): string {
+  const resolved = resolveComponents(rawComponents as Parameters<typeof resolveComponents>[0]);
+  return `Emit only these spec components, in canonical order: ${resolved.join(', ')}.`;
 }
 
 /**
@@ -158,8 +165,8 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
     case 'spec':
       return [
         'You have read the structured design decisions from the input.',
-        'You have written a complete spec file with YAML frontmatter and ALL required sections: Context, Problem, Goals & Requirements, Scope, Constraints, Success Metrics, Alternatives, Decision Records, Technical Design, Testing Plan, Acceptance Criteria.',
-        'Every functional requirement uses must/should/may language and maps to an acceptance criterion.',
+        'You have written a complete spec file with YAML frontmatter and the requested canonical sections only, preserving canonical order.',
+        'The canonical section labels are: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks.',
         'No placeholder language exists (no TBD, TODO, or vague verbs).',
         'You have produced the required JSON output block.',
       ].join(' ');
@@ -490,7 +497,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
-    let skills;
+    let skills: SkillPair;
     try {
       const subtype = (input as Record<string, unknown>).subtype as string | undefined;
       skills = await loadSkill(input.type, SKILLS_DIR, subtype);
@@ -602,6 +609,19 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               const filePath = spPayload.target!.paths![0];
               copyToWorktree = [path.isAbsolute(filePath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath))) : filePath];
             }
+          }
+
+          // ── Spec component resolution: resolve subset and inject scope ──
+          if (input.type === 'spec') {
+            const rawComponents = (input as Record<string, unknown>).components;
+            (payload as Record<string, unknown>).components = resolveComponents(
+              rawComponents as Parameters<typeof resolveComponents>[0],
+            );
+            const scopeInstruction = `\n\n## Requested Spec Components\n\n${buildSpecScopeInstruction(rawComponents)}\n`;
+            skills = {
+              implement: `${skills.implement}${scopeInstruction}`,
+              review: `${skills.review}${scopeInstruction}`,
+            };
           }
 
           // ── Context block resolution: resolve IDs → content, pin for duration ──

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SPEC_COMPONENTS } from './spec-components.js';
 
 const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
@@ -112,6 +113,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
     prompt: z.string().min(1),
     target: targetSchema,
     outputPath: z.string().optional(),
+    components: z.array(z.enum(SPEC_COMPONENTS)).optional(),
     ...commonFields,
   }).strict(),
 
