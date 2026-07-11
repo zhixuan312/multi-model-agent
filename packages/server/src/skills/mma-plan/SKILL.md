@@ -38,7 +38,7 @@ Dispatch a spec file to a complex worker that writes a TDD implementation plan. 
 {
   "type": "plan",
   "prompt": "Write a TDD implementation plan for the database-free claims demo",
-  "target": { "paths": ["/project/docs/mma/specs/2026-07-06-claims-demo.md"] }
+  "target": { "paths": ["/project/.mma/specs/2026-07-06-claims-demo.md"] }
 }
 ```
 
@@ -49,7 +49,7 @@ Dispatch a spec file to a complex worker that writes a TDD implementation plan. 
 | `target` | object | yes | Container — must have exactly one of `paths` or `inline`, not both |
 | `target.paths` | string[] | primary | Path to the spec file (exactly one file) |
 | `target.inline` | string | alternative | Spec content pasted directly. When using inline, `outputPath` is **required** |
-| `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. Default (when `target.paths`): `docs/mma/plans/YYYY-MM-DD-<spec-basename>.md` |
+| `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. Default (when `target.paths`): `.mma/plans/YYYY-MM-DD-<spec-basename>.md` |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Whether the plan gets a reviewer pass. Default `"reviewed"` |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
@@ -60,7 +60,7 @@ Inline mode — `outputPath` is required because no basename can be derived:
   "type": "plan",
   "prompt": "Write a TDD implementation plan for the database-free claims demo",
   "target": { "inline": "# Claims Demo Spec\n\n## Requirements\n..." },
-  "outputPath": "docs/mma/plans/2026-07-06-claims-demo.md"
+  "outputPath": ".mma/plans/2026-07-06-claims-demo.md"
 }
 ```
 
@@ -70,7 +70,7 @@ Inline mode — `outputPath` is required because no basename can be derived:
 
 | Input mode | `outputPath` provided? | Behavior |
 |---|---|---|
-| `target.paths` | No | Auto-derived: `docs/mma/plans/YYYY-MM-DD-<spec-basename>.md` |
+| `target.paths` | No | Auto-derived: `.mma/plans/YYYY-MM-DD-<spec-basename>.md` |
 | `target.paths` | Yes | Uses provided path |
 | `target.inline` | No | HTTP 400 `invalid_request` — cannot derive basename from inline |
 | `target.inline` | Yes | Uses provided path |
@@ -88,7 +88,7 @@ RESULT=$(curl -f -sS -X POST \
   -d '{
     "type": "plan",
     "prompt": "Write a TDD implementation plan for the database-free claims demo spec",
-    "target": { "paths": ["/project/docs/mma/specs/2026-07-06-claims-demo.md"] }
+    "target": { "paths": ["/project/.mma/specs/2026-07-06-claims-demo.md"] }
   }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
@@ -104,7 +104,7 @@ The terminal envelope's `output.summary` contains:
 
 ```json
 {
-  "planPath": "docs/mma/plans/2026-07-06-claims-demo.md",
+  "planPath": ".mma/plans/2026-07-06-claims-demo.md",
   "taskCount": 17,
   "tasks": [
     { "title": "Task I-1: resolveDataSource", "verdict": "executable" },

@@ -36,6 +36,7 @@ import { sendJson, sendError } from '../errors.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { deriveDefaultOutputPath } from './derive-output-path.js';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -583,20 +584,17 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               return;
             }
 
-            // Derive outputPath if not provided
+            // Derive outputPath if not provided (defaults live under .mma/,
+            // alongside the journal — see derive-output-path.ts)
             if (!spPayload.outputPath) {
               const today = new Date().toISOString().slice(0, 10);
-              if (input.type === 'spec') {
-                const slug = spPayload.prompt.split(/[.!?\n]/)[0].trim().toLowerCase()
-                  .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
-                (payload as Record<string, unknown>).outputPath = `docs/mma/specs/${today}-${slug || 'spec'}.md`;
-              } else if (hasPaths) {
-                const specBase = path.basename(spPayload.target!.paths![0], path.extname(spPayload.target!.paths![0]));
-                const hasDatePrefix = /^\d{4}-\d{2}-\d{2}-/.test(specBase);
-                (payload as Record<string, unknown>).outputPath = hasDatePrefix
-                  ? `docs/mma/plans/${specBase}.md`
-                  : `docs/mma/plans/${today}-${specBase}.md`;
-              }
+              const derived = deriveDefaultOutputPath({
+                type: input.type,
+                prompt: spPayload.prompt,
+                firstPath: hasPaths ? spPayload.target!.paths![0] : undefined,
+                today,
+              });
+              if (derived) (payload as Record<string, unknown>).outputPath = derived;
             }
 
             // Set up copyToWorktree for target.paths

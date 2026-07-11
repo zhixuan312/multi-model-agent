@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.5] - 2026-07-11
+
+**Spec/plan artifacts relocate to `.mma/`, Deferred-Decision Backlog rename, and spec-scaffold guidance.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Changed
+- Default output paths for `spec` and `plan` tasks move from `docs/mma/specs|plans/` to **`.mma/specs|plans/`**, co-located with the journal (`.mma/journal/`). The derivation is extracted from the handler into a pure `deriveDefaultOutputPath()` helper.
+- `mma-flow`: the **Deferred-Decision Ledger** is renamed **Deferred-Decision Backlog** and is now **created lazily on the first deferral** (not eagerly at `B1`); a run that defers nothing writes no backlog file. `B9` treats an absent or empty backlog as auto-merge-eligible. The run-metadata cache (`sourceBranch`/`slug`/`specPath`/`planPath`) is dropped — LOCATE re-derives it. Backlog artifacts live at `.mma/backlog/`.
+- `mma-design` / `mma-spec` skills: large or heavily-structured design decisions are now written to a tmp scaffold file and passed via `target.paths` instead of inline JSON, avoiding shell/JSON escaping fragility.
+
+### Added
+- Unit coverage for `deriveDefaultOutputPath()` (all spec/plan branches, `.mma/` root, `docs/mma` regression guard); `full-smoke` scenarios #24/#25 now assert the derived artifacts land under `.mma/specs|plans/`.
+
 ## [5.8.4] - 2026-07-11
 
 **Model-profile registry refresh + mma-flow audit-loop clarification + README economics update.** `SCHEMA_VERSION` unchanged (still 6).
