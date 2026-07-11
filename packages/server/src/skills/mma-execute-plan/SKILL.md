@@ -1,6 +1,6 @@
 ---
 name: mma-execute-plan
-description: Use when a plan or spec file exists on disk (any markdown with task headings — docs/superpowers/plans/*.md, a TODO list, a spec doc) and you need to implement one or more tasks from it sequentially in one worker session
+description: Use when a plan or spec file exists on disk (any markdown with task headings — .mma/plans/*.md, a TODO list, a spec doc) and you need to implement one or more tasks from it sequentially in one worker session
 when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mma is running. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
 version: "0.0.0-unreleased"
 ---
@@ -41,7 +41,7 @@ Dispatch tasks from a plan file to a single worker session. The `tasks` array se
     "2. Write unit tests for the auth module"
   ],
   "target": {
-    "paths": ["/project/docs/plan.md"]
+    "paths": ["/project/.mma/plans/2026-07-11-feature.md"]
   },
   "contextBlockIds": []
 }
@@ -66,7 +66,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"execute_plan","tasks":["3. Migrate database schema"],"target":{"paths":["/project/docs/plan.md"]}}' \
+  -d '{"type":"execute_plan","tasks":["3. Migrate database schema"],"target":{"paths":["/project/.mma/plans/2026-07-11-feature.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -124,7 +124,7 @@ Worker rejects with "no matching task" or matches the wrong one. **Fix:** copy t
 ❌ **Forgetting the plan file in `target.paths`**
 > target.paths: ["/project/src/db/schema.sql"]    ← no plan file
 
-Worker can't read the task body. **Fix:** always include the plan path: `target.paths: ["/project/docs/plan.md"]`.
+Worker can't read the task body. **Fix:** always include the plan path: `target.paths: ["/project/.mma/plans/2026-07-11-feature.md"]`.
 
 execute_plan handles dependencies naturally since tasks run sequentially in one session — the worker executes them in order within a single worktree.
 

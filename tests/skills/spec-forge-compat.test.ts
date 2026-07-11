@@ -12,37 +12,29 @@ const FORGE_COMPONENTS = [
   'User Stories & Tasks',
 ];
 
-describe('mma-spec template: Forge-compatible 8-component structure', () => {
+describe('mma-spec prompts: subset-aware Forge-compatible structure', () => {
   const implMd = readFileSync('packages/core/src/skills/spec/implement.md', 'utf8');
+  const reviewMd = readFileSync('packages/core/src/skills/spec/review.md', 'utf8');
 
-  it('template contains all 8 ## component headings', () => {
+  it('implementer template still contains all 8 canonical component headings', () => {
     for (const label of FORGE_COMPONENTS) {
       expect(implMd, `missing ## ${label}`).toContain(`## ${label}`);
     }
   });
 
-  it('template uses ## (not ###) for all 8 component-level headings', () => {
-    const templateBlock = implMd.match(/```markdown([\s\S]*?)```/)?.[1] ?? '';
-    const lines = templateBlock.split('\n');
-    for (const label of FORGE_COMPONENTS) {
-      const h2Line = lines.find(l => l.trim() === `## ${label}`);
-      expect(h2Line, `## ${label} not found in template`).toBeTruthy();
-    }
+  it('implementer instructions say requested components default to all 8', () => {
+    expect(implMd).toContain('requested components');
+    expect(implMd).toContain('default all 8');
+    expect(implMd).toContain('exactly equal to the resolved component set');
+    expect(implMd).toContain('zero `<!-- brief:` markers remain');
   });
 
-  it('self-validation checklist mentions all 8 components', () => {
-    for (const label of FORGE_COMPONENTS) {
-      expect(implMd).toContain(label);
-    }
-    expect(implMd).toContain('8 `##` component headings');
-  });
-
-  it('output JSON lists all 8 sections', () => {
-    const jsonMatch = implMd.match(/"sections":\s*\[([^\]]+)\]/);
-    expect(jsonMatch).toBeTruthy();
-    const sectionsStr = jsonMatch![1];
-    for (const label of FORGE_COMPONENTS) {
-      expect(sectionsStr).toContain(`"${label}"`);
-    }
+  it('refiner instructions scope work to requested components and gate cross-component checks', () => {
+    expect(reviewMd).toContain('requested components');
+    expect(reviewMd).toContain('Goals & Requirements');
+    expect(reviewMd).toContain('User Stories & Tasks');
+    expect(reviewMd).toContain('skipped if either is absent');
+    expect(reviewMd).toContain('exactly equal to the resolved component set');
+    expect(reviewMd).toContain('`sections` must list exactly the resolved component set');
   });
 });

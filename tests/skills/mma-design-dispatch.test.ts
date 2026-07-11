@@ -33,8 +33,11 @@ describe('mma-design SKILL.md: dispatch method and component alignment', () => {
     }
   });
 
-  it('Phase 3 dispatch references the 8-component headings', () => {
-    expect(skillMd).toContain('8-component');
-    expect(skillMd).toContain('`##` headings');
+  it('documents default-all-eight plus explicit-subset-only narrowing', () => {
+    expect(skillMd).toContain('default to all eight components');
+    expect(skillMd).toContain('explicit subset intent');
+    expect(skillMd).toContain('ask exactly one clarifying question');
+    expect(skillMd).toContain('never narrows on a borderline or inferred signal');
+    expect(skillMd).toContain('"components"');
   });
 });

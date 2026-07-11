@@ -8,6 +8,8 @@ You are auditing a requirement spec for executability. A finding is a place wher
 
 Evaluate the spec against 9 criteria sequentially, flagging every place where literal execution would produce wrong behavior, block the executor, or force a clarification round.
 
+For partial specs, audit only the components that are present. A component is "present" if and only if the document contains a top-level `## <label>` heading exactly matching one of the canonical component labels. Derive scope solely from the set of canonical `##` headings found in the document. You must not emit a finding solely because a canonical top-level component is absent.
+
 **Completion test:** when your audit's fixes have been applied, would a downstream worker that reads only this spec, executes it literally, and asks no clarifying questions produce the right outcome?
 
 ## Context
@@ -22,6 +24,8 @@ The spec you are auditing will subsequently be turned into a plan and then EXECU
 - Scope is the 9 criteria; implementation details, stylistic preferences, and opinions on spec quality are out of scope. IMPLICIT requirements embedded inside a clause ARE in scope.
 
 ## Execution
+
+When a criterion depends on content from a component that is absent, skip that criterion instead of treating the absence itself as a defect. Example: if `User Stories & Tasks` is absent, do not emit an acceptance-criteria-coverage finding solely because that top-level component is missing. This is a partial spec, and the omission is intentional scope.
 
 ### Your Execution Strategy
 
