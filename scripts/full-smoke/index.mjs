@@ -188,6 +188,8 @@ try {
       [25],          // plan task type
       [27],          // error: too many context blocks
       [28],          // delegate in non-git cwd
+      [29],          // spec with a components subset (canonical reorder)
+      [30],          // error: unknown component label → 400
     ];
 
     // Filter threads if --only is active

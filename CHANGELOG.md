@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.7] - 2026-07-11
+
+**Subset spec components — the `spec` route can emit a caller-chosen subset of the 8 components.** `SCHEMA_VERSION` unchanged (still 6). Fully backward compatible.
+
+### Added
+- `spec` task input accepts optional **`components: string[]`** (Zod enum of the 8 canonical labels). **Absent or empty `[]` ⇒ all 8** (unchanged default); a non-empty array selects a subset; unknown label ⇒ `400`; duplicates de-duplicated. New `SPEC_COMPONENTS` constant + pure `resolveComponents()` (default-all-8, canonical order) in `packages/core/src/unified/spec-components.ts`.
+- Two `full-smoke` scenarios: **#29** (subset spec — asserts exactly the requested components, reordered to canonical order) and **#30** (unknown component label → `400`).
+
+### Changed
+- Server resolves `components` and injects a `## Requested Spec Components` block into the implementer + refiner context; the spec implementer / refiner / audit prompts and the `mma-design` / `mma-spec` skills are subset-aware. Spec audit is now **present-components-only** (never flags an intentionally-omitted component). Obsolete `Decision Records` / `Acceptance Criteria` vocabulary removed from `mma-spec` docs.
+- `mma-flow` documents that audit/review fixes are applied **inline** by the main agent, never via a worktree fix worker (worktree routes discard edits to gitignored `.mma/` artifacts). All skill spec/plan path samples aligned to `.mma/specs` / `.mma/plans`.
+
+### Fixed
+- Spec implementer template no longer calls all 8 headings "mandatory" (which contradicted the injected subset block).
+
+### Notes
+- Forge `parseSpecSections` tolerating fewer than 8 top-level components is a downstream dependency, intentionally out of scope for this release; full-spec callers (including current Forge) are unaffected.
+
 ## [5.8.6] - 2026-07-11
 
 **Spec/plan drafting switches to scaffold-then-enrich for long-document reliability.** `SCHEMA_VERSION` unchanged (still 6). No API or output-contract change.
