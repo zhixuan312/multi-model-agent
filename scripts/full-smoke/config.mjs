@@ -143,4 +143,13 @@ export const SCENARIOS = [
 
   // K. Non-git cwd: delegate works without a git repo (no worktree)
   { id: 28, type: 'delegate', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
+
+  // L. Subset spec components (the `components` feature)
+  //    #29: spec with a NON-canonical components subset → the worker must emit ONLY
+  //         those components, reordered to canonical order (exercises resolveComponents
+  //         + subset-aware generation). Requested order is scrambled on purpose to
+  //         verify canonical reordering (AC-4.2).
+  //    #30: spec with an unknown component label → 400 invalid_request (AC-3.1).
+  { id: 29, type: 'spec', tier: 'complex', kind: 'write', emits: 1, subsetComponents: ['Technical Design', 'Context', 'Problem'] },
+  { id: 30, type: 'error_bad_components', kind: 'error', expectStatus: 400, emits: 0 },
 ];

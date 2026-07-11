@@ -26,7 +26,7 @@ function extractFindingsFromOutput(output) {
   } catch { return []; }
 }
 
-function checkQuality(type, subtype, r) {
+function checkQuality(type, subtype, r, subsetComponents) {
   // Extract output text: prefer raw implementer text, then output.summary as string
   const rawImpl = r?.raw?.implementer ?? '';
   const summary = r?.output?.summary;
@@ -100,8 +100,14 @@ function checkQuality(type, subtype, r) {
         return ['FAIL', `specPath not under .mma/specs/: ${specPath}`];
       }
       const sections = specSummary?.sections ?? [];
-      const forgeComponents = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
-      const missingComponents = forgeComponents.filter(c => !sections.includes(c));
+      const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
+      if (subsetComponents) {
+        // Subset spec: pass iff sections equals exactly the requested set in canonical order.
+        const want = CANON.filter(c => subsetComponents.includes(c));
+        const exact = sections.length === want.length && want.every((c, i) => sections[i] === c);
+        return [exact ? 'PASS' : 'FAIL', `subset spec; specPath=${hasSpecPath}; sections=${JSON.stringify(sections)} (want ${JSON.stringify(want)})`];
+      }
+      const missingComponents = CANON.filter(c => !sections.includes(c));
       const forgeCompat = missingComponents.length === 0;
       return [forgeCompat ? 'PASS' : 'WARN', `${outputLen} chars; specPath=${hasSpecPath}; forge-compat=${forgeCompat}${missingComponents.length > 0 ? ` missing=[${missingComponents.join(',')}]` : ''}`];
     }
@@ -214,7 +220,7 @@ export function verify(rec) {
 
   // ⑤ quality — does the output contain meaningful, type-appropriate content?
   if (e.kind === 'read' || e.kind === 'write') {
-    const [qStatus, qDetail] = checkQuality(e.type, e.subtype, r);
+    const [qStatus, qDetail] = checkQuality(e.type, e.subtype, r, e.subsetComponents);
     out.push(C('quality', qStatus, qDetail));
   }
 
@@ -359,14 +365,23 @@ export function verify(rec) {
       `delta round 2: ${findings.length} findings (task completed with prior context injected)`));
   }
 
-  // ⑰ Spec Forge-compat — spec output must list all 8 Forge-standard components
+  // ⑰ Spec components — default spec emits all 8 (Forge-compat); a subset request must
+  //    emit EXACTLY the requested components, reordered to canonical order.
   if (e.type === 'spec') {
     const specSummary = r?.output?.summary;
     const sections = specSummary?.sections ?? [];
-    const forgeComponents = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
-    const missing = forgeComponents.filter(c => !sections.includes(c));
-    out.push(C('forge-compat', missing.length === 0 ? 'PASS' : 'WARN',
-      `sections=${JSON.stringify(sections)}${missing.length > 0 ? ` missing=[${missing.join(',')}]` : ''}`));
+    const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
+    if (e.subsetComponents) {
+      // Expected = the requested labels in canonical order (regardless of request order).
+      const want = CANON.filter(c => e.subsetComponents.includes(c));
+      const exact = sections.length === want.length && want.every((c, i) => sections[i] === c);
+      out.push(C('subset-components', exact ? 'PASS' : 'FAIL',
+        `requested=${JSON.stringify(e.subsetComponents)} expected-canonical=${JSON.stringify(want)} got=${JSON.stringify(sections)}`));
+    } else {
+      const missing = CANON.filter(c => !sections.includes(c));
+      out.push(C('forge-compat', missing.length === 0 ? 'PASS' : 'WARN',
+        `sections=${JSON.stringify(sections)}${missing.length > 0 ? ` missing=[${missing.join(',')}]` : ''}`));
+    }
   }
 
   // ⑱ Non-git cwd — verify delegate completed without worktree

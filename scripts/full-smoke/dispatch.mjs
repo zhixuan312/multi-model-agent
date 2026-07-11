@@ -67,6 +67,10 @@ export function buildRequest(spec, ctx) {
     // K. Non-git cwd: delegate without worktree
     case 28: return { type: 'delegate', body: { prompt: 'Create file src/output.ts with: export const OUT = 1;', target: { paths: ['src/output.ts'] }, reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
 
+    // L. Subset spec components — request a scrambled subset; worker emits only those, canonical order
+    case 29: return { type: 'spec', body: { prompt: 'Guarded arithmetic — subset spec', target: { paths: [`${cwd}/design-decisions.md`] }, components: spec.subsetComponents } };
+    case 30: return { type: 'error_bad_components', body: {}, rawPayload: { type: 'spec', prompt: 'bad component label', target: { inline: '## Context\n\n### Background\ntest' }, components: ['Context', 'Not A Real Component'] } };
+
     // Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
