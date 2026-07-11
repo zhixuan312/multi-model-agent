@@ -291,7 +291,7 @@ describe('taskInputSchema', () => {
       type: 'spec',
       prompt: 'Input validation for math module',
       target: { inline: '## Context\ntest' },
-      outputPath: 'docs/mma/specs/2026-07-06-input-validation.md',
+      outputPath: '.mma/specs/2026-07-06-input-validation.md',
     }).success).toBe(true);
   });
 
@@ -332,7 +332,7 @@ describe('taskInputSchema', () => {
       type: 'plan',
       prompt: 'Write a TDD plan',
       target: { inline: '# Spec content...' },
-      outputPath: 'docs/mma/plans/2026-07-06-feature.md',
+      outputPath: '.mma/plans/2026-07-06-feature.md',
     }).success).toBe(true);
   });
 
@@ -341,7 +341,7 @@ describe('taskInputSchema', () => {
       type: 'plan',
       prompt: 'Write a TDD plan',
       target: { paths: ['/spec.md'] },
-      outputPath: 'docs/mma/plans/custom.md',
+      outputPath: '.mma/plans/custom.md',
     }).success).toBe(true);
   });
 

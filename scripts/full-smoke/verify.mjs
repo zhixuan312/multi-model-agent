@@ -89,7 +89,16 @@ function checkQuality(type, subtype, r) {
     case 'spec': {
       if (outputLen < 20) return ['WARN', `spec output very short (${outputLen} chars)`];
       const specSummary = r?.output?.summary;
-      const hasSpecPath = specSummary?.specPath != null;
+      const specPath = specSummary?.specPath ?? null;
+      const hasSpecPath = specPath != null;
+      // Default artifact root is .mma/specs/ (co-located with the journal). Scenario
+      // #24 sends no outputPath, so the derived path must land under .mma/specs/ —
+      // regression guard. The worker may return an absolute worktree path, so match
+      // the .mma/specs/ segment (not a leading anchor) and reject the old docs/mma root.
+      const specStr = String(specPath);
+      if (hasSpecPath && (!/(^|\/)\.mma\/specs\//.test(specStr) || specStr.includes('docs/mma'))) {
+        return ['FAIL', `specPath not under .mma/specs/: ${specPath}`];
+      }
       const sections = specSummary?.sections ?? [];
       const forgeComponents = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
       const missingComponents = forgeComponents.filter(c => !sections.includes(c));
@@ -99,8 +108,17 @@ function checkQuality(type, subtype, r) {
     case 'plan': {
       if (outputLen < 20) return ['WARN', `plan output very short (${outputLen} chars)`];
       const planSummary = r?.output?.summary;
-      const hasPlanPath = planSummary?.planPath != null;
-      return ['PASS', `${outputLen} chars output; planPath=${hasPlanPath}`];
+      const planPath = planSummary?.planPath ?? null;
+      const hasPlanPath = planPath != null;
+      // Default artifact root is .mma/plans/ (co-located with the journal). Scenario
+      // #25 sends no outputPath, so the derived path must land under .mma/plans/ —
+      // regression guard. The worker may return an absolute worktree path, so match
+      // the .mma/plans/ segment (not a leading anchor) and reject the old docs/mma root.
+      const planStr = String(planPath);
+      if (hasPlanPath && (!/(^|\/)\.mma\/plans\//.test(planStr) || planStr.includes('docs/mma'))) {
+        return ['FAIL', `planPath not under .mma/plans/: ${planPath}`];
+      }
+      return ['PASS', `${outputLen} chars output; planPath=${planPath ?? 'none'}`];
     }
     default:
       return ['PASS', `${outputLen} chars output (no type-specific quality check)`];

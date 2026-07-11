@@ -51,7 +51,7 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 | `target` | object | yes | Container — must have exactly one of `inline` or `paths`, not both |
 | `target.inline` | string | primary | The structured design decisions as markdown with section headings |
 | `target.paths` | string[] | alternative | Path to a structured outline file — exactly one file containing markdown with spec section headings |
-| `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `docs/mma/specs/YYYY-MM-DD-<slug>.md` |
+| `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `.mma/specs/YYYY-MM-DD-<slug>.md` |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Default `"reviewed"` (two-phase pipeline with refiner). Set `"none"` to skip review |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
@@ -101,7 +101,7 @@ The terminal envelope's `output.summary` contains:
 
 ```json
 {
-  "specPath": "docs/mma/specs/2026-07-06-claims-demo.md",
+  "specPath": ".mma/specs/2026-07-06-claims-demo.md",
   "sections": ["Context", "Problem", "Goals & Requirements", "Alternatives", "Decision Records", "Technical Design", "Testing Plan", "Acceptance Criteria"],
   "acceptanceCriteriaCount": 15,
   "notes": "Verified 3 codebase paths; expanded terse Constraints section with measurable targets"
@@ -118,8 +118,8 @@ The terminal envelope's `output.summary` contains:
 ## Best practices
 
 - **Gather all sections before dispatching.** The worker writes the formal spec from confirmed decisions — if a section is missing, the worker must invent it, which defeats the purpose.
-- **Use inline for fresh specs.** `target.inline` is the primary path — pass the structured decisions directly from the design session.
-- **Use paths for re-spec.** `target.paths` is for when you have an existing outline file on disk that needs formal expansion.
+- **Inline for small, fresh decisions.** `target.inline` is the default — pass the structured decisions directly from the design session.
+- **Write a tmp scaffold file + `target.paths` once the content is large or heavily structured** (tables, code fences, many sections — roughly >8 KB). A path has no JSON-escaping surface and keeps the dispatch body small; the driver is escaping fragility, not size alone. Delete the scaffold after `specPath` returns. `target.paths` also covers re-spec from an existing outline on disk.
 - **Register large context via `mma-context-blocks`.** If the design decisions reference large documents (prior specs, investigation reports), register them as context blocks and pass `contextBlockIds`.
 
 ## Common pitfalls
@@ -127,6 +127,8 @@ The terminal envelope's `output.summary` contains:
 ❌ **Dispatching before all sections are confirmed.** The worker cannot make design decisions — it writes what it receives. Missing sections produce incomplete specs. **Fix:** complete the interactive design phase (all 8 top-level sections confirmed by the user, including the Scope/Constraints/Success Metrics subsections under Goals & Requirements) before dispatching.
 
 ❌ **Sending raw brain dump instead of structured decisions.** The worker expects markdown with the standard section headings. An unstructured text dump produces a poorly organized spec. **Fix:** structure the content with the required `##` headings before passing as `target.inline`.
+
+❌ **Inlining a large, table-heavy decisions doc as a JSON string.** Embedding many `##` sections, tables, and code fences into a shell-assembled JSON string breaks the dispatch (escaping/heredoc failures). **Fix:** write the decisions to a tmp scaffold file and pass `target.paths`.
 
 ❌ **Using this instead of `mma-audit subtype:spec`.** This writes a spec; audit verifies one. If you already have a spec and want it checked, use audit. **Fix:** dispatch `mma-audit subtype:spec` to verify an existing spec.
 

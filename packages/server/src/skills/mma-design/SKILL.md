@@ -134,10 +134,16 @@ When all sections are filled, present the complete set of confirmed decisions to
 Once the decision summary is confirmed:
 
 1. Gather all confirmed sections into a structured markdown document using the 8-component `##` headings: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks. Use `###` for sections within each component.
-2. Dispatch:
-   ```json
-   { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
-   ```
+2. Pick the carrier by size + structure, then dispatch:
+   - **Small, simple decisions → `target.inline`** (the default): pass the structured markdown directly.
+     ```json
+     { "type": "spec", "prompt": "<feature title>", "target": { "inline": "<structured decisions markdown>" } }
+     ```
+   - **Large or heavily structured decisions → write a tmp scaffold file and pass `target.paths`.** When the assembled markdown is big or rich (tables, code fences, many sections — roughly >8 KB), write it to a tmp scaffold (e.g. `<scratchpad>/spec-scaffold.md`), dispatch with the absolute path, and delete the scaffold once `specPath` returns.
+     ```json
+     { "type": "spec", "prompt": "<feature title>", "target": { "paths": ["<abs>/spec-scaffold.md"] } }
+     ```
+     **Why:** the driver is JSON-escaping fragility, not size alone — embedding a table/backtick/newline-heavy document into a shell-assembled JSON string breaks the dispatch, whereas a path has zero escaping surface (and keeps the request body small). The scaffold is throwaway — the spec worker produces the durable artifact at `specPath`.
 3. Poll `GET /task/:taskId` until terminal. The `output.summary` contains `{ specPath, sections, acceptanceCriteriaCount, notes }` — `specPath` is the written spec file path
 4. Present the spec file path to the user. **mma-design ends here.**
 
