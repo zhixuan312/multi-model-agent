@@ -11,7 +11,7 @@
 [![npm: @zhixuan92/multi-model-agent](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=%40zhixuan92%2Fmulti-model-agent)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 [![npm: @zhixuan92/multi-model-agent-core](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-core?label=%40zhixuan92%2Fmulti-model-agent-core)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-core)
 
-Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for 90%+ less.
+Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for **up to 97% less per task**.
 
 A local HTTP daemon for Claude Code, Codex CLI, Gemini CLI, and Cursor. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
@@ -21,16 +21,21 @@ A local HTTP daemon for Claude Code, Codex CLI, Gemini CLI, and Cursor. One tool
 
 Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste. multi-model-agent fixes this.
 
-- **Save 90%+ on implementation labor.** Mechanical work runs on standard agents at **$0.01–0.03/task**. Spec/quality review runs on complex agents at **$0.30–0.65/task**. Your flagship model does neither.
+- **Cut implementation cost up to 97%.** At production token loads (~59K input / 20K output / 1.4M cached-read tokens per task), a task that costs **~$1.94 on your flagship** (Claude Opus 4.8) runs for **~$0.05 on DeepSeek V4 Pro** or **~$0.13 on MiniMax-M3** — 94–97% less. Spec/quality review on a complex agent (**GPT-5.6 mid** or **Claude Sonnet 5**) is **~$0.80/task** (~60% less). Your flagship model does neither.
 - **Keep your context window clean.** Every task runs in an isolated worker context. Zero implementation tokens pollute your architect session.
 - **Ship faster with parallelism.** Independent tasks execute concurrently — 30–45% wall-clock savings on multi-file work.
 - **Catch bugs with cross-agent review.** Implementation and review run on different model families. Different training data, different blind spots — structural quality you can't get from self-review.
 
-| Project | MMA — MiniMax-M3 | MMA — DeepSeek V4 Pro | Flagship: Claude Opus 4.8 |
+**Per-task cost at production token loads** — mean 59K input · 20K output · 1.4M cached-read tokens/task (one week of a 2-dev team, 1,256 tasks):
+
+| Tier — role | Recommended model | Cost/task | vs flagship |
 |---|---|---|---|
-| Feature impl (30 files, ~50 tasks) | **$1.50** · **33× ROI** · ~35 min | **~$2.50** · **20× ROI** · ~15 min | $50 · 1× · *baseline* |
-| Full web SPA (59 tasks) | **$5.65** · **12× ROI** · ~50 min | **~$9** · **7.5× ROI** · ~22 min | $68 · 1× · *baseline* |
-| Backend microservice (91 tasks) | **$8.21** · **13× ROI** · ~1.5 hrs | **~$14** · **7.5× ROI** · ~40 min | $104 · 1× · *baseline* |
+| **Flagship** — your architect / brain | Claude Opus 4.8 | $1.94 | — *baseline* |
+| **Complex** — spec · review · debug | GPT-5.6 mid · Claude Sonnet 5 | **$0.78–0.80** | ~60% less |
+| **Standard** — mechanical impl | MiniMax-M3 · GLM-5.2 | **$0.13–0.54** | 72–94% less |
+| **Standard** — cheapest capable | DeepSeek V4 Pro | **$0.05** | **97% less** |
+
+Measured across a **2-developer team over one week** (1,000 delegated tasks): **2.8× ROI — 64% less** than running the same work on the flagship, before parallelism. Routing the standard tier to DeepSeek V4 Pro takes per-task mechanical savings to 97%.
 
 ## Initial setup
 
@@ -59,7 +64,7 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
 
 - Heavy Claude Code user → `claude-opus-4-8`
-- ChatGPT-led workflow → `gpt-5.5`
+- ChatGPT-led workflow → `gpt-5.6`
 - Gemini-led workflow → `gemini-3.1-pro`
 
 Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (server returns `400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers writes JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return the *worker's* model as the calling agent's "main" model. The calling client is the only reliable source. Export both once if you're calling the API directly:
@@ -85,7 +90,7 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
     },
     "complex": {
       "type": "codex",
-      "model": "gpt-5.5"
+      "model": "gpt-5.6"
     }
   }
 }
@@ -183,11 +188,11 @@ You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
 ↓
 Client picks mma-execute-plan (plan file on disk, multiple tasks)
 ↓
-mma runs the tasks as one sequential goal-set: the standard agent (e.g. MiniMax-M3)
+mma runs the tasks as one sequential goal-set: the standard agent (e.g. DeepSeek V4 Pro)
 implements each task in order and commits it (`[task N] …`), then the complex agent
 reviews every task and fixes anything left — returning one structured report.
 ↓
-You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-8 (30× ROI)"
+You see one consolidated headline: "~$1.17 actual / ~$2.93 saved vs claude-opus-4-8 (~3.5× ROI)"
 ```
 
 **Sample 2 — debug a failing test (multiple skills chained)**
@@ -208,7 +213,7 @@ Step 3 — mma-delegate
   Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
   fix; the reviewer verifies the failing test now passes 20× via its own shell tools.
 ↓
-Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the verdict.
+Total cost: ~$0.40 (debug trace + one delegated fix). Main-context tokens consumed: just the hypothesis and the verdict.
 ```
 
 ## Configuration reference

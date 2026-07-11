@@ -154,14 +154,16 @@ Create the PR only after `B7` passes in the current session.
 
 ## Audit And Review Loop Policy
 
-`B1`, `B3`, and `B6` all use the same policy:
+`B1`, `B3`, and `B6` all use the same policy. The gate for advancing to the next stage is a **clean pass** — a single round whose own findings contain **0 critical AND 0 high**. Applying fixes never satisfies the gate on its own; only a subsequent pass that itself comes back clean does. A round that found any high (even with 0 critical) is never a stopping point, no matter how thoroughly its findings were fixed.
 
 1. Run the relevant MMA worker.
-2. Count critical and high findings.
-3. Stop immediately when both counts are zero.
-4. If critical or high findings remain, and autofix is enabled, dispatch a fix worker and rerun.
+2. Count the critical and high findings **in that pass**.
+3. If both counts are zero, that pass is clean — stop the loop and advance.
+4. Otherwise — any critical, OR any high, including the "0 critical, ≥1 high" case — dispatch a fix worker for every critical/high finding, then **run another full round**. Never advance on the strength of the fixes alone: a round that surfaced highs must be followed by a fresh round that surfaces none.
 5. Cap the loop at three rounds.
 6. If critical or high findings remain after round three, return `proceed: false` and stop the flow before the next stage.
+
+**Worked example.** Round 1 returns 0 critical, 2 high. You fix both highs. You may NOT skip to the next stage — a pass with highs was never clean. Run round 2. If round 2 returns 0 critical / 0 high, that clean pass is the gate: advance. If round 2 still has a high (a fix was incomplete or introduced a new issue), fix again and run round 3. This applies identically to spec audit (B1), plan audit (B3), and code review (B6).
 
 ## Deferred-Decision Ledger
 

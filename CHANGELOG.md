@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.4] - 2026-07-11
+
+**Model-profile registry refresh + mma-flow audit-loop clarification + README economics update.** `SCHEMA_VERSION` unchanged (still 6).
+
+### Added
+- Model profiles for new provider flagships/tiers: OpenAI **GPT-5.6** family (`gpt-5.6` Sol / `gpt-5.6-terra` mid / `gpt-5.6-luna` budget), Claude **Sonnet 5** plus premium **Fable 5** / **Mythos 5** tiers, xAI **Grok 4.1 Fast**, **Qwen3.7-Max**, **GLM-5.2**. `rateLookupDate` advanced to 2026-07-11 for the 10 re-verified providers (anthropic, openai, google, xai, deepseek, mistral, alibaba, zhipu, moonshot, minimax).
+
+### Changed
+- `mma-flow` audit/review loop policy (`B1`/`B3`/`B6`): the gate to advance is now an explicit **clean pass** — a single round whose own findings contain 0 critical AND 0 high. Applying fixes never satisfies the gate by itself; a round that surfaced any high must be followed by a fresh clean round. Applies identically to spec audit, plan audit, and code review.
+- README pricing/economics rewritten against 7-day production telemetry: per-task cost table by tier (flagship / complex / standard) with recommended models and honest measured ROI (2.8× on delegated work, 2-dev team sample), replacing the stale per-project ROI figures. Example model ids refreshed to `gpt-5.6`.
+
+### Fixed
+- `grok-4.20` pricing corrected to $2/$6 per MTok with 2M context (was $1.25/$2.50); `mistral-small` to Small-4 rates ($0.15/$0.60). Prior flagships (`gpt-5.5`, `qwen3.6-plus`, `glm-5.1`) relabeled as superseded.
+
 ## [5.8.3] - 2026-07-09
 
 **mma-flow B10 journal record step.** `SCHEMA_VERSION` unchanged (still 6).
