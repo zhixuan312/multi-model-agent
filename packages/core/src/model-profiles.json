@@ -1,9 +1,9 @@
 [
   {
     "provider": "anthropic",
-    "naming": "claude-{tier}-{major}-{minor} | claude-{major}-{tier}-{date} (3.x legacy)",
+    "naming": "claude-{tier}-{major}-{minor} — tiers: haiku < sonnet < opus < fable/mythos (premium); claude-{major}-{tier}-{date} (3.x legacy)",
     "rateSource": "https://platform.claude.com/docs/en/about-claude/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "claude",
       "supportsEffort": true,
@@ -32,7 +32,35 @@
       },
       {
         "prefix": "claude-sonnet",
-        "bestFor": "professional coding and tool use"
+        "bestFor": "professional coding and tool use (Sonnet 4.6 rates)"
+      },
+      {
+        "prefix": "claude-sonnet-5",
+        "input": 3,
+        "output": 15,
+        "cachedRead": 0.3,
+        "cachedNonRead": 3.75,
+        "bestFor": "current Sonnet flagship (Sonnet 5, GA 2026-06-30); default on Free/Pro; standard $3/$15 — introductory $2/$10 applied through 2026-08-31"
+      },
+      {
+        "prefix": "claude-fable",
+        "tier": "reasoning",
+        "cost": "high",
+        "input": 10,
+        "output": 50,
+        "cachedRead": 1,
+        "cachedNonRead": 12.5,
+        "bestFor": "premium Claude tier above Opus for highest-stakes creative + reasoning work (Fable 5; $10/$50)"
+      },
+      {
+        "prefix": "claude-mythos",
+        "tier": "reasoning",
+        "cost": "high",
+        "input": 10,
+        "output": 50,
+        "cachedRead": 1,
+        "cachedNonRead": 12.5,
+        "bestFor": "premium Claude reasoning tier (Mythos 5; same $10/$50 as Fable 5)"
       },
       {
         "prefix": "claude-haiku",
@@ -77,9 +105,9 @@
   },
   {
     "provider": "openai",
-    "naming": "gpt-{major}.{minor}[-{size}] — sizes: pro, mini, nano (no suffix = base)",
+    "naming": "gpt-{major}.{minor}[-{size}] — 5.6 sizes: sol (flagship), terra (mid), luna (budget); 5.4/5.5 sizes: pro, mini, nano (no suffix = base/flagship)",
     "rateSource": "https://developers.openai.com/api/docs/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "openai",
       "supportsEffort": true,
@@ -102,11 +130,41 @@
         "inputTokenSoftLimit": 1000000
       },
       {
+        "prefix": "gpt-5.6",
+        "input": 5,
+        "output": 30,
+        "cachedRead": 0.5,
+        "bestFor": "current GPT flagship (GPT-5.6 Sol, GA 2026-07-09); base id resolves to the Sol tier; cache writes bill at 1.25x uncached input"
+      },
+      {
+        "prefix": "gpt-5.6-sol",
+        "input": 5,
+        "output": 30,
+        "cachedRead": 0.5,
+        "bestFor": "GPT-5.6 Sol flagship tier"
+      },
+      {
+        "prefix": "gpt-5.6-terra",
+        "input": 2.5,
+        "output": 15,
+        "cachedRead": 0.25,
+        "bestFor": "GPT-5.6 Terra mid tier"
+      },
+      {
+        "prefix": "gpt-5.6-luna",
+        "tier": "standard",
+        "cost": "low",
+        "input": 1,
+        "output": 6,
+        "cachedRead": 0.1,
+        "bestFor": "GPT-5.6 Luna budget tier"
+      },
+      {
         "prefix": "gpt-5.5",
         "input": 5,
         "output": 30,
         "cachedRead": 0.5,
-        "bestFor": "latest GPT-5 flagship"
+        "bestFor": "prior GPT-5 flagship (superseded by GPT-5.6 2026-07-09; still served)"
       },
       {
         "prefix": "gpt-5.5-pro",
@@ -164,7 +222,7 @@
     "provider": "google",
     "naming": "gemini-{major}[.{minor}]-{tier}-{suffix} — tiers: pro ($2/$12), flash ($0.50/$3)",
     "rateSource": "https://ai.google.dev/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "gemini",
       "supportsEffort": false,
@@ -247,9 +305,9 @@
   },
   {
     "provider": "xai",
-    "naming": "grok-{major}[.{minor}][-{variant}] — Grok 4.3 (slug grok-4.3) is current flagship; grok-4 family (incl. heavy) deprecated 2026-05-15, retires 2026-08-15",
+    "naming": "grok-{major}[.{minor}][-{variant}] — Grok 4.3 (slug grok-4.3) is current flagship; grok-4.20 is the 2M-context variant; grok-4 family (incl. heavy) deprecated 2026-05-15, retires 2026-08-15",
     "rateSource": "https://docs.x.ai/developers/models",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "grok",
       "supportsEffort": false,
@@ -289,10 +347,20 @@
         "prefix": "grok-4.20",
         "tier": "reasoning",
         "cost": "low",
-        "input": 1.25,
-        "output": 2.5,
-        "bestFor": "Grok 4.20 reasoning / non-reasoning / multi-agent variants; 1M context",
-        "inputTokenSoftLimit": 1000000
+        "input": 2,
+        "output": 6,
+        "cachedRead": 0.2,
+        "bestFor": "Grok 4.20 reasoning / non-reasoning / multi-agent variants; 2M context",
+        "inputTokenSoftLimit": 2000000
+      },
+      {
+        "prefix": "grok-4.1-fast",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 0.2,
+        "output": 0.5,
+        "cachedRead": 0.05,
+        "bestFor": "cheapest frontier-tier Grok (Grok 4.1 Fast); high-throughput budget option"
       },
       {
         "prefix": "grok-4-heavy",
@@ -316,9 +384,9 @@
   },
   {
     "provider": "mistral",
-    "naming": "mistral-{tier}-{version} — tiers: large ($0.50/$1.50), small ($0.10/$0.30)",
+    "naming": "mistral-{tier}-{version} — tiers: large ($0.50/$1.50), small ($0.15/$0.60)",
     "rateSource": "https://mistral.ai/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "mistral",
       "supportsEffort": false,
@@ -346,8 +414,8 @@
       },
       {
         "prefix": "mistral-small",
-        "input": 0.1,
-        "output": 0.3,
+        "input": 0.15,
+        "output": 0.6,
         "bestFor": "fast lightweight tasks and classification (Small 4)"
       },
       {
@@ -389,7 +457,7 @@
     "provider": "deepseek",
     "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "deepseek",
       "supportsEffort": false,
@@ -459,9 +527,9 @@
   },
   {
     "provider": "alibaba",
-    "naming": "qwen{major}[.{minor}]-{tier} — no separator after 'qwen'",
+    "naming": "qwen{major}[.{minor}]-{tier} — no separator after 'qwen'; Qwen3.7-Max is current flagship",
     "rateSource": "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "qwen",
       "supportsEffort": false,
@@ -477,13 +545,23 @@
         "bestFor": "cost-effective coding and multilingual tasks (catch-all, Qwen3.5-Plus DashScope rates)"
       },
       {
+        "prefix": "qwen3.7-max",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 1.25,
+        "output": 3.75,
+        "notes": "$1.25/$3.75 is a 50% promotional rate; standard list is $2.50/$7.50. International (Singapore) Model Studio endpoint; regional prices differ.",
+        "bestFor": "current Qwen flagship (Qwen3.7-Max)",
+        "inputTokenSoftLimit": 1000000
+      },
+      {
         "prefix": "qwen3.6-plus",
         "tier": "reasoning",
         "cost": "low",
         "input": 0.33,
         "output": 1.95,
-        "notes": "rates from third-party aggregators (OpenRouter); official DashScope international pricing page does not yet list a dedicated qwen3.6-plus row as of 2026-06-01.",
-        "bestFor": "current Qwen flagship with 1M context (released 2026-03-30)",
+        "notes": "rates from third-party aggregators (OpenRouter); official DashScope international pricing page does not list a dedicated qwen3.6-plus row.",
+        "bestFor": "prior Qwen flagship (Qwen3.6-Plus, released 2026-03-30); 1M context",
         "inputTokenSoftLimit": 1000000
       },
       {
@@ -499,9 +577,9 @@
   },
   {
     "provider": "zhipu",
-    "naming": "glm-{major}[.{minor}] — GLM-5 is ~30% more expensive than GLM-4",
+    "naming": "glm-{major}[.{minor}] — GLM-5.2 is current flagship; GLM-5 is ~30% more expensive than GLM-4",
     "rateSource": "https://docs.z.ai/guides/overview/pricing",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "glm",
       "supportsEffort": false,
@@ -524,11 +602,19 @@
         "inputTokenSoftLimit": 200000
       },
       {
+        "prefix": "glm-5.2",
+        "input": 1.4,
+        "output": 4.4,
+        "cachedRead": 0.26,
+        "bestFor": "current GLM flagship (GLM-5.2, released 2026-06); agentic coding, 200k context",
+        "inputTokenSoftLimit": 200000
+      },
+      {
         "prefix": "glm-5.1",
         "input": 1.4,
         "output": 4.4,
         "cachedRead": 0.26,
-        "bestFor": "current GLM flagship (released 2026-04-07); agentic coding, 200k context",
+        "bestFor": "prior GLM flagship (GLM-5.1, released 2026-04-07); agentic coding, 200k context",
         "inputTokenSoftLimit": 200000
       },
       {
@@ -552,7 +638,7 @@
     "provider": "moonshot",
     "naming": "kimi-k{generation}[.{minor}] | kimi-k{generation}-{variant}",
     "rateSource": "https://platform.kimi.ai/docs/pricing/chat",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "kimi",
       "supportsEffort": false,
@@ -646,7 +732,7 @@
     "provider": "minimax",
     "naming": "MiniMax-M{major}[.{minor}][-highspeed] — case-sensitive prefix",
     "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
-    "rateLookupDate": "2026-06-01",
+    "rateLookupDate": "2026-07-11",
     "defaults": {
       "family": "minimax",
       "supportsEffort": true,
