@@ -33,9 +33,15 @@ The interactive design session (brain dump → investigation → structuring →
 3. Note any gaps between the decisions and what a downstream executor would need
 4. Identify whether the work spans **multiple independent workstreams** (e.g. a prerequisite gate, the main implementation, and a release-governance gate). If it does, note which requirements belong to which workstream — you will structure them explicitly in Phase B.
 
-### Phase B — Write the Spec
+### Phase B — Scaffold the spec file (ONE write)
 
-Write the spec file at the designated output path. The spec **must** follow this exact heading hierarchy — 8 component headings at `##` level, sections within each at `###`, sub-parts at `####`. This is the unified MMA/Forge specification standard:
+Do NOT try to write the whole spec in one pass — long single-pass documents come out slow and uneven and often truncate or fail before the last section. Instead, first create the spec file as a **complete skeleton**: the frontmatter, the title, and EVERY heading (the 8 `##` components, each `###` section, each `####` sub-part), with a single one-line **brief** immediately under each `###` section stating what that section will contain (drawn from the confirmed decisions). Write this skeleton in ONE `Write` call — it is small and fast.
+
+Each brief is one HTML-comment line placed directly under its `###` heading:
+
+`<!-- brief: one line — what this section will cover, from the decisions -->`
+
+The skeleton **must** follow this exact heading hierarchy — 8 component headings at `##` level, sections within each at `###`, sub-parts at `####`. This is the unified MMA/Forge specification standard (the bracketed guidance under each heading below is what that section must eventually contain — in the skeleton it becomes the one-line brief; you write the full content in Phase C):
 
 ```markdown
 ---
@@ -161,6 +167,12 @@ acceptance criteria as sub-items.]
 
 These labels are the shared standard between MMA and Forge. Forge's `parseSpecSections` matches on `## <label>` (case-insensitive) to identify components, then reads `###` headings as sections within each component. Using different heading levels or different labels will break downstream parsing.
 
+### Phase C — Enrich each section (one Edit per section)
+
+Now fill the skeleton in, **one `###` section at a time, in document order**, using `Edit` to replace that section's `<!-- brief: ... -->` line with its complete final content. Never rewrite the whole file — edit one section, move to the next. Small, focused edits produce higher-quality prose than one long pass, and if you run out of budget they leave a well-structured partial document (the refiner completes any sections you did not reach). Continue until **zero `<!-- brief:` markers remain.**
+
+Each section you enrich must satisfy these Section Rules:
+
 ### Section Rules
 
 1. **No placeholders.** Every section must be complete. No TBD, TODO, "to be determined", or "similar to above."
@@ -171,9 +183,10 @@ These labels are the shared standard between MMA and Forge. Forge's `parseSpecSe
 6. **Blocking prerequisites.** Any section or requirement that depends on an external artifact (a spike, a sign-off, a governance review, a schema freeze) must be explicitly flagged as a blocking prerequisite with the artifact path and the condition that unblocks it.
 7. **Workstream decomposition.** When the spec covers multiple independent kinds of work (prerequisite gates, the buildable runtime implementation, release-governance sign-offs), enumerate them explicitly in Delivery order. The downstream plan must separate them into distinct sections. A spec that folds prerequisite or governance items into the implementation workstream fails the decomposition check.
 
-### Phase C — Self-Validation
+### Phase D — Self-Validation
 
 Before finishing, verify:
+- **Zero `<!-- brief:` markers remain** — every section has been enriched with final content
 - All 8 `##` component headings are present: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks
 - Every `##` heading uses the exact label from the list above (case-insensitive match is tolerated but exact casing is preferred)
 - Sections within components use `###`, sub-parts use `####` — no other heading levels for spec content
