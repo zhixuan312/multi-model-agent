@@ -11,7 +11,7 @@ This is a **Claude Code command**. The user invokes it by typing `/mma-flow`.
 
 ## Overview
 
-`/mma-flow` is the packaged SDLC orchestration command for MMA. It is not a server endpoint and it does not add server-side workflow state. This file is the source of truth; the main agent drives all loop stages (audit→fix→re-audit) inline via the mma-* skill tools.
+`/mma-flow` is the packaged SDLC orchestration command for MMA. It is not a server endpoint and it does not add server-side workflow state. This file is the source of truth. The main agent drives the loop stages: it dispatches the *audit/review* pass to an mma-* worker, but it **applies every fix itself, inline, with `Edit`** — it does not dispatch a fix worker (see "Applying fixes — inline, never dispatched").
 
 ## When to Use
 
@@ -156,14 +156,30 @@ Create the PR only after `B7` passes in the current session.
 
 `B1`, `B3`, and `B6` all use the same policy. The gate for advancing to the next stage is a **clean pass** — a single round whose own findings contain **0 critical AND 0 high**. Applying fixes never satisfies the gate on its own; only a subsequent pass that itself comes back clean does. A round that found any high (even with 0 critical) is never a stopping point, no matter how thoroughly its findings were fixed.
 
-1. Run the relevant MMA worker.
+1. Run the relevant MMA worker to produce the audit/review findings.
 2. Count the critical and high findings **in that pass**.
 3. If both counts are zero, that pass is clean — stop the loop and advance.
-4. Otherwise — any critical, OR any high, including the "0 critical, ≥1 high" case — dispatch a fix worker for every critical/high finding, then **run another full round**. Never advance on the strength of the fixes alone: a round that surfaced highs must be followed by a fresh round that surfaces none.
+4. Otherwise — any critical, OR any high, including the "0 critical, ≥1 high" case — **the main agent applies every critical/high fix itself, inline, with `Edit`** (never a dispatched fix worker — see below), then **runs another full round**. Never advance on the strength of the fixes alone: a round that surfaced highs must be followed by a fresh round that surfaces none.
 5. Cap the loop at three rounds.
 6. If critical or high findings remain after round three, return `proceed: false` and stop the flow before the next stage.
 
-**Worked example.** Round 1 returns 0 critical, 2 high. You fix both highs. You may NOT skip to the next stage — a pass with highs was never clean. Run round 2. If round 2 returns 0 critical / 0 high, that clean pass is the gate: advance. If round 2 still has a high (a fix was incomplete or introduced a new issue), fix again and run round 3. This applies identically to spec audit (B1), plan audit (B3), and code review (B6).
+**Worked example.** Round 1 returns 0 critical, 2 high. The main agent edits the spec/plan/source in place to fix both highs. You may NOT skip to the next stage — a pass with highs was never clean. Run round 2. If round 2 returns 0 critical / 0 high, that clean pass is the gate: advance. If round 2 still has a high (a fix was incomplete or introduced a new issue), fix again and run round 3. This applies identically to spec audit (B1), plan audit (B3), and code review (B6).
+
+### Applying fixes — inline, never dispatched
+
+The audit/review *pass* runs on a worker (`mma-audit`, `mma-review`). The *fix* does not. The main agent applies every fix directly with `Edit` on the real file. **Do not dispatch fixes to `mma-delegate` or `mma-execute-plan`.**
+
+This is not a style preference — it is a correctness requirement:
+
+- `mma-delegate` and `mma-execute-plan` are **worktree routes** (`worktree: true`). The worker edits a *copy* inside an isolated git worktree; the engine merges that worktree back via **git**.
+- Spec and plan artifacts live under `.mma/`, which is **gitignored**. Git has nothing to commit or merge for an ignored path, so on worktree cleanup the worker's edits are silently discarded — **and the worker still reports success**, because from its own vantage it did write the file. The fixes vanish. Re-auditing then re-finds the same issues and the loop never converges.
+
+Therefore:
+
+- **B1 (spec audit) and B3 (plan audit)** target gitignored `.mma/` artifacts — the main agent **must** apply fixes inline with `Edit`. A worktree route can *never* persist here.
+- **B6 (code review)** targets tracked source on the project branch — inline `Edit` also applies cleanly there. Keep it inline for consistency; do not dispatch.
+
+If a fix is genuinely too large for the main agent to apply inline and a worker is unavoidable, route it through a **`worktree: false`** type (`orchestrate`), which edits the real file in place — never through `delegate`/`execute_plan`.
 
 ## Deferred-Decision Backlog
 
