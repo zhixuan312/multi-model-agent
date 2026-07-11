@@ -157,7 +157,7 @@ Format each as: **As a** role, **I want** action, **so that** benefit, with
 acceptance criteria as sub-items.]
 ```
 
-**The 8 `##` component headings are mandatory and must use these exact labels:**
+**The canonical `##` component labels, in this exact order — emit the components requested in the `## Requested Spec Components` block (default: all eight), using these exact labels:**
 1. `## Context`
 2. `## Problem`
 3. `## Goals & Requirements`
