@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.6] - 2026-07-11
+
+**Spec/plan drafting switches to scaffold-then-enrich for long-document reliability.** `SCHEMA_VERSION` unchanged (still 6). No API or output-contract change.
+
+### Changed
+- `spec` implementer now writes the full document skeleton (all 8 `##` components + `###`/`####` headings, one `<!-- brief: -->` line per section) in a single `Write`, then enriches one section per `Edit` — instead of one monolithic write that degrades or truncates on long specs. `plan` implementer scaffolds header + file structure + every task heading (`Files:` + AC refs + `<!-- enrich -->` slot) in one `Write`, then fills each task's TDD steps one `Edit` at a time.
+- Both refiners now **complete any unfinished scaffold** (leftover `<!-- brief:` / `<!-- enrich` markers) before running their quality checks, so an implementer that runs out of budget mid-document is finished by the reviewer rather than lost. Placeholder scans now also flag leftover scaffold markers.
+
+### Fixed
+- Long specs/plans no longer depend on a single one-shot generation that could stall past 30 minutes or fail outright; incremental edits keep each section/task focused and leave a well-structured partial document if interrupted. Verified live: spec = 1 Write + 22 Edits (322 lines, 0 leftover markers), 4-task plan = 1 Write + 4 Edits (432 lines, 0 leftover markers).
+
 ## [5.8.5] - 2026-07-11
 
 **Spec/plan artifacts relocate to `.mma/`, Deferred-Decision Backlog rename, and spec-scaffold guidance.** `SCHEMA_VERSION` unchanged (still 6).

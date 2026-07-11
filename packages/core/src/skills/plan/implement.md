@@ -48,9 +48,11 @@ Before writing any plan content:
 
 **Do NOT skip Phase A.** Plans that skip codebase verification produce tasks with wrong paths, wrong symbols, and wrong test commands — exactly the failures the 12-perspective plan audit catches.
 
-### Phase B — Structure
+### Phase B — Scaffold the plan skeleton (ONE write)
 
-Write the plan header, conventions, and file structure:
+Do NOT write the whole plan in one pass — long single-pass plans come out slow and uneven and often truncate before the last tasks. Instead, first create the plan file as a **complete skeleton** in ONE `Write` call: the header, the file structure, the commit convention, the workstream/track headings, and EVERY task heading with its `**Files:**` block and AC references — leaving the code-heavy TDD steps as a single slot to fill next. Task headings are dynamic (derived from the spec), so this pass establishes the full task list, order, file surface, and AC mapping up front; you write the code in Phase C. (No per-task brief is needed — a task's title, AC refs, and `Files:` block already state its intent.)
+
+Write the header, conventions, and file structure in full (they are short):
 
 ```markdown
 # <Feature Name> Implementation Plan
@@ -87,9 +89,25 @@ Only workstream-2 tasks get TDD task structure. Prerequisite and release-gate it
 
 Then decompose the implementation workstream into **Tracks** — logical groupings of related tasks (2-6 tasks per track).
 
-### Phase C — Task Writing (TDD, bite-sized)
+Under each track, lay out **every** task as a heading with its file surface but WITHOUT the steps yet — a task skeleton:
 
-Each task MUST follow this exact structure:
+```markdown
+### Task I-N: <Component Name> (AC-X.X, AC-Y.Y)
+
+**Files:**
+- Create: `exact/path/to/new-file.ts`
+- Test: `tests/exact/path/to/test-file.test.ts`
+
+<!-- enrich -->
+```
+
+Finalize each task's `Files:` block now — it fixes the ≤3-files decomposition up front — and leave a single `<!-- enrich -->` slot where the TDD steps will go. Also scaffold the closing-section headings (Full-suite gate, Spec-coverage traceability) as empty headings; you fill them in Phase D.
+
+### Phase C — Enrich each task (one Edit per task)
+
+Now fill in the tasks **one at a time, in dependency order**, using `Edit` to replace each task's `<!-- enrich -->` slot with its complete TDD steps. Never rewrite the whole file — edit one task, move to the next. Small, focused edits keep each task's code complete and correct, and if you run out of budget they leave a fully-structured plan with the remaining tasks clearly marked (the refiner completes any tasks you did not reach). Continue until **zero `<!-- enrich` markers remain.**
+
+Each task MUST follow this exact structure (the steps replace its `<!-- enrich -->` slot):
 
 ```markdown
 ### Task I-N: <Component Name> (AC-X.X, AC-Y.Y)
@@ -177,6 +195,7 @@ Every spec AC must appear in this table mapped to at least one task. An unmapped
 ### Phase E — Self-Validation
 
 Before finishing:
+- **Zero `<!-- enrich` markers remain** — every task has its full TDD steps
 - Every spec requirement maps to at least one task (verify via traceability table)
 - Every task has the exact TDD structure (test → fail → implement → pass)
 - Every file path was verified in Phase A
@@ -190,7 +209,7 @@ Before finishing:
 
 ### Turn Budget
 
-Plan writing is a heavyweight task — expect 20-40 tool calls. Read the spec once, explore the codebase systematically in Phase A, then write continuously in Phase B/C/D. Do not re-read files you already read.
+Plan writing is a heavyweight task — expect 20-40 tool calls. Read the spec once, explore the codebase systematically in Phase A, scaffold the whole skeleton in ONE write (Phase B), then enrich one task per `Edit` (Phase C). Do not re-read files you already read, and do not rewrite the whole file — each enrichment is a single targeted `Edit` on one task's slot.
 
 ## Output
 

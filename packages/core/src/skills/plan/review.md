@@ -12,9 +12,10 @@ Verify the implementer's plan against the real codebase and the upstream spec, f
 
 1. Read the plan file the implementer wrote.
 2. Read the spec from the Original Task context.
-3. Apply all 12 perspectives below sequentially — fix as you go.
-4. Assign per-task verdicts based on findings.
-5. Your FINAL message must be a single ```json fenced block — nothing else.
+3. **Complete any unfinished scaffold.** If the implementer ran out of budget, some tasks may still hold a `<!-- enrich -->` slot instead of their TDD steps. Before verifying, write the full TDD steps for every such task (per the same Task Writing Rules the implementer follows) so **zero `<!-- enrich` markers remain**. A plan that reaches you half-scaffolded is finished here, not rejected.
+4. Apply all 12 perspectives below sequentially — fix as you go.
+5. Assign per-task verdicts based on findings.
+6. Your FINAL message must be a single ```json fenced block — nothing else.
 
 ## Checks
 
@@ -46,7 +47,7 @@ For each perspective, verify with Read/grep against the actual codebase. Fix iss
 
 9. **TASK GRANULARITY** — each task should touch ≤3 source files and have ≤6 steps. Fix: split oversized tasks.
 
-11. **PLACEHOLDER LANGUAGE** — scan for `TBD`, `TODO`, `implement later`, `Similar to Task N`, steps without code blocks. Fix: replace with actual code.
+11. **PLACEHOLDER LANGUAGE** — scan for `TBD`, `TODO`, `implement later`, `Similar to Task N`, steps without code blocks, or leftover `<!-- enrich` scaffold slots. Fix: replace with actual code.
 
 12. **PLAN SKELETON** — plan must have: Goal/Architecture/Tech Stack header, File Structure section, per-task `Files:` blocks. Fix: add missing structure.
 
