@@ -8,11 +8,16 @@ Local HTTP daemon that delegates tool-using work to sub-agents on different LLM 
 
 Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste.
 
-| Project | MMA — MiniMax-M3 | MMA — DeepSeek V4 Pro | Flagship: Claude Opus 4.8 |
+**Per-task cost at production token loads** — mean 59K input · 20K output · 1.4M cached-read tokens/task (one week of a 2-dev team, 1,256 tasks):
+
+| Tier — role | Recommended model | Cost/task | vs flagship |
 |---|---|---|---|
-| Feature impl (30 files, ~50 tasks) | **$1.50** · **33× ROI** · ~35 min | **~$2.50** · **20× ROI** · ~15 min | $50 · 1× · *baseline* |
-| Full web SPA (59 tasks) | **$5.65** · **12× ROI** · ~50 min | **~$9** · **7.5× ROI** · ~22 min | $68 · 1× · *baseline* |
-| Backend microservice (91 tasks) | **$8.21** · **13× ROI** · ~1.5 hrs | **~$14** · **7.5× ROI** · ~40 min | $104 · 1× · *baseline* |
+| **Flagship** — your architect / brain | Claude Opus 4.8 | $1.94 | — *baseline* |
+| **Complex** — spec · review · debug | GPT-5.6 mid · Claude Sonnet 5 | **$0.78–0.80** | ~60% less |
+| **Standard** — mechanical impl | MiniMax-M3 · GLM-5.2 | **$0.13–0.54** | 72–94% less |
+| **Standard** — cheapest capable | DeepSeek V4 Pro | **$0.05** | **97% less** |
+
+Measured across a **2-developer team over one week** (1,000 delegated tasks): **2.8× ROI — 64% less** than running the same work on the flagship, before parallelism.
 
 Plus structural quality: implementation and review run on **different** model families — different blind spots, catches what self-review can't.
 
@@ -61,7 +66,7 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
     },
     "complex": {
       "type": "codex",
-      "model": "gpt-5.5",
+      "model": "gpt-5.6",
       "apiKeyEnv": "OPENAI_API_KEY"
     }
   }
