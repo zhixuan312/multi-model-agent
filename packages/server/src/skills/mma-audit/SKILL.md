@@ -16,7 +16,7 @@ version: "0.0.0-unreleased"
 | You're auditing… | Use… | What it checks |
 |---|---|---|
 | A general prose artifact (design doc, recommendation, post-mortem, README) | `subtype: 'default'` | Comprehensive prose-coherence — would a literal-following worker produce the right outcome from this prose alone? Catches ambiguity, contradictions, missing branches, drift, scope-creep. **Does NOT verify against any codebase.** |
-| A **code-execution PLAN** (`docs/superpowers/plans/*.md` or similar) before running it via `mma-execute-plan` | `subtype: 'plan'` | Plan-vs-codebase coherence — for every method / type / file path / signature / import / verify command the plan names, the codebase actually contains it as described. Catches the bug class the prose-coherence audit cannot see (e.g. plan says `registerBlock` but actual interface is `register`). |
+| A **code-execution PLAN** (`.mma/plans/*.md` or similar) before running it via `mma-execute-plan` | `subtype: 'plan'` | Plan-vs-codebase coherence — for every method / type / file path / signature / import / verify command the plan names, the codebase actually contains it as described. Catches the bug class the prose-coherence audit cannot see (e.g. plan says `registerBlock` but actual interface is `register`). |
 | A **requirement spec** (what we want, why; success criteria) | `subtype: 'spec'` | Requirement-prose executability across 9 criteria — testability, scope explicitness AND decomposability, acceptance-criteria coverage, non-functional capture, requirement conflicts, decision-trace, assumption exposure, placeholder scan, and design-decomposition presence (architecture / components / data flow / error handling / testing). |
 | A **SKILL.md** for an `mma-*` skill or comparable agent-facing playbook | `subtype: 'skill'` | Skill-file reader-effectiveness — when-to-use specificity, endpoint contract integrity, example correctness, anti-pattern coverage, link integrity. |
 
@@ -44,7 +44,7 @@ If you want to bias workers toward a narrow lens (security only, performance onl
   "type": "audit",
   "prompt": "optional audit instruction",
   "subtype": "default",
-  "target": { "paths": ["/project/docs/spec.md"] },
+  "target": { "paths": ["/project/.mma/specs/2026-07-11-feature-design.md"] },
   "contextBlockIds": []
 }
 ```
@@ -94,7 +94,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"default","target":{"paths":["/project/docs/api-spec.md"]}}' \
+  -d '{"type":"audit","subtype":"default","target":{"paths":["/project/.mma/specs/2026-07-11-api-design.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -107,7 +107,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"spec","target":{"paths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}}' \
+  -d '{"type":"audit","subtype":"spec","target":{"paths":["/project/.mma/specs/2026-05-12-feature-design.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 ```
 
@@ -131,7 +131,7 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"plan","target":{"paths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}}' \
+  -d '{"type":"audit","subtype":"plan","target":{"paths":["/project/.mma/plans/2026-05-10-feature.md"]}}' \
   "http://localhost:$PORT/task?cwd=/project")
 ```
 

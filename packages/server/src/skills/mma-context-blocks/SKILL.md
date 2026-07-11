@@ -71,7 +71,7 @@ ID=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
+  -d "{\"content\":$(jq -Rs . < /project/.mma/specs/2026-07-11-feature-design.md)}" \
   "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
 
 # Reference from a delegate call

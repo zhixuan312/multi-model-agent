@@ -119,7 +119,7 @@ The terminal envelope's `output.summary` contains:
 
 - **Gather all sections before dispatching.** The worker writes the formal spec from confirmed decisions — if a section is missing, the worker must invent it, which defeats the purpose.
 - **Inline for small, fresh decisions.** `target.inline` is the default — pass the structured decisions directly from the design session.
-- **Write a tmp scaffold file + `target.paths` once the content is large or heavily structured** (tables, code fences, many sections — roughly >8 KB). A path has no JSON-escaping surface and keeps the dispatch body small; the driver is escaping fragility, not size alone. Delete the scaffold after `specPath` returns. `target.paths` also covers re-spec from an existing outline on disk.
+- **Write a tmp scaffold file + `target.paths` once the content is large or heavily structured** (tables, code fences, many sections — roughly >8 KB). A path has no JSON-escaping surface and keeps the dispatch body small; the driver is escaping fragility, not size alone. **Write the scaffold to your scratchpad / system temp directory, never inside the target repo** (e.g. `<scratchpad>/spec-decisions.md`, not `<repo>/.mma-spec-scaffold.md`) — it's a throwaway dispatch artifact, not a project file, so keep it out of the working tree. Pass an absolute path in `target.paths`. Delete the scaffold after `specPath` returns. `target.paths` also covers re-spec from an existing outline on disk.
 - **Register large context via `mma-context-blocks`.** If the design decisions reference large documents (prior specs, investigation reports), register them as context blocks and pass `contextBlockIds`.
 
 ## Common pitfalls
@@ -128,7 +128,7 @@ The terminal envelope's `output.summary` contains:
 
 ❌ **Sending raw brain dump instead of structured decisions.** The worker expects markdown with the standard section headings. An unstructured text dump produces a poorly organized spec. **Fix:** structure the content with the required `##` headings before passing as `target.inline`.
 
-❌ **Inlining a large, table-heavy decisions doc as a JSON string.** Embedding many `##` sections, tables, and code fences into a shell-assembled JSON string breaks the dispatch (escaping/heredoc failures). **Fix:** write the decisions to a tmp scaffold file and pass `target.paths`.
+❌ **Inlining a large, table-heavy decisions doc as a JSON string.** Embedding many `##` sections, tables, and code fences into a shell-assembled JSON string breaks the dispatch (escaping/heredoc failures). **Fix:** write the decisions to a tmp scaffold file **in your scratchpad / system temp dir (not inside the repo)** and pass its absolute path via `target.paths`.
 
 ❌ **Using this instead of `mma-audit subtype:spec`.** This writes a spec; audit verifies one. If you already have a spec and want it checked, use audit. **Fix:** dispatch `mma-audit subtype:spec` to verify an existing spec.
 
