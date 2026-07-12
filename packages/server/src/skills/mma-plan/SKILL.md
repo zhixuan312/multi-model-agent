@@ -1,7 +1,7 @@
 ---
 name: mma-plan
 description: Use when you have a spec file on disk and need a TDD implementation plan written by a worker — produces ordered tasks with complete code blocks, exact file paths, and verification commands
-when_to_use: You have a formal specification on disk (written by mma-spec or manually) AND you want a TDD implementation plan produced by a worker. If you don't have a spec yet → use mma-design to create one. If you have a plan and want to execute it → use mma-execute-plan. If you want to audit an existing plan → use mma-audit subtype:plan.
+when_to_use: You have a formal specification on disk (written by mma-spec or manually) AND you want a TDD implementation plan produced by a worker. If you don't have a spec yet → use mma-brainstorm to create one. If you have a plan and want to execute it → use mma-execute-plan. If you want to audit an existing plan → use mma-audit subtype:plan.
 version: "0.0.0-unreleased"
 ---
 
@@ -16,12 +16,12 @@ Dispatch a spec file to a complex worker that writes a TDD implementation plan. 
 ## When to Use
 
 **Use when:**
-- A spec file exists on disk (written by `mma-spec`, `mma-design`, or manually)
+- A spec file exists on disk (written by `mma-spec`, `mma-brainstorm`, or manually)
 - You want a TDD implementation plan with complete code blocks
 - The plan will be executed via `mma-execute-plan`
 
 **Don't use when:**
-- No spec exists yet → `mma-design` (full design workflow) or `mma-spec` (write spec from decisions)
+- No spec exists yet → `mma-brainstorm` (full design workflow) or `mma-spec` (write spec from decisions)
 - You want to audit an existing plan → `mma-audit subtype:plan`
 - You want to execute a plan → `mma-execute-plan`
 - The task is simple enough for `mma-delegate` (no plan needed)
@@ -139,6 +139,12 @@ The plan file follows this structure:
 - **Tasks:** TDD structure (failing test → verify fail → implement → verify pass)
 - **Track verification subsets** between track boundaries
 
+## Natural next step
+
+The plan is written. Usual next moves (soft suggestions — none forced):
+- **Audit it against the codebase** → `mma-audit` (subtype: plan) — verify task ordering, signatures, and file paths before execution.
+- **Execute it** → `mma-execute-plan` — implement the tasks on a worker.
+
 ## Best practices
 
 - **One spec per plan.** Pass exactly one spec file. Multi-spec plans produce unfocused output.
@@ -147,7 +153,7 @@ The plan file follows this structure:
 
 ## Common pitfalls
 
-❌ **Passing a brain dump instead of a spec.** The worker needs structured requirements to produce a correct plan. An unstructured prompt produces a vague plan. **Fix:** write a formal spec first via `mma-spec` or `mma-design`, then pass the spec file.
+❌ **Passing a brain dump instead of a spec.** The worker needs structured requirements to produce a correct plan. An unstructured prompt produces a vague plan. **Fix:** write a formal spec first via `mma-spec` or `mma-brainstorm`, then pass the spec file.
 
 ❌ **Using `target.inline` without `outputPath`.** The worker cannot derive a filename from inline content — provide `outputPath` explicitly.
 

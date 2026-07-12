@@ -18,6 +18,7 @@ Local HTTP service that fans out tool-using work to workers on different LLM pro
 ```dot
 digraph picker {
     "New idea / feature?" [shape=diamond];
+    "Grounded yet?" [shape=diamond];
     "Spec on disk?" [shape=diamond];
     "Plan on disk?" [shape=diamond];
     "Audit a doc?" [shape=diamond];
@@ -25,7 +26,7 @@ digraph picker {
     "Debug a failure?" [shape=diamond];
     "Codebase question?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
-    "mma-design" [shape=box];
+    "mma-brainstorm" [shape=box];
     "/mma-flow" [shape=box, style=bold];
     "mma-spec" [shape=box];
     "mma-plan" [shape=box];
@@ -37,7 +38,9 @@ digraph picker {
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
 
-    "New idea / feature?" -> "mma-design" [label="yes — need a spec"];
+    "New idea / feature?" -> "Grounded yet?" [label="yes"];
+    "Grounded yet?" -> "mma-explore" [label="no — ground it first"];
+    "Grounded yet?" -> "mma-brainstorm" [label="yes — grill to spec"];
     "New idea / feature?" -> "Spec on disk?" [label="no"];
     "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
     "Spec on disk?" -> "Plan on disk?" [label="no"];
@@ -53,14 +56,15 @@ digraph picker {
     "Codebase question?" -> "Convergent or divergent?" [label="yes"];
     "Codebase question?" -> "mma-delegate" [label="no — ad-hoc"];
     "Convergent or divergent?" -> "mma-investigate" [label="convergent (one answer)"];
-    "Convergent or divergent?" -> "mma-explore" [label="divergent (3-5 directions)"];
+    "Convergent or divergent?" -> "mma-explore" [label="divergent — writes exploration.md"];
 }
 ```
 
 | Skill | Purpose |
 |---|---|
-| `mma-design` | Interactive design workflow — brain dump → investigate → structured interview → write spec |
-| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → design/spec → audits → branch → execute → review → verify → PR → merge |
+| `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current State · Rough Direction). Divergent grounding before brainstorm/plan. |
+| `mma-brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma-spec` |
+| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
@@ -68,7 +72,6 @@ digraph picker {
 | `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
-| `mma-explore` | Divergent ideation from codebase + web research + prior-learnings recall |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous dispatch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |

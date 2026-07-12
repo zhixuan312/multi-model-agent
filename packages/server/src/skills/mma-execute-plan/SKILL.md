@@ -105,6 +105,12 @@ The HTTP status is the state discriminator:
 
 `details` is optional and present only when the server has structured additional context.
 
+## Natural next step
+
+Tasks are implemented. Usual next moves (soft suggestions — none forced):
+- **Review the changes** → `mma-review` on the changed files.
+- **Re-run only the failures** → `mma-retry` on any `failed` / incomplete indices (never a full re-dispatch).
+
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:

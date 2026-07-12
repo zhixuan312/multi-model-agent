@@ -28,7 +28,7 @@ The interactive design session (brain dump → investigation → structuring →
 
 ### Phase A — Read and Understand
 
-1. Read the structured decisions thoroughly
+1. Read the structured decisions thoroughly. **When multiple input files are provided, the FIRST file is the authoritative confirmed decisions to expand. Any additional file — for example an `exploration.md` carrying a `## Rough Direction` section — is GROUNDING/reference only: read it for context, but NEVER treat its options, rough directions, or unranked alternatives as decisions. The chosen decisions live in the first file (or, when no decisions file is given, in the task prompt).**
 2. If file paths or codebase references are mentioned, verify them via Read/grep
 3. Note any gaps between the decisions and what a downstream executor would need
 4. Identify whether the work spans **multiple independent workstreams** (e.g. a prerequisite gate, the main implementation, and a release-governance gate). If it does, note which requirements belong to which workstream — you will structure them explicitly in Phase B.

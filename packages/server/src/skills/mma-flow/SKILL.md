@@ -29,6 +29,7 @@ Run LOCATE on every invocation. Determine the earliest incomplete coarse stage f
 type FlowStage =
   | 'D1'
   | 'D2'
+  | 'D3'
   | 'B1'
   | 'B2'
   | 'B3'
@@ -41,6 +42,7 @@ type FlowStage =
   | 'B10';
 
 interface LocateSignals {
+  latestExplorationPath?: string | null;
   latestSpecPath?: string | null;
   latestPlanPath?: string | null;
   backlogPath?: string | null;
@@ -63,7 +65,8 @@ Resume rules:
 
 | Signal state | Resume stage |
 |---|---|
-| No spec under `.mma/specs/` | `D1` |
+| No spec under `.mma/specs/` AND no exploration under `.mma/explorations/` | `D1` |
+| Exploration exists under `.mma/explorations/`, no spec under `.mma/specs/` | `D2`, then `D3` |
 | Spec exists, no plan under `.mma/plans/` | `B1`, then `B2` |
 | Plan exists, no `mma/*` branch | `B3`, then `B4` |
 | `mma/*` branch exists, no commits beyond source branch | `B5` |
@@ -75,7 +78,7 @@ Resume rules:
 | PR merged, no journal entries recorded this session | `B10` |
 | PR merged, journal entries recorded this session | Flow complete |
 
-**Multi-artifact disambiguation.** If multiple spec or plan files exist under the default artifact roots, LOCATE shall use the pair explicitly referenced in the current conversation. If no explicit reference exists, LOCATE shall choose the most recently modified spec under `.mma/specs/` and the most recently modified plan under `.mma/plans/` whose filename slug matches that spec's slug.
+**Multi-artifact disambiguation.** If multiple exploration, spec, or plan files exist under the default artifact roots, LOCATE shall use the set explicitly referenced in the current conversation. If no explicit reference exists, LOCATE shall choose the most recently modified spec under `.mma/specs/` and the most recently modified plan under `.mma/plans/` whose filename slug matches that spec's slug; the exploration is resolved as the most recently modified file under `.mma/explorations/` whose slug matches, and it is only consulted when no spec exists yet (once a spec exists, Design is complete and the exploration is not re-derived).
 
 The rationale for the current-session evidence requirement is architectural: with no new server endpoint and no new persisted orchestration state, the skill can durably infer artifact and git boundaries, while audit and verification sub-steps remain session-local unless and until they produce the next durable artifact boundary.
 
@@ -85,8 +88,11 @@ If only session-local review or green evidence is missing after an interruption,
 
 Design is git-free.
 
-1. `D1` — run `mma-design`
-2. `D2` — run `mma-spec` and write the spec into `.mma/specs/`
+1. `D1` — run `mma-explore`: capture the braindump, fan out investigate + research + journal-recall, synthesise, and write the exploration into `.mma/explorations/`.
+2. `D2` — run `mma-brainstorm`: grill the requirements into confirmed decisions, consuming the latest `.mma/explorations/` artifact as grounding.
+3. `D3` — run `mma-spec`: pass the confirmed decisions as the **first** `target.paths` file (scaffolded to a tmp file) and the `exploration.md` as the **second** (grounding); the worker writes the spec into `.mma/specs/`.
+
+**In flow mode, `D3` owns the spec dispatch.** `mma-brainstorm` in isolation ends at confirmed decisions and *soft-offers* `mma-spec`; inside `/mma-flow` that soft offer is bypassed — the flow proceeds from `D2` straight into `D3`, which dispatches `mma-spec` exactly once. Do not dispatch the spec twice.
 
 Do not require git validation before Build begins.
 
@@ -104,6 +110,45 @@ Build requires git. Before `B1`, confirm the working directory is inside a git r
 8. `B8` — verify PR prerequisites, push the project branch, and create the pull request
 9. `B9` — evaluate the Deferred-Decision Backlog, merge automatically only if it is absent or empty
 10. `B10` — synthesize and record journal entries from the entire flow
+
+## Input model — structured files forward, unstructured prompt
+
+Every stage that produces a durable artifact writes it under `.mma/` **so the next stage can receive it as a file** — that is the whole reason these files exist: they are the structured hand-off between stages. Each downstream dispatch therefore carries **two kinds of input, deliberately**:
+
+- **Structured input → `target.paths` (files).** The durable upstream artifact(s) the stage consumes — `exploration.md` into spec, `spec.md` into plan, `plan.md` into execute. When a stage takes more than one file, the **first path is authoritative** and the rest are grounding/reference (spec receives `[decisions, exploration.md]`; the worker never treats the grounding file's options as decisions).
+- **Unstructured input → `prompt`.** Only what is fresh to this stage — a title, extra constraints, task headings. Never re-paste a file that is already passed as a path.
+
+| Stage | Structured file(s) in `target.paths` | `prompt` carries | Artifact written |
+|---|---|---|---|
+| `D1` explore | — (braindump only) | the braindump, per leg | `.mma/explorations/<slug>.md` |
+| `D2` brainstorm | reads `exploration.md` (main agent) | the interview | confirmed decisions (in-context) |
+| `D3` spec | `[<decisions-scaffold>, exploration.md]` | title (+ subset via `components`) | `.mma/specs/<slug>.md` |
+| `B2` plan | `[spec.md]` | title + constraints beyond the spec | `.mma/plans/<slug>.md` |
+| `B5` execute | `[plan.md]` | `tasks` = plan headings | code (MMA commits) |
+| `B1`/`B3` audit | `[spec.md]` / `[plan.md]` | `subtype` | findings (in-context) |
+| `B6` review | `[<changed files>]` | acceptance notes | findings (in-context) |
+
+Rule of thumb: **if a prior stage generated a file, pass that file to the stage that needs it — never re-summarise it into the prompt.** The prompt is for what isn't already on disk.
+
+## Stage handbook — what each stage does, who handles it, and how to call it
+
+Every worker dispatch is `POST /task?cwd=<repo-root>`; poll `GET /task/:taskId` to a terminal `200`. **"Main agent"** means you do it in the main session; **"worker"** means a delegated MMA task on a cheap model. Fixes to gitignored `.mma/` artifacts and to source are **always applied inline by the main agent** — never by a fix worker (see "Applying fixes — inline, never dispatched"). The per-skill `SKILL.md` files carry the full request schema; the calls below list the load-bearing fields.
+
+| Stage | What it does | Who handles it | How to call / what to pass |
+|---|---|---|---|
+| `D1` | Explore — ground the idea | Main agent orchestrates; the 3 legs run on workers | Run `mma-explore`: take the braindump from the user, then fan out `POST /task` × `{type:'investigate', prompt, target:{paths}}`, `{type:'research', prompt}`, `{type:'journal_recall', prompt}` in one message. Main agent synthesises and **writes** `.mma/explorations/<date>-<slug>.md`. |
+| `D2` | Brainstorm — grill into decisions | Main agent interviews; mechanical lookups on workers | Run `mma-brainstorm`: read the latest exploration, then grill the user **one decision at a time**. Mechanical questions → `POST /task` (`investigate`/`research`/`journal_recall`); decision questions → the user. Output is a confirmed decision summary held in context (no file). |
+| `D3` | Spec — write the formal doc | Worker writes; main agent assembles the payload | `POST /task {type:'spec', prompt:'<title>', target:{paths:['<decisions-scaffold>', '<exploration.md>']}}` — **first path = authoritative confirmed decisions** (scaffolded to a tmp file under the scratchpad), **second = exploration.md grounding**; add `components?:[...]` for a subset. Worker writes `.mma/specs/<date>-<slug>.md`. |
+| `B1` | Spec audit loop | Worker audits; **main agent fixes inline** | `POST /task {type:'audit', subtype:'spec', target:{paths:['<specPath>']}}`. Read `output.summary.findings[].weight`; fix every `critical`/`high` with `Edit`; re-audit. Clean-pass gate, cap 3. |
+| `B2` | Plan — write the TDD plan | Worker writes | `POST /task {type:'plan', prompt:'<title>', target:{paths:['<specPath>']}}`. Worker writes `.mma/plans/<date>-<slug>.md`. |
+| `B3` | Plan audit loop | Worker audits; **main agent fixes inline** | `POST /task {type:'audit', subtype:'plan', target:{paths:['<planPath>']}}`. Same loop as `B1`. |
+| `B4` | Branch | Main agent (git) | `sourceBranch=$(git rev-parse --abbrev-ref HEAD); git checkout -b mma/<slug>`. |
+| `B5` | Execute the plan | Worker implements (worktree); main agent verifies | `POST /task {type:'execute_plan', target:{paths:['<planPath>']}, tasks:['<heading>', …]}`. `tasks` are plan headings verbatim (empty ⇒ all). **The plan must contain no git-commit steps — MMA owns the commit.** Main agent verifies against the real `git diff` and fixes worker mistakes inline. |
+| `B6` | Review loop | Worker reviews; **main agent fixes inline** | `POST /task {type:'review', target:{paths:['<changed file>', …]}}`. Same clean-pass loop as `B1`. |
+| `B7` | Whole-repo verification | Main agent | Detect and run the repo's build then test (see "B7 — Whole-repo verification command discovery"). |
+| `B8` | Push + open PR | Main agent (git + `gh`) | Verify prerequisites, `git push -u origin mma/<slug>`, `gh pr create --base <sourceBranch> --head mma/<slug>`. |
+| `B9` | Evaluate backlog + merge | Main agent (`gh`) | If the backlog is absent/empty, `gh pr merge <n> --merge`; otherwise present the entries and wait for the user. |
+| `B10` | Journal capture | Worker records; main agent composes | `POST /task {type:'journal_record', prompt:'<one concrete learning>'}` per insight (see "B10 — Journal record"). |
 
 ### Deferred-Decision Backlog — lazy creation (not at `B1`)
 
@@ -211,7 +256,7 @@ The journal already holds the team's **known knowns** — things clearly documen
 **Known unknowns → now resolved.** Gaps we knew existed but filled during this flow. These surface when the flow crosses a system boundary or brings in external information:
 
 - External research (D1/mma-explore) revealed an industry practice, ecosystem constraint, or prior-art pattern we hadn't incorporated
-- User input during spec interview (D1/mma-design) clarified an integration point, external system behavior, or business rule that was previously assumed or unknown
+- User input during the requirement interview (D2/mma-brainstorm) clarified an integration point, external system behavior, or business rule that was previously assumed or unknown
 - Investigation during planning (B2) discovered codebase state (actual signatures, existing patterns, undocumented constraints) that contradicted or refined the spec's assumptions
 - Audit findings (B1/B3) exposed ambiguity or contradiction that required a decision — the decision itself is the resolved unknown
 
@@ -227,8 +272,9 @@ Walk the flow artifacts in order and extract learnings:
 
 | Flow stage | Where to look | What surfaces |
 |---|---|---|
-| D1 (design) | mma-explore results, mma-design interview transcript | Research findings not previously known; user decisions that resolved ambiguity; directions explored and dropped (with why) |
-| D2 (spec) | The spec file itself; diff between early drafts and final | Requirements that changed shape during iteration; constraints discovered late |
+| D1 (explore) | mma-explore leg results, the written `exploration.md` | Research/investigation/recall findings not previously known; directions explored and dropped (with why) |
+| D2 (brainstorm) | mma-brainstorm interview transcript; the confirmed-decision summary | User decisions that resolved ambiguity; contradictions surfaced and reconciled |
+| D3 (spec) | The spec file itself; diff between early drafts and final | Requirements that changed shape during iteration; constraints discovered late |
 | B1 (spec audit) | Audit findings and fixes | Ambiguities that weren't obvious until audited; assumptions that were wrong |
 | B2 (plan) | The plan file; any plan-vs-codebase reconciliation notes | Codebase state that surprised the planner; symbols/paths that didn't exist as assumed |
 | B3 (plan audit) | Audit findings and fixes | Cross-task dependencies or sequencing issues discovered; verification commands that needed adjustment |
@@ -260,7 +306,7 @@ Compose a single `mma-journal-record` prompt per learning. Each entry must be co
 
 ## Failure Handling
 
-- If Design has not produced a spec yet, stop in `D1`.
+- If Design has not produced a spec yet, stop in the earliest incomplete Design stage (`D1` if no exploration, `D2` if an exploration exists but no confirmed decisions, `D3` if decisions are confirmed but no spec is written).
 - If Build starts outside a git repository, stop before `B1`.
 - If `mma/<slug>` already exists and matches the active flow, switch to it and rerun LOCATE.
 - If the branch name collides with a different in-progress flow, stop and ask the user to resolve the collision.
@@ -273,21 +319,29 @@ Every supported client installs this playbook. All clients follow the same stage
 
 ## Data Model
 
-The flow uses three artifact families:
+The flow uses four artifact families:
 
-1. **Spec artifacts**
+1. **Exploration artifacts**
+
+```text
+.mma/explorations/YYYY-MM-DD-<slug>.md
+```
+
+Written at `D1` by `mma-explore` (Background · Current State · Rough Direction). Read at `D2` by `mma-brainstorm` as grounding. Never required once a spec exists.
+
+2. **Spec artifacts**
 
 ```text
 .mma/specs/YYYY-MM-DD-<slug>.md
 ```
 
-2. **Plan artifacts**
+3. **Plan artifacts**
 
 ```text
 .mma/plans/YYYY-MM-DD-<slug>.md
 ```
 
-3. **Deferred-Decision Backlog artifacts**
+4. **Deferred-Decision Backlog artifacts**
 
 ```text
 .mma/backlog/YYYY-MM-DD-<slug>.json

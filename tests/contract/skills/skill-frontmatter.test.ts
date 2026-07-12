@@ -41,10 +41,10 @@ function extractEndpointPath(md: string): string | null {
 
 const ACTIONABLE_SKILLS = [
   'mma-audit',
+  'mma-brainstorm',
   'mma-context-blocks',
   'mma-debug',
   'mma-delegate',
-  'mma-design',
   'mma-execute-plan',
   'mma-explore',
   'mma-flow',
