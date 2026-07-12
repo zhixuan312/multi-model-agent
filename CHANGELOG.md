@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.1] - 2026-07-12
+
+**`mma-flow` audit-loop and merge-gate rewrite — the flow now runs fully autonomously to merge, with a single terminal human touchpoint.** Skill-content only; `SCHEMA_VERSION` unchanged (still 6). No HTTP API, task-type, or runtime change — consumers install the same package.
+
+### Changed
+- **Audit/review loop (`B1`/`B3`/`B6`)** — replaced the flat "cap 3, clean = 0 critical AND 0 high, else `proceed: false`" gate with an **escalating gate, hard cap 5, that never halts the flow**: rounds 1–3 advance on 0 critical AND 0 high; rounds 4–5 advance on 0 critical (high findings tolerated); round 6 never runs. A critical still present after round 5 is appended to the backlog and the flow advances anyway — grilling one spot past the cap does not improve quality; the residue resolves naturally as the rest of the flow proceeds.
+- **Second human gate removed (`B9`)** — the PR now merges automatically and unconditionally. The Deferred-Decision Backlog no longer gates the merge and the flow never pauses for a human decision mid-run.
+- **Deferred-Decision Backlog** is now a passive accumulator of both deferred decisions **and** residual critical/high findings (still created lazily, on first append), surfaced to the user exactly once via a new `B10` **terminal report** — the only human touchpoint, after the merge and journal have already landed.
+
 ## [5.9.0] - 2026-07-12
 
 **`mma-design` split into `mma-explore` (rewritten, divergent) + `mma-brainstorm` (new, convergent interview).** `SCHEMA_VERSION` unchanged (still 6). No HTTP API or task-type change — this is a skill-surface change; consumers install the same package.
