@@ -146,7 +146,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 
 | Skill | Use when |
 |---|---|
-| `mma-design` | Interactive design workflow — brain dump → structured interview → investigate/research/recall → dispatch `mma-spec`. Teaches the main agent to resolve mechanical questions via workers and surface only decision questions to the user. |
+| `mma-brainstorm` | Requirement interview — name the destination → grill the 8 spec components one decision at a time, resolving mechanical questions via workers and putting only real decisions to the user → dispatch `mma-spec`. Consumes an `exploration.md` from `mma-explore` when present. |
 | `mma-spec` | Write a formal specification from structured design decisions. Output follows the Forge 8-component standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
 | `mma-plan` | Write a TDD implementation plan from a spec file. Output uses `### Task I-N:` headings with `**Files:**` blocks and checkbox steps. |
 
@@ -157,7 +157,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them on cheap workers as one goal-set (implement → review-fix). |
 | `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | Orchestrator playbook — fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-explore` | Orchestrator playbook — braindump → fans out `mma-investigate` + `mma-research` + `mma-journal-recall` in parallel → synthesises a written `exploration.md` (Background · Current State · Rough Direction, with 3–5 ranked directions). Divergent grounding before `mma-brainstorm`. Not for "where is X" questions (use `mma-investigate`). |
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, openalex, crossref, pubmed, brave-with-freshness/news/`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |

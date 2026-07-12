@@ -99,7 +99,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 
 | Skill | Task type | Use when |
 |---|---|---|
-| `mma-design` | *(orchestrator)* | Interactive design workflow — brain dump → investigate → structure → spec → plan |
+| `mma-brainstorm` | *(orchestrator)* | Requirement interview — name the destination → grill the 8 components → confirmed decisions → dispatch `mma-spec` |
 | `mma-spec` | `spec` | Write a formal spec from structured design decisions |
 | `mma-plan` | `plan` | Write a TDD implementation plan from a spec file |
 
@@ -110,7 +110,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 | `mma-delegate` | `delegate` | Ad-hoc implementation or research tasks without a plan file |
 | `mma-execute-plan` | `execute_plan` | A plan markdown exists on disk with numbered task headings |
 | `mma-investigate` | `investigate` | Answer a question about this codebase |
-| `mma-explore` | *(orchestrator)* | Fans out investigate + research + journal-recall in parallel |
+| `mma-explore` | *(orchestrator)* | Braindump → fans out investigate + research + journal-recall in parallel → writes `exploration.md` |
 | `mma-research` | `research` | External multi-source research with citations |
 | `mma-debug` | `debug` | Debug a failing test or unexpected behavior |
 | `mma-review` | `review` | Source-code review, one worker per file |
