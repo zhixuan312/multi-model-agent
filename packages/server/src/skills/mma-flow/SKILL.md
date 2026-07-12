@@ -100,16 +100,16 @@ Do not require git validation before Build begins.
 
 Build requires git. Before `B1`, confirm the working directory is inside a git repository. If git is unavailable or the directory is not a git repository, stop before Build, explain the failure, and keep the Design artifacts intact.
 
-1. `B1` — run `mma-audit` (subtype: spec) in a loop (audit→fix→re-audit, cap 3)
+1. `B1` — run `mma-audit` (subtype: spec) in a loop (audit→fix→re-audit) under the escalating gate, hard cap 5
 2. `B2` — run `mma-plan` and write the plan into `.mma/plans/`
-3. `B3` — run `mma-audit` (subtype: plan) in a loop (audit→fix→re-audit, cap 3)
+3. `B3` — run `mma-audit` (subtype: plan) in a loop (audit→fix→re-audit) under the escalating gate, hard cap 5
 4. `B4` — create the project branch from the detected source branch
 5. `B5` — run `mma-execute-plan` on the project branch
-6. `B6` — run `mma-review` on changed files
+6. `B6` — run `mma-review` on changed files in a loop under the escalating gate, hard cap 5
 7. `B7` — run whole-repo verification on the project branch
 8. `B8` — verify PR prerequisites, push the project branch, and create the pull request
-9. `B9` — evaluate the Deferred-Decision Backlog, merge automatically only if it is absent or empty
-10. `B10` — synthesize and record journal entries from the entire flow
+9. `B9` — merge the PR automatically and unconditionally (the backlog never gates the merge)
+10. `B10` — synthesize and record journal entries, then surface the backlog to the user as the terminal report
 
 ## Input model — structured files forward, unstructured prompt
 
@@ -139,20 +139,20 @@ Every worker dispatch is `POST /task?cwd=<repo-root>`; poll `GET /task/:taskId` 
 | `D1` | Explore — ground the idea | Main agent orchestrates; the 3 legs run on workers | Run `mma-explore`: take the braindump from the user, then fan out `POST /task` × `{type:'investigate', prompt, target:{paths}}`, `{type:'research', prompt}`, `{type:'journal_recall', prompt}` in one message. Main agent synthesises and **writes** `.mma/explorations/<date>-<slug>.md`. |
 | `D2` | Brainstorm — grill into decisions | Main agent interviews; mechanical lookups on workers | Run `mma-brainstorm`: read the latest exploration, then grill the user **one decision at a time**. Mechanical questions → `POST /task` (`investigate`/`research`/`journal_recall`); decision questions → the user. Output is a confirmed decision summary held in context (no file). |
 | `D3` | Spec — write the formal doc | Worker writes; main agent assembles the payload | `POST /task {type:'spec', prompt:'<title>', target:{paths:['<decisions-scaffold>', '<exploration.md>']}}` — **first path = authoritative confirmed decisions** (scaffolded to a tmp file under the scratchpad), **second = exploration.md grounding**; add `components?:[...]` for a subset. Worker writes `.mma/specs/<date>-<slug>.md`. |
-| `B1` | Spec audit loop | Worker audits; **main agent fixes inline** | `POST /task {type:'audit', subtype:'spec', target:{paths:['<specPath>']}}`. Read `output.summary.findings[].weight`; fix every `critical`/`high` with `Edit`; re-audit. Clean-pass gate, cap 3. |
+| `B1` | Spec audit loop | Worker audits; **main agent fixes inline** | `POST /task {type:'audit', subtype:'spec', target:{paths:['<specPath>']}}`. Read `output.summary.findings[].weight`; fix blocking `critical`/`high` with `Edit`; re-audit. Escalating gate, hard cap 5, never halts (see "Audit And Review Loop Policy"). |
 | `B2` | Plan — write the TDD plan | Worker writes | `POST /task {type:'plan', prompt:'<title>', target:{paths:['<specPath>']}}`. Worker writes `.mma/plans/<date>-<slug>.md`. |
 | `B3` | Plan audit loop | Worker audits; **main agent fixes inline** | `POST /task {type:'audit', subtype:'plan', target:{paths:['<planPath>']}}`. Same loop as `B1`. |
 | `B4` | Branch | Main agent (git) | `sourceBranch=$(git rev-parse --abbrev-ref HEAD); git checkout -b mma/<slug>`. |
 | `B5` | Execute the plan | Worker implements (worktree); main agent verifies | `POST /task {type:'execute_plan', target:{paths:['<planPath>']}, tasks:['<heading>', …]}`. `tasks` are plan headings verbatim (empty ⇒ all). **The plan must contain no git-commit steps — MMA owns the commit.** Main agent verifies against the real `git diff` and fixes worker mistakes inline. |
-| `B6` | Review loop | Worker reviews; **main agent fixes inline** | `POST /task {type:'review', target:{paths:['<changed file>', …]}}`. Same clean-pass loop as `B1`. |
+| `B6` | Review loop | Worker reviews; **main agent fixes inline** | `POST /task {type:'review', target:{paths:['<changed file>', …]}}`. Same escalating-gate loop as `B1`. |
 | `B7` | Whole-repo verification | Main agent | Detect and run the repo's build then test (see "B7 — Whole-repo verification command discovery"). |
 | `B8` | Push + open PR | Main agent (git + `gh`) | Verify prerequisites, `git push -u origin mma/<slug>`, `gh pr create --base <sourceBranch> --head mma/<slug>`. |
-| `B9` | Evaluate backlog + merge | Main agent (`gh`) | If the backlog is absent/empty, `gh pr merge <n> --merge`; otherwise present the entries and wait for the user. |
+| `B9` | Merge (unconditional) | Main agent (`gh`) | `gh pr merge <n> --merge` — always. The backlog never gates the merge and the flow never pauses for the user; carry the backlog forward to the `B10` terminal report. |
 | `B10` | Journal capture | Worker records; main agent composes | `POST /task {type:'journal_record', prompt:'<one concrete learning>'}` per insight (see "B10 — Journal record"). |
 
 ### Deferred-Decision Backlog — lazy creation (not at `B1`)
 
-The backlog is **not** created up front. It is created **lazily, on the first deferral**: the first time any Build stage (`B1`–`B7`) defers a decision or a missing credential instead of halting (per the anti-interrupt rule), the main agent creates `.mma/backlog/YYYY-MM-DD-<slug>.json` as `{ "entries": [ <that entry> ] }`, commits it to the project branch, and appends every subsequent deferral to the same file. If a run never defers anything, **no backlog file is ever written** — that is the normal, clean outcome, not an omission. The backlog holds only deferred-decision entries; run metadata (`sourceBranch`, `slug`, `specPath`, `planPath`) is re-derived by LOCATE and is deliberately not persisted here.
+The backlog is **not** created up front. It is created **lazily, on the first append**: the first time any Build stage (`B1`–`B7`) defers a decision, tolerates a missing credential instead of halting (per the anti-interrupt rule), **or leaves a residual critical/high audit-or-review finding after the round cap**, the main agent creates `.mma/backlog/YYYY-MM-DD-<slug>.json` as `{ "entries": [ <that entry> ] }`, commits it to the project branch, and appends every subsequent item to the same file. If a run never defers anything and every audit/review round comes back clean, **no backlog file is ever written** — that is the normal, clean outcome, not an omission. The backlog holds deferred-decision entries and residual-finding entries; run metadata (`sourceBranch`, `slug`, `specPath`, `planPath`) is re-derived by LOCATE and is deliberately not persisted here.
 
 ### B7 — Whole-repo verification command discovery
 
@@ -199,16 +199,27 @@ Create the PR only after `B7` passes in the current session.
 
 ## Audit And Review Loop Policy
 
-`B1`, `B3`, and `B6` all use the same policy. The gate for advancing to the next stage is a **clean pass** — a single round whose own findings contain **0 critical AND 0 high**. Applying fixes never satisfies the gate on its own; only a subsequent pass that itself comes back clean does. A round that found any high (even with 0 critical) is never a stopping point, no matter how thoroughly its findings were fixed.
+`B1`, `B3`, and `B6` share one policy: an **escalating gate with a hard cap of 5 rounds** that **never halts the flow**. Each round is judged on **its own findings** — applying fixes never satisfies the gate by itself; only a subsequent round that itself comes back within threshold does. The threshold loosens as rounds climb:
+
+| Round | Advances when its own findings have… |
+|---|---|
+| 1–3 | **0 critical AND 0 high** |
+| 4–5 | **0 critical** (high findings are tolerated) |
+
+Round 6 never runs — 5 is an absolute ceiling.
 
 1. Run the relevant MMA worker to produce the audit/review findings.
-2. Count the critical and high findings **in that pass**.
-3. If both counts are zero, that pass is clean — stop the loop and advance.
-4. Otherwise — any critical, OR any high, including the "0 critical, ≥1 high" case — **the main agent applies every critical/high fix itself, inline, with `Edit`** (never a dispatched fix worker — see below), then **runs another full round**. Never advance on the strength of the fixes alone: a round that surfaced highs must be followed by a fresh round that surfaces none.
-5. Cap the loop at three rounds.
-6. If critical or high findings remain after round three, return `proceed: false` and stop the flow before the next stage.
+2. Count the critical and high findings **in that round**.
+3. Apply the round's threshold:
+   - Rounds 1–3: if 0 critical **and** 0 high, the round is clean — stop the loop and advance with nothing left over.
+   - Rounds 4–5: if 0 critical, the round passes — append any **residual high** findings to the Deferred-Decision Backlog, then stop the loop and advance.
+4. Otherwise, **the main agent applies every blocking fix itself, inline, with `Edit`** (never a dispatched fix worker — see below) — critical + high in rounds 1–3, critical only in rounds 4–5 — then **runs the next round**. Never advance on the strength of the fixes alone: only a round judged within its own threshold clears the gate.
+5. The loop is capped at 5 rounds — never a 6th.
+6. **The gate never returns `proceed: false` and never stops the flow.** If round 5 still has critical (or high) findings, append every residual finding to the Deferred-Decision Backlog and **advance anyway**. Grilling a single spot past the cap does not improve quality — the residue is left for the backlog and resolves naturally as the rest of the flow proceeds. No human is asked mid-flow.
 
-**Worked example.** Round 1 returns 0 critical, 2 high. The main agent edits the spec/plan/source in place to fix both highs. You may NOT skip to the next stage — a pass with highs was never clean. Run round 2. If round 2 returns 0 critical / 0 high, that clean pass is the gate: advance. If round 2 still has a high (a fix was incomplete or introduced a new issue), fix again and run round 3. This applies identically to spec audit (B1), plan audit (B3), and code review (B6).
+Residual findings are recorded as backlog entries: `item` = the finding, `assumptionMade` = "advanced past this unresolved <severity> finding after the round cap", `blastRadius` = the finding's stated impact, `blockedWork` = "none — flow continued". A human reviews the backlog only at the very end (see `B10`), never during the flow.
+
+**Worked example.** Round 1 returns 0 critical, 2 high → not clean (rounds 1–3 need 0 high). The main agent edits the spec/plan/source in place to fix both highs, then runs round 2. Round 2 returns 0 critical, 1 high → still not clean. Fix, run round 3. Round 3 returns 0 critical, 1 high → not clean, and the strict window is over. Round 4 runs under the relaxed gate: 0 critical, 1 high → **passes** (highs tolerated); append the residual high to the backlog and advance. Had round 4 still carried a critical, you'd fix it and run round 5. If round 5 still had a critical, append it to the backlog and **advance anyway** — never a round 6, never a halt. This applies identically to spec audit (B1), plan audit (B3), and code review (B6).
 
 ### Applying fixes — inline, never dispatched
 
@@ -228,7 +239,7 @@ If a fix is genuinely too large for the main agent to apply inline and a worker 
 
 ## Deferred-Decision Backlog
 
-Track unresolved human decisions across `B1` through `B9` with entries shaped as:
+Track everything left unresolved across `B1` through `B9` — deferred human decisions and residual critical/high findings — with entries shaped as:
 
 ```ts
 export interface DeferredDecisionBacklogEntry {
@@ -239,11 +250,9 @@ export interface DeferredDecisionBacklogEntry {
 }
 ```
 
-The backlog file (`.mma/backlog/YYYY-MM-DD-<slug>.json`) is created **lazily on the first deferral** and never exists when nothing was deferred — see "Deferred-Decision Backlog — lazy creation".
+The backlog file (`.mma/backlog/YYYY-MM-DD-<slug>.json`) is created **lazily on the first append** and never exists when nothing was left unresolved — see "Deferred-Decision Backlog — lazy creation".
 
-At `B9`:
-- If the backlog is absent or its `entries` array is empty, auto-merge.
-- If the backlog has entries, present them to the user, wait for decisions, apply any required branch changes, and merge only after the gate is cleared.
+At `B9`: **merge automatically and unconditionally.** The backlog never gates the merge — there is no second human gate, and the flow does not pause for a human decision at any point. Whatever is in the backlog is carried forward untouched and surfaced to the user exactly once, at the very end of the flow (see `B10`).
 
 ## B10 — Journal record (knowledge capture)
 
@@ -281,7 +290,7 @@ Walk the flow artifacts in order and extract learnings:
 | B5 (execute) | Worker reports; inline fixes; deferred backlog entries | Implementation surprises — things that worked differently than the plan assumed; workarounds applied |
 | B6 (review) | Review findings | Code patterns flagged as inconsistent with existing conventions; edge cases the plan missed |
 | B7 (verification) | Test/build failures fixed | Pre-existing issues surfaced; integration points that broke unexpectedly |
-| B9 (backlog) | Deferred decisions and their resolutions | Every resolved backlog entry is a known-unknown that was filled — record the resolution, not just the decision |
+| B9 (backlog) | Deferred decisions and residual findings carried to the terminal report | Each backlog entry is a known-unknown left open — record the assumption made and why it was safe to proceed past it |
 
 ### Recording
 
@@ -303,6 +312,16 @@ Compose a single `mma-journal-record` prompt per learning. Each entry must be co
 - **One entry per insight, not per stage.** A single flow might produce 2–8 journal entries, or zero for a trivial change. Don't pad.
 - **Concrete over abstract.** Include the specific file, API, behavior, or decision — not a vague category label.
 - **B10 never blocks.** If `mma-journal-record` fails, log the failure and report it, but do not roll back the merge or halt the flow. The code is already landed; knowledge capture is best-effort.
+
+### Terminal report — surface the backlog (the only human touchpoint)
+
+`B10` is the last stage. After journal recording completes, the flow is done. Produce a single closing report to the user:
+
+1. State plainly that the flow finished end-to-end — spec, plan, execution, review, verification, PR, merge, and journal are all complete.
+2. If `.mma/backlog/YYYY-MM-DD-<slug>.json` exists and its `entries` array is non-empty, show the backlog: list each entry (`item`, `assumptionMade`, `blastRadius`, `blockedWork`) and tell the user these are the deferred decisions and unresolved findings they may want to act on now. This is the **only** point in the entire flow where the human is asked to do anything — and it comes after everything has already landed, not as a gate.
+3. If the backlog is absent or empty, say so — the run resolved everything cleanly.
+
+The report never blocks and never rolls anything back. The merge has already happened; this is advisory follow-up.
 
 ## Failure Handling
 
@@ -347,6 +366,6 @@ Written at `D1` by `mma-explore` (Background · Current State · Rough Direction
 .mma/backlog/YYYY-MM-DD-<slug>.json
 ```
 
-Created **lazily on the first deferral** (not at `B1`; absent when nothing is deferred) as `{ "entries": [...] }`. Committed to the project branch and appended to by subsequent stages. Read by `B9`, where an absent or empty backlog means no human decisions are required before merge.
+Created **lazily on the first append** (not at `B1`; absent when nothing is left unresolved) as `{ "entries": [...] }`. Holds deferred decisions and residual critical/high findings. Committed to the project branch and appended to by subsequent stages. Read once at the **end of the flow** for the terminal report (see `B10`); it never gates the merge, and the flow never pauses for it.
 
 No new server-side schema, task type, or HTTP route is introduced.
