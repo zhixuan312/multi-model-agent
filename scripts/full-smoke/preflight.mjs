@@ -1,8 +1,63 @@
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BASE_URL, INSTALL_ID_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
 import { readToken } from './http.mjs';
+
+// The packaged skill surface the running server installs to its clients
+// (dev layout: the live server reads skills from here).
+const SKILLS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'packages', 'server', 'src', 'skills');
+
+/**
+ * Skill-surface release gate. Guards the design→explore/brainstorm split so a
+ * revert or regression can never pass the release smoke silently. This feature
+ * is orchestration-only (no HTTP task type, no skill-listing endpoint), so it
+ * is asserted against the packaged surface rather than a dispatch.
+ */
+function skillSurfaceGate() {
+  const dirs = existsSync(SKILLS_ROOT)
+    ? readdirSync(SKILLS_ROOT, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+    : [];
+  const has = (name) => dirs.includes(name);
+  const read = (name) => {
+    const p = join(SKILLS_ROOT, name, 'SKILL.md');
+    return existsSync(p) ? readFileSync(p, 'utf8') : '';
+  };
+
+  if (has('mma-design')) {
+    throw new AbortError('skill-surface', 'mma-design is still packaged',
+      'the design skill was split into mma-explore + mma-brainstorm — remove packages/server/src/skills/mma-design');
+  }
+  for (const required of ['mma-explore', 'mma-brainstorm']) {
+    if (!has(required)) {
+      throw new AbortError('skill-surface', `${required} is missing from the packaged surface`,
+        `create packages/server/src/skills/${required}/SKILL.md`);
+    }
+  }
+
+  const explore = read('mma-explore');
+  for (const marker of ['.mma/explorations/', '## Background', '## Current State', '## Rough Direction', 'in ONE message']) {
+    if (!explore.includes(marker)) {
+      throw new AbortError('skill-surface', `mma-explore SKILL.md missing marker: ${marker}`,
+        'mma-explore must braindump → fan out → write exploration.md (Background · Current State · Rough Direction)');
+    }
+  }
+
+  const brainstorm = read('mma-brainstorm');
+  for (const marker of ['Name the destination', 'one decision at a time', 'mma-spec']) {
+    if (!brainstorm.includes(marker)) {
+      throw new AbortError('skill-surface', `mma-brainstorm SKILL.md missing marker: ${marker}`,
+        'mma-brainstorm must grill (wayfinder-style) then dispatch mma-spec');
+    }
+  }
+
+  const flow = read('mma-flow');
+  if (flow.includes('mma-design') || !flow.includes('`D3`') || !flow.includes('mma-explore') || !flow.includes('mma-brainstorm')) {
+    throw new AbortError('skill-surface', 'mma-flow is not wired to D1 explore → D2 brainstorm → D3 spec',
+      'update packages/server/src/skills/mma-flow/SKILL.md Design phase (remove mma-design, add D3 + exploration stage)');
+  }
+}
 
 export class AbortError extends Error {
   constructor(gate, observed, remediation) {
@@ -48,6 +103,9 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   const diagFile = join(DIAG_DIR, `mma-${todayUtc()}.jsonl`);
   if (!existsSync(diagFile)) throw new AbortError('diagnostics', `no ${diagFile}`,
     'set diagnostics.log: true in config and restart the server');
+
+  // Skill-surface release gate (design→explore/brainstorm split intact).
+  skillSurfaceGate();
 
   const ctx = { token, serverVersion, bootId, serverBranch, installId,
                 runStartTs: new Date().toISOString(), databaseUrl: null,

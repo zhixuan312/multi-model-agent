@@ -38,6 +38,17 @@ export function createProject() {
     '## User Stories & Tasks\n\n### User stories\n- [ ] AC-1: divide(1,0) throws Error\n- [ ] AC-2: divide(6,3) still returns 2\n');
   git('add', 'design-decisions.md'); git('commit', '-qm', 'add design decisions');
 
+  // Write an exploration.md for scenario #31 (spec with two target files:
+  // decisions [authoritative] + exploration.md [grounding]). Its Rough Direction
+  // is deliberately UNRESOLVED (two open options) — the spec worker must follow
+  // the decisions file (throw Error), never expand these rough options as decisions.
+  writeFileSync(join(dir, 'exploration.md'),
+    '# Exploration: Guarded arithmetic\n\n' +
+    '## Background\nThe math module needs input validation; division by zero is currently unguarded.\n\n' +
+    '## Current State\n\n### Findings — Internal (codebase)\n`divide(a,b)` in src/math.ts returns a/b with no guard.\n\n' +
+    '## Rough Direction\n\n### Direction 1: Throw on invalid input\nExplicit errors; callers handle.\n\n### Direction 2: Return NaN\nSilent; no throw.\n\n### Recommended next step\nGrill the error-handling decision in brainstorm.\n');
+  git('add', 'exploration.md'); git('commit', '-qm', 'add exploration grounding');
+
   // Non-git directory for scenario #28 (delegate without worktree)
   const nonGitDir = mkdtempSync(join(tmpdir(), 'mma-nongit-'));
   mkdirSync(join(nonGitDir, 'src'));

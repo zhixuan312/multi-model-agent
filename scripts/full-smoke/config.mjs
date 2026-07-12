@@ -152,4 +152,5 @@ export const SCENARIOS = [
   //    #30: spec with an unknown component label → 400 invalid_request (AC-3.1).
   { id: 29, type: 'spec', tier: 'complex', kind: 'write', emits: 1, subsetComponents: ['Technical Design', 'Context', 'Problem'] },
   { id: 30, type: 'error_bad_components', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 31, type: 'spec', tier: 'complex', kind: 'write', emits: 1, groundingFile: true },
 ];
