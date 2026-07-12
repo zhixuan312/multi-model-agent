@@ -30,7 +30,7 @@ mean and which directions to pursue.
 **Don't use when:**
 - The question is about THIS codebase → `mma-investigate`
 - You need divergent ideation across both internal and external (multiple
-  directions with synthesis) → `mma-explore` (orchestrates mma-investigate + mma-research)
+  directions with synthesis) → `mma-explore` (orchestrates mma-investigate + mma-research + mma-journal-recall → writes `exploration.md`)
 - A single web fetch is all you need → `WebFetch` inline
 
 ## Endpoint

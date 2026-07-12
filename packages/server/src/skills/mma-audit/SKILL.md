@@ -77,7 +77,7 @@ The legacy `auditType` field and its `correctness` / `style` / `general` / `secu
 
 When `subtype: 'plan'`:
 
-- **`cwd` = the target repo** (the codebase the plan will be executed against). **`target.paths` = the plan file** (which may live outside the repo, e.g. `.mma/projects/<id>/plan.md`). The worker greps and reads source files under `cwd` to verify the plan's claims. If `cwd` points at the wrong directory, the worker searches the wrong codebase and produces false findings.
+- **`cwd` = the target repo** (the codebase the plan will be executed against). **`target.paths` = the plan file** (which may live outside the target repo, e.g. `.mma/plans/2026-01-15-<slug>.md`). The worker greps and reads source files under `cwd` to verify the plan's claims. If `cwd` points at the wrong directory, the worker searches the wrong codebase and produces false findings.
 - `target.paths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
 - `target.inline` (inline content) is not used in plan mode — the plan must be on disk so the worker can read it.
 - The worker runs the sequential-criteria loop with the plan-audit criteria set across 12 perspectives in three groups: **EXTERNAL CODEBASE COHERENCE** (1 PATH EXISTENCE, 2 SYMBOL EXISTENCE, 3 SIGNATURE MATCH, 4 IMPORT GRAPH, 5 TEST HARNESS AVAILABILITY, 6 STEP SEQUENCE WITHIN TASK, 7 CROSS-TASK DEPENDENCIES, 8 VERIFICATION COMMAND VALIDITY), **INTRA-PLAN STRUCTURE** (9 TASK GRANULARITY, 11 PLACEHOLDER LANGUAGE, 12 PLAN SKELETON), and **SPEC ALIGNMENT** (10 SPEC COVERAGE).

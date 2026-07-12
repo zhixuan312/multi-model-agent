@@ -9,16 +9,16 @@ describe('mma-explore SKILL.md', () => {
   it('has required frontmatter keys', () => {
     expect(data.name).toBe('mma-explore');
     expect(data.description).toMatch(/divergent/i);
-    expect(data.description).toMatch(/brainstorm|plan/i);
+    expect(data.description).toMatch(/exploration/i);
     expect(data.when_to_use).toBeTruthy();
     expect(data.version).toBeTruthy();
   });
 
-  it('contains required sections (skill-template parity)', () => {
+  it('contains required sections', () => {
     for (const section of [
-      '## Overview', '## When to Use', '## How to run',
-      '## Synthesis output shape', '## Best practices', '## Common pitfalls',
-      '## Failure handling',
+      '## Overview', '## When to Use', '## The workflow',
+      '## exploration.md structure', '## Reading the leg results',
+      '## Common pitfalls', '## Failure handling',
     ]) {
       expect(content).toContain(section);
     }
@@ -28,18 +28,28 @@ describe('mma-explore SKILL.md', () => {
     expect(content).toContain('in ONE message');
   });
 
-  it('mandates the synthesis output shape (MUST + 3–5 threads)', () => {
-    expect(content).toMatch(/MUST[\s\S]{0,80}3.?5 threads/);
+  it('writes the artifact to .mma/explorations/', () => {
+    expect(content).toContain('.mma/explorations/');
+  });
+
+  it('exploration.md carries the three Forge-aligned top-level sections', () => {
+    expect(content).toContain('## Background');
+    expect(content).toContain('## Current State');
+    expect(content).toContain('## Rough Direction');
+  });
+
+  it('keeps the divergent 3–5 ranked directions inside Rough Direction', () => {
+    expect(content).toMatch(/3.?5 ranked candidate directions/);
+  });
+
+  it('describes the lightweight (non-per-task) user gate', () => {
+    expect(content).toContain("Anything you'd add");
   });
 
   it('contains the sentinel literals for greenfield + research-empty + journal-empty', () => {
     expect(content).toContain('(no internal anchor — fully greenfield)');
     expect(content).toContain('(no external source found)');
     expect(content).toContain('(no prior learning)');
-  });
-
-  it('mandates the Recommended next step header', () => {
-    expect(content).toContain('## Recommended next step');
   });
 
   it('contains the lazy-main-agent guard', () => {
@@ -52,8 +62,12 @@ describe('mma-explore SKILL.md', () => {
     expect(content).toContain('mma-journal-recall');
   });
 
+  it('soft-suggests mma-brainstorm as the natural next step', () => {
+    expect(content).toContain('mma-brainstorm');
+  });
+
   it('declares the journal leg as a third source in frontmatter + body', () => {
-    expect(data.description).toMatch(/journal|prior.learning/i);
-    expect(content).toMatch(/ALL THREE|three delegated|three legs/i);
+    expect(data.description).toMatch(/journal|prior.learning|recall/i);
+    expect(content).toMatch(/ALL THREE|three delegated|three parallel|three legs|all three/i);
   });
 });

@@ -1,7 +1,7 @@
 ---
 name: mma-spec
 description: Use when you have structured design decisions ready and need a formal specification document written by a worker instead of consuming main-context tokens
-when_to_use: You have completed an interactive design session (brain dump → investigation → structuring → user confirmation) and all sections are confirmed. You want a formal, structured spec written to disk by a worker. If you are still in the interactive design phase → stay in mma-design. If you already have a spec and need a plan → use mma-plan.
+when_to_use: You have completed an interactive design session (brain dump → investigation → structuring → user confirmation) and all sections are confirmed. You want a formal, structured spec written to disk by a worker. If you are still in the interactive design phase → stay in mma-brainstorm. If you already have a spec and need a plan → use mma-plan.
 version: "0.0.0-unreleased"
 ---
 
@@ -22,7 +22,7 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 
 **Don't use when:**
 - You are still exploring the problem space → `mma-explore` or `mma-investigate`
-- You are still in the interactive design phase → `mma-design`
+- You are still in the interactive design phase → `mma-brainstorm`
 - You already have a spec and need a plan → `mma-plan`
 - You need to audit an existing spec → `mma-audit subtype:spec`
 
@@ -51,7 +51,7 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 | `prompt` | string | yes | Feature title + one-line summary — the first sentence becomes the filename slug |
 | `target` | object | yes | Container — must have exactly one of `inline` or `paths`, not both |
 | `target.inline` | string | primary | The structured design decisions as markdown with section headings |
-| `target.paths` | string[] | alternative | Path to a structured outline file — exactly one file containing markdown with spec section headings |
+| `target.paths` | string[] | alternative | Path(s) to structured input files. The **first** file is the authoritative confirmed decisions (markdown with spec section headings). Any **additional** files — e.g. an `exploration.md` from `mma-explore` — are **grounding/reference only**: the worker reads them for context but never treats their options / rough directions as decisions. |
 | `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `.mma/specs/YYYY-MM-DD-<slug>.md` |
 | `components` | string[] | no | Optional subset of canonical top-level component labels. Allowed labels: `Context`, `Problem`, `Goals & Requirements`, `Alternatives`, `Technical Design`, `Testing Plan`, `Risks & Mitigations`, `User Stories & Tasks`. Omitted or empty `components` means all eight components. |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Default `"reviewed"` (two-phase pipeline with refiner). Set `"none"` to skip review |
@@ -117,11 +117,18 @@ The terminal envelope's `output.summary` contains:
 | `acceptanceCriteriaCount` | number | Count of AC-X.X entries in the spec |
 | `notes` | string | Worker observations, codebase verification results, reviewer fixes applied |
 
+## Natural next step
+
+The spec is written and you're back in the main agent. Usual next moves (soft suggestions — none forced):
+- **Audit it** → `mma-audit` (subtype: spec) — catch ambiguity or untestable requirements before planning.
+- **Write the plan** → `mma-plan` — turn the spec into an ordered TDD implementation plan.
+
 ## Best practices
 
 - **Gather all sections before dispatching.** The worker writes the formal spec from confirmed decisions — if a section is missing, the worker must invent it, which defeats the purpose.
 - **Inline for small, fresh decisions.** `target.inline` is the default — pass the structured decisions directly from the design session.
 - **Write a tmp scaffold file + `target.paths` once the content is large or heavily structured** (tables, code fences, many sections — roughly >8 KB). A path has no JSON-escaping surface and keeps the dispatch body small; the driver is escaping fragility, not size alone. **Write the scaffold to your scratchpad / system temp directory, never inside the target repo** (e.g. `<scratchpad>/spec-decisions.md`, not `<repo>/.mma-spec-scaffold.md`) — it's a throwaway dispatch artifact, not a project file, so keep it out of the working tree. Pass an absolute path in `target.paths`. Delete the scaffold after `specPath` returns. `target.paths` also covers re-spec from an existing outline on disk.
+- **Pass upstream grounding (e.g. an `exploration.md`) as an ADDITIONAL `target.paths` file, after the decisions.** `target` is exactly-one-of `inline`/`paths`, so when the worker should have both the decisions and a grounding file, put both in `target.paths` — decisions **first** (authoritative, what it expands), grounding **second** (context only; the worker never treats its rough options as decisions).
 - **Register large context via `mma-context-blocks`.** If the design decisions reference large documents (prior specs, investigation reports), register them as context blocks and pass `contextBlockIds`.
 
 ## Common pitfalls

@@ -190,6 +190,7 @@ try {
       [28],          // delegate in non-git cwd
       [29],          // spec with a components subset (canonical reorder)
       [30],          // error: unknown component label → 400
+      [31],          // spec with two target files: decisions [authoritative] + exploration.md [grounding]
     ];
 
     // Filter threads if --only is active

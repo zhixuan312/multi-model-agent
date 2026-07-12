@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.0] - 2026-07-12
+
+**`mma-design` split into `mma-explore` (rewritten, divergent) + `mma-brainstorm` (new, convergent interview).** `SCHEMA_VERSION` unchanged (still 6). No HTTP API or task-type change — this is a skill-surface change; consumers install the same package.
+
+### Added
+- **`mma-brainstorm`** skill — the requirements interview extracted from the old `mma-design`: name the destination, assess the 8 spec components as clear/ambiguous/missing, grill one decision at a time (mechanical questions → `POST /task` workers, decision questions → the user), confirm a decision summary, then dispatch `mma-spec`.
+- Two-file spec grounding: `mma-spec` / the spec worker accept **multiple `target.paths`** where the **first** file is the authoritative confirmed decisions and any additional file (e.g. an `exploration.md`) is grounding/reference only — the worker never promotes its rough options to decisions.
+- `full-smoke` scenario **#31** — spec dispatched with two target files (decisions [authoritative] + exploration.md [grounding]); asserts the worker expands the decisions and honors the grounding as reference. New skill-surface preflight gate (aborts if `mma-design` is still present; requires `mma-explore` + `mma-brainstorm` with their structural markers).
+
+### Changed
+- **`mma-explore`** rewritten as a divergent orchestrator: braindump → parallel fan-out of N `mma-investigate` + M `mma-research` + K `mma-journal-recall` tasks (sized to the braindump — investigate 1–8, research 0–3, recall 0–3 — not one-per-type) → lightweight user gate → synthesise into 3–5 ranked directions → write `.mma/explorations/YYYY-MM-DD-<slug>.md`.
+- Every skill now soft-suggests its natural next step; `mma-flow` documents the full explore→brainstorm→spec→plan→execute→review→retry progression with per-stage payloads and the structured-file (`target.paths`) vs unstructured-prompt input model.
+- `multi-model-agent` router, `mma-spec`, `mma-plan`, `mma-audit`, `mma-research`, `mma-execute-plan`, and both READMEs updated for the new skill surface.
+
+### Removed
+- **`mma-design`** skill and its dispatch contract test (superseded by `mma-explore` + `mma-brainstorm`).
+
 ## [5.8.7] - 2026-07-11
 
 **Subset spec components — the `spec` route can emit a caller-chosen subset of the 8 components.** `SCHEMA_VERSION` unchanged (still 6). Fully backward compatible.

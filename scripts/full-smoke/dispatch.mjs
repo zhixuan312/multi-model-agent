@@ -70,6 +70,7 @@ export function buildRequest(spec, ctx) {
     // L. Subset spec components — request a scrambled subset; worker emits only those, canonical order
     case 29: return { type: 'spec', body: { prompt: 'Guarded arithmetic — subset spec', target: { paths: [`${cwd}/design-decisions.md`] }, components: spec.subsetComponents } };
     case 30: return { type: 'error_bad_components', body: {}, rawPayload: { type: 'spec', prompt: 'bad component label', target: { inline: '## Context\n\n### Background\ntest' }, components: ['Context', 'Not A Real Component'] } };
+    case 31: return { type: 'spec', body: { prompt: 'Guarded arithmetic — spec from decisions + exploration grounding', target: { paths: [`${cwd}/design-decisions.md`, `${cwd}/exploration.md`] } } };
 
     // Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };

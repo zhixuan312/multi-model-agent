@@ -382,6 +382,13 @@ export function verify(rec) {
       out.push(C('forge-compat', missing.length === 0 ? 'PASS' : 'WARN',
         `sections=${JSON.stringify(sections)}${missing.length > 0 ? ` missing=[${missing.join(',')}]` : ''}`));
     }
+    if (e.groundingFile) {
+      // Two target files (decisions [authoritative] + exploration.md [grounding]) must
+      // still produce a full 8-component spec — proving the multi-file dispatch works and
+      // the worker expanded the decisions, not the exploration's unresolved rough options.
+      out.push(C('two-file-grounding', sections.length === 8 ? 'PASS' : 'FAIL',
+        `2 target files → sections=${JSON.stringify(sections)}`));
+    }
   }
 
   // ⑱ Non-git cwd — verify delegate completed without worktree

@@ -18,12 +18,12 @@ export const SUPPORTED_SKILLS = [
   'mma-investigate',
   'mma-research',
   'mma-explore',
+  'mma-brainstorm',
   'mma-journal-record',
   'mma-journal-recall',
   'mma-orchestrate',
   'mma-spec',
   'mma-plan',
-  'mma-design',
 ] as const;
 
 /**
