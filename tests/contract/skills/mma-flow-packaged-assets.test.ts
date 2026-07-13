@@ -21,6 +21,17 @@ describe('contract: mma-flow packaged assets', () => {
     expect(existsSync(path.join(root, 'workflows'))).toBe(false);
   });
 
+  it('B5 encodes the one-request-per-repo dispatch invariant + multi-repo fan-out', () => {
+    const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    // The dispatch unit is the repo, never the task: B5 runs once per repo, and an
+    // empty tasks[] runs the whole plan (no per-task fragmentation of a single repo).
+    // tasks[] only partitions a multi-repo plan. This guards the bug where a
+    // single-repo plan was fragmented into many execute_plan requests.
+    expect(skill).toContain('once per repo');
+    expect(skill).toContain('empty = whole plan');
+    expect(skill).toContain('Common: Multi-repo');
+  });
+
   it('readCommandContent reads mma-flow SKILL.md from the skills root', () => {
     const content = readCommandContent('mma-flow');
     expect(content).toBeTruthy();
