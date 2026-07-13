@@ -53,9 +53,13 @@ function skillSurfaceGate() {
   }
 
   const flow = read('mma-flow');
-  if (flow.includes('mma-design') || !flow.includes('`D3`') || !flow.includes('mma-explore') || !flow.includes('mma-brainstorm')) {
+  if (flow.includes('mma-design') || !flow.includes('D3 — Spec') || !flow.includes('mma-explore') || !flow.includes('mma-brainstorm')) {
     throw new AbortError('skill-surface', 'mma-flow is not wired to D1 explore → D2 brainstorm → D3 spec',
       'update packages/server/src/skills/mma-flow/SKILL.md Design phase (remove mma-design, add D3 + exploration stage)');
+  }
+  if (!flow.includes('once per repo') || !flow.includes('Common: Multi-repo')) {
+    throw new AbortError('skill-surface', 'mma-flow B5 is missing the one-request-per-repo dispatch invariant',
+      'update packages/server/src/skills/mma-flow/SKILL.md B5 / Common: Multi-repo to encode one execute_plan request per repo (tasks[] only partitions multi-repo plans)');
   }
 }
 
