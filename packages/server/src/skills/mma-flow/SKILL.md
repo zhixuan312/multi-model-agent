@@ -10,8 +10,11 @@ version: "0.0.0-unreleased"
 A Claude Code command (the user types `/mma-flow`) that orchestrates the MMA SDLC
 from idea to merged PR. Not a server endpoint, not an auto-matched skill, not
 available on other clients — invoked explicitly. Its **only** input is the initial
-**brain dump** (the user's raw idea), taken directly at invocation and fed to D1; on
-resume it takes nothing — Stage 0 LOCATE picks up from the durable artifacts on disk.
+**brain dump** (the user's raw idea), taken directly at invocation and fed to D1. A
+**bare** invocation (no braindump — headless cron, or the user just typed the
+command) takes nothing: Stage 0 LOCATE picks up from the durable artifacts on disk. A
+braindump naming work already on disk resumes that flow; a braindump naming NEW work
+starts a fresh flow even when unrelated artifacts exist (see Stage 0 — LOCATE).
 
 ## The orchestration contract
 
@@ -41,7 +44,8 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Trigger : mma-explore  (main agent)
 - Read    : mma-explore/SKILL.md
 - Wire    : braindump (direct from the user, at invocation) → prompt
-- Out     : `.mma/explorations/YYYY-MM-DD-<slug>.md`
+- Out     : `.mma/explorations/<stem>.md`  (mints the stem — see Common: Artifact stem)
+- Uses    : Common: Artifact stem
 
 ### D2 — Brainstorm
 - Trigger : mma-brainstorm  (main agent interviews; mechanical lookups → workers)
@@ -54,7 +58,8 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Read    : mma-spec/SKILL.md
 - Wire    : target.paths = [`<scratchpad>/decisions.md`, `exploration.md`]  (1st authoritative, 2nd grounding; decisions.md is a throwaway tmp scaffold)
             title → prompt ; optional subset → components[]
-- Out     : `.mma/specs/YYYY-MM-DD-<slug>.md`
+- Out     : `.mma/specs/<stem>.md`  (inherited from the dated exploration source — no outputPath threaded)
+- Uses    : Common: Artifact stem
 
 ### B1 — Spec audit
 - Trigger : mma-audit subtype:spec  (worker)
@@ -67,8 +72,8 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Trigger : mma-plan  (worker)
 - Read    : mma-plan/SKILL.md
 - Wire    : spec → target.paths[0] ; title + target repos + constraints → prompt
-- Out     : `.mma/plans/YYYY-MM-DD-<slug>.md`
-- Uses    : Common: Multi-repo  (plan tags each task with its repo)
+- Out     : `.mma/plans/<stem>.md`  (inherited from the dated spec source — no outputPath threaded)
+- Uses    : Common: Artifact stem · Common: Multi-repo  (plan tags each task with its repo)
 
 ### B3 — Plan audit
 - Trigger : mma-audit subtype:plan  (worker)
@@ -138,6 +143,26 @@ re-runs them (safe and idempotent) rather than trusting stale session state. A r
 skipped at B8 (no writable remote) is recorded in the backlog so LOCATE won't
 re-select it forever.
 
+**Braindump vs. resume — decide this first.** Before consulting the table, settle
+which flow LOCATE is even acting on. `/mma-flow` is invoked either with a braindump
+argument or bare, and that argument decides new-vs-resume:
+
+- **Bare** (no argument) → pure resume: select the most-recent flow on disk (per
+  Multi-artifact below) and resume it at the earliest incomplete stage.
+- **Braindump present** → derive its topic, then scan `.mma/explorations/` +
+  `.mma/specs/` for an artifact covering THAT work:
+  - Matches an existing flow → resume THAT flow's artifacts. Re-pasting the same idea
+    is idempotent: it continues the flow, never forks a duplicate.
+  - Matches nothing on disk → this is a NEW flow. Start at **D1** with a fresh dated
+    slug, even when unrelated explorations / specs / plans exist. Never resume a
+    stale, unrelated artifact just because it is the most recent.
+  - Genuinely ambiguous (could plausibly be either) → setup ambiguity: ask the user
+    once whether to continue `<existing slug>` or start fresh, then proceed. This is
+    the one permitted setup-only stop (Common: Never-halt) — never guess.
+
+The table below then applies to the SELECTED flow's artifacts (a NEW flow has neither
+exploration nor spec, so it lands on the D1 row).
+
 | Resume signal (durable git/disk + session-local)                      | Resume  |
 |-----------------------------------------------------------------------|---------|
 | No exploration and no spec                                            | D1      |
@@ -152,10 +177,12 @@ re-select it forever.
 | Every repo merged or backlog-skipped; no journal this session         | B10     |
 | Every repo merged or backlog-skipped; journal recorded this session   | done    |
 
-Multi-artifact: if the user's current message points at a specific artifact, use it;
-otherwise (the default — including a headless resume) use the most-recent spec under
-`.mma/specs/` and the plan whose slug matches. Artifact roots resolve in the primary
-repo.
+Multi-artifact: once the braindump-vs-resume decision has selected a flow, resolve its
+exact files by stem under `.mma/…/` (Common: Artifact stem — same stem end to end, so
+this is an exact match, not a fuzzy one). If the user's current message points at a
+specific artifact, use it. A bare resume with several flows on disk defaults to the
+most-recent spec under `.mma/specs/` and the plan sharing its stem. Artifact roots
+resolve in the primary repo.
 
 ## Common: Gate   (B1, B3, B6)
 
@@ -179,7 +206,8 @@ credentials, deferred decisions all drain to the backlog and the flow advances. 
 may stop only on unresolved **setup** ambiguity it cannot decide autonomously
 (missing repo path, branch-name collision) — never on a finding or a decision.
 
-Backlog: one file — `.mma/backlogs/YYYY-MM-DD-<slug>.json` in the primary repo.
+Backlog: one file — `.mma/backlogs/<stem>.json` in the primary repo (same stem as the
+rest of the chain — see Common: Artifact stem).
 - Created lazily on the first append; if nothing is ever deferred, it never exists.
 - Uncommitted working-tree file (`.mma/` is gitignored — see Common: Fixes inline).
 - Entry: `{ item, assumptionMade, blastRadius, blockedWork }`.
@@ -204,8 +232,9 @@ type (orchestrate), which edits in place — never delegate/execute_plan.
 
 ## Common: Branch & PR   (B4, B8, B9)
 
-Slug ← spec title: lowercase; non-alphanumeric runs → "-"; collapse repeats; trim
-leading/trailing "-"; truncate to 30; fallback "task".
+`<slug>` = the slug half of the stem (Common: Artifact stem) — the same string across
+artifacts and branch. The branch is never slugged independently; read it off the
+exploration/spec filename.
 
 Per repo (see Common: Multi-repo):
 
@@ -247,16 +276,39 @@ the ordinary case; every rule below collapses to it.
   repo, copy the plan into it and pass the in-cwd path; delete after. The primary /
   single repo needs no copy.
 
+## Common: Artifact stem   (D1, D3, B2, backlog, branch)
+
+One flow, one join key — the **stem** `<date>-<slug>`. `ls .mma/*/<stem>.*` and the
+`mma/<slug>` branch recover the whole chain (exploration → spec → plan → backlog).
+
+- **Minted once, at D1.** mma-explore derives `<slug>` from the topic title and stamps
+  today's date; its SKILL.md owns the slug rule — mma-flow never restates or re-derives
+  it. The exploration filename IS the stem, and the date is frozen here — a multi-day
+  flow stays on one key.
+- **Inherited by the workers, automatically — the flow threads no `outputPath`.** Each
+  stage hands the prior dated artifact to the next as a `target.paths` source, so
+  mma-spec and mma-plan reuse its stem verbatim server-side (see their SKILL.md
+  `outputPath` rows). Undated scaffolds (the scratchpad `decisions.md`) are skipped, so
+  only the exploration/spec dictates the stem. This is the SAME mechanism a direct
+  skill call gets — the chain holds with or without the flow.
+- **Read off disk for the two artifacts no worker writes.** The main agent takes the
+  stem from the most-recent exploration filename (once a spec exists, the spec filename
+  is equally authoritative) to name the backlog `.mma/backlogs/<stem>.json` and the
+  branch `mma/<slug>`. On resume, LOCATE recovers it the same way — off disk, no
+  persisted state.
+
 ## Data model
 
 All artifacts live under the PRIMARY repo's `.mma/` (the invocation cwd); secondary
 repos hold only branches, code, and PRs.
 
+All four share one `<stem>` = `<date>-<slug>`, minted at D1 (see Common: Artifact stem):
+
 ```text
-.mma/explorations/YYYY-MM-DD-<slug>.md   D1 — grounding; not needed once a spec exists
-.mma/specs/YYYY-MM-DD-<slug>.md          D3
-.mma/plans/YYYY-MM-DD-<slug>.md          B2
-.mma/backlogs/YYYY-MM-DD-<slug>.json      lazy; uncommitted (see Common: Never-halt)
+.mma/explorations/<stem>.md   D1 — grounding; not needed once a spec exists
+.mma/specs/<stem>.md          D3
+.mma/plans/<stem>.md          B2
+.mma/backlogs/<stem>.json     lazy; uncommitted (see Common: Never-halt)
 ```
 
 No server schema, task type, or HTTP route is added — `/mma-flow` is client-side.
