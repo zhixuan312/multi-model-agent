@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.2] - 2026-07-13
+
+**`mma-flow` rewritten as a thin orchestrator + multi-repo fan-out.** Skill-content and test/tooling only; `SCHEMA_VERSION` unchanged (still 6). No HTTP API, task-type, or runtime change — consumers install the same package.
+
+### Changed
+- **`/mma-flow` redesigned as a thin orchestrator** (416 → 274 lines). Each stage now carries only three things — **Trigger** (which skill fires), **Read first** (that skill's `SKILL.md` is the source of *how*), and **Wire** (which inputs ride a `prompt` vs a file) — instead of re-documenting each skill's internals. Skill-internal detail (explore's fan-out, the journal taxonomy, audit-weight mechanics, execute_plan's copy internals) is delegated back to the individual skills; flow-level policy is consolidated into five **Common** blocks (Gate, Never-halt & backlog, Fixes inline, Branch & PR, Multi-repo).
+- **B5 dispatch granularity fixed** — the dispatch unit is the **repo**, never the task: one `execute_plan` request per repo (`#requests == #repos`), an empty `tasks[]` runs the whole plan, and `tasks[]` only partitions a multi-repo plan. Prevents fragmenting a single repo's plan into many requests.
+
+### Added
+- **Multi-repo fan-out** — a single flow can now land code across N repos. Design + audit (D1–B3) and B10 run once; B4–B9 fan out per repo as a barrier per stage (branch, execute, review, verify, one PR per repo, merge each). A single primary repo owns the `.mma/` artifacts + the one backlog; secondary repos get a branch, code, and a PR.
+- Contract guard (`mma-flow-packaged-assets`) + `smoke:full` preflight assertions for the one-request-per-repo dispatch invariant and the multi-repo fan-out, so the invariant can't silently regress.
+
 ## [5.9.1] - 2026-07-12
 
 **`mma-flow` audit-loop and merge-gate rewrite — the flow now runs fully autonomously to merge, with a single terminal human touchpoint.** Skill-content only; `SCHEMA_VERSION` unchanged (still 6). No HTTP API, task-type, or runtime change — consumers install the same package.
