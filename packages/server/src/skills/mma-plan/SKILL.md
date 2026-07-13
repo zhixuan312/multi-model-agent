@@ -49,7 +49,7 @@ Dispatch a spec file to a complex worker that writes a TDD implementation plan. 
 | `target` | object | yes | Container — must have exactly one of `paths` or `inline`, not both |
 | `target.paths` | string[] | primary | Path to the spec file (exactly one file) |
 | `target.inline` | string | alternative | Spec content pasted directly. When using inline, `outputPath` is **required** |
-| `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. Default (when `target.paths`): `.mma/plans/YYYY-MM-DD-<spec-basename>.md` |
+| `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. When omitted with `target.paths`, the default **inherits the spec's dated stem** → `.mma/plans/<spec-stem>.md` (the first `YYYY-MM-DD-`-prefixed input; no double-date), so the plan shares the exploration/spec stem. An undated source falls back to `.mma/plans/<today>-<basename>.md`. |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Whether the plan gets a reviewer pass. Default `"reviewed"` |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 

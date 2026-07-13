@@ -48,11 +48,11 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `type` | `"spec"` | yes | Literal route discriminator — must be exactly `"spec"` |
-| `prompt` | string | yes | Feature title + one-line summary — the first sentence becomes the filename slug |
+| `prompt` | string | yes | Feature title + one-line summary. Its first sentence becomes the filename slug **only when self-naming** (no dated input and no explicit `outputPath`) — when a dated input is present the stem is inherited from it (see `outputPath`) |
 | `target` | object | yes | Container — must have exactly one of `inline` or `paths`, not both |
 | `target.inline` | string | primary | The structured design decisions as markdown with section headings |
 | `target.paths` | string[] | alternative | Path(s) to structured input files. The **first** file is the authoritative confirmed decisions (markdown with spec section headings). Any **additional** files — e.g. an `exploration.md` from `mma-explore` — are **grounding/reference only**: the worker reads them for context but never treats their options / rough directions as decisions. |
-| `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). Default: `.mma/specs/YYYY-MM-DD-<slug>.md` |
+| `outputPath` | string | no | Where to write the spec (relative to cwd, must not contain `..` or be absolute). When omitted, the default **inherits the stem** from the first `YYYY-MM-DD-`-prefixed entry in `target.paths` (the exploration) → `.mma/specs/<that-stem>.md`, so the exploration → spec → plan chain shares one stem; undated inputs (scratchpad scaffolds) are skipped. Falls back to `.mma/specs/<today>-<prompt-slug>.md` only when no dated input is present. Every `target.paths` entry must resolve, else the task fails `invalid_request`. |
 | `components` | string[] | no | Optional subset of canonical top-level component labels. Allowed labels: `Context`, `Problem`, `Goals & Requirements`, `Alternatives`, `Technical Design`, `Testing Plan`, `Risks & Mitigations`, `User Stories & Tasks`. Omitted or empty `components` means all eight components. |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Default `"reviewed"` (two-phase pipeline with refiner). Set `"none"` to skip review |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
