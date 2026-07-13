@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.3] - 2026-07-13
+
+**Artifact stem inheritance — the exploration → spec → plan chain now shares one `<date>-<slug>` join key.** Server-internal output-path derivation + `mma-flow`/`mma-spec`/`mma-plan` skill docs; `SCHEMA_VERSION` unchanged (still 6). No HTTP API or task-type change — consumers install the same package.
+
+### Changed
+- **Default `spec`/`plan` output paths now inherit the upstream stem.** `deriveDefaultOutputPath` names a spec or plan after the first `YYYY-MM-DD-`-prefixed entry in `target.paths` (the exploration for a spec, the spec for a plan), skipping undated scaffolds — so `ls .mma/*/<stem>.*` recovers the whole chain. Previously `spec` ignored its inputs and re-minted `<today>-<prompt-slug>`, breaking the exploration→spec link. The self-naming fallback (no dated input) and explicit `outputPath` override are unchanged.
+- **`spec`/`plan` tasks copy *every* `target.paths` entry into the worker's worktree** (previously only the first), so a spec worker actually reads the dated exploration it is named after.
+- **`/mma-flow` LOCATE decides braindump-vs-resume first** — a braindump naming NEW work starts a fresh flow even when unrelated artifacts exist; a braindump matching an on-disk flow resumes it (idempotent); genuine ambiguity asks once instead of silently resuming stale work.
+
+### Added
+- **Pre-dispatch `target.paths` validation** — a `spec`/`plan` task whose paths contain an unresolvable entry (missing / unreadable / broken symlink) fails with `invalid_request` before any worker runs, rather than producing a partial worktree copy.
+
+### Fixed
+- `mma-flow`'s `Common: Artifact stem` contract ("`mma-spec` and `mma-plan` reuse the stem verbatim server-side") is now actually implemented rather than aspirational; `mma-spec`/`mma-plan` `outputPath` doc rows reconciled with the shipped behavior.
+
 ## [5.9.2] - 2026-07-13
 
 **`mma-flow` rewritten as a thin orchestrator + multi-repo fan-out.** Skill-content and test/tooling only; `SCHEMA_VERSION` unchanged (still 6). No HTTP API, task-type, or runtime change — consumers install the same package.

@@ -598,16 +598,30 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               const derived = deriveDefaultOutputPath({
                 type: input.type,
                 prompt: spPayload.prompt,
-                firstPath: hasPaths ? spPayload.target!.paths![0] : undefined,
+                paths: hasPaths ? spPayload.target!.paths! : undefined,
                 today,
               });
               if (derived) (payload as Record<string, unknown>).outputPath = derived;
             }
 
-            // Set up copyToWorktree for target.paths
+            // Set up copyToWorktree for ALL target.paths so the worker reads every
+            // input (e.g. the dated exploration it is named after), not just paths[0].
+            // Validate each entry resolves BEFORE dispatch — any missing / unreadable /
+            // broken-symlink path fails the task; no partial copyToWorktree is produced.
             if (hasPaths) {
-              const filePath = spPayload.target!.paths![0];
-              copyToWorktree = [path.isAbsolute(filePath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath))) : filePath];
+              const allPaths = spPayload.target!.paths!;
+              const unresolvable = allPaths.find(
+                (filePath) => !fs.existsSync(path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath)),
+              );
+              if (unresolvable !== undefined) {
+                deps.taskRegistry.fail(taskId, { code: 'invalid_request', message: `target.paths contains an unresolvable path: ${unresolvable}` });
+                return;
+              }
+              copyToWorktree = allPaths.map((filePath) =>
+                path.isAbsolute(filePath)
+                  ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath)))
+                  : filePath,
+              );
             }
           }
 
