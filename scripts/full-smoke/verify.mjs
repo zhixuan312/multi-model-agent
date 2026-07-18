@@ -67,11 +67,27 @@ function checkQuality(type, subtype, r, subsetComponents) {
     }
     case 'journal_recall': {
       if (outputLen < 20) return ['WARN', `recall output very short (${outputLen} chars)`];
-      return ['PASS', `${outputLen} chars output`];
+      const findings = Array.isArray(summary?.findings) ? summary.findings : [];
+      if (findings.length > 0) {
+        const badTopic = findings.filter(f => typeof f?.topic !== 'string' || f.topic.length === 0);
+        if (badTopic.length > 0) return ['FAIL', `${badTopic.length}/${findings.length} recall findings missing a topic`];
+        const badFallback = findings.filter(f => typeof f?.fallback !== 'boolean');
+        if (badFallback.length > 0) return ['FAIL', `${badFallback.length}/${findings.length} recall findings missing a boolean fallback flag`];
+        return ['PASS', `${findings.length} findings, all carry topic + boolean fallback`];
+      }
+      return ['PASS', `${outputLen} chars output (0 findings)`];
     }
     case 'journal_record': {
       if (outputLen < 10) return ['WARN', `record output very short (${outputLen} chars)`];
       const hasType = /\btype\b/.test(output) || /decision|design|behavior|process|knowledge|style/.test(output);
+      const recorded = Array.isArray(summary?.recorded) ? summary.recorded : [];
+      if (recorded.length > 0) {
+        const missingTopic = recorded.filter(x => typeof x?.topic !== 'string' || x.topic.length === 0);
+        if (missingTopic.length > 0) return ['FAIL', `${missingTopic.length}/${recorded.length} recorded items missing a topic`];
+        const allKebab = recorded.every(x => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x.topic));
+        if (!allKebab) return ['FAIL', `recorded topic is not normalized lowercase-kebab`];
+        return ['PASS', `${recorded.length} recorded, all carry lowercase-kebab topic; type-aware=${hasType}`];
+      }
       return ['PASS', `${outputLen} chars output; type-aware=${hasType}`];
     }
     case 'delegate': {

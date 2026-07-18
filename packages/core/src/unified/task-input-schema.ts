@@ -3,6 +3,7 @@ import { SPEC_COMPONENTS } from './spec-components.js';
 
 const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
+const topicSchema = z.string().min(1).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const sessionIdsSchema = z.object({
   implementer: z.string().optional(),
   reviewer: z.string().optional(),
@@ -68,6 +69,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('journal_recall'),
     prompt: z.string().min(10),
+    topic: topicSchema.optional(),
     ...commonFields,
   }).strict(),
 
@@ -91,6 +93,7 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('journal_record'),
     prompt: z.string().min(1),
+    topic: topicSchema.optional(),
     ...commonFields,
   }).strict(),
 

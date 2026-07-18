@@ -150,16 +150,19 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
     case 'journal_record':
       return [
         'You have classified the entry by type (decision/design/behavior/process/knowledge/style) and operation (create/refine/supersede/merge).',
+        'Each node includes a normalized lowercase-kebab `topic` frontmatter field naming the primary subject.',
         'You have checked the existing journal for supersede/refine/merge candidates.',
         'You have written the node file with proper YAML frontmatter (including type) and edges.',
-        'You have updated the journal catalog (log.md and index.md with type column).',
+        'You have updated the journal catalog (log.md and index.md with the column order id | timestamp | type | status | title | topic | tags).',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'journal_recall':
       return [
         'You have searched from ALL 3 perspectives: keyword-match, graph-neighborhood, contradiction-and-history.',
         'Superseded nodes are excluded from results.',
-        'Each result includes the learning, context, and relevance assessment.',
+        'Each result includes the learning, context, relevance assessment, normalized lowercase-kebab `topic` frontmatter field, and boolean `fallback` indicator.',
+        'Findings from the optional `topic`-narrowed search use `fallback: false`; cross-topic fallback evidence uses `fallback: true`.',
+        'The index.md catalog (if present) uses the column order id | timestamp | type | status | title | topic | tags.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'spec':

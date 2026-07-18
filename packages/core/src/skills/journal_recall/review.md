@@ -23,25 +23,22 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 
 ## Checks
 
-1. **Citation accuracy** — read `.mma/journal/nodes/` to verify each `nodeId`/`nodePath` references a real node file. Remove results citing non-existent nodes.
-
-2. **Relevance** — each result answers the query, not tangential. Downgrade tangential results.
-
-3. **Missed entries** — check `.mma/journal/index.md` for nodes matching query terms. Add missed relevant nodes.
-
-4. **Supersession** — superseded nodes excluded by default. Status labels correct.
-
-5. **Synthesis quality** — summary represents the cited evidence. Names how nodes relate.
+1. **Citation accuracy** — verify each `nodeId`/`nodePath` references a real node file.
+2. **Topic behavior** — when the request included `topic`, confirm the first-pass evidence was pre-narrowed to that topic. If fewer than 3 keyword matches existed there, confirm the added cross-topic findings are labeled `fallback: true`. In-topic matches must use `fallback: false`.
+3. **Relevance** — each result answers the query, not tangential. Downgrade tangential results.
+4. **Missed entries** — check `.mma/journal/index.md` for nodes matching query terms, topic slugs, and graph neighbors that the implementer missed.
+5. **Supersession** — superseded nodes excluded by default. Legacy nodes without a frontmatter topic should be emitted as `topic: "unscoped"`.
+6. **Synthesis quality** — summary represents the cited evidence and names how nodes relate.
 
 ## Constraints
 
 - Remove results citing non-existent nodes. Add missed nodes. Adjust relevance ratings.
-- Fix incorrect `status`/`type` fields.
-- Improve `learning` and `context` text if you can add clarity. Don't rephrase for style.
+- Fix incorrect `type`, `topic`, or `fallback` fields.
+- Improve `claim` and `evidence` text if you can add clarity. Don't rephrase for style.
 - **If you cannot verify any citations (journal inaccessible), re-output the implementer's answer unchanged.**
 
 ## Output
 
 ```json
-{"answer": "<synthesis>", "criteriaCovered": ["decision", "design", "behavior", "process", "knowledge", "style"], "findings": [{"weight": "critical|high|medium|low", "category": "<category>", "claim": "<lesson>", "evidence": "<edges and related nodes>", "nodeId": "<id>", "nodePath": "<path>"}]}
+{"answer": "<synthesis>", "criteriaCovered": ["decision", "design", "behavior", "process", "knowledge", "style"], "findings": [{"weight": "critical|high|medium|low", "category": "<category>", "claim": "<lesson>", "evidence": "<edges and related nodes>", "topic": "<lowercase-kebab-topic-or-unscoped>", "fallback": false, "nodeId": "<id>", "nodePath": "<path>"}]}
 ```

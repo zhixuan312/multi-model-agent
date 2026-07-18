@@ -28,7 +28,7 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 **Don't use when:**
 - You're asking a question → `mma-investigate`
 - You're dispatching work → `mma-delegate`
-- You want to retrieve past entries → `mma-journal-recall` (the read route for the journal graph)
+- You want to retrieve past entries → `mma-journal-recall`
 - You're mid-task and want to pause → that's what `blockedBy` is for; journal is for conclusions, not temporary blockers
 
 ## Endpoint
@@ -42,22 +42,24 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 ```json
 {
   "type": "journal_record",
-  "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged. Also: Bun.spawn lacks process groups; keep node:child_process for codex subprocess management."
+  "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
+  "topic": "grouped-dispatch"
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `prompt` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
+| `topic` | string | no | Optional caller-supplied primary subject. Must already be lowercase-kebab. When provided, the worker uses it verbatim. When omitted, the system infers one topic from the learning content and existing journal topics. |
 
 **What gets stored & where:**
 
 Entries are integrated into a graph-structured journal store at `.mma/journal/`:
 - `nodes/` — individual learning entries (keyed by unique node ID)
-- `index.md` — searchable index of all entries, tags, and cross-references
+- `index.md` — searchable index of all entries, topics, tags, and cross-references
 - `log.md` — append-only event log of create/refine/supersede/merge operations
 
-The worker creates, refines, or supersedes nodes in the graph (never appends blindly). You can query the index or log directly to track learning history. Writes are confined to the project's `.mma/` directory (no traversal).
+The worker creates, refines, or supersedes nodes in the graph (never appends blindly). The derived `index.md` catalog uses the column order `id | timestamp | type | status | title | topic | tags`. Legacy rows may be regenerated with `topic: unscoped` without rewriting historical node files.
 
 ## Full example
 
@@ -69,7 +71,8 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "type": "journal_record",
-    "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged."
+    "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged.",
+    "topic": "grouped-dispatch"
   }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
@@ -84,15 +87,12 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 **One entry per decision, not per turn.**
 Log once when you decide not to pursue a direction; don't log "just checked X" on every iteration.
 
+**Use `topic` when you already know the primary subject.**
+Provide a caller-supplied `topic` for stable subsystem names so the worker does not have to infer one. When you omit `topic`, the worker infers one from the learning content and exact-slug matches against existing journal topics.
+
 **Keep entries concrete.**
 ❌ "Didn't work"  
 ✅ "Tried multicast-style dispatch with worker dedup; git diff is the source of truth, workers can't track cancellations atomically. Use getRealFilesChanged instead."
-
-**Use tags to build searchable structure.**
-```bash
-# Later, grep your journal for all perf decisions:
-grep -r "^" .mma/journal/ | grep -i "perf:"
-```
 
 ## Common pitfalls
 
@@ -105,6 +105,11 @@ Journal is for **conclusions**, not work-in-progress. Keep notes in a separate w
 > "Doesn't work."
 
 Future-you (or a teammate) won't remember what "doesn't work" means. Always include the decision frame: what did you try, why did you try it, what was the outcome, and what will you do instead?
+
+❌ **Sending a non-normalized topic**
+> `"topic": "Worker Runtime"`
+
+The request schema accepts only lowercase-kebab topics. Fix it before dispatch: `"topic": "worker-runtime"`.
 
 ## Context blocks
 
