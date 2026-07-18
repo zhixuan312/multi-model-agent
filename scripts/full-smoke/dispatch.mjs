@@ -15,8 +15,8 @@ export function buildRequest(spec, ctx) {
     case 6:  return { type: 'execute_plan', body: { target: { paths: [`${cwd}/plan.md`] }, tasks: ['Task 1: add subtract'] } };
     case 7:  return { type: 'review', body: { target: { paths: [`${cwd}/src/math.ts`] } } };
     case 8:  return { type: 'debug', body: { prompt: 'divide(1,0) returned Infinity, expected a thrown error', target: { paths: ['src/math.ts'] } } };
-    case 9:  return { type: 'journal_record', body: { prompt: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.' } };
-    case 10: return { type: 'journal_recall', body: { prompt: 'what have we learned about guarding invalid inputs in the math module?' } };
+    case 9:  return { type: 'journal_record', body: { prompt: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', topic: 'math-module' } };
+    case 10: return { type: 'journal_recall', body: { prompt: 'what have we learned about guarding invalid inputs in the math module?', topic: 'math-module' } };
 
     // B. Audit Subtypes (spec, plan, skill — each loads a different implement-<subtype>.md)
     case 11: return { type: 'audit', body: { subtype: 'spec', target: { paths: [`${cwd}/spec.md`] }, contextBlockIds: ctx.blockId ? [ctx.blockId] : [] } };
