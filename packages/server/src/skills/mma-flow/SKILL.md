@@ -230,6 +230,13 @@ keep it inline for consistency.
 If a fix is genuinely too large for inline, route it through a `worktree:false`
 type (orchestrate), which edits in place — never delegate/execute_plan.
 
+**Bump the version each fix round.** The `.mma/` design artifacts (exploration, spec,
+plan) carry YAML frontmatter (`version` + `updated_at`). After applying a round's fixes
+to a spec (B1) or plan (B3), increment that file's `version` by 1 and set `updated_at`
+to today's date — once per round, after the round's edits, not once per finding. So
+`version: N` means the artifact survived `N-1` audit-fix rounds. A round that clears the
+gate with zero findings makes no edit and no bump.
+
 ## Common: Branch & PR   (B4, B8, B9)
 
 `<slug>` = the slug half of the stem (Common: Artifact stem) — the same string across

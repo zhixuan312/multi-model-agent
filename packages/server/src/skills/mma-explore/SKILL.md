@@ -142,7 +142,15 @@ Top-level headers are `##` and follow the canonical exploration.md format (`Back
 `Current State` · `Rough Direction`). Keep the top level at `##` — downstream tools parse these
 sections by their `##` heading, so a deeper top level makes them see zero sections.
 
+Open the file with the same YAML frontmatter the spec and plan use — `version: 1` and `updated_at`
+set to today's real date — so all three `.mma/` artifacts carry a consistent frontmatter block:
+
 ```markdown
+---
+version: 1
+updated_at: YYYY-MM-DD
+---
+
 # Exploration: <title>
 
 ## Background

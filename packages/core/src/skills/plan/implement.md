@@ -52,9 +52,14 @@ Before writing any plan content:
 
 Do NOT write the whole plan in one pass — long single-pass plans come out slow and uneven and often truncate before the last tasks. Instead, first create the plan file as a **complete skeleton** in ONE `Write` call: the header, the file structure, the commit convention, the workstream/track headings, and EVERY task heading with its `**Files:**` block and AC references — leaving the code-heavy TDD steps as a single slot to fill next. Task headings are dynamic (derived from the spec), so this pass establishes the full task list, order, file surface, and AC mapping up front; you write the code in Phase C. (No per-task brief is needed — a task's title, AC refs, and `Files:` block already state its intent.)
 
-Write the header, conventions, and file structure in full (they are short):
+Write the header, conventions, and file structure in full (they are short). Open with the same YAML frontmatter the spec uses — `version: 1` and `updated_at` set to today's date (real `YYYY-MM-DD`, not the literal placeholder) — so exploration, spec, and plan artifacts all carry a consistent frontmatter block:
 
 ```markdown
+---
+version: 1
+updated_at: YYYY-MM-DD
+---
+
 # <Feature Name> Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
