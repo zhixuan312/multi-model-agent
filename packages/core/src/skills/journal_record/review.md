@@ -24,11 +24,11 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 
 1. **Classification** — correct operation for each learning? supersede=invalidates prior conclusion, refine=adds evidence to existing, merge=no new causal claim, create=no existing node covers it. Reclassify if graph contradicts.
 
-2. **Graph integrity** — superseded nodes marked with `supersededBy`. Edges use only: supersedes, refines, relates, depends-on, contradicts, parent. Edge targets exist. Node IDs collision-free, sequential, zero-padded 4 digits.
+2. **Graph integrity** — superseded nodes marked with `supersededBy`. Edges use only: `supersedes`, `refines`, `relates`, `depends-on`, `contradicts`, `parent`. Edge targets exist. Node IDs collision-free, sequential, zero-padded 4 digits.
 
-3. **Node quality** — correct YAML frontmatter (id, title, type, status, description, timestamp, tags, links). Type is one of: decision, design, behavior, process, knowledge, style. Nodes are actionable. Secrets redacted.
+3. **Node quality** — correct YAML frontmatter (`id`, `title`, `type`, `topic`, `status`, `description`, `timestamp`, `tags`, `links`). Type is one of: `decision`, `design`, `behavior`, `process`, `knowledge`, `style`. Topic is exactly one lowercase-kebab value per node unless a legacy node is being surfaced as `unscoped`. Nodes are actionable. Secrets redacted.
 
-4. **Catalog consistency** — index.md lists all nodes sorted by id. log.md has entry for each operation.
+4. **Catalog consistency** — `index.md` lists all nodes sorted by id and uses the column order `id | timestamp | type | status | title | topic | tags`. `log.md` has an entry for each operation. Legacy rows missing a topic cell must be regenerated with `unscoped`.
 
 5. **Completeness** — every input learning in exactly one of `recorded` or `failed`. None silently dropped.
 
@@ -37,13 +37,13 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 ## Constraints
 
 Verify and correct the implementer's existing recordings. Do NOT record additional learnings, create new nodes, or add new files beyond what the implementer already did:
-- Reclassify operations if the existing graph contradicts them. Fix edge types and missing supersededBy links.
+- Reclassify operations if the existing graph contradicts them. Fix edge types and missing `supersededBy` links.
 - Fix catalog inconsistencies in existing entries only.
-- Keep the implementer's `recorded`, `failed`, and `filesChanged` unless an entry is wrong.
+- Keep the implementer's `recorded` and `failed` entries unless an entry is wrong.
 - **If you cannot verify recordings (journal inaccessible), re-output the implementer's answer unchanged.**
 
 ## Output
 
 ```json
-{"recorded": [{"learning": "<lesson text>", "type": "<type>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
+{"recorded": [{"learning": "<lesson text>", "type": "<type>", "topic": "<lowercase-kebab-topic>", "nodeId": "<id>", "nodePath": "<path>"}], "failed": [{"learning": "<verbatim>", "reason": "<why>"}]}
 ```

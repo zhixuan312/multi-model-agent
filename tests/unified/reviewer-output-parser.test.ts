@@ -41,11 +41,26 @@ const VALID_RESEARCH = JSON.stringify({
 const VALID_JOURNAL_RECALL = JSON.stringify({
   answer: 'Prior decision: use sequential dispatch',
   criteriaCovered: ['decision'],
-  findings: [{ weight: 'high', category: 'decision', claim: 'Sequential chosen over parallel', evidence: 'Node 0012 relates to 0008', nodeId: '0012', nodePath: '.mma/journal/nodes/0012-dispatch-order.md' }],
+  findings: [{
+    weight: 'high',
+    category: 'decision',
+    claim: 'Sequential chosen over parallel',
+    evidence: 'Node 0012 relates to 0008',
+    topic: 'dispatch-runtime',
+    fallback: false,
+    nodeId: '0012',
+    nodePath: '.mma/journal/nodes/0012-dispatch-order.md',
+  }],
 });
 
 const VALID_JOURNAL_RECORD = JSON.stringify({
-  recorded: [{ learning: 'Haiku cannot verify citations', type: 'process', nodeId: '0015', nodePath: '.mma/journal/nodes/0015-refiner-limitation.md' }],
+  recorded: [{
+    learning: 'Haiku cannot verify citations',
+    type: 'process',
+    topic: 'citation-verification',
+    nodeId: '0015',
+    nodePath: '.mma/journal/nodes/0015-refiner-limitation.md',
+  }],
   failed: [],
 });
 
@@ -160,20 +175,70 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput(VALID_JOURNAL_RECALL, 'journal_recall');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { findings: { nodeId: string; nodePath: string }[] };
+        const data = r.data as { findings: { topic: string; fallback: boolean; nodeId: string; nodePath: string }[] };
+        expect(data.findings[0].topic).toBe('dispatch-runtime');
+        expect(data.findings[0].fallback).toBe(false);
         expect(data.findings[0].nodeId).toBe('0012');
         expect(data.findings[0].nodePath).toContain('.mma/journal');
       }
+    });
+
+    it('rejects journal_recall output without topic', () => {
+      const r = parseReviewerOutput(JSON.stringify({
+        answer: 'Prior decision: use sequential dispatch',
+        criteriaCovered: ['decision'],
+        findings: [{
+          weight: 'high',
+          category: 'decision',
+          claim: 'Sequential chosen over parallel',
+          evidence: 'Node 0012 relates to 0008',
+          fallback: false,
+          nodeId: '0012',
+          nodePath: '.mma/journal/nodes/0012-dispatch-order.md',
+        }],
+      }), 'journal_recall');
+      expect(r.ok).toBe(false);
+    });
+
+    it('rejects journal_recall output without fallback', () => {
+      const r = parseReviewerOutput(JSON.stringify({
+        answer: 'Prior decision: use sequential dispatch',
+        criteriaCovered: ['decision'],
+        findings: [{
+          weight: 'high',
+          category: 'decision',
+          claim: 'Sequential chosen over parallel',
+          evidence: 'Node 0012 relates to 0008',
+          topic: 'dispatch-runtime',
+          nodeId: '0012',
+          nodePath: '.mma/journal/nodes/0012-dispatch-order.md',
+        }],
+      }), 'journal_recall');
+      expect(r.ok).toBe(false);
     });
 
     it('validates journal_record output', () => {
       const r = parseReviewerOutput(VALID_JOURNAL_RECORD, 'journal_record');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { recorded: { nodeId: string }[]; failed: unknown[] };
+        const data = r.data as { recorded: { topic: string; nodeId: string }[]; failed: unknown[] };
         expect(data.recorded).toHaveLength(1);
+        expect(data.recorded[0].topic).toBe('citation-verification');
         expect(data.failed).toHaveLength(0);
       }
+    });
+
+    it('rejects journal_record output without topic', () => {
+      const r = parseReviewerOutput(JSON.stringify({
+        recorded: [{
+          learning: 'Haiku cannot verify citations',
+          type: 'process',
+          nodeId: '0015',
+          nodePath: '.mma/journal/nodes/0015-refiner-limitation.md',
+        }],
+        failed: [],
+      }), 'journal_record');
+      expect(r.ok).toBe(false);
     });
 
     it('rejects wrong-type output (audit JSON against investigate schema)', () => {

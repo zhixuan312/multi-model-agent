@@ -77,6 +77,8 @@ const journalRecallAnswerSchema = z.object({
     category: z.string().min(1),
     claim: z.string().min(1),
     evidence: z.string().min(1),
+    topic: z.string().min(1),
+    fallback: z.boolean(),
     nodeId: z.string().min(1),
     nodePath: z.string().min(1),
   })),
@@ -101,6 +103,7 @@ const journalRecordAnswerSchema = z.object({
   recorded: z.array(z.object({
     learning: z.string().min(1),
     type: z.string().min(1),
+    topic: z.string().min(1),
     nodeId: z.string().min(1),
     nodePath: z.string().min(1),
   })),

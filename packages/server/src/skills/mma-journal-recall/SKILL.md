@@ -17,15 +17,15 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 
 **Use when:**
 - Before attempting something, ask "what have we learned about this?".
-- The query is a conceptual question ("dispatch cancellation reliability?", "rate-limiting patterns?"), not exact tags or keywords.
+- The query is a conceptual question, not an exact file or symbol lookup.
 - You want prior learnings + their relationships, not isolated chunks.
 - The project has an active journal (started with `mma-journal-record`).
 
 **Don't use when:**
-- You're recording a new learning → `mma-journal-record` (write route).
-- You're asking about the codebase structure → `mma-investigate` (read codebase).
-- You're researching external docs/web → `mma-research` / `WebSearch`.
-- The journal is empty or not yet initialized.
+- You're recording a new learning → `mma-journal-record`
+- You're asking about the codebase structure → `mma-investigate`
+- You're researching external docs/web → `mma-research`
+- The journal is empty or not yet initialized
 
 ## Endpoint
 
@@ -39,23 +39,25 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 {
   "type": "journal_recall",
   "prompt": "what have we learned about dispatch cancellation reliability?",
+  "topic": "grouped-dispatch",
   "contextBlockIds": []
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt` | string | yes | A vague conceptual question about prior learnings (min 10 chars). No tags or keywords needed. |
+| `prompt` | string | yes | A conceptual question about prior learnings (min 10 chars). Keep this natural-language, not a keyword list. |
+| `topic` | string | no | Optional lowercase-kebab topic filter. Use it when you already know the primary subject and want recall to narrow that slice first. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — enables follow-up / delta recall |
 
 > Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
-**Why `prompt` is vague, not keyword-filtered:**
+**Why `prompt` stays conceptual even when `topic` exists:**
 
-❌ `{ "prompt": "dispatch" }` — too narrow, might miss "cancellation reliability" nodes that don't mention the word "dispatch" in title.
-✅ `{ "prompt": "what have we learned about dispatch cancellation reliability?" }` — the worker understands the concept and finds related nodes.
+❌ `{ "prompt": "dispatch", "topic": "grouped-dispatch" }`
+✅ `{ "prompt": "what have we learned about dispatch cancellation reliability?", "topic": "grouped-dispatch" }`
 
-**Why:** the worker traverses the journal's typed graph (supersedes, refines, contradicts, depends-on) and synthesizes across related nodes. Semantic matching is the LLM's job, just like `mma-investigate`.
+`topic` narrows the subject boundary. `prompt` still tells the worker what kind of lesson to retrieve and synthesize.
 
 ## Full example
 
@@ -65,7 +67,11 @@ RESULT=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type":"journal_recall","prompt":"what have we learned about dispatch cancellation reliability?"}' \
+  -d '{
+    "type":"journal_recall",
+    "prompt":"what have we learned about dispatch cancellation reliability?",
+    "topic":"grouped-dispatch"
+  }' \
   "http://localhost:$PORT/task?cwd=/project")
 TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 ```
@@ -76,35 +82,25 @@ TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
 
 ## Best practices
 
-This skill is one step in a larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-journal-recall`:
-
-- **Recipe A — Recall before attempting.** Call `mma-journal-recall` with your question before running `mma-delegate` / `mma-execute-plan` to avoid re-treading prior dead ends.
-- **Recipe B — Recall → plan → execute.** `mma-journal-recall` → write a plan based on the learnings → `mma-execute-plan`.
-- **Recipe C — Delta follow-up recall.** Feed a prior recall's `contextBlockId` into a follow-up call to dig deeper: `contextBlockIds: [priorResult.contextBlockId]`.
-
-Anti-pattern alert: **Misusing recall as codebase search.** Recall is for the *project's learnings graph*, not the codebase. If you want to search code → `mma-investigate`. If you want to ask the journal → `mma-journal-recall`.
+- Use `topic` when you know the exact subsystem you care about.
+- Keep `prompt` conceptual so the worker can still rank and synthesize within the topic slice.
+- Omit `topic` when you want the worker to infer the likely subject and keep cross-topic fallback open.
 
 ## Common pitfalls
 
-❌ **Using exact tags instead of a conceptual question**
-> prompt: "dispatch cancellation"
-
-The worker expects a sentence with context, not keywords. **Fix:** phrase it as a question:
-> prompt: "what have we learned about dispatch cancellation and how it interacts with timeouts?"
-
-❌ **Asking about the codebase instead of the journal**
+❌ **Using recall as codebase search**
 > prompt: "where is DispatchCanceller called?"
 
-That's a codebase question. Use `mma-investigate` instead. Journal recall is for *learnings* stored in `.mma/journal/`, not code.
+That's a codebase question. Use `mma-investigate` instead.
 
-❌ **Assuming the journal exists**
-> prompt: "what do we know about X?"
+❌ **Treating `topic` as a replacement for the prompt**
+> `{ "prompt": "grouped-dispatch", "topic": "grouped-dispatch" }`
 
-If the project hasn't used `mma-journal-record`, the journal is empty. The worker will return `not_applicable`. **Fix:** check whether the journal is active in the project first, or start recording learnings with `mma-journal-record`.
+Keep the question conceptual. `topic` scopes the search; `prompt` tells the worker what answer to synthesize.
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry / journal-record) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry / journal-record) return `contextBlockId: null` — their record is the commit, not a block.
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

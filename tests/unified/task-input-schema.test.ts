@@ -157,6 +157,53 @@ describe('taskInputSchema', () => {
     }).success).toBe(true);
   });
 
+  it('accepts journal_recall with optional kebab-case topic', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+      topic: 'worker-runtime',
+    }).success).toBe(true);
+  });
+
+  it('accepts journal_recall without topic key', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+    }).success).toBe(true);
+  });
+
+  it('rejects journal_recall topic with uppercase characters', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+      topic: 'Worker-Runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_recall topic with spaces', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+      topic: 'worker runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_recall topic with dots', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+      topic: 'worker.runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_recall topic arrays', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
+      topic: ['worker-runtime'],
+    }).success).toBe(false);
+  });
+
   it('rejects journal_recall with deprecated query', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_recall',
@@ -169,6 +216,53 @@ describe('taskInputSchema', () => {
       type: 'journal_record',
       prompt: 'We decided to use Redis for caching because...',
     }).success).toBe(true);
+  });
+
+  it('accepts journal_record with optional kebab-case topic', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: 'worker-runtime',
+    }).success).toBe(true);
+  });
+
+  it('accepts journal_record without topic key', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+    }).success).toBe(true);
+  });
+
+  it('rejects journal_record topic with uppercase characters', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: 'Worker-Runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record topic with spaces', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: 'worker runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record topic with dots', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: 'worker.runtime',
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record topic arrays', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: ['worker-runtime'],
+    }).success).toBe(false);
   });
 
   it('rejects journal_record with deprecated entry', () => {

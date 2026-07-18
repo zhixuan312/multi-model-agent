@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const CATEGORIES = ['decision', 'design', 'behavior', 'process', 'knowledge', 'style'] as const;
+const INDEX_HEADER = 'id | timestamp | type | status | title | topic | tags';
 
 describe('contract: journal type vocabulary', () => {
   const schemaPath = resolve('.mma/journal/schema.md');
@@ -27,12 +28,20 @@ describe('contract: journal type vocabulary', () => {
     }
   });
 
-  it('schema.md index format includes type column', () => {
-    expect(schema).toContain('id | timestamp | type | status | title | tags');
+  it('schema.md documents topic as a first-class journal field', () => {
+    expect(schema).toContain('## Topic');
+    expect(schema).toContain('lowercase kebab-case');
+    expect(schema).toContain('unscoped');
   });
 
-  it('implement.md references type in frontmatter spec', () => {
+  it('schema.md index format includes topic column', () => {
+    expect(schema).toContain(INDEX_HEADER);
+  });
+
+  it('implement.md references type and topic in frontmatter spec', () => {
     expect(impl).toContain('`type`');
+    expect(impl).toContain('`topic`');
+    expect(impl).toContain('caller supplied structured `topic`');
   });
 
   it('implement.md has type classification table', () => {
@@ -41,8 +50,11 @@ describe('contract: journal type vocabulary', () => {
     }
   });
 
-  it('implement.md index format includes type column', () => {
-    expect(impl).toContain('id | timestamp | type | status | title | tags');
+  it('implement.md defines topic inference and the new index format', () => {
+    expect(impl).toContain('lowercase-kebab');
+    expect(impl).toContain('EXACT slug equality');
+    expect(impl).toContain(INDEX_HEADER);
+    expect(impl).toContain('"topic":');
   });
 
   it('review.md validates type field', () => {
