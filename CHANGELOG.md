@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.0] - 2026-07-18
+
+**First-class `topic` dimension for the journal — an optional subject axis on `journal_record`/`journal_recall`, orthogonal to the six-value `type` enum, enabling topic-scoped recall for repetitive work.** Additive and backward-compatible; `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package.
+
+### Added
+- Optional lowercase-kebab `topic` on the `journal_record` and `journal_recall` request schemas (validated, additive; omit it and both routes behave exactly as before).
+- `topic` on journal recall findings and record `recorded[]` outputs, plus a boolean `fallback` marker on recall findings (cross-topic evidence surfaced when a topic filter yields too few in-topic matches).
+- Topic-scoped recall: pre-narrows to a caller-supplied or inferred `topic`, then keyword-ranks, with a cross-topic fallback so a strict filter never starves results.
+- Journal `index.md` gains a derived `topic` column (`id | timestamp | type | status | title | topic | tags`); legacy nodes without `topic` are treated as `unscoped`.
+
+### Changed
+- Journal record/recall worker prompts, reviews, client SKILLs, and the handler success checklist document and enforce `topic` in lockstep.
+- Skill-doc consistency: exploration and plan templates now carry the same `version`/`updated_at` frontmatter as specs, and `/mma-flow` bumps the artifact version once per audit-fix round.
+- Full-smoke scenarios #9/#10 now exercise `topic`, asserting it on record output and `topic`+`fallback` on recall findings.
+
 ## [5.9.3] - 2026-07-13
 
 **Artifact stem inheritance — the exploration → spec → plan chain now shares one `<date>-<slug>` join key.** Server-internal output-path derivation + `mma-flow`/`mma-spec`/`mma-plan` skill docs; `SCHEMA_VERSION` unchanged (still 6). No HTTP API or task-type change — consumers install the same package.
