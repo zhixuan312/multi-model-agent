@@ -1,4 +1,4 @@
-import { readFileSync, watch } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { decideConsent, type ConsentDecision } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 
@@ -24,15 +24,4 @@ export function decide(homeDir: string): ConsentDecision {
     }
   }
   return decideConsent({ env, config });
-}
-
-export function watchConfigForChanges(homeDir: string, onChange: (d: ConsentDecision) => void): () => void {
-  const filename = 'config.json';
-  let timer: NodeJS.Timeout | null = null;
-  const w = watch(homeDir, { persistent: false }, (_event, fname) => {
-    if (fname !== filename) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => onChange(decide(homeDir)), 500);
-  });
-  return () => { w.close(); if (timer) clearTimeout(timer); };
 }
