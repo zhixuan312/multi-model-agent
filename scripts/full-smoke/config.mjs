@@ -21,7 +21,10 @@ export const PORT = 7337;
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
 export const TOKEN_FILE = join(HOME_MM, 'auth-token');
 export const QUEUE_FILE = process.env.SMOKE_QUEUE_FILE || join(HOME_MM, 'telemetry-queue.ndjson');
-export const INSTALL_ID_FILE = join(HOME_MM, 'install-id');
+// The persistent install identity lives in identity.json (installId + signing keys),
+// written by the server's telemetry identity on first run. The legacy standalone
+// `install-id` file is retired — read the id from identity.json.
+export const IDENTITY_FILE = join(HOME_MM, 'identity.json');
 export const DIAG_DIR = process.env.MMA_LOG_DIR || join(HOME_MM, 'logs'); // mma-YYYY-MM-DD.jsonl
 
 export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
