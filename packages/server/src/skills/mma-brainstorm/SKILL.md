@@ -198,3 +198,9 @@ suggest `mma-explore` first.
 
 ❌ **Auto-dispatching mma-spec.** Brainstorm ends at confirmed decisions + a soft offer. The spec
 dispatch is the user's go (or `/mma-flow` stage `D3`).
+
+## Multi-repo mode (parent-aware)
+
+When `/mma-flow` has entered multi-repo mode with a confirmed **involved repo** set, brainstorm preserves
+that set and treats the **parent workspace** as the durable artifact root when it dispatches `mma-spec`.
+Single-project mode is unchanged.

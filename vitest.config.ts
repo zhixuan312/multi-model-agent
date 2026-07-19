@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     root: '.',
-    exclude: ['.worktrees/**', '**/node_modules/**', 'tests/perf/**'],
+    exclude: ['**/.mma/**', '**/node_modules/**', 'tests/perf/**'],
     pool: 'forks',
     poolOptions: { forks: { maxForks: 2, minForks: 1 } },
     server: {

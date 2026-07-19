@@ -139,4 +139,10 @@ execute_plan handles dependencies naturally since tasks run sequentially in one 
 Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
+## Non-git targets
+
+Execution is **one plan file** per request. Git targets use worktree isolation; **non-git** targets run
+**in-place** (no worktree, edits the folder directly), skipping branch/PR/merge. No new execution task type
+is introduced, and git is never forced.
+
 @include _shared/error-handling.md

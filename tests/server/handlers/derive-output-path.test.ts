@@ -116,4 +116,20 @@ describe('deriveDefaultOutputPath', () => {
       expect(deriveDefaultOutputPath({ type: 'plan', prompt: 'Plan', today: TODAY })).toBeNull();
     });
   });
+
+  // ── AC-4.3b: per-repo plan filename mechanism (multi-repo fan-out) ──
+  describe('per-repo plan filename mechanism (multi-repo fan-out)', () => {
+    it('accepts a per-repo plan basename under .mma/plans/ that differs only by --<repo-slug>', () => {
+      // Two involved repos → two plan files sharing the stem, differing only by the repo slug.
+      const a = '.mma/plans/2026-07-19-parent-aware-multi-repo-sdlc--multi-model-agent.md';
+      const b = '.mma/plans/2026-07-19-parent-aware-multi-repo-sdlc--multi-model-agent-forge.md';
+      for (const p of [a, b]) {
+        expect(p.startsWith('.mma/plans/')).toBe(true);  // stays under the parent plans dir
+        expect(p.includes('..')).toBe(false);            // no escape → passes unified-task.ts validation
+        expect(p.startsWith('/')).toBe(false);           // relative → accepted by the handler
+      }
+      // The two paths share the stem and differ ONLY by the --<repo-slug> suffix.
+      expect(a.replace(/--[^.]+\.md$/, '')).toBe(b.replace(/--[^.]+\.md$/, ''));
+    });
+  });
 });

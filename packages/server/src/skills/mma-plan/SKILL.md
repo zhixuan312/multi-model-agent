@@ -159,4 +159,12 @@ The plan is written. Usual next moves (soft suggestions — none forced):
 
 ❌ **Skipping `mma-audit subtype:plan` after.** The built-in reviewer checks 12 perspectives, but a standalone plan audit provides a second independent verification pass. **Fix:** dispatch `mma-audit subtype:plan` on the produced plan file before executing.
 
+## Multi-repo mode (parent-aware)
+
+In multi-repo mode, `/mma-flow` fans out **one** `mma-plan` dispatch per involved repo. Each dispatch plans
+**exactly one repo**'s slice of the **shared spec** (two repo dispatches differ only in repo scope and
+`outputPath`), and writes `.mma/plans/<stem>--<repo-slug>.md` under the parent workspace. Planning **one
+repo** at a time keeps each plan a clean single-file `execute_plan` input. Single-project mode writes the
+usual `<stem>.md`.
+
 @include _shared/error-handling.md

@@ -69,11 +69,11 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Uses    : Common: Gate · Fixes inline
 
 ### B2 — Plan
-- Trigger : mma-plan  (worker)
+- Trigger : mma-plan  (worker) — one dispatch PER involved repo (fan-out; N=1 single repo)
 - Read    : mma-plan/SKILL.md
-- Wire    : spec → target.paths[0] ; title + target repos + constraints → prompt
-- Out     : `.mma/plans/<stem>.md`  (inherited from the dated spec source — no outputPath threaded)
-- Uses    : Common: Artifact stem · Common: Multi-repo  (plan tags each task with its repo)
+- Wire    : spec → target.paths[0] ; per dispatch: the one repo's scope + constraints → prompt
+- Out     : one plan per repo — `.mma/plans/<stem>--<repo-slug>.md` under the parent (single repo: `<stem>.md`)
+- Uses    : Common: Artifact stem · Common: Multi-repo  (one spec → one plan per repo)
 
 ### B3 — Plan audit
 - Trigger : mma-audit subtype:plan  (worker)
@@ -265,23 +265,57 @@ B8 prerequisites (per repo): writable `origin` on GitHub · `gh` authenticated �
 source branch still on the remote. Any missing → backlog entry, skip that repo's
 PR, continue with the rest (Common: Never-halt).
 
-## Common: Multi-repo   (B4–B9)
+## Common: Multi-repo   (parent-aware; D1–B10)
 
-Only B4–B9 fan out. Design + audit (D1–B3) and B10 run ONCE — one exploration,
-spec, plan, journal pass, and backlog cover the whole flow. N = 1 (single repo) is
-the ordinary case; every rule below collapses to it.
+The product may be one repo or several sibling repos under a **parent workspace**. Which
+one you're in is DETECTED, not declared.
 
-- Repo set comes from the plan (B2 tags each task with its repo). The invocation
-  cwd is the PRIMARY repo — it owns `.mma/` (exploration, spec, plan, backlog).
-  Every other repo is SECONDARY: branch + code + PR only.
-- Before B4, resolve each repo name → absolute root. Can't find one → ask the user
-  once (setup, not a mid-flow decision).
-- Barrier per stage: finish a stage across ALL repos before advancing. LOCATE
-  resumes at the earliest stage not yet complete for all repos.
-- B5 needs the plan inside each worker's cwd (`copyToWorktree` takes a path relative
-  to cwd; the primary's plan escapes a secondary worktree). So for each SECONDARY
-  repo, copy the plan into it and pass the in-cwd path; delete after. The primary /
-  single repo needs no copy.
+**Topology detection (run once, at flow start).** Enumerate the immediate child
+directories of the invocation cwd and test each for a `.git` entry (file OR directory).
+Detection **does not recurse** into subdirectories and **does not follow symlinks** — it
+only inspects **immediate child** directories.
+- **≥1 git child → multi-repo mode.** The invocation cwd is the **parent workspace**; the
+  git children are the candidate sub-projects. The parent (typically itself non-git) owns
+  ALL durable artifacts.
+- **0 git children → single-project mode.** Everything is one project rooted at the cwd;
+  behave EXACTLY as before — no involved-repo proposal, no fan-out, no artifact relocation.
+  Every rule below collapses to N = 1.
+
+`CLAUDE.md` is **optional context enrichment** only (what each sub-project is). Its absence
+never blocks detection or the flow; detection is purely structural.
+
+**Involved-repo confirmation (multi-repo mode, before D1 investigation/recall).** Propose
+the detected git children as the **involved repo** set and let the user confirm, remove a
+repo, or ADD a non-git **immediate child** directory (path-confined: reject any `..`,
+absolute path, or non-immediate-child). If the confirmed set is empty or invalid,
+**re-prompt** — never proceed. If two child names normalize to the same lowercase-kebab
+slug (a **slug collision**), halt and re-prompt for explicit disambiguating slug overrides
+before proposing the set — plan filenames and journal topics must stay unique.
+
+**Parent owns everything (multi-repo mode).** The **parent workspace** owns the entire
+`.mma/` tree — journal, explorations, specs, plans, backlogs — reached by dispatching the
+design/journal legs with `cwd = parent workspace`. Forge durable design docs go to the
+parent `design/<stem>.md` (only when that step runs), never a child repo. Sub-repos hold
+code, branches, and PRs only.
+
+**One spec → one plan per repo (fan-out at B2).** One shared spec captures the goal.
+**Fan out one `mma-plan` dispatch per involved repo** — each scoped to exactly one repo,
+each writing `.mma/plans/<stem>--<repo-slug>.md` under the parent. B3 audits each per-repo
+plan; B5 dispatches each repo's own plan. This is **one plan per repo**, not one combined
+plan (see mma-plan).
+
+**Journal scoping.** Journal record + recall run against the parent journal with
+`topic = <repo-slug>` (lowercase-kebab) so product-level knowledge slices per repo.
+
+**Per-target git, B4–B9.** Each involved target is handled by its own git status:
+- **Git target** → branch → `execute_plan` (worktree) → review → verify → PR → merge.
+- **Non-git target** → `execute_plan` runs **in-place** (no worktree, edits the folder
+  directly); **skip** branch/PR/merge and record `delivered in-place, no PR (non-git target)`
+  in the backlog. Git is never forced. B5 still copies each secondary repo's plan into its
+  cwd for the worker (`copyToWorktree` is cwd-relative); the parent/single repo needs no copy.
+
+Barrier per stage: finish a stage across ALL involved repos before advancing; LOCATE resumes
+at the earliest stage not complete for all of them.
 
 ## Common: Artifact stem   (D1, D3, B2, backlog, branch)
 
@@ -306,16 +340,17 @@ One flow, one join key — the **stem** `<date>-<slug>`. `ls .mma/*/<stem>.*` an
 
 ## Data model
 
-All artifacts live under the PRIMARY repo's `.mma/` (the invocation cwd); secondary
-repos hold only branches, code, and PRs.
+All artifacts live under the **parent workspace**'s `.mma/` (the invocation cwd — the parent
+in multi-repo mode, the single repo otherwise); sub-repos hold only branches, code, and PRs.
 
-All four share one `<stem>` = `<date>-<slug>`, minted at D1 (see Common: Artifact stem):
+All share one `<stem>` = `<date>-<slug>`, minted at D1 (see Common: Artifact stem):
 
 ```text
-.mma/explorations/<stem>.md   D1 — grounding; not needed once a spec exists
-.mma/specs/<stem>.md          D3
-.mma/plans/<stem>.md          B2
-.mma/backlogs/<stem>.json     lazy; uncommitted (see Common: Never-halt)
+.mma/explorations/<stem>.md            D1 — grounding; not needed once a spec exists
+.mma/specs/<stem>.md                   D3 — one shared spec
+.mma/plans/<stem>--<repo-slug>.md      B2 — one plan PER involved repo (single repo: <stem>.md)
+.mma/backlogs/<stem>.json              lazy; uncommitted (see Common: Never-halt)
+design/<stem>.md                       Forge durable design docs (only if that step runs)
 ```
 
 No server schema, task type, or HTTP route is added — `/mma-flow` is client-side.

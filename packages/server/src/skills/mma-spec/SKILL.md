@@ -141,4 +141,11 @@ The spec is written and you're back in the main agent. Usual next moves (soft su
 
 ❌ **Using this instead of `mma-audit subtype:spec`.** This writes a spec; audit verifies one. If you already have a spec and want it checked, use audit. **Fix:** dispatch `mma-audit subtype:spec` to verify an existing spec.
 
+## Multi-repo mode (parent-aware)
+
+In multi-repo mode the **parent workspace owns the spec output in multi-repo mode** — the spec is a single
+shared artifact under the parent `.mma/specs/`, never forked per repo.
+**One shared spec feeds per-repo plans** (mma-plan then fans out one plan per involved repo).
+Single-project mode is unchanged.
+
 @include _shared/error-handling.md

@@ -90,17 +90,24 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     wtManager = new WorktreeManager();
     const created = await wtManager.create(input.cwd, input.taskId, input.type);
     effectiveCwd = created.path;
-    wtInfo = { branch: created.branch, path: created.path };
 
-    // Copy uncommitted files (e.g. plan files) into the worktree
-    if (input.copyToWorktree?.length) {
-      for (const relPath of input.copyToWorktree) {
-        if (relPath.startsWith('..') || relPath.startsWith('/')) continue;
-        const src = join(input.cwd, relPath);
-        const dst = join(effectiveCwd, relPath);
-        if (existsSync(src) && !existsSync(dst)) {
-          await mkdir(dirname(dst), { recursive: true });
-          await copyFile(src, dst);
+    // A REAL worktree exists only when create() returned a non-empty branch and a path
+    // distinct from cwd. For a non-git target create() runs IN-PLACE (empty branch, path ===
+    // cwd): wtInfo stays undefined, so resolveWorktree() returns null (execution.worktree: null),
+    // effectiveCwd === cwd (no payload rewrite), and no file-copy/merge/cleanup is attempted.
+    if (created.branch !== '' && created.path !== input.cwd) {
+      wtInfo = { branch: created.branch, path: created.path };
+
+      // Copy uncommitted files (e.g. plan files) into the worktree
+      if (input.copyToWorktree?.length) {
+        for (const relPath of input.copyToWorktree) {
+          if (relPath.startsWith('..') || relPath.startsWith('/')) continue;
+          const src = join(input.cwd, relPath);
+          const dst = join(effectiveCwd, relPath);
+          if (existsSync(src) && !existsSync(dst)) {
+            await mkdir(dirname(dst), { recursive: true });
+            await copyFile(src, dst);
+          }
         }
       }
     }

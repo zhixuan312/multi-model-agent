@@ -288,6 +288,41 @@ describe('runTwoPhasePipeline', () => {
     expect(result.status).toBe('done');
   });
 
+  it('treats in-place fallback as worktree=null even when worktreeEnabled=true (non-git target)', async () => {
+    // create() returns in-place info (empty branch, path === cwd) for a non-git target.
+    const createMock = vi.mocked(WorktreeManager.prototype.create);
+    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
+    createMock.mockResolvedValue({ branch: '', path: '/tmp/plain-project', hasChanges: false, merged: false });
+
+    const impl = mockSession('{"status":"done","notes":"done"}');
+    const rev = mockSession('{"status":"done","notes":"reviewed"}');
+    const implProvider = mockProvider(impl);
+
+    const result = await runTwoPhasePipeline({
+      type: 'delegate',
+      implementerSkill: '# Implement',
+      reviewerSkill: '# Review',
+      taskPayload: 'do X',
+      implementerProvider: implProvider,
+      reviewerProvider: mockProvider(rev),
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: '/tmp/plain-project',
+      sandboxPolicy: 'cwd-only',
+      worktreeEnabled: true,
+      taskId: 'abcd1234-5678-9abc-def0-1234567890ab',
+    });
+
+    // In-place: worktree null, no merge/cleanup, implementer runs in the ORIGINAL cwd.
+    expect(result.worktree).toBeNull();
+    expect(cleanupMock).not.toHaveBeenCalled();
+    expect(implProvider.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: '/tmp/plain-project' }),
+    );
+    expect(result.status).toBe('done');
+  });
+
   it('returns worktree=null when worktreeEnabled=false', async () => {
     const createMock = vi.mocked(WorktreeManager.prototype.create);
 
