@@ -61,6 +61,32 @@ function skillSurfaceGate() {
     throw new AbortError('skill-surface', 'mma-flow B5 is missing the one-request-per-repo dispatch invariant',
       'update packages/server/src/skills/mma-flow/SKILL.md B5 / Common: Multi-repo to encode one execute_plan request per repo (tasks[] only partitions multi-repo plans)');
   }
+
+  // mma-breakout is orchestration/command-only (no HTTP task type, no dispatch
+  // scenario), so — like mma-flow — it is gated against the packaged surface:
+  // the interactive breakout lifecycle + one-shot journal close-out must stay intact,
+  // and it must never grow a backend route.
+  if (!has('mma-breakout')) {
+    throw new AbortError('skill-surface', 'mma-breakout is missing from the packaged surface',
+      'create packages/server/src/skills/mma-breakout/SKILL.md');
+  }
+  const breakout = read('mma-breakout');
+  for (const marker of [
+    '# /mma-breakout',
+    'Claude Code command',
+    'run_in_background: true',
+    '@name',
+    'exactly one `journal_record` task',
+    'TaskStop',
+    "raw `.output` transcript",
+    'No server schema, task type, or HTTP route is added',
+    'client-side only',
+  ]) {
+    if (!breakout.includes(marker)) {
+      throw new AbortError('skill-surface', `mma-breakout SKILL.md missing marker: ${marker}`,
+        'mma-breakout must keep the isolated breakout lifecycle + one-shot journal close-out and stay client-side only');
+    }
+  }
 }
 
 export class AbortError extends Error {

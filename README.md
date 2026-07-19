@@ -178,6 +178,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | Command | Invoke with | What it does |
 |---|---|---|
 | `/mma-flow` | Type `/mma-flow` in Claude Code | Self-locating SDLC playbook — detects which stage the project is at (idea → spec → plan → execute → verify → review → green), confirms the design freeze, then runs the autonomous Build chain to committed code. |
+| `/mma-breakout` | Type `/mma-breakout` in Claude Code | Claude Code-only interactive expert-persona breakout — spawns a named breakout teammate, keeps deep dialogue in direct `@name` conversation isolated from the main thread, then closes with one confirmed journal batch. |
 
 ### Two generic usage samples
 

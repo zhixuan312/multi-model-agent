@@ -65,6 +65,7 @@ digraph picker {
 | `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current State · Rough Direction). Divergent grounding before brainstorm/plan. |
 | `mma-brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma-spec` |
 | `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge |
+| `/mma-breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma-breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
@@ -134,6 +135,8 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multiple `mma-delegate` dispatches; `mma-retry` is the corrective there too.)
 
 When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through PR creation and conditional merge, while the other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
+
+When the user needs a bounded interactive expert-persona breakout without polluting the main thread, suggest `/mma-breakout` (a Claude Code command installed to `~/.claude/commands/mma-breakout.md`). It spawns a named breakout teammate, keeps the deep dialogue in direct `@name` conversation isolated from the main context, then closes with one confirmed journal batch instead of adding a backend task type. `/mma-breakout` is Claude Code only.
 
 ## Preflight: auto-start the daemon if it is not running
 
