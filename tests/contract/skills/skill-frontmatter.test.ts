@@ -53,7 +53,6 @@ const ACTIONABLE_SKILLS = [
   'mma-journal-recall',
   'mma-orchestrate',
   'mma-plan',
-  'mma-retry',
   'mma-review',
   'mma-investigate',
   'mma-research',

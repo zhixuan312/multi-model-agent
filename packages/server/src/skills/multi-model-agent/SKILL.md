@@ -1,6 +1,6 @@
 ---
 name: multi-model-agent
-description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
+description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, debug, plan execution, codebase investigation, ad-hoc delegation, context-block reuse) instead of defaulting to inline Agent dispatches
 when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mma is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
 version: "0.0.0-unreleased"
 ---
@@ -74,7 +74,6 @@ digraph picker {
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
-| `mma-retry` | Re-run specific failed/incomplete tasks from a previous dispatch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 
 ## Best practices
@@ -94,7 +93,7 @@ Labor handles work whose answer is findable from the inputs. Main session keeps 
 - **Final approval / merge decisions** — what ships.
 - **Dialogue with the engineer** — clarifying intent, negotiating tradeoffs, answering "should we?".
 
-The test: *if a worker can produce the answer from the given inputs, delegate; if the answer requires deciding what the inputs should be, it's main-session work.* Recipes A–D all keep these judgment steps in main context (e.g., Recipe C explicitly: `mma-investigate` → **write the plan (main)** → `mma-execute-plan`).
+The test: *if a worker can produce the answer from the given inputs, delegate; if the answer requires deciding what the inputs should be, it's main-session work.* Recipes A–C all keep these judgment steps in main context (e.g., Recipe C explicitly: `mma-investigate` → **write the plan (main)** → `mma-execute-plan`).
 
 ### C1 — Delegate by default, inline by exception
 
@@ -118,11 +117,7 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 ### Recipe C — Investigate-plan-execute
 
-`mma-investigate` (codebase Q&A) → write the plan (main-context judgment task) → `mma-execute-plan` (workers implement against named plan headings) → `mma-retry` on any failed indices. Register the plan file as a context block before execute-plan; the retry call inherits the same configuration including `contextBlockIds`.
-
-### Recipe D — Plan-execute-retry
-
-When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full re-dispatch. Pass the **original `taskId`** as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `taskId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original task carry forward into retry — no need to re-register.
+`mma-investigate` (codebase Q&A) → write the plan (main-context judgment task) → `mma-execute-plan` (workers implement against named plan headings). Register the plan file as a context block before execute-plan so it isn't re-inlined into every worker's prompt.
 
 ### Anti-patterns
 
@@ -132,7 +127,7 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 
 3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 separate task dispatches (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
 
-4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multiple `mma-delegate` dispatches; `mma-retry` is the corrective there too.)
+4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: dispatch a fresh `mma-execute-plan` scoped to ONLY the failed task headings (pass just those in `tasks[]`), so the successful tasks aren't re-run.
 
 When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through PR creation and conditional merge, while the other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
 
@@ -175,7 +170,6 @@ Every route has a default tier that can be overridden by sending `agentTier`:
 |---|---|
 | `delegate` | `standard` |
 | `execute_plan` | `standard` |
-| `retry_tasks` | `standard` |
 | `audit` | `complex` |
 | `review` | `complex` |
 | `debug` | `complex` |
@@ -199,7 +193,7 @@ Context blocks are immutable after creation. To update content, register a new b
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

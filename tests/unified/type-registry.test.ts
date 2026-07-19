@@ -5,8 +5,8 @@ import {
 } from '../../packages/core/src/unified/type-registry.js';
 
 describe('TypeRegistry', () => {
-  it('has 13 task types', () => {
-    expect(TASK_TYPES).toHaveLength(13);
+  it('has 12 task types', () => {
+    expect(TASK_TYPES).toHaveLength(12);
   });
 
   it('delegate defaults to standard/worktree/cwd-only', () => {
@@ -65,7 +65,7 @@ describe('TypeRegistry', () => {
   });
 
   it('targetAcceptance: routes without targets reject all', () => {
-    for (const t of ['research', 'journal_recall', 'journal_record', 'retry_tasks', 'orchestrate'] as const) {
+    for (const t of ['research', 'journal_recall', 'journal_record', 'orchestrate'] as const) {
       expect(getTypeConfig(t).targetAcceptance.paths).toBe(false);
       expect(getTypeConfig(t).targetAcceptance.inline).toBe(false);
       expect(getTypeConfig(t).targetAcceptance.required).toBe(false);

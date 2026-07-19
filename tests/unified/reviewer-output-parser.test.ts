@@ -289,21 +289,6 @@ describe('parseReviewerOutput', () => {
   });
 
   describe('untyped task types', () => {
-    it('retry_tasks accepts any valid JSON', () => {
-      const r = parseReviewerOutput('{"anything": true}', 'retry_tasks');
-      expect(r.ok).toBe(true);
-    });
-
-    it('retry_tasks accepts legacy critic format', () => {
-      const r = parseReviewerOutput(LEGACY_CRITIC, 'retry_tasks');
-      expect(r.ok).toBe(true);
-    });
-
-    it('retry_tasks fails on non-JSON', () => {
-      const r = parseReviewerOutput('just text', 'retry_tasks');
-      expect(r.ok).toBe(false);
-    });
-
     it('orchestrate accepts any valid JSON', () => {
       const r = parseReviewerOutput('{"result": "ok"}', 'orchestrate');
       expect(r.ok).toBe(true);

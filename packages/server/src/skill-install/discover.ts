@@ -13,7 +13,6 @@ export const SUPPORTED_SKILLS = [
   'mma-review',
   'mma-debug',
   'mma-execute-plan',
-  'mma-retry',
   'mma-context-blocks',
   'mma-investigate',
   'mma-research',

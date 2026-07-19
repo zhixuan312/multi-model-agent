@@ -171,7 +171,6 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
 | `mma-orchestrate` | A multi-phase workflow needs a session-persistent LLM brain for orchestration — send a structured prompt, get a structured response, reuse the session across workflow phases. Uses the `main` tier (no reviewer, no worktree). |
-| `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
 
 ### Commands (Claude Code only)
 
@@ -312,7 +311,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 13 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` and `plan` types write formal specification and TDD implementation plan documents from structured input. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` and `plan` types write formal specification and TDD implementation plan documents from structured input. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)

@@ -127,7 +127,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
+  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
   subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
@@ -216,10 +216,10 @@ export const TaskCompletedEventSchema = z.object({
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'journal-recall']);
 // Every route EXCEPT orchestrate defaults to reviewPolicy='reviewed' (see
 // unified-task.ts: `type === 'orchestrate' ? 'none' : reviewed`), so every one of them
-// can legitimately emit a `review` stage. Omitting journal-recall / research /
-// retry here made `toWireRecord` throw "R9: review stage only allowed on reviewed
-// routes" and silently DROP their telemetry. List all reviewable routes.
-const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall']);
+// can legitimately emit a `review` stage. Omitting journal-recall / research here
+// made `toWireRecord` throw "R9: review stage only allowed on reviewed routes" and
+// silently DROP their telemetry. List all reviewable routes.
+const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall']);
 
 export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superRefine((event, ctx) => {
   // R1: ok terminalStatus implies non-failed worker outcome and no errorCode

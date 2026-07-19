@@ -214,8 +214,17 @@ export function verify(rec) {
     out.push(C('terminal-status', ok ? 'PASS' : (soft ? 'WARN' : 'FAIL'),
       `status=${st}${!ok && soft ? ' (no-guarantor -> soft)' : ''}`));
 
+    // Git write routes (worktree:true + git cwd) MUST run in a worktree — this is the
+    // positive half of the optional-worktree contract, guarding against a regression where
+    // a git target accidentally runs in-place. orchestrate (worktree:false) and non-git
+    // targets (asserted null in check ⑱) legitimately have a null worktree.
     const wt = r?.execution?.worktree;
-    if (wt && typeof wt === 'object') {
+    const expectsWorktree = e.type !== 'orchestrate' && !e.nonGitCwd;
+    if (expectsWorktree) {
+      const okWt = wt !== null && typeof wt === 'object' && typeof wt.branch === 'string';
+      out.push(C('worktree', okWt ? 'PASS' : 'FAIL',
+        `git write route → expect a worktree; got branch=${wt?.branch} merged=${wt?.merged}`));
+    } else if (wt && typeof wt === 'object') {
       out.push(C('worktree', typeof wt.branch === 'string' ? 'PASS' : 'FAIL',
         `branch=${wt.branch} merged=${wt.merged}`));
     }

@@ -98,13 +98,6 @@ export const taskInputSchema = z.discriminatedUnion('type', [
   }).strict(),
 
   z.object({
-    type: z.literal('retry_tasks'),
-    taskId: z.string().uuid(),
-    taskIndices: z.array(z.number().int().nonnegative()).min(1),
-    ...commonFields,
-  }).strict(),
-
-  z.object({
     type: z.literal('orchestrate'),
     prompt: z.string().min(1),
     outputFormat: z.string().optional(),

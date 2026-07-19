@@ -109,16 +109,15 @@ The HTTP status is the state discriminator:
 
 Tasks are implemented. Usual next moves (soft suggestions — none forced):
 - **Review the changes** → `mma-review` on the changed files.
-- **Re-run only the failures** → `mma-retry` on any `failed` / incomplete indices (never a full re-dispatch).
+- **Re-run only the failures** → a fresh `mma-execute-plan` scoped to ONLY the failed task headings (pass just those in `tasks[]`), never a full re-dispatch that re-charges the successful tasks.
 
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:
 
-- **Recipe C — Investigate-plan-execute.** `mma-investigate` → write the plan → `mma-execute-plan` → `mma-retry` on failed indices. Register the plan file as a context block before the execute-plan call so it isn't re-inlined into every worker's prompt; retry inherits the same configuration.
-- **Recipe D — Plan-execute-retry (entry point).** `mma-execute-plan` is the producer of the `taskId` that `mma-retry` consumes. When this dispatch returns mixed `done` / `failed`, the next call is `mma-retry` with failed indices, NOT a re-dispatch.
+- **Recipe C — Investigate-plan-execute.** `mma-investigate` → write the plan → `mma-execute-plan`. Register the plan file as a context block before the execute-plan call so it isn't re-inlined into every worker's prompt.
 
-Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the dispatch returns mixed `done` / `failed`, do NOT re-run the whole task list — use `mma-retry` with the failed indices only. Re-running the whole list re-charges every successful task.
+Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the dispatch returns mixed `done` / `failed`, do NOT re-run the whole task list — dispatch a fresh `mma-execute-plan` scoped to ONLY the failed task headings (`tasks[]`). Re-running the whole list re-charges every successful task.
 
 ## Common pitfalls
 
@@ -136,7 +135,7 @@ execute_plan handles dependencies naturally since tasks run sequentially in one 
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
 ## Non-git targets

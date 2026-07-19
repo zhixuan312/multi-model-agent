@@ -123,7 +123,6 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 | Skill | Endpoint | Use when |
 |---|---|---|
 | `mma-context-blocks` | `POST/DELETE /context-blocks` | Reuse a large doc across multiple calls |
-| `mma-retry` | `retry` task type | Re-run failed indices from a previous task |
 
 ### Commands (Claude Code only)
 
@@ -157,7 +156,7 @@ All task types dispatch through the unified `POST /task` endpoint with a `type` 
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, retry_tasks, orchestrate, spec, plan) |
+| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
 | `GET /task/:taskId` | Poll task status and results |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |

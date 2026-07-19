@@ -49,10 +49,14 @@ export function createProject() {
     '## Rough Direction\n\n### Direction 1: Throw on invalid input\nExplicit errors; callers handle.\n\n### Direction 2: Return NaN\nSilent; no throw.\n\n### Recommended next step\nGrill the error-handling decision in brainstorm.\n');
   git('add', 'exploration.md'); git('commit', '-qm', 'add exploration grounding');
 
-  // Non-git directory for scenario #28 (delegate without worktree)
+  // Non-git directory for the optional-worktree scenarios:
+  //   #28 delegate  — write in-place, no worktree
+  //   #32 execute_plan — run a plan in-place, no worktree (needs plan.md below)
   const nonGitDir = mkdtempSync(join(tmpdir(), 'mma-nongit-'));
   mkdirSync(join(nonGitDir, 'src'));
   writeFileSync(join(nonGitDir, 'src', 'hello.ts'), 'export const hello = "world";\n');
+  writeFileSync(join(nonGitDir, 'plan.md'),
+    '# Plan\n\n### Task 1: add greeting\nAdd `export const GREETING = "hi";` to `src/hello.ts`.\n');
 
   return { dir, nonGitDir };
 }

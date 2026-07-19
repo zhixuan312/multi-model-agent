@@ -64,8 +64,9 @@ export function buildRequest(spec, ctx) {
     // J. Error: too many context blocks (>2 rejected)
     case 27: return { type: 'error_too_many_blocks', body: {}, rawPayload: { type: 'audit', target: { paths: [`${cwd}/spec.md`] }, contextBlockIds: ['a', 'b', 'c'] } };
 
-    // K. Non-git cwd: delegate without worktree
+    // K. Non-git cwd: write routes run in-place without a worktree
     case 28: return { type: 'delegate', body: { prompt: 'Create file src/output.ts with: export const OUT = 1;', target: { paths: ['src/output.ts'] }, reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
+    case 32: return { type: 'execute_plan', body: { target: { paths: ['plan.md'] }, tasks: ['Task 1: add greeting'], reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
 
     // L. Subset spec components — request a scrambled subset; worker emits only those, canonical order
     case 29: return { type: 'spec', body: { prompt: 'Guarded arithmetic — subset spec', target: { paths: [`${cwd}/design-decisions.md`] }, components: spec.subsetComponents } };

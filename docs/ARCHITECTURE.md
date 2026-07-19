@@ -86,7 +86,6 @@ Per-type fill of the stack:
 | `research` | reviewed | no | read-only | mma-research |
 | `journal_recall` | reviewed | no | read-only | mma-journal-recall |
 | `journal_record` | reviewed | no | cwd-only | mma-journal-record |
-| `retry_tasks` | reviewed | no | cwd-only | mma-retry |
 | `orchestrate` | none | no | cwd-only | mma-orchestrate |
 | `spec` | reviewed | yes | cwd-only | mma-spec |
 | `plan` | reviewed | yes | cwd-only | mma-plan |

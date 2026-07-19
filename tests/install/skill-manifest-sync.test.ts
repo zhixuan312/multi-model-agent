@@ -43,7 +43,7 @@ describe('SkillManifestSync.driftReport', () => {
     const canonicalVersion = '0.0.0-unreleased'; // matches source SKILL.md version before npm publish injection
     const supported = [
       'multi-model-agent', 'mma-delegate', 'mma-audit', 'mma-review',
-      'mma-debug', 'mma-execute-plan', 'mma-retry',
+      'mma-debug', 'mma-execute-plan',
       'mma-context-blocks', 'mma-investigate', 'mma-research', 'mma-explore',
       'mma-brainstorm', 'mma-journal-record', 'mma-journal-recall', 'mma-orchestrate',
       'mma-spec', 'mma-plan',

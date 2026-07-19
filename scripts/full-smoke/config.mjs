@@ -1,10 +1,17 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Redesigned as a comprehensive product release gate: 22 scenarios, each testing
-// a DISTINCT product capability. No duplicates. Covers task types, audit subtypes,
-// tier/review policy overrides, session reuse, error cases, sandbox confinement,
-// and telemetry.
+// Comprehensive product release gate: 32 scenarios, each testing a DISTINCT product
+// capability — no duplicates, every scenario earns its place. Full functional coverage:
+//   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
+//     research, journal_recall, journal_record, orchestrate, spec, plan) + the
+//     context-blocks control op — every dispatchable route is exercised.
+//   - audit subtypes (default/spec/plan/skill), tier + review-policy overrides,
+//     session reuse, sandbox confinement (cwd-only escape/cd-chain, read-only),
+//     optional worktree (git → worktree; non-git → in-place for BOTH write routes),
+//     copyToWorktree (uncommitted plan), context-block delta, spec-component subset,
+//     multi-file grounding, and the error surface (invalid type, missing field,
+//     too-many-blocks, bad-components) + telemetry wire records.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,7 +38,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 28-scenario release gate.
+// The 32-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -141,8 +148,13 @@ export const SCENARIOS = [
   // J. Error: too many context blocks (>2 rejected)
   { id: 27, type: 'error_too_many_blocks', kind: 'error', expectStatus: 400, emits: 0 },
 
-  // K. Non-git cwd: delegate works without a git repo (no worktree)
+  // K. Optional worktree — write routes run in-place in a non-git cwd (no worktree, no PR).
+  //    #28 delegate      — non-git delegate edits in place; execution.worktree === null.
+  //    #32 execute_plan  — non-git plan execution edits in place (the OTHER worktree:true
+  //                        route); execution.worktree === null. Together they prove BOTH
+  //                        worktree-taking write routes degrade to in-place off git.
   { id: 28, type: 'delegate', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
+  { id: 32, type: 'execute_plan', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
 
   // L. Subset spec components (the `components` feature)
   //    #29: spec with a NON-canonical components subset → the worker must emit ONLY
