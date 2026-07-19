@@ -11,8 +11,8 @@ import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-b
 import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
 import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
-import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 import { normalizeModel } from '@zhixuan92/multi-model-agent-core';
+import { decide as decideConsent } from '../telemetry/consent.js';
 import type { RawHandler } from './types.js';
 import type { HandlerDeps } from './handler-deps.js';
 import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
@@ -163,25 +163,11 @@ export async function startServer(
       // Wire TelemetryUploader so unified-handler tasks emit wire records.
       let recorderForUnified: Recorder | null = null;
       try { recorderForUnified = getRecorder(); } catch { /* not initialized */ }
-      const decideConsentForUnified = () => {
-        const envVal = process.env.MMA_TELEMETRY;
-        let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
-        try {
-          const cfgPath = join(homedir(), '.mma', 'config.json');
-          const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-          if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
-            configState = { enabled: cfg.telemetry.enabled };
-          }
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-            configState = { kind: 'unreadable' };
-          }
-        }
-        return decideConsent({ env: envVal, config: configState });
-      };
+      // Consent decision is owned by telemetry/consent.ts (single source of truth for the
+      // env + config.json → decision logic); reuse it here rather than re-implementing it.
       bus.subscribe(new TelemetryUploader({
         recorder: recorderForUnified,
-        consent: { decide: decideConsentForUnified },
+        consent: { decide: () => decideConsent(join(homedir(), '.mma')) },
         buildOpts: (env: any) => ({
           toolMode: 'full',
           implementerModel: env.stages[0]?.model ?? env.mainModel,
