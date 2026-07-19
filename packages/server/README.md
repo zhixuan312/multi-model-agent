@@ -130,6 +130,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 | Command | What it does |
 |---|---|
 | `/mma-flow` | Self-locating SDLC playbook — detects project stage, confirms design freeze, runs the autonomous Build chain to committed code. |
+| `/mma-breakout` | Claude Code-only interactive expert-persona breakout — spawns a named breakout teammate, keeps deep dialogue isolated from the main thread, then records one confirmed journal batch. |
 
 ## Configuration reference
 

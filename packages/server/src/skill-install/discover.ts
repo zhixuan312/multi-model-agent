@@ -33,6 +33,7 @@ export const SUPPORTED_SKILLS = [
  */
 export const SUPPORTED_COMMANDS = [
   'mma-flow',
+  'mma-breakout',
 ] as const;
 
 /** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */

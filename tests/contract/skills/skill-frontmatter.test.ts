@@ -42,6 +42,7 @@ function extractEndpointPath(md: string): string | null {
 const ACTIONABLE_SKILLS = [
   'mma-audit',
   'mma-brainstorm',
+  'mma-breakout',
   'mma-context-blocks',
   'mma-debug',
   'mma-delegate',
@@ -84,7 +85,7 @@ describe('contract: skill manifest surface', () => {
       it('description starts with "Use when" or "Use first" (skill-discovery convention)', () => {
         // Commands (e.g. mma-flow) are explicitly invoked via /name, not auto-matched
         // by intent — the "Use when" convention does not apply to them.
-        const COMMANDS = ['mma-flow'];
+        const COMMANDS = ['mma-flow', 'mma-breakout'];
         if (COMMANDS.includes(skillName)) return;
 
         expect(
