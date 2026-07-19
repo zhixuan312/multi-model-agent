@@ -5,11 +5,58 @@ describe('WorktreeManager', () => {
   const mockExec = (stdout = '') =>
     vi.fn().mockResolvedValue({ stdout, stderr: '' });
 
-  const mockFs = (hasPackageJson = false) => ({
+  // access() now serves TWO probes: `.git` (git-repo detection) and `package.json` (pnpm install).
+  // `isGit` defaults true so existing git-path tests are unchanged; `hasPackageJson` gates install.
+  const mockFs = (hasPackageJson = false, isGit = true) => ({
     mkdir: vi.fn().mockResolvedValue(undefined),
-    access: hasPackageJson
-      ? vi.fn().mockResolvedValue(undefined)
-      : vi.fn().mockRejectedValue(new Error('ENOENT')),
+    access: vi.fn().mockImplementation(async (p: string) => {
+      if (p.endsWith('.git')) {
+        if (isGit) return undefined;
+        throw new Error('ENOENT');
+      }
+      // package.json probe
+      if (hasPackageJson) return undefined;
+      throw new Error('ENOENT');
+    }),
+  });
+
+  it('create returns an in-place execution target when the `.git` entry is absent', async () => {
+    // Non-git target: `.git` probe rejects → create() skips the worktree and runs in place.
+    const exec = mockExec();
+    const fs = mockFs(false, false); // isGit = false
+    const mgr = new WorktreeManager(exec, fs);
+
+    const info = await mgr.create('/plain-dir', 'task-abc12345', 'delegate');
+
+    expect(info).toEqual({ branch: '', path: '/plain-dir', hasChanges: false, merged: false });
+    // No git commands and no worktree mkdir for a non-git target.
+    expect(exec).not.toHaveBeenCalled();
+    expect(fs.mkdir).not.toHaveBeenCalled();
+  });
+
+  it('a git-repo SUBDIR (no direct `.git`) runs in-place — intentional per the `.git`-entry contract', async () => {
+    // Detection is a `.git`-ENTRY check on the given cwd, so a subdir of a repo (which has no
+    // `.git` of its own) is treated as non-git → in-place. This is deliberate: /mma-flow only
+    // ever dispatches write routes at a repo ROOT, never a subdir. Locking the behavior here.
+    const exec = mockExec();
+    const fs = mockFs(false, false); // subdir: no `.git` entry at this cwd
+    const mgr = new WorktreeManager(exec, fs);
+
+    const info = await mgr.create('/repo/src', 'task-abc12345', 'delegate');
+
+    expect(info).toEqual({ branch: '', path: '/repo/src', hasChanges: false, merged: false });
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('mergeAndCleanup is a no-op for in-place execution (empty branch, path === cwd)', async () => {
+    const exec = mockExec();
+    const fs = mockFs();
+    const mgr = new WorktreeManager(exec, fs);
+
+    const info = await mgr.mergeAndCleanup('/plain-dir', '', '/plain-dir');
+
+    expect(info).toEqual({ branch: '', path: '/plain-dir', hasChanges: false, merged: false });
+    expect(exec).not.toHaveBeenCalled(); // no git cleanup for in-place execution
   });
 
   it('create calls git worktree add with correct branch', async () => {

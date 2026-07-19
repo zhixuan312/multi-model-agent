@@ -119,7 +119,32 @@ export class WorktreeManager {
     }
   }
 
+  /**
+   * Is `cwd` a git repository? Detection is a `.git` ENTRY check (file OR directory), not
+   * `git rev-parse`. Rationale: it is the single detection rule across this feature (topology
+   * detection also keys on a child's `.git`), `fs.access` succeeds whether `.git` is a directory
+   * (repo root) or a FILE (a linked worktree), and write-route `cwd` is always a repo root or a
+   * plain non-git folder — never a repo subdir — so the subdir-walk semantics of `git rev-parse`
+   * add nothing. This replaces the deleted route-local `isGitRepo` helper as the single source of
+   * truth for write-route git detection.
+   */
+  async isGitRepo(cwd: string): Promise<boolean> {
+    try {
+      await this.fs.access(join(cwd, '.git'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async create(cwd: string, taskId: string, type: string): Promise<WorktreeInfo> {
+    // Non-git target → in-place execution. Skip `git worktree add` entirely and run directly in
+    // `cwd` (the `cwd-only` sandbox already confines the worker). Signalled by an empty branch and
+    // a path equal to the original cwd; mergeAndCleanup() treats that pair as a no-op.
+    if (!(await this.isGitRepo(cwd))) {
+      return { branch: '', path: cwd, hasChanges: false, merged: false };
+    }
+
     const shortId = taskId.slice(0, 8);
     const branch = `mma/${type}-${shortId}`;
     const worktreeDir = join(cwd, '.mma', 'worktrees', shortId);
@@ -147,6 +172,12 @@ export class WorktreeManager {
    * Returns the merge result. On merge conflict, preserves the worktree for manual resolution.
    */
   async mergeAndCleanup(worktreePath: string, branch: string, originalCwd: string, commitMessage?: string): Promise<WorktreeInfo> {
+    // In-place execution (non-git target): create() returned an empty branch with the worktree
+    // path equal to the original cwd. There is no worktree or branch to merge or clean up — no-op.
+    if (branch === '' && worktreePath === originalCwd) {
+      return { branch: '', path: originalCwd, hasChanges: false, merged: false };
+    }
+
     // Defensive: if the worktree directory is gone (e.g. an OS temp-dir reap, or
     // an agent that deleted it), every `git` spawn with `cwd: worktreePath` would
     // throw `spawn git ENOENT` and crash the whole pipeline. Detect it first and

@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 
@@ -236,6 +240,60 @@ describe('route contract', () => {
         });
         expect(res.status).toBe(404);
       } finally { await h.close(); }
+    });
+  });
+
+  // ── Non-git targets: write routes run in-place, worktree stays null (optional worktree) ──
+
+  describe('non-git write-route execution', () => {
+    it('delegate keeps execution.worktree null for a non-git cwd target', async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-nongit-'));   // no .git created
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+      try {
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({ type: 'delegate', prompt: 'touch a note' }),
+        });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        expect((env.execution as Record<string, unknown>).worktree).toBeNull();
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
+    });
+
+    it('execute_plan runs in-place (worktree null) for a non-git cwd target', async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-nongit-ep-'));
+      await writeFile(join(tmp, 'plan.md'), '# Plan\n\n### Task 1: noop\n\n- [ ] Step 1: do nothing\n');
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+      try {
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({ type: 'execute_plan', target: { paths: ['plan.md'] } }),
+        });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        expect((env.execution as Record<string, unknown>).worktree).toBeNull();
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
+    });
+
+    it('delegate still creates a worktree (non-null) for a git cwd target — no regression', async () => {
+      // Isolated temp git repo (not the engine repo) so the git path is exercised deterministically.
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-git-'));
+      execFileSync('git', ['init', '-q'], { cwd: tmp });
+      execFileSync('git', ['config', 'user.email', 't@t'], { cwd: tmp });
+      execFileSync('git', ['config', 'user.name', 't'], { cwd: tmp });
+      await writeFile(join(tmp, 'f.txt'), 'x\n');
+      execFileSync('git', ['add', '-A'], { cwd: tmp });
+      execFileSync('git', ['commit', '-qm', 'init'], { cwd: tmp });
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+      try {
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({ type: 'delegate', prompt: 'touch a note' }),
+        });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        expect((env.execution as Record<string, unknown>).worktree).not.toBeNull();
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
   });
 }, 60_000);

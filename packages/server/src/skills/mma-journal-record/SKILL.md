@@ -115,4 +115,10 @@ The request schema accepts only lowercase-kebab topics. Fix it before dispatch: 
 
 Write-route tasks (delegate / execute-plan / journal / retry) do **not** register terminal context blocks. Their artifact is the filesystem mutation (git commit for delegate; graph mutations for journal). Read-route tasks (audit / review / debug / investigate / research) auto-register blocks containing their findings.
 
+## Multi-repo mode (parent-aware)
+
+In a parent-aware multi-repo flow, records go to the **parent** workspace **journal** (one product-level
+store, reached with `cwd = parent workspace`). Pass `topic = <repo-slug>` (normalized **lowercase-kebab**,
+e.g. `multi-model-agent`) to scope a learning to the repo it came from. Single-project mode is unchanged.
+
 @include _shared/error-handling.md

@@ -119,4 +119,10 @@ The block is registered server-side at task completion; no caller action is need
 
 **Empty journal is not a failure.** A recall that finds nothing relevant is a success — "no prior learnings match that question." The `output.summary.answer` field contains the narrative; `output.summary.findings` contains individual learnings with `nodeId` and `nodePath` for citation.
 
+## Multi-repo mode (parent-aware)
+
+In a parent-aware multi-repo flow, recall searches the **parent** workspace **journal**. Pass
+`topic = <repo-slug>` (**lowercase-kebab**) to narrow recall to one repo's learnings; recall still falls
+back across topics so a repo filter never starves retrieval. Single-project mode is unchanged.
+
 @include _shared/error-handling.md

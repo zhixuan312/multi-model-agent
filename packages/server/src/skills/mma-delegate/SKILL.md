@@ -129,4 +129,10 @@ The reviewer sees the full diff with the original prompt as context. Reading inl
 Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
+## Non-git targets
+
+When the target `cwd` is **non-git**, delegate runs **in-place** with **no worktree** — it edits the
+folder directly under the cwd-only sandbox, and there is no branch/PR/merge. Git targets keep worktree
+isolation unchanged. Git is never forced.
+
 @include _shared/error-handling.md

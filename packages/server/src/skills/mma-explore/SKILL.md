@@ -251,3 +251,9 @@ the user's call (or `/mma-flow`'s).
 | Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need. Do NOT synthesise over an unfinished investigation. |
 | Research returned 0 usable sources | Sentinel on external lines; add a one-line note under `## Current State` that external research returned nothing usable. |
 | Investigate headline reads "0 citations" but `output.summary.findings.length > 0` | Known stage-sync noise — IGNORE the headline; read `output.summary.findings` directly. |
+
+## Multi-repo mode (parent-aware)
+
+In **multi-repo mode** (a parent workspace with git-bearing child repos), the exploration is written
+under the **parent workspace** `.mma/explorations/`, not a child repo — so one product-level exploration
+covers the whole flow. Single-project mode is unchanged.

@@ -39,18 +39,6 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { deriveDefaultOutputPath } from './derive-output-path.js';
-import { execFile as execFileCb } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFileCb);
-
-async function isGitRepo(cwd: string): Promise<boolean> {
-  try {
-    await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd });
-    return true;
-  } catch { return false; }
-}
-
 function tryParseJson(raw: string): unknown {
   const fenced = [...raw.matchAll(/```json\s*([\s\S]*?)```/g)];
   const match = fenced.length ? fenced[fenced.length - 1] : raw.match(/(\{[\s\S]*\})/);
@@ -707,7 +695,9 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             reviewPolicy,
             cwd,
             sandboxPolicy: typeConfig.sandbox,
-            worktreeEnabled: typeConfig.worktree && await isGitRepo(cwd),
+            // Git detection now lives in the shared WorktreeManager (WorktreeManager.isGitRepo):
+            // for a non-git target it runs in-place, so the route just passes the type's intent.
+            worktreeEnabled: typeConfig.worktree,
             taskId,
             implementerGoal,
             reviewerGoal,
