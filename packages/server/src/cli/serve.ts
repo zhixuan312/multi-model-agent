@@ -19,10 +19,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
-import { startServer } from '../http/server.js';
+import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
@@ -85,17 +84,6 @@ export async function maybeAutoUpdateSkills(
     if (missing.length > 0) process.stdout.write(`[mma] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
-  }
-}
-
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
   }
 }
 
@@ -171,7 +159,7 @@ export async function startServe(
   // if recorder is null at that moment, the uploader is wired with
   // recorder=null and silently drops every event for the daemon's lifetime.
   const homeDir = path.join(os.homedir(), '.mma');
-  const mmaVersion = readServerVersion();
+  const mmaVersion = SERVER_VERSION;
   createRecorder({ homeDir, mmaVersion });
 
   // Pass the full MultiModelConfig (not just the server block) so
@@ -322,7 +310,7 @@ export async function startServe(
     const token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
     const fp = createHash('sha256').update(token).digest('hex').slice(0, 8);
     const bootId = randomUUID();
-    const version = readServerVersion();
+    const version = SERVER_VERSION;
     process.stdout.write(
       `[mma] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
     );
