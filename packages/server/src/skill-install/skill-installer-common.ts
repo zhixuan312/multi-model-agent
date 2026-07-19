@@ -1,10 +1,9 @@
 // Shared skill-install utilities. Per architecture.md:188-194, each client
 // gets its own writer under skill-installers/; this file holds the dispatch
-// layer, orchestration, missing-skill detection, and outbound headers/notify
-// code that was previously scattered across packages/server/src/install/.
+// layer, missing-skill detection, and outbound headers/notify code that was
+// previously scattered across packages/server/src/install/.
 //
 // @module
-import fs from 'node:fs';
 import path from 'node:path';
 import type { Client, ManifestEntry } from './manifest.js';
 import {
@@ -21,10 +20,6 @@ import { installCursor, uninstallCursor } from './skill-installers/cursor.js';
 // ── Headers (was server/src/install/headers.ts) ───────────────────────────
 
 export type HeaderClientName = 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli';
-
-export function clientHeaders(client: HeaderClientName) {
-  return { 'X-MMA-Client': client };
-}
 
 export function toHeaderClientName(client: Client): HeaderClientName {
   switch (client) {
@@ -69,13 +64,6 @@ export function findMissingSkills(
   return supportedSkills
     .filter((name) => !installedNames.has(name))
     .map((name) => ({ name, targets: [...targets] }));
-}
-
-export function findOrphanedSkills(
-  manifestEntries: ManifestEntry[],
-  supportedSkills: readonly string[],
-): ManifestEntry[] {
-  return manifestEntries.filter((e) => !supportedSkills.includes(e.name));
 }
 
 function unionTargets(entries: ManifestEntry[]): Client[] {
@@ -192,20 +180,3 @@ export function removeCommandFromClaudeCode(
   uninstallClaudeCodeCommand(commandName, homeDir);
 }
 
-// ── Orchestration (was server/src/install/orchestrate.ts) ───────────────────
-
-export function activeCleanup(installDir: string, canonicalSkills: readonly string[]): string[] {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(installDir);
-  } catch {
-    return [];
-  }
-  const present = entries.filter((name) => name.startsWith('mma-'));
-  const orphaned = present.filter((name) => !canonicalSkills.includes(name));
-  for (const orphan of orphaned) {
-    const dirPath = path.join(installDir, orphan);
-    fs.rmSync(dirPath, { recursive: true, force: true });
-  }
-  return orphaned;
-}
