@@ -1,8 +1,7 @@
 import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { readServerVersion } from '../server-version.js';
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
@@ -22,19 +21,7 @@ import type { ProjectRegistry } from './project-registry.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
-/** Server package version — read once at module load time from package.json. */
-function readServerVersion(): string {
-  try {
-    const thisDir = dirname(fileURLToPath(import.meta.url));
-    // Walk up from src/http/ to packages/server/
-    const pkgPath = join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
-
+/** Server package version — read once at module load time (single source: server-version.ts). */
 export const SERVER_VERSION = readServerVersion();
 
 function extractMultiModelConfig(config: ServerConfig): HandlerDeps['config'] | undefined {

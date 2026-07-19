@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
 import {
   loadConfigFromFile,
@@ -191,19 +192,6 @@ Global options:
   --version, -v         Show version
 `;
 
-/**
- * Read the server package version from package.json, walking up from this file.
- */
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
 
 /**
  * Main entry point — exported so it can be unit-tested without subprocess spawning.
