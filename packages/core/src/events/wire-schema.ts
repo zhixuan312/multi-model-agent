@@ -323,17 +323,7 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   }
 });
 
-// ── Wire-telemetry record (§3.5) ─────────────────────────────────────────
-// Validates the wire shape emitted by buildWirePayload. v4.0.3 unified
-// internal + wire to mainModel/mainModelFamily — no more rename shim.
-
-export const WireTelemetryRecordSchema = z.object({
-  mainModel: z.string().nullable(),
-  mainModelFamily: ModelFamilyEnum,
-}).passthrough();
-
 // ── Inferred TS types ────────────────────────────────────────────────────
 
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
-export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
 export type { ConcernCategoryType } from '../types/enums.js';
