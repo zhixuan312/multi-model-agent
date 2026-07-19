@@ -21,8 +21,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-// ShutdownCause: previously exported from http-server-log.ts (removed in events refactor).
-type ShutdownCause = 'sigterm' | 'sigint' | 'uncaught_exception' | 'unhandled_rejection' | 'stdout_epipe' | 'stdout_other_error' | 'uncaughtException' | 'unhandledRejection';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
@@ -183,26 +181,18 @@ export async function startServe(
   const running = await startServer(config as Parameters<typeof startServer>[0], undefined, configPath);
 
   // ── stdout/stderr error + uncaught/unhandled rejection guards ────────
-  const logShutdown = (_cause: ShutdownCause): void => {
-    // Option A: no diagnostics surface today. Cause name routed via stderr only.
-    // Option B (follow-up): wire running.diagnostics?.shutdown(_cause) here.
-  };
-
   const onStdoutError = (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('stdout_other_error');
+    if (err.code === 'EPIPE') exit(0);
     try { process.stderr.write(`[mma] stdout error: ${err.message}\n`); } catch { /* stderr may also be dead */ }
     exit(1);
   };
   const onStderrError = (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('stdout_other_error');
+    if (err.code === 'EPIPE') exit(0);
     exit(1);
   };
   const onUncaught = (err: unknown) => {
     const errno = (err as NodeJS.ErrnoException | undefined)?.code;
-    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('uncaughtException');
+    if (errno === 'EPIPE') exit(0);
     try {
       const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       process.stderr.write(`[mma] uncaught exception: ${msg}\n`);
@@ -211,8 +201,7 @@ export async function startServe(
   };
   const onUnhandledRejection = (reason: unknown) => {
     const errno = (reason as NodeJS.ErrnoException | undefined)?.code;
-    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('unhandledRejection');
+    if (errno === 'EPIPE') exit(0);
     try {
       const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
       process.stderr.write(`[mma] unhandled rejection: ${msg}\n`);
