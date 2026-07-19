@@ -9,7 +9,7 @@ import type { TaskCompletedEventType } from './wire-schema.js';
 import { ValidatedTaskCompletedEventSchema } from './wire-schema.js';
 import type { FindingsOutcome } from '../types/enums.js';
 
-// === clamp helpers (copied from clamp.ts, sans clampReasoningTokens) ===
+// === clamp helpers — bound each wire field to a sane range before emit ===
 export const clampStageCost = (n: number): number =>
   Math.max(0, Math.min(Math.round(n * 1_000_000) / 1_000_000, 500));
 
