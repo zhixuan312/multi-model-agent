@@ -40,16 +40,5 @@ export async function loadSkill(type: TaskType, skillsDir: string, subtype?: str
   return pair;
 }
 
-export async function validateSkillsExist(
-  types: readonly TaskType[],
-  skillsDir: string,
-): Promise<void> {
-  const errors: string[] = [];
-  for (const type of types) {
-    try { await loadSkill(type, skillsDir); }
-    catch (e) { errors.push(e instanceof Error ? e.message : String(e)); }
-  }
-  if (errors.length > 0) throw new Error(`Skill validation failed:\n${errors.join('\n')}`);
-}
-
+// Test-support: clear the module-level skill cache for isolation between tests.
 export function clearSkillCache(): void { cache.clear(); }

@@ -44,8 +44,9 @@ Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
   (When reviewPolicy is 'none', the review phase is skipped entirely.)
 
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
-  5.1  Output parsing     core/src/reporting/structured-report.ts
-  5.2  Status derivation  core/src/reporting/terminal-status-deriver.ts
+  5.1  Evidence parsing   core/src/reporting/extract-evidence-sections.ts
+  5.2  Status derivation  inline in core/src/unified/two-phase-pipeline.ts
+                          (done | done_with_concerns from the reviewer parse)
   5.3  Sentinels          core/src/reporting/not-applicable.ts
   5.4  Telemetry emit     core/src/events/{envelope-bus,task-envelope,wire-schema,
                           to-wire-record,consent-rules,telemetry-uploader}.ts

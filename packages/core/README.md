@@ -39,9 +39,7 @@ const config = await loadConfigFromFile();
 | `./config/load` | `loadConfigFromFile`, `loadAuthToken` |
 | `./config/model-profile-registry` | `findModelProfile`, `extractCanonicalModelName`, model family enum |
 | `./providers/provider-factory` | `createProvider` factory, session safety ceiling |
-| `./bounded-execution/activity-tracker` | `ActivityTracker` — heartbeat + stage transitions |
 | `./types` | Cross-cutting types (task spec, run result, config, enums) |
-| `./reporting/structured-report` | Structured report parsing |
 | `./error-codes` | Error code constants |
 | `./events/envelope-bus` | `EnvelopeBus` — pub/sub for structured observability |
 | `./events/log-writer` | `LogWriter` — JSONL diagnostic sink |
