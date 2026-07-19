@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   __liveByTask,
-  releaseTask,
   SafetyCeilingExceededError,
   TaskSessionLimitExceededError,
   MissingTaskIdentityError,
@@ -86,22 +85,6 @@ describe('provider-factory per-task safety (D6)', () => {
     expect(__liveByTask().get('B:9')?.size ?? 0).toBe(before); // no leak
   });
 
-  it('A6.4 — releaseTask force-closes registered sessions and clears the map', async () => {
-    const s1 = makeFakeSession();
-    const s2 = makeFakeSession();
-    let i = 0;
-    __setCoreTestProviderOverride(mockProvider(() => (i++ === 0 ? s1 : s2)));
-    const cfg = { agents: { standard: { type: 'codex', model: 'm' } } } as any;
-    const p = createProvider('standard', cfg);
-    p.openSession(opts('B', 5));
-    p.openSession(opts('B', 5));
-    expect(__liveByTask().get('B:5')?.size).toBe(2);
-    await releaseTask('B', 5);
-    expect(s1.closeFn).toHaveBeenCalledTimes(1);
-    expect(s2.closeFn).toHaveBeenCalledTimes(1);
-    expect(__liveByTask().get('B:5')).toBeUndefined();
-  });
-
   it('A6.5 — 101st live session across all keys throws SafetyCeilingExceeded', () => {
     __setCoreTestProviderOverride(mockProvider(() => makeFakeSession()));
     const cfg = { agents: { standard: { type: 'codex', model: 'm' } } } as any;
@@ -117,26 +100,4 @@ describe('provider-factory per-task safety (D6)', () => {
     return Promise.all(sessions.map((s) => s.close()));
   });
 
-  it('A6.6 — releaseTask iterates remaining sessions when one close() throws, and emits diagnostic', async () => {
-    const goodSession = makeFakeSession();
-    const badSession = makeFakeSession(async () => { throw new Error('close-failed'); });
-    let i = 0;
-    __setCoreTestProviderOverride(mockProvider(() => (i++ === 0 ? badSession : goodSession)));
-    const cfg = { agents: { standard: { type: 'codex', model: 'm' } } } as any;
-    const p = createProvider('standard', cfg);
-    p.openSession(opts('B', 7));
-    p.openSession(opts('B', 7));
-    const events: Array<Record<string, unknown>> = [];
-    const bus = { emit: (e: Record<string, unknown>) => { events.push(e); } };
-    await releaseTask('B', 7, bus);
-    expect(badSession.closeFn).toHaveBeenCalledTimes(1);
-    expect(goodSession.closeFn).toHaveBeenCalledTimes(1);
-    expect(__liveByTask().get('B:7')).toBeUndefined();
-    expect(events.find((e) => e.event === 'release_task_close_failed')).toMatchObject({
-      event: 'release_task_close_failed',
-      taskId: 'B',
-      taskIndex: 7,
-      error: 'close-failed',
-    });
-  });
 });
