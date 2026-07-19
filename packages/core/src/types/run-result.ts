@@ -165,7 +165,6 @@ export interface RuntimeRunResult {
   };
   agents?: {
     implementer?: string;
-    implementerToolMode?: string;
     [key: string]: unknown;
   };
   stallCount?: number;

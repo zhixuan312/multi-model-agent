@@ -35,7 +35,7 @@ Stage 3 — DISPATCH  (pick agent, run implementer)
   3.2  Two-phase pipeline core/src/unified/two-phase-pipeline.ts
   3.3  Provider invoke    core/src/providers/{claude,codex}.ts
                           via providers/provider-factory.ts
-  3.4  Bounded execution  core/src/bounded-execution/{activity-tracker,cost-compute}.ts
+  3.4  Bounded execution  core/src/bounded-execution/cost-compute.ts
                           (provider-level wallClockDeadline + abortSignal)
 
 Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
@@ -107,8 +107,7 @@ C.1  Identity & sandboxing      core/src/identity/{claude-oauth,secret-redactor}
                                 core/src/transport/loopback-enforcer.ts,
                                 core/src/providers/claude-cwd-confinement.ts
                                 (PreToolUse hook: cwd-only + read-only enforcement)
-C.2  Bounded execution           core/src/bounded-execution/{activity-tracker,
-                                cost-compute}.ts,
+C.2  Bounded execution           core/src/bounded-execution/cost-compute.ts,
                                 core/src/error-codes.ts
                                 (provider-level wallClockDeadline + abortSignal)
 C.3  Provider abstraction        core/src/providers/provider-factory.ts,
@@ -180,7 +179,7 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `packages/core/src/tools/` (per-tool briefSlots, tool-configs) | Replaced by `core/src/skills/` (per-type implement.md + review.md) + `unified/type-registry.ts` |
 | `packages/core/src/routing/` (AgentResolver, ToolSurfaceRegistry) | `AgentResolver` moved to `providers/agent-resolver.ts`; ToolSurfaceRegistry deleted |
 | `packages/core/src/executors/` | Deleted. Pipeline drives providers directly |
-| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only; domain types in `types/` (task-spec, run-result, goal, stage-stats, etc.) |
+| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only; domain types in `types/` (task-spec, run-result, config, enums) |
 | `packages/mcp/` | Deleted. All MCP-layer concerns now live under `packages/server/` (HTTP service) + `packages/server/src/skills/` (distributed skill markdown) |
 | `packages/server/src/install/` | Renamed to `packages/server/src/skill-install/` |
 | Clarification flow (clarification-store, force-clarification, confirm route, `mma-clarifications` skill) | Deleted in v4.0. Routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |

@@ -306,10 +306,9 @@ export function toWireRecord(
       { critical: 0, high: 0, medium: 0, low: 0 },
     ),
     // 4.7.4+ outcome rollup. Source priority: review → annotating → implementing.
-    // Each stage stores the same value the worker / reviewer emitted; the
-    // first non-null wins because later stages mirror earlier ones (see
-    // mergeStageStats branch for 'implementing | annotating' and review-stage
-    // handler). Top-level is the single source backend + frontend read.
+    // Each stage stores the same value the worker / reviewer emitted; the first
+    // non-null wins because later stages mirror earlier ones (see the
+    // outcomePriority walk below). Top-level is the single source backend + frontend read.
     ...(() => {
       const outcomePriority: Array<'reviewing' | 'annotating' | 'implementing'> = ['reviewing', 'annotating', 'implementing'];
       type StageWithOutcome = {
