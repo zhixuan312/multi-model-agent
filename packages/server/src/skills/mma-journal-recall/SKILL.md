@@ -100,7 +100,7 @@ Keep the question conceptual. `topic` scopes the search; `prompt` tells the work
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / retry / journal-record) return `contextBlockId: null` — their record is the commit, not a block.
+Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / journal-record) return `contextBlockId: null` — their record is the commit, not a block.
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

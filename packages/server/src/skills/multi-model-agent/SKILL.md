@@ -69,7 +69,7 @@ digraph picker {
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
-| `mma-audit` | Audit a document/spec/config for security, correctness, style, or performance |
+| `mma-audit` | Audit a document, spec, plan, or skill for coherence, correctness, and executability (subtype-driven: `default` / `plan` / `spec` / `skill`; lens biasing goes through the free-text prompt) |
 | `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
