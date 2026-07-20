@@ -183,7 +183,6 @@ export async function handleRequest(
     url: urlObj,
     cwd: cwdValue,
     body: parsedBody,
-    authed: !pipelineCfg.authExemptPaths.has(pathname),
     callerClient: identity.callerClient,
     mainModel: identity.mainModel,
   };

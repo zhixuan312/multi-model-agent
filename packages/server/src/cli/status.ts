@@ -23,7 +23,6 @@ interface StatusResponse {
     activeTasks?: number;
   };
   inflight?: unknown[];
-  recent?: unknown[];
   skillVersion?: string | null;
   skillCompatible?: boolean | null;
 }
