@@ -331,9 +331,9 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.10.0
+## What's new in 5.11.0
 
-- **First-class journal `topic`.** `journal_record` and `journal_recall` gain an optional lowercase-kebab `topic` — a subject axis orthogonal to the six `type` values — so repetitive work recalls a precise, topic-scoped slice of the journal instead of the whole graph. Additive and backward-compatible: omit it and both routes behave exactly as before.
+- **Interactive breakout + parent-aware multi-repo SDLC.** `/mma-breakout` runs a bounded expert-persona sub-chat isolated from the main thread; `/mma-flow` now detects a parent workspace and coordinates a spec-once → plan-per-repo flow across sibling repos (single-repo mode unchanged). Adds the **Kimi K3** model and fixes four latent bugs (failed-task telemetry drop, codex sandbox enforcement, Claude wall-clock deadline, the `pnpm dev` fake-restart). Removes the dormant `retry_tasks` task type (breaking).
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

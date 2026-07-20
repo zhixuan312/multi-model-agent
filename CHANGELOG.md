@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.0] - 2026-07-20
+
+**New SDLC surfaces (interactive expert-persona breakout + parent-aware multi-repo flow) and the Kimi K3 model, on top of a repo-wide quality audit that removed every dormant/parallel implementation and fixed four latent bugs.** `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package. Contains breaking removals of the dormant `retry_tasks` task type and the never-read `defaults` config block.
+
+### Added
+- **`/mma-breakout`** — a Claude Code command for a bounded interactive expert-persona breakout: spawns a named teammate, keeps the deep dialogue in a direct `@name` conversation isolated from the main thread, then closes with one confirmed journal entry (no new backend task type).
+- **Parent-aware multi-repo SDLC.** `/mma-flow` now detects a parent workspace from git-bearing child directories and coordinates a spec-once → plan-per-repo flow: the parent workspace owns all `.mma/` artifacts (exploration, spec, plans, backlog, journal), `mma-plan` fans out one plan per involved repo (`<stem>--<repo-slug>.md`), journal record/recall scope by `topic = <repo-slug>`, and each target is handled by its own git status. Single-project mode is unchanged.
+- **Optional worktree for non-git targets.** Write routes (`delegate`, `execute_plan`) run in-place with no worktree when the target `cwd` is not a git repo (edits the folder directly under the cwd-only sandbox, no branch/PR/merge); git is never forced.
+- **Kimi K3** (Moonshot) model profile — reasoning-tier flagship, 2.8T-param MoE, 1M context, $3/$15 pricing.
+
+### Fixed
+- **Telemetry was silently dropped for every failed task.** A failed pipeline sealed `errorCode: 'pipeline_failed'`, which is not in `ErrorCodeSchema`, so every failed wire record threw at `ValidatedTaskCompletedEventSchema.parse()` and `TelemetryUploader` swallowed it. Added a validating `coerceErrorCode` (maps out-of-vocabulary codes to `other`) and removed the `as never` cast that hid the mismatch.
+- **Codex ran with no OS sandbox.** The launch passed `--dangerously-bypass-approvals-and-sandbox`, which disables sandboxing entirely, so codex-backed read-only/cwd-only tasks had no write confinement (Claude enforced it via its PreToolUse hook). Replaced with `--ask-for-approval never` + `--sandbox <mode>` threaded from the task's sandbox policy (`read-only` → `read-only`, `cwd-only` → `workspace-write`).
+- **Claude turns had no wall-clock deadline.** The runner forwarded `abortSignal` (never fired) and never read `wallClockDeadline`. Now mirrors the codex runner: a timer force-closes the SDK query at the deadline (`terminationReason: time_exceeded`, `errorCode: wall_clock_exceeded`).
+- **`pnpm dev` was a "fake restart"** — it served a stale built `core/dist`, so core edits were invisible until a manual build. A dev tsconfig now resolves core from `src`, and startup reconciles orphaned installed skills.
+- **False skill-drift after `mma disable`** — the drift check now honors disabled clients (no more spurious `serve`/`/health` drift warnings for an intentionally disabled client).
+- **`mma telemetry` homeDir** — the subcommand now joins `.mma` for a supplied `homeDir` override, consistent with the other subcommands.
+
+### Changed
+- Skill docs updated for the removed `retry` route (write-route context-block notes, `mma-audit` re-described by the current `default/plan/spec/skill` subtype model instead of the retired `auditType` lens vocabulary) and the parent-aware multi-repo flow.
+- `README`/`ARCHITECTURE`/`CONTRIBUTING`/`PRIVACY` and the skill markdown verified current against the 12-task-type / `reviewed|none` world.
+
+### Removed
+- **`retry_tasks` task type + `mma-retry` skill** (BREAKING) — a dormant migration remnant. Re-running failures is now a fresh `execute_plan` scoped to the failed headings.
+- **`defaults` config block** (BREAKING) — never read at runtime; the main model comes from the required `X-MMA-Main-Model` header.
+- **Three parallel implementations / dead subsystems** relocated or deleted: `TaskEnvelopeStore` (349-line dead `TaskEnvelope` producer → test fixture), the `ProjectRegistry` idle-eviction + MCP-session subsystem, and the test-only `RuntimeRunResult` types (→ test fixture).
+- ~20 areas of dead code, write-only counters, dormant exports (`RunResult`, `ContextBlockNotFoundError`, `redactAdapterUrl`, `Recorder.revokeIdentity/signal`, the skill-install `localhost:7331` notify path, dead `terminationReason` enum members), plus duplicated utilities deduped (`expandHome`, `readServerVersion`, consent `decide`, arg parsing). Net ≈ −2,900 lines.
+
 ## [5.10.0] - 2026-07-18
 
 **First-class `topic` dimension for the journal — an optional subject axis on `journal_record`/`journal_recall`, orthogonal to the six-value `type` enum, enabling topic-scoped recall for repetitive work.** Additive and backward-compatible; `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package.
