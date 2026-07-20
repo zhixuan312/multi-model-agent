@@ -638,7 +638,7 @@
     "provider": "moonshot",
     "naming": "kimi-k{generation}[.{minor}] | kimi-k{generation}-{variant}",
     "rateSource": "https://platform.kimi.ai/docs/pricing/chat",
-    "rateLookupDate": "2026-07-11",
+    "rateLookupDate": "2026-07-20",
     "defaults": {
       "family": "kimi",
       "supportsEffort": false,
@@ -672,6 +672,16 @@
         "cachedRead": 0.16,
         "bestFor": "current Kimi flagship (released 2026-04-20); 256k context, thinking + non-thinking modes",
         "inputTokenSoftLimit": 256000
+      },
+      {
+        "prefix": "kimi-k3",
+        "tier": "reasoning",
+        "cost": "medium",
+        "input": 3,
+        "output": 15,
+        "cachedRead": 0.6,
+        "bestFor": "current Kimi flagship (K3, released 2026-07-16); 2.8T-param open MoE (16/896 experts active), native multimodal, 1M context; competitive with Fable 5, outperforms Opus 4.8 / GPT-5.6",
+        "inputTokenSoftLimit": 1000000
       }
     ]
   },
