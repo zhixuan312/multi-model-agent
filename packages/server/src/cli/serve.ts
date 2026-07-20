@@ -151,7 +151,8 @@ export async function startServe(
   try {
     const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
     const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-    const sync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    const { disabledTargets } = await import('../skill-install/disabled-state.js');
+    const sync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
     const drift = sync.driftReport();
     if (drift.length > 0) {
       const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');

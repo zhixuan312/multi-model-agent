@@ -129,6 +129,18 @@ describe('SkillManifestSync.driftReport', () => {
     expect(orphans).toHaveLength(0);
   });
 
+  it('skips clients listed as disabled (no false drift after `mma disable`)', () => {
+    const dir = join(tmpDir, 'disabled-test');
+    mkdirSync(dir, { recursive: true });
+    // An empty dir (all skills removed by `mma disable`) would normally report
+    // every supported skill as missing...
+    const withoutDisabled = makeSkillManifestSync({ 'claude-code': dir }).driftReport();
+    expect(withoutDisabled.filter((d) => d.issue === 'missing').length).toBeGreaterThanOrEqual(10);
+    // ...but when the client is disabled, it produces no drift at all.
+    const withDisabled = makeSkillManifestSync({ 'claude-code': dir }, ['claude-code']).driftReport();
+    expect(withDisabled).toEqual([]);
+  });
+
   it('handles installed SKILL.md that is unreadable (skips outdated check gracefully)', () => {
     const dir = join(tmpDir, 'unreadable-test');
     mkdirSync(dir, { recursive: true });

@@ -122,7 +122,8 @@ export async function startServer(
     try {
       const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
       const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
+      const { disabledTargets } = await import('../skill-install/disabled-state.js');
+      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
     } catch {
       skillManifestSync = { driftReport: () => [] };
     }

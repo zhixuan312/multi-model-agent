@@ -26,12 +26,19 @@ function canonicalVersion(skillName: string): string | null {
   }
 }
 
-export function makeSkillManifestSync(perClientInstallDirs: Partial<Record<Client, string>>): SkillManifestSync {
+export function makeSkillManifestSync(
+  perClientInstallDirs: Partial<Record<Client, string>>,
+  disabled: readonly Client[] = [],
+): SkillManifestSync {
+  const disabledSet = new Set<Client>(disabled);
   return {
     driftReport(): DriftEntry[] {
       const drift: DriftEntry[] = [];
       const supported = new Set<string>(SUPPORTED_SKILLS);
       for (const [client, dir] of Object.entries(perClientInstallDirs)) {
+        // Skip clients the user deliberately disabled (`mma disable --target=X`);
+        // their skills are intentionally absent, not drift.
+        if (disabledSet.has(client as Client)) continue;
         let entries: string[];
         try { entries = readdirSync(dir); } catch { continue; }
         const present = new Set(
