@@ -140,6 +140,21 @@ export class ClaudeSession implements Session {
     });
     this.activeQuery = q as unknown as { close?: () => unknown };
 
+    // Wall-clock bound (parity with the codex runner's armGuards): when the
+    // deadline elapses, force-close the SDK query so the turn returns instead of
+    // running unbounded. Previously claude only forwarded opts.abortSignal, which
+    // nothing fires — so claude turns had no wall-clock limit at all.
+    let timedOut = false;
+    let deadlineTimer: NodeJS.Timeout | undefined;
+    const deadlineMs = Math.max(0, this.args.opts.wallClockDeadline - Date.now());
+    if (Number.isFinite(deadlineMs) && deadlineMs > 0) {
+      deadlineTimer = setTimeout(() => {
+        timedOut = true;
+        try { q.close(); } catch { /* ignore */ }
+      }, deadlineMs);
+      deadlineTimer.unref();
+    }
+
     const events: SDKMessage[] = [];
     try {
       for await (const ev of q) {
@@ -155,16 +170,22 @@ export class ClaudeSession implements Session {
         if ((ev as { type?: string }).type === 'result') break;
       }
     } catch (err) {
-      const e = err as { name?: string; message?: string };
-      this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_error', {
-        name: e.name ?? 'unknown',
-        message: e.message ?? String(err),
-        ...this.taskTag(),
-      }));
-      try { q.close(); } catch { /* ignore */ }
-      this.activeQuery = undefined;
-      throw err;
+      // A deadline-induced close() can surface as an iterator error — treat that
+      // as a bounded time-out, not a provider failure. Rethrow only real errors.
+      if (!timedOut) {
+        if (deadlineTimer) clearTimeout(deadlineTimer);
+        const e = err as { name?: string; message?: string };
+        this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_error', {
+          name: e.name ?? 'unknown',
+          message: e.message ?? String(err),
+          ...this.taskTag(),
+        }));
+        try { q.close(); } catch { /* ignore */ }
+        this.activeQuery = undefined;
+        throw err;
+      }
     }
+    if (deadlineTimer) clearTimeout(deadlineTimer);
     try { q.close(); } catch { /* ignore */ }
     this.activeQuery = undefined;
 
@@ -172,7 +193,9 @@ export class ClaudeSession implements Session {
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
       costUSD: 0,
+      ...(timedOut ? { guardTerminationReason: 'time_exceeded' as const } : {}),
     });
+    if (timedOut && !norm.errorCode) norm.errorCode = 'wall_clock_exceeded';
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {
