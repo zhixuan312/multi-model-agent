@@ -50,25 +50,12 @@ describe('loadConfigFromFile', () => {
 
     expect(config.agents.standard.type).toBe('codex');
     expect(config.agents.standard.model).toBe('deepseek-r1');
-    expect(config.defaults).toBeDefined();
   });
 
   it('throws when explicit config path does not exist', async () => {
     await expect(loadConfigFromFile(path.join(tmpDir, 'nonexistent.json'))).rejects.toThrow(
       /Config file not found/,
     );
-  });
-
-  it('merges user defaults with system defaults', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      agents: minimalAgentConfig,
-      defaults: { mainModel: 'claude-opus-4-6' },
-    }));
-
-    const config = await loadConfigFromFile(configPath);
-
-    expect(config.defaults.mainModel).toBe('claude-opus-4-6');
   });
 
   it('parses effort when present', async () => {

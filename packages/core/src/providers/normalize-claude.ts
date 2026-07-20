@@ -6,7 +6,7 @@
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { TurnResult, TokenUsage } from '../types/run-result.js';
-import { classifyClaudeToolCall, CLAUDE_SHELL_TOOLS } from './claude-tool-categories.js';
+import { classifyClaudeToolCall } from './claude-tool-categories.js';
 
 export function normalizeClaudeTurn(
   events: SDKMessage[],
@@ -14,7 +14,6 @@ export function normalizeClaudeTurn(
     durationMs: number;
     costUSD: number;
     guardTerminationReason?: TurnResult['terminationReason'];
-    model?: string;
   },
 ): TurnResult {
   let outputText = '';

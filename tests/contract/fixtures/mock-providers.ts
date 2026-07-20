@@ -10,13 +10,13 @@
 import type {
   Provider,
   ProviderConfig,
-  RuntimeRunResult,
   RunStatus,
   TokenUsage,
   AttemptRecord,
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
+import type { RuntimeRunResult } from './runtime-run-result.js';
 import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** Build a Session whose `send()` invokes the same RuntimeRunResult-producing

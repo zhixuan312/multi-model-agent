@@ -54,7 +54,7 @@ The two packages are linked via pnpm workspaces; `pnpm install` from the repo ro
 - **Zod for runtime validation** at every system boundary (config files, HTTP inputs, telemetry events).
 - **No backwards-compatibility shims.** Breaking changes are expected; if you change a contract, update the call sites, contract goldens, and tests in the same PR.
 - **Mock providers in tests.** Never call real LLM APIs from `tests/`. Use `mockProvider` / `failProvider` helpers in `tests/contract/fixtures/mock-providers.ts`.
-- **Sandbox by default.** Task types enforce either `read-only` or `cwd-only` confinement (path traversal + symlink checks). 7 of 11 types use `read-only` (audit, review, debug, investigate, research, journal_recall, context_blocks); only 4 use `cwd-only` (delegate, execute_plan, journal_record, retry_tasks).
+- **Sandbox by default.** Task types enforce either `read-only` or `cwd-only` confinement (path traversal + symlink checks). Of the 12 task types, 6 use `read-only` (audit, review, debug, investigate, research, journal_recall); the other 6 use `cwd-only` (delegate, execute_plan, journal_record, orchestrate, spec, plan).
 - **Contract goldens are the public-contract ratchet.** Changes to `tests/contract/**` goldens encode the HTTP envelope, route manifest, observability event set, and skill surface. Updating a golden must be intentional and justified.
 
 ## Adding a new provider

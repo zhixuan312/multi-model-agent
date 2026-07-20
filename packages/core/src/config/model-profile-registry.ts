@@ -59,16 +59,6 @@ const TRAILING_MARKERS = [
 ];
 
 /**
- * Strip well-known vendor prefixes (case-insensitive) and Bedrock-style
- * version suffixes to recover the canonical model identifier.
- *
- * Prefix stripping repeats until no prefix matches so compound prefixes
- * like `vertex_ai/anthropic.` collapse correctly.
- *
- * Idempotent: repeated application returns the same result.
- * Bare model names pass through unchanged.
- */
-/**
  * Returns the canonical wire-display model name for telemetry.
  *
  * v4.0.3+: preserves the model + version (e.g. `claude-opus-4-7` instead
@@ -449,6 +439,12 @@ export function findModelProfile(modelId: string): ModelProfile {
   return FROZEN_DEFAULT_PROFILE;
 }
 
+/**
+ * Strip well-known vendor prefixes (case-insensitive) to recover the bare model
+ * identifier. Repeats until no prefix matches so compound prefixes like
+ * `vertex_ai/anthropic.` collapse correctly. Idempotent; bare names pass through
+ * unchanged.
+ */
 function stripLeadingNamespace(raw: string): string {
   let result = raw;
   let changed = true;

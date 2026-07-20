@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EnvelopeBus, type Subscriber } from '../../packages/core/src/events/envelope-bus.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 const seed = { taskId: 't', batchId: 'b', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'm', cwd: '/tmp', reviewPolicy: 'reviewed' as const };
 

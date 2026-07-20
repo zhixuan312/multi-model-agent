@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uploader.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 
 describe('telemetry envelope (v2)', () => {

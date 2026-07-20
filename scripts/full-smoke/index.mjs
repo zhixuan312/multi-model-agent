@@ -187,7 +187,8 @@ try {
       [24],          // spec task type
       [25],          // plan task type
       [27],          // error: too many context blocks
-      [28],          // delegate in non-git cwd
+      [28],          // delegate in non-git cwd (in-place, no worktree)
+      [32],          // execute_plan in non-git cwd (in-place, no worktree)
       [29],          // spec with a components subset (canonical reorder)
       [30],          // error: unknown component label → 400
       [31],          // spec with two target files: decisions [authoritative] + exploration.md [grounding]

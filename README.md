@@ -171,7 +171,6 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
 | `mma-orchestrate` | A multi-phase workflow needs a session-persistent LLM brain for orchestration — send a structured prompt, get a structured response, reuse the session across workflow phases. Uses the `main` tier (no reviewer, no worktree). |
-| `mma-retry` | A previous dispatch came back partial — re-run only the failed indices without re-dispatching the whole task. |
 
 ### Commands (Claude Code only)
 
@@ -312,7 +311,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 13 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `retry_tasks`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` and `plan` types write formal specification and TDD implementation plan documents from structured input. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` and `plan` types write formal specification and TDD implementation plan documents from structured input. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -332,9 +331,9 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.10.0
+## What's new in 5.11.0
 
-- **First-class journal `topic`.** `journal_record` and `journal_recall` gain an optional lowercase-kebab `topic` — a subject axis orthogonal to the six `type` values — so repetitive work recalls a precise, topic-scoped slice of the journal instead of the whole graph. Additive and backward-compatible: omit it and both routes behave exactly as before.
+- **Interactive breakout + parent-aware multi-repo SDLC.** `/mma-breakout` runs a bounded expert-persona sub-chat isolated from the main thread; `/mma-flow` now detects a parent workspace and coordinates a spec-once → plan-per-repo flow across sibling repos (single-repo mode unchanged). Adds the **Kimi K3** model and fixes four latent bugs (failed-task telemetry drop, codex sandbox enforcement, Claude wall-clock deadline, the `pnpm dev` fake-restart). Removes the dormant `retry_tasks` task type (breaking).
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

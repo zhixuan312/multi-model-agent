@@ -30,4 +30,4 @@ export { githubSearch } from './github-search.js';
 export { openalexSearch } from './openalex.js';
 export { crossrefSearch } from './crossref.js';
 export { pubmedSearch } from './pubmed.js';
-export { redactAdapterUrl, RESEARCH_HTTP_TIMEOUT_MS } from './redact-adapter-url.js';
+export { RESEARCH_HTTP_TIMEOUT_MS } from './types.js';

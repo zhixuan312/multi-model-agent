@@ -1,8 +1,7 @@
 import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { readServerVersion } from '../server-version.js';
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
@@ -11,8 +10,8 @@ import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-b
 import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
 import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
-import { decideConsent } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 import { normalizeModel } from '@zhixuan92/multi-model-agent-core';
+import { decide as decideConsent } from '../telemetry/consent.js';
 import type { RawHandler } from './types.js';
 import type { HandlerDeps } from './handler-deps.js';
 import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
@@ -22,19 +21,7 @@ import type { ProjectRegistry } from './project-registry.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
-/** Server package version — read once at module load time from package.json. */
-function readServerVersion(): string {
-  try {
-    const thisDir = dirname(fileURLToPath(import.meta.url));
-    // Walk up from src/http/ to packages/server/
-    const pkgPath = join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
-
+/** Server package version — read once at module load time (single source: server-version.ts). */
 export const SERVER_VERSION = readServerVersion();
 
 function extractMultiModelConfig(config: ServerConfig): HandlerDeps['config'] | undefined {
@@ -121,8 +108,6 @@ export async function startServer(
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
-    idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
-    evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.
@@ -137,7 +122,8 @@ export async function startServer(
     try {
       const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
       const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
+      const { disabledTargets } = await import('../skill-install/disabled-state.js');
+      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
     } catch {
       skillManifestSync = { driftReport: () => [] };
     }
@@ -163,25 +149,11 @@ export async function startServer(
       // Wire TelemetryUploader so unified-handler tasks emit wire records.
       let recorderForUnified: Recorder | null = null;
       try { recorderForUnified = getRecorder(); } catch { /* not initialized */ }
-      const decideConsentForUnified = () => {
-        const envVal = process.env.MMA_TELEMETRY;
-        let configState: { enabled: boolean } | { kind: 'unreadable' } | undefined = undefined;
-        try {
-          const cfgPath = join(homedir(), '.mma', 'config.json');
-          const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-          if (cfg && typeof cfg === 'object' && cfg.telemetry && typeof cfg.telemetry === 'object' && typeof cfg.telemetry.enabled === 'boolean') {
-            configState = { enabled: cfg.telemetry.enabled };
-          }
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-            configState = { kind: 'unreadable' };
-          }
-        }
-        return decideConsent({ env: envVal, config: configState });
-      };
+      // Consent decision is owned by telemetry/consent.ts (single source of truth for the
+      // env + config.json → decision logic); reuse it here rather than re-implementing it.
       bus.subscribe(new TelemetryUploader({
         recorder: recorderForUnified,
-        consent: { decide: decideConsentForUnified },
+        consent: { decide: () => decideConsent(join(homedir(), '.mma')) },
         buildOpts: (env: any) => ({
           toolMode: 'full',
           implementerModel: env.stages[0]?.model ?? env.mainModel,

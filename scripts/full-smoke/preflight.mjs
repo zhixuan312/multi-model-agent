@@ -2,7 +2,7 @@ import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BASE_URL, INSTALL_ID_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
+import { BASE_URL, IDENTITY_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
 import { readToken } from './http.mjs';
 
 // The packaged skill surface the running server installs to its clients
@@ -125,9 +125,11 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
       'pass --allow-mismatch or restart the server on the expected checkout');
   }
 
-  if (!existsSync(INSTALL_ID_FILE)) throw new AbortError('install-id', `missing ${INSTALL_ID_FILE}`,
-    'run the server once so it generates the install id');
-  const installId = readFileSync(INSTALL_ID_FILE, 'utf8').trim();
+  if (!existsSync(IDENTITY_FILE)) throw new AbortError('install-id', `missing ${IDENTITY_FILE}`,
+    'run the server once so it generates the telemetry identity (identity.json)');
+  const installId = JSON.parse(readFileSync(IDENTITY_FILE, 'utf8')).installId;
+  if (!installId) throw new AbortError('install-id', `${IDENTITY_FILE} has no installId`,
+    'the identity file is malformed; delete it and restart the server to regenerate');
 
   // Diagnostics gate: today's JSONL must exist (proves diagnostics.log is on).
   const diagFile = join(DIAG_DIR, `mma-${todayUtc()}.jsonl`);

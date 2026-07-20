@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { RunnerAdapter } from '../helpers/test-harness.js';
 
-const VALID_PROVIDER_TYPES = ['claude', 'claude', 'openai', 'codex', 'codex'] as const;
+const VALID_PROVIDER_TYPES = ['claude', 'codex'] as const;
 
 function assertConformance(adapter: RunnerAdapter): void {
   expect(VALID_PROVIDER_TYPES).toContain(adapter.providerType);

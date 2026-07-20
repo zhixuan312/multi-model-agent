@@ -43,7 +43,7 @@ describe('SkillManifestSync.driftReport', () => {
     const canonicalVersion = '0.0.0-unreleased'; // matches source SKILL.md version before npm publish injection
     const supported = [
       'multi-model-agent', 'mma-delegate', 'mma-audit', 'mma-review',
-      'mma-debug', 'mma-execute-plan', 'mma-retry',
+      'mma-debug', 'mma-execute-plan',
       'mma-context-blocks', 'mma-investigate', 'mma-research', 'mma-explore',
       'mma-brainstorm', 'mma-journal-record', 'mma-journal-recall', 'mma-orchestrate',
       'mma-spec', 'mma-plan',
@@ -74,7 +74,7 @@ describe('SkillManifestSync.driftReport', () => {
     const drift = s.driftReport();
     const missing = drift.filter((d) => d.issue === 'missing');
     // Should have all other supported skills as missing
-    expect(missing.length).toBeGreaterThanOrEqual(10); // 11 total - 1 present
+    expect(missing.length).toBeGreaterThanOrEqual(10); // 16 supported skills, 1 present
     expect(missing.every((d) => d.client === 'claude-code')).toBe(true);
     expect(missing.every((d) => d.skill !== 'mma-delegate')).toBe(true);
   });
@@ -127,6 +127,18 @@ describe('SkillManifestSync.driftReport', () => {
     const orphans = drift.filter((d) => d.issue === 'orphan');
     expect(missing.length).toBeGreaterThanOrEqual(10);
     expect(orphans).toHaveLength(0);
+  });
+
+  it('skips clients listed as disabled (no false drift after `mma disable`)', () => {
+    const dir = join(tmpDir, 'disabled-test');
+    mkdirSync(dir, { recursive: true });
+    // An empty dir (all skills removed by `mma disable`) would normally report
+    // every supported skill as missing...
+    const withoutDisabled = makeSkillManifestSync({ 'claude-code': dir }).driftReport();
+    expect(withoutDisabled.filter((d) => d.issue === 'missing').length).toBeGreaterThanOrEqual(10);
+    // ...but when the client is disabled, it produces no drift at all.
+    const withDisabled = makeSkillManifestSync({ 'claude-code': dir }, ['claude-code']).driftReport();
+    expect(withDisabled).toEqual([]);
   });
 
   it('handles installed SKILL.md that is unreadable (skips outdated check gracefully)', () => {

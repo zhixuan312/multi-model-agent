@@ -28,7 +28,7 @@ const CHANGED: Record<string, string[]> = {
 
 const UNCHANGED = [
   'mma-audit', 'mma-context-blocks', 'mma-debug', 'mma-investigate',
-  'mma-orchestrate', 'mma-research', 'mma-retry', 'mma-review', 'mma-breakout',
+  'mma-orchestrate', 'mma-research', 'mma-review', 'mma-breakout',
 ];
 
 describe('contract: mma-flow packaged assets', () => {

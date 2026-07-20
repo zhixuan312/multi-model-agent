@@ -16,7 +16,6 @@ describe('parseConfig', () => {
       },
     });
     expect(result.agents.standard.model).toBe('test-model');
-    expect(result.defaults).toBeDefined();
   });
 
   it('parses valid full config', () => {
@@ -87,17 +86,6 @@ describe('parseConfig', () => {
         complex: minimalAgentConfig,
       },
     })).toThrow();
-  });
-
-  it('accepts defaults with only mainModel', () => {
-    const result = parseConfig({
-      agents: {
-        standard: minimalAgentConfig,
-        complex: minimalAgentConfig,
-      },
-      defaults: { mainModel: 'claude-opus-4-6' },
-    });
-    expect(result.defaults.mainModel).toBe('claude-opus-4-6');
   });
 
   it('throws when agents missing', () => {

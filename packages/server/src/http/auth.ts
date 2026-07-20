@@ -1,13 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { loadAuthToken as coreLoadAuthToken } from '@zhixuan92/multi-model-agent-core';
-
-function expandHome(p: string): string {
-  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
-  return p;
-}
+import { expandHome } from '../expand-home.js';
 
 /**
  * Load or generate the bearer token from a file path.

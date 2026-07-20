@@ -16,8 +16,6 @@ export type {
   CodexProviderConfig,
   ClaudeProviderConfig,
   MultiModelConfig,
-  RunResult,
-  RuntimeRunResult,
   Provider,
 } from './types.js';
 export type {
@@ -26,14 +24,12 @@ export type {
   RunOptions,
   AttemptRecord,
 } from './providers/runner-types.js';
-export type { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';
 export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanHeading } from './unified/plan-task-matcher.js';
 // Context blocks
 export {
   InMemoryContextBlockStore,
-  ContextBlockNotFoundError,
 } from './stores/context-block-tool.js';
 export type {
   ContextBlockStore,
@@ -45,7 +41,7 @@ export type {
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
 
 // Project context
-export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
+export { createProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
 
 // (Lifecycle layer deleted — unified pipeline is the only execution path.)
@@ -72,7 +68,6 @@ export { getClaudeOAuth } from './identity/claude-oauth.js';
 
 
 // Observability
-export { TaskEnvelopeStore } from './events/task-envelope.js';
 export type { TaskEnvelope, StageRecord, ToolCallRecord } from './events/task-envelope.js';
 export { EnvelopeBus } from './events/envelope-bus.js';
 export type { BusMessage, Subscriber } from './events/envelope-bus.js';
@@ -91,7 +86,7 @@ export { SPEC_COMPONENTS, resolveComponents } from './unified/spec-components.js
 export type { SpecComponent } from './unified/spec-components.js';
 export { taskInputSchema } from './unified/task-input-schema.js';
 export type { TaskInput } from './unified/task-input-schema.js';
-export { loadSkill, validateSkillsExist } from './unified/skill-loader.js';
+export { loadSkill } from './unified/skill-loader.js';
 export type { SkillPair } from './unified/skill-loader.js';
 export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';

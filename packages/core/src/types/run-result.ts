@@ -1,47 +1,7 @@
 // Run-result types.
 //
-// `RunResult` — the wire envelope shape (unified handler response).
-// `RuntimeRunResult` — the internal fat shape for test mock providers.
-
-import type { FindingsOutcome } from './enums.js';
-
-export type RunResult = {
-  completed: boolean;
-  message: string;
-  findings: Array<{ id?: string; severity: string; category: string; claim: string; evidence?: string; suggestion?: string; source: string }>;
-  summary: string;
-  filesChanged: string[];
-  commitSha: string | null;
-  blockId: string | null;
-  findingsOutcome?: FindingsOutcome;
-  findingsOutcomeReason?: string | null;
-  outcomeInferred?: boolean;
-  outcomeMalformed?: boolean;
-  telemetry: {
-    totalDurationMs: number;
-    totalCostUSD: number | null;
-    workerSelfAssessment: 'done' | 'failed' | null;
-    reviewVerdict: 'approved' | 'changes_required' | null;
-    commitOutcome: 'committed' | 'no_op' | 'not_applicable';
-    stopReason: 'normal' | 'turn_cap' | 'timeout' | 'transport_error';
-    haltedStage: string | null;
-    stages: Array<{
-      name: string;
-      outcome: 'advance' | 'skip' | 'halt' | 'not_run';
-      comment?: string;
-      durationMs: number;
-      costUSD: number | null;
-    }>;
-  };
-};
-
-import type { TaskEnvelopeStore } from '../events/task-envelope.js';
-// ── Runtime mirror — what the SDK runners + two-phase pipeline produce ────────
-// `RuntimeRunResult` is the internal shape. Renamed from `RunResult` so the
-// public type name is the wire envelope; the runtime mirror keeps the
-// fields handlers/recorder/runners actually populate.
-
-// Session / TurnResult — the internal provider-runner contract (SDK ↔ mma)
+// The internal provider-runner contract (SDK ↔ mma): TokenUsage, TurnResult,
+// Session, Provider, and the option shapes the two-phase pipeline passes in.
 
 export interface TokenUsage {
   inputTokens: number;
@@ -50,23 +10,13 @@ export interface TokenUsage {
   cachedNonReadTokens: number;
 }
 
-/** Cause values for the TerminationReason object (inline to break circularity). */
-export type _TerminationCause =
-  | 'finished'
-  | 'incomplete'
-  | 'timeout'
-  | 'time_ceiling'
-  | 'degenerate_exhausted'
-  | 'brief_too_vague'
-  | 'error';
-
 export interface TurnResult {
   output: string;
   usage: TokenUsage;
   costUSD: number;
   turns: number;
   durationMs: number;
-  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted';
+  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'aborted';
   errorCode?: string;
   filesWritten: string[];
   usedShell: boolean;
@@ -92,8 +42,6 @@ export interface SessionOpts {
   taskId?: string;
   /** Index within task. */
   taskIndex?: number;
-  /** Per-task event envelope for recording provider mutations. Optional during wiring phase. */
-  envelope?: TaskEnvelopeStore;
   /** Present only when the task requested skills and resolution succeeded. */
   skills?: ResolvedSkillBundle;
   /** Session ID from a prior task — seeds the provider session so the first
@@ -142,48 +90,6 @@ export interface Provider {
    *  in types/config.ts to avoid circular deps. */
   config: any;     // v5: ClaudeProviderConfig | CodexProviderConfig (lives in types/config.ts; broadened to avoid circular dep)
   openSession(opts: SessionOpts): Session;
-}
-
-export interface RuntimeRunResult {
-  output: string;
-  status: string;
-  usage: TokenUsage;
-  actualCostUSD: number;
-  turns: number;
-  filesWritten: string[];
-  workerStatus?: 'done' | 'failed' | 'blocked';
-  terminationReason?: { cause: _TerminationCause; turnsUsed: number; hasFileArtifacts: boolean; usedShell: boolean; workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped' | null; wasPromoted: boolean; wallClockMs?: number };
-  usedShell?: boolean;
-  errorCode?: string;
-  error?: string;
-  escalationLog: EscalationRecord[];
-  durationMs?: number;
-  models?: {
-    implementer?: string;
-    reviewer?: string;
-    [key: string]: string | undefined;
-  };
-  agents?: {
-    implementer?: string;
-    implementerToolMode?: string;
-    [key: string]: unknown;
-  };
-  stallCount?: number;
-  taskMaxIdleMs?: number;
-  structuredError?: { code: string; message: string; where?: string };
-  cost?: { costUSD: number | null; costDeltaVsMainUSD: number | null };
-}
-
-export interface EscalationRecord {
-  provider: string;
-  status: string;
-  turns: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUSD: number | null;
-  initialPromptLengthChars: number;
-  initialPromptHash: string;
-  reason?: string;
 }
 
 

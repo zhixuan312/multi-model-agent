@@ -113,7 +113,7 @@ The request schema accepts only lowercase-kebab topics. Fix it before dispatch: 
 
 ## Context blocks
 
-Write-route tasks (delegate / execute-plan / journal / retry) do **not** register terminal context blocks. Their artifact is the filesystem mutation (git commit for delegate; graph mutations for journal). Read-route tasks (audit / review / debug / investigate / research) auto-register blocks containing their findings.
+Write-route tasks (delegate / execute-plan / journal) do **not** register terminal context blocks. Their artifact is the filesystem mutation (git commit for delegate; graph mutations for journal). Read-route tasks (audit / review / debug / investigate / research) auto-register blocks containing their findings.
 
 ## Multi-repo mode (parent-aware)
 

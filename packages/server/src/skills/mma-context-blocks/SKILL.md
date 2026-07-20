@@ -91,7 +91,6 @@ This skill is the cross-cutting state mechanism described in `multi-model-agent`
 - **Recipe A — Audit-iterate-clean.** Register the doc once before round 1; pass round-N's findings block ID into round N+1.
 - **Recipe B — Debug-fix-verify.** Register the failing test output / reproduction log before the debug call; reuse on verify.
 - **Recipe C — Investigate-plan-execute.** Register the plan file before `mma-execute-plan`.
-- **Recipe D — Plan-execute-retry.** No new registration needed — `mma-retry` inherits the original task's `contextBlockIds`.
 
 Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec into 5 task prompts costs N× tokens. Register once; pass `contextBlockIds`.
 

@@ -13,7 +13,9 @@ let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<AgentType, Provider> | null = null;
 
 // ─── Safety ceiling ────────────────────────────────────────────────────────
-// KEEP these existing exports/symbols (still used):
+// Hard cap on live provider sessions per task — a backstop against a runaway
+// pipeline spawning unbounded sub-agents. Enforced in createProvider via
+// __liveByTask; breaching it throws SafetyCeilingExceededError.
 const SAFETY_CEILING = 100;
 export class SafetyCeilingExceededError extends Error {
   readonly code = 'safety_ceiling_exceeded';
@@ -57,40 +59,6 @@ function taskKey(opts: SessionOpts): string {
     throw new MissingTaskIdentityError();
   }
   return `${opts.taskId}:${opts.taskIndex}`;
-}
-
-/**
- * Force-close any sessions still tracked under (taskId, taskIndex).
- * Iterates the per-task session map; each close() is awaited inside its
- * own try/catch so a throw from one session does not skip the others.
- * Errors are logged via the bus under `release_task_close_failed` and
- * do not propagate to the caller. After iteration, the map entry is
- * unconditionally deleted.
- */
-export async function releaseTask(
-  taskId: string,
-  taskIndex: number,
-  bus?: { emit?: (e: Record<string, unknown>) => void },
-): Promise<void> {
-  const key = `${taskId}:${taskIndex}`;
-  const live = liveByTask.get(key);
-  if (!live) return;
-  for (const [sessionId, session] of live) {
-    try {
-      await session.close();
-    } catch (err) {
-      bus?.emit?.({
-        event: 'release_task_close_failed',
-        ts: new Date().toISOString(),
-        severity: 'warn',
-        taskId,
-        taskIndex,
-        sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-  liveByTask.delete(key);
 }
 
 function wrapWithSafetyCeiling(p: Provider): Provider {

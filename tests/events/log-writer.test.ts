@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LogWriter } from '../../packages/core/src/events/log-writer.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 
 describe('LogWriter — JSONL disabled (4.7.3+ contract)', () => {
   let stderrSpy: ReturnType<typeof vi.spyOn>;
@@ -40,12 +40,4 @@ describe('LogWriter file destination', () => {
     expect(contents).toContain('"batch_id":"b1"');
   });
 
-  it('spills oversized request body with 0600 mode', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mma-spill-'));
-    const w = new LogWriter({ diagnosticsLog: true, logDir: dir });
-    const { path, bytes } = await w.spillRequestBody({ batchId: '00000000-0000-0000-0000-000000000001', body: { hello: 'world' } });
-    expect(bytes).toBeGreaterThan(0);
-    const stat = statSync(path);
-    expect((stat.mode & 0o777).toString(8)).toBe('600');
-  });
 });

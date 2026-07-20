@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 describe('TaskEnvelope reviewPolicy + errorCode honesty', () => {
   const baseSeed = {

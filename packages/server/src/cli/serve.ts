@@ -19,12 +19,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-// ShutdownCause: previously exported from http-server-log.ts (removed in events refactor).
-type ShutdownCause = 'sigterm' | 'sigint' | 'uncaught_exception' | 'unhandled_rejection' | 'stdout_epipe' | 'stdout_other_error' | 'uncaughtException' | 'unhandledRejection';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
-import { startServer } from '../http/server.js';
+import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
@@ -64,12 +61,18 @@ export async function maybeAutoUpdateSkills(
 
   const behind = entries.filter((e) => isSkillBehind(e.name, e.skillVersion));
   const missing = findMissingSkills(entries, SUPPORTED_SKILLS as unknown as readonly string[]);
-  if (behind.length === 0 && missing.length === 0) return;
+  // Orphans = installed skills that have since been removed from the bundle
+  // (e.g. a retired task type like the old `mma-retry`). runSyncSkills Pass 1
+  // drops these. Without orphans in the trigger below, a lone orphan (nothing
+  // behind or missing) never prompts a sync and lingers across every restart.
+  const orphans = entries.filter((e) => !(SUPPORTED_SKILLS as readonly string[]).includes(e.name));
+  if (behind.length === 0 && missing.length === 0 && orphans.length === 0) return;
 
   if (!config.server.autoUpdateSkills) {
     const drift: string[] = [];
     if (behind.length > 0) drift.push(`${behind.length} out of date (${behind.map((e) => e.name).join(', ')})`);
     if (missing.length > 0) drift.push(`${missing.length} new (${missing.map((m) => m.name).join(', ')})`);
+    if (orphans.length > 0) drift.push(`${orphans.length} removed (${orphans.map((e) => e.name).join(', ')})`);
     stderr(
       `[mma] skill drift: ${drift.join('; ')}. ` +
       `Run 'mma sync-skills' to reconcile (or set server.autoUpdateSkills=true in config).\n`,
@@ -85,19 +88,9 @@ export async function maybeAutoUpdateSkills(
     ]);
     if (behind.length > 0) process.stdout.write(`[mma] auto-synced ${behind.length} updated skill(s)\n`);
     if (missing.length > 0) process.stdout.write(`[mma] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
+    if (orphans.length > 0) process.stdout.write(`[mma] auto-removed ${orphans.length} orphaned skill(s): ${orphans.map((e) => e.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
-  }
-}
-
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
   }
 }
 
@@ -158,7 +151,8 @@ export async function startServe(
   try {
     const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
     const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-    const sync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    const { disabledTargets } = await import('../skill-install/disabled-state.js');
+    const sync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
     const drift = sync.driftReport();
     if (drift.length > 0) {
       const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
@@ -173,7 +167,7 @@ export async function startServe(
   // if recorder is null at that moment, the uploader is wired with
   // recorder=null and silently drops every event for the daemon's lifetime.
   const homeDir = path.join(os.homedir(), '.mma');
-  const mmaVersion = readServerVersion();
+  const mmaVersion = SERVER_VERSION;
   createRecorder({ homeDir, mmaVersion });
 
   // Pass the full MultiModelConfig (not just the server block) so
@@ -183,26 +177,18 @@ export async function startServe(
   const running = await startServer(config as Parameters<typeof startServer>[0], undefined, configPath);
 
   // ── stdout/stderr error + uncaught/unhandled rejection guards ────────
-  const logShutdown = (_cause: ShutdownCause): void => {
-    // Option A: no diagnostics surface today. Cause name routed via stderr only.
-    // Option B (follow-up): wire running.diagnostics?.shutdown(_cause) here.
-  };
-
   const onStdoutError = (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('stdout_other_error');
+    if (err.code === 'EPIPE') exit(0);
     try { process.stderr.write(`[mma] stdout error: ${err.message}\n`); } catch { /* stderr may also be dead */ }
     exit(1);
   };
   const onStderrError = (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('stdout_other_error');
+    if (err.code === 'EPIPE') exit(0);
     exit(1);
   };
   const onUncaught = (err: unknown) => {
     const errno = (err as NodeJS.ErrnoException | undefined)?.code;
-    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('uncaughtException');
+    if (errno === 'EPIPE') exit(0);
     try {
       const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       process.stderr.write(`[mma] uncaught exception: ${msg}\n`);
@@ -211,8 +197,7 @@ export async function startServe(
   };
   const onUnhandledRejection = (reason: unknown) => {
     const errno = (reason as NodeJS.ErrnoException | undefined)?.code;
-    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
-    logShutdown('unhandledRejection');
+    if (errno === 'EPIPE') exit(0);
     try {
       const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
       process.stderr.write(`[mma] unhandled rejection: ${msg}\n`);
@@ -333,7 +318,7 @@ export async function startServe(
     const token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
     const fp = createHash('sha256').update(token).digest('hex').slice(0, 8);
     const bootId = randomUUID();
-    const version = readServerVersion();
+    const version = SERVER_VERSION;
     process.stdout.write(
       `[mma] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
     );

@@ -1,24 +1,5 @@
 import { z } from 'zod';
 
-/** Total wall-clock cap per task — 60 min. Bumped from 30 min in v3.9.0
- * after the 32-min hang on batch 1574b3a2 showed reviewers had no cap
- * at all. The right number is "long enough that legitimate slow tasks
- * don't false-trigger; short enough that a hung reviewer doesn't camp
- * forever." Tune via per-stage telemetry once we have a few hundred runs
- * with the new fields. */
-export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
-
-/** Idle-gap watchdog — 20 min. No `turn_start | text_emission | tool_call
- * | turn_complete` event for this long → force-abort the in-flight call.
- * Bumped from 10 min in v3.9.0 — the prior value occasionally fired on
- * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
-export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
-
-/** Wall-clock pre-stop ratio — the runtime warns at
- * DEFAULT_TASK_TIMEOUT_MS × this ratio (48 min), with a worst-case
- * total of DEFAULT_TASK_TIMEOUT_MS / MAX_TIME_PRESTOP_RATIO (1.25 h). */
-export const MAX_TIME_PRESTOP_RATIO = 0.80;
-
 // === Shared field schemas ===
 
 const TrimmedNonEmpty = z.string().trim().min(1);
@@ -107,10 +88,6 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 
 // === MultiModelConfig schema ===
 
-const defaultsSchema = z.object({
-  mainModel: z.string().min(1).optional(),
-}).default(() => ({}));
-
 // Named constants are the single source of truth for server defaults.
 // Each .default(() => ({...})) references the same constant so changing a
 // value here = one edit, not three. Zod 4 requires explicit defaults at each
@@ -127,7 +104,6 @@ const DEFAULT_SERVER_AUTH = {
 const DEFAULT_SERVER_LIMITS = {
   maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES,
   batchTtlMs: 3_600_000,
-  idleProjectTimeoutMs: 1_800_000,
   projectCap: 200,
   maxContextBlockBytes: 524_288,
   maxContextBlocksPerProject: 500,
@@ -145,7 +121,6 @@ const DEFAULT_SERVER = {
 const serverLimitsSchema = z.object({
   maxBodyBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBodyBytes),
   batchTtlMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.batchTtlMs),
-  idleProjectTimeoutMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.idleProjectTimeoutMs),
   projectCap: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.projectCap),
   maxContextBlockBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlockBytes),
   maxContextBlocksPerProject: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlocksPerProject),
@@ -172,7 +147,6 @@ export const multiModelConfigSchema = z.object({
     complex: agentConfigSchema,
     main: agentConfigSchema.optional(),
   }),
-  defaults: defaultsSchema,
   diagnostics: z.object({
     log: z.boolean().default(false),
     logDir: z.string().min(1).optional(),

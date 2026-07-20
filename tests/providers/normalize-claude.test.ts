@@ -48,7 +48,7 @@ describe('normalizeClaudeTurn', () => {
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_execution_error');
   });
-  it('terminationReason cap_exhausted from error_max_turns', () => {
+  it('error_max_turns maps to terminationReason=error + errorCode=sdk_max_turns', () => {
     const r = normalizeClaudeTurn(
       [result('error_max_turns')],
       { durationMs: 1, costUSD: 0 },

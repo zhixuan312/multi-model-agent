@@ -11,12 +11,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-
-/** Expand a leading '~/' to the home directory. */
-function expandHome(p: string, homeDir: string): string {
-  if (p.startsWith('~/')) return path.join(homeDir, p.slice(2));
-  return p;
-}
+import { expandHome } from '../expand-home.js';
 
 export interface PrintTokenDeps {
   /** Home directory (defaults to os.homedir()). */

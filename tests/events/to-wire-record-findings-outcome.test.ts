@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/wire-schema.js';
 

@@ -37,10 +37,4 @@ describe('discoverPerClientInstallDirs', () => {
     expect(keys).toHaveLength(2);
   });
 
-  it('returns type-compatible Partial<Record<Client, string>>', () => {
-    const dirs = discoverPerClientInstallDirs();
-    // Verify the return type is usable as Partial<Record<Client, string>>
-    const typed: Partial<Record<Client, string>> = dirs;
-    expect(typed).toBe(dirs);
-  });
 });

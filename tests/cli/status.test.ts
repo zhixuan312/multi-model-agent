@@ -55,12 +55,10 @@ const SAMPLE_STATUS = {
   auth: { enabled: true },
   counters: {
     projectCount: 2,
-    activeRequests: 1,
-    activeBatches: 3,
+    activeTasks: 3,
   },
   projects: [],
-  inflight: [{ batchId: 'b1', tool: 'delegate', cwd: '/tmp', startedAt: 0, state: 'pending' }],
-  recent: [],
+  inflight: [{ taskId: 't1', tool: 'delegate', cwd: '/tmp', startedAt: 0, state: 'pending' }],
   skillVersion: '3.0.0',
   skillCompatible: true,
 };

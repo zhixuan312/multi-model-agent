@@ -52,7 +52,6 @@ function taskTypeToRoute(type: TaskType): Route {
     execute_plan: 'execute-plan',
     journal_recall: 'journal-recall',
     journal_record: 'journal-record',
-    retry_tasks: 'retry',
   };
   return (map[type] ?? type) as Route;
 }

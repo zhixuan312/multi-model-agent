@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
-import { loadSkill, validateSkillsExist, clearSkillCache } from '../../packages/core/src/unified/skill-loader.js';
-import { TASK_TYPES } from '../../packages/core/src/unified/type-registry.js';
+import { loadSkill, clearSkillCache } from '../../packages/core/src/unified/skill-loader.js';
 
 const SKILLS_DIR = path.resolve(import.meta.dirname, '../../packages/core/src/skills');
 
@@ -28,14 +27,6 @@ describe('SkillLoader', () => {
 
   it('throws for missing type', async () => {
     await expect(loadSkill('nonexistent' as any, SKILLS_DIR)).rejects.toThrow('Skill file missing');
-  });
-
-  it('validateSkillsExist passes for delegate+audit', async () => {
-    await expect(validateSkillsExist(['delegate', 'audit'], SKILLS_DIR)).resolves.not.toThrow();
-  });
-
-  it('validates all 11 types have skill files', async () => {
-    await expect(validateSkillsExist(TASK_TYPES, SKILLS_DIR)).resolves.not.toThrow();
   });
 
   it('loads audit subtype implement-plan.md when subtype=plan', async () => {

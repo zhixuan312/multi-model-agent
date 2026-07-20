@@ -17,8 +17,8 @@ const VersionString = z
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
-// re-exported here so existing `import { ConcernCategory } from
-// '..events/telemetry-types'` paths keep working.
+// re-exported here so callers can pull it from the wire-schema module
+// alongside the wire event types it is used in.
 
 export { ConcernCategory } from '../types/enums.js';
 // We need a direct local binding for `z.array(_ConcernCategory)` below; the
@@ -127,7 +127,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
+  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
   subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
@@ -216,10 +216,10 @@ export const TaskCompletedEventSchema = z.object({
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'journal-recall']);
 // Every route EXCEPT orchestrate defaults to reviewPolicy='reviewed' (see
 // unified-task.ts: `type === 'orchestrate' ? 'none' : reviewed`), so every one of them
-// can legitimately emit a `review` stage. Omitting journal-recall / research /
-// retry here made `toWireRecord` throw "R9: review stage only allowed on reviewed
-// routes" and silently DROP their telemetry. List all reviewable routes.
-const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'journal-record', 'journal-recall']);
+// can legitimately emit a `review` stage. Omitting journal-recall / research here
+// made `toWireRecord` throw "R9: review stage only allowed on reviewed routes" and
+// silently DROP their telemetry. List all reviewable routes.
+const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall']);
 
 export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superRefine((event, ctx) => {
   // R1: ok terminalStatus implies non-failed worker outcome and no errorCode
@@ -323,17 +323,7 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   }
 });
 
-// ── Wire-telemetry record (§3.5) ─────────────────────────────────────────
-// Validates the wire shape emitted by buildWirePayload. v4.0.3 unified
-// internal + wire to mainModel/mainModelFamily — no more rename shim.
-
-export const WireTelemetryRecordSchema = z.object({
-  mainModel: z.string().nullable(),
-  mainModelFamily: ModelFamilyEnum,
-}).passthrough();
-
 // ── Inferred TS types ────────────────────────────────────────────────────
 
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
-export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
 export type { ConcernCategoryType } from '../types/enums.js';

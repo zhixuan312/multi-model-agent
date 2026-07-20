@@ -64,7 +64,6 @@ describe('GET /status', () => {
         auth: { enabled: true },
         counters: {
           projectCount: expect.any(Number),
-          activeRequests: expect.any(Number),
           activeTasks: expect.any(Number),
         },
         projects: expect.any(Array),
@@ -115,11 +114,9 @@ describe('GET /status', () => {
     }
   });
 
-  it('returns project entries when projects are active', async () => {
+  it('keeps counters.projectCount consistent with the projects array length', async () => {
     const s = await startTestServerWithAgents();
     try {
-      // Create a project by touching a cwd via /status (pre-populated by other means)
-      // Just verify the shape holds with zero projects
       const res = await fetch(`${s.url}/status`, {
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });

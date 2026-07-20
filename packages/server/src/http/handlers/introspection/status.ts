@@ -17,29 +17,14 @@ import type { ProjectRegistry } from '../../project-registry.js';
 const SKILL_MANIFEST_PATH = join(homedir(), '.mma', 'skills-install-manifest.json');
 
 /**
- * SemVer range this server is compatible with for installed skills.
- * A manifest version that does NOT match means the skill is out of date.
+ * Whether an installed skill's manifest version is compatible with this server.
+ * Compatible range is >=3.0.0 <4.0.0 — i.e. the major version must be exactly 3.
+ * A version outside that range means the installed skill is out of date.
  */
-export const SKILL_VERSION_COMPATIBLE = '>=3.0.0 <4.0.0';
-
-/** Simple semver range check: parses major.minor.patch and checks >=min <max. */
 function checkSkillCompatible(version: string): boolean {
-  // Parse the version string
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  const match = /^(\d+)\./.exec(version);
   if (!match) return false;
-  const [, majorStr, minorStr, patchStr] = match;
-  const major = parseInt(majorStr!, 10);
-  const minor = parseInt(minorStr!, 10);
-  const patch = parseInt(patchStr!, 10);
-
-  // Must be >= 3.0.0
-  if (major < 3) return false;
-  if (major === 3 && minor === 0 && patch < 0) return false;
-
-  // Must be < 4.0.0
-  if (major >= 4) return false;
-
-  return true;
+  return parseInt(match[1]!, 10) === 3;
 }
 
 interface SkillManifestInfo {
@@ -104,26 +89,21 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     const now = Date.now();
 
     // ── Counters ──────────────────────────────────────────────────────────────
-    let activeRequests = 0;
-
     const projects: {
       cwd: string;
       createdAt: number;
       lastActivityAt: number;
-      activeRequests: number;
       activeTasks: number;
       contextBlockCount: number;
     }[] = [];
 
     for (const [, pc] of projectRegistry.entries()) {
       const pcActiveTasks = taskRegistry.countActive(pc.cwd);
-      activeRequests += pc.activeRequests;
 
       projects.push({
         cwd: pc.cwd,
         createdAt: pc.createdAt,
         lastActivityAt: pc.lastActivityAt,
-        activeRequests: pc.activeRequests,
         activeTasks: pcActiveTasks,
         contextBlockCount: pc.contextBlocks.size,
       });
@@ -149,7 +129,6 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       auth: { enabled: true },
       counters: {
         projectCount: projectRegistry.size,
-        activeRequests,
         activeTasks: inflight.length,
       },
       projects,

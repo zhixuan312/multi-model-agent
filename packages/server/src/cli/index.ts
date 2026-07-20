@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
 import {
   loadConfigFromFile,
@@ -191,19 +192,6 @@ Global options:
   --version, -v         Show version
 `;
 
-/**
- * Read the server package version from package.json, walking up from this file.
- */
-function readServerVersion(): string {
-  try {
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
 
 /**
  * Main entry point — exported so it can be unit-tested without subprocess spawning.
@@ -383,7 +371,10 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     case 'telemetry': {
-      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.mma');
+      // runTelemetry treats homeDir as the `.mma` directory itself. deps.homeDir()
+      // (like every other subcommand) returns the raw home, so join `.mma` to
+      // whichever base we resolve — not only to the os.homedir() default.
+      const home = path.join(deps.homeDir?.() ?? os.homedir(), '.mma');
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {

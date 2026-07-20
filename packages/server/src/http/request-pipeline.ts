@@ -8,7 +8,7 @@ import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
-import { isLoopbackAddress, isAllowedHostHeader } from '@zhixuan92/multi-model-agent-core';
+import { shouldRejectNonLoopback, isAllowedHostHeader } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext, RawHandler } from './types.js';
 
@@ -90,7 +90,7 @@ export async function handleRequest(
   // (b) IP-level loopback check — loopbackOnlyPaths only.
   if (pipelineCfg.loopbackOnlyPaths.has(pathname)) {
     const remoteAddr = req.socket?.remoteAddress;
-    if (!isLoopbackAddress(remoteAddr)) {
+    if (shouldRejectNonLoopback(remoteAddr)) {
       sendError(res, 403, 'loopback_only', 'This endpoint is only accessible from the loopback interface');
       return;
     }
@@ -183,7 +183,6 @@ export async function handleRequest(
     url: urlObj,
     cwd: cwdValue,
     body: parsedBody,
-    authed: !pipelineCfg.authExemptPaths.has(pathname),
     callerClient: identity.callerClient,
     mainModel: identity.mainModel,
   };

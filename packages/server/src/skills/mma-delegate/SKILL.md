@@ -126,7 +126,7 @@ The reviewer sees the full diff with the original prompt as context. Reading inl
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan / retry) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
 ## Non-git targets

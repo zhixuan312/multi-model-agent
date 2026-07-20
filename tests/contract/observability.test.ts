@@ -3,7 +3,7 @@ import { PlainLogEntrySchema, PlainLogKindEnum } from '../../packages/core/src/e
 import type { TaskEnvelope } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 import type { Subscriber, BusMessage } from '../../packages/core/src/events/envelope-bus.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 describe('observability contract — envelope + plain entries', () => {
   it('every envelope snapshot conforms to TaskEnvelope shape', async () => {
@@ -43,7 +43,7 @@ describe('observability contract — envelope + plain entries', () => {
       expect(typeof env.taskId).toBe('string');
       expect(typeof env.batchId).toBe('string');
       expect(typeof env.taskIndex).toBe('number');
-      expect(['delegate', 'audit', 'review', 'debug', 'investigate', 'execute-plan', 'retry', 'research', 'journal-record', 'journal-recall', 'orchestrate']).toContain(env.route);
+      expect(['delegate', 'audit', 'review', 'debug', 'investigate', 'execute-plan', 'research', 'journal-record', 'journal-recall', 'orchestrate']).toContain(env.route);
       expect(['standard', 'complex', 'main']).toContain(env.agentType);
       expect(typeof env.client).toBe('string');
       expect(typeof env.mainModel).toBe('string');

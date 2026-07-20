@@ -125,14 +125,6 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
     expect(tracker.terminationReason).toBe('stalled');
   });
 
-  it('does NOT produce terminationReason: "cap_exhausted" (Codex has no turn cap)', () => {
-    // Codex CLI does not have a native turn cap like Claude SDK does.
-    // This terminationReason value is reserved for parity but cannot be
-    // produced by the Codex provider. This test documents that constraint.
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    expect(tracker.terminationReason).not.toBe('cap_exhausted');
-  });
 });
 
 describe('codex TurnTracker — TokenUsage disjoint-partition contract', () => {

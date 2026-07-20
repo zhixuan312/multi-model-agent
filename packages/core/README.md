@@ -24,7 +24,7 @@ const config = await loadConfigFromFile();
 ## What's inside
 
 - **Provider runners** — Claude (via agent-sdk) and Codex (via CLI subprocess), plus any OpenAI-compatible endpoint
-- **Unified task API** — all 13 task types (delegate, audit, review, debug, execute-plan, investigate, research, journal-record, journal-recall, retry, orchestrate, spec, plan) flow through a single two-phase pipeline
+- **Unified task API** — all 12 task types (delegate, audit, review, debug, execute-plan, investigate, research, journal-record, journal-recall, orchestrate, spec, plan) flow through a single two-phase pipeline
 - **Skill-driven prompts** — each task type has `implement.md` + `review.md` skill files that drive worker behavior
 - **Model profile registry** — 32 model families with cost/tier/effort metadata for routing and cost computation
 - **Bounded execution** — per-task wall-clock deadlines, idle-stall detection, abort signals, and cost tracking
@@ -39,13 +39,11 @@ const config = await loadConfigFromFile();
 | `./config/load` | `loadConfigFromFile`, `loadAuthToken` |
 | `./config/model-profile-registry` | `findModelProfile`, `extractCanonicalModelName`, model family enum |
 | `./providers/provider-factory` | `createProvider` factory, session safety ceiling |
-| `./bounded-execution/activity-tracker` | `ActivityTracker` — heartbeat + stage transitions |
 | `./types` | Cross-cutting types (task spec, run result, config, enums) |
-| `./reporting/structured-report` | Structured report parsing |
 | `./error-codes` | Error code constants |
 | `./events/envelope-bus` | `EnvelopeBus` — pub/sub for structured observability |
 | `./events/log-writer` | `LogWriter` — JSONL diagnostic sink |
-| `./events/task-envelope` | `TaskEnvelopeStore` — per-task event accumulator |
+| `./events/task-envelope` | `TaskEnvelope` + stage/finding types — per-task lifecycle shape |
 | `./events/telemetry-uploader` | `TelemetryUploader` — wire record upload |
 | `./events/stderr-log-subscriber` | `StderrLogSubscriber` — stderr event echo |
 | `./events/consent-rules` | `decideConsent` — env / config / default precedence |

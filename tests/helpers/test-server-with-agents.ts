@@ -24,11 +24,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         baseUrl: 'http://localhost:1/v1',
       },
     },
-    defaults: {
-      timeoutMs: 30_000,
-      tools: 'full',
-      sandboxPolicy: 'cwd-only',
-    },
     server: {
       bind: '127.0.0.1',
       port: 0,
@@ -36,7 +31,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
       limits: {
         maxBodyBytes: 10_485_760,
         batchTtlMs: 3_600_000,
-        idleProjectTimeoutMs: 1_800_000,
         projectCap: 200,
         maxContextBlockBytes: 524_288,
         maxContextBlocksPerProject: 32,

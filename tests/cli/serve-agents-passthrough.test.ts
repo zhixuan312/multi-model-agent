@@ -21,18 +21,12 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
         standard: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
         complex: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
       },
-      defaults: {
-        tools: 'full',
-        timeoutMs: 60_000,
-        sandboxPolicy: 'cwd-only',
-      },
       server: {
         bind: '127.0.0.1',
         port: 0,
         auth: { tokenFile },
         limits: {
           projectCap: 10,
-          idleProjectTimeoutMs: 600_000,
           batchTtlMs: 3_600_000,
           maxContextBlocksPerProject: 100,
           shutdownDrainMs: 1_000,

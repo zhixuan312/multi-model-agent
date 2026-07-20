@@ -91,16 +91,9 @@ function baseProfile(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 describe('model profile registry', () => {
-  it('has at least one profile for every V3 model family', () => {
+  it('resolves every known model family to a profile with the matching family field', () => {
     for (const family of MODEL_FAMILIES) {
       expect(findModelProfile(FAMILY_EXAMPLES[family]).family).toBe(family);
-    }
-  });
-
-  it('every known model family resolves to a profile with a family field', () => {
-    for (const family of MODEL_FAMILIES) {
-      const example = FAMILY_EXAMPLES[family];
-      expect(findModelProfile(example).family).toBe(family);
     }
   });
 

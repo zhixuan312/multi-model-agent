@@ -44,14 +44,3 @@ describe('observability event manifest', () => {
   });
 });
 
-describe('errorCode invariant', () => {
-  it('whenever terminalStatus === "error", errorCode must be non-null', () => {
-    // Invariant enforced at composition time by to-wire-record.ts — when
-    // envelope.status is 'failed' and structuredError.code exists, the wire
-    // record's errorCode must be populated. Verified end-to-end in
-    // tests/events/to-wire-record-error-code.test.ts. This test validates the
-    // manifest documents the invariant.
-    const providerEventEntry = manifest.kinds.find((k) => k.kind === 'batch_completed');
-    expect(providerEventEntry).toBeDefined();
-  });
-});

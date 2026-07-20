@@ -32,7 +32,7 @@ export interface EvidencePack {
 
 /** One row of the `## Sources used` table: which adapter group was queried,
  *  whether it returned usable data, and a short note (result count or failure
- *  reason). Mirrors the report-parser-slot's ResearchSourcesUsedEntry shape. */
+ *  reason). */
 export interface SourceUsage {
   source:    string;
   attempted: boolean;

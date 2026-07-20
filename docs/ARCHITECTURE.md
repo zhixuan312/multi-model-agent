@@ -35,7 +35,7 @@ Stage 3 — DISPATCH  (pick agent, run implementer)
   3.2  Two-phase pipeline core/src/unified/two-phase-pipeline.ts
   3.3  Provider invoke    core/src/providers/{claude,codex}.ts
                           via providers/provider-factory.ts
-  3.4  Bounded execution  core/src/bounded-execution/{activity-tracker,cost-compute}.ts
+  3.4  Bounded execution  core/src/bounded-execution/cost-compute.ts
                           (provider-level wallClockDeadline + abortSignal)
 
 Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
@@ -44,8 +44,9 @@ Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
   (When reviewPolicy is 'none', the review phase is skipped entirely.)
 
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
-  5.1  Output parsing     core/src/reporting/structured-report.ts
-  5.2  Status derivation  core/src/reporting/terminal-status-deriver.ts
+  5.1  Evidence parsing   core/src/reporting/extract-evidence-sections.ts
+  5.2  Status derivation  inline in core/src/unified/two-phase-pipeline.ts
+                          (done | done_with_concerns from the reviewer parse)
   5.3  Sentinels          core/src/reporting/not-applicable.ts
   5.4  Telemetry emit     core/src/events/{envelope-bus,task-envelope,wire-schema,
                           to-wire-record,consent-rules,telemetry-uploader}.ts
@@ -86,7 +87,6 @@ Per-type fill of the stack:
 | `research` | reviewed | no | read-only | mma-research |
 | `journal_recall` | reviewed | no | read-only | mma-journal-recall |
 | `journal_record` | reviewed | no | cwd-only | mma-journal-record |
-| `retry_tasks` | reviewed | no | cwd-only | mma-retry |
 | `orchestrate` | none | no | cwd-only | mma-orchestrate |
 | `spec` | reviewed | yes | cwd-only | mma-spec |
 | `plan` | reviewed | yes | cwd-only | mma-plan |
@@ -107,8 +107,7 @@ C.1  Identity & sandboxing      core/src/identity/{claude-oauth,secret-redactor}
                                 core/src/transport/loopback-enforcer.ts,
                                 core/src/providers/claude-cwd-confinement.ts
                                 (PreToolUse hook: cwd-only + read-only enforcement)
-C.2  Bounded execution           core/src/bounded-execution/{activity-tracker,
-                                cost-compute}.ts,
+C.2  Bounded execution           core/src/bounded-execution/cost-compute.ts,
                                 core/src/error-codes.ts
                                 (provider-level wallClockDeadline + abortSignal)
 C.3  Provider abstraction        core/src/providers/provider-factory.ts,
@@ -126,7 +125,6 @@ C.5  Telemetry & observability   core/src/events/{envelope-bus,task-envelope,
                                 plain-log-entry,stderr-log-subscriber}.ts
 C.6  State stores (in-process)   core/src/unified/task-registry.ts,
                                 core/src/stores/{context-block-tool,
-                                expand-context-blocks,
                                 project-context-registry}.ts
 C.7  Distribution                server/src/skill-install/skill-installers/{claude-code,
                                 cursor,codex-cli,gemini-cli}.ts +
@@ -150,7 +148,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 4. **Review** — When `reviewPolicy` is `reviewed`, the pipeline runs a second-phase review pass. When `none`, the review phase is skipped.
 5. **Reporting** — Results are aggregated into the uniform envelope, telemetry events emitted via the event bus, and the result stored in `TaskRegistry` for retrieval via `GET /task/:taskId`.
 
-**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`) keep full `Promise.all` fan-out.
+**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
 
 ## Testing layers
 
@@ -161,7 +159,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 | Contract | `tests/contract/**` | HTTP envelopes + skill manifest + observability + route enumeration; goldens under `tests/contract/goldens/` |
 | Perf | `tests/perf/*.test.ts` | Baseline + budget enforcement |
 
-Mock-provider pattern: `mockProvider` / `failProvider` from `tests/delegate.test.ts` and `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
+Mock-provider pattern: `mockProvider` / `failProvider` from `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
 
 ## Key observables
 
@@ -180,7 +178,7 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `packages/core/src/tools/` (per-tool briefSlots, tool-configs) | Replaced by `core/src/skills/` (per-type implement.md + review.md) + `unified/type-registry.ts` |
 | `packages/core/src/routing/` (AgentResolver, ToolSurfaceRegistry) | `AgentResolver` moved to `providers/agent-resolver.ts`; ToolSurfaceRegistry deleted |
 | `packages/core/src/executors/` | Deleted. Pipeline drives providers directly |
-| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only; domain types in `types/` (task-spec, run-result, goal, stage-stats, etc.) |
+| `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only; domain types in `types/` (task-spec, run-result, config, enums) |
 | `packages/mcp/` | Deleted. All MCP-layer concerns now live under `packages/server/` (HTTP service) + `packages/server/src/skills/` (distributed skill markdown) |
 | `packages/server/src/install/` | Renamed to `packages/server/src/skill-install/` |
 | Clarification flow (clarification-store, force-clarification, confirm route, `mma-clarifications` skill) | Deleted in v4.0. Routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |
