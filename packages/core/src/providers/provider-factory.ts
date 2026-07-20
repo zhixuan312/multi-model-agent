@@ -13,7 +13,9 @@ let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<AgentType, Provider> | null = null;
 
 // ─── Safety ceiling ────────────────────────────────────────────────────────
-// KEEP these existing exports/symbols (still used):
+// Hard cap on live provider sessions per task — a backstop against a runaway
+// pipeline spawning unbounded sub-agents. Enforced in createProvider via
+// __liveByTask; breaching it throws SafetyCeilingExceededError.
 const SAFETY_CEILING = 100;
 export class SafetyCeilingExceededError extends Error {
   readonly code = 'safety_ceiling_exceeded';

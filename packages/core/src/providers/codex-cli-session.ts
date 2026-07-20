@@ -31,7 +31,6 @@ import type { Session, SessionOpts, TurnOpts, TurnResult, TokenUsage } from '../
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js';
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
-import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { prepareCodexSkillHome, codexAuthMode } from './codex-skill-home.js';

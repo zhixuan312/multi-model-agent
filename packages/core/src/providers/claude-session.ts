@@ -20,7 +20,6 @@ import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-re
 import { normalizeClaudeTurn } from './normalize-claude.js';
 import { classifyClaudeToolCall } from './claude-tool-categories.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
-import type { EnvelopeBus } from '../events/envelope-bus.js';
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
@@ -177,7 +176,6 @@ export class ClaudeSession implements Session {
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
       costUSD: 0,
-      model: this.args.model,
     });
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
