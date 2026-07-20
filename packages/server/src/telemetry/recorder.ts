@@ -1,17 +1,12 @@
-import { existsSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
 import { decide } from './consent.js';
 import { getOrCreateIdentity } from './identity.js';
-import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
-import { readGeneration, bumpGeneration } from './generation.js';
+import { readGeneration } from './generation.js';
 import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
 
 export interface Recorder {
-  readonly signal: AbortSignal;
   enqueue(event: Record<string, unknown>): void;
-  revokeIdentity(options?: { deleteInstallId?: boolean }): Promise<void>;
 }
 
 let _recorder: Recorder | null = null;
@@ -32,7 +27,6 @@ export function createRecorder(opts: { homeDir: string; mmaVersion: string }): R
 function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder {
   const { homeDir, mmaVersion } = opts;
   const queue = new Queue(homeDir);
-  const controller = new AbortController();
   let _installId: string | null = null;
 
   const resolveInstallId = (): string => {
@@ -66,22 +60,5 @@ function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder
     }
   };
 
-  return {
-    get signal() {
-      return controller.signal;
-    },
-
-    enqueue,
-
-    async revokeIdentity(options) {
-      await bumpGeneration(homeDir);
-      controller.abort();
-      const queuePath = join(homeDir, 'telemetry-queue.ndjson');
-      if (existsSync(queuePath)) unlinkSync(queuePath);
-      _installId = null;
-      if (options?.deleteInstallId) {
-        deleteInstallId(homeDir);
-      }
-    },
-  };
+  return { enqueue };
 }
