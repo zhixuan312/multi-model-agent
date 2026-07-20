@@ -88,10 +88,6 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 
 // === MultiModelConfig schema ===
 
-const defaultsSchema = z.object({
-  mainModel: z.string().min(1).optional(),
-}).default(() => ({}));
-
 // Named constants are the single source of truth for server defaults.
 // Each .default(() => ({...})) references the same constant so changing a
 // value here = one edit, not three. Zod 4 requires explicit defaults at each
@@ -151,7 +147,6 @@ export const multiModelConfigSchema = z.object({
     complex: agentConfigSchema,
     main: agentConfigSchema.optional(),
   }),
-  defaults: defaultsSchema,
   diagnostics: z.object({
     log: z.boolean().default(false),
     logDir: z.string().min(1).optional(),

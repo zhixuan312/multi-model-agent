@@ -78,11 +78,6 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         model: 'mock',
       },
     },
-    defaults: {
-      timeoutMs: 1_800_000,
-      tools: 'full',
-      sandboxPolicy: 'cwd-only',
-    },
     diagnostics: {
       log: opts.diagnosticsLog ?? false,
     },

@@ -10,12 +10,6 @@ function minimalConfig(tokenFile: string) {
       standard: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
       complex: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
     },
-    defaults: {
-      tools: 'full' as const,
-      timeoutMs: 60_000,
-      stallTimeoutMs: 30_000,
-      sandboxPolicy: 'cwd-only' as const,
-    },
     server: {
       bind: '127.0.0.1',
       port: 0,

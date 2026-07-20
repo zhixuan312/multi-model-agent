@@ -24,11 +24,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         baseUrl: 'http://localhost:1/v1',
       },
     },
-    defaults: {
-      timeoutMs: 30_000,
-      tools: 'full',
-      sandboxPolicy: 'cwd-only',
-    },
     server: {
       bind: '127.0.0.1',
       port: 0,
