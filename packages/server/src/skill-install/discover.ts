@@ -35,27 +35,15 @@ export const SUPPORTED_COMMANDS = [
   'mma-breakout',
 ] as const;
 
-/** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */
-export class SkillNotFoundError extends Error {
-  readonly code = 'skill_not_found' as const;
-  constructor(skillName: string, checkedPath: string) {
-    super(
-      `Skill '${skillName}' not found. ` +
-      `Checked: ${checkedPath}. ` +
-      `Available skills: ${SUPPORTED_SKILLS.join(', ')}`,
-    );
-  }
-}
-
 // Skills are bundled at `packages/server/src/skills/` (copied to
 // `packages/server/dist/skills/` at build time, shipped on the npm package).
 // Probe candidates for monorepo dev layouts and both npm-installed layouts
 // (hoisted siblings, or core nested under server).
 export function skillsRootCandidates(here: string): string[] {
   return [
-    // Dev source: packages/server/src/skill-install -> packages/server/src/skills
-    path.resolve(here, '..', 'skills'),
-    // Dev built: packages/server/dist/skill-install -> packages/server/dist/skills
+    // Same-package sibling: covers BOTH dev source (packages/server/src/skill-install
+    // -> src/skills) and dev built (packages/server/dist/skill-install -> dist/skills),
+    // because `here` already resolves to the right src/ or dist/ root at runtime.
     path.resolve(here, '..', 'skills'),
     // Core dev: packages/core/src/unified -> packages/server/src/skills
     path.resolve(here, '..', '..', '..', 'server', 'src', 'skills'),

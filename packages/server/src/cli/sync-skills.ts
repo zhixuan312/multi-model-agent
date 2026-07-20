@@ -32,6 +32,7 @@ import {
   listEntries,
   appendEntry,
   removeEntry,
+  manifestPath,
   FutureManifestError,
   type Client,
   type ManifestEntry,
@@ -127,7 +128,7 @@ function versionFromContent(content: string): string {
 }
 
 function manifestPresent(homeDir: string): boolean {
-  return fs.existsSync(path.join(homeDir, '.mma', 'install-manifest.json'));
+  return fs.existsSync(manifestPath(homeDir));
 }
 
 function readInstalledVersion(skillName: string, target: Client, homeDir: string): string | null {
