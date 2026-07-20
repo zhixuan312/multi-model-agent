@@ -21,7 +21,6 @@
  *   3 — explicit --target was not a known client
  */
 import * as os from 'node:os';
-import minimist from 'minimist';
 import { removeEntry, ALL_CLIENTS, type Client } from '../skill-install/manifest.js';
 import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
 import {
@@ -33,7 +32,7 @@ import {
   clearDisabledTargets,
   disabledTargets,
 } from '../skill-install/disabled-state.js';
-import { resolveTargets, runSyncSkills } from './sync-skills.js';
+import { resolveTargets, runSyncSkills, parseArgs } from './sync-skills.js';
 
 export const ToggleExitCode = Object.freeze({
   SUCCESS: 0,
@@ -52,31 +51,6 @@ export interface ToggleDeps {
   stderr?: (s: string) => boolean;
 }
 
-interface ToggleArgs {
-  targets: Client[] | null;
-  allTargets: boolean;
-  dryRun: boolean;
-  json: boolean;
-}
-
-function parseToggleArgs(argv: string[]): ToggleArgs {
-  const args = minimist(argv, {
-    string: ['target'],
-    boolean: ['dry-run', 'json', 'all-targets'],
-    alias: { t: 'target', j: 'json' },
-  });
-  let targets: Client[] | null = null;
-  if (args.target) {
-    const t = Array.isArray(args.target) ? args.target : [args.target];
-    targets = (t as string[]).map((s) => s as Client);
-  }
-  return {
-    targets,
-    allTargets: args['all-targets'] === true,
-    dryRun: args['dry-run'] === true,
-    json: args['json'] === true,
-  };
-}
 
 /**
  * `mma disable` — remove all MMA skills from the resolved clients and
@@ -88,7 +62,7 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
   const cliVersion = deps.cliVersion ?? 'unknown';
-  const parsed = parseToggleArgs(argv);
+  const parsed = parseArgs(argv);
 
   let targets: Client[];
   try {
@@ -166,7 +140,7 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
   const homeDir = deps.homeDir ?? os.homedir();
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
-  const parsed = parseToggleArgs(argv);
+  const parsed = parseArgs(argv);
 
   let targets: Client[];
   try {
