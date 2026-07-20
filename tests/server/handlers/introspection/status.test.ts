@@ -64,7 +64,6 @@ describe('GET /status', () => {
         auth: { enabled: true },
         counters: {
           projectCount: expect.any(Number),
-          activeRequests: expect.any(Number),
           activeTasks: expect.any(Number),
         },
         projects: expect.any(Array),

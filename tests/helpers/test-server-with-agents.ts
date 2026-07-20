@@ -36,7 +36,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
       limits: {
         maxBodyBytes: 10_485_760,
         batchTtlMs: 3_600_000,
-        idleProjectTimeoutMs: 1_800_000,
         projectCap: 200,
         maxContextBlockBytes: 524_288,
         maxContextBlocksPerProject: 32,

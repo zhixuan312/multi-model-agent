@@ -22,7 +22,6 @@ function minimalConfig(tokenFile: string) {
       auth: { tokenFile },
       limits: {
         projectCap: 10,
-        idleProjectTimeoutMs: 600_000,
         batchTtlMs: 3_600_000,
         maxContextBlocksPerProject: 100,
         shutdownDrainMs: 1_000,

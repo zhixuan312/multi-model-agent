@@ -108,7 +108,6 @@ const DEFAULT_SERVER_AUTH = {
 const DEFAULT_SERVER_LIMITS = {
   maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES,
   batchTtlMs: 3_600_000,
-  idleProjectTimeoutMs: 1_800_000,
   projectCap: 200,
   maxContextBlockBytes: 524_288,
   maxContextBlocksPerProject: 500,
@@ -126,7 +125,6 @@ const DEFAULT_SERVER = {
 const serverLimitsSchema = z.object({
   maxBodyBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBodyBytes),
   batchTtlMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.batchTtlMs),
-  idleProjectTimeoutMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.idleProjectTimeoutMs),
   projectCap: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.projectCap),
   maxContextBlockBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlockBytes),
   maxContextBlocksPerProject: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlocksPerProject),

@@ -19,7 +19,6 @@ interface StatusResponse {
   bind?: string;
   counters?: {
     projectCount?: number;
-    activeRequests?: number;
     activeTasks?: number;
   };
   inflight?: unknown[];
@@ -116,7 +115,6 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
   if (c) {
     lines.push(`  projects:       ${c.projectCount ?? 0}`);
     lines.push(`  active tasks:   ${c.activeTasks ?? 0}`);
-    lines.push(`  active reqs:    ${c.activeRequests ?? 0}`);
   }
 
   const inflightCount = Array.isArray(body.inflight) ? body.inflight.length : 0;

@@ -8,10 +8,8 @@ describe('createProjectContext', () => {
     expect(pc.contextBlocks).toBeDefined();
   });
 
-  it('starts with empty counters and sets', () => {
+  it('starts with empty counters', () => {
     const pc = createProjectContext('/tmp/abc');
-    expect(pc.activeSessions.size).toBe(0);
-    expect(pc.activeRequests).toBe(0);
     expect(pc.pendingReservations).toBe(0);
   });
 
@@ -24,12 +22,10 @@ describe('createProjectContext', () => {
     expect(pc.lastActivityAt).toBe(pc.createdAt);
   });
 
-  it('has mutable activeRequests, pendingReservations, lastActivityAt', () => {
+  it('has mutable pendingReservations and lastActivityAt', () => {
     const pc = createProjectContext('/tmp/abc');
-    pc.activeRequests = 5;
     pc.pendingReservations = 2;
     pc.lastActivityAt = 12345;
-    expect(pc.activeRequests).toBe(5);
     expect(pc.pendingReservations).toBe(2);
     expect(pc.lastActivityAt).toBe(12345);
   });

@@ -89,26 +89,21 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     const now = Date.now();
 
     // ── Counters ──────────────────────────────────────────────────────────────
-    let activeRequests = 0;
-
     const projects: {
       cwd: string;
       createdAt: number;
       lastActivityAt: number;
-      activeRequests: number;
       activeTasks: number;
       contextBlockCount: number;
     }[] = [];
 
     for (const [, pc] of projectRegistry.entries()) {
       const pcActiveTasks = taskRegistry.countActive(pc.cwd);
-      activeRequests += pc.activeRequests;
 
       projects.push({
         cwd: pc.cwd,
         createdAt: pc.createdAt,
         lastActivityAt: pc.lastActivityAt,
-        activeRequests: pc.activeRequests,
         activeTasks: pcActiveTasks,
         contextBlockCount: pc.contextBlocks.size,
       });
@@ -134,7 +129,6 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       auth: { enabled: true },
       counters: {
         projectCount: projectRegistry.size,
-        activeRequests,
         activeTasks: inflight.length,
       },
       projects,
