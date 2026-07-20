@@ -24,7 +24,6 @@ export type {
 } from './types/config.js';
 
 export type {
-  RuntimeRunResult,
   Provider,
 } from './types/run-result.js';
 

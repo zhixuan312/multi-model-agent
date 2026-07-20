@@ -16,7 +16,6 @@ export type {
   CodexProviderConfig,
   ClaudeProviderConfig,
   MultiModelConfig,
-  RuntimeRunResult,
   Provider,
 } from './types.js';
 export type {
