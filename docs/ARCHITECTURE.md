@@ -148,7 +148,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 4. **Review** — When `reviewPolicy` is `reviewed`, the pipeline runs a second-phase review pass. When `none`, the review phase is skipped.
 5. **Reporting** — Results are aggregated into the uniform envelope, telemetry events emitted via the event bus, and the result stored in `TaskRegistry` for retrieval via `GET /task/:taskId`.
 
-**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`) keep full `Promise.all` fan-out.
+**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
 
 ## Testing layers
 
@@ -159,7 +159,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 | Contract | `tests/contract/**` | HTTP envelopes + skill manifest + observability + route enumeration; goldens under `tests/contract/goldens/` |
 | Perf | `tests/perf/*.test.ts` | Baseline + budget enforcement |
 
-Mock-provider pattern: `mockProvider` / `failProvider` from `tests/delegate.test.ts` and `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
+Mock-provider pattern: `mockProvider` / `failProvider` from `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
 
 ## Key observables
 
