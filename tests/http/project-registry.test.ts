@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -12,7 +12,7 @@ describe('ProjectRegistry', () => {
   let reg: ProjectRegistry;
   let dir: string;
   beforeEach(() => {
-    reg = new ProjectRegistry({ cap: 3, idleEvictionMs: 1000, evictionIntervalMs: 60_000 });
+    reg = new ProjectRegistry({ cap: 3 });
     dir = tmpDir();
   });
 
@@ -35,25 +35,13 @@ describe('ProjectRegistry', () => {
     expect(r.projectContext.pendingReservations).toBe(2);
   });
 
-  it('attachSession decrements pendingReservations and adds sessionId', () => {
+  it('cancelReservation decrements pendingReservations', () => {
     const r = reg.reserveProject(dir);
     if (!r.ok) return;
-    reg.attachSession(r.projectContext.cwd, 's1');
-    expect(r.projectContext.pendingReservations).toBe(0);
-    expect(r.projectContext.activeSessions.has('s1')).toBe(true);
-  });
-
-  it('detachSession removes sessionId and updates lastActivityAt', () => {
-    const r = reg.reserveProject(dir);
-    if (!r.ok) return;
-    reg.attachSession(r.projectContext.cwd, 's1');
-    const before = r.projectContext.lastActivityAt;
-    vi.useFakeTimers();
-    vi.setSystemTime(Date.now() + 100);
-    reg.detachSession(r.projectContext.cwd, 's1');
-    expect(r.projectContext.activeSessions.has('s1')).toBe(false);
-    expect(r.projectContext.lastActivityAt).toBeGreaterThan(before);
-    vi.useRealTimers();
+    reg.reserveProject(dir);
+    expect(r.projectContext.pendingReservations).toBe(2);
+    reg.cancelReservation(r.projectContext.cwd);
+    expect(r.projectContext.pendingReservations).toBe(1);
   });
 
   it('reserveProject returns project_cap error when full and target is new', () => {
@@ -70,24 +58,5 @@ describe('ProjectRegistry', () => {
     dirs.forEach(d => reg.reserveProject(d));
     const r = reg.reserveProject(dirs[0]); // already exists
     expect(r.ok).toBe(true);
-  });
-
-  it('eviction skips projects with active sessions, requests, or reservations', () => {
-    vi.useFakeTimers();
-    const r = reg.reserveProject(dir);
-    if (!r.ok) return;
-    reg.attachSession(r.projectContext.cwd, 's1');
-    vi.setSystemTime(Date.now() + 10_000);
-    reg.evictIdle();
-    expect(reg.size).toBe(1); // active session
-    reg.detachSession(r.projectContext.cwd, 's1');
-    r.projectContext.activeRequests = 1;
-    reg.evictIdle();
-    expect(reg.size).toBe(1); // active request
-    r.projectContext.activeRequests = 0;
-    vi.setSystemTime(Date.now() + 2000);
-    reg.evictIdle();
-    expect(reg.size).toBe(0);
-    vi.useRealTimers();
   });
 });

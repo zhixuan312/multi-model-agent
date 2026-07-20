@@ -108,8 +108,6 @@ export async function startServer(
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
-    idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
-    evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.
