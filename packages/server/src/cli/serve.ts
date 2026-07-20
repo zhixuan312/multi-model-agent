@@ -61,12 +61,18 @@ export async function maybeAutoUpdateSkills(
 
   const behind = entries.filter((e) => isSkillBehind(e.name, e.skillVersion));
   const missing = findMissingSkills(entries, SUPPORTED_SKILLS as unknown as readonly string[]);
-  if (behind.length === 0 && missing.length === 0) return;
+  // Orphans = installed skills that have since been removed from the bundle
+  // (e.g. a retired task type like the old `mma-retry`). runSyncSkills Pass 1
+  // drops these. Without orphans in the trigger below, a lone orphan (nothing
+  // behind or missing) never prompts a sync and lingers across every restart.
+  const orphans = entries.filter((e) => !(SUPPORTED_SKILLS as readonly string[]).includes(e.name));
+  if (behind.length === 0 && missing.length === 0 && orphans.length === 0) return;
 
   if (!config.server.autoUpdateSkills) {
     const drift: string[] = [];
     if (behind.length > 0) drift.push(`${behind.length} out of date (${behind.map((e) => e.name).join(', ')})`);
     if (missing.length > 0) drift.push(`${missing.length} new (${missing.map((m) => m.name).join(', ')})`);
+    if (orphans.length > 0) drift.push(`${orphans.length} removed (${orphans.map((e) => e.name).join(', ')})`);
     stderr(
       `[mma] skill drift: ${drift.join('; ')}. ` +
       `Run 'mma sync-skills' to reconcile (or set server.autoUpdateSkills=true in config).\n`,
@@ -82,6 +88,7 @@ export async function maybeAutoUpdateSkills(
     ]);
     if (behind.length > 0) process.stdout.write(`[mma] auto-synced ${behind.length} updated skill(s)\n`);
     if (missing.length > 0) process.stdout.write(`[mma] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
+    if (orphans.length > 0) process.stdout.write(`[mma] auto-removed ${orphans.length} orphaned skill(s): ${orphans.map((e) => e.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
   }

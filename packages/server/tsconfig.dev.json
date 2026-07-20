@@ -1,0 +1,23 @@
+{
+  // Dev-only tsconfig used by `pnpm dev` (via TSX_TSCONFIG_PATH).
+  //
+  // The production build (tsconfig.json) resolves @zhixuan92/multi-model-agent-core
+  // through the package `exports` map → packages/core/dist. That is correct for
+  // `npm run build` and `npm run serve` (the shipped dist-JS package).
+  //
+  // But under `pnpm dev` (tsx watch) that same dist resolution makes core edits
+  // invisible until a manual rebuild — a "fake restart". These paths point tsx
+  // straight at packages/core/src, so core/src files enter tsx's live module
+  // graph and any edit triggers a real reload. Mirrors the aliases in
+  // vitest.config.ts so dev and tests resolve core identically (from source).
+  //
+  // Build/prod never load this file, so dist resolution is untouched.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@zhixuan92/multi-model-agent-core": ["../core/src/index.ts"],
+      "@zhixuan92/multi-model-agent-core/research": ["../core/src/research/index.ts"],
+      "@zhixuan92/multi-model-agent-core/*": ["../core/src/*"]
+    }
+  }
+}
