@@ -74,7 +74,7 @@ describe('SkillManifestSync.driftReport', () => {
     const drift = s.driftReport();
     const missing = drift.filter((d) => d.issue === 'missing');
     // Should have all other supported skills as missing
-    expect(missing.length).toBeGreaterThanOrEqual(10); // 11 total - 1 present
+    expect(missing.length).toBeGreaterThanOrEqual(10); // 16 supported skills, 1 present
     expect(missing.every((d) => d.client === 'claude-code')).toBe(true);
     expect(missing.every((d) => d.skill !== 'mma-delegate')).toBe(true);
   });

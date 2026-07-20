@@ -16,7 +16,7 @@ export interface TurnResult {
   costUSD: number;
   turns: number;
   durationMs: number;
-  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted';
+  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'aborted';
   errorCode?: string;
   filesWritten: string[];
   usedShell: boolean;
