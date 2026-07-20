@@ -20,7 +20,7 @@ export interface CodexCliConfig {
 
 export interface BuildLaunchInput {
   cfg: CodexCliConfig;
-  opts: Pick<SessionOpts, 'cwd'>;
+  opts: Pick<SessionOpts, 'cwd' | 'sandboxPolicy'>;
   outputFile: string;
   schemaFile?: string;
   /** When set, the launch is a `codex exec resume <id>` (subsequent turn). */
@@ -40,21 +40,30 @@ const CUSTOM_PROVIDER_NAME = 'mma-custom';
 export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   const { cfg, opts, outputFile, schemaFile, resumeSessionId, codexHome } = input;
 
-  const args: string[] = ['exec'];
+  // `--ask-for-approval never` is a global flag (must precede `exec`) that
+  // suppresses all approval prompts for non-interactive runs — it works with
+  // every `--sandbox` mode. Together with `--sandbox <mode>` below it replaces
+  // the old `--dangerously-bypass-approvals-and-sandbox`, which disabled the OS
+  // sandbox ENTIRELY: that left read-only / cwd-only task types with no write
+  // confinement on the codex runner (a cross-runner security gap — Claude
+  // enforces the same policy via its PreToolUse hook).
+  const args: string[] = ['--ask-for-approval', 'never', 'exec'];
   if (resumeSessionId) args.push('resume', resumeSessionId);
 
   args.push(
     '--json',
     '--skip-git-repo-check',
-    '--dangerously-bypass-approvals-and-sandbox',
     '--ignore-user-config',
     '--ignore-rules',
   );
 
   // Working directory + sandbox apply only on the initial turn. `resume`
-  // inherits cwd + sandbox from the stored session record.
+  // inherits cwd + sandbox from the stored session record. The sandbox mode
+  // mirrors the task type's policy: `read-only` blocks all writes; `cwd-only`
+  // maps to `workspace-write` (writes confined to the cwd + temp dirs).
   if (!resumeSessionId) {
-    args.push('-C', opts.cwd ?? process.cwd(), '-s', 'workspace-write');
+    const sandboxMode = opts.sandboxPolicy === 'read-only' ? 'read-only' : 'workspace-write';
+    args.push('-C', opts.cwd ?? process.cwd(), '-s', sandboxMode);
   }
 
   args.push('-m', cfg.model);

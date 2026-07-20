@@ -23,4 +23,41 @@ describe('buildCodexCliLaunch (D7)', () => {
     const providerFlag = result.args[result.args.findIndex(a => a === '-c' && result.args[result.args.indexOf(a)+1]?.startsWith('model_providers.mma-custom=')) + 1];
     expect(providerFlag).toContain('env_key="CUSTOM_KEY"');
   });
+
+  const sandboxOf = (args: string[]): string | undefined => args[args.indexOf('-s') + 1];
+
+  it('never disables the sandbox (no --dangerously-bypass-approvals-and-sandbox; approvals suppressed via --ask-for-approval never)', () => {
+    const result = buildCodexCliLaunch({
+      cfg: { model: 'gpt-test' },
+      opts: { cwd: '/tmp', sandboxPolicy: 'cwd-only' },
+      outputFile: '/tmp/out.jsonl',
+    });
+    expect(result.args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+    // global --ask-for-approval never precedes the exec subcommand
+    expect(result.args.slice(0, 3)).toEqual(['--ask-for-approval', 'never', 'exec']);
+  });
+
+  it('maps sandboxPolicy read-only → -s read-only', () => {
+    const result = buildCodexCliLaunch({
+      cfg: { model: 'gpt-test' },
+      opts: { cwd: '/tmp', sandboxPolicy: 'read-only' },
+      outputFile: '/tmp/out.jsonl',
+    });
+    expect(sandboxOf(result.args)).toBe('read-only');
+  });
+
+  it('maps sandboxPolicy cwd-only (and default) → -s workspace-write', () => {
+    const cwdOnly = buildCodexCliLaunch({
+      cfg: { model: 'gpt-test' },
+      opts: { cwd: '/tmp', sandboxPolicy: 'cwd-only' },
+      outputFile: '/tmp/out.jsonl',
+    });
+    expect(sandboxOf(cwdOnly.args)).toBe('workspace-write');
+    const noPolicy = buildCodexCliLaunch({
+      cfg: { model: 'gpt-test' },
+      opts: { cwd: '/tmp' },
+      outputFile: '/tmp/out.jsonl',
+    });
+    expect(sandboxOf(noPolicy.args)).toBe('workspace-write');
+  });
 });

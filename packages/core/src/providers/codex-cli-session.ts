@@ -92,7 +92,7 @@ export class CodexCliSession implements Session {
 
     const launch = buildCodexCliLaunch({
       cfg: this.args.cfg,
-      opts: { cwd: this.args.opts.cwd },
+      opts: { cwd: this.args.opts.cwd, sandboxPolicy: this.args.opts.sandboxPolicy },
       outputFile,
       ...(this.threadId && { resumeSessionId: this.threadId }),
       ...(codexHome && { codexHome }),
