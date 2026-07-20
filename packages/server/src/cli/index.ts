@@ -371,7 +371,10 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     case 'telemetry': {
-      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.mma');
+      // runTelemetry treats homeDir as the `.mma` directory itself. deps.homeDir()
+      // (like every other subcommand) returns the raw home, so join `.mma` to
+      // whichever base we resolve — not only to the os.homedir() default.
+      const home = path.join(deps.homeDir?.() ?? os.homedir(), '.mma');
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {
