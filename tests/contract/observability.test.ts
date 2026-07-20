@@ -3,7 +3,7 @@ import { PlainLogEntrySchema, PlainLogKindEnum } from '../../packages/core/src/e
 import type { TaskEnvelope } from '../../packages/core/src/events/task-envelope.js';
 import { EnvelopeBus } from '../../packages/core/src/events/envelope-bus.js';
 import type { Subscriber, BusMessage } from '../../packages/core/src/events/envelope-bus.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 describe('observability contract — envelope + plain entries', () => {
   it('every envelope snapshot conforms to TaskEnvelope shape', async () => {

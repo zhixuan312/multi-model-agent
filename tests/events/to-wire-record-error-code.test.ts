@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 function baseOpts() {
   return {

@@ -69,7 +69,6 @@ export { getClaudeOAuth } from './identity/claude-oauth.js';
 
 
 // Observability
-export { TaskEnvelopeStore } from './events/task-envelope.js';
 export type { TaskEnvelope, StageRecord, ToolCallRecord } from './events/task-envelope.js';
 export { EnvelopeBus } from './events/envelope-bus.js';
 export type { BusMessage, Subscriber } from './events/envelope-bus.js';

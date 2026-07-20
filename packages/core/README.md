@@ -43,7 +43,7 @@ const config = await loadConfigFromFile();
 | `./error-codes` | Error code constants |
 | `./events/envelope-bus` | `EnvelopeBus` — pub/sub for structured observability |
 | `./events/log-writer` | `LogWriter` — JSONL diagnostic sink |
-| `./events/task-envelope` | `TaskEnvelopeStore` — per-task event accumulator |
+| `./events/task-envelope` | `TaskEnvelope` + stage/finding types — per-task lifecycle shape |
 | `./events/telemetry-uploader` | `TelemetryUploader` — wire record upload |
 | `./events/stderr-log-subscriber` | `StderrLogSubscriber` — stderr event echo |
 | `./events/consent-rules` | `decideConsent` — env / config / default precedence |

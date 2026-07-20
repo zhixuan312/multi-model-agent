@@ -1,7 +1,7 @@
 // tests/events/telemetry-uploader.test.ts
 import { describe, it, expect, vi } from 'vitest';
 import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uploader.js';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 const seed = { taskId: 't1', batchId: 'b', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'reviewed' as const };
 const buildOpts = () => ({ toolMode: 'full' as const, implementerModel: 'claude-sonnet-4-6', implementerTier: 'standard' as const, mainModelFamily: 'claude' });

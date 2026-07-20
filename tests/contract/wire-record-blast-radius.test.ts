@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskEnvelopeStore } from '../../packages/core/src/events/task-envelope.js';
+import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 
 // The 5 fields that A+B+C is permitted to change between pre-4.7.8 and
