@@ -34,7 +34,6 @@ function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder
   const queue = new Queue(homeDir);
   const controller = new AbortController();
   let _installId: string | null = null;
-  let dropped = 0;
 
   const resolveInstallId = (): string => {
     if (!_installId) {
@@ -60,10 +59,10 @@ function _buildRecorder(opts: { homeDir: string; mmaVersion: string }): Recorder
         generation: gen,
         events: [event],
       }).catch(() => {
-        dropped++;
+        // best-effort: telemetry enqueue is fire-and-forget
       });
     } catch {
-      dropped++;
+      // swallow — telemetry must never break the request path
     }
   };
 

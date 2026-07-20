@@ -45,21 +45,12 @@ export class Flusher {
   #backoffTimer: ReturnType<typeof setTimeout> | null = null;
   #backoffMs = 0;
   #inFlight = false;
-  #dropped = 0;
 
   constructor(opts: FlusherOptions) {
     this.#queue = opts.queue;
     this.#dir = opts.dir;
     this.#endpoint = opts.endpoint;
     this.#controller = new AbortController();
-  }
-
-  get controller(): AbortController {
-    return this.#controller;
-  }
-
-  get dropped(): number {
-    return this.#dropped;
   }
 
   get backoffActive(): boolean {
@@ -142,8 +133,7 @@ export class Flusher {
         }
       }
       if (dropHashes.size > 0) {
-        const removed = await this.#queue.removeRecords(dropHashes);
-        this.#dropped += removed;
+        await this.#queue.removeRecords(dropHashes);
         batch = await this.#queue.readBatch(MAX_BATCH);
         if (batch.records.length === 0) {
           this.clearBackoff();
@@ -192,9 +182,6 @@ export class Flusher {
 
         if (result.status === '204' || result.status === '400' || result.status === '413') {
           acknowledgedCount += group.records.length;
-          if (result.status === '400' || result.status === '413') {
-            this.#dropped += group.records.length;
-          }
         } else {
           shouldBackoff = true;
           if (result.status === '429') {
@@ -260,10 +247,10 @@ export class Flusher {
       const status = response.status;
       if (status === 204) return { status: '204', retryAfterSeconds: null };
       if (status === 400 || status === 413) {
-        let body = '';
-        try { body = (await response.text()).slice(0, 200); } catch { /* ignore */ }
+        let errText = '';
+        try { errText = (await response.text()).slice(0, 200); } catch { /* ignore */ }
         process.stderr.write(
-          `[mma] telemetry upload dropped: status=${status} records=${group.records.length} body=${body}\n`,
+          `[mma] telemetry upload dropped: status=${status} records=${group.records.length} body=${errText}\n`,
         );
         return { status: status === 400 ? '400' : '413', retryAfterSeconds: null };
       }
