@@ -17,8 +17,8 @@ const VersionString = z
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
-// re-exported here so existing `import { ConcernCategory } from
-// '..events/telemetry-types'` paths keep working.
+// re-exported here so callers can pull it from the wire-schema module
+// alongside the wire event types it is used in.
 
 export { ConcernCategory } from '../types/enums.js';
 // We need a direct local binding for `z.array(_ConcernCategory)` below; the

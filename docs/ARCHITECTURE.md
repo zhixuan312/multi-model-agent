@@ -125,7 +125,6 @@ C.5  Telemetry & observability   core/src/events/{envelope-bus,task-envelope,
                                 plain-log-entry,stderr-log-subscriber}.ts
 C.6  State stores (in-process)   core/src/unified/task-registry.ts,
                                 core/src/stores/{context-block-tool,
-                                expand-context-blocks,
                                 project-context-registry}.ts
 C.7  Distribution                server/src/skill-install/skill-installers/{claude-code,
                                 cursor,codex-cli,gemini-cli}.ts +
