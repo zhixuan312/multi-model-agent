@@ -46,22 +46,6 @@ export interface ContextBlockStore {
   readonly ttlMs: number;
 }
 
-/**
- * Thrown when a task references a block id that cannot be resolved against
- * the store (missing, expired, or evicted). The unified handler surfaces
- * this as a `context_block_not_found` error so the caller can re-register
- * the block and retry.
- */
-export class ContextBlockNotFoundError extends Error {
-  constructor(public readonly id: string) {
-    super(
-      `Context block "${id}" is unknown or expired. ` +
-      `Retry without contextBlockIds for a full (non-delta) run, ` +
-      `or re-register the content via register_context_block and retry with the new ID.`,
-    );
-    this.name = 'ContextBlockNotFoundError';
-  }
-}
 
 interface Entry {
   content: string;

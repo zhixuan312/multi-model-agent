@@ -31,7 +31,6 @@ export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanH
 // Context blocks
 export {
   InMemoryContextBlockStore,
-  ContextBlockNotFoundError,
 } from './stores/context-block-tool.js';
 export type {
   ContextBlockStore,

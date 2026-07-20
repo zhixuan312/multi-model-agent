@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   InMemoryContextBlockStore,
-  ContextBlockNotFoundError,
 } from '../../packages/core/src/stores/context-block-tool.js';
 
 describe('InMemoryContextBlockStore — basic CRUD', () => {
@@ -186,20 +185,5 @@ describe('InMemoryContextBlockStore — v4.0 defaults', () => {
     store.register('x'.repeat(11 * 1024 * 1024), { id: 'big' });
     process.stderr.write = orig;
     expect(warns.some((w) => w.includes('>10 MiB'))).toBe(true);
-  });
-});
-
-describe('ContextBlockNotFoundError', () => {
-  it('carries the missing id and has a helpful message', () => {
-    const err = new ContextBlockNotFoundError('missing-id');
-    expect(err.id).toBe('missing-id');
-    expect(err.message).toContain('missing-id');
-    expect(err.name).toBe('ContextBlockNotFoundError');
-  });
-
-  it('includes recovery guidance', () => {
-    const err = new ContextBlockNotFoundError('abc-123');
-    expect(err.message).toContain('Retry without contextBlockIds');
-    expect(err.message).toContain('re-register');
   });
 });
