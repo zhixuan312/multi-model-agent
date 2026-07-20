@@ -31,7 +31,6 @@ import type { Session, SessionOpts, TurnOpts, TurnResult, TokenUsage } from '../
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import { buildCodexCliLaunch, type CodexCliConfig } from './codex-cli-launch.js';
 import { parseCodexCliEvent, type CodexCliEvent, type CodexItem, type CodexUsage } from './codex-cli-event.js';
-import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { prepareCodexSkillHome, codexAuthMode } from './codex-skill-home.js';
 
@@ -41,7 +40,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-import { type BusLike, busOf, envelopeOf } from './session-helpers.js';
+import { type BusLike, busOf } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;
@@ -100,9 +99,8 @@ export class CodexCliSession implements Session {
     });
 
     const bus = busOf(this.args.opts);
-    const envelope = envelopeOf(this.args.opts);
     const tag = this.taskTag();
-    const tracker = new TurnTracker(this.cumulativeUsage, bus, envelope, tag);
+    const tracker = new TurnTracker(this.cumulativeUsage, bus, tag);
 
     bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_subprocess_starting', {
       model: this.args.cfg.model,
@@ -401,7 +399,6 @@ class TurnTracker {
   constructor(
     private readonly cumulative: TokenUsage,
     private readonly bus?: BusLike,
-    private readonly envelope?: TaskEnvelopeStore,
     private readonly tag: { taskId?: string; taskIndex?: number } = {},
   ) {
     this.snapshot = { ...cumulative };
@@ -469,11 +466,6 @@ class TurnTracker {
       }));
     } else if (item.type === 'command_execution') {
       this.usedShell = true;
-      this.envelope?.recordToolCall({
-        stage: 'implementing',
-        tool: 'run_shell',
-        filesWritten: [],
-      });
       this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_command_completed', {
         command: String(item.command ?? '').slice(0, 500),
         exitCode: item.exit_code ?? null,
@@ -482,8 +474,7 @@ class TurnTracker {
     } else if (item.type === 'file_change') {
       // Collect paths from both the modern `changes: [{ path, kind }]` shape
       // (codex 0.130.0+) and the legacy flat `path` field. We treat them
-      // identically — recordToolCall fires once with the union of paths so the
-      // envelope's filesWritten and stage.filesWrittenCount stay accurate.
+      // identically, unioning the paths into filesWritten for the TurnResult.
       const paths: string[] = [];
       if (Array.isArray(item.changes)) {
         for (const c of item.changes) {
@@ -492,13 +483,6 @@ class TurnTracker {
       }
       if (typeof item.path === 'string' && item.path.length > 0) paths.push(item.path);
       for (const p of paths) this.filesWritten.add(p);
-      if (paths.length > 0) {
-        this.envelope?.recordToolCall({
-          stage: 'implementing',
-          tool: 'edit_file',
-          filesWritten: paths,
-        });
-      }
       this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_file_change', {
         ...(paths.length > 0 && { paths }),
         ...this.tag,

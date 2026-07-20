@@ -2,7 +2,6 @@
 //
 // `RuntimeRunResult` — the internal fat shape for test mock providers.
 
-import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 // ── Runtime mirror — what the SDK runners + two-phase pipeline produce ────────
 // `RuntimeRunResult` is the internal shape. Renamed from `RunResult` so the
 // public type name is the wire envelope; the runtime mirror keeps the
@@ -59,8 +58,6 @@ export interface SessionOpts {
   taskId?: string;
   /** Index within task. */
   taskIndex?: number;
-  /** Per-task event envelope for recording provider mutations. Optional during wiring phase. */
-  envelope?: TaskEnvelopeStore;
   /** Present only when the task requested skills and resolution succeeded. */
   skills?: ResolvedSkillBundle;
   /** Session ID from a prior task — seeds the provider session so the first

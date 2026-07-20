@@ -18,13 +18,11 @@
 import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-result.js';
 import { normalizeClaudeTurn } from './normalize-claude.js';
-import { classifyClaudeToolCall } from './claude-tool-categories.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
-import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
 import { buildConfinementHook } from './claude-cwd-confinement.js';
-import { type BusLike, busOf, envelopeOf } from './session-helpers.js';
+import { type BusLike, busOf } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
   private closed = false;
@@ -32,7 +30,6 @@ export class ClaudeSession implements Session {
   private sessionId?: string;
   private skillPluginReady = false;
   private readonly bus: BusLike | undefined;
-  private readonly envelope: TaskEnvelopeStore | undefined;
   /** Active SDK query handle for the in-flight turn. Captured so close() can
    *  force-shut the query (releases the underlying SDK worker / network
    *  resources). Undefined between turns. */
@@ -46,7 +43,6 @@ export class ClaudeSession implements Session {
     oauthAccessToken?: string;
   }) {
     this.bus = busOf(args.opts);
-    this.envelope = envelopeOf(args.opts);
     if (args.opts.resume) this.sessionId = args.opts.resume;
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_session_starting', {
       model: args.model,
@@ -233,16 +229,6 @@ export class ClaudeSession implements Session {
         const inputPreview = typeof b.input === 'object' && b.input !== null
           ? JSON.stringify(b.input).slice(0, 300)
           : '';
-        // Extract file_path / notebook_path from tool input so the envelope
-        // counters reflect actual file activity. isShell is computed but not
-        // recorded at the envelope level — it flows through normalize-claude.ts
-        // into TurnResult.usedShell.
-        const { writtenPath, isShell } = classifyClaudeToolCall(b.name, b.input);
-        this.envelope?.recordToolCall({
-          stage: 'implementing',
-          tool: b.name,
-          filesWritten: writtenPath ? [writtenPath] : [],
-        });
         this.bus.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_tool_call', {
           turn: this.turns,
           tool: b.name,
