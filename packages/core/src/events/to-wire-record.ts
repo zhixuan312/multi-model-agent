@@ -8,6 +8,21 @@ import type { TaskEnvelope } from './task-envelope.js';
 import type { TaskCompletedEventType } from './wire-schema.js';
 import { ValidatedTaskCompletedEventSchema } from './wire-schema.js';
 import type { FindingsOutcome } from '../types/enums.js';
+import { ErrorCodeSchema } from '../error-codes.js';
+import type { ErrorCode } from '../error-codes.js';
+
+// Coerce a derived error code to the canonical ErrorCode vocabulary. Providers
+// and the terminal-status deriver emit codes from ErrorCodeSchema, but the
+// two-phase pipeline's failure sentinel ('pipeline_failed') is a structuredError
+// *detail*, not an emitter code. Any code outside the vocabulary maps to 'other'
+// so a failed-pipeline task still produces a schema-valid wire record instead of
+// throwing at ValidatedTaskCompletedEventSchema.parse() — which previously caused
+// TelemetryUploader to silently drop the record for every failed task.
+export const coerceErrorCode = (code: string | null): ErrorCode | null => {
+  if (code === null) return null;
+  const parsed = ErrorCodeSchema.safeParse(code);
+  return parsed.success ? parsed.data : 'other';
+};
 
 // === clamp helpers — bound each wire field to a sane range before emit ===
 export const clampStageCost = (n: number): number =>
@@ -273,7 +288,7 @@ export function toWireRecord(
     tierUsage: tierUsageBuckets as never,
     terminalStatus: terminalStatus as never,
     workerStatus: workerStatus as never,
-    errorCode: (env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)) as never,
+    errorCode: coerceErrorCode(env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)),
     inputTokens: clampInputTokens(env.totalInputTokens),
     outputTokens: clampOutputTokens(env.totalOutputTokens),
     cachedReadTokens: clampCachedTokens(env.totalCachedReadTokens),

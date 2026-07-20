@@ -43,6 +43,27 @@ describe('toWireRecord errorCode preservation', () => {
     expect(wire.errorCode).toBe('codex_error');
   });
 
+  // Regression for the failed-task telemetry-drop bug: the real production
+  // producer (buildEnvelopeSnapshot in unified-task.ts) seals a failed task with
+  // errorCode=null and structuredError={code:'pipeline_failed'}. 'pipeline_failed'
+  // is NOT a member of ErrorCodeSchema, so toWireRecord's final
+  // ValidatedTaskCompletedEventSchema.parse() threw for EVERY failed-pipeline
+  // task and TelemetryUploader silently swallowed the throw — dropping telemetry
+  // for all failures. The pre-existing tests missed it because they always sealed
+  // with a valid errorCode, never exercising the structuredError.code fallback.
+  it('maps the pipeline_failed sentinel to "other" instead of throwing', () => {
+    const base = failedEnvelopeWithCode('sdk_max_turns');
+    const prodShaped = {
+      ...base,
+      errorCode: null,
+      structuredError: { code: 'pipeline_failed', message: 'Pipeline completed with failed status' },
+    };
+    // Must not throw (previously threw inside ValidatedTaskCompletedEventSchema.parse).
+    const wire = toWireRecord(prodShaped, baseOpts());
+    expect(wire.terminalStatus).toBe('error');
+    expect(wire.errorCode).toBe('other');
+  });
+
   it('emits errorCode=null when terminalStatus is ok', () => {
     const store = TaskEnvelopeStore.create({
       taskId: 't1', batchId: 'b1', taskIndex: 0,
