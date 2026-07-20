@@ -29,7 +29,3 @@ export function createProjectContext(
     pendingReservations: 0,
   };
 }
-
-export function createInMemoryProjectContext(cwd: string): ProjectContext {
-  return createProjectContext(cwd);
-}

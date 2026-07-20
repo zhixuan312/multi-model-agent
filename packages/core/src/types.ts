@@ -24,13 +24,11 @@ export type {
 } from './types/config.js';
 
 export type {
-  RunResult,
   RuntimeRunResult,
   Provider,
 } from './types/run-result.js';
 
 // `ErrorCode` lives in `error-codes.ts` next to its Zod schema; re-exported
-// here for the same reason `RunResult` lives in `types/run-result.ts`: every
-// caller importing the type set should be able to grab it from one place.
+// here so every caller importing the type set can grab it from one place.
 export type { ErrorCode } from './error-codes.js';
 

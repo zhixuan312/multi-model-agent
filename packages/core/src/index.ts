@@ -16,7 +16,6 @@ export type {
   CodexProviderConfig,
   ClaudeProviderConfig,
   MultiModelConfig,
-  RunResult,
   RuntimeRunResult,
   Provider,
 } from './types.js';
@@ -44,7 +43,7 @@ export type {
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
 
 // Project context
-export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
+export { createProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
 
 // (Lifecycle layer deleted — unified pipeline is the only execution path.)

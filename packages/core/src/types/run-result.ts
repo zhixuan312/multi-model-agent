@@ -1,39 +1,6 @@
 // Run-result types.
 //
-// `RunResult` — the wire envelope shape (unified handler response).
 // `RuntimeRunResult` — the internal fat shape for test mock providers.
-
-import type { FindingsOutcome } from './enums.js';
-
-export type RunResult = {
-  completed: boolean;
-  message: string;
-  findings: Array<{ id?: string; severity: string; category: string; claim: string; evidence?: string; suggestion?: string; source: string }>;
-  summary: string;
-  filesChanged: string[];
-  commitSha: string | null;
-  blockId: string | null;
-  findingsOutcome?: FindingsOutcome;
-  findingsOutcomeReason?: string | null;
-  outcomeInferred?: boolean;
-  outcomeMalformed?: boolean;
-  telemetry: {
-    totalDurationMs: number;
-    totalCostUSD: number | null;
-    workerSelfAssessment: 'done' | 'failed' | null;
-    reviewVerdict: 'approved' | 'changes_required' | null;
-    commitOutcome: 'committed' | 'no_op' | 'not_applicable';
-    stopReason: 'normal' | 'turn_cap' | 'timeout' | 'transport_error';
-    haltedStage: string | null;
-    stages: Array<{
-      name: string;
-      outcome: 'advance' | 'skip' | 'halt' | 'not_run';
-      comment?: string;
-      durationMs: number;
-      costUSD: number | null;
-    }>;
-  };
-};
 
 import type { TaskEnvelopeStore } from '../events/task-envelope.js';
 // ── Runtime mirror — what the SDK runners + two-phase pipeline produce ────────
