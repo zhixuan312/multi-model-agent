@@ -1,7 +1,7 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 32 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 34 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
@@ -41,7 +41,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 32-scenario release gate.
+// The 34-scenario release gate (32 base + 2 manual-test-sweep regression: F4 empty-target, F5 async-error envelope).
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -78,6 +78,15 @@ export const POLL = {
 //      #20 delegate cwd-escape  — worker instructed to write /tmp; hook denies, worker adapts
 //      #21 delegate cd-chain    — worker instructed to cd /tmp && touch; hardened hook catches
 //      #22 audit read-only      — read-only sandbox completes normally without write capability
+//
+//   Cross-cutting invariant (verify.mjs check ①b `reviewer-degrade`, not a scenario):
+//      Whenever a live reviewer flakes on output format (emits non-JSON), the task must
+//      degrade — error:null, status done_with_concerns, output.summary carries the
+//      implementer answer, output.reviewerNote.code === 'reviewer_unavailable' — never
+//      hard-fail. It fires opportunistically on any read/write scenario whose reviewer
+//      happens to produce unparseable output (the haiku-writes-prose case) and hard-fails
+//      if the degrade contract is violated. Deterministic coverage lives in the contract
+//      test tests/contract/http/route-contract.test.ts.
 //
 // `emits` = how many wire telemetry records this scenario produces. The wire
 // pipeline emits ONE record per sealed task envelope:
@@ -168,4 +177,14 @@ export const SCENARIOS = [
   { id: 29, type: 'spec', tier: 'complex', kind: 'write', emits: 1, subsetComponents: ['Technical Design', 'Context', 'Problem'] },
   { id: 30, type: 'error_bad_components', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 31, type: 'spec', tier: 'complex', kind: 'write', emits: 1, groundingFile: true },
+
+  // M. Manual-test-sweep regression coverage (2026-07-23 backlog).
+  //    #33: audit with an EMPTY target {} → 400 invalid_request. targetSchema now
+  //         requires EXACTLY one of paths/inline (F4) — an empty target is a
+  //         subject-less task and must be rejected at validation.
+  //    #34: spec with a target.paths entry that does not resolve → the task fails
+  //         ASYNC (post-202) and its terminal 200 must be the SAME 6-field envelope
+  //         with a populated `error` (F5), not a bare { code, message }.
+  { id: 33, type: 'error_empty_target', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 34, type: 'spec', tier: 'complex', kind: 'async_error', emits: 0 },
 ];

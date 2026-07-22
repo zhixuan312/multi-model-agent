@@ -192,6 +192,8 @@ try {
       [29],          // spec with a components subset (canonical reorder)
       [30],          // error: unknown component label → 400
       [31],          // spec with two target files: decisions [authoritative] + exploration.md [grounding]
+      [33],          // F4: audit with empty target {} → 400 invalid_request
+      [34],          // F5: spec with unresolvable path → async fail returns 6-field error envelope
     ];
 
     // Filter threads if --only is active

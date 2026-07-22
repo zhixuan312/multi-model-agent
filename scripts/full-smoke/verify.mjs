@@ -169,15 +169,56 @@ export function verify(rec) {
     return out;
   }
 
+  // ─── Async-error tasks (F5): a task that fails AFTER the 202 (e.g. an unresolvable
+  //     target path) must return the SAME 6-field envelope as any terminal result,
+  //     with the failure in `error` — not a bare { code, message } callers can't detect
+  //     via env.error. ───
+  if (e.kind === 'async_error') {
+    const keys = Object.keys(r ?? {}).sort();
+    const shapeOk = JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
+    out.push(C('layered-200', shapeOk ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
+    const err = r?.error;
+    const errOk = err && typeof err.code === 'string' && typeof err.message === 'string';
+    out.push(C('async-error-envelope', errOk ? 'PASS' : 'FAIL', `error=${JSON.stringify(err)}`));
+    out.push(C('async-error-status', r?.task?.status === 'failed' ? 'PASS' : 'FAIL', `status=${r?.task?.status}`));
+    return out;
+  }
+
   // New layered response: { task, output, execution, metrics, raw, error }
   const taskStatus = r?.task?.status;
   const implSessionId = r?.execution?.sessions?.implementer;
   const revSessionId = r?.execution?.sessions?.reviewer;
 
-  // ① response — did the task complete? null=success, reviewer_parse_failed=soft concern, other=hard fail
-  const errCode = r?.error?.code;
-  const responseStatus = r?.error === null ? 'PASS' : errCode === 'reviewer_parse_failed' ? 'WARN' : 'FAIL';
+  // ① response — did the task complete? A non-null error is the ONLY failure signal.
+  //    done and done_with_concerns both carry error:null (a reviewer that couldn't emit
+  //    parseable output is a concern surfaced in output.reviewerNote, NOT a fatal error —
+  //    the implementer answer still stands in output.summary).
+  const responseStatus = r?.error === null ? 'PASS' : 'FAIL';
   out.push(C('response', responseStatus, JSON.stringify(r?.error)));
+
+  // ①b reviewer-degrade — whenever a real reviewer flakes on output format, the task must
+  //    degrade gracefully rather than hard-fail. This invariant fires only when it actually
+  //    happens (reviewerNote non-null), so it captures the haiku-writes-prose scenario in a
+  //    live run without needing to force it. Contract when the reviewer was unavailable:
+  //      • error is null (not fatal)          • status is done_with_concerns
+  //      • output.summary carries a non-empty implementer answer (not the reviewer garbage)
+  //      • reviewerNote.code === 'reviewer_unavailable'
+  if (e.kind === 'read' || e.kind === 'write') {
+    const note = r?.output?.reviewerNote ?? null;
+    if (note !== null) {
+      const summary = r?.output?.summary;
+      const summaryLen = typeof summary === 'string'
+        ? summary.length
+        : (summary && typeof summary === 'object' ? JSON.stringify(summary).length : 0);
+      const degradeOk =
+        r?.error === null &&
+        taskStatus === 'done_with_concerns' &&
+        note.code === 'reviewer_unavailable' &&
+        summaryLen > 2; // non-empty object/string — implementer answer survived
+      out.push(C('reviewer-degrade', degradeOk ? 'PASS' : 'FAIL',
+        `reviewer unavailable → error=${JSON.stringify(r?.error)} status=${taskStatus} noteCode=${note.code} summaryLen=${summaryLen}`));
+    }
+  }
 
   // ② sessions — validate session shape on the execution layer
   if (e.kind === 'read' || e.kind === 'write') {
