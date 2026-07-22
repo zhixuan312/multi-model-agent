@@ -36,7 +36,17 @@ function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
 }
 
 function matchesBatch(line: string, batchId: string): boolean {
-  return line.includes(`"batchId":"${batchId}"`);
+  // The JSONL log carries the task/batch id under several key spellings depending on
+  // the writer: plain diagnostic entries nest it in `fields` as snake_case
+  // (`task_id` / `batch_id`), envelope snapshots use `taskId`, and wire records use
+  // `batchId`. Match ALL forms so `--batch=<id>` returns the complete trace for a task
+  // rather than the single line that happens to use one spelling.
+  return (
+    line.includes(`"taskId":"${batchId}"`) ||
+    line.includes(`"task_id":"${batchId}"`) ||
+    line.includes(`"batchId":"${batchId}"`) ||
+    line.includes(`"batch_id":"${batchId}"`)
+  );
 }
 
 export async function runLogs(deps: LogsDeps): Promise<number> {

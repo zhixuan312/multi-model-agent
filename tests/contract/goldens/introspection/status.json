@@ -12,6 +12,6 @@
   },
   "projects": [],
   "inflight": [],
-  "skillVersion": null,
-  "skillCompatible": null
+  "skillVersion": "<DETERMINISTIC>",
+  "skillCompatible": "<DETERMINISTIC>"
 }

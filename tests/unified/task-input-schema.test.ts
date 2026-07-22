@@ -43,6 +43,16 @@ describe('taskInputSchema', () => {
     }).success).toBe(false);
   });
 
+  // The SKILL.md docs for audit/review/spec/plan all state "exactly one of paths
+  // or inline must be provided" — an empty target must be rejected, not just a
+  // both-present target. Otherwise a subject-less task reaches the worker.
+  it('rejects an empty target {} for every targetSchema route (exactly-one contract)', () => {
+    expect(taskInputSchema.safeParse({ type: 'audit', target: {} }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ type: 'review', target: {} }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ type: 'spec', prompt: 'x', target: {} }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ type: 'plan', prompt: 'x', target: {} }).success).toBe(false);
+  });
+
   it('rejects unknown type', () => {
     expect(taskInputSchema.safeParse({ type: 'bogus' }).success).toBe(false);
   });

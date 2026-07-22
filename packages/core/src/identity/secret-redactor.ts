@@ -1,6 +1,13 @@
 const PATTERNS: Array<[RegExp, string]> = [
   [/\bsk-[A-Za-z0-9_\-]{20,}/g, '[REDACTED-API-KEY]'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]'],
+  // GitHub tokens: classic PATs + OAuth/user/server/refresh (gh[porus]_) and
+  // fine-grained PATs (github_pat_). Redacted before Bearer so a `Bearer ghp_…`
+  // still collapses to a GitHub marker.
+  [/\b(?:gh[oprsu]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})/g, '[REDACTED-GITHUB-TOKEN]'],
+  // GitLab tokens: glpat-, gldt-, glrt-, glcbt-, glptt-, glsoat-, … (gl + routing
+  // prefix + `-` + ≥20 token chars). The config stores a GitLab-capable token surface.
+  [/\bgl[a-z]{2,6}-[A-Za-z0-9_\-]{20,}/g, '[REDACTED-GITLAB-TOKEN]'],
   [/Bearer\s+[A-Za-z0-9._\-]{20,}/g, 'Bearer [REDACTED]'],
 ];
 

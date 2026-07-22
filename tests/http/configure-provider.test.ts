@@ -89,6 +89,24 @@ describe('POST /configure-provider', () => {
     } finally { await h.close(); }
   });
 
+  it('400 carries structured details.fieldErrors naming the offending field (parity with /task + /context-blocks)', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await authedFetch(h.baseUrl, h.token, {
+        tier: 'standard', provider: 'claude',
+        auth: { mode: 'api-key', apiKey: 'test-key' },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('invalid_request');
+      // Same shape as unified-task + context-blocks: details.fieldErrors is the raw Zod
+      // flatten() = { formErrors, fieldErrors }, so the per-field messages live at
+      // details.fieldErrors.fieldErrors.<field> — here `model`.
+      expect(body.error.details.fieldErrors.fieldErrors.model).toBeDefined();
+      expect(Array.isArray(body.error.details.fieldErrors.fieldErrors.model)).toBe(true);
+    } finally { await h.close(); }
+  });
+
   it('rejects api-key mode without apiKey', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {

@@ -16,9 +16,12 @@ const targetSchema = z.object({
   (t) => {
     const hasPaths = t.paths !== undefined && t.paths.length > 0;
     const hasInline = t.inline !== undefined;
-    return !(hasPaths && hasInline);
+    // Exactly one — reject both-present AND neither-present (an empty target is a
+    // subject-less task). Matches the "exactly one of paths or inline" contract
+    // documented in the mma-audit/review/spec/plan SKILL.md files.
+    return hasPaths !== hasInline;
   },
-  { message: 'target must have paths or inline, not both' },
+  { message: 'target must have exactly one of paths or inline' },
 );
 
 const commonFields = {

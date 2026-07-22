@@ -77,6 +77,13 @@ export function buildRequest(spec, ctx) {
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
 
+    // Manual-test-sweep regression coverage
+    // F4: empty target {} must be rejected at validation (targetSchema = exactly-one).
+    case 33: return { type: 'error_empty_target', body: {}, rawPayload: { type: 'audit', target: {} } };
+    // F5: a spec whose target.paths does not resolve fails ASYNC — dispatched normally
+    // (202 → poll), the terminal 200 must be the 6-field envelope with `error`.
+    case 34: return { type: 'spec', body: { prompt: 'F5 async-error smoke — nonexistent target path', target: { paths: [`${cwd}/does-not-exist-smoke-f5-9c3.md`] } } };
+
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }

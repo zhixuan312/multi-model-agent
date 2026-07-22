@@ -78,6 +78,32 @@ describe('mma logs', () => {
     }
   });
 
+  it('--batch matches every real log id key form (taskId, task_id, batch_id, batchId)', async () => {
+    // The JSONL log emits the task/batch id under several key spellings depending
+    // on the writer (plain entries use snake_case fields.task_id/batch_id; envelope
+    // snapshots use taskId; wire records use batchId). --batch must catch them ALL,
+    // otherwise it silently drops most of a task's diagnostic events.
+    const dir = mkdtempSync(join(tmpdir(), 'mma-logs-batch-forms-'));
+    try {
+      writeLog(dir, [
+        JSON.stringify({ ts: '1', kind: 'batch_created', fields: { batch_id: 'B', tool: 'delegate' } }),
+        JSON.stringify({ ts: '2', taskId: 'B', kind: 'seal' }),
+        JSON.stringify({ ts: '3', kind: 'task_started', fields: { task_id: 'B' } }),
+        JSON.stringify({ event: 'wire', batchId: 'B' }),
+        JSON.stringify({ ts: '4', taskId: 'OTHER', kind: 'seal' }),
+      ]);
+      const c = cap();
+      const code = await runLogs({ config: mkConfig(dir), homeDir: dir, batchId: 'B', stdout: c.outFn, stderr: c.errFn });
+      expect(code).toBe(0);
+      const lines = c.out.join('').trim().split('\n').filter(Boolean);
+      // All 4 lines for task B must appear; the OTHER line must be excluded.
+      expect(lines.length).toBe(4);
+      expect(lines.some((l) => l.includes('OTHER'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('no log file + no --follow exits 0 with warning on stderr', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-logs-empty-'));
     try {

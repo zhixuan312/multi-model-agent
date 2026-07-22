@@ -42,8 +42,14 @@ describe('spec/plan target.paths resolution guard', () => {
       expect(res.status).toBe(202);
       const { taskId } = await res.json();
       const terminal = await pollToTerminal(h, taskId);
-      expect(terminal.code).toBe('invalid_request');
-      expect(terminal.message).toContain('this-path-does-not-exist-9f3a2b.md');
+      // Async failures return the SAME 6-field envelope as any other terminal result,
+      // with the failure in `error` (matches the documented env.error contract) — not a
+      // bare { code, message } that callers can't detect via env.error.
+      expect(Object.keys(terminal).sort()).toEqual(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
+      expect((terminal.task as Record<string, unknown>).status).toBe('failed');
+      const err = terminal.error as Record<string, unknown>;
+      expect(err.code).toBe('invalid_request');
+      expect(err.message as string).toContain('this-path-does-not-exist-9f3a2b.md');
     } finally {
       await h.close();
     }

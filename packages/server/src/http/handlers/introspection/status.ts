@@ -1,63 +1,11 @@
 // packages/server/src/http/handlers/introspection/status.ts
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import { sendError, sendJson } from '../../errors.js';
+import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../project-registry.js';
-
-/**
- * The skill manifest is installed by the `sync-skills` CLI.
- * We read it at /status request time — if absent, skillVersion and
- * skillCompatible are both null.
- */
-const SKILL_MANIFEST_PATH = join(homedir(), '.mma', 'skills-install-manifest.json');
-
-/**
- * Whether an installed skill's manifest version is compatible with this server.
- * Compatible range is >=3.0.0 <4.0.0 — i.e. the major version must be exactly 3.
- * A version outside that range means the installed skill is out of date.
- */
-function checkSkillCompatible(version: string): boolean {
-  const match = /^(\d+)\./.exec(version);
-  if (!match) return false;
-  return parseInt(match[1]!, 10) === 3;
-}
-
-interface SkillManifestInfo {
-  skillVersion: string | null;
-  skillCompatible: boolean | null;
-}
-
-function readSkillManifest(): SkillManifestInfo {
-  try {
-    const raw = readFileSync(SKILL_MANIFEST_PATH, 'utf8');
-    const manifest = JSON.parse(raw) as Record<string, unknown>;
-    const skillVersion = typeof manifest['skillVersion'] === 'string'
-      ? manifest['skillVersion']
-      : null;
-
-    if (skillVersion === null) {
-      return { skillVersion: null, skillCompatible: null };
-    }
-
-    let skillCompatible: boolean | null;
-    try {
-      skillCompatible = checkSkillCompatible(skillVersion);
-    } catch {
-      // Version parse failed — report incompatible
-      skillCompatible = false;
-    }
-
-    return { skillVersion, skillCompatible };
-  } catch {
-    // File absent or unreadable
-    return { skillVersion: null, skillCompatible: null };
-  }
-}
+import { deriveSkillManifestInfo } from '../../../skill-install/skill-drift.js';
 
 export interface StatusHandlerDeps {
   taskRegistry: TaskRegistry;
@@ -119,7 +67,9 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     }));
 
     // ── Skill manifest ────────────────────────────────────────────────────────
-    const { skillVersion, skillCompatible } = readSkillManifest();
+    // Derived from the real install-manifest.json (single source of truth shared
+    // with serve-startup drift detection). Null/null when no skills are installed.
+    const { skillVersion, skillCompatible } = deriveSkillManifestInfo();
 
     sendJson(res, 200, {
       version,

@@ -125,6 +125,34 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
       'pass --allow-mismatch or restart the server on the expected checkout');
   }
 
+  // Backlog F1: /status must expose skill-manifest fields derived from the REAL
+  // install-manifest.json (skillVersion string|null, skillCompatible bool|null,
+  // consistent nullability) — not the old dead-path always-null values.
+  {
+    const sv = status.skillVersion;
+    const sc = status.skillCompatible;
+    const svOk = sv === null || typeof sv === 'string';
+    const scOk = sc === null || typeof sc === 'boolean';
+    const consistent = sv === null ? sc === null : true;
+    if (!('skillVersion' in status) || !svOk || !scOk || !consistent) {
+      throw new AbortError('status-skill-fields',
+        `skillVersion=${JSON.stringify(sv)} skillCompatible=${JSON.stringify(sc)}`,
+        'GET /status must derive skillVersion/skillCompatible from install-manifest.json (backlog F1)');
+    }
+  }
+
+  // Backlog F8: a 405 response MUST advertise the supported methods in an Allow
+  // header (RFC 7231 §6.5.5), not only in the JSON body.
+  {
+    const res = await fetch(`${BASE_URL}/task`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+    const allow = res ? res.headers.get('allow') : null;
+    if (!res || res.status !== 405 || allow !== 'POST') {
+      throw new AbortError('405-allow-header',
+        `DELETE /task -> ${res ? res.status : 'no-response'} allow=${allow}`,
+        'a 405 must set the Allow header to the supported methods (backlog F8)');
+    }
+  }
+
   if (!existsSync(IDENTITY_FILE)) throw new AbortError('install-id', `missing ${IDENTITY_FILE}`,
     'run the server once so it generates the telemetry identity (identity.json)');
   const installId = JSON.parse(readFileSync(IDENTITY_FILE, 'utf8')).installId;

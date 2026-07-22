@@ -36,6 +36,8 @@ describe('request processing order', () => {
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(405);
+      // RFC 7231 §6.5.5: a 405 MUST include an Allow header listing the methods.
+      expect(res.headers.get('allow')).toBe('POST');
       const body = await res.json();
       expect(body.error.code).toBe('method_not_allowed');
       expect(body.error.details.allowed).toContain('POST');

@@ -56,6 +56,37 @@ function taskTypeToRoute(type: TaskType): Route {
   return (map[type] ?? type) as Route;
 }
 
+/**
+ * Build a terminal FAILED result that is shape-consistent with the success/pipeline
+ * envelope (task, output, execution, metrics, raw, error). Every terminal 200 — success
+ * or failure — must have these six keys so callers detect failure uniformly via `error`
+ * (the contract documented in _shared/response-shape.md). Used for pre-dispatch/async
+ * validation failures and runner crashes, which would otherwise store a bare
+ * { code, message } that has no `error` field for callers to check.
+ */
+function buildErrorEnvelope(
+  taskId: string,
+  type: TaskType,
+  error: { code: string; message: string } & Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    task: { taskId, type, status: 'failed' as const },
+    output: { summary: null, filesChanged: [], contextBlockId: null, reviewerNote: null },
+    execution: { sessions: { implementer: null, reviewer: null }, worktree: null },
+    metrics: {
+      totalDurationMs: 0,
+      totalCostUsd: 0,
+      implementer: null,
+      reviewer: null,
+      totalUsage: null,
+      mainEquivalentCostUsd: null,
+      savedVsMainCostUsd: null,
+    },
+    raw: { implementer: null, reviewer: null },
+    error,
+  };
+}
+
 function buildSpecScopeInstruction(rawComponents: unknown): string {
   const resolved = resolveComponents(rawComponents as Parameters<typeof resolveComponents>[0]);
   return `Emit only these spec components, in canonical order: ${resolved.join(', ')}.`;
@@ -541,7 +572,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             try {
               planContent = fs.readFileSync(resolvedPlanPath, 'utf-8');
             } catch {
-              deps.taskRegistry.fail(taskId, { code: 'plan_not_found', message: `Plan file not found: ${planPath}` });
+              deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'plan_not_found', message: `Plan file not found: ${planPath}` }));
               return;
             }
             const headings = parsePlanHeadings(planContent);
@@ -550,7 +581,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               matched = matchTasks(headings, epPayload.tasks);
             } catch (err) {
               if (err instanceof MatchError) {
-                deps.taskRegistry.fail(taskId, { code: err.code, message: err.message, ...(err.matches && { matches: err.matches }) });
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message, ...(err.matches && { matches: err.matches }) }));
                 return;
               }
               throw err;
@@ -570,14 +601,14 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             // Validate outputPath if provided
             if (spPayload.outputPath) {
               if (spPayload.outputPath.includes('..') || path.isAbsolute(spPayload.outputPath)) {
-                deps.taskRegistry.fail(taskId, { code: 'invalid_output_path', message: `outputPath must be relative to cwd and must not contain '..': ${spPayload.outputPath}` });
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'invalid_output_path', message: `outputPath must be relative to cwd and must not contain '..': ${spPayload.outputPath}` }));
                 return;
               }
             }
 
             // For plan + inline, outputPath is required
             if (input.type === 'plan' && hasInline && !spPayload.outputPath) {
-              deps.taskRegistry.fail(taskId, { code: 'invalid_request', message: 'outputPath is required when type=plan uses target.inline (cannot derive basename from inline content)' });
+              deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'invalid_request', message: 'outputPath is required when type=plan uses target.inline (cannot derive basename from inline content)' }));
               return;
             }
 
@@ -604,7 +635,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
                 (filePath) => !fs.existsSync(path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath)),
               );
               if (unresolvable !== undefined) {
-                deps.taskRegistry.fail(taskId, { code: 'invalid_request', message: `target.paths contains an unresolvable path: ${unresolvable}` });
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'invalid_request', message: `target.paths contains an unresolvable path: ${unresolvable}` }));
                 return;
               }
               copyToWorktree = allPaths.map((filePath) =>
@@ -750,9 +781,19 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               status: result.status,
             },
             output: {
-              summary: result.reviewerOutput ?? tryParseJson(result.reviewerTurn?.output ?? result.implementerOutput),
+              // When the reviewer parsed cleanly, its refined structured output IS the answer.
+              // When it didn't (reviewerOutput === null), fall straight to the implementer's
+              // answer — never to result.reviewerTurn.output, which is the unparseable prose
+              // that failed and would otherwise pollute summary.
+              summary: result.reviewerOutput ?? tryParseJson(result.implementerOutput),
               filesChanged: result.worktree?.filesChanged ?? result.implementerTurn.filesWritten,
               contextBlockId,
+              // Advisory: the reviewer ran but its output wasn't parseable, so the answer above
+              // is the un-refined implementer output. This is a concern (status is already
+              // done_with_concerns), NOT a fatal error — see the `error` field below.
+              reviewerNote: result.reviewerParseError
+                ? { code: 'reviewer_unavailable' as const, message: result.reviewerParseError }
+                : null,
             },
             execution: {
               sessions: {
@@ -788,11 +829,14 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               implementer: result.implementerOutput,
               reviewer: result.reviewerTurn?.output ?? null,
             },
-            error: result.reviewerParseError
-              ? { code: 'reviewer_parse_failed' as const, message: result.reviewerParseError }
-              : result.status === 'failed'
-                ? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' }
-                : null,
+            // Only a `failed` status is a fatal error. A reviewer that couldn't emit parseable
+            // output is a concern, not a failure — the pipeline already downgraded it to
+            // done_with_concerns and the implementer answer stands (surfaced in output.summary,
+            // with the reason in output.reviewerNote). This mirrors the telemetry envelope's
+            // structuredError, which is likewise null for done_with_concerns.
+            error: result.status === 'failed'
+              ? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' }
+              : null,
           };
 
           // Emit telemetry via the bus — TelemetryUploader picks up the
@@ -835,7 +879,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             message,
             ...(stack !== undefined && { stack }),
           };
-          deps.taskRegistry.fail(taskId, errObj);
+          deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, errObj));
           const durationMs = Date.now() - startedAtMs;
           deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
           process.stderr.write(

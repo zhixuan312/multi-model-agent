@@ -143,18 +143,18 @@ describe('route contract', () => {
       } finally { await h.close(); }
     });
 
-    it('error is null when reviewer parses successfully, or has code when parse fails', async () => {
+    it('error is null for both done and done_with_concerns; only failed carries a fatal error', async () => {
+      // A reviewer that emits non-JSON is a reviewer-availability concern, not a task
+      // failure — the implementer answer still stands. So done_with_concerns MUST carry
+      // error: null (matches response-shape.md and the telemetry envelope).
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
         const { taskId } = (await res.json()) as { taskId: string };
         const env = await pollToTerminal(h, taskId);
         const task = env.task as Record<string, unknown>;
-        if (task.status === 'done') {
-          expect(env.error).toBeNull();
-        } else if (task.status === 'done_with_concerns') {
-          expect(env.error).toMatchObject({ code: 'reviewer_parse_failed' });
-        }
+        expect(['done', 'done_with_concerns']).toContain(task.status);
+        expect(env.error).toBeNull();
       } finally { await h.close(); }
     });
 
@@ -165,6 +165,84 @@ describe('route contract', () => {
         const { taskId } = (await res.json()) as { taskId: string };
         const env = await pollToTerminal(h, taskId);
         expect((env.execution as Record<string, unknown>).worktree).toBeNull();
+      } finally { await h.close(); }
+    });
+  });
+
+  // ── Reviewer parse failure degrades gracefully (no hard fail) ──
+
+  describe('reviewer parse failure degrades to the implementer answer', () => {
+    // Implementer emits a valid structured answer; reviewer emits prose with no JSON
+    // (the real-world haiku-flakes-on-format case). The task must NOT hard-fail — the
+    // implementer answer stands, surfaced in output.summary, with a non-fatal note.
+    const degradeProvider = () => mockProvider({
+      sequence: [
+        { output: '{"headline":"IMPL_MARKER_9f","findings":[]}' }, // implementer (send #1)
+        { output: 'I looked at the changes and they seem fine, but I forgot to emit JSON.' }, // reviewer (send #2), no braces → parse fails
+      ],
+    });
+
+    it('status is done_with_concerns, not failed', async () => {
+      const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        expect((env.task as Record<string, unknown>).status).toBe('done_with_concerns');
+      } finally { await h.close(); }
+    });
+
+    it('error is null — a reviewer format flake is not a fatal error', async () => {
+      const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        expect(env.error).toBeNull();
+      } finally { await h.close(); }
+    });
+
+    it('output.summary carries the implementer answer (not the reviewer garbage)', async () => {
+      const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        const summary = (env.output as Record<string, unknown>).summary as Record<string, unknown>;
+        expect(summary).toMatchObject({ headline: 'IMPL_MARKER_9f' });
+      } finally { await h.close(); }
+    });
+
+    it('output.reviewerNote surfaces the parse-failure reason (advisory)', async () => {
+      const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        const note = (env.output as Record<string, unknown>).reviewerNote as Record<string, unknown> | null;
+        expect(note).not.toBeNull();
+        expect(note).toMatchObject({ code: 'reviewer_unavailable' });
+        expect(note!.message).toBeTypeOf('string');
+        expect((note!.message as string).length).toBeGreaterThan(0);
+      } finally { await h.close(); }
+    });
+
+    it('output.reviewerNote is null when the reviewer parses cleanly', async () => {
+      // Reviewer emits valid refiner-ish JSON on both sends → clean parse → no note.
+      const cleanProvider = mockProvider({
+        sequence: [
+          { output: '{"headline":"impl","findings":[]}' },
+          { output: '{"criteriaCovered":["structure"],"findings":[]}' }, // valid reviewAnswerSchema
+        ],
+      });
+      const h = await boot({ provider: cleanProvider, cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+        const out = env.output as Record<string, unknown>;
+        expect(out).toHaveProperty('reviewerNote');
+        expect(out.reviewerNote).toBeNull();
       } finally { await h.close(); }
     });
   });
