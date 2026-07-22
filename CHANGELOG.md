@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.12.0] - 2026-07-23
+
+**A route-by-route manual-test sweep of the engine — 13 findings fixed (correctness, two unbounded-memory leaks, a project-cap lockout, and secret-log hardening), converged over five passes to a clean pass — plus expanded `smoke:full` coverage.** `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package. Two consumer-visible behavior changes (empty `target` now rejected; async task failures now return the standard error envelope).
+
+### Changed
+- **`POST /task` rejects an empty `target: {}`.** `targetSchema` now requires EXACTLY one of `paths` or `inline` (previously it only forbade *both*), matching the "exactly one" contract already documented in the audit/review/spec/plan `SKILL.md` files. A subject-less task is a `400 invalid_request` instead of a vacuous run.
+- **Async task failures return the standard 6-field envelope.** Pre-dispatch/validation failures (unresolvable `target.paths`, plan-not-found, bad `outputPath`) and runner crashes now poll to a terminal `{ task, output, execution, metrics, raw, error }` with the failure in `error` — previously a bare `{ code, message }` that callers could not detect via the documented `error` field.
+
+### Fixed
+- **`GET /status` skill fields were permanently null.** They read a filename nothing writes (`skills-install-manifest.json`) with a stale `major===3` compatibility check (dead code). Now derived from the real `install-manifest.json` via a shared `skill-drift` module (single implementation with serve-startup drift detection).
+- **`POST /context-blocks` silently dropped the validated `ttlMs`.** The handler validated the field but never forwarded it to the store, so every block used the 24h default. Now honored end-to-end.
+- **Task registry grew without bound.** `TaskRegistry` never evicted terminal entries (each holding a full result envelope) and the `batchTtlMs` config was read nowhere. It now lazily evicts terminal entries past the TTL.
+- **The project cap became a permanent lockout.** `ProjectRegistry` never removed projects, so once `projectCap` (default 200) distinct cwds were seen the server rejected all new cwds forever. It now evicts the least-recently-active idle project (no active tasks, no retained context blocks) to admit new work.
+- **Secret redaction missed GitHub and GitLab tokens.** The diagnostic-log redactor covered `sk-`/AWS/`Bearer` but not the `ghp_`/`github_pat_`/GitHub-OAuth and GitLab `glpat-`/`gl*-` families (the config stores a `githubPat`). Added both, with the first test coverage for the redactor.
+- **`mma logs --batch=<id>` returned ~1 of 9 lines per task.** It matched only the `batchId` key; the JSONL log carries the id as `taskId`/`task_id`/`batch_id` too. Now matches all forms.
+- **`configure-provider` 400s** now carry structured `details.fieldErrors`, consistent with the `/task` and `/context-blocks` handlers.
+- **405 responses** now set the RFC-7231 `Allow` header (in addition to listing methods in the body).
+- **Bounded the telemetry uploader's dedup set** (previously grew one entry per task, forever) and removed the never-called `runIdleSweep` dead code from the context-block store.
+
 ## [5.11.0] - 2026-07-20
 
 **New SDLC surfaces (interactive expert-persona breakout + parent-aware multi-repo flow) and the Kimi K3 model, on top of a repo-wide quality audit that removed every dormant/parallel implementation and fixed four latent bugs.** `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package. Contains breaking removals of the dormant `retry_tasks` task type and the never-read `defaults` config block.
