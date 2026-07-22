@@ -1,5 +1,42 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TaskRegistry } from '../../packages/core/src/unified/task-registry.js';
+
+describe('TaskRegistry TTL eviction (server.limits.batchTtlMs)', () => {
+  it('evicts terminal entries older than ttlMs on register; keeps in-flight + recent', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const reg = new TaskRegistry({ ttlMs: 1000 });
+      reg.register('old', '/c', 'delegate');
+      reg.complete('old', { ok: true });          // terminalAt = 0
+      reg.register('inflight', '/c', 'delegate');  // pending, terminalAt = null
+
+      vi.setSystemTime(2000);                       // 2000 - 0 > 1000 for 'old'
+      reg.register('fresh', '/c', 'delegate');      // register triggers the sweep
+
+      expect(reg.get('old')).toBeUndefined();       // terminal + expired → evicted
+      expect(reg.get('inflight')).toBeDefined();    // in-flight is NEVER evicted, any age
+      expect(reg.get('fresh')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a terminal entry still within ttlMs (caller can still poll its result)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const reg = new TaskRegistry({ ttlMs: 10_000 });
+      reg.register('recent', '/c', 'delegate');
+      reg.complete('recent', { ok: true });         // terminalAt = 0
+      vi.setSystemTime(5000);                        // 5000 - 0 < 10000
+      reg.register('next', '/c', 'delegate');
+      expect(reg.get('recent')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('TaskRegistry', () => {
   it('registers a task as pending', () => {

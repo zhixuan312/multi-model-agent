@@ -44,7 +44,7 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
       return;
     }
 
-    const { content } = parsed.data;
+    const { content, ttlMs } = parsed.data;
 
     // ── 2. Content byte-size check ─────────────────────────────────────────
     const byteLen = Buffer.byteLength(content, 'utf8');
@@ -80,7 +80,9 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
     }
 
     // ── 5. Register block directly ──────────────────────────────────────────
-    const registered = pc.contextBlocks.register(content);
+    // Forward the caller's per-block ttlMs when supplied; the store falls back to
+    // its configured default (24h) when omitted.
+    const registered = pc.contextBlocks.register(content, ttlMs !== undefined ? { ttlMs } : undefined);
 
     // ── 6. Return block ID ────────────────────────────────────────────────
     sendJson(res, 201, { id: registered.id });

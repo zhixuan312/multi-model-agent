@@ -28,21 +28,9 @@ import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
 import { runSyncSkills } from './sync-skills.js';
 import { listEntries, FutureManifestError } from '../skill-install/manifest.js';
-import { readSkillContent, SUPPORTED_SKILLS } from '../skill-install/discover.js';
+import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
 import { findMissingSkills } from '../skill-install/skill-installer-common.js';
-import matter from 'gray-matter';
-
-function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
-  const src = readSkillContent(entryName);
-  if (src === null) return false; // skill removed from bundle — sync-skills will drop it
-  try {
-    const parsed = matter(src);
-    const v = parsed.data['version'];
-    return typeof v === 'string' && v !== entrySkillVersion;
-  } catch {
-    return false;
-  }
-}
+import { isSkillBehind } from '../skill-install/skill-drift.js';
 
 export async function maybeAutoUpdateSkills(
   config: MultiModelConfig,

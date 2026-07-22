@@ -10,16 +10,44 @@ export type ReserveResult =
 export interface ProjectRegistryOptions {
   cap: number;
   onProjectCreated?: (cwd: string) => void;
+  /** Returns true when the project at this canonical cwd has in-flight work and
+   *  must not be evicted. Wired to `TaskRegistry.countActive(cwd) > 0` in
+   *  production — `pendingReservations` is NOT a reliable busy signal because it
+   *  is cancelled at dispatch, before the async task runs. */
+  isBusy?: (canonicalCwd: string) => boolean;
 }
 
 export class ProjectRegistry {
   private readonly map = new Map<string, ProjectContext>();
   private readonly cap: number;
   private readonly onProjectCreated?: (cwd: string) => void;
+  private readonly isBusy?: (canonicalCwd: string) => boolean;
 
   constructor(options: ProjectRegistryOptions) {
     this.cap = options.cap;
     this.onProjectCreated = options.onProjectCreated;
+    this.isBusy = options.isBusy;
+  }
+
+  /** Evict the least-recently-active project that is safe to drop — no in-flight
+   *  work (`isBusy` false) and no retained context blocks (a caller may still
+   *  reference them via contextBlockIds). Returns true if one was evicted. This
+   *  keeps the cap from becoming a permanent lockout once `cap` distinct cwds
+   *  have been seen over the server's lifetime. */
+  private evictIdleLRU(): boolean {
+    let victim: string | null = null;
+    let oldest = Infinity;
+    for (const [key, pc] of this.map) {
+      if (this.isBusy?.(key)) continue;
+      if (pc.contextBlocks.size > 0) continue;
+      if (pc.lastActivityAt < oldest) {
+        oldest = pc.lastActivityAt;
+        victim = key;
+      }
+    }
+    if (victim === null) return false;
+    this.map.delete(victim);
+    return true;
   }
 
   /** Synchronous lookup-or-create with cap enforcement. Increments pendingReservations on success. */
@@ -32,8 +60,12 @@ export class ProjectRegistry {
       existing.pendingReservations += 1;
       return { ok: true, projectContext: existing, created: false };
     }
-    if (this.map.size >= this.cap) {
-      return { ok: false, error: 'project_cap', message: `server at ${this.cap} projects; close some connections and retry` };
+    if (this.map.size >= this.cap && !this.evictIdleLRU()) {
+      return {
+        ok: false,
+        error: 'project_cap',
+        message: `server at ${this.cap} projects, all with in-flight work or retained context blocks; wait for active tasks to finish or delete unused context blocks`,
+      };
     }
     const pc = createProjectContext(key);
     pc.pendingReservations = 1;

@@ -23,7 +23,8 @@ The terminal JSON envelope has these 6 top-level fields:
   "output": {
     "summary": { /* refiner JSON — shape varies by route, see below */ },
     "filesChanged": ["src/foo.ts", "src/bar.ts"],
-    "contextBlockId": "<string or null>"
+    "contextBlockId": "<string or null>",
+    "reviewerNote": null
   },
   "execution": {
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
@@ -61,7 +62,7 @@ The terminal JSON envelope has these 6 top-level fields:
 | Read routes (audit, review, investigate, debug, research) | `{ findings: [...], criteriaCovered: [...], ... }` — findings array is the main payload |
 | Write routes (delegate, execute_plan) | `{ status: 'done'\|'failed', notes }` or `{ tasks: [...], notes }` |
 | Spec / Plan | `{ specPath, sections, acceptanceCriteriaCount, notes }` or `{ planPath, taskCount, tasks, notes }` |
-| Journal recall | `{ answer, criteriaCovered, findings: [{ weight, category, claim, evidence, nodeId, nodePath }] }` |
+| Journal recall | `{ answer, criteriaCovered, findings: [{ weight, category, claim, evidence, topic, fallback, nodeId, nodePath }] }` |
 | Journal record | `{ recorded: [...], failed: [...] }` |
 
 **Step 3 — for read routes, extract findings:**
@@ -82,15 +83,29 @@ response.output.filesChanged       ← array of relative paths modified by the w
 response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
 ```
 
+**Step 5 — check `output.reviewerNote` (reviewer availability):**
+
+`output.reviewerNote` is `null` on the normal path. When the reviewer ran but its output
+couldn't be parsed, the task degrades to `status: "done_with_concerns"` with **`error: null`**
+(a reviewer format flake is a concern, not a failure), and `output.summary` falls back to the
+**implementer's** answer. `reviewerNote` then carries the reason:
+
+```json
+"reviewerNote": { "code": "reviewer_unavailable", "message": "<why the parse failed>" }
+```
+
+Treat a non-null `reviewerNote` as advisory: the answer in `output.summary` is the un-refined
+implementer output, still usable. Never discard the task on `reviewerNote` alone.
+
 ### Common extraction mistakes
 
 ❌ **Reading `output.findings`** — this field does NOT exist. Findings are inside `output.summary.findings`.
 
 ❌ **Reading `results` or `structuredReport`** — these are legacy field names from older API versions. The current envelope uses `output.summary`.
 
-❌ **Treating `output.summary` as a string** — it is parsed JSON (an object), not a string. If it looks like a string, the refiner output could not be parsed; fall back to reading `raw.reviewer` or `raw.implementer`.
+❌ **Treating `output.summary` as a string** — it is parsed JSON (an object), not a string. If it looks like a string, the underlying output could not be parsed at all — check `output.reviewerNote` and, as a last resort, `raw.implementer`.
 
-❌ **Ignoring `error: null` check** — a `status: "done_with_concerns"` task has `error: null` and is a success (advisory concerns only). Only `error !== null` is a failure.
+❌ **Ignoring `error: null` check** — a `status: "done_with_concerns"` task has `error: null` and is a success (advisory concerns only). Only `error !== null` is a failure. In particular, when a reviewer emits non-JSON, the task is `done_with_concerns` with `error: null`, `output.summary` holds the implementer answer, and `output.reviewerNote` explains the degrade — do NOT treat this as a failure.
 
 ### Error response (4xx / 5xx)
 

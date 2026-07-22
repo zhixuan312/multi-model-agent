@@ -36,6 +36,10 @@ const VOLATILE_KEYS = new Set([
   'taskMaxIdleMs',
   // v4.0 — skill manifest drift varies per machine
   'drift',
+  // /status skill-version fields are derived from the real install-manifest.json,
+  // so they vary per machine (null in CI, a real version where skills are installed).
+  'skillVersion',
+  'skillCompatible',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);

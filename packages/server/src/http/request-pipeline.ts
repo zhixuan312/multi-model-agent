@@ -71,6 +71,10 @@ export async function handleRequest(
   if (!match) {
     const allowed = router.methodsFor(rawUrl);
     if (allowed.length > 0) {
+      // RFC 7231 §6.5.5: a 405 response MUST advertise the supported methods in an
+      // Allow header (not only in the JSON body). Set before sendError so it survives
+      // the writeHead in sendError.
+      res.setHeader('Allow', allowed.join(', '));
       sendError(res, 405, 'method_not_allowed', `Method ${method} not allowed`, { allowed });
     } else {
       sendError(res, 404, 'not_found', `Unknown path ${rawUrl.split('?')[0]}`);

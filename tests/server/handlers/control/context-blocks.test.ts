@@ -173,6 +173,38 @@ describe('POST /context-blocks', () => {
     }
   });
 
+  it('honors a per-block ttlMs (regression: handler previously dropped the validated field)', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      // Block with a 1ms TTL — must expire almost immediately.
+      const shortRes = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
+        method: 'POST',
+        headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          Authorization: `Bearer ${s.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ content: 'ephemeral', ttlMs: 1 }),
+      });
+      expect(shortRes.status).toBe(201);
+      const { id: shortId } = await shortRes.json() as { id: string };
+
+      // Control block with no ttlMs → the store default (24h) applies.
+      const { id: longId } = await createBlock(s.url, s.token, cwd, 'persistent');
+
+      // Wait well past the 1ms TTL.
+      await new Promise((r) => setTimeout(r, 25));
+
+      const pc = s.projectRegistry.get(cwd)!;
+      // With ttlMs honored, the short block is expired/gone; the default-TTL one survives.
+      expect(pc.contextBlocks.get(shortId)).toBeUndefined();
+      expect(pc.contextBlocks.get(longId)).toBe('persistent');
+    } finally {
+      await s.stop();
+    }
+  });
+
   it('returns 400 missing_cwd when cwd query param is absent', async () => {
     const s = await startTestServerWithAgents();
     try {

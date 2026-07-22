@@ -104,10 +104,15 @@ export async function startServer(
   const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
   const { ProjectRegistry } = await import('./project-registry.js');
 
-  const taskRegistry = new TaskRegistry();
+  // batchTtlMs bounds how long terminal task entries (with their full result
+  // envelope) are retained for polling before eviction — prevents unbounded
+  // growth of the task registry on a long-running server.
+  const taskRegistry = new TaskRegistry({ ttlMs: config.server.limits.batchTtlMs });
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
+    // A project with active tasks must never be evicted to make room at cap.
+    isBusy: (cwd) => taskRegistry.countActive(cwd) > 0,
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.

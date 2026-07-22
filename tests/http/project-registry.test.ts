@@ -44,11 +44,13 @@ describe('ProjectRegistry', () => {
     expect(r.projectContext.pendingReservations).toBe(1);
   });
 
-  it('reserveProject returns project_cap error when full and target is new', () => {
-    reg.reserveProject(tmpDir());
-    reg.reserveProject(tmpDir());
-    reg.reserveProject(tmpDir());
-    const r = reg.reserveProject(tmpDir());
+  it('reserveProject returns project_cap when full and every project is busy (unevictable)', () => {
+    // isBusy=always true → nothing is evictable → cap is a hard wall.
+    const busyReg = new ProjectRegistry({ cap: 3, isBusy: () => true });
+    busyReg.reserveProject(tmpDir());
+    busyReg.reserveProject(tmpDir());
+    busyReg.reserveProject(tmpDir());
+    const r = busyReg.reserveProject(tmpDir());
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('project_cap');
   });
@@ -58,5 +60,38 @@ describe('ProjectRegistry', () => {
     dirs.forEach(d => reg.reserveProject(d));
     const r = reg.reserveProject(dirs[0]); // already exists
     expect(r.ok).toBe(true);
+  });
+
+  // ── Idle-project eviction at cap (finding #11: no permanent lockout) ──
+
+  it('evicts the LRU idle project (not busy, no context blocks) to admit a new one at cap', () => {
+    const busy = new Set<string>();
+    const evReg = new ProjectRegistry({ cap: 2, isBusy: (cwd) => busy.has(cwd) });
+    const a = tmpDir(), b = tmpDir(), c = tmpDir();
+    const ra = evReg.reserveProject(a);
+    const rb = evReg.reserveProject(b);
+    expect(ra.ok && rb.ok).toBe(true);
+    if (!ra.ok || !rb.ok) return;
+    busy.add(rb.projectContext.cwd);          // b is busy → unevictable; a is idle
+    expect(evReg.size).toBe(2);               // at cap
+
+    const rc = evReg.reserveProject(c);       // must evict idle 'a', admit 'c'
+    expect(rc.ok).toBe(true);
+    expect(evReg.get(ra.projectContext.cwd)).toBeUndefined(); // a evicted
+    expect(evReg.get(rb.projectContext.cwd)).toBeDefined();   // busy b kept
+    expect(evReg.size).toBe(2);
+  });
+
+  it('does NOT evict a project that still holds context blocks; rejects instead', () => {
+    const holdReg = new ProjectRegistry({ cap: 1 });
+    const a = tmpDir();
+    const ra = holdReg.reserveProject(a);
+    expect(ra.ok).toBe(true);
+    if (!ra.ok) return;
+    ra.projectContext.contextBlocks.register('keep-me'); // project retains state
+    const rb = holdReg.reserveProject(tmpDir());          // cap 1, a unevictable
+    expect(rb.ok).toBe(false);
+    if (!rb.ok) expect(rb.error).toBe('project_cap');
+    expect(holdReg.get(ra.projectContext.cwd)).toBeDefined(); // a preserved
   });
 });

@@ -18,10 +18,33 @@ function isTerminal(state: TaskState): boolean {
   return state === 'complete' || state === 'failed';
 }
 
+/** Default retention for terminal task entries (1h) — matches
+ *  DEFAULT_SERVER_LIMITS.batchTtlMs. Long enough that any caller has retrieved
+ *  the result via GET /task/:id well before eviction. */
+const DEFAULT_TASK_TTL_MS = 3_600_000;
+
 export class TaskRegistry {
   private entries = new Map<string, TaskEntry>();
+  private readonly ttlMs: number;
+
+  constructor(opts: { ttlMs?: number } = {}) {
+    this.ttlMs = opts.ttlMs ?? DEFAULT_TASK_TTL_MS;
+  }
+
+  /** Drop terminal entries whose result has been retrievable longer than the TTL.
+   *  In-flight (non-terminal) entries are never evicted regardless of age — a
+   *  slow task must never disappear mid-run. Runs lazily on register(), so a busy
+   *  server bounds its own memory without a background timer. */
+  private evictExpired(now: number): void {
+    for (const [id, e] of this.entries) {
+      if (e.terminalAt !== null && now - e.terminalAt > this.ttlMs) {
+        this.entries.delete(id);
+      }
+    }
+  }
 
   register(taskId: string, cwd: string, tool: string): void {
+    this.evictExpired(Date.now());
     this.entries.set(taskId, {
       taskId, cwd, tool,
       state: 'pending',

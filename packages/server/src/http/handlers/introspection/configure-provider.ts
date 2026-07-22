@@ -219,7 +219,12 @@ export function buildConfigureProviderHandler(config: MultiModelConfig | undefin
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx: RequestContext) => {
     const parsed = configureProviderSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      sendError(res, 400, 'invalid_request', parsed.error.issues.map(i => i.message).join('; '));
+      // Structured field-level errors, consistent with the unified-task and
+      // context-blocks handlers — callers get { fieldErrors: { <field>: [msgs] } }
+      // so they know WHICH field is invalid, not just a flat joined message.
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
+        fieldErrors: parsed.error.flatten(),
+      });
       return;
     }
 
