@@ -23,6 +23,7 @@ export function normalizeClaudeTurn(
   let turns = 0;
   let sdkTermination: TurnResult['terminationReason'] = 'ok';
   let errorCode: string | undefined;
+  let errorMessage: string | undefined;
 
   for (const ev of events) {
     if (ev.type === 'assistant') {
@@ -56,7 +57,11 @@ export function normalizeClaudeTurn(
       } else if (subtype === 'error_max_budget_usd') {
         sdkTermination = 'error'; errorCode = 'sdk_max_budget';
       } else if (subtype === 'error_during_execution') {
-        sdkTermination = 'error'; errorCode = 'sdk_execution_error';
+        sdkTermination = 'error';
+        errorCode = 'sdk_execution_error';
+        errorMessage = ((ev as { error?: { message?: string } }).error?.message)
+          ?? ((ev as { result?: string }).result)
+          ?? 'Claude execution failed';
       } else if (subtype === 'error_max_structured_output_retries') {
         sdkTermination = 'error'; errorCode = 'sdk_max_structured_output_retries';
       }
@@ -74,5 +79,6 @@ export function normalizeClaudeTurn(
     costUSD: args.costUSD,
     terminationReason: finalTermination,
     ...(errorCode && { errorCode }),
+    ...(errorMessage && { errorMessage }),
   };
 }

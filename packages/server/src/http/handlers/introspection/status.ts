@@ -5,6 +5,8 @@ import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../project-registry.js';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { resolveConfiguredAuthMode } from '@zhixuan92/multi-model-agent-core';
 import { deriveSkillManifestInfo } from '../../../skill-install/skill-drift.js';
 
 export interface StatusHandlerDeps {
@@ -13,6 +15,7 @@ export interface StatusHandlerDeps {
   serverStartedAt: number;
   bind: string;
   version: string;
+  config?: MultiModelConfig;
 }
 
 /**
@@ -32,9 +35,26 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       serverStartedAt,
       bind,
       version,
+      config,
     } = deps;
 
     const now = Date.now();
+    const agents = config
+      ? {
+          standard: {
+            type: config.agents.standard.type,
+            mode: resolveConfiguredAuthMode(config.agents.standard),
+          },
+          complex: {
+            type: config.agents.complex.type,
+            mode: resolveConfiguredAuthMode(config.agents.complex),
+          },
+          main: {
+            type: (config.agents.main ?? config.agents.complex).type,
+            mode: resolveConfiguredAuthMode(config.agents.main ?? config.agents.complex),
+          },
+        }
+      : undefined;
 
     // ── Counters ──────────────────────────────────────────────────────────────
     const projects: {
@@ -77,6 +97,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       bind,
       uptimeMs: now - serverStartedAt,
       auth: { enabled: true },
+      ...(agents && { agents }),
       counters: {
         projectCount: projectRegistry.size,
         activeTasks: inflight.length,

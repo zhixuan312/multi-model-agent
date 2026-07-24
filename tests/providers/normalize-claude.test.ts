@@ -42,11 +42,12 @@ describe('normalizeClaudeTurn', () => {
   });
   it('terminationReason error from error_during_execution', () => {
     const r = normalizeClaudeTurn(
-      [result('error_during_execution')],
+      [result('error_during_execution', {}, { error: { message: 'Invalid API key for Anthropic' } })],
       { durationMs: 1, costUSD: 0 },
     );
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_execution_error');
+    expect(r.errorMessage).toBe('Invalid API key for Anthropic');
   });
   it('error_max_turns maps to terminationReason=error + errorCode=sdk_max_turns', () => {
     const r = normalizeClaudeTurn(

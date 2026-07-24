@@ -16,8 +16,9 @@ export interface TurnResult {
   costUSD: number;
   turns: number;
   durationMs: number;
-  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'aborted';
+  terminationReason: 'ok' | 'error' | 'time_exceeded' | 'aborted' | 'stalled';
   errorCode?: string;
+  errorMessage?: string;
   filesWritten: string[];
   usedShell: boolean;
 }
@@ -91,5 +92,4 @@ export interface Provider {
   config: any;     // v5: ClaudeProviderConfig | CodexProviderConfig (lives in types/config.ts; broadened to avoid circular dep)
   openSession(opts: SessionOpts): Session;
 }
-
 

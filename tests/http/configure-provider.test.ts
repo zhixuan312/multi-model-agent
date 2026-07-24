@@ -118,6 +118,36 @@ describe('POST /configure-provider', () => {
     } finally { await h.close(); }
   });
 
+  it('accepts auth.mode=api-key with apiKeyEnv and probes using the env-resolved secret', async () => {
+    process.env.CUSTOM_OPENAI_KEY = 'good-key';
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/configure-provider`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({
+          tier: 'standard',
+          provider: 'codex',
+          model: 'gpt-5',
+          auth: {
+            mode: 'api-key',
+            apiKeyEnv: 'CUSTOM_OPENAI_KEY',
+            baseUrl: `http://127.0.0.1:${mockApiPort}`,
+          },
+        }),
+      });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.verified).toBe(true);
+      expect(body.applied).toBe(false);
+      expect(body.probe.reachable).toBe(true);
+      expect(body.probe.modelListed).toBe(true);
+    } finally {
+      delete process.env.CUSTOM_OPENAI_KEY;
+      await h.close();
+    }
+  });
+
   // ── dryRun behavior ───────────────────────────────────────────────────────
 
   it('defaults dryRun to true, applied is false', async () => {

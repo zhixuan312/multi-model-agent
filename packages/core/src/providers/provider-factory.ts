@@ -5,12 +5,78 @@ import type {
   AgentType, Provider, MultiModelConfig,
 } from '../types.js';
 import type { ClaudeProviderConfig, CodexProviderConfig } from '../types/config.js';
-import type { SessionOpts, Session } from '../types/run-result.js';
+import type { AgentConfig } from '../types/config.js';
+import type { SessionOpts, Session, TurnResult } from '../types/run-result.js';
 import { makeClaudeProvider } from './claude.js';
 import { makeCodexProvider } from './codex.js';
 
 let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<AgentType, Provider> | null = null;
+
+export type ProviderAuthMode = 'oauth' | 'api-key';
+
+export interface AuthFailureDetails {
+  code: 'missing_credentials' | 'invalid_api_key';
+  message: string;
+}
+
+const MISSING_CREDENTIALS_PATTERNS = [
+  /missing credentials/i,
+  /no api key/i,
+  /api key .*required/i,
+  /could not find.*api key/i,
+  /oauth token.*not available/i,
+  /log in .*codex/i,
+  /auth\.json.*not found/i,
+];
+
+const INVALID_API_KEY_PATTERNS = [
+  /invalid api key/i,
+  /incorrect api key/i,
+  /401\b/i,
+  /unauthorized/i,
+  /authentication failed/i,
+];
+
+export function resolveConfiguredApiKey(
+  agentConfig: Pick<AgentConfig, 'apiKey' | 'apiKeyEnv'>,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return agentConfig.apiKey
+    ?? (agentConfig.apiKeyEnv ? env[agentConfig.apiKeyEnv] : undefined);
+}
+
+export function resolveConfiguredAuthMode(
+  agentConfig: Pick<AgentConfig, 'apiKey' | 'apiKeyEnv'>,
+  env: NodeJS.ProcessEnv = process.env,
+): ProviderAuthMode {
+  return resolveConfiguredApiKey(agentConfig, env) ? 'api-key' : 'oauth';
+}
+
+export function classifyAuthFailure(args: {
+  tier: AgentType;
+  provider: 'claude' | 'codex';
+  errorCode?: string;
+  errorMessage?: string;
+}): AuthFailureDetails | null {
+  const message = args.errorMessage ?? '';
+
+  if (MISSING_CREDENTIALS_PATTERNS.some((pattern) => pattern.test(message))) {
+    return {
+      code: 'missing_credentials',
+      message: `${args.tier} tier ${args.provider} provider is missing credentials`,
+    };
+  }
+
+  if (INVALID_API_KEY_PATTERNS.some((pattern) => pattern.test(message))) {
+    return {
+      code: 'invalid_api_key',
+      message: `${args.tier} tier ${args.provider} provider rejected the configured API key`,
+    };
+  }
+
+  return null;
+}
 
 // ─── Safety ceiling ────────────────────────────────────────────────────────
 // Hard cap on live provider sessions per task — a backstop against a runaway
@@ -99,7 +165,21 @@ function wrapWithSafetyCeiling(p: Provider): Provider {
       };
       // Build the wrapped Session that close() in the normal path uses.
       const wrapped: Session = {
-        send: inner.send.bind(inner),
+        async send(instruction, turnOpts): Promise<TurnResult> {
+          const turn = await inner.send(instruction, turnOpts);
+          const authFailure = classifyAuthFailure({
+            tier: p.name as AgentType,
+            provider: (p.config.type ?? 'codex') as 'claude' | 'codex',
+            errorCode: turn.errorCode,
+            errorMessage: turn.errorMessage,
+          });
+          if (!authFailure) return turn;
+          return {
+            ...turn,
+            errorCode: authFailure.code,
+            errorMessage: authFailure.message,
+          };
+        },
         async close(): Promise<void> {
           try { await inner.close(); } finally { removeFromMap(); }
         },
@@ -134,19 +214,19 @@ export function __setCoreTestProviderOverrideMap(map: Map<AgentType, Provider> |
 }
 
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
-  if (coreTestProviderOverrideMap?.has(slot)) return wrapWithSafetyCeiling(coreTestProviderOverrideMap.get(slot)!);
-  if (coreTestProviderOverride) return wrapWithSafetyCeiling(coreTestProviderOverride);
+  if (coreTestProviderOverrideMap?.has(slot)) {
+    return wrapWithSafetyCeiling({ ...coreTestProviderOverrideMap.get(slot)!, name: slot });
+  }
+  if (coreTestProviderOverride) {
+    return wrapWithSafetyCeiling({ ...coreTestProviderOverride, name: slot });
+  }
 
   const agentConfig = config.agents[slot] ?? (slot === 'main' ? config.agents.complex : undefined);
   if (!agentConfig) {
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);
   }
 
-  const apiKey = (agentConfig as { apiKey?: string }).apiKey
-    ?? ((agentConfig as { apiKeyEnv?: string }).apiKeyEnv
-        ? process.env[(agentConfig as { apiKeyEnv: string }).apiKeyEnv]
-        : undefined);
-
+  const apiKey = resolveConfiguredApiKey(agentConfig);
   const baseUrl = (agentConfig as { baseUrl?: string }).baseUrl;
   const apiKeyEnv = (agentConfig as { apiKeyEnv?: string }).apiKeyEnv;
 

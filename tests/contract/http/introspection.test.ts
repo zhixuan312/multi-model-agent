@@ -28,12 +28,22 @@ describe('contract: introspection + errors', () => {
   });
 
   it('GET /status returns the golden shape', async () => {
+    process.env.OPENAI_API_KEY = 'contract-openai-key';
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await authedFetch(`${h.baseUrl}/status`, h.token);
       expect(res.status).toBe(200);
-      expect(normalize(await res.json())).toEqual(statusGolden);
+      const body = normalize(await res.json());
+      expect(body).toMatchObject({
+        agents: {
+          standard: { type: 'codex', mode: 'api-key' },
+          complex: { type: 'codex', mode: 'api-key' },
+          main: { type: 'codex', mode: 'api-key' },
+        },
+      });
+      expect(body).toEqual(statusGolden);
     } finally {
+      delete process.env.OPENAI_API_KEY;
       await h.close();
     }
   });
