@@ -4,6 +4,7 @@
     "config",
     "events",
     "identity",
+    "journal",
     "providers",
     "reporting",
     "research",

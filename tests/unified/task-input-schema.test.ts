@@ -214,6 +214,21 @@ describe('taskInputSchema', () => {
     }).success).toBe(false);
   });
 
+  it('accepts additive includeHistory and defaults callers that omit it', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about deterministic indexing?',
+      includeHistory: true,
+    }).success).toBe(true);
+
+    const parsed = taskInputSchema.parse({
+      type: 'journal_recall',
+      prompt: 'What did we learn about deterministic indexing?',
+    }) as { includeHistory?: boolean };
+
+    expect(parsed.includeHistory ?? false).toBe(false);
+  });
+
   it('rejects journal_recall with deprecated query', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_recall',

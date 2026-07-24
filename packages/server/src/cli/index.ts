@@ -38,6 +38,7 @@ import { runSyncSkills } from './sync-skills.js';
 import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
+import { runJournalReindex } from './journal-reindex.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -75,7 +76,7 @@ export interface CliDeps {
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
     string: ['config', 'batch'],
-    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log', 'regenerate-catalog'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -185,6 +186,7 @@ Commands:
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
+  journal reindex  Rebuild .mma/journal/index.db from markdown nodes (--regenerate-catalog to also rewrite index.md)
 
 Global options:
   --config, -c <path>   Path to config file
@@ -387,6 +389,22 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         homeDir: home,
         stdout: deps.stdout,
         stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'journal': {
+      const nested = positional[1] ?? '';
+      if (nested !== 'reindex') {
+        stderr(`mma journal: unknown subcommand '${nested}'\nValid: reindex\n`);
+        exit(1);
+        break;
+      }
+      const code = await runJournalReindex({
+        cwd: deps.cwd?.() ?? process.cwd(),
+        regenerateCatalog: opts['regenerate-catalog'] === true,
+        stdout,
+        stderr,
       });
       exit(code);
       break;

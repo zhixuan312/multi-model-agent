@@ -1,8 +1,0 @@
-{
-  "delegateLatencyMs": 1.5485830000000078,
-  "startupMs": 0.41762500000004366,
-  "peakRssBytes": 166543360,
-  "contractSuiteMs": 17713.67475,
-  "fullSuiteMs": 23964.893041000003,
-  "capturedAt": "2026-05-05T10:12:52.917Z"
-}
