@@ -1,7 +1,7 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 37 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 38 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
@@ -200,4 +200,14 @@ export const SCENARIOS = [
   { id: 35, type: 'journal_record', tier: 'complex', kind: 'write', emits: 1, batchRecords: 2 },
   { id: 36, type: 'error_journal_mixed_shape', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 37, type: 'error_journal_empty_records', kind: 'error', expectStatus: 400, emits: 0 },
+
+  // N. Worktree lifecycle — no leaked worktrees.
+  //    Every worktree-enabled task (delegate/execute_plan) MUST leave `.mma/worktrees/`
+  //    clean: its own worktree removed on completion (mergeAndCleanup / finally), and any
+  //    worktree orphaned by a prior process kill reaped at the next write dispatch.
+  //    #38 seeds a real orphan worktree (dir + branch), dispatches a live delegate whose
+  //    dispatch-time reaper fires, then asserts (a) the seeded orphan is reaped and (b) the
+  //    task's own worktree is cleaned — proving no worktree leaks. seedOrphan drives the
+  //    seed + filesystem assertions in index.mjs (not verify.mjs).
+  { id: 38, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', seedOrphan: true, emits: 1 },
 ];
