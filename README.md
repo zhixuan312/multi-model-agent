@@ -331,9 +331,9 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.13.0
+## What's new in 5.13.1
 
-- **`journal_record` accepts a batch of records.** Submit a `records: [{ prompt, topic? }]` array (1–20) in one request; the agent records them **sequentially, one node per record**, returning a per-record `recorded[]`/`failed[]` result. Additive and non-breaking — the legacy single-`prompt` body still works (coerced at the boundary); a mixed `records`+`prompt` body is rejected. `SCHEMA_VERSION` unchanged; no install change.
+- **Write-route worktrees no longer leak.** A `delegate`/`execute_plan` task that crashed, timed out, or was killed mid-flight used to orphan its `.mma/worktrees/<id>` + branch (dozens accumulated over time). Cleanup is now guaranteed on failure, and a dispatch-time reaper sweeps any kill-orphaned worktrees before the next write. `SCHEMA_VERSION` unchanged; no install or API change.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
