@@ -112,6 +112,10 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   let effectiveCwd = input.cwd;
   let wtManager: WorktreeManager | undefined;
   let wtInfo: { branch: string; path: string } | undefined;
+  // True once mergeAndCleanup has handled the worktree (merged+removed, or intentionally
+  // preserved on a rebase conflict). If the pipeline throws BEFORE that, the `finally`
+  // force-removes the worktree so a failed task never orphans its `.mma/worktrees/<id>`.
+  let worktreeResolved = false;
 
   if (input.worktreeEnabled && input.taskId) {
     wtManager = new WorktreeManager();
@@ -223,6 +227,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     if (input.reviewPolicy === 'none') {
       const worktree = await resolveWorktree(buildCommitMessage());
+      worktreeResolved = true;
       return {
         status: 'done',
         implementerOutput: implTurn.output,
@@ -275,6 +280,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 
     const worktree = await resolveWorktree(buildCommitMessage());
+    worktreeResolved = true;
 
     // Completeness check: if dispatched tasks > reported tasks, flag as partial
     let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
@@ -303,5 +309,11 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     };
   } finally {
     await closeSessions();
+    // If the pipeline threw before the worktree was merged/cleaned (implementer or reviewer
+    // error, timeout, crash), force-remove it so a failed task never orphans its worktree +
+    // branch. A real worktree only exists when wtInfo is set (non-git targets run in place).
+    if (wtManager && wtInfo && !worktreeResolved) {
+      await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+    }
   }
 }

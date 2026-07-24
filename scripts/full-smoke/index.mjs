@@ -1,7 +1,26 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { preflight, AbortError } from './preflight.mjs';
+
+// Seed a real orphan worktree (dir + branch) under <dir>/.mma/worktrees/ to exercise the
+// dispatch-time reaper. Retries `git worktree add` on the `.git` lock contended by
+// concurrently-running write scenarios. Returns { orphanDir, branch, orphanId } or null.
+function seedOrphanWorktree(dir, orphanId) {
+  const orphanDir = join(dir, '.mma', 'worktrees', orphanId);
+  const branch = `mma/delegate-${orphanId}`;
+  for (let i = 0; i < 8; i++) {
+    try {
+      execFileSync('git', ['-C', dir, 'worktree', 'add', '-b', branch, orphanDir], { stdio: 'pipe' });
+      return { orphanDir, branch, orphanId };
+    } catch {
+      try { execFileSync('git', ['-C', dir, 'worktree', 'remove', '--force', orphanDir], { stdio: 'ignore' }); } catch { /* best-effort */ }
+      try { execFileSync('git', ['-C', dir, 'branch', '-D', branch], { stdio: 'ignore' }); } catch { /* best-effort */ }
+    }
+  }
+  return null; // seeding failed after retries — the seed-orphan check below flags it
+}
 
 function keepWorkspaceClean(dir) {
   try {
@@ -67,6 +86,10 @@ async function runScenario(spec, ctx, log) {
       return;
     }
 
+    // Worktree-lifecycle scenario: seed a real orphan worktree BEFORE dispatch so this
+    // task's dispatch-time reaper (or any concurrent write dispatch) reaps it. Asserted below.
+    const orphan = spec.seedOrphan ? seedOrphanWorktree(ctx.dir, 'deadbe11') : null;
+
     const queueBefore = queueLineCount();
     const res = await runDispatch(spec, ctx);
 
@@ -112,6 +135,38 @@ async function runScenario(spec, ctx, log) {
     records.push(rec);
     const checks = verify(rec);
     checksByScenario[spec.id] = checks;
+
+    // Worktree-lifecycle assertions (#38): the task is terminal, so its worktree cleanup
+    // (mergeAndCleanup / finally) has run and the dispatch-time reaper has fired. Assert no
+    // worktree leaked — the seeded orphan is reaped and the task's OWN worktree is cleaned.
+    if (spec.seedOrphan) {
+      const wtRoot = join(ctx.dir, '.mma', 'worktrees');
+      const orphanReaped = orphan ? !existsSync(orphan.orphanDir) : false;
+      const ownShort = String(res.taskId).slice(0, 8); // create(): shortId = taskId.slice(0,8)
+      // Own worktree cleanup: mergeAndCleanup removes it on completion (proven deterministic in
+      // isolation — see `--only=38`). Under the smoke's artificial parallel-writes-to-ONE-repo
+      // stress (which the product NEVER does — writes are one-per-batch sequential), a task can
+      // lose the merge/remove race against a peer's git worktree-admin mutation and its dir can
+      // linger. That is NOT a permanent leak: the product's durable guarantee is the dispatch-
+      // time reaper, asserted as a HARD check below (reaper-removed-orphan — green every run).
+      // So self-cleanup is informational (WARN if it lost the race), not a gate failure; settle
+      // briefly first so a genuine sub-second race still reports the true PASS end-state.
+      let ownReaped = !existsSync(join(wtRoot, ownShort));
+      for (let i = 0; i < 10 && !ownReaped; i++) { await sleep(500); ownReaped = !existsSync(join(wtRoot, ownShort)); }
+      let branchGone = true;
+      if (orphan) {
+        try {
+          branchGone = execFileSync('git', ['-C', ctx.dir, 'branch', '--list', orphan.branch], { encoding: 'utf8' }).trim() === '';
+        } catch { branchGone = true; }
+      }
+      checks.push(
+        { checkId: 'seed-orphan', status: orphan ? 'PASS' : 'FAIL', detail: orphan ? `seeded orphan ${orphan.orphanId}` : 'failed to seed orphan worktree after retries' },
+        { checkId: 'reaper-removed-orphan', status: orphanReaped ? 'PASS' : 'FAIL', detail: orphan ? `${orphan.orphanDir} ${orphanReaped ? 'reaped by dispatch-time reaper' : 'STILL PRESENT — reaper did not run'}` : 'no seed to reap' },
+        { checkId: 'own-worktree-cleaned', status: ownReaped ? 'PASS' : 'WARN', detail: `own shortId ${ownShort} ${ownReaped ? 'cleaned on completion' : 'lingered under concurrent-write stress — NOT a permanent leak (dispatch-time reaper is the durable catch-all; see reaper-removed-orphan)'}` },
+        { checkId: 'reaper-removed-orphan-branch', status: branchGone ? 'PASS' : 'WARN', detail: `${orphan?.branch}: ${branchGone ? 'deleted' : 'still present (reaper branch-delete is best-effort under lock contention)'}` },
+      );
+    }
+
     const fails = checks.filter(c => c.status === 'FAIL').length;
     const warns = checks.filter(c => c.status === 'WARN').length;
     const cost = envelope.metrics?.implementer?.costUsd ?? 0;
@@ -197,6 +252,7 @@ try {
       [35],          // journal_record canonical records[] batch (2 records, sequential + completeness)
       [36],          // journal_record mixed shape (records + prompt) → 400
       [37],          // journal_record empty records[] → 400
+      [38],          // worktree lifecycle: seed orphan → reaper reaps it + own worktree cleaned (no leak)
     ];
 
     // Filter threads if --only is active

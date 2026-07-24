@@ -97,6 +97,8 @@ export { loadSkill } from './unified/skill-loader.js';
 export type { SkillPair } from './unified/skill-loader.js';
 export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
+export { WorktreeManager } from './unified/worktree-manager.js';
+export type { WorktreeInfo } from './unified/worktree-manager.js';
 export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
 export type { ParseResult } from './unified/reviewer-output-parser.js';
 export { REFINER_SCHEMAS } from './unified/refiner-schemas.js';

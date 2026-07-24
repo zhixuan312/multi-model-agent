@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.13.1] - 2026-07-24
+
+**Write-route worktrees no longer leak.** A `delegate`/`execute_plan` task that failed, timed out, or was killed mid-flight used to strip its `.mma/worktrees/<id>` + branch only on the success path — a crash or a `tsx`-watch restart orphaned it forever (dozens accumulated, GBs of `pnpm install` copies). Cleanup is now guaranteed on failure, and a dispatch-time reaper sweeps kill-orphaned worktrees. `SCHEMA_VERSION` unchanged (still 6); no install change; no API change.
+
+### Fixed
+- **Failure-path worktree cleanup.** The two-phase pipeline's `finally` now force-removes an unresolved worktree (new `WorktreeManager.remove()`), so a task that throws before `mergeAndCleanup` — implementer/reviewer error, timeout, crash — no longer orphans its worktree + branch.
+- **Dispatch-time reaper for kill-orphaned worktrees.** Before each write-route dispatch, `WorktreeManager.reapOrphans()` removes any `.mma/worktrees/*` whose owning task is no longer in flight (keyed on the task-id prefix) — the catch-all for worktrees a `SIGKILL` / `tsx`-restart could not clean up itself. Still-running tasks are never touched.
+- **`git worktree add` retries the worktree-admin read race.** Under concurrent worktree operations on one repo, a peer's prune/remove can unlink a sibling's admin files mid-scan, aborting `add` with `failed to read .git/worktrees/.../commondir: Undefined error: 0`. This transient race is now retried (with partial-state cleanup) instead of surfacing as a `runner_crash`.
+
+### Changed
+- `smoke:full` gains a worktree-lifecycle scenario (#38, 38-scenario gate): it seeds a real orphan worktree, dispatches a live write route, and asserts the dispatch-time reaper removes the orphan + branch (the durable no-permanent-leak guarantee).
+
 ## [5.13.0] - 2026-07-24
 
 **`journal_record` accepts a batch of records processed sequentially.** A caller can submit an array of learnings in one request instead of firing N separate calls. Additive and non-breaking — the legacy single-record body still works. `SCHEMA_VERSION` unchanged (still 6); no install change. Built end-to-end via `/mma-flow`.

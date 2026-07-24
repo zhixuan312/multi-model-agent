@@ -92,6 +92,10 @@ export function buildRequest(spec, ctx) {
     case 36: return { type: 'error_journal_mixed_shape', body: {}, rawPayload: { type: 'journal_record', prompt: 'legacy prompt', records: [{ prompt: 'canonical prompt' }] } };
     case 37: return { type: 'error_journal_empty_records', body: {}, rawPayload: { type: 'journal_record', records: [] } };
 
+    // Worktree lifecycle — a normal delegate; the interesting part is the seeded orphan
+    // (index.mjs) + the post-run filesystem assertions that no worktree leaks.
+    case 38: return { type: 'delegate', body: { prompt: 'Create file src/reap.ts with exactly: export const REAP = 38. Only that file.', target: { paths: ['src/reap.ts'] }, reviewPolicy: 'none' } };
+
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }
