@@ -1,7 +1,7 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 34 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 37 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
@@ -41,7 +41,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 34-scenario release gate (32 base + 2 manual-test-sweep regression: F4 empty-target, F5 async-error envelope).
+// The 37-scenario release gate (32 base + F4/F5 sweep regression + 3 journal_record batch: canonical records[], mixed-shape 400, empty-records 400; #9 also covers legacy coercion).
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -187,4 +187,17 @@ export const SCENARIOS = [
   //         with a populated `error` (F5), not a bare { code, message }.
   { id: 33, type: 'error_empty_target', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 34, type: 'spec', tier: 'complex', kind: 'async_error', emits: 0 },
+
+  // N. journal_record batch (array) input (2026-07-24 records[] feature).
+  //    #9 (above) sends a single legacy `prompt` and now exercises the legacy →
+  //    records[] coercion path (proves non-breaking). The scenarios below cover
+  //    the canonical array shape and its validation:
+  //    #35: canonical `records: [{prompt,topic?}]` (2 records) → processed
+  //         sequentially, one node per record; recorded[]+failed[] totals the
+  //         submitted count (batch completeness).
+  //    #36: ambiguous mixed shape (records + top-level prompt) → 400 invalid_request.
+  //    #37: empty `records: []` → 400 invalid_request (.min(1)).
+  { id: 35, type: 'journal_record', tier: 'complex', kind: 'write', emits: 1, batchRecords: 2 },
+  { id: 36, type: 'error_journal_mixed_shape', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 37, type: 'error_journal_empty_records', kind: 'error', expectStatus: 400, emits: 0 },
 ];

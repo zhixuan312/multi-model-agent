@@ -424,6 +424,16 @@ export function verify(rec) {
       `filesChanged=${Array.isArray(fc) ? fc.length : 'missing'} files`));
   }
 
+  // ⑮b journal_record batch completeness — a records[] batch must produce exactly
+  //     one outcome per submitted record: recorded[]+failed[] === submitted count.
+  if (e.batchRecords) {
+    const summary = r?.output?.summary;
+    const recorded = Array.isArray(summary?.recorded) ? summary.recorded.length : 0;
+    const failed = Array.isArray(summary?.failed) ? summary.failed.length : 0;
+    out.push(C('batch-completeness', recorded + failed === e.batchRecords ? 'PASS' : 'FAIL',
+      `recorded=${recorded} failed=${failed} submitted=${e.batchRecords} (records[] processed sequentially)`));
+  }
+
   // ⑯ Delta mode — verify that round 2 audit (with contextBlockId) still produces findings
   if (e.delta) {
     const summary = r?.output?.summary;

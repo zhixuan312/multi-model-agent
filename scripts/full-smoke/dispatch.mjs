@@ -84,6 +84,14 @@ export function buildRequest(spec, ctx) {
     // (202 → poll), the terminal 200 must be the 6-field envelope with `error`.
     case 34: return { type: 'spec', body: { prompt: 'F5 async-error smoke — nonexistent target path', target: { paths: [`${cwd}/does-not-exist-smoke-f5-9c3.md`] } } };
 
+    // journal_record batch (records[]) coverage
+    case 35: return { type: 'journal_record', body: { records: [
+      { prompt: 'In src/math.ts, divide() lacks a zero-divisor guard; we decided to throw rather than return Infinity. Lesson: guard invalid inputs at the function boundary.', topic: 'math-module' },
+      { prompt: 'Batch journal_record processes submitted records sequentially in one worker session, writing one node per record. Lesson: reuse the execute_plan one-worker-sequential completeness model.', topic: 'worker-runtime' },
+    ] } };
+    case 36: return { type: 'error_journal_mixed_shape', body: {}, rawPayload: { type: 'journal_record', prompt: 'legacy prompt', records: [{ prompt: 'canonical prompt' }] } };
+    case 37: return { type: 'error_journal_empty_records', body: {}, rawPayload: { type: 'journal_record', records: [] } };
+
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }

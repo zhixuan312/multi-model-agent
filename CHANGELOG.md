@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.13.0] - 2026-07-24
+
+**`journal_record` accepts a batch of records processed sequentially.** A caller can submit an array of learnings in one request instead of firing N separate calls. Additive and non-breaking — the legacy single-record body still works. `SCHEMA_VERSION` unchanged (still 6); no install change. Built end-to-end via `/mma-flow`.
+
+### Added
+- **`journal_record` batch input.** The request now accepts a canonical `records: [{ prompt, topic? }]` array (`.min(1).max(20)`), processed **one-by-one by a single worker** (reusing the `execute_plan` one-worker-sequential model) — each record becomes one journal node with its own optional `topic`, returned in the existing `recorded[]` / `failed[]` result (best-effort partial success). The reviewer verifies every submitted record appears exactly once (`done_with_concerns` on under-count).
+
+### Changed
+- **Non-breaking legacy coercion.** A legacy `{ type: "journal_record", prompt, topic? }` body is normalized to a one-element `records` array at the validation boundary, so existing callers (`/mma-flow` B10, Forge, agents) keep working unchanged. A body carrying **both** `records` and a top-level `prompt`/`topic` is an ambiguous mixed shape and is rejected with `400 invalid_request`. The refiner output schema is unchanged.
+- `smoke:full` gains 3 journal-batch scenarios (canonical `records[]` + completeness, mixed-shape → 400, empty `records[]` → 400); the single-`prompt` scenario now also exercises the legacy-coercion path (37-scenario gate).
+
 ## [5.12.0] - 2026-07-23
 
 **A route-by-route manual-test sweep of the engine — 13 findings fixed (correctness, two unbounded-memory leaks, a project-cap lockout, and secret-log hardening), converged over five passes to a clean pass — plus expanded `smoke:full` coverage.** `SCHEMA_VERSION` unchanged (still 6). No install change — consumers install the same package. Two consumer-visible behavior changes (empty `target` now rejected; async task failures now return the standard error envelope).

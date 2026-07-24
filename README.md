@@ -331,9 +331,9 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.12.0
+## What's new in 5.13.0
 
-- **Engine hardening from a route-by-route manual-test sweep — 13 fixes.** Closes two unbounded-memory leaks (task registry, telemetry dedup), a project-cap permanent lockout, a permanently-null `/status` skill report, a dropped `context-blocks` `ttlMs`, a broken `mma logs --batch`, and missing GitHub/GitLab secret redaction in diagnostic logs. Two behavior changes: an empty `target: {}` is now `400`, and async task failures now return the standard `error` envelope. `SCHEMA_VERSION` unchanged; no install change.
+- **`journal_record` accepts a batch of records.** Submit a `records: [{ prompt, topic? }]` array (1–20) in one request; the agent records them **sequentially, one node per record**, returning a per-record `recorded[]`/`failed[]` result. Additive and non-breaking — the legacy single-`prompt` body still works (coerced at the boundary); a mixed `records`+`prompt` body is rejected. `SCHEMA_VERSION` unchanged; no install change.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

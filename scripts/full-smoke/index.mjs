@@ -194,6 +194,9 @@ try {
       [31],          // spec with two target files: decisions [authoritative] + exploration.md [grounding]
       [33],          // F4: audit with empty target {} → 400 invalid_request
       [34],          // F5: spec with unresolvable path → async fail returns 6-field error envelope
+      [35],          // journal_record canonical records[] batch (2 records, sequential + completeness)
+      [36],          // journal_record mixed shape (records + prompt) → 400
+      [37],          // journal_record empty records[] → 400
     ];
 
     // Filter threads if --only is active
