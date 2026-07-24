@@ -101,6 +101,15 @@ export { WorktreeManager } from './unified/worktree-manager.js';
 export type { WorktreeInfo } from './unified/worktree-manager.js';
 export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
 export type { ParseResult } from './unified/reviewer-output-parser.js';
-export { REFINER_SCHEMAS } from './unified/refiner-schemas.js';
+export { REFINER_SCHEMAS, parseRecordDecisions } from './unified/refiner-schemas.js';
+export {
+  JournalIndexStore,
+  JournalStore,
+  JOURNAL_INDEX_DB_FILENAME,
+  JOURNAL_INDEX_SCHEMA_VERSION,
+  searchCandidatesForRecall,
+  searchCandidatesForRecord,
+} from './journal/index.js';
+export type { JournalCandidate, JournalRecordDecision, ApplyRecordInput, ApplyRecordResult } from './journal/index.js';
 export { TaskRegistry } from './unified/task-registry.js';
 export type { TaskEntry, TaskState } from './unified/task-registry.js';

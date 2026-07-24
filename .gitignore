@@ -21,6 +21,13 @@ coverage/
 *.swo
 .worktrees/
 .mma/
+# Derived SQLite journal index — rebuildable from .mma/journal/nodes/ via
+# `mma journal reindex`; never committable. Already covered by the `.mma/`
+# rule above; listed explicitly so the derived cache stays out of git even if
+# the `.mma/` tree is ever un-ignored.
+.mma/journal/index.db
+.mma/journal/index.db-wal
+.mma/journal/index.db-shm
 *.tgz
 full-smoke-results.json
 

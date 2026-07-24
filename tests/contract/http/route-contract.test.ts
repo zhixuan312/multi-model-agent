@@ -36,23 +36,29 @@ async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: str
 
 describe('route contract', () => {
   describe('journal_record batch contract', () => {
-    it('normalizes legacy input into records[] and runs one implementer/reviewer session pair', async () => {
+    it('normalizes legacy input into records[], applies decisions, and runs the reviewer when review is forced', async () => {
       const prompts: string[] = [];
       let openCount = 0;
+      // Implementer now emits a decision array (decide-then-apply); the engine applies it and the
+      // reviewer re-emits the applied {recorded,failed} answer shape. reviewPolicy:'reviewed' forces
+      // the reviewer (otherwise passing invariants would skip it).
+      const decisionArray = JSON.stringify([
+        { learning: 'A', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } },
+      ]);
       const reviewerOutput = JSON.stringify({
         recorded: [{ learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' }],
         failed: [{ learning: 'B', reason: 'duplicate' }],
       });
       const h = await boot({
         provider: mockProvider({
-          sequence: [{ output: reviewerOutput }, { output: reviewerOutput }],
+          sequence: [{ output: decisionArray }, { output: reviewerOutput }],
           onPrompt: (p) => prompts.push(p),
           onOpen: () => { openCount += 1; },
         }),
         cwd: process.cwd(),
       });
       try {
-        const res = await dispatch(h, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
+        const res = await dispatch(h, { type: 'journal_record', reviewPolicy: 'reviewed', prompt: 'A', topic: 'worker-runtime' });
         expect(res.status).toBe(202);
         const { taskId } = (await res.json()) as { taskId: string };
         const env = await pollToTerminal(h, taskId);
@@ -71,26 +77,50 @@ describe('route contract', () => {
       } finally { await h.close(); }
     });
 
-    it('downgrades journal_record to done_with_concerns when reviewer output omits submitted records', async () => {
-      const prompts: string[] = [];
-      const twoRecorded = JSON.stringify({
-        recorded: [
-          { learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' },
-          { learning: 'B', type: 'process', topic: 'worker-runtime', nodeId: '0002', nodePath: '.mma/journal/nodes/0002-b.md' },
-        ],
-        failed: [],
+    it('applies decisions then SKIPS the reviewer when invariants pass and reviewPolicy is omitted', async () => {
+      let openCount = 0;
+      const decisionArray = JSON.stringify([
+        { learning: 'A', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } },
+      ]);
+      const h = await boot({
+        provider: mockProvider({
+          sequence: [{ output: decisionArray }],
+          onOpen: () => { openCount += 1; },
+        }),
+        cwd: process.cwd(),
       });
+      try {
+        const res = await dispatch(h, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
+        expect(res.status).toBe(202);
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+
+        expect(openCount).toBe(1); // implementer only — reviewer skipped by passing invariants
+        const summary = (env.output as Record<string, unknown>).summary as { recorded: unknown[]; failed: unknown[] };
+        expect(summary.recorded).toHaveLength(1);
+        expect(summary.failed).toHaveLength(0);
+        expect((env.task as Record<string, unknown>).status).toBe('done');
+      } finally { await h.close(); }
+    });
+
+    it('downgrades journal_record to done_with_concerns when forced reviewer output omits submitted records', async () => {
+      const prompts: string[] = [];
+      const twoDecisions = JSON.stringify([
+        { learning: 'A', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } },
+        { learning: 'B', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } },
+      ]);
       const oneRecorded = JSON.stringify({
         recorded: [{ learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' }],
         failed: [],
       });
       const h = await boot({
-        provider: mockProvider({ sequence: [{ output: twoRecorded }, { output: oneRecorded }], onPrompt: (p) => prompts.push(p) }),
+        provider: mockProvider({ sequence: [{ output: twoDecisions }, { output: oneRecorded }], onPrompt: (p) => prompts.push(p) }),
         cwd: process.cwd(),
       });
       try {
         const res = await dispatch(h, {
           type: 'journal_record',
+          reviewPolicy: 'reviewed',
           records: [{ prompt: 'A', topic: 'worker-runtime' }, { prompt: 'B', topic: 'worker-runtime' }],
         });
         expect(res.status).toBe(202);

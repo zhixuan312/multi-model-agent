@@ -13,6 +13,11 @@ import {
   matchTasks,
   MatchError,
   resolveComponents,
+  JournalIndexStore,
+  JournalStore,
+  searchCandidatesForRecall,
+  searchCandidatesForRecord,
+  parseRecordDecisions,
   type SkillPair,
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
@@ -168,12 +173,11 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'journal_record':
       return [
-        'You have classified the entry by type (decision/design/behavior/process/knowledge/style) and operation (create/refine/supersede/merge).',
-        'Each node includes a normalized lowercase-kebab `topic` frontmatter field naming the primary subject.',
-        'You have checked the existing journal for supersede/refine/merge candidates.',
-        'You have written the node file with proper YAML frontmatter (including type) and edges.',
-        'You have updated the journal catalog (log.md and index.md with the column order id | timestamp | type | status | title | topic | tags).',
-        'You have produced the required JSON output block.',
+        'For EVERY submitted record you have emitted exactly one structured decision (create/refine/supersede/merge), judging only from the engine-supplied candidates.',
+        'Each decision classifies the entry by type (decision/design/behavior/process/knowledge/style) and carries a normalized lowercase-kebab `topic` naming the primary subject.',
+        'refine and supersede decisions name the existing targetNodeId; create/refine decisions carry the full node content (title, description, context, consequences, tags, links).',
+        'You have NOT written node files, allocated ids, or edited index.md/log.md — the deterministic engine applies your decisions.',
+        'You have produced the required JSON decision array as the final output block.',
       ].join(' ');
     case 'journal_recall':
       return [
@@ -509,6 +513,9 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
     const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
+    // Raw caller intent: undefined when omitted. Journal routes force review only when the
+    // caller explicitly asked for it; otherwise the deterministic invariants decide.
+    const callerForcedReview = input.reviewPolicy === 'reviewed';
 
     let implAgent, revAgent;
     try {
@@ -604,6 +611,42 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             });
             const entry = deps.taskRegistry.get(taskId);
             if (entry) entry.totalTasks = jrPayload.records.length;
+
+            // Candidate injection: the deterministic engine retrieves supersede/refine/merge
+            // candidates per record so the implementer decides against real nodes. Searches run
+            // SEQUENTIALLY (not Promise.all): searchCandidatesForRecord opens a SQLite transaction
+            // (syncIndexIncremental → BEGIN) on the store's single connection, so concurrent
+            // searches would throw "cannot start a transaction within a transaction".
+            const indexStore = await JournalIndexStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
+            try {
+              await indexStore.ensureHealthy();
+              const candidatesByRecord = [];
+              for (const r of jrPayload.records) {
+                candidatesByRecord.push(await searchCandidatesForRecord(indexStore, { prompt: r.prompt, topic: r.topic }));
+              }
+              (payload as Record<string, unknown>).candidatesByRecord = candidatesByRecord;
+            } finally {
+              // Close the WAL connection so no lock leaks per request.
+              indexStore.close();
+            }
+          }
+
+          // ── journal_recall pre-processing: inject engine-retrieved candidates so the
+          //    implementer judges/synthesizes from real nodes instead of scanning the corpus. ──
+          if (input.type === 'journal_recall') {
+            const jrPayload = payload as { prompt: string; topic?: string; includeHistory?: boolean };
+            const includeHistory = jrPayload.includeHistory ?? false;
+            const indexStore = await JournalIndexStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
+            try {
+              await indexStore.ensureHealthy();
+              (payload as Record<string, unknown>).candidates = await searchCandidatesForRecall(indexStore, {
+                prompt: jrPayload.prompt, topic: jrPayload.topic, includeHistory,
+              });
+              (payload as Record<string, unknown>).includeHistory = includeHistory;
+            } finally {
+              // Close the WAL connection so no lock leaks per request.
+              indexStore.close();
+            }
           }
 
           // ── Spec/Plan pre-processing: outputPath derivation + copyToWorktree ──
@@ -727,6 +770,29 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             deps.taskRegistry.setPhase(taskId, phase);
           };
 
+          // Deterministic apply hook (journal_record only; recall writes nothing). Parses the
+          // implementer's decision array and applies it atomically to the corpus. A parse/apply
+          // throw does NOT crash the task: it degrades to the documented per-record
+          // recorded[]/failed[] shape with every submitted record in failed[] (reason = the
+          // parse/apply error) and invariantsPassed=false, so the reviewer still runs and the
+          // pipeline produces the contract shape (mma-journal-record SKILL.md:56).
+          const applyDecisions = input.type === 'journal_record'
+            ? async (implementerOutput: string) => {
+                try {
+                  const store = await JournalStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
+                  return await store.applyRecordBatch(parseRecordDecisions(implementerOutput));
+                } catch (err) {
+                  const reason = err instanceof Error ? err.message : String(err);
+                  const submitted = (payload as { records?: Array<{ prompt: string }> }).records ?? [];
+                  return {
+                    recorded: [],
+                    failed: submitted.map((record) => ({ learning: record.prompt, reason })),
+                    invariantsPassed: false,
+                  };
+                }
+              }
+            : undefined;
+
           // Reap worktrees under <cwd>/.mma/worktrees/ orphaned by a prior process kill
           // (tsx-restart / SIGKILL) that could not run its own cleanup. A worktree's shortId
           // is its owning task's `taskId.slice(0, 8)`, so a still-in-flight task is never
@@ -760,6 +826,8 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             reviewerGoal,
             bus: deps.bus,
             onPhaseChange,
+            forceReview: callerForcedReview,
+            ...(applyDecisions && { applyDecisions }),
             ...(dispatchedTasks && { dispatchedTasks }),
             ...(copyToWorktree && { copyToWorktree }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),

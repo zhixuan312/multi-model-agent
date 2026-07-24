@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const CATEGORIES = ['decision', 'design', 'behavior', 'process', 'knowledge', 'style'] as const;
-const INDEX_HEADER = 'id | timestamp | type | status | title | topic | tags';
 
 describe('contract: journal type vocabulary', () => {
   // The canonical journal `schema.md` is a design/reference doc that lives in the parent
@@ -32,7 +31,11 @@ describe('contract: journal type vocabulary', () => {
     expect(impl).toContain('caller supplied structured `topic`');
     expect(impl).toContain('records');
     expect(impl).toContain('legacy single-record');
-    expect(impl).toContain('exactly once across `recorded` and `failed`');
+    // Decide-then-apply: the implementer emits one decision per record instead of
+    // writing files; deterministic code applies the batch and computes recorded/failed.
+    expect(impl).toContain('emit a structured per-record decision');
+    expect(impl).toContain('candidatesByRecord');
+    expect(impl).toContain('Emit exactly one decision per submitted record');
   });
 
   it('implement.md has type classification table', () => {
@@ -41,20 +44,25 @@ describe('contract: journal type vocabulary', () => {
     }
   });
 
-  it('implement.md defines topic inference and the new index format', () => {
+  it('implement.md defines topic inference and emits topic in the decision', () => {
     expect(impl).toContain('lowercase-kebab');
     expect(impl).toContain('EXACT slug equality');
-    expect(impl).toContain(INDEX_HEADER);
+    // The implementer no longer renders index.md itself (deterministic code owns the
+    // catalog now); it emits topic as a field of each per-record decision.
     expect(impl).toContain('"topic":');
+    expect(impl).toContain('"decision":');
   });
 
-  it('review.md validates type field', () => {
+  it('review.md validates type field against the applied result', () => {
     expect(review).toContain('type');
     for (const cat of CATEGORIES) {
       expect(review, `review.md missing type: ${cat}`).toContain(cat);
     }
-    expect(review).toContain('records');
-    expect(review).toContain('legacy single-record');
+    // Decide-then-apply: the reviewer verifies the APPLIED { recorded, failed } result
+    // (produced by deterministic code), not raw records[] it must re-write.
+    expect(review).toContain('APPLIED');
+    expect(review).toContain('recorded');
+    expect(review).toContain('failed');
     expect(review).toContain('submitted record');
   });
 

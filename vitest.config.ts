@@ -5,7 +5,11 @@ export default defineConfig({
   test: {
     globals: true,
     root: '.',
-    exclude: ['**/.mma/**', '**/node_modules/**', 'tests/perf/**'],
+    // NOTE: tests/perf/ holds the deterministic journal benchmark + gate
+    // (tests/perf/journal-engine-benchmark*.test.ts) — they always run, no skips.
+    // (The old wall-clock baseline-vs-baseline harness was removed; it compared
+    // cross-machine absolute timings and could not run deterministically.)
+    exclude: ['**/.mma/**', '**/node_modules/**'],
     pool: 'forks',
     poolOptions: { forks: { maxForks: 2, minForks: 1 } },
     server: {

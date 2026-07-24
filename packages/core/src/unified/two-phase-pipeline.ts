@@ -44,6 +44,13 @@ export interface PipelineInput {
   /** Resolved context block content (max 2). Injected as a ## Prior Context
    *  section between the skill prompt and the ## Task payload. */
   contextBlocks?: string[];
+  /** When true, always run the reviewer even if applyDecisions reports invariants passed
+   *  (caller explicitly requested review). */
+  forceReview?: boolean;
+  /** Deterministic post-implementer hook (journal_record). Applies the implementer's
+   *  decision output to the corpus and returns the applied result. When it reports
+   *  invariantsPassed the reviewer is skipped (unless forceReview). */
+  applyDecisions?: (implementerOutput: string) => Promise<{ recorded: unknown[]; failed: unknown[]; invariantsPassed: boolean }>;
 }
 
 export interface SessionInfo {
@@ -225,12 +232,28 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     const implId = implSession.getSessionId();
 
-    if (input.reviewPolicy === 'none') {
+    // Deterministic apply hook (journal_record): apply the implementer's decision output to
+    // the corpus BEFORE the review-skip decision. The effective output becomes the applied
+    // {recorded,failed} JSON so downstream consumers + the reviewer see the applied result,
+    // not the raw decision array.
+    let applied: { recorded: unknown[]; failed: unknown[]; invariantsPassed: boolean } | undefined;
+    let effectiveOutput = implTurn.output;
+    if (input.applyDecisions) {
+      applied = await input.applyDecisions(implTurn.output);
+      effectiveOutput = JSON.stringify({ recorded: applied.recorded, failed: applied.failed });
+    }
+
+    const skipReviewer =
+      input.forceReview === true ? false
+      : applied !== undefined ? applied.invariantsPassed
+      : input.reviewPolicy === 'none';
+
+    if (skipReviewer) {
       const worktree = await resolveWorktree(buildCommitMessage());
       worktreeResolved = true;
       return {
         status: 'done',
-        implementerOutput: implTurn.output,
+        implementerOutput: effectiveOutput,
         implementerTurn: implTurn,
         reviewerOutput: null,
         reviewerRaw: null,
@@ -271,7 +294,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const completenessSection = buildCompletenessSection(input);
     const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
-    const revPrompt = `${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
+    const revPrompt = `${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(effectiveOutput)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });
@@ -294,7 +317,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     return {
       status,
-      implementerOutput: implTurn.output,
+      implementerOutput: effectiveOutput,
       implementerTurn: implTurn,
       reviewerOutput: parsed.ok ? parsed.data : null,
       reviewerRaw: parsed.ok ? revTurn.output : null,

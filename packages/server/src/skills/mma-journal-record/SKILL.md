@@ -68,6 +68,18 @@ Entries are integrated into a graph-structured journal store at `.mma/journal/`:
 
 The worker creates, refines, or supersedes nodes in the graph (never appends blindly). The derived `index.md` catalog uses the column order `id | timestamp | type | status | title | topic | tags`. Legacy rows may be regenerated with `topic: unscoped` without rewriting historical node files.
 
+## Review contract (deterministic engine)
+
+The implementer emits one structured decision per record; a **deterministic engine** applies the batch and enforces the mechanical invariants in **code** — id uniqueness, node schema, edge integrity (no dangling/self links), and submitted-record completeness (every record lands in `recorded[]` or `failed[]`). Because these guarantees are code-enforced, the LLM reviewer is redundant for them and is **skipped when the invariants pass** and the caller did not force review.
+
+| `reviewPolicy` | Reviewer runs? |
+|---|---|
+| omitted (default) | Skipped when invariants pass; runs if they fail |
+| `none` | Skipped when invariants pass; runs if they fail |
+| `reviewed` | **Always** runs |
+
+Pass `reviewPolicy: "reviewed"` to force a full LLM review pass (e.g. to sanity-check type classification or topic inference). The default and `"none"` both allow the skip. This is intentional — the deterministic engine replaces redundant review, it does not weaken the guarantees.
+
 ## Full example
 
 ```bash

@@ -123,6 +123,7 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     type: z.literal('journal_recall'),
     prompt: z.string().min(10),
     topic: topicSchema.optional(),
+    includeHistory: z.boolean().optional().default(false),
     ...commonFields,
   }).strict(),
 
