@@ -17,9 +17,10 @@ export const ErrorCodeSchema = z.enum([
   'codex_error',
   'codex_not_installed',
   'spawn_failed',
+  'missing_credentials',
+  'invalid_api_key',
   // sentinel for unrecognized or dynamic codes (e.g. exit_${N})
   'other',
 ]);
 
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
-

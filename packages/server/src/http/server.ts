@@ -196,6 +196,7 @@ export async function startServer(
     serverStartedAt,
     bind: config.server.bind,
     version: SERVER_VERSION,
+    config: extractMultiModelConfig(config),
   }));
 
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.

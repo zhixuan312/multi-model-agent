@@ -39,6 +39,13 @@ export type {
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
+export {
+  resolveConfiguredApiKey,
+  resolveConfiguredAuthMode,
+  classifyAuthFailure,
+  type ProviderAuthMode,
+  type AuthFailureDetails,
+} from './providers/provider-factory.js';
 
 // Project context
 export { createProjectContext } from './stores/project-context-registry.js';

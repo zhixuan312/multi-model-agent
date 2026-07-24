@@ -13,8 +13,17 @@ const PROBE_TIMEOUT_MS = 5_000;
 const oauthAuthSchema = z.object({ mode: z.literal('oauth') });
 const apiKeyAuthSchema = z.object({
   mode: z.literal('api-key'),
-  apiKey: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
+  apiKeyEnv: z.string().min(1).optional(),
   baseUrl: z.string().min(1).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.apiKey && !value.apiKeyEnv) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['apiKey'],
+      message: 'api-key auth requires either apiKey or apiKeyEnv',
+    });
+  }
 });
 
 const configureProviderSchema = z.object({
@@ -95,11 +104,19 @@ async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
   const headers: Record<string, string> = {};
 
   if (input.auth.mode === 'api-key') {
+    const resolvedApiKey = resolveSubmittedApiKey(input);
+    if (!resolvedApiKey) {
+      return {
+        reachable: false,
+        modelListed: null,
+        detail: `Environment variable "${input.auth.apiKeyEnv}" is not set`,
+      };
+    }
     if (input.provider === 'claude') {
-      headers['x-api-key'] = input.auth.apiKey;
+      headers['x-api-key'] = resolvedApiKey;
       headers['anthropic-version'] = '2023-06-01';
     } else {
-      headers['authorization'] = `Bearer ${input.auth.apiKey}`;
+      headers['authorization'] = `Bearer ${resolvedApiKey}`;
     }
   } else if (input.auth.mode === 'oauth') {
     if (input.provider === 'claude') {
@@ -156,6 +173,12 @@ async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
   }
 }
 
+function resolveSubmittedApiKey(input: ConfigureProviderRequest): string | undefined {
+  if (input.auth.mode !== 'api-key') return undefined;
+  return input.auth.apiKey
+    ?? (input.auth.apiKeyEnv ? process.env[input.auth.apiKeyEnv] : undefined);
+}
+
 function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {
   const agentConfig: Record<string, unknown> = {
     type: input.provider,
@@ -163,7 +186,11 @@ function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest
   };
 
   if (input.auth.mode === 'api-key') {
-    agentConfig.apiKey = input.auth.apiKey;
+    if (input.auth.apiKeyEnv) {
+      agentConfig.apiKeyEnv = input.auth.apiKeyEnv;
+    } else if (input.auth.apiKey) {
+      agentConfig.apiKey = input.auth.apiKey;
+    }
     if (input.auth.baseUrl) agentConfig.baseUrl = input.auth.baseUrl;
   }
 

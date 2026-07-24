@@ -127,6 +127,52 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
 
 });
 
+describe('codex TurnTracker auth error details', () => {
+  it('preserves turn_failed error text for downstream auth classification', () => {
+    const tracker = new TurnTracker(zeroUsage());
+    tracker.consume({
+      kind: 'turn_failed',
+      error: { message: '401 Unauthorized: Invalid API key provided' },
+    } as CodexCliEvent);
+    expect(tracker.errorCode).toBe('turn_failed');
+    expect(tracker.errorMessage).toBe('401 Unauthorized: Invalid API key provided');
+  });
+
+  it('preserves codex_error message for downstream auth classification', () => {
+    const tracker = new TurnTracker(zeroUsage());
+    tracker.consume({
+      kind: 'error',
+      message: 'Missing credentials. Run codex login or set OPENAI_API_KEY',
+    } as CodexCliEvent);
+    expect(tracker.errorCode).toBe('codex_error');
+    expect(tracker.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
+  });
+
+  it('propagates errorMessage from the tracker into the built TurnResult', () => {
+    const tracker = new TurnTracker(zeroUsage());
+    tracker.consume({
+      kind: 'error',
+      message: 'Missing credentials. Run codex login or set OPENAI_API_KEY',
+    } as CodexCliEvent);
+
+    const result = {
+      output: '',
+      usage: zeroUsage(),
+      costUSD: 0,
+      turns: tracker.turns,
+      durationMs: 0,
+      terminationReason: tracker.terminationReason,
+      ...(tracker.errorCode && { errorCode: tracker.errorCode }),
+      ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
+      filesWritten: [...tracker.filesWritten],
+      usedShell: tracker.usedShell,
+    };
+
+    expect(result).toHaveProperty('errorMessage');
+    expect(result.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
+  });
+});
+
 describe('codex TurnTracker — TokenUsage disjoint-partition contract', () => {
   it('subtracts cached_input_tokens from input_tokens before storing (gross → net)', () => {
     // Codex reports: input_tokens=1000 (GROSS, includes cached), cached=700.

@@ -202,6 +202,7 @@ export class CodexCliSession implements Session {
       durationMs: Date.now() - startMs,
       terminationReason: tracker.terminationReason,
       ...(tracker.errorCode && { errorCode: tracker.errorCode }),
+      ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
       filesWritten: [...tracker.filesWritten],
       usedShell: tracker.usedShell,
     };
@@ -293,6 +294,7 @@ export class CodexCliSession implements Session {
       durationMs: Date.now() - startMs,
       terminationReason: 'error',
       errorCode: code,
+      errorMessage: message,
       filesWritten: [],
       usedShell: false,
     };

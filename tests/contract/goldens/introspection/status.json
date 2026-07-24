@@ -6,6 +6,20 @@
   "auth": {
     "enabled": true
   },
+  "agents": {
+    "standard": {
+      "type": "codex",
+      "mode": "api-key"
+    },
+    "complex": {
+      "type": "codex",
+      "mode": "api-key"
+    },
+    "main": {
+      "type": "codex",
+      "mode": "api-key"
+    }
+  },
   "counters": {
     "projectCount": 0,
     "activeTasks": 0
