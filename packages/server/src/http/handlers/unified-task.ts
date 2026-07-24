@@ -592,6 +592,19 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             if (entry) entry.totalTasks = matched.length;
           }
 
+          // ── journal_record pre-processing: one label per submitted record so the
+          //    reviewer can run the same completeness check as execute_plan (every
+          //    record must appear exactly once across recorded[]/failed[]). ──
+          if (input.type === 'journal_record') {
+            const jrPayload = payload as { records: Array<{ prompt: string; topic?: string }> };
+            dispatchedTasks = jrPayload.records.map((record, index) => {
+              const label = record.topic ? `${record.topic} :: ${record.prompt}` : record.prompt;
+              return `[record ${index + 1}] ${label}`.slice(0, 200);
+            });
+            const entry = deps.taskRegistry.get(taskId);
+            if (entry) entry.totalTasks = jrPayload.records.length;
+          }
+
           // ── Spec/Plan pre-processing: outputPath derivation + copyToWorktree ──
           if (input.type === 'spec' || input.type === 'plan') {
             const spPayload = payload as { prompt: string; target?: { paths?: string[]; inline?: string }; outputPath?: string };

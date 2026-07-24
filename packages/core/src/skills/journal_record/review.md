@@ -6,6 +6,20 @@ You are the quality gate verifying the implementer's journal recording, fixing i
 
 ## Task
 
+The runtime strips envelope fields (`type`, `agentTier`, `reviewPolicy`, `sessionIds`,
+`contextBlockIds`) before assembling your prompt, so the payload you receive is the canonical
+shape below (note: no top-level `type`):
+
+```json
+{
+  "records": [
+    { "prompt": "Learning text", "topic": "optional-lowercase-kebab-topic" }
+  ]
+}
+```
+
+Note: legacy single-record HTTP bodies are accepted only at the request boundary and normalized before they reach you. Review completeness against `records[]`, not against a top-level legacy `prompt`.
+
 Verify the implementer's journal recording, fix issues in the worktree. Fix classification errors, repair graph integrity, complete missing entries — genuinely raise the score. Don't rephrase correct text for style. Re-output in the same JSON format. If already high quality, re-output unchanged.
 
 ## Critical: journal location
@@ -30,7 +44,7 @@ The journal is at `.mma/journal/` relative to your working directory. Nodes are 
 
 4. **Catalog consistency** — `index.md` lists all nodes sorted by id and uses the column order `id | timestamp | type | status | title | topic | tags`. `log.md` has an entry for each operation. Legacy rows missing a topic cell must be regenerated with `unscoped`.
 
-5. **Completeness** — every input learning in exactly one of `recorded` or `failed`. None silently dropped.
+5. **Completeness** — every submitted record in exactly one of `recorded` or `failed`. None silently dropped. If the prompt includes a submitted-record count or stable labels, reconcile against them before finalizing.
 
 6. **Scope** — all writes confined to `.mma/journal/`.
 

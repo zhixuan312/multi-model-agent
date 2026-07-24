@@ -77,6 +77,33 @@ function extractStructuredBlock(raw: string): string {
   return raw;
 }
 
+/** Reviewer-prompt completeness section. execute_plan and journal_record both hand
+ *  the worker N sub-items to complete in one session; this tells the reviewer to
+ *  verify every one was addressed. journal_record records must each appear exactly
+ *  once across recorded[]/failed[]. */
+function buildCompletenessSection(input: PipelineInput): string {
+  if (!input.dispatchedTasks?.length) return '';
+  const items = input.dispatchedTasks.map((task, index) => `${index + 1}. ${task}`).join('\n');
+  if (input.type === 'journal_record') {
+    return `\n\n## Submitted Records (completeness check)\n\nThe following ${input.dispatchedTasks.length} records were submitted. Verify that every record appears exactly once across recorded[] and failed[], and if any are missing, complete the work before you emit the final JSON.\n\n${items}\n`;
+  }
+  return `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${items}\n`;
+}
+
+/** How many sub-items the reviewer's structured output reports as addressed, so the
+ *  pipeline can flag done_with_concerns when fewer than dispatched were handled. */
+function getReportedCompletenessCount(type: TaskType, data: Record<string, unknown>): number {
+  if (type === 'execute_plan') {
+    return Array.isArray(data.tasks) ? data.tasks.length : 0;
+  }
+  if (type === 'journal_record') {
+    const recorded = Array.isArray(data.recorded) ? data.recorded.length : 0;
+    const failed = Array.isArray(data.failed) ? data.failed.length : 0;
+    return recorded + failed;
+  }
+  return 0;
+}
+
 export async function runTwoPhasePipeline(input: PipelineInput): Promise<PipelineResult> {
   const ac = new AbortController();
   const deadline = Date.now() + (input.timeoutMs ?? 3_600_000);
@@ -149,8 +176,14 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         if (prompt.length > 5) return `${prefix}: ${prompt.slice(0, 150)}`;
       }
       if (input.type === 'journal_record') {
-        const prompt = payload.prompt ?? '';
-        if (prompt.length > 5) return `${prefix}: ${prompt.slice(0, 150)}`;
+        const records = Array.isArray(payload.records)
+          ? payload.records as Array<{ prompt?: string }>
+          : [];
+        const firstPrompt = typeof records[0]?.prompt === 'string' ? records[0].prompt : '';
+        if (firstPrompt.length > 5) {
+          const suffix = records.length > 1 ? ` (${records.length} records)` : '';
+          return `${prefix}: ${firstPrompt.slice(0, 150)}${suffix}`;
+        }
       }
     } catch { /* payload not JSON — fall through */ }
     return `${prefix}: task completed`;
@@ -231,9 +264,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     sessions.push(revSession);
 
-    const completenessSection = input.dispatchedTasks?.length
-      ? `\n\n## Dispatched Tasks (completeness check)\n\nThe following ${input.dispatchedTasks.length} tasks were dispatched. If the implementer did not complete all of them, implement the missing ones in this worktree.\n\n${input.dispatchedTasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
-      : '';
+    const completenessSection = buildCompletenessSection(input);
     const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
     const revPrompt = `${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(implTurn.output)}`;
     const revTurn = await revSession.send(revPrompt, {
@@ -249,7 +280,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
     if (parsed.ok && input.dispatchedTasks?.length) {
       const reported = parsed.data as Record<string, unknown>;
-      const reportedTasks = Array.isArray(reported.tasks) ? reported.tasks.length : 0;
+      const reportedTasks = getReportedCompletenessCount(input.type, reported);
       if (reportedTasks < input.dispatchedTasks.length) {
         status = 'done_with_concerns';
       }

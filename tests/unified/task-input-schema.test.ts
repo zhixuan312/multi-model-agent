@@ -228,6 +228,84 @@ describe('taskInputSchema', () => {
     }).success).toBe(true);
   });
 
+  it('accepts canonical journal_record records[] input and preserves record order', () => {
+    const result = taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: [
+        { prompt: 'A' },
+        { prompt: 'B', topic: 'worker-runtime' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data as { type: string }).type).toBe('journal_record');
+      expect((result.data as { records: unknown[] }).records).toEqual([
+        { prompt: 'A' },
+        { prompt: 'B', topic: 'worker-runtime' },
+      ]);
+    }
+  });
+
+  it('normalizes legacy journal_record prompt/topic input into one canonical record', () => {
+    const result = taskInputSchema.parse({
+      type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
+      topic: 'worker-runtime',
+    }) as { type: string; records: unknown[] };
+    expect(result.type).toBe('journal_record');
+    expect(result.records).toEqual([
+      { prompt: 'We decided to use Redis for caching because...', topic: 'worker-runtime' },
+    ]);
+  });
+
+  it('rejects journal_record with empty records[]', () => {
+    expect(taskInputSchema.safeParse({ type: 'journal_record', records: [] }).success).toBe(false);
+  });
+
+  it('rejects journal_record with more than 20 records', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: Array.from({ length: 21 }, (_, i) => ({ prompt: `Learning ${i + 1}` })),
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record records[] entries without prompt', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: [{ topic: 'worker-runtime' }],
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record records[] entries with invalid topic', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: [{ prompt: 'Learning', topic: 'Worker Runtime' }],
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record records[] entries with unknown keys', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: [{ prompt: 'Learning', extra: true }],
+    }).success).toBe(false);
+  });
+
+  it('rejects journal_record records[] as bare strings', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      records: ['Learning A', 'Learning B'],
+    }).success).toBe(false);
+  });
+
+  it('rejects ambiguous mixed-shape journal_record input (records + top-level prompt/topic)', () => {
+    expect(taskInputSchema.safeParse({
+      type: 'journal_record',
+      prompt: 'Legacy prompt',
+      topic: 'worker-runtime',
+      records: [{ prompt: 'Canonical prompt' }],
+    }).success).toBe(false);
+  });
+
   it('accepts journal_record with optional kebab-case topic', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_record',
