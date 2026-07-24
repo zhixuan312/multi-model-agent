@@ -18,6 +18,8 @@ describe('WorktreeManager', () => {
       if (hasPackageJson) return undefined;
       throw new Error('ENOENT');
     }),
+    readdir: vi.fn().mockResolvedValue([]),
+    rm: vi.fn().mockResolvedValue(undefined),
   });
 
   it('create returns an in-place execution target when the `.git` entry is absent', async () => {
@@ -46,6 +48,48 @@ describe('WorktreeManager', () => {
 
     expect(info).toEqual({ branch: '', path: '/repo/src', hasChanges: false, merged: false });
     expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('remove force-removes a worktree, prunes, and deletes its branch (best-effort)', async () => {
+    const exec = mockExec();
+    const mgr = new WorktreeManager(exec, mockFs());
+    await mgr.remove('/repo/.mma/worktrees/abc12345', 'mma/delegate-abc12345', '/repo');
+    const calls = exec.mock.calls.map((c) => c[1].join(' '));
+    expect(calls).toContain('worktree remove --force /repo/.mma/worktrees/abc12345');
+    expect(calls).toContain('worktree prune');
+    expect(calls).toContain('branch -D mma/delegate-abc12345');
+  });
+
+  it('reapOrphans removes worktrees whose task is NOT active + their branches, keeps active ones', async () => {
+    // Two worktree dirs: dead1111 (inactive → reap), live2222 (active → keep).
+    const exec = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'for-each-ref') return { stdout: 'mma/delegate-dead1111\nmma/execute_plan-live2222\n', stderr: '' };
+      return { stdout: '', stderr: '' };
+    });
+    const fs = { ...mockFs(), readdir: vi.fn().mockResolvedValue(['dead1111', 'live2222']) };
+    const mgr = new WorktreeManager(exec, fs);
+
+    const reaped = await mgr.reapOrphans('/repo', (id) => id === 'live2222');
+
+    expect(reaped).toBe(1);
+    const calls = exec.mock.calls.map((c) => c[1].join(' '));
+    expect(calls).toContain('worktree remove --force /repo/.mma/worktrees/dead1111');
+    expect(calls).toContain('branch -D mma/delegate-dead1111');
+    // The active task's worktree + branch are untouched.
+    expect(calls).not.toContain('worktree remove --force /repo/.mma/worktrees/live2222');
+    expect(calls).not.toContain('branch -D mma/execute_plan-live2222');
+  });
+
+  it('reapOrphans is a no-op for a non-git cwd and when no worktrees dir exists', async () => {
+    const execNonGit = mockExec();
+    const nonGit = new WorktreeManager(execNonGit, mockFs(false, false)); // .git absent
+    expect(await nonGit.reapOrphans('/plain', () => false)).toBe(0);
+    expect(execNonGit).not.toHaveBeenCalled();
+
+    const execNoDir = mockExec();
+    const fsNoDir = { ...mockFs(), readdir: vi.fn().mockRejectedValue(new Error('ENOENT')) };
+    const noDir = new WorktreeManager(execNoDir, fsNoDir);
+    expect(await noDir.reapOrphans('/repo', () => false)).toBe(0);
   });
 
   it('mergeAndCleanup is a no-op for in-place execution (empty branch, path === cwd)', async () => {
@@ -113,6 +157,26 @@ describe('WorktreeManager', () => {
     const addCalls = exec.mock.calls.filter((c) => c[1][0] === 'worktree' && c[1][1] === 'add');
     expect(addCalls.length).toBe(3);
     expect(exec.mock.calls.some((c) => c[1][0] === 'branch' && c[1][1] === '-D')).toBe(true);
+  });
+
+  it('create retries worktree-add on a concurrent worktree-admin read race (commondir / Undefined error: 0)', async () => {
+    // `git worktree add` scans `.git/worktrees/*` for existing trees; a CONCURRENT prune/remove
+    // (another task's cleanup, or the dispatch-time reaper) can unlink a peer's admin files
+    // mid-scan, so add aborts reading `commondir`. On macOS the errno surfaces as the generic
+    // "Undefined error: 0". It is transient — the peer op finishes in ms — so add must RETRY.
+    const exec = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('Command failed: git worktree add'), {
+        stderr: "fatal: failed to read '.git/worktrees/8fc494a7/commondir': Undefined error: 0",
+      }))
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: worktree prune
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // cleanup: branch -D
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // 2nd add succeeds
+    const mgr = new WorktreeManager(exec, mockFs(false));
+    const info = await mgr.create('/repo', 'task-abc12345', 'delegate');
+    expect(info.branch).toBe('mma/delegate-task-abc');
+    const addCalls = exec.mock.calls.filter((c) => c[1][0] === 'worktree' && c[1][1] === 'add');
+    expect(addCalls.length).toBe(2); // retried the add after the admin-read race
   });
 
   it('create throws immediately on a non-retryable add error', async () => {

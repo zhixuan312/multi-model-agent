@@ -8,6 +8,7 @@ import {
   loadSkill,
   resolveAgent,
   runTwoPhasePipeline,
+  WorktreeManager,
   parsePlanHeadings,
   matchTasks,
   MatchError,
@@ -725,6 +726,19 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const onPhaseChange = (phase: 'implementing' | 'reviewing') => {
             deps.taskRegistry.setPhase(taskId, phase);
           };
+
+          // Reap worktrees under <cwd>/.mma/worktrees/ orphaned by a prior process kill
+          // (tsx-restart / SIGKILL) that could not run its own cleanup. A worktree's shortId
+          // is its owning task's `taskId.slice(0, 8)`, so a still-in-flight task is never
+          // reaped. This runs before the pipeline creates THIS task's worktree, and only for
+          // worktree-enabled types. Best-effort — a reap failure never blocks the dispatch.
+          if (typeConfig.worktree) {
+            await new WorktreeManager()
+              .reapOrphans(cwd, (shortId) =>
+                deps.taskRegistry.allInFlight().some((e) => e.taskId.startsWith(shortId)),
+              )
+              .catch(() => undefined);
+          }
 
           const result = await runTwoPhasePipeline({
             type: input.type,

@@ -1,6 +1,6 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, access, rmdir, readdir } from 'node:fs/promises';
+import { mkdir, access, rmdir, readdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 
 const execFileAsync = promisify(execFileCb);
@@ -22,6 +22,8 @@ export type ExecFn = (
 export interface FsOps {
   mkdir(path: string, opts: { recursive: boolean }): Promise<void>;
   access(path: string): Promise<void>;
+  readdir(path: string): Promise<string[]>;
+  rm(path: string, opts: { recursive: boolean; force: boolean }): Promise<void>;
 }
 
 const defaultExec: ExecFn = async (cmd, args, opts) => {
@@ -32,6 +34,8 @@ const defaultExec: ExecFn = async (cmd, args, opts) => {
 const defaultFs: FsOps = {
   mkdir: async (path, opts) => { await mkdir(path, opts); },
   access: async (path) => { await access(path); },
+  readdir: async (path) => await readdir(path),
+  rm: async (path, opts) => { await rm(path, opts); },
 };
 
 /**
@@ -46,20 +50,35 @@ const defaultFs: FsOps = {
 const LOCK_ERROR_RE =
   /could not lock config file|file exists|unable to create|index\.lock|cannot lock ref|another git process|\.lock['": ]/i;
 
+/**
+ * A CONCURRENT worktree-admin mutation races a `git` command that is scanning
+ * `.git/worktrees/*`. `git worktree add` (and, less often, `remove`/`prune`) walks the
+ * existing worktree registrations; a peer's prune/remove — another task's cleanup or the
+ * dispatch-time reaper's `git worktree prune` — can unlink a sibling's admin files mid-scan,
+ * so the command aborts reading its `commondir`/`gitdir`. On macOS the errno surfaces as the
+ * generic "Undefined error: 0". Like a lock, this is transient (the peer op finishes in ms),
+ * so the fix is to RETRY (with the same partial-state cleanup), not to serialize. Scoped to
+ * the worktree-admin read path so a genuine unrelated failure still surfaces immediately.
+ */
+const WORKTREE_ADMIN_RACE_RE =
+  /failed to read [^\n]*\.git[/\\]worktrees[/\\]|(?:commondir|gitdir)[^\n]*(?:No such file|Undefined error)|worktrees[/\\][^\n]*Undefined error: 0/i;
+
 function errText(err: unknown): string {
   return err instanceof Error ? `${err.message} ${(err as { stderr?: string }).stderr ?? ''}` : String(err);
 }
 
-function isLockContention(err: unknown): boolean {
-  return LOCK_ERROR_RE.test(errText(err));
+/** Transient same-repo git races worth retrying: `.git/config`/ref lock contention OR a
+ *  concurrent worktree-admin read race (see {@link WORKTREE_ADMIN_RACE_RE}). */
+function isTransientGitRace(err: unknown): boolean {
+  const msg = errText(err);
+  return LOCK_ERROR_RE.test(msg) || WORKTREE_ADMIN_RACE_RE.test(msg);
 }
 
 /** `git worktree add` is non-idempotent: a lock-interrupted partial run leaves the
  *  branch/worktree behind, so a blind retry fails "already exists". We clean up and
- *  retry on EITHER signal. */
+ *  retry on EITHER a transient race OR the already-exists trap. */
 function isAddRetryable(err: unknown): boolean {
-  const msg = errText(err);
-  return LOCK_ERROR_RE.test(msg) || /already (exists|checked out|used by worktree)/i.test(msg);
+  return isTransientGitRace(err) || /already (exists|checked out|used by worktree)/i.test(errText(err));
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -74,9 +93,10 @@ export class WorktreeManager {
   }
 
   /**
-   * Run a git command, retrying on transient `.git/config`/ref lock contention so
-   * concurrent same-repo worktree ops don't break each other. Up to 8 attempts
-   * with linear backoff (~50ms → ~400ms); a non-lock error throws immediately.
+   * Run a git command, retrying on a transient same-repo git race — `.git/config`/ref lock
+   * contention OR a concurrent worktree-admin read race — so concurrent same-repo worktree
+   * ops don't break each other. Up to 8 attempts with linear backoff (~50ms → ~400ms); a
+   * non-transient error throws immediately.
    */
   private async gitWithRetry(
     args: string[],
@@ -89,7 +109,7 @@ export class WorktreeManager {
         return await this.exec('git', args, { ...opts, windowsHide: true });
       } catch (err) {
         lastErr = err;
-        if (attempt === maxAttempts || !isLockContention(err)) throw err;
+        if (attempt === maxAttempts || !isTransientGitRace(err)) throw err;
         await sleep(50 * attempt);
       }
     }
@@ -165,6 +185,62 @@ export class WorktreeManager {
   async hasChanges(worktreePath: string): Promise<boolean> {
     const { stdout } = await this.exec('git', ['status', '--porcelain'], { cwd: worktreePath, windowsHide: true });
     return stdout.trim().length > 0;
+  }
+
+  /**
+   * Force-remove a single worktree + its branch (best-effort, never throws). Used by the
+   * pipeline's `finally` so a task that FAILS or throws before `mergeAndCleanup` runs does
+   * not orphan its worktree. (A process kill can't run this — {@link reapOrphans} is the
+   * next-boot / next-dispatch catch-all for that.)
+   */
+  async remove(worktreePath: string, branch: string, originalCwd: string): Promise<void> {
+    await this.exec('git', ['worktree', 'remove', '--force', worktreePath], { cwd: originalCwd, windowsHide: true })
+      .catch(() => this.fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined));
+    await this.exec('git', ['worktree', 'prune'], { cwd: originalCwd, windowsHide: true }).catch(() => undefined);
+    if (branch) {
+      await this.exec('git', ['branch', '-D', branch], { cwd: originalCwd, windowsHide: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Reap worktrees under `<cwd>/.mma/worktrees/` left behind by tasks that are no longer
+   * in flight — the catch-all for worktrees orphaned by a process kill (tsx-restart /
+   * SIGKILL) that could not run their own cleanup. `isActive(shortId)` returns true when a
+   * live task still owns that worktree dir (wired to the task registry at dispatch time), so
+   * concurrently-running tasks are never touched. Best-effort; returns the count reaped.
+   */
+  async reapOrphans(cwd: string, isActive: (shortId: string) => boolean): Promise<number> {
+    if (!(await this.isGitRepo(cwd))) return 0;
+    const worktreesDir = join(cwd, '.mma', 'worktrees');
+    let entries: string[];
+    try {
+      entries = await this.fs.readdir(worktreesDir);
+    } catch {
+      return 0; // no worktrees dir yet — nothing to reap
+    }
+    // Drop git's registrations for dirs already gone, then read the mma/* branch list once.
+    await this.exec('git', ['worktree', 'prune'], { cwd, windowsHide: true }).catch(() => undefined);
+    const { stdout } = await this.exec('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/mma/'], { cwd, windowsHide: true })
+      .catch(() => ({ stdout: '', stderr: '' }));
+    const mmaBranches = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+
+    let reaped = 0;
+    for (const shortId of entries) {
+      if (isActive(shortId)) continue; // a live task still owns this worktree — never touch it
+      const wtPath = join(worktreesDir, shortId);
+      await this.exec('git', ['worktree', 'remove', '--force', wtPath], { cwd, windowsHide: true })
+        .catch(() => this.fs.rm(wtPath, { recursive: true, force: true }).catch(() => undefined));
+      for (const br of mmaBranches) {
+        if (br.endsWith(`-${shortId}`)) {
+          await this.exec('git', ['branch', '-D', br], { cwd, windowsHide: true }).catch(() => undefined);
+        }
+      }
+      reaped++;
+    }
+    if (reaped > 0) {
+      await this.exec('git', ['worktree', 'prune'], { cwd, windowsHide: true }).catch(() => undefined);
+    }
+    return reaped;
   }
 
   /**
