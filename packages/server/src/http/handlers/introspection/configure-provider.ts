@@ -173,10 +173,22 @@ async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
   }
 }
 
+/**
+ * Resolve the credential the probe should verify.
+ *
+ * Precedence MUST match `applyToConfig()` below, which persists `apiKeyEnv` in
+ * preference to an inline `apiKey`. If the two disagreed, a request carrying both
+ * could verify against the inline key and then persist an env reference that is
+ * unset or holds a different value — reporting `verified: true` for a config that
+ * fails on the very next request. Verify exactly what gets saved.
+ */
 function resolveSubmittedApiKey(input: ConfigureProviderRequest): string | undefined {
   if (input.auth.mode !== 'api-key') return undefined;
-  return input.auth.apiKey
-    ?? (input.auth.apiKeyEnv ? process.env[input.auth.apiKeyEnv] : undefined);
+  // When apiKeyEnv is supplied it is the ONLY source considered — no fallback to an
+  // inline apiKey. An unset env var must fail the probe rather than silently verify
+  // against a value that will not be persisted.
+  if (input.auth.apiKeyEnv) return process.env[input.auth.apiKeyEnv];
+  return input.auth.apiKey;
 }
 
 function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {

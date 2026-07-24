@@ -76,3 +76,51 @@ describe('configure-provider persistence', () => {
     }
   });
 });
+
+describe('probe/persist credential-source parity', () => {
+  afterEach(() => {
+    delete process.env.PARITY_KEY_ENV;
+    vi.restoreAllMocks();
+  });
+
+  it('probes the apiKeyEnv value, never an inline apiKey, when both are submitted', async () => {
+    // Regression guard: the probe used to prefer the inline apiKey while
+    // applyToConfig() persists apiKeyEnv. A request carrying both could therefore
+    // report verified:true after probing a key that is NOT what gets saved. With
+    // PARITY_KEY_ENV unset the probe must fail rather than fall back to the inline key.
+    delete process.env.PARITY_KEY_ENV;
+
+    const config = {
+      agents: {
+        standard: { type: 'claude', model: 'claude-haiku-4-5' },
+        complex: { type: 'claude', model: 'claude-opus-4-8' },
+      },
+    } as unknown as MultiModelConfig;
+
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const handler = buildConfigureProviderHandler(config, undefined);
+    const chunks: Array<string> = [];
+    const res = {
+      writeHead: () => undefined,
+      end: (chunk?: string) => { if (chunk) chunks.push(chunk); },
+    } as any;
+
+    await handler({} as any, res, {}, {
+      body: {
+        tier: 'standard',
+        provider: 'claude',
+        model: 'claude-haiku-4-5',
+        dryRun: true,
+        auth: { mode: 'api-key', apiKey: 'sk-inline-would-pass', apiKeyEnv: 'PARITY_KEY_ENV' },
+      },
+    } as any);
+
+    const body = JSON.parse(chunks.join(''));
+    expect(body.verified).toBe(false);
+    expect(body.probe.detail).toMatch(/PARITY_KEY_ENV/);
+    // The inline key must never have been used to reach the provider.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
