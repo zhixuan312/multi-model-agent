@@ -35,6 +35,77 @@ async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: str
 }
 
 describe('route contract', () => {
+  describe('journal_record batch contract', () => {
+    it('normalizes legacy input into records[] and runs one implementer/reviewer session pair', async () => {
+      const prompts: string[] = [];
+      let openCount = 0;
+      const reviewerOutput = JSON.stringify({
+        recorded: [{ learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' }],
+        failed: [{ learning: 'B', reason: 'duplicate' }],
+      });
+      const h = await boot({
+        provider: mockProvider({
+          sequence: [{ output: reviewerOutput }, { output: reviewerOutput }],
+          onPrompt: (p) => prompts.push(p),
+          onOpen: () => { openCount += 1; },
+        }),
+        cwd: process.cwd(),
+      });
+      try {
+        const res = await dispatch(h, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
+        expect(res.status).toBe(202);
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+
+        expect(openCount).toBe(2);
+        expect(prompts).toHaveLength(2);
+        expect(prompts[0]).toContain('"records": [');
+        expect(prompts[0]).not.toMatch(/"type": "journal_record",\s+"prompt":/);
+        expect(prompts[1]).toContain('## Submitted Records (completeness check)');
+        expect(prompts[1]).toContain('1. [record 1] worker-runtime :: A');
+
+        const summary = (env.output as Record<string, unknown>).summary as { recorded: unknown[]; failed: unknown[] };
+        expect(summary.recorded).toHaveLength(1);
+        expect(summary.failed).toHaveLength(1);
+        expect((env.task as Record<string, unknown>).status).toBe('done');
+      } finally { await h.close(); }
+    });
+
+    it('downgrades journal_record to done_with_concerns when reviewer output omits submitted records', async () => {
+      const prompts: string[] = [];
+      const twoRecorded = JSON.stringify({
+        recorded: [
+          { learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' },
+          { learning: 'B', type: 'process', topic: 'worker-runtime', nodeId: '0002', nodePath: '.mma/journal/nodes/0002-b.md' },
+        ],
+        failed: [],
+      });
+      const oneRecorded = JSON.stringify({
+        recorded: [{ learning: 'A', type: 'process', topic: 'worker-runtime', nodeId: '0001', nodePath: '.mma/journal/nodes/0001-a.md' }],
+        failed: [],
+      });
+      const h = await boot({
+        provider: mockProvider({ sequence: [{ output: twoRecorded }, { output: oneRecorded }], onPrompt: (p) => prompts.push(p) }),
+        cwd: process.cwd(),
+      });
+      try {
+        const res = await dispatch(h, {
+          type: 'journal_record',
+          records: [{ prompt: 'A', topic: 'worker-runtime' }, { prompt: 'B', topic: 'worker-runtime' }],
+        });
+        expect(res.status).toBe(202);
+        const { taskId } = (await res.json()) as { taskId: string };
+        const env = await pollToTerminal(h, taskId);
+
+        expect(prompts[0]).toContain('"records": [');
+        expect(prompts[1]).toContain('1. [record 1] worker-runtime :: A');
+        expect(prompts[1]).toContain('2. [record 2] worker-runtime :: B');
+        expect((env.task as Record<string, unknown>).status).toBe('done_with_concerns');
+        expect(env.error).toBeNull();
+      } finally { await h.close(); }
+    });
+  });
+
   // ── Dispatch receipt (POST /task → 202) ──
 
   describe('POST /task dispatch receipt', () => {

@@ -30,6 +30,9 @@ describe('contract: journal type vocabulary', () => {
     expect(impl).toContain('`type`');
     expect(impl).toContain('`topic`');
     expect(impl).toContain('caller supplied structured `topic`');
+    expect(impl).toContain('records');
+    expect(impl).toContain('legacy single-record');
+    expect(impl).toContain('exactly once across `recorded` and `failed`');
   });
 
   it('implement.md has type classification table', () => {
@@ -50,6 +53,9 @@ describe('contract: journal type vocabulary', () => {
     for (const cat of CATEGORIES) {
       expect(review, `review.md missing type: ${cat}`).toContain(cat);
     }
+    expect(review).toContain('records');
+    expect(review).toContain('legacy single-record');
+    expect(review).toContain('submitted record');
   });
 
   it('recall implement.md is type-aware', () => {
@@ -67,6 +73,11 @@ describe('contract: journal type vocabulary', () => {
     expect(skill).toContain('process learning');
     expect(skill).toContain('research finding');
     expect(skill).toContain('style convention');
+    expect(skill).toContain('records');
+    expect(skill).toContain('legacy single-record');
+    expect(skill).toContain('one request');
+    expect(skill).toContain('recorded[]');
+    expect(skill).toContain('failed[]');
   });
 
   it('handler goal condition references type classification', () => {

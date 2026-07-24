@@ -42,15 +42,22 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 ```json
 {
   "type": "journal_record",
-  "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
-  "topic": "grouped-dispatch"
+  "records": [
+    {
+      "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it — git diff is the source of truth. Lesson: use getRealFilesChanged.",
+      "topic": "grouped-dispatch"
+    }
+  ]
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
-| `topic` | string | no | Optional caller-supplied primary subject. Must already be lowercase-kebab. When provided, the worker uses it verbatim. When omitted, the system infers one topic from the learning content and existing journal topics. |
+| `records` | array | yes | Canonical request field. Provide 1 to 20 structured record objects in submission order; one request runs one sequential `journal_record` pipeline — the agent processes the records one-by-one and returns a per-record `recorded[]` / `failed[]` result. |
+| `records[].prompt` | string | yes | A natural-language entry: what you decided, why, or what you learned. Keep it concrete (min 1 char). |
+| `records[].topic` | string | no | Optional caller-supplied primary subject. Must already be lowercase-kebab. When provided, the worker uses it verbatim. When omitted, the system infers one topic per record from the learning content and existing journal topics. |
+
+**Legacy compatibility (still accepted).** A legacy single-record body of `{ "type": "journal_record", "prompt": "...", "topic": "..." }` is normalized to a one-element `records` array at the request boundary, so existing callers keep working unchanged. Do not mix the two shapes — a body carrying both `records` and a top-level `prompt`/`topic` is rejected with `400 invalid_request`.
 
 **What gets stored & where:**
 
