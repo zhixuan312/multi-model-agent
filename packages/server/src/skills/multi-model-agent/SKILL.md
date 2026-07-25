@@ -62,7 +62,7 @@ digraph picker {
 
 | Skill | Purpose |
 |---|---|
-| `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current State · Rough Direction). Divergent grounding before brainstorm/plan. |
+| `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current state · Rough direction). Divergent grounding before brainstorm/plan. |
 | `mma-brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma-spec` |
 | `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge. Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
 | `/mma-breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma-breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |

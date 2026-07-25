@@ -34,11 +34,11 @@ describe('mma-explore SKILL.md', () => {
 
   it('exploration.md carries the three Forge-aligned top-level sections', () => {
     expect(content).toContain('## Background');
-    expect(content).toContain('## Current State');
-    expect(content).toContain('## Rough Direction');
+    expect(content).toContain('## Current state');
+    expect(content).toContain('## Rough direction');
   });
 
-  it('keeps the divergent 3–5 ranked directions inside Rough Direction', () => {
+  it('keeps the divergent 3–5 ranked directions inside Rough direction', () => {
     expect(content).toMatch(/3.?5 ranked candidate directions/);
   });
 

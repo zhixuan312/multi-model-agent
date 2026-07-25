@@ -94,12 +94,12 @@ export function createProject() {
     '## User Stories & Tasks\n\n### User stories\n- [ ] AC-1: divide(1,0) throws Error\n- [ ] AC-2: divide(6,3) still returns 2\n');
   git('add', 'design-decisions.md'); git('commit', '-qm', 'add design decisions');
 
-  // exploration.md for scenario #31 (spec grounding). Rough Direction deliberately UNRESOLVED.
+  // exploration.md for scenario #31 (spec grounding). Rough direction deliberately UNRESOLVED.
   writeFileSync(join(dir, 'exploration.md'),
     '# Exploration: Guarded arithmetic\n\n' +
     '## Background\nThe math module needs input validation; division by zero is currently unguarded.\n\n' +
-    '## Current State\n\n### Findings — Internal (codebase)\n`divide(a,b)` in src/math.ts returns a/b with no guard.\n\n' +
-    '## Rough Direction\n\n### Direction 1: Throw on invalid input\nExplicit errors; callers handle.\n\n### Direction 2: Return NaN\nSilent; no throw.\n\n### Recommended next step\nGrill the error-handling decision in brainstorm.\n');
+    '## Current state\n\n### Findings — Internal (codebase)\n`divide(a,b)` in src/math.ts returns a/b with no guard.\n\n' +
+    '## Rough direction\n\n### Direction 1: Throw on invalid input\nExplicit errors; callers handle.\n\n### Direction 2: Return NaN\nSilent; no throw.\n\n### Recommended next step\nGrill the error-handling decision in brainstorm.\n');
   git('add', 'exploration.md'); git('commit', '-qm', 'add exploration grounding');
 
   // Non-git directory for the optional-worktree scenarios:
