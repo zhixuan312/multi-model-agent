@@ -47,6 +47,9 @@ importers:
       fast-xml-parser:
         specifier: ^5.7.2
         version: 5.9.2
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
       undici:
         specifier: ^8.2.0
         version: 8.5.0
