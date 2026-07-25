@@ -5,6 +5,61 @@ import { execFileSync } from 'node:child_process';
 
 export const SENTINEL = 'SMOKE-REQ-7f3a2c'; // unique string asserted in dispatch #4
 
+const BT = '`';
+const F = '```';
+
+// Build a contract-first Contract Task plan (the format execute_plan's parseContractPlan requires:
+// `### Task I-N:`, multi-line **Files:** with Test:, five Contract bullets, an Acceptance tests block
+// with Path/fenced-source/Run, and the frozen Implementation sentence). The acceptance test uses
+// Node's built-in test runner (`node --test`) against a NEW `.mjs` file the executor creates — so it
+// runs with zero deps and no TS loader, and passes once the trivial implementation exists.
+function contractPlan(title, header, implPath, testPath, testSrc) {
+  return [
+    `# ${header}`, '',
+    `> **Execution:** implement task-by-task with the mma-execute-plan worker.`, '',
+    '## Phase 1 — Implement: the new function exists and its test passes', '',
+    `### Task I-1: ${title}`, '',
+    '**Files:**',
+    `- Create: ${BT}${implPath}${BT}`,
+    `- Test: ${BT}${testPath}${BT}`, '',
+    `**Technical acceptance criteria** (← AC-1): ${title} — the function exists and its acceptance test passes.`, '',
+    '**Contract:**',
+    '- Inputs / Request: the arguments named in the test.',
+    '- Outputs / Response: the value the test asserts.',
+    '- Data mapping: result computed directly from the inputs.',
+    '- Errors: none required.',
+    '- Behavior / invariants: pure; no side effects.', '',
+    '**Acceptance tests (plan-authored — pipeline-owned)**',
+    `Path: ${BT}${testPath}${BT}`,
+    `${F}js`,
+    testSrc,
+    F,
+    `Run: ${BT}node --test ${testPath}${BT}`, '',
+    '**Implementation:** left to the executor — no code in the plan.', '',
+  ].join('\n');
+}
+
+const subtractTest = [
+  "import { test } from 'node:test';",
+  "import assert from 'node:assert';",
+  "import { subtract } from '../src/subtract.mjs';",
+  "test('subtract', () => { assert.strictEqual(subtract(5, 3), 2); });",
+].join('\n');
+
+const moduloTest = [
+  "import { test } from 'node:test';",
+  "import assert from 'node:assert';",
+  "import { modulo } from '../src/modulo.mjs';",
+  "test('modulo', () => { assert.strictEqual(modulo(7, 3), 1); });",
+].join('\n');
+
+const greetingTest = [
+  "import { test } from 'node:test';",
+  "import assert from 'node:assert';",
+  "import { GREETING } from '../src/greeting.mjs';",
+  "test('greeting', () => { assert.strictEqual(GREETING, 'hi'); });",
+].join('\n');
+
 export function createProject() {
   const dir = mkdtempSync(join(tmpdir(), 'mma-fullsmoke-'));
   const git = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' });
@@ -14,19 +69,20 @@ export function createProject() {
     'export const add = (a: number, b: number) => a + b;\n' +
     'export const multiply = (a: number, b: number) => a * b;\n' +
     'export const divide = (a: number, b: number) => a / b; // no b===0 guard\n');
+  // Contract-first plan for execute_plan #6 (git target): create src/subtract.mjs, test runs via `node --test`.
   writeFileSync(join(dir, 'plan.md'),
-    '# Plan\n\n### Task 1: add subtract\nAdd `subtract(a,b)` to `src/math.ts`.\n');
+    contractPlan('add subtract', 'Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest));
   writeFileSync(join(dir, 'spec.md'),
     `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
   git('add', '.'); git('commit', '-qm', 'seed');
 
-  // Write an UNCOMMITTED plan file for scenario #23 (worktree copy test)
+  // UNCOMMITTED contract-first plan for scenario #23 (worktree copy test).
   writeFileSync(join(dir, 'uncommitted-plan.md'),
-    '# Uncommitted Plan\n\n### Task 1: add modulo\nAdd `modulo(a,b)` to `src/math.ts` that returns `a % b`.\n');
+    contractPlan('add modulo', 'Uncommitted Plan', 'src/modulo.mjs', 'tests/modulo.test.mjs', moduloTest));
   // Intentionally NOT git-added — tests the copyToWorktree mechanism
 
-  // Write a structured design decisions file for scenario #24 (spec task type)
-  // Uses the 8-component Forge-compatible heading standard
+  // Structured design decisions file for scenario #24 (spec task type).
+  // Uses the 8-component heading standard.
   writeFileSync(join(dir, 'design-decisions.md'),
     '## Context\n\n### Background\nThe math module in src/math.ts provides arithmetic functions.\n\n' +
     '## Problem\n\n### Problem\nThe divide function has no zero-divisor guard.\n\n' +
@@ -38,10 +94,7 @@ export function createProject() {
     '## User Stories & Tasks\n\n### User stories\n- [ ] AC-1: divide(1,0) throws Error\n- [ ] AC-2: divide(6,3) still returns 2\n');
   git('add', 'design-decisions.md'); git('commit', '-qm', 'add design decisions');
 
-  // Write an exploration.md for scenario #31 (spec with two target files:
-  // decisions [authoritative] + exploration.md [grounding]). Its Rough Direction
-  // is deliberately UNRESOLVED (two open options) — the spec worker must follow
-  // the decisions file (throw Error), never expand these rough options as decisions.
+  // exploration.md for scenario #31 (spec grounding). Rough Direction deliberately UNRESOLVED.
   writeFileSync(join(dir, 'exploration.md'),
     '# Exploration: Guarded arithmetic\n\n' +
     '## Background\nThe math module needs input validation; division by zero is currently unguarded.\n\n' +
@@ -51,12 +104,12 @@ export function createProject() {
 
   // Non-git directory for the optional-worktree scenarios:
   //   #28 delegate  — write in-place, no worktree
-  //   #32 execute_plan — run a plan in-place, no worktree (needs plan.md below)
+  //   #32 execute_plan — run a contract-first plan in-place, no worktree
   const nonGitDir = mkdtempSync(join(tmpdir(), 'mma-nongit-'));
   mkdirSync(join(nonGitDir, 'src'));
   writeFileSync(join(nonGitDir, 'src', 'hello.ts'), 'export const hello = "world";\n');
   writeFileSync(join(nonGitDir, 'plan.md'),
-    '# Plan\n\n### Task 1: add greeting\nAdd `export const GREETING = "hi";` to `src/hello.ts`.\n');
+    contractPlan('add greeting', 'Plan', 'src/greeting.mjs', 'tests/greeting.test.mjs', greetingTest));
 
   return { dir, nonGitDir };
 }

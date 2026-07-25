@@ -166,7 +166,7 @@ export const SCENARIOS = [
   //                        route); execution.worktree === null. Together they prove BOTH
   //                        worktree-taking write routes degrade to in-place off git.
   { id: 28, type: 'delegate', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
-  { id: 32, type: 'execute_plan', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
+  { id: 32, type: 'execute_plan', tier: 'standard', kind: 'write', nonGitCwd: true, emits: 1 },
 
   // L. Subset spec components (the `components` feature)
   //    #29: spec with a NON-canonical components subset → the worker must emit ONLY

@@ -12,7 +12,7 @@ export function buildRequest(spec, ctx) {
     case 3:  return { type: 'research', body: { prompt: 'What static program-analysis techniques have researchers proposed for detecting division-by-zero errors in software? Background: Surveying the literature on static detection of division-by-zero (abstract interpretation, symbolic execution, etc.) to inform guarding a small math module.' } };
     case 4:  return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/spec.md`] } } };
     case 5:  return { type: 'delegate', body: { prompt: 'Create file src/a.ts with exactly: export const A=1. Only that file.', target: { paths: ['src/a.ts'] }, reviewPolicy: 'reviewed' } };
-    case 6:  return { type: 'execute_plan', body: { target: { paths: [`${cwd}/plan.md`] }, tasks: ['Task 1: add subtract'] } };
+    case 6:  return { type: 'execute_plan', body: { target: { paths: [`${cwd}/plan.md`] }, tasks: ['Task I-1: add subtract'] } };
     case 7:  return { type: 'review', body: { target: { paths: [`${cwd}/src/math.ts`] } } };
     case 8:  return { type: 'debug', body: { prompt: 'divide(1,0) returned Infinity, expected a thrown error', target: { paths: ['src/math.ts'] } } };
     case 9:  return { type: 'journal_record', body: { prompt: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', topic: 'math-module' } };
@@ -48,7 +48,7 @@ export function buildRequest(spec, ctx) {
     case 22: return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/src/math.ts`] } } };
 
     // G. Uncommitted plan file (worktree copy test)
-    case 23: return { type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task 1: add modulo'] } };
+    case 23: return { type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task I-1: add modulo'] } };
 
     // H. New task types (spec + plan)
     case 24: return { type: 'spec', body: { prompt: 'Input validation for math module — guard division by zero', target: { paths: [`${cwd}/design-decisions.md`] } } };
@@ -66,7 +66,7 @@ export function buildRequest(spec, ctx) {
 
     // K. Non-git cwd: write routes run in-place without a worktree
     case 28: return { type: 'delegate', body: { prompt: 'Create file src/output.ts with: export const OUT = 1;', target: { paths: ['src/output.ts'] }, reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
-    case 32: return { type: 'execute_plan', body: { target: { paths: ['plan.md'] }, tasks: ['Task 1: add greeting'], reviewPolicy: 'none' }, cwd: ctx.nonGitDir };
+    case 32: return { type: 'execute_plan', body: { target: { paths: ['plan.md'] }, tasks: ['Task I-1: add greeting'] }, cwd: ctx.nonGitDir };
 
     // L. Subset spec components — request a scrambled subset; worker emits only those, canonical order
     case 29: return { type: 'spec', body: { prompt: 'Guarded arithmetic — subset spec', target: { paths: [`${cwd}/design-decisions.md`] }, components: spec.subsetComponents } };
