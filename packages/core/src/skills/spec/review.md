@@ -13,7 +13,7 @@ Verify the implementer's specification in the worktree against the original desi
 1. Read the spec file the implementer wrote.
 2. Read the original design decisions from the Original Task context.
 3. **Complete any unfinished scaffold.** If the implementer ran out of budget, some `###` sections may still hold a `<!-- brief: ... -->` line instead of real content. Before anything else, write the full content for every such section (per the same Section Rules the implementer follows) so **zero `<!-- brief:` markers remain**. A spec that reaches you half-scaffolded is finished here, not rejected.
-4. Apply each of the 9 criteria below sequentially.
+4. Apply each of the 10 criteria below sequentially.
 5. Fix issues inline in the worktree file.
 6. Your FINAL message must be a single ```json fenced block — nothing else.
 
@@ -44,6 +44,8 @@ In the output JSON, `sections` must list exactly the resolved component set in c
 8. **Assumption exposure** — assumptions are stated explicitly, not hidden in prose. Fix: surface hidden assumptions.
 
 9. **Placeholder scan** — no TBD, TODO, "to be determined", vague verbs, incomplete sections, or leftover `<!-- brief:` scaffold markers. Fix: replace with concrete content.
+
+10. **Reader accessibility** — the business-facing components (Context, Problem, Goals, Alternatives, User Stories) open in plain English a non-engineer (business/product) can follow, lead with the business value, and define a specialist term on first use. The spec is a shared human-alignment contract, not an engineering-only doc. Fix: rewrite jargon-first openings into plain language; keep Technical Design precise.
 
 ## Constraints
 
