@@ -195,3 +195,123 @@ describe('getClaudeOAuth', () => {
     expect(creds?.refreshToken).toBe('r-keep');
   });
 });
+
+// ── Linux / non-macOS: reads ~/.claude/.credentials.json (same blob shape) ────
+describe('getClaudeOAuth (Linux / file store)', () => {
+  const HOME = '/home/svc';
+  const CREDS_PATH = `${HOME}/.claude/.credentials.json`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setPlatform('linux');
+  });
+  afterEach(() => setPlatform(originalPlatform));
+
+  function linuxDeps(over: {
+    blob?: string | Error;
+    refresh?: unknown | Error;
+    now?: number;
+    onWrite?: (path: string, data: string) => void;
+  }) {
+    const exec = vi.fn((cmd: string, _args: string[], options?: { input?: string }) => {
+      if (cmd === 'curl') {
+        if (over.refresh instanceof Error) throw over.refresh;
+        return JSON.stringify(over.refresh);
+      }
+      return '';
+    });
+    const readFile = vi.fn((p: string) => {
+      expect(p).toBe(CREDS_PATH);
+      if (over.blob instanceof Error) throw over.blob;
+      return over.blob ?? '';
+    });
+    const writeFile = vi.fn((p: string, data: string) => over.onWrite?.(p, data));
+    return {
+      deps: {
+        exec: exec as unknown as typeof import('child_process').execFileSync,
+        now: () => over.now ?? Date.now(),
+        readFile,
+        writeFile,
+        homedir: () => HOME,
+      },
+      exec,
+      readFile,
+      writeFile,
+    };
+  }
+
+  const FULL_BLOB = (over: Record<string, unknown>) =>
+    JSON.stringify({
+      claudeAiOauth: {
+        accessToken: 'sk-ant-oat01-OLD',
+        refreshToken: 'sk-ant-ort01-OLD',
+        expiresAt: FAR_FUTURE_MS,
+        refreshTokenExpiresAt: 1787155594671,
+        scopes: ['user:inference', 'user:profile'],
+        subscriptionType: 'max',
+        rateLimitTier: 'default_claude_max_20x',
+        ...over,
+      },
+    });
+
+  it('L1: reads the file and returns credentials when valid/unexpired (no refresh, no write)', () => {
+    const { deps, exec, writeFile } = linuxDeps({ blob: FULL_BLOB({}) });
+    const creds = getClaudeOAuth(deps);
+    expect(creds?.accessToken).toBe('sk-ant-oat01-OLD');
+    expect(creds?.refreshToken).toBe('sk-ant-ort01-OLD');
+    expect(creds?.subscriptionType).toBe('max');
+    expect(exec).not.toHaveBeenCalled(); // never shells out on the happy path
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('L2: refreshes an expired token, persists the FULL wrapper back to the file, preserves extra fields', () => {
+    let written: { path?: string; data?: string } = {};
+    const { deps } = linuxDeps({
+      blob: FULL_BLOB({ expiresAt: FAR_PAST_MS }),
+      refresh: { access_token: 'sk-ant-oat01-NEW', refresh_token: 'sk-ant-ort01-NEW', expires_in: 28_800 },
+      onWrite: (path, data) => (written = { path, data }),
+    });
+    const before = Date.now();
+    const creds = getClaudeOAuth(deps);
+
+    expect(creds?.accessToken).toBe('sk-ant-oat01-NEW');
+    expect(creds?.refreshToken).toBe('sk-ant-ort01-NEW');
+    expect(creds?.expiresAt).toBeGreaterThan(before + 28_800 * 1000 - 5_000);
+
+    // persisted the whole file (wrapper), rotated tokens, extra fields untouched
+    expect(written.path).toBe(CREDS_PATH);
+    const persisted = JSON.parse(written.data!) as { claudeAiOauth: Record<string, unknown> };
+    expect(persisted.claudeAiOauth.accessToken).toBe('sk-ant-oat01-NEW');
+    expect(persisted.claudeAiOauth.refreshToken).toBe('sk-ant-ort01-NEW');
+    expect(persisted.claudeAiOauth.refreshTokenExpiresAt).toBe(1787155594671);
+    expect(persisted.claudeAiOauth.rateLimitTier).toBe('default_claude_max_20x');
+    expect(persisted.claudeAiOauth.subscriptionType).toBe('max');
+  });
+
+  it('L3: returns null when the credentials file does not exist', () => {
+    const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const { deps } = linuxDeps({ blob: err });
+    expect(getClaudeOAuth(deps)).toBeNull();
+  });
+
+  it('L4: returns null when expired and the refresh request fails', () => {
+    const { deps, writeFile } = linuxDeps({
+      blob: FULL_BLOB({ expiresAt: FAR_PAST_MS }),
+      refresh: new Error('curl: (22) 401'),
+    });
+    expect(getClaudeOAuth(deps)).toBeNull();
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('L5: still returns the refreshed token even if the file write fails (best effort)', () => {
+    const { deps } = linuxDeps({
+      blob: FULL_BLOB({ expiresAt: FAR_PAST_MS }),
+      refresh: { access_token: 'tok-new', refresh_token: 'r-new', expires_in: 28_800 },
+      onWrite: () => {
+        throw new Error('EACCES');
+      },
+    });
+    const creds = getClaudeOAuth(deps);
+    expect(creds?.accessToken).toBe('tok-new');
+  });
+});
