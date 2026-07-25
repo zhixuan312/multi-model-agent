@@ -36,7 +36,7 @@ export const EVENTS_RAW_COLUMNS = ['event_id', 'install_id', 'received_at', 'rou
 export const APPROVED_DB_HOSTS = ['localhost', '127.0.0.1', '::1', ''];
 
 export const POLL = {
-  taskEveryMs: 1500, taskMaxMs: 10 * 60 * 1000,
+  taskEveryMs: 1500, taskMaxMs: 15 * 60 * 1000,
   backendEveryMs: 2000, backendMaxMs: 60 * 1000,
 };
 

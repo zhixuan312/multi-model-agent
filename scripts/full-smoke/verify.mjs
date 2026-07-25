@@ -240,6 +240,12 @@ export function verify(rec) {
       const skipped = revSessionId == null;
       out.push(C('review', skipped ? 'PASS' : 'FAIL',
         `reviewPolicy=none; reviewer=${revSessionId}`));
+    } else if (e.type === 'journal_record') {
+      // journal_record is deterministic decide-then-apply: the reviewer runs only when the
+      // apply's invariants don't pass. A clean apply legitimately skips the reviewer, so a null
+      // reviewer is correct here — either presence or absence is acceptable.
+      out.push(C('review', 'PASS',
+        `journal_record: reviewer optional (deterministic apply); reviewer=${revSessionId}`));
     } else {
       const hasReviewer = revSessionId != null && typeof revSessionId === 'string';
       out.push(C('review', hasReviewer ? 'PASS' : 'FAIL',
@@ -295,7 +301,9 @@ export function verify(rec) {
   //    The two-phase pipeline should produce non-empty implementer output AND
   //    non-empty reviewer output. If either is empty, the collaborative pipeline
   //    is broken (reviewer rubber-stamped or implementer produced nothing).
-  if ((e.kind === 'read' || e.kind === 'write') && e.reviewPolicy !== 'none' && e.type !== 'orchestrate') {
+  //    journal_record is exempt: its reviewer runs only on an invariant failure (deterministic
+  //    decide-then-apply), so a clean apply has no reviewer output by design.
+  if ((e.kind === 'read' || e.kind === 'write') && e.reviewPolicy !== 'none' && e.type !== 'orchestrate' && e.type !== 'journal_record') {
     const rawImpl = r?.raw?.implementer ?? '';
     const rawRev = r?.raw?.reviewer ?? '';
     const implLen = typeof rawImpl === 'string' ? rawImpl.length : 0;

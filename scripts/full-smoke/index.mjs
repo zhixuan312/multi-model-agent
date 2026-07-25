@@ -49,6 +49,7 @@ const opts = {
   only: onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null,
   waitFlush: argv.includes('--wait-flush'),
   sequential: argv.includes('--sequential'),
+  concurrency: Number((argv.find((a) => a.startsWith('--concurrency=')) || '').split('=')[1]) || 8,
 };
 
 let ctx;
@@ -277,7 +278,11 @@ try {
       .filter(t => t.length > 0);
     if (p2Threads.length > 0) {
       log(`\n── Phase 2 (${p2Threads.length} parallel threads, ${p2Threads.reduce((n, t) => n + t.length, 0)} tasks) ──`);
-      await Promise.all(p2Threads.map(thread => runChain(thread, scenarios, ctx, log)));
+      const cap = opts.sequential ? 1 : opts.concurrency;
+      log(`   (concurrency cap: ${cap})`);
+      let cursor = 0;
+      const worker = async () => { while (cursor < p2Threads.length) { const t = p2Threads[cursor++]; await runChain(t, scenarios, ctx, log); } };
+      await Promise.all(Array.from({ length: Math.min(cap, p2Threads.length) }, worker));
     }
 
   }

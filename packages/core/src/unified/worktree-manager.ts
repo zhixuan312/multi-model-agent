@@ -311,10 +311,14 @@ export class WorktreeManager {
       }
     }
 
-    // Compute filesChanged from the merge commit (source of truth, not tool-call tracking)
+    // Compute filesChanged from the worktree branch's own last commit — NOT from the shared
+    // originalCwd HEAD~1..HEAD. The latter races: when multiple worktrees merge into the same repo
+    // concurrently, another merge can advance originalCwd's HEAD between this merge and the diff,
+    // so HEAD~1..HEAD there would report the wrong (or empty) commit. The worktree branch is private
+    // to this worker, so its HEAD~1..HEAD is race-free.
     let filesChanged: string[] = [];
     try {
-      const { stdout } = await this.exec('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: originalCwd, windowsHide: true });
+      const { stdout } = await this.exec('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: worktreePath, windowsHide: true });
       filesChanged = stdout.trim().split('\n').filter(Boolean);
     } catch { /* best-effort — empty list on failure */ }
 
