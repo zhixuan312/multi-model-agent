@@ -62,6 +62,13 @@ Assign exactly one `type` per created/refined/superseding node:
 - **Status values** (only): `adopted`, `dropped`, `inconclusive`, `superseded`.
 - Do not invent edge types, status values, or types outside these vocabularies.
 
+### `links[]` rules
+
+- Each `links[]` entry needs BOTH a valid `type` (one of the 6 edge types above) AND a `target` that is an existing node id drawn from the supplied `candidatesByRecord` — never a placeholder or a guessed id.
+- If no supplied candidate is clearly related, emit an empty `links: []`. Do NOT invent an edge just to have one.
+- `refine`/`supersede` still set the top-level `targetNodeId` for the primary relationship; the engine injects the `refines`/`supersedes` edge for you, so you need not duplicate it in `links[]`.
+- Any extra edge that lacks a valid `type` or a real `target` is dropped by the engine — do not rely on it.
+
 ## Topic rules
 
 - If the caller supplied structured `topic`, use that value verbatim (it is already validated lowercase-kebab).
