@@ -21,7 +21,20 @@ describe('contract-first plan authoring prompts (I-6)', () => {
     expect(planImpl).toContain('Path:');
     expect(planImpl).toContain('Run:');
     expect(planImpl).toContain('**Implementation:** left to the executor');
-    expect(planImpl.toLowerCase()).toContain('contract boundary');
+  });
+
+  it('plan/implement.md is human-executable: phased, technical-AC-per-task, human completion bar', () => {
+    // Phases are the build story (human comprehension), each with "what works at the end".
+    expect(planImpl).toContain('## Phase N —');
+    expect(planImpl.toLowerCase()).toContain('what works at the end');
+    // Business AC -> technical AC translation, traced.
+    expect(planImpl).toContain('Technical acceptance criteria');
+    expect(planImpl).toContain('← AC');
+    // The completion bar is human-executability, not just agent-executability.
+    expect(planImpl.toLowerCase()).toContain('human-executable');
+    expect(planImpl.toLowerCase()).toContain('competent engineer');
+    // Human divide-and-conquer, not a hundred micro-tasks nor two epics.
+    expect(planImpl.toLowerCase()).toContain('divide and conquer');
   });
 
   it('plan/implement.md drops the verbatim-code / size-cap mandates', () => {
@@ -30,10 +43,11 @@ describe('contract-first plan authoring prompts (I-6)', () => {
     expect(planImpl).not.toMatch(/Maximum 3 source files/i);
   });
 
-  it('plan/review.md checks contract completeness and emits optional contractCompleteness', () => {
+  it('plan/review.md checks phases, technical ACs, and contract completeness', () => {
+    expect(planRev.toLowerCase()).toContain('human-executable phases');
+    expect(planRev.toLowerCase()).toContain('technical acceptance criterion');
     expect(planRev.toLowerCase()).toContain('contract completeness');
     expect(planRev).toContain('contractCompleteness');
-    expect(planRev.toLowerCase()).not.toContain('verbatim-code fidelity enforced');
   });
 });
 
@@ -50,6 +64,19 @@ describe('autonomous executor prompts (I-7)', () => {
     expect(execImpl.toLowerCase()).not.toContain('mechanical executor');
     expect(execImpl.toLowerCase()).not.toContain('character-for-character');
     expect(execImpl).not.toContain('CODE SUBSTITUTION');
+  });
+
+  it('execute_plan/implement.md keeps the house-style headers but stays lean', () => {
+    // House style: the standard section headers are kept so every skill reads consistently.
+    for (const h of ['## Role', '## Task', '## Context', '## Constraints', '## Output']) {
+      expect(execImpl).toContain(h);
+    }
+    // Agent-audience: the "how to work" babysitting is stripped, unlike the old mechanical version.
+    expect(execImpl).not.toContain('Turn Budget');
+    expect(execImpl.toLowerCase()).not.toContain('restart-loop');
+    expect(execImpl.toLowerCase()).not.toContain('do not over-verify');
+    // Well below the old ~77-line mechanical-executor prompt.
+    expect(execImpl.split('\n').length).toBeLessThan(60);
   });
 
   it('execute_plan/review.md defines fidelity as contract satisfaction + passing tests, not verbatim', () => {

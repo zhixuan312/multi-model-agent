@@ -262,6 +262,25 @@ describe('parseContractPlan', () => {
     expect(snapshot.tasks[0]!.acceptanceTests[0]!.source).toBe(EXAMPLE_SOURCE);
   });
 
+  it('tolerates a human-facing Technical acceptance criteria line before the Contract', () => {
+    // The human-executable plan template adds a "**Technical acceptance criteria**" line between
+    // **Files:** and the Contract bullets. It is for humans; the parser must ignore it and still
+    // extract the same contract + acceptance test.
+    const withTechAc = VALID_PLAN.replace(
+      '\nInputs / Request:',
+      '\n**Technical acceptance criteria** (← AC-1.1): Given a valid markdown task, one snapshot is returned.\n\nInputs / Request:',
+    );
+    const snapshot = parseContractPlan(withTechAc);
+    expect(snapshot.tasks.length).toBe(1);
+    expect(snapshot.tasks[0]!.acceptanceTests[0]).toEqual({
+      path: 'tests/unified/example.test.ts',
+      source: EXAMPLE_SOURCE,
+      command: 'pnpm vitest run tests/unified/example.test.ts',
+    });
+    // The Technical-AC prose is NOT absorbed into the last Contract bullet.
+    expect(snapshot.tasks[0]!.contract.behaviorInvariants).not.toContain('Technical acceptance criteria');
+  });
+
   it('returns an immutable deep-frozen snapshot', () => {
     const snapshot = parseContractPlan(VALID_PLAN);
     expect(Object.isFrozen(snapshot)).toBe(true);
