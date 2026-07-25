@@ -190,4 +190,23 @@ describe('matchTasks', () => {
     expect(titles).not.toContain("What Doesn't Change");
     expect(titles).not.toContain('Phase 1: Core Setup');
   });
+
+  it('recognizes roman-numeral "Task I-N:" headings as numbered', () => {
+    const plan = `# Plan\n\n## Track 1\n\n### Task I-1: Parse the contract\n\n### Task I-12: Materialize acceptance tests\n`;
+    const h = parsePlanHeadings(plan);
+    const numbered = h.filter(x => x.isNumbered);
+    expect(numbered.length).toBe(2);
+    expect(numbered.map(x => x.normalized)).toEqual([
+      'Task I-1: Parse the contract',
+      'Task I-12: Materialize acceptance tests',
+    ]);
+  });
+
+  it('empty selector on a roman-numeral Task plan returns all Contract Tasks', () => {
+    const plan = `# Plan\n\n## Track 1\n\n### Task I-1: A\n\n### Task I-12: B\n\n## What Doesn't Change\n`;
+    const h = parsePlanHeadings(plan);
+    const matched = matchTasks(h, []);
+    expect(matched.length).toBe(2);
+    expect(matched.map(m => m.normalized)).toEqual(['Task I-1: A', 'Task I-12: B']);
+  });
 });
