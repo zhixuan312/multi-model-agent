@@ -25,9 +25,14 @@ re-output unchanged.
 
 ## Checks
 
-1. **Human-executable phases.** The implementation is grouped into `## Phase N — <name>: <what works at
-   the end>` build stages, sequenced so each phase leaves a working increment. Add the "what works at
-   the end" line to any phase missing it; regroup a flat task list into phases if needed.
+1. **Human-executable phases (required format).** The implementation is grouped into
+   `## Phase N — <name>: <what works at the end>` build stages (level-2 `##` headings — the plan-stage
+   renderer groups tasks by them; fix any `#`/`###` phase heading), sequenced so each phase leaves a
+   working increment. Add the "what works at the end" line to any phase missing it; regroup a flat task
+   list into phases. Task headings must be `### Task I-N:` (level-3, roman-numbered), and `**Files:**`
+   must be a multi-line `- Create:/Modify:/Test:` bullet list with backticked paths (not a single
+   inline line) so each task's files render — convert any inline Files line to bullets. The plan must
+   not reference any non-MMA methodology skill; MMA executes its own plans via mma-execute-plan.
 2. **Human-sensible granularity.** Each phase holds a sensible handful of tasks (roughly 2–6) and each
    task is a unit an engineer could finish in a sitting. Split a mega-task; merge trivially-fragmented
    ones. Not a hundred micro-tasks, not two epics.

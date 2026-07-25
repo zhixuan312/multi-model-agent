@@ -262,6 +262,18 @@ describe('parseContractPlan', () => {
     expect(snapshot.tasks[0]!.acceptanceTests[0]!.source).toBe(EXAMPLE_SOURCE);
   });
 
+  it('accepts the Forge-style multi-line **Files:** bullet list (not just the inline form)', () => {
+    // Forge renders task files from a multi-line `**Files:**\n- Create/Test: \`path\`` list; the
+    // executor parser must accept that same shape so one plan loads in Forge AND runs here.
+    const multiline = VALID_PLAN.replace(
+      /\*\*Files:\*\*.*/,
+      '**Files:**\n- Modify: ' + BT + 'packages/core/src/unified/example.ts' + BT + '\n- Test: ' + BT + 'tests/unified/example.test.ts' + BT,
+    );
+    const snapshot = parseContractPlan(multiline);
+    expect(snapshot.tasks.length).toBe(1);
+    expect(snapshot.tasks[0]!.acceptanceTests[0]!.path).toBe('tests/unified/example.test.ts');
+  });
+
   it('tolerates a human-facing Technical acceptance criteria line before the Contract', () => {
     // The human-executable plan template adds a "**Technical acceptance criteria**" line between
     // **Files:** and the Contract bullets. It is for humans; the parser must ignore it and still

@@ -77,7 +77,11 @@ const ACCEPTANCE_HEADING_MARKER = 'Acceptance tests (plan-authored';
 const IMPLEMENTATION_SENTINEL = '**Implementation:** left to the executor — no code in the plan.';
 
 const TASK_HEADING_RE = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
-const FILES_LINE_RE = /^\*\*Files:\*\*\s*(.+)$/m;
+// Capture the whole **Files:** block — the inline remainder AND/OR the multi-line bullet list
+// that follows — up to the next blank line, the next bold field, or the next task heading. This
+// accepts BOTH the inline `**Files:** Create: … · Test: …` form and Forge's multi-line
+// `**Files:**\n- Create: \`…\`\n- Test: \`…\`` form, so one plan renders in Forge and runs here.
+const FILES_BLOCK_RE = /\*\*Files:\*\*([\s\S]*?)(?=\n[ \t]*\n|\n\*\*[A-Za-z]|\n###\s|$)/;
 const SHELL_METACHAR_RE = /[|&;<>$`()'"]/;
 const TEST_BLOCK_RE = /Path:\s*`?([^\n`]+?)`?\s*\n```[^\n]*\n([\s\S]*?)\n```\s*\nRun:\s*`?([^\n`]+?)`?\s*(?=\n|$)/g;
 
@@ -85,13 +89,15 @@ function stripBacktick(value: string): string {
   return value.trim().replace(/^`+|`+$/g, '').trim();
 }
 
-function extractDeclaredTestPaths(filesLine: string): string[] {
-  const testIdx = filesLine.indexOf('Test:');
+function extractDeclaredTestPaths(filesBlock: string): string[] {
+  const testIdx = filesBlock.indexOf('Test:');
   if (testIdx === -1) {
-    throw new ContractPlanError('malformed-plan', `Files: line is missing a "Test:" field: "${filesLine}"`);
+    throw new ContractPlanError('malformed-plan', `Files block is missing a "Test:" field: "${filesBlock.trim()}"`);
   }
-  const rest = filesLine.slice(testIdx + 'Test:'.length);
-  return rest
+  // Take only the remainder of the line that holds "Test:" — works for both the inline
+  // `… Test: a, b` form and the multi-line `- Test: \`a\`` bullet form.
+  const testLineRest = filesBlock.slice(testIdx + 'Test:'.length).split('\n')[0]!;
+  return testLineRest
     .split(',')
     .map(stripBacktick)
     .filter(p => p.length > 0);
@@ -100,9 +106,9 @@ function extractDeclaredTestPaths(filesLine: string): string[] {
 function parseTaskSection(headingLine: string, body: string): ParsedContractTask {
   const title = headingLine.replace(/^###\s+/, '').trim();
 
-  const filesMatch = body.match(FILES_LINE_RE);
+  const filesMatch = body.match(FILES_BLOCK_RE);
   if (!filesMatch) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing an inline "**Files:**" field`);
+    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing a "**Files:**" field`);
   }
   const declaredPaths = extractDeclaredTestPaths(filesMatch[1]!);
   if (declaredPaths.length === 0) {

@@ -37,6 +37,19 @@ describe('contract-first plan authoring prompts (I-6)', () => {
     expect(planImpl.toLowerCase()).toContain('divide and conquer');
   });
 
+  it('plan/implement.md specifies the required render format (## phases, multi-line **Files:**) and MMA execution', () => {
+    // Phases parse by level-2 headings; task files by a multi-line `- ` bullet list.
+    expect(planImpl.toLowerCase()).toContain('required heading & file conventions');
+    expect(planImpl).toContain('## Phase N —');
+    // The Files template must be the multi-line bullet form, not a single inline line.
+    expect(planImpl).toMatch(/\*\*Files:\*\*\n- Create:/);
+    expect(planImpl).toContain('- Test: `');
+    // MMA executes its own plans: reference mma-execute-plan, never superpowers, and don't name Forge.
+    expect(planImpl).toContain('mma-execute-plan');
+    expect(planImpl.toLowerCase()).not.toContain('superpowers');
+    expect(planImpl.toLowerCase()).not.toContain('forge');
+  });
+
   it('plan/implement.md drops the verbatim-code / size-cap mandates', () => {
     expect(planImpl).not.toContain('show ALL the code');
     expect(planImpl).not.toMatch(/Maximum 6 steps/i);

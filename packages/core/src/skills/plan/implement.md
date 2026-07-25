@@ -61,7 +61,10 @@ regardless of phase, so the executor can select them):
 ```markdown
 ### Task I-N: <Contract name> (← AC-X.X, AC-Y.Y)
 
-**Files:** Create/Modify: <impl paths>  ·  Test: <new dedicated test path(s)>
+**Files:**
+- Create: `<impl path>`
+- Modify: `<impl path>`
+- Test: `<new dedicated test path>`
 
 **Technical acceptance criteria** (← AC-X.X): <one human-readable, testable statement of what "done"
 means for this task — the engineering translation of the cited business AC. e.g. "Given a request with
@@ -89,6 +92,26 @@ fenced source block and one `Run:` command:
 The five Contract bullets appear in exactly this order and label text. The only code you write is the
 acceptance tests.
 
+### Format — required heading & file conventions
+
+The plan file is parsed by the SDLC plan-stage renderer to display phases, tasks, and files. Use
+these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the file list):
+- **Phase headings are level-2** — `## Phase N — <name>: <what works at the end>`. Not `#`, not `###`.
+  The renderer groups tasks by the `##` heading above them; a `#` phase heading is invisible.
+- **Task headings are level-3, roman-numbered** — `### Task I-N: <title> (← AC-X.X)`. The `I-N`
+  (roman-`I` + `-N`) is required by the executor and accepted by the renderer.
+- **`**Files:**` is a multi-line bullet list**, each path wrapped in backticks, with exactly one
+  `- Test:` line:
+  ```markdown
+  **Files:**
+  - Create: `src/foo.ts`
+  - Modify: `src/bar.ts`
+  - Test: `tests/foo.test.ts`
+  ```
+  The renderer reads the `- ` bullets to show each task's file list; a single inline
+  `**Files:** … Test: …` line renders with no files. Keep the `- Test:` path identical to the `Path:`
+  in the acceptance-tests block below.
+
 ## Constraints
 
 1. **No implementation code in the plan.** A task's `Implementation` section is exactly
@@ -112,10 +135,13 @@ Work in this order (guidance for producing a good document, not a rigid ritual):
    patterns, build/run commands); verify every path and symbol the spec references exists at HEAD.
    Record discrepancies as reconciliation notes in the plan header — a contract that names a wrong path
    makes the executor fail.
-2. **Skeleton in one write.** Write the header (frontmatter `version: 1` + `updated_at`, Goal,
-   Architecture, Tech Stack, Ground truth at HEAD, File Structure), the phase headings each with their
-   "what works at the end" line, and every task heading with its `**Files:**` block and `← AC` refs —
-   leaving each task's body as a single `<!-- enrich -->` slot.
+2. **Skeleton in one write.** Write the header — frontmatter (`version: 1` + `updated_at`), the title,
+   a one-line **execution note** (`> **Execution:** implement task-by-task with the mma-execute-plan
+   worker (the MMA autonomous executor); each task's acceptance tests gate its commit.`), then Goal,
+   Architecture, Tech Stack, Ground truth at HEAD, File Structure — followed by the phase headings each
+   with their "what works at the end" line, and every task heading with its `**Files:**` block and
+   `← AC` refs, leaving each task's body as a single `<!-- enrich -->` slot. Do NOT reference any
+   non-MMA methodology skill — MMA executes its own plans via mma-execute-plan.
 3. **Fill each task** one at a time (technical AC + Contract + acceptance tests), in dependency order,
    until zero `<!-- enrich` markers remain.
 4. **Close** with a Full-suite gate (test/build/lint, expected PASS) and a Spec-coverage traceability
