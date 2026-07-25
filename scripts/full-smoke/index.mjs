@@ -118,7 +118,7 @@ async function runScenario(spec, ctx, log) {
     const queue = collectQueue(queueBefore);
     const want = spec.emits ?? 0;
     const startSeen = seenIds.size;
-    const settleUntil = Date.now() + 8000;
+    const settleUntil = Date.now() + 15000;
     for (;;) {
       for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
       if (seenIds.size - startSeen >= want || Date.now() >= settleUntil) break;

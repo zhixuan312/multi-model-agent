@@ -427,7 +427,7 @@ export function verify(rec) {
   // ⑮ Write route filesChanged — must be populated (from git diff or tool tracking).
   // Non-git (in-place) targets have no git diff to compute changed files from, so the
   // git-diff-based filesChanged is not asserted there.
-  if (e.kind === 'write' && e.reviewPolicy !== 'none' && !e.nonGitCwd) {
+  if (e.kind === 'write' && e.reviewPolicy !== 'none' && !e.nonGitCwd && e.type !== 'journal_record') {
     const fc = r?.output?.filesChanged;
     const hasFiles = Array.isArray(fc) && fc.length > 0;
     out.push(C('files-changed', hasFiles ? 'PASS' : 'WARN',

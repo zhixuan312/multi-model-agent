@@ -223,8 +223,9 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
+      .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base branch HEAD
+      .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only base branch (filesChanged)
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge
-      .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
       .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
 
@@ -243,12 +244,13 @@ describe('WorktreeManager', () => {
     expect(calls[0][1]).toContain('--porcelain');
     expect(calls[1][1]).toEqual(['add', '-A']);
     expect(calls[2][1]).toContain('commit');
-    expect(calls[3][1]).toContain('merge');
-    expect(calls[3][1]).toContain('mma/delegate-abc');
-    expect(calls[3][2].cwd).toBe('/repo'); // merge runs in original cwd
-    expect(calls[4][1]).toContain('diff'); // git diff --name-only for filesChanged
-    expect(calls[5][1]).toContain('remove');
-    expect(calls[6][1]).toContain('-D');
+    expect(calls[3][1]).toContain('merge-base'); // filesChanged base (fork point)
+    expect(calls[4][1]).toContain('diff'); // git diff --name-only base branch → filesChanged
+    expect(calls[5][1]).toContain('merge');
+    expect(calls[5][1]).toContain('mma/delegate-abc');
+    expect(calls[5][2].cwd).toBe('/repo'); // merge runs in original cwd
+    expect(calls[6][1]).toContain('remove');
+    expect(calls[7][1]).toContain('-D');
   });
 
   it('mergeAndCleanup preserves worktree on merge conflict', async () => {
@@ -256,6 +258,8 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
+      .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base branch HEAD
+      .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only (filesChanged)
       .mockRejectedValueOnce(new Error('not fast-forward')) // git merge --ff-only fails
       .mockRejectedValueOnce(new Error('rebase conflict')) // git rebase fails
       .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git rebase --abort

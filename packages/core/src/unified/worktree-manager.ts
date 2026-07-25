@@ -295,6 +295,18 @@ export class WorktreeManager {
       // Already committed or nothing to commit
     }
 
+    // Compute filesChanged BEFORE the merge, as the full diff of the worktree branch against its
+    // fork point (merge-base with the current target). This is robust to (a) concurrent merges
+    // advancing the shared HEAD between merge and diff, and (b) the worker making its own commits —
+    // a post-merge `HEAD~1..HEAD` would miss both. merge-base is the stable fork point regardless of
+    // how the target branch moved.
+    let filesChanged: string[] = [];
+    try {
+      const { stdout: base } = await this.exec('git', ['merge-base', branch, 'HEAD'], { cwd: originalCwd, windowsHide: true });
+      const { stdout } = await this.exec('git', ['diff', '--name-only', base.trim(), branch], { cwd: originalCwd, windowsHide: true });
+      filesChanged = stdout.trim().split('\n').filter(Boolean);
+    } catch { /* best-effort — empty list on failure */ }
+
     // Merge worktree branch into original branch — prefer fast-forward for linear history.
     // If the target moved while the worker ran, rebase the worktree branch first.
     try {
@@ -310,17 +322,6 @@ export class WorktreeManager {
         return { branch, path: worktreePath, hasChanges: true, merged: false };
       }
     }
-
-    // Compute filesChanged from the worktree branch's own last commit — NOT from the shared
-    // originalCwd HEAD~1..HEAD. The latter races: when multiple worktrees merge into the same repo
-    // concurrently, another merge can advance originalCwd's HEAD between this merge and the diff,
-    // so HEAD~1..HEAD there would report the wrong (or empty) commit. The worktree branch is private
-    // to this worker, so its HEAD~1..HEAD is race-free.
-    let filesChanged: string[] = [];
-    try {
-      const { stdout } = await this.exec('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: worktreePath, windowsHide: true });
-      filesChanged = stdout.trim().split('\n').filter(Boolean);
-    } catch { /* best-effort — empty list on failure */ }
 
     // Merge succeeded — remove worktree + branch (shared `.git` registry → retry on lock)
     await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
