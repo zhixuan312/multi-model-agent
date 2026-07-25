@@ -992,7 +992,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             // with the reason in output.reviewerNote). This mirrors the telemetry envelope's
             // structuredError, which is likewise null for done_with_concerns.
             error: result.status === 'failed'
-              ? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' }
+              ? (result.failureReason ?? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' })
               : null,
           };
 
@@ -1017,7 +1017,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
           if (result.status === 'failed') {
             deps.taskRegistry.fail(taskId, resultObj);
-            deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: 'pipeline_failed', error_message: 'Pipeline completed with failed status' } });
+            deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: result.failureReason?.code ?? 'pipeline_failed', error_message: result.failureReason?.message ?? 'Pipeline completed with failed status' } });
             process.stderr.write(
               `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
             );

@@ -97,4 +97,15 @@ describe('execute_plan contract-first completion scoring', () => {
     expect(r.completionPercent).toBeLessThan(80);
     expect(r.status).toBe('failed');
   });
+
+  it('refuses to auto-pass an execute_plan dispatched without a contract snapshot (defense-in-depth)', async () => {
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    const input = baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run });
+    delete input.acceptanceTestSnapshot;
+    const r = await runTwoPhasePipeline(input);
+    expect(r.completionPercent).toBe(0);
+    expect(r.status).toBe('failed');
+    expect(r.failureReason?.code).toBe('missing_contract_snapshot');
+    expect(WorktreeManager.prototype.mergeAndCleanup).not.toHaveBeenCalled();
+  });
 });

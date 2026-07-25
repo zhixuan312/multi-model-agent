@@ -423,7 +423,12 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // commands passing. Test integrity is structural — the scored run always uses the plan's bytes.
     let completionPercent = 100;
     let epFailure: { code: string; message: string } | undefined;
-    if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
+    if (input.type === 'execute_plan' && !input.acceptanceTestSnapshot) {
+      // Defense-in-depth: a contract-first execute_plan is unscorable without its frozen snapshot.
+      // The handler always supplies one; a direct pipeline caller that omits it must NOT auto-pass.
+      completionPercent = 0;
+      epFailure = { code: 'missing_contract_snapshot', message: 'execute_plan requires a contract-first acceptanceTestSnapshot to be scorable' };
+    } else if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
       try {
         await rematerializeAcceptanceTests(input.acceptanceTestSnapshot, effectiveCwd);
       } catch (err) {
@@ -454,7 +459,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       }
       worktreeResolved = true;
       worktree = null;
-      epFailure = { code: 'contract_not_satisfied', message: `execute_plan completion ${completionPercent} is below the 80 commit gate` };
+      epFailure = epFailure ?? { code: 'contract_not_satisfied', message: `execute_plan completion ${completionPercent} is below the 80 commit gate` };
     } else {
       worktree = await resolveWorktree(buildCommitMessage());
       worktreeResolved = true;
