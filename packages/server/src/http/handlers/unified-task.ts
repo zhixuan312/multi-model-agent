@@ -9,9 +9,9 @@ import {
   resolveAgent,
   runTwoPhasePipeline,
   WorktreeManager,
-  parsePlanHeadings,
-  matchTasks,
-  MatchError,
+  parseContractPlan,
+  assertSafeAcceptanceTestPaths,
+  ContractPlanError,
   resolveComponents,
   JournalIndexStore,
   JournalStore,
@@ -19,6 +19,7 @@ import {
   searchCandidatesForRecord,
   parseRecordDecisions,
   type SkillPair,
+  type ContractPlanSnapshot,
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model-agent-core';
@@ -165,10 +166,10 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'execute_plan':
       return [
-        'You have followed EVERY step in the plan exactly as written.',
-        'Code blocks in the plan were applied verbatim (no substitution or improvisation).',
-        'If the plan lists verification commands, you ran them.',
-        'No steps were skipped or reordered.',
+        'You have satisfied every dispatched Contract Task\'s Contract (Inputs/Request, Outputs/Response, Data mapping, Errors, Behavior/invariants) and made its plan-authored Acceptance tests pass.',
+        'You materialized each plan-authored Acceptance test source verbatim to its paired path before implementing it, and did not modify, weaken, delete, or overwrite it.',
+        'You chose your own implementation approach to satisfy the contract — the plan contains no implementation code, so there is nothing to copy verbatim.',
+        'If a contract defect (including an authored test that contradicts the contract) blocked you, you reported it by name instead of silently working around it or weakening the test.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'journal_record':
@@ -199,11 +200,12 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
     case 'plan':
       return [
         'You have read the spec and explored the codebase to discover ground truth at HEAD.',
-        'You have written a complete plan file with Goal/Architecture/Tech Stack header, File Structure section, and Track-organized TDD tasks.',
-        'Every task has the exact structure: failing test → verify fail → minimal code → verify pass.',
-        'Every code block is complete — no placeholders, no "similar to Task N".',
+        'You have written a complete plan file with Goal/Architecture/Tech Stack header and File Structure section.',
+        'Every task is a frozen Contract Task: a numbered "### Task <roman>-<n>:" heading with an inline "**Files:** ... Test:" field naming its plan-authored acceptance-test path(s).',
+        'Every task states all five Contract bullets, in order: Inputs / Request, Outputs / Response, Data mapping, Errors, Behavior / invariants.',
+        'Every task has an "Acceptance tests (plan-authored" block with, for each declared path, exactly one Path:, one complete fenced source block, and one Run: command containing no shell metacharacters.',
+        'Every task ends with the exact line "**Implementation:** left to the executor — no code in the plan." — you do not write implementation code in the plan.',
         'Every file path was verified against the codebase.',
-        'Every verification command uses the project actual test runner.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'orchestrate':
@@ -302,7 +304,7 @@ function buildEnvelopeSnapshot(
     terminalAt: now,
     stopReason: null,
     structuredError: result.status === 'failed'
-      ? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' }
+      ? (result.failureReason ?? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' })
       : null,
     errorCode: null,
     reviewPolicy: reviewPolicy === 'none' ? 'none' : 'reviewed',
@@ -512,7 +514,14 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const typeConfig = getTypeConfig(input.type);
     const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
-    const reviewPolicy = input.type === 'orchestrate' ? 'none' : (input.reviewPolicy ?? 'reviewed');
+    // execute_plan is always reviewed: contract-first completion scoring derives
+    // contract satisfaction from the reviewer's tasks[], so an unreviewed execute-plan
+    // has no scoring source. This overrides any caller-requested 'none'.
+    const reviewPolicy = input.type === 'orchestrate'
+      ? 'none'
+      : input.type === 'execute_plan'
+        ? 'reviewed'
+        : (input.reviewPolicy ?? 'reviewed');
     // Raw caller intent: undefined when omitted. Journal routes force review only when the
     // caller explicitly asked for it; otherwise the deterministic invariants decide.
     const callerForcedReview = input.reviewPolicy === 'reviewed';
@@ -569,9 +578,13 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
           const implementerGoal = buildGoalCondition(input.type, 'implementer', skills.implement);
           const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
 
-          // ── Execute-plan pre-processing: parse plan + smart match ──
+          // ── Execute-plan pre-processing: parse + validate the frozen Contract Task
+          //    plan and select the dispatched tasks BEFORE any provider session opens.
+          //    Any structural, path-safety, or selector problem fails the task terminally
+          //    here (zero provider sessions) — the client learns of it by polling. ──
           let dispatchedTasks: string[] | undefined;
           let copyToWorktree: string[] | undefined;
+          let acceptanceTestSnapshot: ContractPlanSnapshot | undefined;
           if (input.type === 'execute_plan') {
             const epPayload = payload as { target: { paths: string[] }; tasks: string[] };
             const planPath = epPayload.target.paths[0];
@@ -583,21 +596,69 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
               deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'plan_not_found', message: `Plan file not found: ${planPath}` }));
               return;
             }
-            const headings = parsePlanHeadings(planContent);
-            let matched;
+
+            let fullSnapshot: ContractPlanSnapshot;
             try {
-              matched = matchTasks(headings, epPayload.tasks);
+              fullSnapshot = parseContractPlan(planContent);
             } catch (err) {
-              if (err instanceof MatchError) {
-                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message, ...(err.matches && { matches: err.matches }) }));
+              if (err instanceof ContractPlanError) {
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message }));
                 return;
               }
               throw err;
             }
-            dispatchedTasks = matched.map(h => h.normalized);
+
+            // Task selection comes from the parsed Contract snapshot, not the legacy
+            // matchTasks/parsePlanHeadings matcher (which never recognized roman-numeral
+            // "### Task I-N:" headings): select by exact, case-sensitive title match, or
+            // every parsed Contract Task when the selector is empty.
+            let selectedTasks: ContractPlanSnapshot['tasks'];
+            if (epPayload.tasks.length === 0) {
+              selectedTasks = fullSnapshot.tasks;
+            } else {
+              const byTitle = new Map(fullSnapshot.tasks.map((t) => [t.title, t] as const));
+              const missing = epPayload.tasks.filter((title) => !byTitle.has(title));
+              const duplicated = epPayload.tasks.filter((title, index) => epPayload.tasks.indexOf(title) !== index);
+              if (missing.length > 0 || duplicated.length > 0) {
+                const invalid = [...new Set([...missing, ...duplicated])];
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'no_match', message: `No Contract Task matches selector(s) one-to-one: ${invalid.join(', ')}` }));
+                return;
+              }
+              selectedTasks = epPayload.tasks.map((title) => byTitle.get(title)!);
+            }
+            const selectedSnapshot: ContractPlanSnapshot = Object.freeze({ tasks: Object.freeze(selectedTasks) });
+
+            // Path-safety preflight against the original (pre-worktree) cwd. Task I-3
+            // repeats this against effectiveCwd/the worktree once materialization can
+            // actually happen there; both checks legitimately coexist.
+            try {
+              await assertSafeAcceptanceTestPaths(selectedSnapshot, cwd);
+            } catch (err) {
+              if (err instanceof ContractPlanError) {
+                deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message }));
+                return;
+              }
+              throw err;
+            }
+
+            // Collision dry-run: refuse to dispatch when a declared acceptance-test path
+            // already exists, without writing anything (materialization itself — and its
+            // own collision check — only happens inside the pipeline in Task I-3).
+            for (const task of selectedSnapshot.tasks) {
+              for (const test of task.acceptanceTests) {
+                const absTestPath = path.resolve(cwd, test.path);
+                if (fs.existsSync(absTestPath)) {
+                  deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: 'test-path-collision', message: `Acceptance test path "${test.path}" already exists; refusing to dispatch` }));
+                  return;
+                }
+              }
+            }
+
+            acceptanceTestSnapshot = selectedSnapshot;
+            dispatchedTasks = selectedSnapshot.tasks.map((t) => t.title);
             copyToWorktree = [path.isAbsolute(planPath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(resolvedPlanPath)) : planPath];
             const entry = deps.taskRegistry.get(taskId);
-            if (entry) entry.totalTasks = matched.length;
+            if (entry) entry.totalTasks = selectedSnapshot.tasks.length;
           }
 
           // ── journal_record pre-processing: one label per submitted record so the
@@ -830,6 +891,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             ...(applyDecisions && { applyDecisions }),
             ...(dispatchedTasks && { dispatchedTasks }),
             ...(copyToWorktree && { copyToWorktree }),
+            ...(acceptanceTestSnapshot && { acceptanceTestSnapshot }),
             ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
             ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
             ...(resolvedContextBlocks && { contextBlocks: resolvedContextBlocks }),
@@ -930,7 +992,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
             // with the reason in output.reviewerNote). This mirrors the telemetry envelope's
             // structuredError, which is likewise null for done_with_concerns.
             error: result.status === 'failed'
-              ? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' }
+              ? (result.failureReason ?? { code: 'pipeline_failed' as const, message: 'Pipeline completed with failed status' })
               : null,
           };
 
@@ -955,7 +1017,7 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
           if (result.status === 'failed') {
             deps.taskRegistry.fail(taskId, resultObj);
-            deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: 'pipeline_failed', error_message: 'Pipeline completed with failed status' } });
+            deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: result.failureReason?.code ?? 'pipeline_failed', error_message: result.failureReason?.message ?? 'Pipeline completed with failed status' } });
             process.stderr.write(
               `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
             );

@@ -3,6 +3,15 @@ import type { TaskType } from './type-registry.js';
 
 export type ParseResult = { ok: true; data: unknown } | { ok: false; error: string; raw: string };
 
+/** One reviewed plan task record. `contractCompleteness` is the optional contract-first
+ *  signal — absent on legacy plan output, and its absence stays parser-compatible. Callers
+ *  consume it from the parsed plan output without any new model call, network, or storage. */
+export interface PlanTaskReviewRecord {
+  title: string;
+  verdict: 'executable' | 'partial' | 'blocked';
+  contractCompleteness?: 'complete' | 'incomplete';
+}
+
 export function parseReviewerOutput(raw: string, taskType: TaskType): ParseResult {
   const json = extractJson(raw);
   if (!json) return { ok: false, error: 'No JSON found in reviewer output', raw };

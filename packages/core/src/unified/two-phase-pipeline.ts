@@ -7,8 +7,58 @@ import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
 import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
+import {
+  assertSafeAcceptanceTestPaths,
+  materializeAcceptanceTests,
+  rematerializeAcceptanceTests,
+  ContractPlanError,
+  type ContractPlanSnapshot,
+} from './contract-plan.js';
+import { execFile } from 'node:child_process';
 
 const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
+
+/** Result of running one plan-authored acceptance-test command. */
+export interface AcceptanceCommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/** Injectable seam for running an acceptance-test command (tests substitute a fake).
+ *  The production default tokenizes the command by whitespace into `[cmd, ...args]`
+ *  (the plan parser guarantees a shell-metacharacter-free argv) and runs it via
+ *  `execFile` with no shell. */
+export type RunAcceptanceCommand = (command: string, cwd: string) => Promise<AcceptanceCommandResult>;
+
+const defaultRunAcceptanceCommand: RunAcceptanceCommand = (command, cwd) =>
+  new Promise((resolve) => {
+    const parts = command.trim().split(/\s+/);
+    const cmd = parts[0] ?? '';
+    const args = parts.slice(1);
+    execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const exitCode = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0;
+      resolve({ exitCode, stdout: String(stdout), stderr: String(stderr) });
+    });
+  });
+
+/** Contract satisfaction for execute_plan: the reviewer's tasks[] must match the
+ *  dispatched-task titles one-to-one (case-sensitive, no duplicate/unknown/missing)
+ *  and every matched task's status must be 'done'. */
+function contractSatisfiedFromReviewer(parsedData: unknown, dispatchedTasks: readonly string[] | undefined): boolean {
+  const data = parsedData as { tasks?: unknown };
+  const tasks = Array.isArray(data?.tasks) ? (data.tasks as Array<{ title?: unknown; status?: unknown }>) : null;
+  if (!tasks) return false;
+  const dispatched = dispatchedTasks ?? [];
+  if (tasks.length !== dispatched.length) return false;
+  const remaining = new Set(dispatched);
+  for (const t of tasks) {
+    if (typeof t.title !== 'string' || !remaining.has(t.title)) return false; // unknown or duplicate
+    remaining.delete(t.title);
+    if (t.status !== 'done') return false;
+  }
+  return remaining.size === 0;
+}
 
 export interface PipelineInput {
   type: TaskType;
@@ -38,6 +88,13 @@ export interface PipelineInput {
   /** For execute_plan: the full list of dispatched task titles (from plan matching).
    *  Injected into the reviewer prompt for completeness verification. */
   dispatchedTasks?: string[];
+  /** For execute_plan: the immutable parsed-and-validated frozen Contract Task
+   *  snapshot selected at dispatch time. Type-only here — Task I-3 adds the
+   *  behavior that materializes/re-materializes its acceptance tests. */
+  acceptanceTestSnapshot?: ContractPlanSnapshot;
+  /** Injectable acceptance-command runner (execute_plan scoring). Tests substitute a
+   *  fake; production uses the no-shell execFile default. */
+  runAcceptanceCommand?: RunAcceptanceCommand;
   /** Files to copy from original cwd into the worktree if they're missing
    *  (e.g. plan files that aren't committed to git). Paths relative to cwd. */
   copyToWorktree?: string[];
@@ -76,6 +133,13 @@ export interface PipelineResult {
     reviewerUsd: number | null;
   };
   worktree: WorktreeInfo | null;
+  /** Completion score (0–100). For execute_plan, derived from contract satisfaction
+   *  plus the re-materialized acceptance-test run; the commit gate is `>= 80`. Other
+   *  task types default to 100 on success / 0 on failure. */
+  completionPercent: number;
+  /** Set on a pre/mid-pipeline failure (e.g. malformed/collision/materialization) so
+   *  the handler can render a specific terminal envelope instead of a generic one. */
+  failureReason?: { code: string; message: string };
 }
 
 function extractStructuredBlock(raw: string): string {
@@ -109,6 +173,38 @@ function getReportedCompletenessCount(type: TaskType, data: Record<string, unkno
     return recorded + failed;
   }
   return 0;
+}
+
+/** Build the terminal PipelineResult for a pre/mid-pipeline failure that ran no
+ *  usable session (materialization/collision/path-safety). Populates every required
+ *  PipelineResult and TurnResult field from a documented sentinel. */
+function earlyFailureResult(input: PipelineInput, code: string, message: string): PipelineResult {
+  const sentinelTurn: TurnResult = {
+    output: '',
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    costUSD: 0,
+    turns: 0,
+    durationMs: 0,
+    terminationReason: 'error',
+    errorCode: code,
+    errorMessage: message,
+    filesWritten: [],
+    usedShell: false,
+  };
+  return {
+    status: 'failed',
+    implementerOutput: '',
+    implementerTurn: sentinelTurn,
+    reviewerOutput: null,
+    reviewerRaw: null,
+    reviewerTurn: null,
+    reviewerParseError: null,
+    sessions: { implementer: { tier: input.implementerTier, sessionId: null, resumeSupported: false }, reviewer: null },
+    cost: { implementerUsd: 0, reviewerUsd: null },
+    worktree: null,
+    completionPercent: 0,
+    failureReason: { code, message },
+  };
 }
 
 export async function runTwoPhasePipeline(input: PipelineInput): Promise<PipelineResult> {
@@ -206,6 +302,24 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   };
 
   try {
+    // execute_plan: materialize the plan-authored acceptance tests into the worktree so the
+    // executor develops against them. Path-safety + collision are re-checked here against the
+    // worktree (the handler already fail-fast checked against the original cwd). Any failure
+    // returns a terminal sentinel with no session opened.
+    if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
+      try {
+        await assertSafeAcceptanceTestPaths(input.acceptanceTestSnapshot, effectiveCwd);
+        await materializeAcceptanceTests(input.acceptanceTestSnapshot, effectiveCwd);
+      } catch (err) {
+        if (wtManager && wtInfo) {
+          await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+        }
+        worktreeResolved = true;
+        const code = err instanceof ContractPlanError ? err.code : 'materialization_failed';
+        return earlyFailureResult(input, code, err instanceof Error ? err.message : String(err));
+      }
+    }
+
     input.onPhaseChange?.('implementing');
     const implSession = input.implementerProvider.openSession({
       cwd: effectiveCwd,
@@ -265,6 +379,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         },
         cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
         worktree,
+        completionPercent: 100,
       };
     }
 
@@ -302,8 +417,53 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 
-    const worktree = await resolveWorktree(buildCommitMessage());
-    worktreeResolved = true;
+    // execute_plan scoring: re-materialize the plan-authored acceptance tests from the immutable
+    // snapshot (discarding any executor edits), run each unique command, and derive completion from
+    // contract satisfaction (reviewer tasks[] all 'done', matched 1:1 to dispatched titles) AND all
+    // commands passing. Test integrity is structural — the scored run always uses the plan's bytes.
+    let completionPercent = 100;
+    let epFailure: { code: string; message: string } | undefined;
+    if (input.type === 'execute_plan' && !input.acceptanceTestSnapshot) {
+      // Defense-in-depth: a contract-first execute_plan is unscorable without its frozen snapshot.
+      // The handler always supplies one; a direct pipeline caller that omits it must NOT auto-pass.
+      completionPercent = 0;
+      epFailure = { code: 'missing_contract_snapshot', message: 'execute_plan requires a contract-first acceptanceTestSnapshot to be scorable' };
+    } else if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
+      try {
+        await rematerializeAcceptanceTests(input.acceptanceTestSnapshot, effectiveCwd);
+      } catch (err) {
+        if (wtManager && wtInfo) {
+          await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+        }
+        worktreeResolved = true;
+        const code = err instanceof ContractPlanError ? err.code : 'rematerialization_failed';
+        return earlyFailureResult(input, code, err instanceof Error ? err.message : String(err));
+      }
+      const runAccept = input.runAcceptanceCommand ?? defaultRunAcceptanceCommand;
+      const commands = [...new Set(input.acceptanceTestSnapshot.tasks.flatMap(t => t.acceptanceTests.map(a => a.command)))];
+      let allPass = true;
+      for (const cmd of commands) {
+        const r = await runAccept(cmd, effectiveCwd);
+        if (r.exitCode !== 0) allPass = false;
+      }
+      const contractSatisfied = parsed.ok && contractSatisfiedFromReviewer(parsed.data, input.dispatchedTasks);
+      completionPercent = contractSatisfied && allPass ? 100 : contractSatisfied || allPass ? 60 : 40;
+    }
+
+    // Merge gate: execute_plan merges only at/above the 80 completion threshold; below it the
+    // worktree is discarded (not merged) and the flag set so `finally` doesn't double-clean.
+    let worktree: WorktreeInfo | null;
+    if (input.type === 'execute_plan' && completionPercent < 80) {
+      if (wtManager && wtInfo) {
+        await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+      }
+      worktreeResolved = true;
+      worktree = null;
+      epFailure = epFailure ?? { code: 'contract_not_satisfied', message: `execute_plan completion ${completionPercent} is below the 80 commit gate` };
+    } else {
+      worktree = await resolveWorktree(buildCommitMessage());
+      worktreeResolved = true;
+    }
 
     // Completeness check: if dispatched tasks > reported tasks, flag as partial
     let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
@@ -314,6 +474,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         status = 'done_with_concerns';
       }
     }
+    if (input.type === 'execute_plan' && completionPercent < 80) status = 'failed';
 
     return {
       status,
@@ -329,6 +490,8 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       },
       cost: { implementerUsd: implTurn.costUSD, reviewerUsd: revTurn.costUSD },
       worktree,
+      completionPercent,
+      ...(epFailure && { failureReason: epFailure }),
     };
   } finally {
     await closeSessions();
