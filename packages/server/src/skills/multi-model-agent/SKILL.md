@@ -1,7 +1,7 @@
 ---
 name: multi-model-agent
 description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, debug, plan execution, codebase investigation, ad-hoc delegation, context-block reuse) instead of defaulting to inline Agent dispatches
-when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mma is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
+when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mma is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user asked directly or through another workflow.
 version: "0.0.0-unreleased"
 ---
 

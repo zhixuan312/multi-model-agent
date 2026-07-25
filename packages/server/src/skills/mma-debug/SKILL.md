@@ -1,7 +1,7 @@
 ---
 name: mma-debug
 description: Use when a test fails, a build breaks, or behavior is unexpected AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
-when_to_use: A failure has surfaced (test/build/runtime) AND you need investigation work — read files, reproduce, trace — OR a methodology skill (superpowers:systematic-debugging) points at the investigation step. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
+when_to_use: A failure has surfaced (test/build/runtime) AND you need investigation work — read files, reproduce, trace — OR a systematic-debugging workflow routes its investigation step here. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
 version: "0.0.0-unreleased"
 ---
 
@@ -19,7 +19,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 - A test fails / build breaks / runtime behavior is unexpected
 - The root cause likely spans 2+ files
 - You have a hypothesis to test (or want the worker to suggest one)
-- A methodology skill (`superpowers:systematic-debugging`) routed here
+- A systematic-debugging workflow routed the investigation here
 
 **Don't use when:**
 - The error message points at one file you can read in 30 seconds → just `Read`

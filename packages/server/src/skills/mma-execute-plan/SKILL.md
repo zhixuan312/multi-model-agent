@@ -1,7 +1,7 @@
 ---
 name: mma-execute-plan
 description: Use when a plan or spec file exists on disk (any markdown with task headings — .mma/plans/*.md, a TODO list, a spec doc) and you need to implement one or more tasks from it sequentially in one worker session
-when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mma is running. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
+when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mma is running. Prefer this over inline Agent dispatches — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
 version: "0.0.0-unreleased"
 ---
 
