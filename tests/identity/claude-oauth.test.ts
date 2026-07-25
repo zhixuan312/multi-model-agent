@@ -19,10 +19,48 @@ function setPlatform(p: NodeJS.Platform): void {
   Object.defineProperty(process, 'platform', { value: p, configurable: true });
 }
 
+/**
+ * Route mocked `execFileSync` calls by their command/args:
+ *  - `security find-generic-password ... -w` → the Keychain blob
+ *  - `security find-generic-password` (no -w) → item attributes (account)
+ *  - `curl ...` → the OAuth refresh response
+ *  - `security add-generic-password -U ...` → persist (records the write)
+ */
+function routeExec(opts: {
+  blob: string;
+  account?: string | Error;
+  refresh?: unknown | Error;
+  onWrite?: (blob: string) => void;
+}): void {
+  mockExec.mockImplementation((cmd: string, args: string[], options?: { input?: string }) => {
+    if (cmd === 'security' && args[0] === 'find-generic-password' && args.includes('-w')) {
+      return opts.blob;
+    }
+    if (cmd === 'security' && args[0] === 'find-generic-password') {
+      if (opts.account instanceof Error) throw opts.account;
+      return `class: "genp"\n    "acct"<blob>="${opts.account ?? 'zhangzhixuan'}"\n    "svce"<blob>="Claude Code-credentials"\n`;
+    }
+    if (cmd === 'curl') {
+      if (opts.refresh instanceof Error) throw opts.refresh;
+      // expose the request body (should carry the refresh token via stdin)
+      routeExec.lastCurlInput = options?.input;
+      return JSON.stringify(opts.refresh);
+    }
+    if (cmd === 'security' && args[0] === 'add-generic-password') {
+      const w = args.indexOf('-w');
+      opts.onWrite?.(w >= 0 ? args[w + 1] : '');
+      return '';
+    }
+    return '';
+  });
+}
+routeExec.lastCurlInput = undefined as string | undefined;
+
 describe('getClaudeOAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setPlatform('darwin');
+    routeExec.lastCurlInput = undefined;
   });
 
   afterEach(() => {
@@ -49,29 +87,19 @@ describe('getClaudeOAuth', () => {
 
   it('case 4: returns null when JSON parses but has no accessToken', () => {
     mockExec.mockReturnValue(
-      JSON.stringify({
-        claudeAiOauth: {
-          refreshToken: 'r',
-          expiresAt: FAR_FUTURE_MS,
-        },
-      }),
+      JSON.stringify({ claudeAiOauth: { refreshToken: 'r', expiresAt: FAR_FUTURE_MS } }),
     );
     expect(getClaudeOAuth()).toBeNull();
   });
 
-  it('case 5: returns null when token is expired', () => {
+  it('case 5: returns null when the token is expired AND there is no refresh token', () => {
     mockExec.mockReturnValue(
-      JSON.stringify({
-        claudeAiOauth: {
-          accessToken: 'tok-expired',
-          expiresAt: FAR_PAST_MS,
-        },
-      }),
+      JSON.stringify({ claudeAiOauth: { accessToken: 'tok-expired', expiresAt: FAR_PAST_MS } }),
     );
     expect(getClaudeOAuth()).toBeNull();
   });
 
-  it('case 6: returns the credentials when token is valid and unexpired', () => {
+  it('case 6: returns the credentials when token is valid and unexpired (no refresh)', () => {
     mockExec.mockReturnValue(
       JSON.stringify({
         claudeAiOauth: {
@@ -84,11 +112,86 @@ describe('getClaudeOAuth', () => {
       }),
     );
     const creds = getClaudeOAuth();
-    expect(creds).not.toBeNull();
     expect(creds?.accessToken).toBe('tok-valid');
     expect(creds?.refreshToken).toBe('r-valid');
     expect(creds?.expiresAt).toBe(FAR_FUTURE_MS);
+    // never touched curl / write
+    expect(mockExec).toHaveBeenCalledTimes(1);
+  });
+
+  it('case 7: refreshes an expired token via the refresh token and persists the new one', () => {
+    const writes: string[] = [];
+    routeExec({
+      blob: JSON.stringify({
+        claudeAiOauth: {
+          accessToken: 'tok-expired',
+          refreshToken: 'sk-ant-ort01-OLD',
+          expiresAt: FAR_PAST_MS,
+          scopes: ['user:inference'],
+          subscriptionType: 'max',
+        },
+      }),
+      account: 'zhangzhixuan',
+      refresh: { token_type: 'Bearer', access_token: 'sk-ant-oat01-NEW', refresh_token: 'sk-ant-ort01-NEW', expires_in: 28_800 },
+      onWrite: (b) => writes.push(b),
+    });
+
+    const before = Date.now();
+    const creds = getClaudeOAuth();
+
+    expect(creds?.accessToken).toBe('sk-ant-oat01-NEW');
+    expect(creds?.refreshToken).toBe('sk-ant-ort01-NEW');
+    expect(creds?.expiresAt).toBeGreaterThan(before + 28_800 * 1000 - 5_000);
     expect(creds?.scopes).toEqual(['user:inference']);
     expect(creds?.subscriptionType).toBe('max');
+
+    // the refresh token went over stdin, not argv
+    const curlCall = mockExec.mock.calls.find((c) => c[0] === 'curl');
+    expect(curlCall?.[1]).not.toContain('sk-ant-ort01-OLD');
+    expect(routeExec.lastCurlInput).toContain('sk-ant-ort01-OLD');
+    expect(routeExec.lastCurlInput).toContain('"grant_type":"refresh_token"');
+
+    // persisted the rotated credentials back to the keychain
+    expect(writes).toHaveLength(1);
+    const persisted = JSON.parse(writes[0]) as { claudeAiOauth: { accessToken: string; refreshToken: string } };
+    expect(persisted.claudeAiOauth.accessToken).toBe('sk-ant-oat01-NEW');
+    expect(persisted.claudeAiOauth.refreshToken).toBe('sk-ant-ort01-NEW');
+  });
+
+  it('case 8: returns null when the token is expired and the refresh request fails', () => {
+    routeExec({
+      blob: JSON.stringify({
+        claudeAiOauth: { accessToken: 'tok-expired', refreshToken: 'r', expiresAt: FAR_PAST_MS },
+      }),
+      refresh: new Error('curl: (22) The requested URL returned error: 401'),
+    });
+    expect(getClaudeOAuth()).toBeNull();
+  });
+
+  it('case 9: still returns the refreshed token even if persisting to the keychain fails', () => {
+    routeExec({
+      blob: JSON.stringify({
+        claudeAiOauth: { accessToken: 'tok-expired', refreshToken: 'r-old', expiresAt: FAR_PAST_MS },
+      }),
+      account: new Error('security: attributes read failed'), // no account → skip persist
+      refresh: { access_token: 'tok-new', refresh_token: 'r-new', expires_in: 28_800 },
+    });
+    const creds = getClaudeOAuth();
+    expect(creds?.accessToken).toBe('tok-new');
+    // reused the old refresh token in the returned creds is NOT expected; response provided a new one
+    expect(creds?.refreshToken).toBe('r-new');
+  });
+
+  it('case 10: keeps the old refresh token when the refresh response omits a new one', () => {
+    routeExec({
+      blob: JSON.stringify({
+        claudeAiOauth: { accessToken: 'tok-expired', refreshToken: 'r-keep', expiresAt: FAR_PAST_MS },
+      }),
+      account: 'zhangzhixuan',
+      refresh: { access_token: 'tok-new', expires_in: 28_800 }, // no refresh_token in response
+    });
+    const creds = getClaudeOAuth();
+    expect(creds?.accessToken).toBe('tok-new');
+    expect(creds?.refreshToken).toBe('r-keep');
   });
 });
