@@ -304,7 +304,7 @@ function buildEnvelopeSnapshot(
     terminalAt: now,
     stopReason: null,
     structuredError: result.status === 'failed'
-      ? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' }
+      ? (result.failureReason ?? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' })
       : null,
     errorCode: null,
     reviewPolicy: reviewPolicy === 'none' ? 'none' : 'reviewed',
