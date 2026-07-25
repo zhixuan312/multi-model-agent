@@ -19,11 +19,11 @@ const CHANGED: Record<string, string[]> = {
   'mma-explore': ['multi-repo mode', 'parent workspace', '.mma/explorations'],
   'mma-brainstorm': ['involved repo', 'parent workspace'],
   'mma-spec': ['parent workspace owns the spec output in multi-repo mode', 'one shared spec feeds per-repo plans'],
-  'mma-plan': ['one repo', 'exactly one repo', 'shared spec', '.mma/plans/<stem>--<repo-slug>.md'],
+  'mma-plan': ['one repo', 'exactly one repo', 'shared spec', '.mma/plans/<stem>--<repo-slug>.md', 'Contract Task', 'plan-authored acceptance tests'],
   'mma-journal-record': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
   'mma-journal-recall': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
   'mma-delegate': ['non-git', 'in-place', 'no worktree'],
-  'mma-execute-plan': ['non-git', 'in-place', 'one plan file'],
+  'mma-execute-plan': ['non-git', 'in-place', 'one plan file', 'autonomous', 'test-path-collision', 'completionPercent'],
 };
 
 const UNCHANGED = [

@@ -9,6 +9,8 @@ const planImpl = read('packages/core/src/skills/plan/implement.md');
 const planRev = read('packages/core/src/skills/plan/review.md');
 const execImpl = read('packages/core/src/skills/execute_plan/implement.md');
 const execRev = read('packages/core/src/skills/execute_plan/review.md');
+const mmaPlanDoc = read('packages/server/src/skills/mma-plan/SKILL.md');
+const mmaExecDoc = read('packages/server/src/skills/mma-execute-plan/SKILL.md');
 
 describe('contract-first plan authoring prompts (I-6)', () => {
   it('plan/implement.md expresses the frozen Contract Task template', () => {
@@ -56,5 +58,20 @@ describe('autonomous executor prompts (I-7)', () => {
     expect(execRev.toLowerCase()).toContain('do not enforce verbatim');
     expect(execRev).not.toContain('CODE SUBSTITUTION');
     expect(execRev.toLowerCase()).not.toContain('were code blocks applied verbatim');
+  });
+});
+
+describe('public skill docs describe contract-first (I-8)', () => {
+  it('mma-plan/SKILL.md describes Contract Tasks + plan-authored acceptance tests', () => {
+    expect(mmaPlanDoc).toContain('Contract Task');
+    expect(mmaPlanDoc.toLowerCase()).toContain('plan-authored acceptance tests');
+    expect(mmaPlanDoc.toLowerCase()).not.toContain('follow mechanically');
+  });
+  it('mma-execute-plan/SKILL.md describes autonomous execution + error codes + the 80 gate', () => {
+    expect(mmaExecDoc.toLowerCase()).toContain('autonomous');
+    for (const code of ['unsupported-legacy-plan', 'malformed-plan', 'unsafe-test-path', 'test-path-collision']) {
+      expect(mmaExecDoc).toContain(code);
+    }
+    expect(mmaExecDoc).toContain('completionPercent >= 80');
   });
 });
