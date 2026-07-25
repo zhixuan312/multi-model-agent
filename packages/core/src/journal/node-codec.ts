@@ -26,7 +26,6 @@ export interface JournalNodeDocument {
 }
 
 const ID_RE = /^\d{4}$/;
-const TOPIC_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // Accept a trailing `Z` (UTC) OR a `±HH:MM` timezone offset. Legacy nodes were
 // written with offset timestamps (e.g. `2026-07-18T18:48:29+08:00`); the renderer
 // still writes the canonical `Z` form.
@@ -38,6 +37,35 @@ const LINK_TYPES = new Set<JournalLinkType>(['supersedes', 'refines', 'relates',
 function asString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim() === '') throw new Error(`Invalid ${field}`);
   return value;
+}
+
+// The topic is a lowercase-dash slug (the recall/index key). Be a LIBERAL reader:
+// coerce any non-slug frontmatter value to its slug rather than rejecting the whole
+// node. A stricter reader here just makes the caller silently skip the node (data
+// loss), and the write path historically persisted whatever topic it was handed.
+// Slugifying on read recovers such nodes and self-heals them on the next write batch
+// (which re-renders every loaded node). Idempotent on already-valid slugs.
+export function slugifyTopic(raw: string): string {
+  const slug = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug.length > 0 ? slug : 'unscoped';
+}
+
+// Resolve a node's canonical 4-digit id. A quoted frontmatter id is authoritative;
+// otherwise fall back to the filename prefix (renderNodeFilename writes `<id>-<slug>.md`,
+// so the leading 4 digits ARE the id) — this recovers nodes whose unquoted `id: 0012`
+// YAML-parsed to a number (octal/int) and would otherwise throw. Numeric coercion is a
+// last resort only when the path carries no prefix.
+function coerceNodeId(rawId: unknown, sourcePath: string): string {
+  if (typeof rawId === 'string' && ID_RE.test(rawId.trim())) return rawId.trim();
+  const fromFilename = sourcePath.match(/([0-9]{4})-[^/]*$/)?.[1];
+  if (fromFilename) return fromFilename;
+  if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId >= 0 && rawId <= 9999) {
+    return String(rawId).padStart(4, '0');
+  }
+  throw new Error('Invalid id');
 }
 
 function parseBodySection(body: string, heading: 'Context' | 'Consequences'): string {
@@ -69,10 +97,10 @@ export function renderNodeFilename(node: Pick<JournalNodeDocument, 'id' | 'title
 export function parseJournalNodeDocument(raw: string, sourcePath: string): JournalNodeDocument {
   const parsed = matter(raw);
   const data = parsed.data as Record<string, unknown>;
-  const id = asString(data.id, 'id');
+  const id = coerceNodeId(data.id, sourcePath);
   const title = asString(data.title, 'title');
   const type = asString(data.type, 'type') as JournalNodeType;
-  const topic = asString(data.topic, 'topic');
+  const topic = slugifyTopic(asString(data.topic, 'topic'));
   const status = asString(data.status, 'status') as JournalNodeStatus;
   const description = asString(data.description, 'description');
   const timestamp = asString(data.timestamp, 'timestamp');
@@ -90,10 +118,8 @@ export function parseJournalNodeDocument(raw: string, sourcePath: string): Journ
     : [];
   const supersededBy = data.supersededBy === null || data.supersededBy === undefined ? null : asString(data.supersededBy, 'supersededBy');
 
-  if (!ID_RE.test(id)) throw new Error('Invalid id');
   if (!TYPES.has(type)) throw new Error('Invalid type');
   if (!STATUSES.has(status)) throw new Error('Invalid status');
-  if (!TOPIC_RE.test(topic)) throw new Error('Invalid topic');
   if (!ISO_RE.test(timestamp)) throw new Error('Invalid timestamp');
   if (status === 'superseded' && !supersededBy) throw new Error('Superseded nodes require supersededBy');
 

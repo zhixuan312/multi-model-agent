@@ -42,10 +42,26 @@ describe('node-codec', () => {
     expect(parsed.links).toEqual([{ type: 'relates', target: '0001' }]);
   });
 
-  it('rejects malformed enum, topic, and timestamp fields', () => {
+  it('rejects malformed enum and timestamp fields', () => {
     expect(() => parseJournalNodeDocument(VALID_NODE.replace('process', 'workflow'), 'nodes/bad.md')).toThrow(/type/i);
-    expect(() => parseJournalNodeDocument(VALID_NODE.replace('journal-engine', 'Journal Engine'), 'nodes/bad.md')).toThrow(/topic/i);
     expect(() => parseJournalNodeDocument(VALID_NODE.replace('2026-07-24T10:00:00.000Z', '07/24/2026'), 'nodes/bad.md')).toThrow(/timestamp/i);
+  });
+
+  it('salvages a non-slug topic instead of dropping the node', () => {
+    // A liberal reader: "Lunch Vote" (space + capitals) becomes the slug so recall
+    // still returns the node, rather than the caller silently skipping it (data loss).
+    const parsed = parseJournalNodeDocument(
+      VALID_NODE.replace('journal-engine', 'Lunch Vote'),
+      'nodes/0007-x.md',
+    );
+    expect(parsed.topic).toBe('lunch-vote');
+  });
+
+  it('recovers a numeric YAML-parsed id from the filename prefix', () => {
+    // Unquoted `id: 0012` YAML-parses to a number; the filename prefix is authoritative.
+    const numericId = VALID_NODE.replace('id: "0007"', 'id: 0012');
+    const parsed = parseJournalNodeDocument(numericId, 'nodes/0012-inline-style-palette.md');
+    expect(parsed.id).toBe('0012');
   });
 
   it('allocates max-plus-one zero-padded ids', () => {
