@@ -174,9 +174,12 @@ this" signal survives. Use `(no prior learning)` when the leg returned nothing.
 
 ## Rough Direction
 3–5 ranked candidate directions — alternatives-style, the same shape as the spec's `Alternatives`
-component, so a downstream spec can lift them almost verbatim. Each direction:
+component, so a downstream spec can lift them almost verbatim. **This exploration is read by business,
+product, and engineering** — write each direction so a non-engineer can weigh it: plain English,
+value first. Each direction:
 
-- **Title** + one-paragraph summary.
+- **Title** + one-paragraph summary in plain language.
+- **What it buys us** — the business value / user outcome this direction delivers, and roughly what it costs.
 - **Key tradeoff** — what you give up to get its upside.
 - **Backing citations** — at least one internal, external, or prior-learning cite (or the matching
   sentinel: `(no internal anchor — fully greenfield)`, `(no external source found)`,
