@@ -43,7 +43,13 @@ export const ResearchConfigSchema = z.object({
 
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
 
-const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
+// Reasoning effort per tier. Stays OPTIONAL on purpose: the default lives in
+// providers/effort.ts (DEFAULT_EFFORT = 'high') rather than here, so a parsed
+// config never materializes a level the user did not write — /configure-provider
+// persists config.agents wholesale and would otherwise pin every tier to the
+// default of the day. Omitted → 'high'. Runners drop it for models with no
+// effort knob.
+const effortSchema = z.enum(['none', 'low', 'medium', 'high', 'xhigh', 'max']);
 // Per-million-token pricing for cost computation. Must be non-negative; zero
 // is allowed (free agents can set both rates to 0 to get a deterministic
 // costUSD: 0 instead of null).

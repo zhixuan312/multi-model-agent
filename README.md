@@ -244,6 +244,27 @@ DeepSeek V4 Pro works as `"type": "claude"` with `baseUrl` pointed at its Anthro
 }
 ```
 
+### Reasoning effort
+
+Every tier runs at **`high`** unless you say otherwise — the same level on both runtimes. Override per tier with `effort`:
+
+```json
+{
+  "agents": {
+    "standard": { "type": "claude", "model": "claude-sonnet-5", "effort": "medium" },
+    "complex":  { "type": "codex",  "model": "gpt-5.6-terra",   "effort": "xhigh" }
+  }
+}
+```
+
+| Level | claude | codex |
+|---|---|---|
+| `none` | `thinking: disabled` | `model_reasoning_effort="none"` |
+| `low` / `medium` / `high` | ✅ | ✅ |
+| `xhigh` / `max` | ✅ (newest models only) | ✅ (newest models only) |
+
+Levels a model can't do are clamped by the runtime itself — claude downgrades silently, codex clamps to its model catalog. Models with no reasoning knob (GLM, DeepSeek, Kimi, Qwen, Gemini, Grok, …) never receive the parameter, whichever wire protocol they run behind.
+
 ### Tuning
 
 Every `defaults` knob has a sane built-in. Override only when you have a reason.
@@ -251,6 +272,7 @@ Every `defaults` knob has a sane built-in. Override only when you have a reason.
 | Field | Default | What it does |
 |---|---|---|
 | `defaults.mainModel` | *(unset)* | Lowest-priority fallback for the main-model resolver chain (headers + per-client auto-detection take precedence). |
+| `agents.<tier>.effort` | `high` | Reasoning level for that tier — see [Reasoning effort](#reasoning-effort). |
 
 ### Auth token
 

@@ -39,6 +39,8 @@ export type {
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
+export { resolveEffort } from './providers/effort.js';
+export { DEFAULT_EFFORT } from './types/task-spec.js';
 export {
   resolveConfiguredApiKey,
   resolveConfiguredAuthMode,

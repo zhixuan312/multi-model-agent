@@ -11,8 +11,12 @@
 import type { Provider, SessionOpts } from '../types/run-result.js';
 import type { CodexProviderConfig } from '../types/config.js';
 import { CodexCliSession } from './codex-cli-session.js';
+import { resolveEffort } from './effort.js';
 
 export function makeCodexProvider(cfg: CodexProviderConfig): Provider {
+  // Undefined for models with no reasoning-effort knob — the launch builder
+  // then omits `-c model_reasoning_effort` entirely.
+  const effort = resolveEffort(cfg.model, cfg.effort);
   return {
     name: `codex:${cfg.model}`,
     config: cfg,
@@ -23,6 +27,7 @@ export function makeCodexProvider(cfg: CodexProviderConfig): Provider {
           ...(cfg.baseUrl && { baseUrl: cfg.baseUrl }),
           ...(cfg.apiKey && { apiKey: cfg.apiKey }),
           ...(cfg.apiKeyEnv && { apiKeyEnv: cfg.apiKeyEnv }),
+          ...(effort && { effort }),
         },
         opts,
       });

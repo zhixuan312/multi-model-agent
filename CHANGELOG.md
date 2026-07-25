@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Reasoning effort is actually applied, and defaults to `high` on both runtimes.** `effort` had been declared in the config schema, `AgentConfig`, `TaskSpec`, and `RunOptions` since 4.x but was never read by any runner: the claude session sent no `effort` option and the codex launch emitted no `-c model_reasoning_effort` (with `--ignore-user-config` blocking `~/.codex/config.toml` as well), so every tier silently ran at its provider's own default. Both runners now resolve effort through one chokepoint (`core/src/providers/effort.ts`), defaulting to `high` when the tier's config omits it. Set `agents.<tier>.effort` to override.
+- **Effort ladder widened to the two runtimes' shared set** — `none | low | medium | high | xhigh | max` (was `none | low | medium | high`). claude-agent-sdk exposes `low|medium|high|xhigh|max`, codex CLI exposes `none|minimal|low|medium|high|xhigh|max|ultra`; mma offers the intersection plus `none` so a level means the same thing on every tier. codex-only `minimal`/`ultra` are deliberately unsupported. On claude, `none` maps to `thinking: { type: 'disabled' }` (the SDK has no `none` level); every other level passes through verbatim. Levels a model doesn't support are clamped by the runtime itself (claude downgrades silently, codex clamps to its catalog's `supported_reasoning_levels`) — mma does not model per-model ladders.
+- **Capability gate.** Effort is only emitted for models whose registry profile says `supportsEffort` (claude, openai, minimax families). `type` is a wire protocol, not a vendor — a `type: "claude"` tier pointed at GLM or a `type: "codex"` tier pointed at DeepSeek gets no effort parameter, since those endpoints reject or ignore one. Unrecognised model ids fall back to the default profile (`supportsEffort: false`) and send nothing.
+
+### Fixed
+- **`POST /configure-provider` no longer wipes a per-tier `effort` override.** The handler replaced the tier entry wholesale, so swapping a model from Forge's Models page dropped a hand-set `effort`. A genuine override is now carried across; an absent one stays absent (the default is resolved at runtime, never materialized into `config.json`).
+
+### Removed
+- Dead `effort` fields on `TaskSpec` and `RunOptions` — effort is a per-tier config concern that flows via the provider config, not a per-task or per-run input. Neither field was ever read.
+
 ## [5.14.0] - 2026-07-25
 
 **`journal_record`/`journal_recall` get a deterministic engine + a rebuildable SQLite index, and Claude OAuth now auto-refreshes on macOS *and* Linux.** The journal write/read paths move their mechanical work (id allocation, catalog maintenance, dedup/candidate retrieval, validation) out of the LLM and into TypeScript plus a derived SQLite FTS5 cache over the flat markdown nodes — the LLM now only *decides* (record) and *synthesizes* (recall). On a 2000-node benchmark: ~8× faster retrieval, ~99.9% fewer injected context tokens, retrieval mAP 1.0 vs 0.49, zero mechanical errors. `SCHEMA_VERSION` unchanged (still 6); `journal_recall` gains one optional additive `includeHistory` field; adds a `mma journal reindex` CLI. Requires Node ≥22 (uses the built-in `node:sqlite`; no new external SQLite dependency).
