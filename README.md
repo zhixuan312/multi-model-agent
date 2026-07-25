@@ -331,9 +331,10 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.13.1
+## What's new in 5.14.0
 
-- **Write-route worktrees no longer leak.** A `delegate`/`execute_plan` task that crashed, timed out, or was killed mid-flight used to orphan its `.mma/worktrees/<id>` + branch (dozens accumulated over time). Cleanup is now guaranteed on failure, and a dispatch-time reaper sweeps any kill-orphaned worktrees before the next write. `SCHEMA_VERSION` unchanged; no install or API change.
+- **Deterministic journal engine.** `journal_record`/`journal_recall` now do their mechanical work (id allocation, catalog, dedup/candidate retrieval, validation) in TypeScript over a rebuildable SQLite FTS5 index (`node:sqlite`), reserving the LLM for judgment — ~8× faster retrieval and ~99.9% fewer context tokens on a 2000-node benchmark, with retrieval quality up. Adds `mma journal reindex`; `journal_recall` gains an optional `includeHistory`. `SCHEMA_VERSION` unchanged.
+- **Claude OAuth auto-refresh (macOS + Linux).** Expired subscription tokens are refreshed via the stored refresh token and persisted, so unattended/headless servers no longer lose auth every ~8h. Now reads Linux `~/.claude/.credentials.json`, not just the macOS Keychain.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

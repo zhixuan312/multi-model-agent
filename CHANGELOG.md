@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.14.0] - 2026-07-25
+
+**`journal_record`/`journal_recall` get a deterministic engine + a rebuildable SQLite index, and Claude OAuth now auto-refreshes on macOS *and* Linux.** The journal write/read paths move their mechanical work (id allocation, catalog maintenance, dedup/candidate retrieval, validation) out of the LLM and into TypeScript plus a derived SQLite FTS5 cache over the flat markdown nodes — the LLM now only *decides* (record) and *synthesizes* (recall). On a 2000-node benchmark: ~8× faster retrieval, ~99.9% fewer injected context tokens, retrieval mAP 1.0 vs 0.49, zero mechanical errors. `SCHEMA_VERSION` unchanged (still 6); `journal_recall` gains one optional additive `includeHistory` field; adds a `mma journal reindex` CLI. Requires Node ≥22 (uses the built-in `node:sqlite`; no new external SQLite dependency).
+
+### Added
+- **Deterministic journal engine (`packages/core/src/journal/`).** `JournalStore` owns node parse/validate, `max+1` id allocation, failure-atomic batch apply (stage → backup → rename-with-rollback), and per-`journalRoot` serialization with fresh-under-lock id allocation. `JournalIndexStore` maintains a rebuildable `.mma/journal/index.db` (`node:sqlite`, FTS5 + WAL, `busy_timeout`) with count-gated incremental sync.
+- **Decide-then-apply `journal_record` / retrieve-then-judge `journal_recall`.** The implementer emits a validated decision array (`create`/`refine`/`supersede`/`merge`; the engine applies it); recall retrieves ranked candidates (BM25 + topic + tag overlap + graph-neighbour, RRF `k=60`) and the LLM only synthesizes. The reviewer is skipped when the code-enforced invariants pass (`reviewPolicy` semantics unchanged; `reviewed` still forces it).
+- **`mma journal reindex`** (+ `--regenerate-catalog`) rebuilds the derived index from the markdown nodes. `index.db` is gitignored and fully rebuildable — the nodes remain the source of truth.
+- **`journal_recall` optional `includeHistory`** (default `false`, additive and backward-compatible) — include superseded nodes in retrieval.
+
+### Fixed
+- **Claude OAuth tokens auto-refresh instead of lapsing every ~8h.** `getClaudeOAuth()` returned `null` once the short-lived access token expired and never used the long-lived refresh token, so unattended servers on subscription auth lost validation every ~8h. It now exchanges the refresh token at the OAuth token endpoint (`platform.claude.com`, `console.anthropic.com` fallback) and persists the rotated credentials. **Now cross-platform:** macOS Keychain *and* Linux `~/.claude/.credentials.json` — the previous code bailed on `platform !== 'darwin'` before reading anything, so headless-Linux subscription validation was permanently `null`. Graceful `null` fallback preserved on any transport failure.
+- **Journal reads tolerate legacy node formats.** The deterministic parser accepts legacy `to:` link fields and `+HH:MM` timestamp offsets, and skips-and-warns on any unparseable node in the read/index path instead of crashing the whole journal (the strict parser had rejected ~30% of a real 82-node journal). The write-validation path stays strict.
+- **`journal_record` sanitizes implementer decision links.** An over-eager or placeholder edge (a link `type` with no valid `target`) is dropped rather than failing the whole record; `refine`/`supersede` decisions still require their `targetNodeId`.
+
+### Changed
+- `packages/core` adds a runtime dependency on `gray-matter` (journal node frontmatter parsing) and uses the built-in `node:sqlite`. `pnpm-lock.yaml` synced (the `gray-matter` entry was missing).
+- Removed the Bun-era wall-clock perf harness (`tests/perf/budget` + `record-baseline`, which compared cross-machine absolute timings and always self-skipped); `tests/perf/` now holds the deterministic journal benchmark, which always runs. No skipped tests remain in the suite.
+
 ## [5.13.1] - 2026-07-24
 
 **Write-route worktrees no longer leak.** A `delegate`/`execute_plan` task that failed, timed out, or was killed mid-flight used to strip its `.mma/worktrees/<id>` + branch only on the success path — a crash or a `tsx`-watch restart orphaned it forever (dozens accumulated, GBs of `pnpm install` copies). Cleanup is now guaranteed on failure, and a dispatch-time reaper sweeps kill-orphaned worktrees. `SCHEMA_VERSION` unchanged (still 6); no install change; no API change.
