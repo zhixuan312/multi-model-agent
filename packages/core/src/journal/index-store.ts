@@ -222,7 +222,15 @@ export class JournalIndexStore {
     this.db.exec('BEGIN');
     try {
       for (const file of files) {
-        const loaded = await this.loadFile(file);
+        // Tolerate a single unparseable EXISTING node: skip-and-warn so one malformed
+        // legacy file can't crash the whole index rebuild. New-node writes still throw.
+        let loaded: LoadedNode;
+        try {
+          loaded = await this.loadFile(file);
+        } catch (error) {
+          console.warn(`[journal] skipping unparseable node ${join('nodes', file)}: ${(error as Error).message}`);
+          continue;
+        }
         insertDoc.run(
           loaded.nodeId,
           loaded.nodePath,
@@ -288,7 +296,15 @@ export class JournalIndexStore {
             .run(st.mtimeMs, nodePath);
           continue;
         }
-        const loaded = this.decodeRaw(raw, nodePath, st.mtimeMs, contentHash);
+        // Tolerate a single unparseable EXISTING node: skip-and-warn so one malformed
+        // legacy file can't crash the incremental sync. New-node writes still throw.
+        let loaded: LoadedNode;
+        try {
+          loaded = this.decodeRaw(raw, nodePath, st.mtimeMs, contentHash);
+        } catch (error) {
+          console.warn(`[journal] skipping unparseable node ${nodePath}: ${(error as Error).message}`);
+          continue;
+        }
         this.upsertDocument(loaded);
       }
 

@@ -202,6 +202,33 @@ describe('JournalStore', () => {
     expect((await readdir(root)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
+  it('skips a genuinely malformed node during bulk read and still loads the good ones', async () => {
+    const root = await makeJournalRoot();
+    // Plant a garbage node (missing required frontmatter fields) alongside the good 0001.
+    await writeFile(join(root, 'nodes', '0099-broken.md'), `---
+id: "0099"
+type: "process"
+---
+
+## Context
+
+Malformed: missing title/topic/status/timestamp.
+`);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const store = await JournalStore.open({ journalRoot: root });
+      // rebuildCatalog bulk-reads every node via loadNodes(); the bad one must not throw.
+      const count = await store.rebuildCatalog();
+      expect(count).toBe(1); // only the good 0001 survived
+      const index = await readFile(join(root, 'index.md'), 'utf8');
+      expect(index).toContain('| 0001 |');
+      expect(index).not.toContain('| 0099 |');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('0099-broken.md'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('rolls back all markdown mutations when a batch invariant fails', async () => {
     const root = await makeJournalRoot();
     const store = await JournalStore.open({ journalRoot: root });

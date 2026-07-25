@@ -27,7 +27,10 @@ export interface JournalNodeDocument {
 
 const ID_RE = /^\d{4}$/;
 const TOPIC_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+// Accept a trailing `Z` (UTC) OR a `±HH:MM` timezone offset. Legacy nodes were
+// written with offset timestamps (e.g. `2026-07-18T18:48:29+08:00`); the renderer
+// still writes the canonical `Z` form.
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
 const TYPES = new Set<JournalNodeType>(['decision', 'design', 'behavior', 'process', 'knowledge', 'style']);
 const STATUSES = new Set<JournalNodeStatus>(['adopted', 'dropped', 'inconclusive', 'superseded']);
 const LINK_TYPES = new Set<JournalLinkType>(['supersedes', 'refines', 'relates', 'depends-on', 'contradicts', 'parent']);
@@ -77,9 +80,11 @@ export function parseJournalNodeDocument(raw: string, sourcePath: string): Journ
   const links = Array.isArray(data.links)
     ? data.links.map((entry) => {
       const link = entry as Record<string, unknown>;
+      // Legacy nodes spelled the destination field `to`; canonical is `target`.
+      // Accept either on read (the renderer always writes `target`).
       return {
         type: asString(link.type, 'link.type') as JournalLinkType,
-        target: asString(link.target, 'link.target'),
+        target: asString(link.target ?? link.to, 'link.target'),
       };
     })
     : [];

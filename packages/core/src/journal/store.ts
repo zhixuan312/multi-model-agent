@@ -100,7 +100,14 @@ export class JournalStore {
     const docs: JournalNodeDocument[] = [];
     for (const file of files) {
       const raw = await readFile(join(this.nodesDir, file), 'utf8');
-      docs.push(parseJournalNodeDocument(raw, join('nodes', file)));
+      // Tolerate a single unparseable EXISTING node in the bulk read/index path:
+      // one malformed legacy file must not crash the whole journal. Skip-and-warn,
+      // then continue. New-node WRITE validation still throws elsewhere.
+      try {
+        docs.push(parseJournalNodeDocument(raw, join('nodes', file)));
+      } catch (error) {
+        console.warn(`[journal] skipping unparseable node ${join('nodes', file)}: ${(error as Error).message}`);
+      }
     }
     return docs.sort((a, b) => a.id.localeCompare(b.id));
   }

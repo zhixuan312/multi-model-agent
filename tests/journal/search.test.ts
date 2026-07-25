@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JournalIndexStore, searchCandidatesForRecall, searchCandidatesForRecord } from '../../packages/core/src/journal/index.js';
 
 async function makeCorpus(): Promise<string> {
@@ -102,6 +102,31 @@ describe('journal search', () => {
     expect(normal.some((candidate) => candidate.nodeId === '0002')).toBe(false);
     const history = await searchCandidatesForRecall(store, { prompt: 'current retrieval answer', topic: 'journal-engine', includeHistory: true });
     expect(history.some((candidate) => candidate.nodeId === '0002')).toBe(true);
+  });
+
+  it('skips a genuinely malformed node during rebuildIndex and still indexes the good ones', async () => {
+    const root = await makeCorpus();
+    // Plant a garbage node (missing required frontmatter fields) alongside the good nodes.
+    await writeFile(join(root, 'nodes', '0099-broken.md'), `---
+id: "0099"
+type: "process"
+---
+
+## Context
+
+Malformed: missing title/topic/status/timestamp.
+`);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const store = await JournalIndexStore.open({ journalRoot: root });
+      await store.rebuildIndex(); // must not throw
+      const docs = store.allDocuments();
+      expect(docs.map((doc) => doc.nodeId).sort()).toEqual(['0001', '0002', '0003']);
+      expect(docs.some((doc) => doc.nodeId === '0099')).toBe(false);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('0099-broken.md'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('uses topic prefilter, tag overlap, graph-neighbor expansion, and fallback ranking', async () => {
