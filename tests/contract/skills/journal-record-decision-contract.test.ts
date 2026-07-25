@@ -79,6 +79,67 @@ describe('journal record decision contract', () => {
     expect(() => parseRecordDecisions(JSON.stringify(bad))).toThrow();
   });
 
+  it('drops an extra link that has a type but no target, keeping the record valid', () => {
+    const decisions = [{
+      learning: 'over-eager edge with no target',
+      decision: {
+        kind: 'create',
+        title: 'Sanitized', type: 'process', topic: 'journal-engine', tags: ['t'],
+        links: [{ type: 'relates' }, { type: 'relates', target: '0002' }],
+        status: 'adopted', description: 'd', context: 'ctx', consequences: '- c',
+      },
+    }];
+    const parsed = parseRecordDecisions(JSON.stringify(decisions));
+    expect(parsed).toHaveLength(1);
+    const decision = parsed[0]?.decision as { kind: string; links: Array<{ type: string; target: string }> };
+    // The targetless link is dropped; only the well-formed one survives.
+    expect(decision.links).toEqual([{ type: 'relates', target: '0002' }]);
+  });
+
+  it('accepts the legacy `to` spelling as an alias for `target`', () => {
+    const decisions = [{
+      learning: 'legacy to alias',
+      decision: {
+        kind: 'create',
+        title: 'Aliased', type: 'process', topic: 'journal-engine', tags: ['t'],
+        links: [{ type: 'depends-on', to: '0007' }],
+        status: 'adopted', description: 'd', context: 'ctx', consequences: '- c',
+      },
+    }];
+    const parsed = parseRecordDecisions(JSON.stringify(decisions));
+    const decision = parsed[0]?.decision as { links: Array<{ type: string; target: string }> };
+    expect(decision.links).toEqual([{ type: 'depends-on', target: '0007' }]);
+  });
+
+  it('drops a link whose type is not one of the 6 valid edge types', () => {
+    const decisions = [{
+      learning: 'bogus edge type',
+      decision: {
+        kind: 'create',
+        title: 'Bogus edge', type: 'process', topic: 'journal-engine', tags: ['t'],
+        links: [{ type: 'invented-edge', target: '0002' }, { type: 'parent', target: '0003' }],
+        status: 'adopted', description: 'd', context: 'ctx', consequences: '- c',
+      },
+    }];
+    const parsed = parseRecordDecisions(JSON.stringify(decisions));
+    const decision = parsed[0]?.decision as { links: Array<{ type: string; target: string }> };
+    expect(decision.links).toEqual([{ type: 'parent', target: '0003' }]);
+  });
+
+  it('accepts a create decision with links omitted (defaults to [])', () => {
+    const decisions = [{
+      learning: 'no links field at all',
+      decision: {
+        kind: 'create',
+        title: 'No links', type: 'process', topic: 'journal-engine', tags: ['t'],
+        status: 'adopted', description: 'd', context: 'ctx', consequences: '- c',
+      },
+    }];
+    const parsed = parseRecordDecisions(JSON.stringify(decisions));
+    const decision = parsed[0]?.decision as { links: Array<{ type: string; target: string }> };
+    expect(decision.links).toEqual([]);
+  });
+
   it('accepts refine/supersede decisions that include targetNodeId', () => {
     const good = [
       {

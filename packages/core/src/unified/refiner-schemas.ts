@@ -141,6 +141,28 @@ const journalNodeTypeEnum = z.enum(['decision', 'design', 'behavior', 'process',
 const journalStatusEnum = z.enum(['adopted', 'dropped', 'inconclusive', 'superseded']);
 const journalLinkTypeEnum = z.enum(['supersedes', 'refines', 'relates', 'depends-on', 'contradicts', 'parent']);
 const journalLinkSchema = z.object({ type: journalLinkTypeEnum, target: z.string().min(1) });
+const VALID_LINK_TYPES: readonly string[] = journalLinkTypeEnum.options;
+
+// LENIENT extra-links sanitizer. This is a decide-then-apply system: the implementer LLM
+// sometimes emits over-eager or placeholder edges — a link with a `type` but no `target`,
+// the legacy `to:` spelling, or an invented edge type. Rejecting the WHOLE record for one
+// stray edge (the original dogfood bug) is wrong; the deterministic layer should sanitize
+// the decision, not throw it away. So we: (a) accept `to` as an alias for `target`
+// (mirrors the node-codec read-side), (b) DROP any entry lacking a non-empty string target,
+// and (c) DROP any entry whose type is not one of the 6 valid edge types. A missing `links`
+// field sanitizes to []. The REQUIRED refine/supersede relationship stays strict — it lives
+// in top-level `targetNodeId`, which the discriminated union below still hard-requires.
+const sanitizedLinksSchema = z.preprocess((raw) => {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const link = entry as Record<string, unknown>;
+    const target = link.target ?? link.to;
+    if (typeof link.type !== 'string' || !VALID_LINK_TYPES.includes(link.type)) return [];
+    if (typeof target !== 'string' || target.trim() === '') return [];
+    return [{ type: link.type, target }];
+  });
+}, z.array(journalLinkSchema));
 
 // Fields shared by every node-writing decision (create/refine/supersede).
 const journalNodeFields = {
@@ -148,7 +170,7 @@ const journalNodeFields = {
   type: journalNodeTypeEnum,
   topic: z.string().min(1),
   tags: z.array(z.string().min(1)),
-  links: z.array(journalLinkSchema),
+  links: sanitizedLinksSchema,
   status: journalStatusEnum,
   description: z.string().min(1),
   context: z.string().min(1),
