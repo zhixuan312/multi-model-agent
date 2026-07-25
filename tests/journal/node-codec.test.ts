@@ -58,6 +58,18 @@ describe('node-codec', () => {
     expect(renderNodeMarkdown(parsed)).toContain('## Context');
   });
 
+  it('accepts a legacy `to` link field as an alias for `target`', () => {
+    const legacy = VALID_NODE.replace('    target: "0001"', '    to: "0001"');
+    const parsed = parseJournalNodeDocument(legacy, 'nodes/0007-legacy-to.md');
+    expect(parsed.links).toEqual([{ type: 'relates', target: '0001' }]);
+  });
+
+  it('accepts a timezone-offset timestamp, not just Z', () => {
+    const offset = VALID_NODE.replace('2026-07-24T10:00:00.000Z', '2026-07-18T18:48:29+08:00');
+    const parsed = parseJournalNodeDocument(offset, 'nodes/0007-offset-ts.md');
+    expect(parsed.timestamp).toBe('2026-07-18T18:48:29+08:00');
+  });
+
   it('rejects self-loops and dangling links during validation', () => {
     expect(() => validateJournalLinkSet('0007', [{ type: 'relates', target: '0007' }], new Set(['0007']))).toThrow(/self-loop/i);
     expect(() => validateJournalLinkSet('0007', [{ type: 'relates', target: '9999' }], new Set(['0007']))).toThrow(/dangling/i);
