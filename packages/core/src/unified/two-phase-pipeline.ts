@@ -7,6 +7,7 @@ import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
 import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
+import type { ContractPlanSnapshot } from './contract-plan.js';
 
 const CWD_ONLY_DISALLOWED_TOOLS = ['Agent', 'EnterWorktree', 'ExitWorktree'];
 
@@ -38,6 +39,10 @@ export interface PipelineInput {
   /** For execute_plan: the full list of dispatched task titles (from plan matching).
    *  Injected into the reviewer prompt for completeness verification. */
   dispatchedTasks?: string[];
+  /** For execute_plan: the immutable parsed-and-validated frozen Contract Task
+   *  snapshot selected at dispatch time. Type-only here — Task I-3 adds the
+   *  behavior that materializes/re-materializes its acceptance tests. */
+  acceptanceTestSnapshot?: ContractPlanSnapshot;
   /** Files to copy from original cwd into the worktree if they're missing
    *  (e.g. plan files that aren't committed to git). Paths relative to cwd. */
   copyToWorktree?: string[];
