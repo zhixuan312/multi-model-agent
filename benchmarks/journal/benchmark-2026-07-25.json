@@ -1,21 +1,22 @@
 {
-  "generatedAt": "2026-07-25T14:38:36.573Z",
+  "generatedAt": "2026-07-25T14:43:07.189Z",
+  "fixtureCount": 3000,
   "baseline": {
     "path": "baseline",
-    "recordLatencyMsP50": 51.952083000000016,
-    "recallLatencyMsP50": 51.9961659999999,
-    "recordTokenTotal": 3263688,
-    "recallTokenTotal": 3263688,
-    "retrievalMAP": 0.48789173789173784,
+    "recordLatencyMsP50": 77.94945899999993,
+    "recallLatencyMsP50": 77.25008399999979,
+    "recordTokenTotal": 4895172,
+    "recallTokenTotal": 4895172,
+    "retrievalMAP": 0.4804067460317459,
     "mechanicalErrors": 2,
     "rebuildEquivalent": true
   },
   "engine": {
     "path": "engine",
-    "recordLatencyMsP50": 4.289457999999286,
-    "recallLatencyMsP50": 4.3026669999999285,
-    "recordTokenTotal": 4685,
-    "recallTokenTotal": 4685,
+    "recordLatencyMsP50": 7.777083999999377,
+    "recallLatencyMsP50": 7.867625000000771,
+    "recordTokenTotal": 4687,
+    "recallTokenTotal": 4687,
     "retrievalMAP": 1,
     "mechanicalErrors": 0,
     "rebuildEquivalent": true

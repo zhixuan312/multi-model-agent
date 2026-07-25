@@ -39,7 +39,7 @@ import {
   type JournalCandidate,
   type JournalNodeDocument,
 } from '../../packages/core/src/journal/index.js';
-import { generateFixture, writeFixtureToJournal } from './fixture-2000.js';
+import { generateFixture, writeFixtureToJournal } from './fixture-3000.js';
 import type { FrozenQuery } from './queries.js';
 
 export interface BenchmarkOutput {
@@ -53,7 +53,10 @@ export interface BenchmarkOutput {
   rebuildEquivalent: boolean;
 }
 
-const FIXTURE_COUNT = 2000;
+// Corpus size for every benchmark run. Exported so the gates test's summary and
+// the persisted JSON report the size they actually measured — the number must
+// never be restated by hand anywhere.
+export const FIXTURE_COUNT = 3000;
 const TOP_K = 8;
 const LATENCY_REPEATS = 3;
 

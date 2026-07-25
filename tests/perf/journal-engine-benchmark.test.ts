@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { generateFixture } from '../../benchmarks/journal/fixture-2000.js';
+import { generateFixture } from '../../benchmarks/journal/fixture-3000.js';
 import { FROZEN_QUERIES } from '../../benchmarks/journal/queries.js';
-import { runBenchmark, type BenchmarkOutput } from '../../benchmarks/journal/run.js';
+import { FIXTURE_COUNT, runBenchmark, type BenchmarkOutput } from '../../benchmarks/journal/run.js';
 
 // Frozen output contract every benchmark run must satisfy:
 // interface BenchmarkOutput {
@@ -14,10 +14,10 @@ import { runBenchmark, type BenchmarkOutput } from '../../benchmarks/journal/run
 // }
 
 describe('journal benchmark harness', () => {
-  it('generates a deterministic 2000-node fixture (same seed → identical corpus)', () => {
-    const a = generateFixture({ seed: 42, count: 2000 });
-    const b = generateFixture({ seed: 42, count: 2000 });
-    expect(a.length).toBe(2000);
+  it('generates a deterministic fixture at the benchmark corpus size (same seed → identical corpus)', () => {
+    const a = generateFixture({ seed: 42, count: FIXTURE_COUNT });
+    const b = generateFixture({ seed: 42, count: FIXTURE_COUNT });
+    expect(a.length).toBe(FIXTURE_COUNT);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     // fixture covers every scenario the retrieval/record paths must handle:
     for (const kind of ['create', 'refine', 'merge', 'supersede', 'contradiction', 'graph-neighbor', 'cross-topic'])
