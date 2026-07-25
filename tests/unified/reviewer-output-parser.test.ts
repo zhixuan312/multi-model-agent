@@ -21,6 +21,13 @@ const VALID_EXECUTE_PLAN = JSON.stringify({
   notes: 'Applied verbatim',
 });
 
+const VALID_PLAN = JSON.stringify({
+  planPath: '.mma/plans/x.md',
+  taskCount: 1,
+  tasks: [{ title: 'Task I-1: Demo', verdict: 'executable', contractCompleteness: 'complete' }],
+  notes: 'ok',
+});
+
 const VALID_REVIEW = JSON.stringify({
   criteriaCovered: ['test-gap'],
   findings: [{ weight: 'high', category: 'test-gap', claim: 'No tests for X', evidence: 'function X()', file: 'src/x.ts', line: 5, suggestion: 'Add test', preExisting: false }],
@@ -98,6 +105,29 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput('Looks fine to me.', 'audit');
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error).toContain('No JSON found');
+    });
+  });
+
+  describe('plan output contractCompleteness (optional contract-first signal)', () => {
+    it('parses plan output with contractCompleteness present, preserving verdict', () => {
+      const r = parseReviewerOutput(VALID_PLAN, 'plan');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const t = (r.data as { tasks: Array<{ verdict: string; contractCompleteness?: string }> }).tasks[0];
+        expect(t.verdict).toBe('executable');
+        expect(t.contractCompleteness).toBe('complete');
+      }
+    });
+    it('accepts plan output with the field absent (undefined), staying legacy-compatible', () => {
+      const legacy = JSON.stringify({ planPath: 'x', taskCount: 1, tasks: [{ title: 'T', verdict: 'executable' }], notes: '' });
+      const r = parseReviewerOutput(legacy, 'plan');
+      expect(r.ok).toBe(true);
+      if (r.ok) expect((r.data as { tasks: Array<{ contractCompleteness?: string }> }).tasks[0].contractCompleteness).toBeUndefined();
+    });
+    it('rejects an invalid contractCompleteness value', () => {
+      const bad = JSON.stringify({ planPath: 'x', taskCount: 1, tasks: [{ title: 'T', verdict: 'executable', contractCompleteness: 'unknown' }], notes: '' });
+      const r = parseReviewerOutput(bad, 'plan');
+      expect(r.ok).toBe(false);
     });
   });
 
