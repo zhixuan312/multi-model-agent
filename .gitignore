@@ -33,3 +33,6 @@ full-smoke-results.json
 
 # pnpm local store (package-manager cache, never commit)
 .pnpm-store/
+
+# TypeScript incremental build info (build artifact)
+*.tsbuildinfo
