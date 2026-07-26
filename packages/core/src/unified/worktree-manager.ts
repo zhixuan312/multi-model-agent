@@ -83,6 +83,30 @@ function isAddRetryable(err: unknown): boolean {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Serialize merge-back on a per-repo basis. `git merge` / `rebase` / `worktree remove` all mutate the
+ * shared HEAD, index, and ref store; two running concurrently on the SAME repo race, and a lost race
+ * silently drops a worker's merge (the worktree is cleaned up with the work still only on its branch).
+ * In the product, writes are one-per-batch so this is a no-op; it protects any caller that dispatches
+ * concurrent write routes to the SAME repo. Keyed by repo root — different repos merge in parallel.
+ * Module-level so the mutex holds across the per-pipeline WorktreeManager instances. The chain is
+ * built from gates that always resolve (released in a `finally`), so one merge's failure never stalls
+ * the queue; at most one chain-tail promise is retained per distinct repo.
+ */
+const repoMergeChains = new Map<string, Promise<void>>();
+async function withRepoMergeLock<T>(repo: string, fn: () => Promise<T>): Promise<T> {
+  const prev = repoMergeChains.get(repo) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  repoMergeChains.set(repo, prev.then(() => gate));
+  await prev; // wait for the previous merge on this repo to release its gate
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 export class WorktreeManager {
   private readonly exec: ExecFn;
   private readonly fs: FsOps;
@@ -267,6 +291,12 @@ export class WorktreeManager {
       return { branch, path: worktreePath, hasChanges: false, merged: false };
     }
 
+    // Serialize the merge-back per target repo (see withRepoMergeLock): concurrent merges to ONE repo
+    // race the shared HEAD/index/refs and silently drop a worker's output; different repos stay parallel.
+    return withRepoMergeLock(originalCwd, () => this.doMergeAndCleanup(worktreePath, branch, originalCwd, commitMessage));
+  }
+
+  private async doMergeAndCleanup(worktreePath: string, branch: string, originalCwd: string, commitMessage?: string): Promise<WorktreeInfo> {
     const dirty = await this.hasChanges(worktreePath);
 
     // Stage + commit any uncommitted work. This is an INTERNAL staging commit that moves the worker's
@@ -320,17 +350,22 @@ export class WorktreeManager {
     }
 
     // Merge worktree branch into original branch — prefer fast-forward for linear history.
-    // If the target moved while the worker ran, rebase the worktree branch first.
+    // If the target moved while the worker ran (a concurrent peer, OR the user committing to their
+    // repo during the task), fast-forward fails and we must rebase the branch onto the new target.
     try {
       await this.exec('git', ['merge', '--ff-only', branch], { cwd: originalCwd, windowsHide: true });
     } catch {
-      // Fast-forward failed — target branch moved. Rebase worktree onto target, then retry ff.
+      // Fast-forward failed — the target advanced. Rebase the branch onto the current target IN THE
+      // WORKTREE: the branch is checked out there, so the main repo CANNOT rebase it (git refuses:
+      // "branch is already used by worktree"), which previously threw → merged:false → silent drop.
+      // Rebasing in the worktree, then fast-forwarding the target, lands the work correctly.
       try {
-        await this.exec('git', ['rebase', 'HEAD', branch], { cwd: originalCwd, windowsHide: true });
+        const { stdout: targetHead } = await this.exec('git', ['rev-parse', 'HEAD'], { cwd: originalCwd, windowsHide: true });
+        await this.exec('git', ['rebase', targetHead.trim()], { cwd: worktreePath, windowsHide: true });
         await this.exec('git', ['merge', '--ff-only', branch], { cwd: originalCwd, windowsHide: true });
       } catch {
-        // Rebase conflict — preserve worktree for manual resolution
-        await this.exec('git', ['rebase', '--abort'], { cwd: originalCwd, windowsHide: true }).catch(() => {});
+        // Genuine rebase conflict — preserve the worktree for manual resolution (abort in the worktree).
+        await this.exec('git', ['rebase', '--abort'], { cwd: worktreePath, windowsHide: true }).catch(() => {});
         return { branch, path: worktreePath, hasChanges: true, merged: false };
       }
     }
