@@ -353,10 +353,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.1
+## What's new in 5.15.2
 
-- **Read routes read plainly.** `audit`, `investigate`, `review`, `debug`, `research`, and `journal_recall` outputs now lead with what their consumer needs to act on — the direct answer, the concrete failure scenario (what breaks, under what input/state), the decision-relevant conclusion — and three drifted acceptance criteria were corrected (audit code-vs-doc evidence prefix, debug 5 angles, journal_recall's deterministic-engine flow). No API or schema change.
-- **Contract-first plans (5.15.0).** `plan` writes what each task must satisfy — a Contract (inputs/outputs/mapping/errors/invariants) + plan-authored acceptance tests, **no implementation code** — in a human-executable phased layout. `execute_plan` implements autonomously and is scored by running those tests (merges at ≥80%). `SCHEMA_VERSION` still 6.
+- **Write routes no longer silently drop work.** Delegating `delegate`/`execute_plan` to a repo could report `merged: true` while discarding the worker's output — when the target repo has a **pre-commit hook** (or no git identity) that aborted the engine's internal staging commit, or when the **target branch moved during the task** (a concurrent write, or you committing to the repo mid-run). Both are fixed: the staging commit bypasses hooks with a guaranteed identity, the merge-back rebases in the worktree when the target advanced, and `merged: true` is now decided by whether the branch actually carries commits — never a no-op "Already up to date". Concurrent writes to one repo are serialized so they all land. No API or schema change.
+- **Read routes read plainly (5.15.1).** `audit`, `investigate`, `review`, `debug`, `research`, `journal_recall` outputs lead with what their consumer needs to act on, with three acceptance-criteria drifts corrected.
+- **Contract-first plans (5.15.0).** `plan` writes a Contract + plan-authored acceptance tests (no implementation code); `execute_plan` implements autonomously and is scored by running those tests. `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.2] - 2026-07-26
+
+**Cross-repo write routes no longer silently drop the worker's output.** Delegating a write route (`delegate`, `execute_plan`) to a repo other than the server's own cwd could report `merged: true` while discarding the work. Two root causes, both fixed. No API or schema change (`SCHEMA_VERSION` still 6).
+
+### Fixed
+- **The internal staging commit is no longer aborted by the target repo's hooks or a missing git identity.** The engine's internal commit — moving the worker's changes onto the branch for merge-back — ran a plain `git commit`, which a **pre-commit hook** (lint/format/test gate, common in real project repos) or an unconfigured `user.name/email` aborts. The failure was swallowed as "nothing to commit", the branch never advanced, and `merge --ff-only` reported "Already up to date" — a false `merged: true` with the work destroyed. It now commits with `--no-verify --no-gpg-sign` and a guaranteed identity, and a genuine commit failure surfaces as `merged: false` (worktree preserved) instead of a silent success.
+- **Merge-back now lands when the target advanced during the task.** If the target branch moved while the worker ran — a concurrent write to the same repo, **or the user committing to their repo mid-task** — the fallback ran `git rebase HEAD <branch>` in the main repo, which git refuses because the branch is checked out in the worktree; the rebase threw and the work was dropped. The rebase now runs **in the worktree** (onto the current target), then fast-forwards.
+- **`merged: true` is now truthful.** The result is decided by whether the branch actually carries commits past its fork point (`git rev-list`), never by a no-op "Already up to date" merge. A worker that self-commits (clean working tree, branch still ahead) is now merged instead of removed unmerged.
+- **Concurrent write routes to the same repo are serialized per repo** so their merges cannot race the shared HEAD/index/refs — three concurrent delegates to one repo now all land (was: one survived). Different repos still merge in parallel.
+
 ## [5.15.1] - 2026-07-26
 
 **Read-route output quality: `audit`, `investigate`, `review`, `debug`, `research`, and `journal_recall` findings now read plainly for the human who acts on them, and three drifted acceptance criteria are corrected.** Prompt-level refinements + criteria accuracy — no API or schema change (`SCHEMA_VERSION` still 6).
