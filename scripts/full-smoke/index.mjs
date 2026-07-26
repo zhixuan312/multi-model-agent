@@ -205,6 +205,16 @@ try {
   const log = (msg) => { process.stderr.write(msg + '\n'); };
   const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
 
+  // Continuous queue capture: the server's telemetry flusher drains the local queue file every
+  // ~5 min (uploading to the backend, independent of --skip-backend). A record emitted just before
+  // a flush would be gone before a per-scenario settle scan sampled it — the wire record WAS emitted,
+  // the smoke just missed it. Tail the queue on a tight interval so every id is captured the instant
+  // it lands, before any flush can drain it. seenIds is a Set, so this only ever adds.
+  const bgScan = setInterval(() => {
+    try { for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id); } catch { /* transient read race */ }
+  }, 150);
+  ctx.bgScan = bgScan;
+
   if (opts.sequential) {
     // Legacy sequential mode
     log(`Full-pipeline smoke — ${scenarios.length} scenarios (sequential)`);
@@ -325,6 +335,7 @@ try {
     backendSummary = collectBackend(ctx.databaseUrl, allEventIds);
   }
 } finally {
+  if (ctx.bgScan) clearInterval(ctx.bgScan);
   await teardown(ctx);
 }
 

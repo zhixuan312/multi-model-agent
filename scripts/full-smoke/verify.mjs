@@ -414,9 +414,13 @@ export function verify(rec) {
       out.push(C('weight-field', allHaveWeight ? 'PASS' : 'FAIL',
         `${findings.length} findings, all have valid weight=${allHaveWeight}`));
 
-      const withPrefix = findings.filter(f => /^\[##?#?\s/.test(f.evidence ?? ''));
+      // Grounding convention: every evidence string starts with its source in square brackets —
+      // a markdown heading for document audits (`[### Heading]`) or a file/path ref for code audits
+      // (`[src/math.ts]` or `[src/math.ts:3]`, since code has no headings). Accept any bracketed
+      // source prefix; what matters is that the finding names where the evidence lives.
+      const withPrefix = findings.filter(f => /^\[[^\]]+\]\s/.test(f.evidence ?? ''));
       out.push(C('evidence-prefix', withPrefix.length > 0 ? 'PASS' : 'WARN',
-        `${withPrefix.length}/${findings.length} findings have [## heading] evidence prefix`));
+        `${withPrefix.length}/${findings.length} findings have a [source] evidence prefix`));
     }
   }
 

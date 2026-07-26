@@ -102,9 +102,9 @@ Every finding must use one of these four evidence shapes:
 
 A finding without one of these four forms is speculation. Note "investigation needed" in your summary instead.
 
-**Section prefix (REQUIRED).** Every evidence string MUST start with the nearest heading above the issue, in square brackets. Use the most specific heading available — prefer `###` over `##` over `#`. This tells the caller exactly which section to fix.
+**Section prefix (REQUIRED).** Every evidence string MUST start with its source in square brackets, so the caller knows exactly where to look. For a **document** target, use the nearest heading above the issue — prefer `###` over `##` over `#`. For a **source-code** target (no markdown headings), use the file path, with a line number when you have one: `[src/math.ts:3]` or `[src/math.ts]`.
 
-Format: `[### Heading Title] "quoted evidence text"`
+Format: `[### Heading Title] "quoted evidence text"` (docs) · `[src/math.ts:3] "quoted code"` (code)
 Multi-section: `[### Task 3] [### Task 5] "Both reference the same config"`
 Preamble/metadata (no ### above): `[# Plan Title]` or `[## Phase Name]`
 
