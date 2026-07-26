@@ -67,8 +67,11 @@ describe('contract-first plan authoring prompts (I-6)', () => {
 describe('autonomous executor prompts (I-7)', () => {
   it('execute_plan/implement.md is the autonomous-executor mandate', () => {
     expect(execImpl.toLowerCase()).toContain('autonomous implementer');
-    expect(execImpl).toContain('MUST NOT weaken, skip, delete, or replace');
-    expect(execImpl).toContain('test-path-collision');
+    expect(execImpl).toContain('MUST NOT create, move, edit, overwrite, delete, weaken, or');
+    // The pipeline materializes the tests before the worker runs; the worker implements
+    // against them as-is and must never re-materialize them or treat their presence as a collision.
+    expect(execImpl.toLowerCase()).toContain('already present in your workspace');
+    expect(execImpl.toLowerCase()).toContain('never treat it as a collision');
     expect(execImpl).toContain('status: "failed"');
     expect(execImpl).toContain('Reconciliation');
   });

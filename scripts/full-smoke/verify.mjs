@@ -308,9 +308,12 @@ export function verify(rec) {
     const rawRev = r?.raw?.reviewer ?? '';
     const implLen = typeof rawImpl === 'string' ? rawImpl.length : 0;
     const revLen = typeof rawRev === 'string' ? rawRev.length : 0;
-    const bothPresent = implLen > 50 && revLen > 50;
+    // The check catches a BROKEN pipeline (an empty side), not terse-but-valid output.
+    // A correct delegate/execute_plan can legitimately return a compact JSON block (~20–40
+    // chars), so the bar is "non-empty", not "long": both sides must clear a small floor.
+    const bothPresent = implLen > 10 && revLen > 10;
     out.push(C('pipeline-collaboration', bothPresent ? 'PASS' : 'FAIL',
-      `implementer=${implLen}chars reviewer=${revLen}chars — both must produce substantive output`));
+      `implementer=${implLen}chars reviewer=${revLen}chars — both must be non-empty`));
   }
 
   // ⑥ contextBlockId

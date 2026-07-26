@@ -167,7 +167,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
     case 'execute_plan':
       return [
         'You have satisfied every dispatched Contract Task\'s Contract (Inputs/Request, Outputs/Response, Data mapping, Errors, Behavior/invariants) and made its plan-authored Acceptance tests pass.',
-        'You materialized each plan-authored Acceptance test source verbatim to its paired path before implementing it, and did not modify, weaken, delete, or overwrite it.',
+        'The plan-authored Acceptance tests were already materialized in your workspace at their declared paths; you implemented against them and did not create, move, modify, weaken, delete, or overwrite them.',
         'You chose your own implementation approach to satisfy the contract — the plan contains no implementation code, so there is nothing to copy verbatim.',
         'If a contract defect (including an authored test that contradicts the contract) blocked you, you reported it by name instead of silently working around it or weakening the test.',
         'You have produced the required JSON output block.',

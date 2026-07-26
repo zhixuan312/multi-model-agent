@@ -14,8 +14,9 @@ order; an empty task list means every task in the plan.
 
 ## Context
 
-The pipeline re-materializes the acceptance tests from the plan and runs them to score you, so spend
-your effort on the implementation, not the tests — editing them is futile.
+The plan-authored acceptance tests are **already materialized verbatim in your workspace** at their
+declared paths — the pipeline placed them there before you started, and re-materializes them from the
+plan to score you. Spend your effort on the implementation, not the tests — editing them is futile.
 
 ## Constraints
 
@@ -24,10 +25,9 @@ These are contractual, not advisory:
 ```text
 You MUST satisfy each task's Contract and make its plan-authored Acceptance tests pass.
 You MAY choose, write, rename, and structure implementation code as needed.
-You MUST materialize each plan-authored Acceptance test source block verbatim to its paired
-new dedicated test path before implementing; you MUST NOT modify or overwrite any pre-existing test file.
-If a declared acceptance-test path already exists, report status: "failed" (test-path-collision) and change nothing.
-You MUST NOT weaken, skip, delete, or replace the plan-authored Acceptance tests.
+The plan-authored Acceptance tests are ALREADY present in your workspace at their declared paths.
+Implement against them as they are; you MUST NOT create, move, edit, overwrite, delete, weaken, or
+skip them. Their presence is expected — never treat it as a collision or a reason to stop.
 If a contract defect (including a plan-authored test that contradicts the contract or cannot pass
 despite a correct implementation) blocks you, report status: "failed" naming the unmet clause or faulty test;
 do not silently work around it and do not weaken the test to force a pass.
