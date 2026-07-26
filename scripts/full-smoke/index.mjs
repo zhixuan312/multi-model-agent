@@ -313,15 +313,16 @@ try {
     }
   }
 
-  // Telemetry final settle: trailing wire records from the last scenarios can land in the queue
-  // file after their per-scenario settle window closed (async flush under load). Scan once more,
-  // bounded, so emitted-but-late records are counted — a genuinely lost record still surfaces.
+  // Telemetry final settle: a short grace so trailing wire records from the last scenarios that
+  // land just after their per-scenario window are still counted. The 150ms background tailer above
+  // already captures continuously, so this only needs a brief top-up (records that permanently race
+  // the flush/rewrite are unobservable locally by design — see report.mjs).
   {
-    const finalUntil = Date.now() + 30000;
+    const finalUntil = Date.now() + 4000;
     for (;;) {
       for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
       if (seenIds.size >= expectedEmits || Date.now() >= finalUntil) break;
-      await sleep(500);
+      await sleep(300);
     }
   }
 
