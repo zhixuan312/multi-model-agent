@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-25T23:42:32.481Z",
+  "generatedAt": "2026-07-26T00:08:34.928Z",
   "fixtureCount": 3000,
   "baseline": {
     "path": "baseline",
-    "recordLatencyMsP50": 75.59783299999981,
-    "recallLatencyMsP50": 75.65154200000006,
+    "recordLatencyMsP50": 75.79299999999989,
+    "recallLatencyMsP50": 75.09558400000014,
     "recordTokenTotal": 4895172,
     "recallTokenTotal": 4895172,
     "retrievalMAP": 0.4804067460317459,
@@ -13,8 +13,8 @@
   },
   "engine": {
     "path": "engine",
-    "recordLatencyMsP50": 6.747916000000259,
-    "recallLatencyMsP50": 6.708957999999257,
+    "recordLatencyMsP50": 6.726207999999133,
+    "recallLatencyMsP50": 7.125082999999904,
     "recordTokenTotal": 4687,
     "recallTokenTotal": 4687,
     "retrievalMAP": 1,

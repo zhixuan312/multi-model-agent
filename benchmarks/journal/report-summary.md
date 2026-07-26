@@ -1,6 +1,6 @@
 # Journal Deterministic Engine — Benchmark Summary
 
-Generated 2026-07-25 by `tests/perf/journal-engine-benchmark-gates.test.ts`.
+Generated 2026-07-26 by `tests/perf/journal-engine-benchmark-gates.test.ts`.
 Deterministic mechanism benchmark over a seeded 3000-node fixture and a frozen
 query set — no LLM, no server, no network.
 
@@ -17,8 +17,8 @@ query set — no LLM, no server, no network.
 
 | Metric | baseline | engine | gate | result |
 |---|---:|---:|---|---|
-| record latency p50 (ms) | 77.949 | 7.777 | baseline/engine ≥ 3× | 10.0× |
-| recall latency p50 (ms) | 77.250 | 7.868 | baseline/engine ≥ 3× | 9.8× |
+| record latency p50 (ms) | 75.793 | 6.726 | baseline/engine ≥ 3× | 11.3× |
+| recall latency p50 (ms) | 75.096 | 7.125 | baseline/engine ≥ 3× | 10.5× |
 | record tokens (total) | 4895172 | 4687 | ≥ 80% reduction | 99.9% |
 | recall tokens (total) | 4895172 | 4687 | ≥ 80% reduction | 99.9% |
 | retrieval mAP | 0.4804 | 1.0000 | engine ≥ baseline | pass |
