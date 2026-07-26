@@ -210,12 +210,16 @@ describe('WorktreeManager', () => {
     expect(info.hasChanges).toBe(false);
     expect(info.merged).toBe(false);
 
-    // git status, git worktree remove, git branch -D
+    // clean worktree → status, then the "is the branch ahead?" probe (merge-base / rev-list / diff;
+    // rev-list count is empty → NaN → not ahead), then worktree remove + branch -D.
     const calls = exec.mock.calls;
-    expect(calls.length).toBe(3);
+    expect(calls.length).toBe(6);
     expect(calls[0][1]).toContain('--porcelain');
-    expect(calls[1][1]).toContain('remove');
-    expect(calls[2][1]).toContain('-D');
+    expect(calls[1][1]).toContain('merge-base');
+    expect(calls[2][1]).toContain('rev-list');
+    expect(calls[3][1]).toContain('diff');
+    expect(calls[4][1]).toContain('remove');
+    expect(calls[5][1]).toContain('-D');
   });
 
   it('mergeAndCleanup auto-commits + merges + cleans up when dirty', async () => {
@@ -224,6 +228,7 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
       .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base branch HEAD
+      .mockResolvedValueOnce({ stdout: '1\n', stderr: '' }) // git rev-list --count base..branch (ahead=1)
       .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only base branch (filesChanged)
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
@@ -244,13 +249,17 @@ describe('WorktreeManager', () => {
     expect(calls[0][1]).toContain('--porcelain');
     expect(calls[1][1]).toEqual(['add', '-A']);
     expect(calls[2][1]).toContain('commit');
-    expect(calls[3][1]).toContain('merge-base'); // filesChanged base (fork point)
-    expect(calls[4][1]).toContain('diff'); // git diff --name-only base branch → filesChanged
-    expect(calls[5][1]).toContain('merge');
-    expect(calls[5][1]).toContain('mma/delegate-abc');
-    expect(calls[5][2].cwd).toBe('/repo'); // merge runs in original cwd
-    expect(calls[6][1]).toContain('remove');
-    expect(calls[7][1]).toContain('-D');
+    // Internal staging commit bypasses the target repo's hooks + carries a guaranteed identity.
+    expect(calls[2][1]).toContain('--no-verify');
+    expect(calls[2][1]).toContain('user.email=mma@localhost');
+    expect(calls[3][1]).toContain('merge-base'); // fork point
+    expect(calls[4][1]).toContain('rev-list'); // is the branch ahead? (truthful merge signal)
+    expect(calls[5][1]).toContain('diff'); // git diff --name-only base branch → filesChanged
+    expect(calls[6][1]).toContain('merge');
+    expect(calls[6][1]).toContain('mma/delegate-abc');
+    expect(calls[6][2].cwd).toBe('/repo'); // merge runs in original cwd
+    expect(calls[7][1]).toContain('remove');
+    expect(calls[8][1]).toContain('-D');
   });
 
   it('mergeAndCleanup preserves worktree on merge conflict', async () => {
@@ -259,10 +268,12 @@ describe('WorktreeManager', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
       .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
       .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base branch HEAD
+      .mockResolvedValueOnce({ stdout: '1\n', stderr: '' }) // git rev-list --count base..branch (ahead=1)
       .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff --name-only (filesChanged)
       .mockRejectedValueOnce(new Error('not fast-forward')) // git merge --ff-only fails
-      .mockRejectedValueOnce(new Error('rebase conflict')) // git rebase fails
-      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git rebase --abort
+      .mockResolvedValueOnce({ stdout: 'targethead\n', stderr: '' }) // git rev-parse HEAD (rebase target)
+      .mockRejectedValueOnce(new Error('rebase conflict')) // git rebase (in worktree) fails
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git rebase --abort (in worktree)
 
     const mgr = new WorktreeManager(exec, mockFs(true));
     const info = await mgr.mergeAndCleanup(
@@ -296,6 +307,74 @@ describe('WorktreeManager', () => {
     const calls = exec.mock.calls;
     expect(calls.every((c) => c[2].cwd === '/repo')).toBe(true);
     expect(calls.map((c) => c[1].join(' '))).toEqual(['worktree prune', 'branch -D mma/delegate-abc']);
+  });
+
+  it('rebases in the worktree and lands when the target advanced (ff-only fails)', async () => {
+    // The target moved while the worker ran (concurrent peer, or the user committing to their repo).
+    // ff-only fails; the fix rebases the branch onto the new target IN THE WORKTREE (the main repo
+    // cannot check out a branch already used by a worktree — that threw before → merged:false → silent
+    // drop), then fast-forwards. Regression for the cross-repo/diverged merge-back loss.
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git commit
+      .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base
+      .mockResolvedValueOnce({ stdout: '1\n', stderr: '' }) // rev-list --count (ahead)
+      .mockResolvedValueOnce({ stdout: 'file.ts\n', stderr: '' }) // git diff (filesChanged)
+      .mockRejectedValueOnce(new Error('Not possible to fast-forward')) // git merge --ff-only fails
+      .mockResolvedValueOnce({ stdout: 'targethead0\n', stderr: '' }) // git rev-parse HEAD (rebase target)
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git rebase targethead0 (in worktree) OK
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge --ff-only (retry) OK
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
+    const mgr = new WorktreeManager(exec, mockFs(true));
+    const info = await mgr.mergeAndCleanup('/repo/.mma/worktrees/abc', 'mma/delegate-abc', '/repo');
+    expect(info.merged).toBe(true);
+    expect(info.filesChanged).toEqual(['file.ts']);
+    // The rebase ran IN THE WORKTREE (cwd = worktree path) onto the target HEAD, not in the main repo.
+    const rebaseCall = exec.mock.calls.find((c) => c[1][0] === 'rebase' && c[1][1] !== '--abort');
+    expect(rebaseCall[1]).toContain('targethead0');
+    expect(rebaseCall[2].cwd).toBe('/repo/.mma/worktrees/abc');
+  });
+
+  it('a genuine staging-commit failure reports merged:false — never a silent merged:true', async () => {
+    // Regression for the cross-repo silent-data-loss bug (B-317). A real commit failure must NOT be
+    // swallowed as "nothing to commit" and then reported as a successful merge via a no-op
+    // `merge --ff-only` ("Already up to date"). The worker's work never landed → merged:false, and
+    // the worktree is preserved (not removed) so the changes are not destroyed.
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ stdout: ' M file.ts\n', stderr: '' }) // hasChanges → dirty
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git add -A
+      .mockRejectedValueOnce(Object.assign(new Error('commit failed'), { stderr: 'fatal: unable to write commit object' }));
+    const mgr = new WorktreeManager(exec, mockFs(true));
+    const info = await mgr.mergeAndCleanup('/repo/.mma/worktrees/abc', 'mma/delegate-abc', '/repo');
+    expect(info.merged).toBe(false);
+    expect(info.hasChanges).toBe(true);
+    // Never proceeded to a merge (no false "Already up to date") and never removed the worktree.
+    const cmds = exec.mock.calls.map((c) => c[1][0]);
+    expect(cmds).not.toContain('merge');
+    expect(cmds).not.toContain('worktree');
+  });
+
+  it('merges a worker self-commit even when the working tree is clean (branch ahead)', async () => {
+    // A worker that committed its own changes leaves a clean working tree but a branch AHEAD of the
+    // fork point. The old `!dirty` fast path removed the branch WITHOUT merging — losing the work.
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // hasChanges → clean (worker self-committed)
+      .mockResolvedValueOnce({ stdout: 'base0000\n', stderr: '' }) // git merge-base
+      .mockResolvedValueOnce({ stdout: '2\n', stderr: '' }) // rev-list --count → ahead by 2
+      .mockResolvedValueOnce({ stdout: 'a.ts\nb.ts\n', stderr: '' }) // git diff --name-only (filesChanged)
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git merge --ff-only
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // git worktree remove
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git branch -D
+    const mgr = new WorktreeManager(exec, mockFs(true));
+    const info = await mgr.mergeAndCleanup('/repo/.mma/worktrees/abc', 'mma/delegate-abc', '/repo');
+    expect(info.merged).toBe(true);
+    expect(info.filesChanged).toEqual(['a.ts', 'b.ts']);
+    // Clean working tree → no add/commit; went straight to the ahead-check + merge.
+    const cmds = exec.mock.calls.map((c) => c[1][0]);
+    expect(cmds).not.toContain('add');
+    expect(cmds).toContain('merge');
   });
 
 });
