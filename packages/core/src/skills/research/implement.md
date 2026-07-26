@@ -121,6 +121,8 @@ A single research question should produce a mix of strategies — broad web quer
 
 ## Output
 
+The `answer` is what the asker reads to make their call. Lead with the **decision-relevant conclusion in plain English** — answer the question first — then support it with the cited findings. State confidence honestly, calibrated to source tier (a Tier-1 primary source warrants more weight than a Tier-4 forum post), and surface the strongest counter-perspective and any gap in the evidence rather than papering over them. The asker should be able to decide, not just read a source list.
+
 After completing research, your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json

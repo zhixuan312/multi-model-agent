@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.1] - 2026-07-26
+
+**Read-route output quality: `audit`, `investigate`, `review`, `debug`, `research`, and `journal_recall` findings now read plainly for the human who acts on them, and three drifted acceptance criteria are corrected.** Prompt-level refinements + criteria accuracy — no API or schema change (`SCHEMA_VERSION` still 6).
+
+### Changed
+- **Read-route outputs lead with what their consumer needs.** `investigate` answers open by directly resolving the asked question (conclusion first, then citations — the five perspectives are how you got there, not what the caller reads); `review` finding claims name the concrete failure (what breaks, under what input or state) so a maintainer judges severity at a glance; `research` answers lead with the decision-relevant conclusion, state confidence calibrated to source tier, and surface the strongest counter-perspective and evidence gaps rather than papering over them.
+
+### Fixed
+- **`audit` refiner no longer forces a `[### Heading]` prefix onto code findings.** The audit skill grounds source-code evidence as `[path:line]` (code has no markdown headings); the refiner was rewriting valid code evidence into a nonexistent heading. Both implementer and refiner now use the doc-vs-code form.
+- **`debug` acceptance criteria corrected from 4 to 5 investigation angles** (adds concurrency-configuration) to match the skill and its refiner.
+- **`journal_recall` acceptance criteria updated to the deterministic-engine flow.** It no longer gates the pre-5.14.0 mechanism (searching 3 perspectives, maintaining the `index.md` catalog) — the engine retrieves and ranks candidates and the worker judges + synthesizes them into a plain-English answer.
+
 ## [5.15.0] - 2026-07-26
 
 **Contract-first plans: `plan` now writes what each task must satisfy — not how to code it — and `execute_plan` implements autonomously against plan-authored acceptance tests it cannot weaken.** A plan is a human-executable, phased contract (readable by engineers, QA, and tech leads); execution is scored by running the plan's own tests, merging at ≥80% completion. `SCHEMA_VERSION` unchanged (still 6). Requires Node ≥22.

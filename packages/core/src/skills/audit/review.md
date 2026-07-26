@@ -38,7 +38,7 @@ Verify the implementer's audit against the original document, improve quality, r
 
 - Remove hallucinated/wrong-evidence findings. Add missed issues. Correct severities.
 - Update `criteriaCovered` and `findings` to match corrected state.
-- Verify every evidence string starts with a `[### Heading]` section prefix. If missing, add the correct heading from the audited document. If the heading is wrong, fix it to match the actual document heading.
+- Verify every evidence string starts with its source in square brackets — a `[### Heading]` for a document target, or a `[path:line]` / `[path]` for a source-code target (code has no headings). If missing, add the correct source ref from the audited artifact; if it is wrong, fix it to match the actual heading or file path. Never force a `[### Heading]` onto a code finding.
 - Improve finding wording if you can add clarity. Don't rephrase correct findings for style.
 
 ## Output

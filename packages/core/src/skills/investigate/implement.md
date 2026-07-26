@@ -91,6 +91,8 @@ Findings that fail any check should be downgraded. However, negative findings ("
 
 ## Output
 
+The `answer` is what the caller reads. Open it by **directly resolving the asked question in plain language** — the caller should have the answer in the first sentence — then back it with the inline `file:line` citations. Lead with the conclusion, not the investigation process; the five perspectives are how you got there, not what the caller wants to read.
+
 Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
