@@ -353,11 +353,10 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.0
+## What's new in 5.15.1
 
-- **Contract-first plans.** `plan` now writes what each task must satisfy — a Contract (inputs/outputs/mapping/errors/invariants), a technical acceptance criterion, and plan-authored acceptance tests — with **no implementation code**, in a human-executable phased layout for engineers/QA/tech leads. `execute_plan` implements autonomously against those tests, which the pipeline re-materializes verbatim and runs to score completion (merges at ≥80%); executor edits to the tests are discarded. `SCHEMA_VERSION` unchanged.
-- **Reasoning effort is actually applied** and defaults to `high` on both runtimes (it had been declared but never read). Ladder widened to `none|low|medium|high|xhigh|max`, emitted only for models whose profile supports it.
-- **Skills refined by audience** — human-facing outputs (`spec`, `plan`, `explore`, `journal_recall`, audit findings) read in plain, business-forward English so a human owns the judgement calls; all "superpowers" references removed.
+- **Read routes read plainly.** `audit`, `investigate`, `review`, `debug`, `research`, and `journal_recall` outputs now lead with what their consumer needs to act on — the direct answer, the concrete failure scenario (what breaks, under what input/state), the decision-relevant conclusion — and three drifted acceptance criteria were corrected (audit code-vs-doc evidence prefix, debug 5 angles, journal_recall's deterministic-engine flow). No API or schema change.
+- **Contract-first plans (5.15.0).** `plan` writes what each task must satisfy — a Contract (inputs/outputs/mapping/errors/invariants) + plan-authored acceptance tests, **no implementation code** — in a human-executable phased layout. `execute_plan` implements autonomously and is scored by running those tests (merges at ≥80%). `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
