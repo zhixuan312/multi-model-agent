@@ -269,43 +269,55 @@ export class WorktreeManager {
 
     const dirty = await this.hasChanges(worktreePath);
 
-    if (!dirty) {
-      // No changes — just remove worktree + branch
-      await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
-      await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
-      // Clean up empty parent directories
+    // Stage + commit any uncommitted work. This is an INTERNAL staging commit that moves the worker's
+    // output onto the branch for merge-back — NOT the user's own commit — so it bypasses the target
+    // repo's commit hooks (`--no-verify`: a failing pre-commit/lint/test hook would otherwise abort it)
+    // and carries a guaranteed identity (`--no-gpg-sign` + `-c user.*`: a repo with no user.name/email
+    // would otherwise fail). Previously any such failure was swallowed as "nothing to commit", the
+    // branch never advanced, and `merge --ff-only` reported "Already up to date" — so the engine claimed
+    // `merged: true` while silently discarding the worker's output (a real project repo's pre-commit
+    // hook is the common trigger). A genuine commit failure now surfaces as `merged: false`.
+    if (dirty) {
+      await this.exec('git', ['add', '-A'], { cwd: worktreePath, windowsHide: true });
       try {
-        const worktreesDir = dirname(worktreePath);
-        const entries = await readdir(worktreesDir);
-        if (entries.length === 0) {
-          await rmdir(worktreesDir);
-          const mmaDir = dirname(worktreesDir);
-          const mmaEntries = await readdir(mmaDir);
-          if (mmaEntries.length === 0) await rmdir(mmaDir);
+        await this.exec('git', [
+          '-c', 'user.email=mma@localhost', '-c', 'user.name=mma worker',
+          'commit', '--no-verify', '--no-gpg-sign', '-m', commitMessage ?? '[mma] auto-commit before merge',
+        ], { cwd: worktreePath, windowsHide: true });
+      } catch (err) {
+        // The only benign failure is an empty commit (everything staged was gitignored). Any other
+        // failure means the worker's changes could not be captured — surface it, never claim success.
+        if (!/nothing to commit|no changes added to commit/i.test(errText(err))) {
+          return { branch, path: worktreePath, hasChanges: true, merged: false, filesChanged: [] };
         }
-      } catch { /* best-effort */ }
-      return { branch, path: worktreePath, hasChanges: false, merged: false };
+      }
     }
 
-    // Commit any uncommitted changes in the worktree
-    await this.exec('git', ['add', '-A'], { cwd: worktreePath, windowsHide: true });
-    try {
-      await this.exec('git', ['commit', '-m', commitMessage ?? `[mma] auto-commit before merge`], { cwd: worktreePath, windowsHide: true });
-    } catch {
-      // Already committed or nothing to commit
-    }
-
-    // Compute filesChanged BEFORE the merge, as the full diff of the worktree branch against its
-    // fork point (merge-base with the current target). This is robust to (a) concurrent merges
-    // advancing the shared HEAD between merge and diff, and (b) the worker making its own commits —
-    // a post-merge `HEAD~1..HEAD` would miss both. merge-base is the stable fork point regardless of
-    // how the target branch moved.
+    // The truthful merge signal: what does the branch carry past its fork point with the target?
+    // This covers BOTH the auto-commit above AND a worker that committed its own changes (working
+    // tree clean, branch still ahead — the old `!dirty` fast path removed such a branch WITHOUT
+    // merging, also losing work). `merge-base` is the stable fork point regardless of how the target
+    // moved; the range diff is filesChanged.
+    let ahead = false;
     let filesChanged: string[] = [];
     try {
-      const { stdout: base } = await this.exec('git', ['merge-base', branch, 'HEAD'], { cwd: originalCwd, windowsHide: true });
-      const { stdout } = await this.exec('git', ['diff', '--name-only', base.trim(), branch], { cwd: originalCwd, windowsHide: true });
-      filesChanged = stdout.trim().split('\n').filter(Boolean);
-    } catch { /* best-effort — empty list on failure */ }
+      const { stdout: baseOut } = await this.exec('git', ['merge-base', branch, 'HEAD'], { cwd: originalCwd, windowsHide: true });
+      const base = baseOut.trim();
+      const { stdout: countOut } = await this.exec('git', ['rev-list', '--count', `${base}..${branch}`], { cwd: originalCwd, windowsHide: true });
+      ahead = Number.parseInt(countOut.trim(), 10) > 0;
+      const { stdout: diffOut } = await this.exec('git', ['diff', '--name-only', base, branch], { cwd: originalCwd, windowsHide: true });
+      filesChanged = diffOut.trim().split('\n').filter(Boolean);
+    } catch { /* best-effort — treat as nothing to merge */ }
+
+    if (!ahead) {
+      // Branch carries no commits past the fork point — nothing to merge. Remove the worktree + branch
+      // and report NOT merged (truthful: no work landed). Reaching here with dirty=true means the
+      // staging commit produced an empty commit (all changes were gitignored).
+      await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
+      await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+      await this.removeEmptyWorktreeParents(worktreePath);
+      return { branch, path: worktreePath, hasChanges: dirty, merged: false, filesChanged: [] };
+    }
 
     // Merge worktree branch into original branch — prefer fast-forward for linear history.
     // If the target moved while the worker ran, rebase the worktree branch first.
@@ -326,8 +338,13 @@ export class WorktreeManager {
     // Merge succeeded — remove worktree + branch (shared `.git` registry → retry on lock)
     await this.gitWithRetry(['worktree', 'remove', worktreePath, '--force'], { cwd: originalCwd, windowsHide: true });
     await this.gitWithRetry(['branch', '-D', branch], { cwd: originalCwd, windowsHide: true });
+    await this.removeEmptyWorktreeParents(worktreePath);
 
-    // Clean up empty parent directories (.mma/worktrees/, .mma/)
+    return { branch, path: worktreePath, hasChanges: true, merged: true, filesChanged };
+  }
+
+  /** Remove now-empty `.mma/worktrees/` and `.mma/` parents after a worktree is cleaned up. Best-effort. */
+  private async removeEmptyWorktreeParents(worktreePath: string): Promise<void> {
     try {
       const worktreesDir = dirname(worktreePath);
       const entries = await readdir(worktreesDir);
@@ -338,8 +355,6 @@ export class WorktreeManager {
         if (mmaEntries.length === 0) await rmdir(mmaDir);
       }
     } catch { /* best-effort */ }
-
-    return { branch, path: worktreePath, hasChanges: true, merged: true, filesChanged };
   }
 
 }
