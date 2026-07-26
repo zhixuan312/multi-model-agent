@@ -27,7 +27,9 @@ function keepWorkspaceClean(dir) {
     const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim();
     if (!dirty) return;
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' });
-    execFileSync('git', ['-C', dir, 'commit', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
+    // --no-verify: the fixture installs a failing pre-commit hook (B-317 regression guard); this
+    // harness cleanup commit must not be blocked by it.
+    execFileSync('git', ['-C', dir, 'commit', '--no-verify', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
   } catch { /* best-effort */ }
 }
 import { createProject } from './fixtures.mjs';
@@ -136,6 +138,46 @@ async function runScenario(spec, ctx, log) {
     records.push(rec);
     const checks = verify(rec);
     checksByScenario[spec.id] = checks;
+
+    // Real-tree landing (B-317 regression): for a git write route, every file the engine reports in
+    // filesChanged MUST actually be tracked in the target repo — proof the worktree merge-back truly
+    // landed, not merely that the engine claimed merged:true. Combined with the fixture's failing
+    // pre-commit hook, this catches the silent-drop signature (merged:true + file absent from HEAD)
+    // that a commit gate or missing git identity used to cause. HARD check.
+    if (spec.kind === 'write' && !spec.nonGitCwd && spec.reviewPolicy !== 'none' && spec.type !== 'journal_record') {
+      const fc = rec?.response?.output?.filesChanged;
+      if (Array.isArray(fc) && fc.length > 0) {
+        // filesChanged may arrive repo-relative (git-diff) OR as an absolute worktree path (the
+        // tool-tracking fallback when worktree.filesChanged was absent) — normalize to repo-relative.
+        const norm = (f) => {
+          const m = f.match(/[/\\]\.mma[/\\]worktrees[/\\][^/\\]+[/\\](.+)$/);
+          if (m) return m[1];
+          if (f.startsWith(ctx.dir + '/')) return f.slice(ctx.dir.length + 1);
+          return f;
+        };
+        // `git ls-files` reads committed state (no lock needed), but under 8-way concurrent writes to
+        // one repo a spawn can still fail transiently — retry a few times before declaring a file gone.
+        const tracked = (f) => {
+          const rel = norm(f);
+          for (let a = 0; a < 4; a++) {
+            try { return execFileSync('git', ['-C', ctx.dir, 'ls-files', '--', rel], { encoding: 'utf8' }).trim() !== ''; }
+            catch { /* transient concurrent git access — retry */ }
+          }
+          return false;
+        };
+        const missing = fc.filter((f) => !tracked(f));
+        // HARD gate. A silent merge-back drop (B-317 hook/identity, or the target-moved rebase bug)
+        // fails this even under the full parallel-writes-to-one-repo stress now that concurrent merges
+        // are serialized per repo + rebased in the worktree — so a FAIL here is a real regression.
+        checks.push({
+          checkId: 'merge-landed',
+          status: missing.length === 0 ? 'PASS' : 'FAIL',
+          detail: missing.length === 0
+            ? `all ${fc.length} reported file(s) tracked in the target repo`
+            : `${missing.length}/${fc.length} reported file(s) NOT in the target tree — silent merge-back drop: ${missing.map(norm).join(', ')}`,
+        });
+      }
+    }
 
     // Worktree-lifecycle assertions (#38): the task is terminal, so its worktree cleanup
     // (mergeAndCleanup / finally) has run and the dispatch-time reaper has fired. Assert no

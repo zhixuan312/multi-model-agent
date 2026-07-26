@@ -102,6 +102,16 @@ export function createProject() {
     '## Rough direction\n\n### Direction 1: Throw on invalid input\nExplicit errors; callers handle.\n\n### Direction 2: Return NaN\nSilent; no throw.\n\n### Recommended next step\nGrill the error-handling decision in brainstorm.\n');
   git('add', 'exploration.md'); git('commit', '-qm', 'add exploration grounding');
 
+  // Install a FAILING pre-commit hook AFTER the fixture's own commits. Write-route scenarios
+  // (#5 delegate, #6/#23 execute_plan) then merge back THROUGH a repo that has a commit gate —
+  // exactly the B-317 trigger: the engine's INTERNAL staging commit (in the worktree, to move the
+  // worker's changes onto the branch) must bypass it (`git commit --no-verify`). If that regresses,
+  // the staging commit aborts, the branch never advances, `merge --ff-only` says "Already up to
+  // date", and the worker's output is silently dropped — caught now by files-changed + merge-landed.
+  writeFileSync(join(dir, '.git', 'hooks', 'pre-commit'),
+    '#!/bin/sh\necho "smoke pre-commit gate: blocked (B-317 regression guard)" >&2\nexit 1\n',
+    { mode: 0o755 });
+
   // Non-git directory for the optional-worktree scenarios:
   //   #28 delegate  — write in-place, no worktree
   //   #32 execute_plan — run a contract-first plan in-place, no worktree
