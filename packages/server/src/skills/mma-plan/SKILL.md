@@ -1,7 +1,7 @@
 ---
 name: mma-plan
-description: Use when you have a spec file on disk and need a TDD implementation plan written by a worker — produces ordered tasks with complete code blocks, exact file paths, and verification commands
-when_to_use: You have a formal specification on disk (written by mma-spec or manually) AND you want a TDD implementation plan produced by a worker. If you don't have a spec yet → use mma-brainstorm to create one. If you have a plan and want to execute it → use mma-execute-plan. If you want to audit an existing plan → use mma-audit subtype:plan.
+description: Use when you have a spec file on disk and need a contract-first implementation plan written by a worker — produces ordered Contract Tasks (inputs/outputs/mapping/errors/invariants) with plan-authored acceptance tests and no implementation code, plus exact file paths
+when_to_use: You have a formal specification on disk (written by mma-spec or manually) AND you want a contract-first implementation plan produced by a worker. If you don't have a spec yet → use mma-brainstorm to create one. If you have a plan and want to execute it → use mma-execute-plan. If you want to audit an existing plan → use mma-audit subtype:plan.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,15 +9,15 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch a spec file to a complex worker that writes a TDD implementation plan. The worker reads the spec, explores the codebase, verifies ground truth at HEAD, then produces ordered tasks with complete code blocks, exact file paths, and verification commands. The reviewer verifies every path and symbol against the real codebase.
+Dispatch a spec file to a complex worker that writes a **contract-first** implementation plan. The worker reads the spec, explores the codebase, verifies ground truth at HEAD, then produces ordered **Contract Tasks** — each a contract (inputs, outputs, data mapping, errors, invariants) plus complete **plan-authored acceptance tests** and NO implementation code. The reviewer verifies every path and symbol against the real codebase.
 
-**Core principle:** The spec defines WHAT to build. The plan defines HOW — in what order, with what files, with what tests, with what code. The worker reads the codebase deeply to produce a plan that a standard-tier executor can follow mechanically.
+**Core principle:** The spec defines WHAT to build. The plan defines the *contract* for each unit of work and the executable tests that pin it — then a capable executor implements freely against that contract. The plan does not dictate implementation code; the acceptance tests are the contract's teeth.
 
 ## When to Use
 
 **Use when:**
 - A spec file exists on disk (written by `mma-spec`, `mma-brainstorm`, or manually)
-- You want a TDD implementation plan with complete code blocks
+- You want a contract-first plan of Contract Tasks with plan-authored acceptance tests
 - The plan will be executed via `mma-execute-plan`
 
 **Don't use when:**

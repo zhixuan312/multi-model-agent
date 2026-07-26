@@ -27,6 +27,16 @@ export type {
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';
 export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanHeading } from './unified/plan-task-matcher.js';
+export {
+  ContractPlanError,
+  parseContractPlan,
+  assertSafeAcceptanceTestPaths,
+  materializeAcceptanceTests,
+  rematerializeAcceptanceTests,
+  type PlanAcceptanceTest,
+  type ParsedContractTask,
+  type ContractPlanSnapshot,
+} from './unified/contract-plan.js';
 // Context blocks
 export {
   InMemoryContextBlockStore,
@@ -39,6 +49,8 @@ export type {
 
 // Provider
 export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
+export { resolveEffort } from './providers/effort.js';
+export { DEFAULT_EFFORT } from './types/task-spec.js';
 export {
   resolveConfiguredApiKey,
   resolveConfiguredAuthMode,

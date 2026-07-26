@@ -7,7 +7,7 @@
  * sets below are a genuine frozen ground truth.
  */
 
-import { LANDMARK_SPECS } from './fixture-2000.js';
+import { LANDMARK_SPECS } from './fixture-3000.js';
 
 export interface FrozenQuery {
   prompt: string;

@@ -192,9 +192,16 @@ function resolveSubmittedApiKey(input: ConfigureProviderRequest): string | undef
 }
 
 function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {
+  // The tier entry is replaced wholesale, so a per-tier reasoning level the
+  // user set by hand has to be carried across — otherwise swapping a model
+  // from the Models page silently resets that tier to DEFAULT_EFFORT.
+  const previousEffort = (config.agents as Record<string, { effort?: string } | undefined>)[input.tier]?.effort;
+  // Only a genuine override survives — an absent effort stays absent so the
+  // written config keeps meaning "use the default".
   const agentConfig: Record<string, unknown> = {
     type: input.provider,
     model: input.model,
+    ...(previousEffort && { effort: previousEffort }),
   };
 
   if (input.auth.mode === 'api-key') {

@@ -1,7 +1,7 @@
 ---
 name: mma-execute-plan
 description: Use when a plan or spec file exists on disk (any markdown with task headings — .mma/plans/*.md, a TODO list, a spec doc) and you need to implement one or more tasks from it sequentially in one worker session
-when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mma is running. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
+when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mma is running. Prefer this over inline Agent dispatches — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,9 +9,16 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch tasks from a plan file to a single worker session. The `tasks` array selects which plan headings to execute — the worker receives them all in one prompt and executes them sequentially in plan order within one worktree. Empty `tasks` = run all.
+Dispatch Contract Tasks from a **contract-first** plan file to a single worker session. The `tasks` array selects which Contract Task headings to execute — the worker receives them all in one prompt and executes them sequentially in plan order within one worktree. Empty `tasks` = run all.
 
-**Core principle:** The plan IS the prompt. Workers re-read the plan file in-process and find their named task — you don't need to inline the task body.
+**Core principle:** The plan IS the prompt. The worker is an **autonomous** implementer of each task's contract — it implements freely and makes the plan-authored acceptance tests pass, rather than copying implementation code.
+
+## Contract-first execution (what the worker does)
+
+- The plan must be a contract-first plan (frozen Contract Task format). A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
+- The pipeline validates and materializes each task's plan-authored acceptance tests, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
+- Completion is scored from contract satisfaction + the passing acceptance-test run; the commit gate is unchanged at **completionPercent >= 80**.
+- Pre-dispatch/materialization failures surface as specific terminal error codes: `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`, and `test-path-collision`.
 
 ## When to Use
 

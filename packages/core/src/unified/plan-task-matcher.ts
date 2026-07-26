@@ -31,7 +31,7 @@ export function parsePlanHeadings(planContent: string): PlanHeading[] {
     const level = match[1].length;
     const body = match[2].trim();
     const normalized = normalizeHeading(line);
-    const strippedBody = body.replace(/^(?:Task\s+)?\d+(?:[\.\)\-:]|\s-)\s*/i, '').trim();
+    const strippedBody = body.replace(/^(?:Task\s+)?(?:\d+|[IVXLCDM]+-\d+)(?:[\.\)\-:]|\s-)\s*/i, '').trim();
     const isNumbered = strippedBody !== body;
 
     while (phaseStack.length > 0 && phaseStack[phaseStack.length - 1].level >= level) {

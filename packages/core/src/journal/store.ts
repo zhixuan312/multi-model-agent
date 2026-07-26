@@ -6,6 +6,7 @@ import {
   parseJournalNodeDocument,
   renderNodeFilename,
   renderNodeMarkdown,
+  slugifyTopic,
   validateJournalLinkSet,
   type JournalLink,
   type JournalNodeDocument,
@@ -212,7 +213,10 @@ export class JournalStore {
           id,
           title: decision.title,
           type: decision.type,
-          topic: decision.topic,
+          // Normalize at the write boundary so a non-slug topic (an LLM emitting
+          // "Lunch Vote" instead of "lunch-vote") can never be persisted and then
+          // silently skipped on read. Mirrors the reader's slugify — defense in depth.
+          topic: slugifyTopic(decision.topic),
           status: decision.status,
           description: decision.description,
           timestamp: nowIso(),

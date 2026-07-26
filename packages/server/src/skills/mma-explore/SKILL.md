@@ -1,6 +1,6 @@
 ---
 name: mma-explore
-description: Use when a raw idea or problem needs grounding before it's designed — captures a braindump, fans out divergent internal-codebase investigation + external research + prior-learnings recall in parallel, then synthesises the results into a written exploration.md (Background · Current State · Rough Direction). Not for "where is X" single-answer questions (use mma-investigate).
+description: Use when a raw idea or problem needs grounding before it's designed — captures a braindump, fans out divergent internal-codebase investigation + external research + prior-learnings recall in parallel, then synthesises the results into a written exploration.md (Background · Current state · Rough direction). Not for "where is X" single-answer questions (use mma-investigate).
 when_to_use: >-
   The user has a raw idea, problem, feature request, or braindump and you want to ground it in
   reality before brainstorming or planning. The question is exploratory ("what are our options",
@@ -30,7 +30,7 @@ type is what keeps you from re-proposing a direction the project already tried a
 grounds the scan in your own history, not just the code and the outside world.
 
 The flow is: braindump → a user-checked parallel fan-out → a synthesised `exploration.md`
-(Background · Current State · Rough Direction). The user gate is deliberately terse (see Phase 2)
+(Background · Current state · Rough direction). The user gate is deliberately terse (see Phase 2)
 — you serve power users who already know what they want.
 
 ## When to Use
@@ -139,7 +139,7 @@ After writing, print the path and **soft-suggest** the next step — never force
 ## exploration.md structure (the artifact)
 
 Top-level headers are `##` and follow the canonical exploration.md format (`Background` ·
-`Current State` · `Rough Direction`). Keep the top level at `##` — downstream tools parse these
+`Current state` · `Rough direction`). Keep the top level at `##` — downstream tools parse these
 sections by their `##` heading, so a deeper top level makes them see zero sections.
 
 Open the file with the same YAML frontmatter the spec and plan use — `version: 1` and `updated_at`
@@ -157,7 +157,7 @@ updated_at: YYYY-MM-DD
 The braindump distilled — who / what / why, the intent and problem framing.
 (← Phase 1 braindump; your words, not the user's verbatim.)
 
-## Current State
+## Current state
 What exists today, synthesised. Anchored in the internal leg plus any prior-learning that describes
 what the project already built or tried.
 
@@ -172,11 +172,14 @@ From mma-journal-recall. Each: a claim + a journal node id (e.g. `node 0012`). I
 **superseded**, say so inline (`node 0012 [superseded by 0013] — …`) so the "we already moved past
 this" signal survives. Use `(no prior learning)` when the leg returned nothing.
 
-## Rough Direction
+## Rough direction
 3–5 ranked candidate directions — alternatives-style, the same shape as the spec's `Alternatives`
-component, so a downstream spec can lift them almost verbatim. Each direction:
+component, so a downstream spec can lift them almost verbatim. **This exploration is read by business,
+product, and engineering** — write each direction so a non-engineer can weigh it: plain English,
+value first. Each direction:
 
-- **Title** + one-paragraph summary.
+- **Title** + one-paragraph summary in plain language.
+- **What it buys us** — the business value / user outcome this direction delivers, and roughly what it costs.
 - **Key tradeoff** — what you give up to get its upside.
 - **Backing citations** — at least one internal, external, or prior-learning cite (or the matching
   sentinel: `(no internal anchor — fully greenfield)`, `(no external source found)`,
@@ -249,7 +252,7 @@ the user's call (or `/mma-flow`'s).
 | All three failed | Report all errors. Do NOT fabricate an exploration.md. |
 | Both investigate and research failed | Report both errors. Do NOT write the artifact. |
 | Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need. Do NOT synthesise over an unfinished investigation. |
-| Research returned 0 usable sources | Sentinel on external lines; add a one-line note under `## Current State` that external research returned nothing usable. |
+| Research returned 0 usable sources | Sentinel on external lines; add a one-line note under `## Current state` that external research returned nothing usable. |
 | Investigate headline reads "0 citations" but `output.summary.findings.length > 0` | Known stage-sync noise — IGNORE the headline; read `output.summary.findings` directly. |
 
 ## Multi-repo mode (parent-aware)

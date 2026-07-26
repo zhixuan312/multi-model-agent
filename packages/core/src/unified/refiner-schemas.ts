@@ -127,6 +127,9 @@ const planAnswerSchema = z.object({
   tasks: z.array(z.object({
     title: z.string().min(1),
     verdict: z.enum(['executable', 'partial', 'blocked']),
+    // Optional contract-first signal: whether the plan task's Contract + acceptance tests are
+    // complete. Absent on legacy plan output; a plain z.object() leaves it undefined when omitted.
+    contractCompleteness: z.enum(['complete', 'incomplete']).optional(),
   })),
   notes: z.string().default(''),
 });

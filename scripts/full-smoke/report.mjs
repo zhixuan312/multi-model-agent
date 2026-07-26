@@ -17,13 +17,26 @@ export function report(records, checksByScenario, meta) {
       if (c.status === 'WARN') { warns++; gaps.push(`WARN  #${rec.scenarioId} ${c.checkId}: ${c.detail}`); }
     }
   }
-  // Run-level telemetry: local queue (③, flush-independent) + backend DB landing (④).
+  // Run-level telemetry: local queue sample (③) + backend DB landing (④, authoritative).
+  //
+  // The local queue file is a transient retry buffer that the server's flusher drains AND
+  // rewrites every ~5 min. Each time it fires, its upload+rewrite window (~1-3s) overlaps
+  // freshly-sealed tasks, so a few just-appended records are removed from the file before the
+  // smoke can sample them — and a wire record's eventId is not observable anywhere else (not in
+  // the task response), so those few become permanently invisible to a file sampler. This is
+  // BOUNDED sampling loss, not a dropped record: every event still uploads to the backend (prove
+  // the exact landing with --wait-flush, which queries events_raw). So the local gate verifies
+  // telemetry is FLOWING (high capture) and only alarms on a real breakdown (near-zero capture),
+  // rather than demanding a perfect file sample it structurally cannot guarantee.
   lines.push('');
   const qCount = meta.queueEventCount ?? 0;
   const exp = meta.expectedRows ?? 1;
-  const localOK = qCount >= exp;
-  lines.push(`local telemetry (queue): ${GLYPH[localOK ? 'PASS' : 'WARN']} ${qCount}/${exp} wire records captured (one per sealed task; sum of scenario emits)`);
-  if (!localOK) { warns++; gaps.push(`WARN  local-telemetry: captured ${qCount} wire records vs expected ${exp} (one per task) — a record was lost or arrived after its settle window`); }
+  const slack = Math.max(4, Math.ceil(exp * 0.15)); // a few records can race one flush/rewrite window
+  const floor = exp - slack;
+  const localOK = qCount >= floor;
+  const exact = qCount >= exp;
+  lines.push(`local telemetry (queue): ${GLYPH[localOK ? 'PASS' : 'WARN']} ${qCount}/${exp} wire records sampled${exact ? ' (all)' : ` (≥${floor} required; up to ${slack} may race the 5-min flush/rewrite window — verify exact backend landing with --wait-flush)`}`);
+  if (!localOK) { warns++; gaps.push(`WARN  local-telemetry: only ${qCount}/${exp} wire records sampled — below the ${floor} floor; telemetry may not be flowing (rerun with --wait-flush to verify backend landing in events_raw)`); }
 
   if (meta.backend) {
     const matched = meta.backend.matched?.length ?? 0;

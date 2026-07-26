@@ -6,6 +6,7 @@ vi.mock('../../packages/core/src/unified/worktree-manager.js', () => {
   const WorktreeManager = vi.fn();
   WorktreeManager.prototype.create = vi.fn();
   WorktreeManager.prototype.mergeAndCleanup = vi.fn();
+  WorktreeManager.prototype.remove = vi.fn().mockResolvedValue(undefined);
   return { WorktreeManager };
 });
 

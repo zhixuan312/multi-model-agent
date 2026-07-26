@@ -11,8 +11,12 @@ import type { Provider, SessionOpts } from '../types/run-result.js';
 import type { ClaudeProviderConfig } from '../types/config.js';
 import { ClaudeSession } from './claude-session.js';
 import { getClaudeOAuth } from '../identity/claude-oauth.js';
+import { resolveEffort } from './effort.js';
 
 export function makeClaudeProvider(cfg: ClaudeProviderConfig): Provider {
+  // Undefined for models with no effort knob (e.g. a GLM/Kimi endpoint behind
+  // the Anthropic wire protocol) — the session then sends no effort option.
+  const effort = resolveEffort(cfg.model, cfg.effort);
   return {
     name: `claude:${cfg.model}`,
     config: cfg,
@@ -25,6 +29,7 @@ export function makeClaudeProvider(cfg: ClaudeProviderConfig): Provider {
       return new ClaudeSession({
         model: cfg.model,
         opts,
+        ...(effort && { effort }),
         ...(cfg.apiKey && { apiKey: cfg.apiKey }),
         ...(cfg.baseUrl && { baseUrl: cfg.baseUrl }),
         ...(oauthAccessToken && { oauthAccessToken }),

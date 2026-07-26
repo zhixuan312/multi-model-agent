@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FROZEN_QUERIES } from '../../benchmarks/journal/queries.js';
-import { runBenchmark, type BenchmarkOutput } from '../../benchmarks/journal/run.js';
+import { FIXTURE_COUNT, runBenchmark, type BenchmarkOutput } from '../../benchmarks/journal/run.js';
 
 /**
  * G-1 gate: run the deterministic mechanism benchmark for BOTH the simulated
@@ -33,7 +33,7 @@ function writeSummary(b: BenchmarkOutput, e: BenchmarkOutput): void {
   const md = `# Journal Deterministic Engine — Benchmark Summary
 
 Generated ${UTC_DATE} by \`tests/perf/journal-engine-benchmark-gates.test.ts\`.
-Deterministic mechanism benchmark over a seeded 2000-node fixture and a frozen
+Deterministic mechanism benchmark over a seeded ${FIXTURE_COUNT}-node fixture and a frozen
 query set — no LLM, no server, no network.
 
 - **baseline** = simulated pre-change cost model: read + parse the whole corpus
@@ -67,7 +67,10 @@ describe('journal benchmark gates', () => {
     mkdirSync(BENCH_DIR, { recursive: true });
     writeFileSync(
       resolve(BENCH_DIR, `benchmark-${UTC_DATE}.json`),
-      `${JSON.stringify({ generatedAt: new Date().toISOString(), baseline, engine }, null, 2)}\n`,
+      // fixtureCount is persisted so a report stays self-describing: the corpus
+      // size has changed once already (2000 -> 3000) and dated files from either
+      // size sit side by side in this directory.
+      `${JSON.stringify({ generatedAt: new Date().toISOString(), fixtureCount: FIXTURE_COUNT, baseline, engine }, null, 2)}\n`,
       'utf8',
     );
     writeSummary(baseline, engine);

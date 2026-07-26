@@ -37,10 +37,10 @@ function skillSurfaceGate() {
   }
 
   const explore = read('mma-explore');
-  for (const marker of ['.mma/explorations/', '## Background', '## Current State', '## Rough Direction', 'in ONE message']) {
+  for (const marker of ['.mma/explorations/', '## Background', '## Current state', '## Rough direction', 'in ONE message']) {
     if (!explore.includes(marker)) {
       throw new AbortError('skill-surface', `mma-explore SKILL.md missing marker: ${marker}`,
-        'mma-explore must braindump → fan out → write exploration.md (Background · Current State · Rough Direction)');
+        'mma-explore must braindump → fan out → write exploration.md (Background · Current state · Rough direction)');
     }
   }
 

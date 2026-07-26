@@ -239,6 +239,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         ...(apiKey && { apiKey }),
         ...(apiKeyEnv && { apiKeyEnv }),
         ...(baseUrl && { baseUrl }),
+        ...(agentConfig.effort && { effort: agentConfig.effort }),
       } as ClaudeProviderConfig);
       break;
     case 'codex':
@@ -248,6 +249,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         ...(apiKey && { apiKey }),
         ...(apiKeyEnv && { apiKeyEnv }),
         ...(baseUrl && { baseUrl }),
+        ...(agentConfig.effort && { effort: agentConfig.effort }),
       } as CodexProviderConfig);
       break;
     default:

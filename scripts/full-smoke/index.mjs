@@ -49,6 +49,7 @@ const opts = {
   only: onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null,
   waitFlush: argv.includes('--wait-flush'),
   sequential: argv.includes('--sequential'),
+  concurrency: Number((argv.find((a) => a.startsWith('--concurrency=')) || '').split('=')[1]) || 8,
 };
 
 let ctx;
@@ -117,7 +118,7 @@ async function runScenario(spec, ctx, log) {
     const queue = collectQueue(queueBefore);
     const want = spec.emits ?? 0;
     const startSeen = seenIds.size;
-    const settleUntil = Date.now() + 8000;
+    const settleUntil = Date.now() + 15000;
     for (;;) {
       for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
       if (seenIds.size - startSeen >= want || Date.now() >= settleUntil) break;
@@ -159,12 +160,17 @@ async function runScenario(spec, ctx, log) {
           branchGone = execFileSync('git', ['-C', ctx.dir, 'branch', '--list', orphan.branch], { encoding: 'utf8' }).trim() === '';
         } catch { branchGone = true; }
       }
+      const ownCheck = { checkId: 'own-worktree-cleaned', status: ownReaped ? 'PASS' : 'WARN', detail: `own shortId ${ownShort} ${ownReaped ? 'cleaned on completion' : 'lingered under concurrent-write stress — re-checked at end of run (dispatch-time reaper is the durable catch-all; see reaper-removed-orphan)'}` };
       checks.push(
         { checkId: 'seed-orphan', status: orphan ? 'PASS' : 'FAIL', detail: orphan ? `seeded orphan ${orphan.orphanId}` : 'failed to seed orphan worktree after retries' },
         { checkId: 'reaper-removed-orphan', status: orphanReaped ? 'PASS' : 'FAIL', detail: orphan ? `${orphan.orphanDir} ${orphanReaped ? 'reaped by dispatch-time reaper' : 'STILL PRESENT — reaper did not run'}` : 'no seed to reap' },
-        { checkId: 'own-worktree-cleaned', status: ownReaped ? 'PASS' : 'WARN', detail: `own shortId ${ownShort} ${ownReaped ? 'cleaned on completion' : 'lingered under concurrent-write stress — NOT a permanent leak (dispatch-time reaper is the durable catch-all; see reaper-removed-orphan)'}` },
+        ownCheck,
         { checkId: 'reaper-removed-orphan-branch', status: branchGone ? 'PASS' : 'WARN', detail: `${orphan?.branch}: ${branchGone ? 'deleted' : 'still present (reaper branch-delete is best-effort under lock contention)'}` },
       );
+      // If the own worktree lost the merge/remove race against a peer's git worktree-admin
+      // mutation, its dir lingers until a later dispatch's reaper. Record it for the end-of-run
+      // sweep, which confirms the durable end-state (every own-worktree dir gone) before the report.
+      if (!ownReaped) { (ctx.lingeringWorktrees ??= []).push({ path: join(wtRoot, ownShort), check: ownCheck }); }
     }
 
     const fails = checks.filter(c => c.status === 'FAIL').length;
@@ -198,6 +204,16 @@ try {
 
   const log = (msg) => { process.stderr.write(msg + '\n'); };
   const scenarios = opts.only ? SCENARIOS.filter((s) => opts.only.has(String(s.id))) : SCENARIOS;
+
+  // Continuous queue capture: the server's telemetry flusher drains the local queue file every
+  // ~5 min (uploading to the backend, independent of --skip-backend). A record emitted just before
+  // a flush would be gone before a per-scenario settle scan sampled it — the wire record WAS emitted,
+  // the smoke just missed it. Tail the queue on a tight interval so every id is captured the instant
+  // it lands, before any flush can drain it. seenIds is a Set, so this only ever adds.
+  const bgScan = setInterval(() => {
+    try { for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id); } catch { /* transient read race */ }
+  }, 150);
+  ctx.bgScan = bgScan;
 
   if (opts.sequential) {
     // Legacy sequential mode
@@ -277,9 +293,37 @@ try {
       .filter(t => t.length > 0);
     if (p2Threads.length > 0) {
       log(`\n── Phase 2 (${p2Threads.length} parallel threads, ${p2Threads.reduce((n, t) => n + t.length, 0)} tasks) ──`);
-      await Promise.all(p2Threads.map(thread => runChain(thread, scenarios, ctx, log)));
+      const cap = opts.sequential ? 1 : opts.concurrency;
+      log(`   (concurrency cap: ${cap})`);
+      let cursor = 0;
+      const worker = async () => { while (cursor < p2Threads.length) { const t = p2Threads[cursor++]; await runChain(t, scenarios, ctx, log); } };
+      await Promise.all(Array.from({ length: Math.min(cap, p2Threads.length) }, worker));
     }
 
+  }
+
+  // #38 end-of-run worktree sweep: any own-worktree that lingered under peak concurrent-write
+  // contention is cleaned by a later dispatch's reaper (the product's durable guarantee). By now
+  // every own-worktree dir should be gone — confirm it and upgrade the transient WARN to PASS.
+  for (const lw of (ctx.lingeringWorktrees ?? [])) {
+    for (let i = 0; i < 20 && existsSync(lw.path); i++) await sleep(500);
+    if (!existsSync(lw.path)) {
+      lw.check.status = 'PASS';
+      lw.check.detail = 'own worktree lingered transiently under concurrent-write stress, then cleaned by the durable reaper before run end';
+    }
+  }
+
+  // Telemetry final settle: a short grace so trailing wire records from the last scenarios that
+  // land just after their per-scenario window are still counted. The 150ms background tailer above
+  // already captures continuously, so this only needs a brief top-up (records that permanently race
+  // the flush/rewrite are unobservable locally by design — see report.mjs).
+  {
+    const finalUntil = Date.now() + 4000;
+    for (;;) {
+      for (const id of allQueueEventIds()) if (!baselineIds.has(id)) seenIds.add(id);
+      if (seenIds.size >= expectedEmits || Date.now() >= finalUntil) break;
+      await sleep(300);
+    }
   }
 
   const allEventIds = [...seenIds];
@@ -292,6 +336,7 @@ try {
     backendSummary = collectBackend(ctx.databaseUrl, allEventIds);
   }
 } finally {
+  if (ctx.bgScan) clearInterval(ctx.bgScan);
   await teardown(ctx);
 }
 

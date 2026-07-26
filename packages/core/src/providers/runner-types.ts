@@ -1,6 +1,5 @@
 import type {
   AgentType,
-  Effort,
   SandboxPolicy,
   TaskSpec,
 } from '../types.js';
@@ -68,7 +67,6 @@ export interface AttemptRecord {
 export interface RunOptions {
   timeoutMs?: number
   cwd?: string
-  effort?: Effort
   sandboxPolicy?: SandboxPolicy
   mainModel?: string
   /** External abort signal — when fired, the runner force-salvages and

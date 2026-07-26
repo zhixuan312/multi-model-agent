@@ -17,6 +17,7 @@
 
 import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-result.js';
+import type { Effort } from '../types/task-spec.js';
 import { normalizeClaudeTurn } from './normalize-claude.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
@@ -41,6 +42,9 @@ export class ClaudeSession implements Session {
     apiKey?: string;
     baseUrl?: string;
     oauthAccessToken?: string;
+    /** Resolved reasoning level (default applied, capability-gated by
+     *  providers/effort.ts). Absent → send no effort option at all. */
+    effort?: Effort;
   }) {
     this.bus = busOf(args.opts);
     if (args.opts.resume) this.sessionId = args.opts.resume;
@@ -119,6 +123,14 @@ export class ClaudeSession implements Session {
     }
     const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 
+    // Reasoning level. The SDK has no 'none' level — that's `thinking:
+    // disabled` — so 'none' routes there and every other level goes to the
+    // `effort` option verbatim. Levels the selected model doesn't support are
+    // downgraded by the SDK itself; mma doesn't model per-model ladders.
+    const effortOptions: Record<string, unknown> = this.args.effort === 'none'
+      ? { thinking: { type: 'disabled' } }
+      : this.args.effort ? { effort: this.args.effort } : {};
+
     const q = query({
       prompt: promptIterable(),
       options: {
@@ -133,6 +145,7 @@ export class ClaudeSession implements Session {
           ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),
         },
         ...skillOptions,
+        ...effortOptions,
         ...(this.sessionId && { resume: this.sessionId }),
         ...goalHooks,
         ...(this.args.opts.disallowedTools?.length && { disallowedTools: this.args.opts.disallowedTools }),

@@ -1,7 +1,7 @@
 # Journal Deterministic Engine — Benchmark Summary
 
-Generated 2026-07-24 by `tests/perf/journal-engine-benchmark-gates.test.ts`.
-Deterministic mechanism benchmark over a seeded 2000-node fixture and a frozen
+Generated 2026-07-26 by `tests/perf/journal-engine-benchmark-gates.test.ts`.
+Deterministic mechanism benchmark over a seeded 3000-node fixture and a frozen
 query set — no LLM, no server, no network.
 
 - **baseline** = simulated pre-change cost model: read + parse the whole corpus
@@ -17,10 +17,10 @@ query set — no LLM, no server, no network.
 
 | Metric | baseline | engine | gate | result |
 |---|---:|---:|---|---|
-| record latency p50 (ms) | 51.766 | 4.419 | baseline/engine ≥ 3× | 11.7× |
-| recall latency p50 (ms) | 51.512 | 4.451 | baseline/engine ≥ 3× | 11.6× |
-| record tokens (total) | 3263688 | 4685 | ≥ 80% reduction | 99.9% |
-| recall tokens (total) | 3263688 | 4685 | ≥ 80% reduction | 99.9% |
-| retrieval mAP | 0.4879 | 1.0000 | engine ≥ baseline | pass |
+| record latency p50 (ms) | 75.793 | 6.726 | baseline/engine ≥ 3× | 11.3× |
+| recall latency p50 (ms) | 75.096 | 7.125 | baseline/engine ≥ 3× | 10.5× |
+| record tokens (total) | 4895172 | 4687 | ≥ 80% reduction | 99.9% |
+| recall tokens (total) | 4895172 | 4687 | ≥ 80% reduction | 99.9% |
+| retrieval mAP | 0.4804 | 1.0000 | engine ≥ baseline | pass |
 | mechanical errors | 2 | 0 | engine == 0 | pass |
 | rebuild equivalent | true | true | engine == true | pass |

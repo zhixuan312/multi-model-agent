@@ -67,7 +67,7 @@ terminal step dispatches `mma-spec`.
 ## Inputs
 
 - **An `exploration.md`** (from `mma-explore`, usually under `.mma/explorations/`), when present —
-  read it first. Its `## Background`, `## Current State`, and `## Rough Direction` sections seed the
+  read it first. Its `## Background`, `## Current state`, and `## Rough direction` sections seed the
   destination and pre-answer several components; the ranked directions map directly onto the spec's
   `Alternatives` component. Do not re-ask what the exploration already settled.
 - **A raw idea/braindump**, when the user skips explore — the interview still works, you just start

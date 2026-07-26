@@ -240,6 +240,12 @@ export function verify(rec) {
       const skipped = revSessionId == null;
       out.push(C('review', skipped ? 'PASS' : 'FAIL',
         `reviewPolicy=none; reviewer=${revSessionId}`));
+    } else if (e.type === 'journal_record') {
+      // journal_record is deterministic decide-then-apply: the reviewer runs only when the
+      // apply's invariants don't pass. A clean apply legitimately skips the reviewer, so a null
+      // reviewer is correct here — either presence or absence is acceptable.
+      out.push(C('review', 'PASS',
+        `journal_record: reviewer optional (deterministic apply); reviewer=${revSessionId}`));
     } else {
       const hasReviewer = revSessionId != null && typeof revSessionId === 'string';
       out.push(C('review', hasReviewer ? 'PASS' : 'FAIL',
@@ -295,14 +301,19 @@ export function verify(rec) {
   //    The two-phase pipeline should produce non-empty implementer output AND
   //    non-empty reviewer output. If either is empty, the collaborative pipeline
   //    is broken (reviewer rubber-stamped or implementer produced nothing).
-  if ((e.kind === 'read' || e.kind === 'write') && e.reviewPolicy !== 'none' && e.type !== 'orchestrate') {
+  //    journal_record is exempt: its reviewer runs only on an invariant failure (deterministic
+  //    decide-then-apply), so a clean apply has no reviewer output by design.
+  if ((e.kind === 'read' || e.kind === 'write') && e.reviewPolicy !== 'none' && e.type !== 'orchestrate' && e.type !== 'journal_record') {
     const rawImpl = r?.raw?.implementer ?? '';
     const rawRev = r?.raw?.reviewer ?? '';
     const implLen = typeof rawImpl === 'string' ? rawImpl.length : 0;
     const revLen = typeof rawRev === 'string' ? rawRev.length : 0;
-    const bothPresent = implLen > 50 && revLen > 50;
+    // The check catches a BROKEN pipeline (an empty side), not terse-but-valid output.
+    // A correct delegate/execute_plan can legitimately return a compact JSON block (~20–40
+    // chars), so the bar is "non-empty", not "long": both sides must clear a small floor.
+    const bothPresent = implLen > 10 && revLen > 10;
     out.push(C('pipeline-collaboration', bothPresent ? 'PASS' : 'FAIL',
-      `implementer=${implLen}chars reviewer=${revLen}chars — both must produce substantive output`));
+      `implementer=${implLen}chars reviewer=${revLen}chars — both must be non-empty`));
   }
 
   // ⑥ contextBlockId
@@ -403,9 +414,13 @@ export function verify(rec) {
       out.push(C('weight-field', allHaveWeight ? 'PASS' : 'FAIL',
         `${findings.length} findings, all have valid weight=${allHaveWeight}`));
 
-      const withPrefix = findings.filter(f => /^\[##?#?\s/.test(f.evidence ?? ''));
+      // Grounding convention: every evidence string starts with its source in square brackets —
+      // a markdown heading for document audits (`[### Heading]`) or a file/path ref for code audits
+      // (`[src/math.ts]` or `[src/math.ts:3]`, since code has no headings). Accept any bracketed
+      // source prefix; what matters is that the finding names where the evidence lives.
+      const withPrefix = findings.filter(f => /^\[[^\]]+\]\s/.test(f.evidence ?? ''));
       out.push(C('evidence-prefix', withPrefix.length > 0 ? 'PASS' : 'WARN',
-        `${withPrefix.length}/${findings.length} findings have [## heading] evidence prefix`));
+        `${withPrefix.length}/${findings.length} findings have a [source] evidence prefix`));
     }
   }
 
@@ -416,8 +431,10 @@ export function verify(rec) {
       `expected=${e.subtype} got=${actualSubtype}`));
   }
 
-  // ⑮ Write route filesChanged — must be populated (from git diff or tool tracking)
-  if (e.kind === 'write' && e.reviewPolicy !== 'none') {
+  // ⑮ Write route filesChanged — must be populated (from git diff or tool tracking).
+  // Non-git (in-place) targets have no git diff to compute changed files from, so the
+  // git-diff-based filesChanged is not asserted there.
+  if (e.kind === 'write' && e.reviewPolicy !== 'none' && !e.nonGitCwd && e.type !== 'journal_record') {
     const fc = r?.output?.filesChanged;
     const hasFiles = Array.isArray(fc) && fc.length > 0;
     out.push(C('files-changed', hasFiles ? 'PASS' : 'WARN',

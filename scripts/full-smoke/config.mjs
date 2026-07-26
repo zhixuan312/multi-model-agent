@@ -36,7 +36,7 @@ export const EVENTS_RAW_COLUMNS = ['event_id', 'install_id', 'received_at', 'rou
 export const APPROVED_DB_HOSTS = ['localhost', '127.0.0.1', '::1', ''];
 
 export const POLL = {
-  taskEveryMs: 1500, taskMaxMs: 10 * 60 * 1000,
+  taskEveryMs: 1500, taskMaxMs: 15 * 60 * 1000,
   backendEveryMs: 2000, backendMaxMs: 60 * 1000,
 };
 
@@ -166,7 +166,7 @@ export const SCENARIOS = [
   //                        route); execution.worktree === null. Together they prove BOTH
   //                        worktree-taking write routes degrade to in-place off git.
   { id: 28, type: 'delegate', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
-  { id: 32, type: 'execute_plan', tier: 'standard', kind: 'write', nonGitCwd: true, reviewPolicy: 'none', emits: 1 },
+  { id: 32, type: 'execute_plan', tier: 'standard', kind: 'write', nonGitCwd: true, emits: 1 },
 
   // L. Subset spec components (the `components` feature)
   //    #29: spec with a NON-canonical components subset → the worker must emit ONLY

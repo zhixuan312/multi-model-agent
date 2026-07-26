@@ -6,10 +6,15 @@
 // the `-c model_providers.X={...}` overrides — never via global config.
 
 import type { SessionOpts } from '../types/run-result.js';
+import type { Effort } from '../types/task-spec.js';
 
 export interface CodexCliConfig {
   /** Required. Model id passed to `-m`. */
   model: string;
+  /** Optional. Reasoning level for `-c model_reasoning_effort`. Already
+   *  resolved (default applied, capability-gated) by providers/effort.ts —
+   *  absent means the model has no effort knob, so no flag is emitted. */
+  effort?: Effort;
   /** Optional. When set, registers a custom model_provider with this base_url. */
   baseUrl?: string;
   /** Optional. Env-var name read by codex for the API key when baseUrl is set. */
@@ -67,6 +72,12 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   }
 
   args.push('-m', cfg.model);
+
+  // Reasoning level. `--ignore-user-config` above means ~/.codex/config.toml
+  // can't supply one, so without this flag every codex turn silently runs at
+  // the CLI's per-model default. Applies on resume turns too — `-c` overrides
+  // are per-invocation, not stored in the session record.
+  if (cfg.effort) args.push('-c', `model_reasoning_effort="${cfg.effort}"`);
 
   if (schemaFile) args.push('--output-schema', schemaFile);
   args.push('-o', outputFile);
