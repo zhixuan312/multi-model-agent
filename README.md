@@ -147,8 +147,8 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 | Skill | Use when |
 |---|---|
 | `mma-brainstorm` | Requirement interview — name the destination → grill the 8 spec components one decision at a time, resolving mechanical questions via workers and putting only real decisions to the user → dispatch `mma-spec`. Consumes an `exploration.md` from `mma-explore` when present. |
-| `mma-spec` | Write a formal specification from structured design decisions. Output follows the Forge 8-component standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
-| `mma-plan` | Write a TDD implementation plan from a spec file. Output uses `### Task I-N:` headings with `**Files:**` blocks and checkbox steps. |
+| `mma-spec` | Write a formal specification from structured design decisions. Output follows the 8-component spec standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
+| `mma-plan` | Write a contract-first, human-executable plan from a spec file. Output is phased (`## Phase N`, `### Task I-N:`) with `**Files:**` blocks, a Contract + technical acceptance criterion per task, and plan-authored acceptance tests — no implementation code. |
 
 ### Work-delegation skills
 
@@ -333,7 +333,7 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` and `plan` types write formal specification and TDD implementation plan documents from structured input. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -353,10 +353,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.14.0
+## What's new in 5.15.0
 
-- **Deterministic journal engine.** `journal_record`/`journal_recall` now do their mechanical work (id allocation, catalog, dedup/candidate retrieval, validation) in TypeScript over a rebuildable SQLite FTS5 index (`node:sqlite`), reserving the LLM for judgment — ~8× faster retrieval and ~99.9% fewer context tokens on a 2000-node benchmark, with retrieval quality up. Adds `mma journal reindex`; `journal_recall` gains an optional `includeHistory`. `SCHEMA_VERSION` unchanged.
-- **Claude OAuth auto-refresh (macOS + Linux).** Expired subscription tokens are refreshed via the stored refresh token and persisted, so unattended/headless servers no longer lose auth every ~8h. Now reads Linux `~/.claude/.credentials.json`, not just the macOS Keychain.
+- **Contract-first plans.** `plan` now writes what each task must satisfy — a Contract (inputs/outputs/mapping/errors/invariants), a technical acceptance criterion, and plan-authored acceptance tests — with **no implementation code**, in a human-executable phased layout for engineers/QA/tech leads. `execute_plan` implements autonomously against those tests, which the pipeline re-materializes verbatim and runs to score completion (merges at ≥80%); executor edits to the tests are discarded. `SCHEMA_VERSION` unchanged.
+- **Reasoning effort is actually applied** and defaults to `high` on both runtimes (it had been declared but never read). Ladder widened to `none|low|medium|high|xhigh|max`, emitted only for models whose profile supports it.
+- **Skills refined by audience** — human-facing outputs (`spec`, `plan`, `explore`, `journal_recall`, audit findings) read in plain, business-forward English so a human owns the judgement calls; all "superpowers" references removed.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
