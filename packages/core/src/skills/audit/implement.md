@@ -36,7 +36,7 @@ A finding that points at any of these failure-mode triggers is high-value EVEN I
 
 - You MUST work through the 11 failure modes **one at a time, sequentially**. Do NOT evaluate all in one pass.
 - Every finding must use one of the four evidence shapes (see Evidence Grounding below).
-- Every evidence string MUST start with the nearest heading in square brackets (see Section prefix below).
+- Every evidence string MUST start with its source in square brackets — the nearest heading for a document, or the file path for source code (see Section prefix below).
 - Scope is the document itself plus any artifact it directly references. Do NOT enumerate the repo or glob across source files.
 - Findings that fail the Self-Validation rubric should be downgraded or dropped.
 

@@ -144,7 +144,7 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'debug':
       return [
-        'You have applied ALL 4 investigation angles: symptom-location, recent-change, test-failure, reproduction.',
+        'You have applied ALL 5 investigation angles: symptom-location, recent-change, test-failure, reproduction, concurrency-configuration.',
         'Your trace chain has at least 3 evidence points: symptom → intermediate state → cause, each with file:line.',
         'You have proposed a fix (read-only — describe, do not apply).',
         'You have stated a falsifier (how the maintainer verifies the fix).',
@@ -182,11 +182,10 @@ function buildGoalCondition(type: TaskType, role: 'implementer' | 'reviewer', sk
       ].join(' ');
     case 'journal_recall':
       return [
-        'You have searched from ALL 3 perspectives: keyword-match, graph-neighborhood, contradiction-and-history.',
-        'Superseded nodes are excluded from results.',
-        'Each result includes the learning, context, relevance assessment, normalized lowercase-kebab `topic` frontmatter field, and boolean `fallback` indicator.',
-        'Findings from the optional `topic`-narrowed search use `fallback: false`; cross-topic fallback evidence uses `fallback: true`.',
-        'The index.md catalog (if present) uses the column order id | timestamp | type | status | title | topic | tags.',
+        'You have judged ONLY the engine-supplied candidate set — you did not scan the journal yourself — and every cited node is present in that set.',
+        'Superseded candidates are excluded unless `includeHistory` is true.',
+        'Each result includes the learning, its context, a relevance assessment, the candidate\'s normalized lowercase-kebab `topic`, and its boolean `fallback` label (in-topic `false`, cross-topic fallback `true`) preserved verbatim from the engine.',
+        'The `answer` synthesizes the cited candidates into plain English a human can act on — what this project already learned or decided that bears on the question, not a node-ID dump.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'spec':
