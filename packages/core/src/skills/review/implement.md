@@ -96,6 +96,8 @@ Findings that fail any check should be downgraded or dropped. However, cross-fil
 
 ## Output
 
+Each finding's `claim` should name the **concrete failure — what breaks, under what input or state** — not just label the smell. "`divide(x, 0)` returns `Infinity`, corrupting the downstream sum" lets the maintainer judge severity at a glance; "unchecked divisor" does not. The `suggestion` gives the fix direction they will apply. Audience is an engineer, so precise technical language is right — the bar is a legible failure scenario, not plain-for-a-layperson.
+
 Your FINAL text response must be exactly one JSON block (do NOT write it to a file):
 
 ```json
