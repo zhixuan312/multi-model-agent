@@ -29,12 +29,16 @@ function contractPlan(title, header, implPath, testPath, testSrc) {
     '- Data mapping: result computed directly from the inputs.',
     '- Errors: none required.',
     '- Behavior / invariants: pure; no side effects.', '',
-    '**Acceptance tests (plan-authored — pipeline-owned)**',
-    `Path: ${BT}${testPath}${BT}`,
-    `${F}js`,
-    testSrc,
-    F,
-    `Run: ${BT}node --test ${testPath}${BT}`, '',
+    // Authored in the mma-plan GENERATOR shape (bulleted `- Path:`/`- Run:`, indented fence, trailing
+    // prose) — NOT the column-0 form — so the smoke exercises the format real plans actually have. The
+    // validator tolerates + dedents this; testing only the column-0 form is what let B-317's malformed-
+    // plan regression ship.
+    '**Acceptance tests (plan-authored — the executable form of the technical AC).**',
+    `- Path: ${BT}${testPath}${BT}`,
+    `  ${F}js`,
+    testSrc.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n'),
+    `  ${F}`,
+    `- Run: ${BT}node --test ${testPath}${BT}  Expected: PASS once implemented`, '',
     '**Implementation:** left to the executor — no code in the plan.', '',
   ].join('\n');
 }
