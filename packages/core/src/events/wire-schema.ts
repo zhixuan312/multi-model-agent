@@ -214,12 +214,12 @@ export const TaskCompletedEventSchema = z.object({
 // ── Super-refinement: R1–R15 (§3.4) ──────────────────────────────────────
 
 const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'journal-recall']);
-// Every route EXCEPT orchestrate defaults to reviewPolicy='reviewed' (see
-// unified-task.ts: `type === 'orchestrate' ? 'none' : reviewed`), so every one of them
-// can legitimately emit a `review` stage. Omitting journal-recall / research here
-// made `toWireRecord` throw "R9: review stage only allowed on reviewed routes" and
-// silently DROP their telemetry. List all reviewable routes.
-const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall']);
+// A `review` stage is legitimate on every route that runs the two-phase pipeline — i.e. every route
+// EXCEPT the two that never review: `orchestrate` (unified-task.ts forces reviewPolicy='none') and the
+// `register-context-block` control op (no pipeline). Encode the COMPLEMENT so a newly-added task route
+// is reviewable BY DEFAULT and does not silently drop its telemetry — the allowlist form twice omitted
+// a reviewable route (journal-recall/research, then spec/plan).
+const nonReviewedRoutes = new Set(['orchestrate', 'register-context-block']);
 
 export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superRefine((event, ctx) => {
   // R1: ok terminalStatus implies non-failed worker outcome and no errorCode
@@ -292,7 +292,7 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
 
   // R9: review stage only on reviewed routes
   for (const st of event.stages) {
-    if (st.name === 'review' && !reviewedRoutes.has(event.route)) {
+    if (st.name === 'review' && nonReviewedRoutes.has(event.route)) {
       ctx.addIssue({ code: 'custom', message: 'R9: review stage only allowed on reviewed routes' });
     }
   }
