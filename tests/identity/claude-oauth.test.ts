@@ -23,7 +23,7 @@ function setPlatform(p: NodeJS.Platform): void {
  * Route mocked `execFileSync` calls by their command/args:
  *  - `security find-generic-password ... -w` → the Keychain blob
  *  - `security find-generic-password` (no -w) → item attributes (account)
- *  - `curl ...` → the OAuth refresh response
+ *  - `process.execPath -e ...` (Node subprocess) → the OAuth refresh response
  *  - `security add-generic-password -U ...` → persist (records the write)
  */
 function routeExec(opts: {
@@ -40,7 +40,7 @@ function routeExec(opts: {
       if (opts.account instanceof Error) throw opts.account;
       return `class: "genp"\n    "acct"<blob>="${opts.account ?? 'zhangzhixuan'}"\n    "svce"<blob>="Claude Code-credentials"\n`;
     }
-    if (cmd === 'curl') {
+    if (cmd === process.execPath) {
       if (opts.refresh instanceof Error) throw opts.refresh;
       // expose the request body (should carry the refresh token via stdin)
       routeExec.lastCurlInput = options?.input;
@@ -146,8 +146,10 @@ describe('getClaudeOAuth', () => {
     expect(creds?.subscriptionType).toBe('max');
 
     // the refresh token went over stdin, not argv
-    const curlCall = mockExec.mock.calls.find((c) => c[0] === 'curl');
-    expect(curlCall?.[1]).not.toContain('sk-ant-ort01-OLD');
+    const refreshCall = mockExec.mock.calls.find((c) => c[0] === process.execPath);
+    expect(refreshCall?.[1]).not.toContain('sk-ant-ort01-OLD');
+    // ISSUE-10: the refresh runs in a Node subprocess, never `curl` (absent in minimal containers).
+    expect(mockExec.mock.calls.some((c) => c[0] === 'curl')).toBe(false);
     expect(routeExec.lastCurlInput).toContain('sk-ant-ort01-OLD');
     expect(routeExec.lastCurlInput).toContain('"grant_type":"refresh_token"');
 
@@ -214,7 +216,7 @@ describe('getClaudeOAuth (Linux / file store)', () => {
     onWrite?: (path: string, data: string) => void;
   }) {
     const exec = vi.fn((cmd: string, _args: string[], options?: { input?: string }) => {
-      if (cmd === 'curl') {
+      if (cmd === process.execPath) {
         if (over.refresh instanceof Error) throw over.refresh;
         return JSON.stringify(over.refresh);
       }
@@ -226,6 +228,7 @@ describe('getClaudeOAuth (Linux / file store)', () => {
       return over.blob ?? '';
     });
     const writeFile = vi.fn((p: string, data: string) => over.onWrite?.(p, data));
+    const log = vi.fn();
     return {
       deps: {
         exec: exec as unknown as typeof import('child_process').execFileSync,
@@ -233,10 +236,12 @@ describe('getClaudeOAuth (Linux / file store)', () => {
         readFile,
         writeFile,
         homedir: () => HOME,
+        log,
       },
       exec,
       readFile,
       writeFile,
+      log,
     };
   }
 
@@ -295,12 +300,14 @@ describe('getClaudeOAuth (Linux / file store)', () => {
   });
 
   it('L4: returns null when expired and the refresh request fails', () => {
-    const { deps, writeFile } = linuxDeps({
+    const h = linuxDeps({
       blob: FULL_BLOB({ expiresAt: FAR_PAST_MS }),
-      refresh: new Error('curl: (22) 401'),
+      refresh: new Error('subprocess exit 3: all endpoints failed'),
     });
-    expect(getClaudeOAuth(deps)).toBeNull();
-    expect(writeFile).not.toHaveBeenCalled();
+    expect(getClaudeOAuth(h.deps)).toBeNull();
+    expect(h.writeFile).not.toHaveBeenCalled();
+    // ISSUE-10: an in-container refresh failure is logged, not silently swallowed.
+    expect(h.log).toHaveBeenCalledWith(expect.stringContaining('refresh failed'));
   });
 
   it('L5: still returns the refreshed token even if the file write fails (best effort)', () => {

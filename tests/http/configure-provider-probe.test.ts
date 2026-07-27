@@ -82,6 +82,27 @@ describe('POST /configure-provider probe (always on)', () => {
     } finally { await h.close(); }
   });
 
+  it('codex tier with the codex CLI absent → verified false (ISSUE-11: verify probes the runner, not just creds)', async () => {
+    // The runner spawns `MMA_CODEX_BIN ?? "codex"`; point it at a path that does not exist so the probe
+    // ENOENTs. Verification must fail — otherwise the tier is green in the UI but dies on the first task
+    // with `codex_not_installed`.
+    const prev = process.env.MMA_CODEX_BIN;
+    process.env.MMA_CODEX_BIN = '/nonexistent/codex-cli-xyz';
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await post(h.baseUrl, h.token, {
+        tier: 'complex', provider: 'codex', model: 'gpt-5',
+        auth: { mode: 'api-key', apiKey: 'good-key', baseUrl: mockBaseUrl() },
+      });
+      const body = await res.json();
+      expect(body.verified).toBe(false);
+      expect(body.reason).toMatch(/codex CLI not found/i);
+    } finally {
+      await h.close();
+      if (prev === undefined) delete process.env.MMA_CODEX_BIN; else process.env.MMA_CODEX_BIN = prev;
+    }
+  });
+
   it('bad key → auth rejected', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {

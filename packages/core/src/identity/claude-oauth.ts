@@ -54,6 +54,8 @@ export interface ClaudeOAuthDeps {
   /** Atomic, 0600 write (temp file + rename). */
   writeFile: (path: string, data: string) => void;
   homedir: () => string;
+  /** Diagnostic sink for the refresh attempt/outcome (default: stderr). */
+  log: (msg: string) => void;
 }
 
 const defaultDeps: ClaudeOAuthDeps = {
@@ -71,6 +73,7 @@ const defaultDeps: ClaudeOAuthDeps = {
     renameSync(tmp, p);
   },
   homedir,
+  log: (msg) => { try { process.stderr.write(`[mma] claude-oauth-refresh: ${msg}\n`); } catch { /* ignore */ } },
 };
 
 interface RefreshResponse {
@@ -163,33 +166,55 @@ function fileStore(deps: ClaudeOAuthDeps): CredentialStore {
   };
 }
 
+// The refresh exchange runs in a Node subprocess (`process.execPath -e <script>`) rather than
+// `curl`: `curl` is NOT guaranteed in a container (minimal Node base images omit it), which silently
+// broke auto-refresh in-container (ISSUE-10) — the running Node binary always exists. It keeps
+// `getClaudeOAuth` synchronous (no async ripple through provider.openSession). The POST body (which
+// carries the refresh token) is passed on stdin, never as an argv element, so it never leaks into the
+// process list. The script POSTs to each endpoint until one returns 2xx and prints that body; it exits
+// non-zero when every endpoint fails, which surfaces here as a thrown error → logged, not swallowed.
+const REFRESH_SUBPROCESS_SCRIPT =
+  "const https=require('https');" +
+  `const urls=${JSON.stringify(TOKEN_ENDPOINTS)};` +
+  "let b='';process.stdin.on('data',d=>b+=d).on('end',()=>{(function n(i){" +
+  "if(i>=urls.length){process.stderr.write('all endpoints failed');process.exit(3);}" +
+  "let u;try{u=new URL(urls[i]);}catch{return n(i+1);}" +
+  "const rq=https.request({hostname:u.hostname,port:u.port||443,path:u.pathname+u.search,method:'POST'," +
+  "headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(b)},timeout:15000}," +
+  "res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>{" +
+  "if(res.statusCode>=200&&res.statusCode<300){process.stdout.write(d);process.exit(0);}" +
+  "else{process.stderr.write('HTTP '+res.statusCode+' from '+u.hostname);n(i+1);}});});" +
+  "rq.on('error',e=>{process.stderr.write(String(e&&e.message||e));n(i+1);});" +
+  "rq.on('timeout',()=>{rq.destroy();n(i+1);});rq.write(b);rq.end();})(0);});";
+
 /**
- * Exchange the refresh token for a fresh access token. Synchronous by way of
- * a `curl` subprocess (matches the store-read style; keeps `getClaudeOAuth`
- * callable synchronously). The refresh token is passed on stdin, never as an
- * argv element, so it does not leak into the process list. Platform-agnostic —
- * `curl` is available on macOS and Linux. Returns null on any failure.
+ * Exchange the refresh token for a fresh access token via a synchronous Node subprocess (see
+ * {@link REFRESH_SUBPROCESS_SCRIPT}). Returns null on any failure, logging the outcome so an
+ * in-container refresh failure is diagnosable rather than a silent "token not found or expired".
  */
-function refreshAccessToken(exec: typeof execFileSync, refreshToken: string): RefreshResponse | null {
+function refreshAccessToken(deps: ClaudeOAuthDeps, refreshToken: string): RefreshResponse | null {
   const body = JSON.stringify({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: OAUTH_CLIENT_ID,
   });
-  for (const url of TOKEN_ENDPOINTS) {
-    try {
-      const out = exec(
-        'curl',
-        ['-sS', '--fail', '-X', 'POST', url, '-H', 'Content-Type: application/json', '--data-binary', '@-'],
-        { input: body, encoding: 'utf8', timeout: 15_000 },
-      ).toString();
-      const parsed = JSON.parse(out) as RefreshResponse;
-      if (parsed && typeof parsed.access_token === 'string' && parsed.access_token.length > 0) return parsed;
-    } catch {
-      // try the next endpoint
+  try {
+    const out = deps.exec(
+      process.execPath,
+      ['-e', REFRESH_SUBPROCESS_SCRIPT],
+      { input: body, encoding: 'utf8', timeout: 20_000 },
+    ).toString();
+    const parsed = JSON.parse(out) as RefreshResponse;
+    if (parsed && typeof parsed.access_token === 'string' && parsed.access_token.length > 0) {
+      deps.log('access token expired → refreshed via refresh token');
+      return parsed;
     }
+    deps.log('refresh failed: response contained no access_token');
+    return null;
+  } catch (err) {
+    deps.log(`refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
   }
-  return null;
 }
 
 /**
@@ -239,8 +264,11 @@ export function getClaudeOAuth(overrides: Partial<ClaudeOAuthDeps> = {}): Claude
 
   if (isExpired) {
     // Access token has lapsed — refresh it using the long-lived refresh token.
-    if (!refreshToken) return null;
-    const refreshed = refreshAccessToken(deps.exec, refreshToken);
+    if (!refreshToken) {
+      deps.log('access token expired and no refresh token present — cannot refresh');
+      return null;
+    }
+    const refreshed = refreshAccessToken(deps, refreshToken);
     if (!refreshed) return null;
 
     const newAccessToken = refreshed.access_token as string;

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -62,6 +63,21 @@ const CLAUDE_NATIVE_FAMILIES = new Set(['claude']);
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_CODEX_BASE_URL = 'https://api.openai.com';
 
+/**
+ * True if the codex CLI the runner will spawn (`MMA_CODEX_BIN ?? 'codex'` — the exact resolution in
+ * codex-cli-launch.ts) is resolvable on this host. Only a spawn ENOENT counts as absent; a present
+ * binary that errors on `--version` is still installed. Claude needs no binary (it uses the Agent SDK).
+ */
+function codexBinaryAvailable(): boolean {
+  const bin = process.env.MMA_CODEX_BIN ?? 'codex';
+  try {
+    execFileSync(bin, ['--version'], { stdio: 'ignore', timeout: 10_000 });
+    return true;
+  } catch (err) {
+    return (err as { code?: string }).code !== 'ENOENT';
+  }
+}
+
 function validate(input: ConfigureProviderRequest): { verified: boolean; reason: string } {
   const profile = findModelProfile(input.model);
   const family = profile.family;
@@ -79,6 +95,18 @@ function validate(input: ConfigureProviderRequest): { verified: boolean; reason:
     if (input.provider === 'codex' && CLAUDE_NATIVE_FAMILIES.has(family)) {
       return { verified: false, reason: `claude model requires claude provider, not codex` };
     }
+  }
+
+  // A codex tier runs via the `codex` CLI subprocess; if the binary is absent (e.g. not bundled in a
+  // container image), the tier verifies green then dies on the FIRST real task with `codex_not_installed`
+  // (ISSUE-11). Probe the runner here — for any codex tier, oauth or api-key — so verification reflects
+  // can-actually-run, not just creds-present. (Claude uses the Agent SDK, so no binary check.)
+  if (input.provider === 'codex' && !codexBinaryAvailable()) {
+    const bin = process.env.MMA_CODEX_BIN ?? 'codex';
+    return {
+      verified: false,
+      reason: `codex CLI not found (tried "${bin}"). A codex tier runs via the codex CLI — install @openai/codex or set MMA_CODEX_BIN; the tier cannot run without it.`,
+    };
   }
 
   if (input.auth.mode === 'oauth') {
