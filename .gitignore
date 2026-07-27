@@ -36,3 +36,10 @@ full-smoke-results.json
 
 # TypeScript incremental build info (build artifact)
 *.tsbuildinfo
+
+# Journal-engine benchmark OUTPUTS — regenerated on every `npm test` by
+# tests/perf/journal-engine-benchmark-gates.test.ts (dated raw JSON + summary, with
+# per-run latency jitter). The perf GATES are the test's numeric assertions, not these
+# files; the sources (run.ts, queries.ts, fixture-3000.ts) stay tracked.
+benchmarks/journal/benchmark-*.json
+benchmarks/journal/report-summary.md
