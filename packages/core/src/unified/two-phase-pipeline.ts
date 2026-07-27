@@ -1,4 +1,4 @@
-import { copyFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -429,6 +429,32 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       completionPercent = 0;
       epFailure = { code: 'missing_contract_snapshot', message: 'execute_plan requires a contract-first acceptanceTestSnapshot to be scorable' };
     } else if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
+      const runAccept = input.runAcceptanceCommand ?? defaultRunAcceptanceCommand;
+      const commands = [...new Set(input.acceptanceTestSnapshot.tasks.flatMap(t => t.acceptanceTests.map(a => a.command)))];
+      const runAll = async (): Promise<{ pass: boolean; failures: string[] }> => {
+        let pass = true;
+        const failures: string[] = [];
+        for (const cmd of commands) {
+          const r = await runAccept(cmd, effectiveCwd);
+          if (r.exitCode !== 0) {
+            pass = false;
+            failures.push(`$ ${cmd}  (exit ${r.exitCode})\n${(r.stderr || r.stdout).trim().slice(-1500)}`);
+          }
+        }
+        return { pass, failures };
+      };
+
+      // Snapshot the executor's acceptance-test files, then score the executor's tests AS LEFT — the
+      // executor may have fixed a plan-authored test that was itself broken (LLM-authored tests often
+      // have runtime/infra bugs: bad path resolution, wrong imports, framework incompatibility).
+      const testPaths = [...new Set(input.acceptanceTestSnapshot.tasks.flatMap(t => t.acceptanceTests.map(a => a.path)))];
+      const executorTestBytes = new Map<string, string>();
+      for (const p of testPaths) {
+        try { executorTestBytes.set(p, await readFile(join(effectiveCwd, p), 'utf8')); } catch { /* not on disk */ }
+      }
+      const executorRun = await runAll();
+
+      // Re-materialize the FROZEN plan tests — the integrity baseline an executor cannot weaken.
       try {
         await rematerializeAcceptanceTests(input.acceptanceTestSnapshot, effectiveCwd);
       } catch (err) {
@@ -439,27 +465,50 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         const code = err instanceof ContractPlanError ? err.code : 'rematerialization_failed';
         return earlyFailureResult(input, code, err instanceof Error ? err.message : String(err));
       }
-      const runAccept = input.runAcceptanceCommand ?? defaultRunAcceptanceCommand;
-      const commands = [...new Set(input.acceptanceTestSnapshot.tasks.flatMap(t => t.acceptanceTests.map(a => a.command)))];
-      let allPass = true;
-      for (const cmd of commands) {
-        const r = await runAccept(cmd, effectiveCwd);
-        if (r.exitCode !== 0) allPass = false;
-      }
+      const frozenRun = await runAll();
+
       const contractSatisfied = parsed.ok && contractSatisfiedFromReviewer(parsed.data, input.dispatchedTasks);
-      completionPercent = contractSatisfied && allPass ? 100 : contractSatisfied || allPass ? 60 : 40;
+
+      // Prefer the frozen tests (integrity intact when they pass). If they FAIL but the executor's own
+      // tests pass AND the cross-provider reviewer confirms the contract, the plan-authored test was
+      // itself broken and the executor legitimately corrected it — accept that and RESTORE the
+      // executor's test bytes so the merge carries the working tests, not the broken frozen ones. A
+      // buggy plan-authored test must never sink a correct, contract-satisfying implementation.
+      let testsPass = frozenRun.pass;
+      let planTestNote = '';
+      if (!frozenRun.pass && executorRun.pass && contractSatisfied) {
+        for (const [p, bytes] of executorTestBytes) {
+          await writeFile(join(effectiveCwd, p), bytes, 'utf8').catch(() => undefined);
+        }
+        testsPass = true;
+        planTestNote = ' Note: a plan-authored acceptance test was broken; the executor\'s corrected version passed and was kept.';
+      }
+      completionPercent = contractSatisfied && testsPass ? 100 : contractSatisfied || testsPass ? 60 : 40;
+      if (completionPercent < 80) {
+        const detail = (frozenRun.failures.length ? frozenRun.failures : executorRun.failures).join('\n---\n');
+        epFailure = {
+          code: 'contract_not_satisfied',
+          message: `execute_plan completion ${completionPercent} is below the 80 commit gate`
+            + (contractSatisfied ? '' : ' — the reviewer did not confirm every dispatched task satisfied its contract')
+            + (detail ? `.\nFailing acceptance command(s):\n${detail}` : '')
+            + planTestNote,
+        };
+      }
     }
 
-    // Merge gate: execute_plan merges only at/above the 80 completion threshold; below it the
-    // worktree is discarded (not merged) and the flag set so `finally` doesn't double-clean.
+    // Merge gate: execute_plan merges only at/above the 80 completion threshold. Below it the worktree
+    // is PRESERVED (not discarded) so a blocked/partial implementation is recoverable, and the failing
+    // command output (above) explains why — silently deleting a completed implementation was the
+    // reported data-loss regression.
     let worktree: WorktreeInfo | null;
     if (input.type === 'execute_plan' && completionPercent < 80) {
-      if (wtManager && wtInfo) {
-        await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
-      }
-      worktreeResolved = true;
-      worktree = null;
-      epFailure = epFailure ?? { code: 'contract_not_satisfied', message: `execute_plan completion ${completionPercent} is below the 80 commit gate` };
+      worktreeResolved = true; // leave the worktree in place for inspection; `finally` won't remove it
+      worktree = wtInfo ? { branch: wtInfo.branch, path: wtInfo.path, hasChanges: true, merged: false } : null;
+      const baseMsg = epFailure?.message ?? `execute_plan completion ${completionPercent} is below the 80 commit gate`;
+      epFailure = {
+        code: epFailure?.code ?? 'contract_not_satisfied',
+        message: wtInfo ? `${baseMsg}\nWorktree preserved for inspection at ${wtInfo.path} (branch ${wtInfo.branch}).` : baseMsg,
+      };
     } else {
       worktree = await resolveWorktree(buildCommitMessage());
       worktreeResolved = true;
