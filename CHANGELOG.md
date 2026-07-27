@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.4] - 2026-07-27
+
+**In-container reliability: Claude OAuth auto-refresh actually works headless, and a codex tier fails verification when its CLI is absent instead of going green-but-broken.** No API or schema change (`SCHEMA_VERSION` still 6).
+
+### Fixed
+- **Claude OAuth auto-refresh no longer depends on `curl` — it works in minimal containers.** The refresh-on-expiry exchange shelled out to `curl`, which minimal Node container images don't ship; `execFileSync('curl', …)` threw `ENOENT`, was swallowed, and the token wasn't refreshed — so an always-on container went dark ~8h after the last manual refresh (`verified=false`, "token not found or expired") even with a valid refresh token and a writable creds mount. The exchange now runs in a Node subprocess (`process.execPath` — always present), stays synchronous, keeps the refresh token on stdin (never argv), and **logs the attempt/outcome** so a failure is diagnosable instead of silent.
+- **`/configure-provider` fails a codex tier when the codex CLI is absent.** A codex-protocol tier passed verification on creds alone, then died on the first real task with `codex_not_installed`. Verification now probes the binary the runner will spawn (`MMA_CODEX_BIN ?? "codex"`) for any codex tier and returns `verified: false` with a clear reason when it's missing — so a codex tier can't look healthy while being unable to run. (Claude tiers use the Agent SDK, so no binary check. Bundling the codex CLI into a deployed image is a separate image-build concern.)
+
 ## [5.15.3] - 2026-07-27
 
 **Fix three contract-first `execute_plan` / telemetry regressions from the 5.15.0 upgrade** — surfaced by a mid-upgrade multi-repo run; all reproduce on a freshly generated, unedited plan. No API or schema change (`SCHEMA_VERSION` still 6).

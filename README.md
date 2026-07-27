@@ -353,11 +353,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.3
+## What's new in 5.15.4
 
-- **Contract-first `execute_plan` fixes (three regressions from 5.15.0).** (1) `execute_plan` now accepts the acceptance-test format `mma-plan` actually generates (bulleted `- Path:`/`- Run:`, indented fence, trailing prose) — the mismatch had failed 100% of contract-first dispatches with `malformed-plan`. (2) A buggy plan-authored test no longer sinks a correct implementation: the executor's corrected test is accepted when the reviewer confirms the contract, and a below-gate worktree is **preserved (never discarded)** with the failing output surfaced. (3) `plan`/`spec` task telemetry is no longer silently dropped by the wire-schema R9 rule. No API or schema change.
-- **Write routes no longer silently drop work (5.15.2).** Delegating to a repo with a pre-commit hook, or whose branch moved mid-task, no longer reports a false `merged: true`; concurrent writes to one repo all land.
-- **Read routes read plainly (5.15.1); contract-first plans (5.15.0).** `SCHEMA_VERSION` still 6.
+- **In-container reliability.** (1) Claude OAuth **auto-refresh works headless** — the refresh-on-expiry exchange no longer needs `curl` (absent in minimal Node images); it runs in a Node subprocess and logs the outcome, so an always-on container no longer goes dark ~8h after the last manual refresh. (2) A **codex tier fails `/configure-provider` verification when the codex CLI is absent** (verify now probes the runner, not just the creds), instead of verifying green and dying on the first task with `codex_not_installed`. No API or schema change.
+- **Contract-first `execute_plan` fixes (5.15.3).** Accepts the generator's acceptance-test format (no more `malformed-plan`); a buggy plan-authored test no longer discards correct work; `plan`/`spec` telemetry no longer dropped.
+- **Write routes no longer silently drop work (5.15.2); read routes read plainly (5.15.1); contract-first plans (5.15.0).** `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
