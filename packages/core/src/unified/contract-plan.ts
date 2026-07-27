@@ -83,10 +83,34 @@ const TASK_HEADING_RE = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
 // `**Files:**\n- Create: \`…\`\n- Test: \`…\`` form, so one plan renders in Forge and runs here.
 const FILES_BLOCK_RE = /\*\*Files:\*\*([\s\S]*?)(?=\n[ \t]*\n|\n\*\*[A-Za-z]|\n###\s|$)/;
 const SHELL_METACHAR_RE = /[|&;<>$`()'"]/;
-const TEST_BLOCK_RE = /Path:\s*`?([^\n`]+?)`?\s*\n```[^\n]*\n([\s\S]*?)\n```\s*\nRun:\s*`?([^\n`]+?)`?\s*(?=\n|$)/g;
+// Acceptance-test block matcher — tolerant of the markdown list form the `mma-plan` generator
+// authors (and of the column-0 form). It accepts, on the Path / fence / Run lines: an optional
+// `- `/`* ` bullet and leading indentation, an INDENTED fenced source block, optional blank lines
+// between the three parts, and trailing prose after the `Run:` command (e.g. "Expected: PASS once
+// implemented"). The captured source is dedented and the command is extracted from the Run remainder
+// (see below) — so generator output and validator agree without forcing a rigid column-0 shape.
+const TEST_BLOCK_RE = /^[ \t]*(?:[-*][ \t]+)?Path:[ \t]*`?([^\n`]+?)`?[ \t]*\n(?:[ \t]*\n)*[ \t]*```[^\n]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n(?:[ \t]*\n)*[ \t]*(?:[-*][ \t]+)?Run:[ \t]*(.+)$/gm;
+// Count declared acceptance tests by their `Path:` line, tolerating a leading bullet + indentation.
+const PATH_LINE_RE = /^[ \t]*(?:[-*][ \t]+)?Path:/gm;
 
 function stripBacktick(value: string): string {
   return value.trim().replace(/^`+|`+$/g, '').trim();
+}
+
+/** Strip the common leading indentation from a captured (possibly bullet-indented) source block. */
+function dedent(source: string): string {
+  const lines = source.split('\n');
+  const indents = lines.filter(l => l.trim().length > 0).map(l => (l.match(/^[ \t]*/)?.[0].length ?? 0));
+  const min = indents.length ? Math.min(...indents) : 0;
+  return min === 0 ? source : lines.map(l => l.slice(min)).join('\n');
+}
+
+/** Extract the command from a `Run:` line remainder: the backtick-wrapped token if present (trailing
+ *  prose like "Expected: PASS" is then outside the backticks and ignored), else the text up to the
+ *  first run of 2+ spaces (which separates a bare command from any trailing note). */
+function extractCommand(runRemainder: string): string {
+  const backticked = runRemainder.match(/`([^`]+)`/);
+  return (backticked ? backticked[1]! : runRemainder.split(/\s{2,}/)[0]!).trim();
 }
 
 function extractDeclaredTestPaths(filesBlock: string): string[] {
@@ -150,7 +174,8 @@ function parseTaskSection(headingLine: string, body: string): ParsedContractTask
 
   const acceptanceBlock = body.slice(acceptanceHeadingIdx, implementationIdx);
 
-  const declaredPathHeadingCount = (acceptanceBlock.match(/^Path:/gm) ?? []).length;
+  PATH_LINE_RE.lastIndex = 0;
+  const declaredPathHeadingCount = (acceptanceBlock.match(PATH_LINE_RE) ?? []).length;
 
   const tests: PlanAcceptanceTest[] = [];
   const seenPaths = new Set<string>();
@@ -158,8 +183,8 @@ function parseTaskSection(headingLine: string, body: string): ParsedContractTask
   let match: RegExpExecArray | null;
   while ((match = TEST_BLOCK_RE.exec(acceptanceBlock)) !== null) {
     const path = stripBacktick(match[1]!);
-    const source = match[2]!;
-    const command = stripBacktick(match[3]!);
+    const source = dedent(match[2]!);
+    const command = extractCommand(match[3]!);
 
     if (!path) {
       throw new ContractPlanError('malformed-plan', `Task "${title}" has an acceptance test with an empty "Path:"`);

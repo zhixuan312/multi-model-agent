@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.3] - 2026-07-27
+
+**Fix three contract-first `execute_plan` / telemetry regressions from the 5.15.0 upgrade** — surfaced by a mid-upgrade multi-repo run; all reproduce on a freshly generated, unedited plan. No API or schema change (`SCHEMA_VERSION` still 6).
+
+### Fixed
+- **`execute_plan` accepts the acceptance-test format `mma-plan` actually generates.** The generator authors acceptance tests as a markdown list — bulleted `- Path:`/`- Run:`, an INDENTED fenced source block, and trailing prose (`Expected: PASS once implemented`) — but the validator demanded column-0, so **100% of contract-first dispatches failed `malformed-plan`**. The validator now tolerates a leading bullet + indentation on the Path/fence/Run lines, blank lines between parts, and trailing prose after the command, and dedents the captured source (backward-compatible with column-0). Added a generate→validate round-trip golden — the missing test that let the mismatch ship.
+- **`execute_plan` no longer discards a correct implementation over a buggy plan-authored test.** Scoring re-materialized the plan's frozen acceptance-test bytes and ran them; when a plan-authored test was itself broken (LLM-authored tests often have runtime/infra bugs — path resolution, imports, framework incompatibility), the executor's fix was reverted, the test failed, completion fell below the 80 gate, and the **fully-implemented worktree was deleted**. Now the executor's tests and the frozen tests are both run: frozen is preferred, but when it fails while the executor's version passes AND the cross-provider reviewer confirms the contract, the executor's corrected test is accepted and kept for the merge. Below the gate the worktree is **preserved (never discarded)** and the failing command + output are surfaced.
+- **`plan`/`spec` task telemetry is no longer silently dropped.** The wire-schema R9 rule allowlisted the routes that may emit a `review` stage but omitted `plan` and `spec`, so their completed tasks' records were rejected on upload (`R9: review stage only allowed on reviewed routes`). R9 now encodes the COMPLEMENT — a review stage is illegitimate only on the never-reviewed `orchestrate` / `register-context-block` routes — so every reviewable route, including any added later, is accepted.
+
 ## [5.15.2] - 2026-07-26
 
 **Cross-repo write routes no longer silently drop the worker's output.** Delegating a write route (`delegate`, `execute_plan`) to a repo other than the server's own cwd could report `merged: true` while discarding the work. Two root causes, both fixed. No API or schema change (`SCHEMA_VERSION` still 6).

@@ -57,6 +57,38 @@ Run: ${BT}pnpm vitest run tests/unified/example.test.ts${BT}
 **Implementation:** left to the executor — no code in the plan.
 `;
 
+// The exact shape the `mma-plan` generator authors (plan/implement.md): a multi-line **Files:** bullet
+// list, and each acceptance test as `- Path:` / an INDENTED fenced source block / `- Run: … Expected:
+// PASS once implemented`. This is a generator↔validator round-trip guard — the format mismatch that
+// made 100% of execute_plan dispatches fail `malformed-plan` shipped precisely because no test parsed
+// a realistically-generated plan (the fixtures were all column-0).
+const GENERATED_STYLE_PLAN = `
+### Task I-1: Parse and validate frozen Contract Tasks (AC-1.1)
+
+**Files:**
+- Modify: ${BT}packages/core/src/unified/example.ts${BT}
+- Test: ${BT}tests/unified/example.test.ts${BT}
+
+Inputs / Request: A markdown string containing one frozen Contract Task section.
+
+Outputs / Response: A ContractPlanSnapshot with one parsed task.
+
+Data mapping: The Files: ... Test: path maps one-to-one to the Path: acceptance-test entry.
+
+Errors: Throws ContractPlanError for any structural violation.
+
+Behavior / invariants: Parsing is pure and returns an immutable, frozen snapshot.
+
+**Acceptance tests (plan-authored — the executable form of the technical AC).**
+- Path: ${BT}tests/unified/example.test.ts${BT}
+  ${FENCE}ts
+${EXAMPLE_SOURCE.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n')}
+  ${FENCE}
+- Run: ${BT}pnpm vitest run tests/unified/example.test.ts${BT}  Expected: PASS once implemented
+
+**Implementation:** left to the executor — no code in the plan.
+`;
+
 const LEGACY_PLAN = `
 # Feature Implementation Plan
 
@@ -260,6 +292,18 @@ describe('parseContractPlan', () => {
   it('returns a byte-for-byte source string', () => {
     const snapshot = parseContractPlan(VALID_PLAN);
     expect(snapshot.tasks[0]!.acceptanceTests[0]!.source).toBe(EXAMPLE_SOURCE);
+  });
+
+  it('parses a plan authored in the mma-plan generator format (bulleted Files/Path/Run, indented fence, trailing prose)', () => {
+    const snapshot = parseContractPlan(GENERATED_STYLE_PLAN);
+    expect(snapshot.tasks.length).toBe(1);
+    const at = snapshot.tasks[0]!.acceptanceTests[0]!;
+    expect(at.path).toBe('tests/unified/example.test.ts');
+    // trailing "Expected: PASS once implemented" is stripped from the command
+    expect(at.command).toBe('pnpm vitest run tests/unified/example.test.ts');
+    // the 2-space fence indentation is removed → source round-trips byte-for-byte to the original
+    // (EXAMPLE_SOURCE keeps its own inner indentation like `  it(...)`; only the fence indent is stripped)
+    expect(at.source).toBe(EXAMPLE_SOURCE);
   });
 
   it('accepts the Forge-style multi-line **Files:** bullet list (not just the inline form)', () => {

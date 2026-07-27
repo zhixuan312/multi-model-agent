@@ -73,14 +73,33 @@ describe('execute_plan contract-first completion scoring', () => {
     expect(run).toHaveBeenCalledWith('true ok', expect.any(String));
   });
 
-  it('scores below 80, fails, and discards the worktree when a reviewer task is not done', async () => {
+  it('scores below 80, fails, and PRESERVES the worktree (never discards) when a reviewer task is not done', async () => {
     const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"failed"}]}', run }));
     expect(r.completionPercent).toBeLessThan(80);
     expect(r.status).toBe('failed');
-    expect(r.worktree).toBeNull();
+    // The worktree is PRESERVED for inspection, NOT discarded — silently deleting a (possibly complete)
+    // implementation was the reported data-loss regression. It is not merged, and remove is not called.
+    expect(r.worktree).not.toBeNull();
+    expect(r.worktree?.merged).toBe(false);
     expect(WorktreeManager.prototype.mergeAndCleanup).not.toHaveBeenCalled();
-    expect(WorktreeManager.prototype.remove).toHaveBeenCalledOnce();
+    expect(WorktreeManager.prototype.remove).not.toHaveBeenCalled();
+    expect(r.failureReason?.message ?? '').toContain('preserved');
+  });
+
+  it('keeps the executor\'s corrected test and MERGES when the plan-authored test is broken but the contract is satisfied', async () => {
+    // Regression for the re-materialization data-loss: the executor\'s tests pass (1st runAll) but the
+    // re-materialized FROZEN plan test fails (2nd runAll) because the plan-authored test itself is buggy.
+    // With the reviewer confirming the contract, the executor\'s corrected version is accepted + kept, so
+    // completion is 100 and the work merges instead of being discarded.
+    let call = 0;
+    const run = vi.fn().mockImplementation(async () =>
+      ++call <= 1 ? { exitCode: 0, stdout: '', stderr: '' } : { exitCode: 1, stdout: '', stderr: 'plan-authored test failed to load' });
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run }));
+    expect(r.completionPercent).toBe(100);
+    expect(r.status).toBe('done');
+    expect(r.worktree).not.toBeNull();
+    expect(WorktreeManager.prototype.mergeAndCleanup).toHaveBeenCalledOnce();
   });
 
   it('scores below 80 and fails when an acceptance command exits non-zero (even if reviewer says done)', async () => {
