@@ -353,11 +353,11 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.2
+## What's new in 5.15.3
 
-- **Write routes no longer silently drop work.** Delegating `delegate`/`execute_plan` to a repo could report `merged: true` while discarding the worker's output — when the target repo has a **pre-commit hook** (or no git identity) that aborted the engine's internal staging commit, or when the **target branch moved during the task** (a concurrent write, or you committing to the repo mid-run). Both are fixed: the staging commit bypasses hooks with a guaranteed identity, the merge-back rebases in the worktree when the target advanced, and `merged: true` is now decided by whether the branch actually carries commits — never a no-op "Already up to date". Concurrent writes to one repo are serialized so they all land. No API or schema change.
-- **Read routes read plainly (5.15.1).** `audit`, `investigate`, `review`, `debug`, `research`, `journal_recall` outputs lead with what their consumer needs to act on, with three acceptance-criteria drifts corrected.
-- **Contract-first plans (5.15.0).** `plan` writes a Contract + plan-authored acceptance tests (no implementation code); `execute_plan` implements autonomously and is scored by running those tests. `SCHEMA_VERSION` still 6.
+- **Contract-first `execute_plan` fixes (three regressions from 5.15.0).** (1) `execute_plan` now accepts the acceptance-test format `mma-plan` actually generates (bulleted `- Path:`/`- Run:`, indented fence, trailing prose) — the mismatch had failed 100% of contract-first dispatches with `malformed-plan`. (2) A buggy plan-authored test no longer sinks a correct implementation: the executor's corrected test is accepted when the reviewer confirms the contract, and a below-gate worktree is **preserved (never discarded)** with the failing output surfaced. (3) `plan`/`spec` task telemetry is no longer silently dropped by the wire-schema R9 rule. No API or schema change.
+- **Write routes no longer silently drop work (5.15.2).** Delegating to a repo with a pre-commit hook, or whose branch moved mid-task, no longer reports a false `merged: true`; concurrent writes to one repo all land.
+- **Read routes read plainly (5.15.1); contract-first plans (5.15.0).** `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
