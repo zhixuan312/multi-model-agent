@@ -46,6 +46,29 @@ function jsonResult(payload: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
 }
 
+/**
+ * Attribute the execution to the CLIENT, not to the transport.
+ *
+ * MCP is a transport that any client can speak — Claude Code, Codex CLI, an
+ * IDE, a script — so recording a flat `mcp` would erase which one it was and
+ * make telemetry useless for the one question it exists to answer. The
+ * 2026-07-28 protocol carries `io.modelcontextprotocol/clientInfo` in every
+ * request's `_meta`, so use it when present. Older clients (Claude Code
+ * currently negotiates 2025-06-18, which sends clientInfo only at initialize,
+ * and this adapter is stateless per request) fall back to `mcp`.
+ *
+ * The value rides into the wire record's `client` column, which accepts any
+ * STRICT_ID_REGEX string — no allowlist to extend.
+ */
+export function callerClientFromMeta(meta: Record<string, unknown> | undefined): string {
+  const info = meta?.['io.modelcontextprotocol/clientInfo'] as { name?: unknown } | undefined;
+  const name = typeof info?.name === 'string' ? info.name.trim().toLowerCase() : '';
+  if (!name) return 'mcp';
+  // Normalize to the same shape the REST X-MMA-Client header uses.
+  const slug = name.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug.length > 0 ? `mcp:${slug}` : 'mcp';
+}
+
 function errorResult(code: string, message: string, extra?: Record<string, unknown>): ToolResult {
   return {
     content: [{ type: 'text', text: JSON.stringify({ error: { code, message, ...extra } }) }],
@@ -90,7 +113,7 @@ async function waitForTerminal(deps: McpAdapterDeps, taskId: string, timeoutMs: 
   }
 }
 
-async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>): Promise<ToolResult> {
+async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, clientName: string): Promise<ToolResult> {
   const cwdRaw = args.cwd;
   if (typeof cwdRaw !== 'string') return errorResult('invalid_request', 'cwd (string) is required');
   const cwdCheck = validateCwd(cwdRaw);
@@ -110,7 +133,7 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>): P
   }
 
   const outcome = await deps.runtime.submit(parsed.data, {
-    clientName: 'mcp',
+    clientName,
     mainModel,
     projectRoot: cwdCheck.canonicalCwd,
   });
@@ -159,9 +182,10 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+    const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined);
     switch (request.params.name) {
       case 'mma_run':
-        return handleRun(deps, args);
+        return handleRun(deps, args, clientName);
       case 'mma_task_get': {
         const taskId = args.taskId;
         if (typeof taskId !== 'string') return errorResult('invalid_request', 'taskId (string) is required');

@@ -59,6 +59,17 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
+#### Client support at a glance
+
+| Client | Skills | SDLC commands | MCP server | How |
+|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | one plugin install (below) — or `sync-skills` |
+| Codex CLI | ✅ | — | ✅ any MCP client may connect to `/mcp` | `mma sync-skills --target=codex-cli` |
+| Cursor | ✅ | — | ✅ | `mma sync-skills --target=cursor` |
+| Gemini CLI | ✅ | — | ✅ | `mma sync-skills --target=gemini-cli` |
+
+Claude Code is the optimized path — it is the only client that can install skills, the SDLC commands, and the MCP server as **one** unit. Every other client gets the full skill set through `mma sync-skills`, and the daemon's `POST /mcp` endpoint is client-agnostic, so any MCP-capable client can connect to it directly. The engine itself treats all clients equally: the same `POST /task` API, the same task types, the same worker tiers.
+
 #### Claude Code: one-step plugin install (alternative)
 
 Claude Code users can install the skills **and** the MCP server in a single step, from this repo's plugin marketplace:
@@ -70,7 +81,7 @@ Claude Code users can install the skills **and** the MCP server in a single step
 
 That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 SDLC commands (`/mma:flow`, `/mma:breakout`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
-> Use either `mma sync-skills` **or** the plugin, not both — standalone and plugin skills coexist, so you would see both `/mma-audit` and `/mma:audit`. Run `mma disable --target=claude-code` before switching to the plugin.
+> Use either `mma sync-skills` **or** the plugin for Claude Code, not both. Claude Code namespaces plugin components rather than replacing standalone ones, so doing both leaves you with two copies of every skill (`/mma-audit` **and** `/mma:audit`) whose descriptions are near-identical — Claude then picks between them arbitrarily. `mma sync-skills` warns when it detects the plugin. To switch: `mma disable --target=claude-code`. Other clients are unaffected — this overlap is Claude-Code-only.
 
 ### 2. Choose your main model — intentionally (4.0.3+)
 

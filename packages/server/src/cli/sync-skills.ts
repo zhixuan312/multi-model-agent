@@ -37,6 +37,7 @@ import {
   type Client,
   type ManifestEntry,
 } from '../skill-install/manifest.js';
+import { findEnabledMmaPlugin, pluginConflictWarning } from '../skill-install/plugin-conflict.js';
 import {
   SUPPORTED_SKILLS,
   SUPPORTED_COMMANDS,
@@ -221,6 +222,16 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       log('No clients detected. Use --target=<client> or --all-targets.\n');
     }
     return ExitCode.SUCCESS;
+  }
+
+  // Plugin overlap: the mma plugin already ships these skills to Claude Code
+  // (namespaced /mma:audit …). Claude Code keeps BOTH copies, so installing
+  // standalone as well doubles every skill with a near-identical description.
+  // Warn rather than block — a user may deliberately want both while migrating
+  // — but make it impossible to end up with duplicates unknowingly.
+  const conflictPlugin = targets.includes('claude-code') ? findEnabledMmaPlugin(homeDir) : null;
+  if (conflictPlugin && !parsed.json) {
+    stderr(pluginConflictWarning(conflictPlugin));
   }
 
   let manifestEntries: ManifestEntry[];
