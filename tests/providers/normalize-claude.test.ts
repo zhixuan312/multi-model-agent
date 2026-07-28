@@ -120,4 +120,45 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
     expect(r.usage.cachedReadTokens).toBe(0);
     expect(r.usage.cachedNonReadTokens).toBe(900);
   });
+
+  // ── 'ok' must be earned by an explicit success result ──────────────────────
+  // A dead tier (unreachable proxy, auth rejection, crashed SDK subprocess)
+  // yields an empty or result-less event stream. Reporting 'ok' for that is
+  // what masked a dead implementer as a successful turn.
+  describe("dead-stream guard ('ok' is earned, never defaulted)", () => {
+    it('empty event stream is an error (sdk_no_result), not ok', () => {
+      const r = normalizeClaudeTurn([], { durationMs: 1, costUSD: 0 });
+      expect(r.terminationReason).toBe('error');
+      expect(r.errorCode).toBe('sdk_no_result');
+      expect(r.errorMessage).toMatch(/without a result event/);
+    });
+
+    it('assistant events without a terminal result event are an error', () => {
+      const r = normalizeClaudeTurn(
+        [asst('partial output before the stream died')],
+        { durationMs: 1, costUSD: 0 },
+      );
+      expect(r.terminationReason).toBe('error');
+      expect(r.errorCode).toBe('sdk_no_result');
+      // Partial output is preserved as evidence.
+      expect(r.output).toBe('partial output before the stream died');
+    });
+
+    it('guardTerminationReason takes precedence over the dead-stream guard', () => {
+      // Deadline-closed stream with zero events: the wall-clock guard owns the
+      // reason; sdk_no_result must not overwrite it.
+      const r = normalizeClaudeTurn([], { durationMs: 1, costUSD: 0, guardTerminationReason: 'time_exceeded' });
+      expect(r.terminationReason).toBe('time_exceeded');
+      expect(r.errorCode).toBeUndefined();
+    });
+
+    it('unknown non-success result subtype is an error (future SDK variants)', () => {
+      const r = normalizeClaudeTurn(
+        [result('error_some_future_variant')],
+        { durationMs: 1, costUSD: 0 },
+      );
+      expect(r.terminationReason).toBe('error');
+      expect(r.errorCode).toBe('sdk_error_some_future_variant');
+    });
+  });
 });

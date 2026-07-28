@@ -23,6 +23,10 @@ export class PreprocessFailure extends Error {
 export interface PreprocessorArgs {
   taskId: string;
   cwd: string;
+  /** The execution's abort signal — forwarded to any provider session a
+   *  preprocessor opens (research query-plan turn) so pre-pipeline work sits
+   *  inside the same cancellation scope as the pipeline itself. */
+  signal: AbortSignal;
   /** The task payload (input minus control fields). Preprocessors may mutate it
    *  in place (candidate injection, outputPath derivation, component resolution). */
   payload: Record<string, unknown>;

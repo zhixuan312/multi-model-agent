@@ -63,12 +63,13 @@ async function prepareResearchContext(
   researchCfg: ResearchConfig,
   taskId: string,
   cwd: string,
+  signal: AbortSignal,
 ): Promise<ResearchContext | null> {
   // --- Turn 1: generate a query plan via the implementer LLM ---
   const planSession = implProvider.openSession({
     cwd,
     wallClockDeadline: Date.now() + 60_000,  // 60s budget for plan generation
-    abortSignal: new AbortController().signal,
+    abortSignal: signal,
     taskId,
     taskIndex: 0,
   });
@@ -164,7 +165,7 @@ async function prepareResearchContext(
  * from actual sources, not training-data recall. On failure (unparseable plan,
  * orchestrator error) the task proceeds with LLM-only research.
  */
-export const researchPreprocessor: Preprocessor = async ({ taskId, cwd, payload, config, implementerProvider }) => {
+export const researchPreprocessor: Preprocessor = async ({ taskId, cwd, payload, config, implementerProvider, signal }) => {
   const researchPayload = payload as { prompt: string };
   const researchCtx = await prepareResearchContext(
     researchPayload.prompt,
@@ -173,6 +174,7 @@ export const researchPreprocessor: Preprocessor = async ({ taskId, cwd, payload,
     config.research,
     taskId,
     cwd,
+    signal,
   );
   if (!researchCtx) return {};
   return {

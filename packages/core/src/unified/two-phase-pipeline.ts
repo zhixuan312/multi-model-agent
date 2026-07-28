@@ -346,6 +346,39 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     });
     const implId = implSession.getSessionId();
 
+    // Dead-implementer guard: a turn with NO assistant events and NO output text
+    // did not execute. Reviewing it would let the reviewer fabricate an answer
+    // from an empty draft and the task would report done while the implementer
+    // tier was dead (unreachable proxy, auth rejection, crashed CLI). Fail
+    // terminally, carrying the real turn so callers see the provider's
+    // usage/duration/errorCode as evidence.
+    if (implTurn.turns === 0 && implTurn.output.trim() === '') {
+      if (wtManager && wtInfo) {
+        await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+      }
+      worktreeResolved = true;
+      const code = implTurn.errorCode ?? 'implementer_no_output';
+      const message = implTurn.errorMessage
+        ?? 'Implementer session produced no output (0 turns); the tier may be unreachable or misconfigured';
+      return {
+        status: 'failed',
+        implementerOutput: '',
+        implementerTurn: implTurn,
+        reviewerOutput: null,
+        reviewerRaw: null,
+        reviewerTurn: null,
+        reviewerParseError: null,
+        sessions: {
+          implementer: { tier: input.implementerTier, sessionId: implId, resumeSupported: implId !== null },
+          reviewer: null,
+        },
+        cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+        worktree: null,
+        completionPercent: 0,
+        failureReason: { code, message },
+      };
+    }
+
     // Deterministic apply hook (journal_record): apply the implementer's decision output to
     // the corpus BEFORE the review-skip decision. The effective output becomes the applied
     // {recorded,failed} JSON so downstream consumers + the reviewer see the applied result,

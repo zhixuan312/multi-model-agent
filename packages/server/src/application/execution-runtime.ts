@@ -25,6 +25,7 @@ import {
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 import type { CallerContext } from './caller-context.js';
+import { ExecutionScope } from './execution-scope.js';
 import type { ProjectRegistry } from './project-registry.js';
 import { SKILLS_DIR } from './skills-dir.js';
 import { buildGoalCondition } from './goal-conditions.js';
@@ -37,6 +38,10 @@ export interface ExecutionRuntimeDeps {
   bus: EnvelopeBus;
   taskRegistry: TaskRegistry;
   projectRegistry: ProjectRegistry;
+  /** Injectable agent resolver — tests substitute mock providers; production
+   *  uses the config-driven resolveAgent (same pattern as PipelineInput's
+   *  runAcceptanceCommand). */
+  resolveAgentFn?: (tier: AgentType, config: MultiModelConfig) => ResolvedAgent;
 }
 
 export type SubmitError =
@@ -75,10 +80,11 @@ export class ExecutionRuntime {
     // caller explicitly asked for it; otherwise the deterministic invariants decide.
     const callerForcedReview = input.reviewPolicy === 'reviewed';
 
+    const resolve = deps.resolveAgentFn ?? resolveAgent;
     let implAgent: ResolvedAgent, revAgent: ResolvedAgent;
     try {
-      implAgent = resolveAgent(implTier, deps.config);
-      revAgent = resolveAgent(revTier, deps.config);
+      implAgent = resolve(implTier, deps.config);
+      revAgent = resolve(revTier, deps.config);
     } catch (err) {
       return { ok: false, error: { kind: 'agent_not_configured', message: err instanceof Error ? err.message : 'Agent resolution failed' } };
     }
@@ -148,6 +154,12 @@ export class ExecutionRuntime {
     const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
     const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, ...payload } = input as Record<string, unknown>;
 
+    // Created BEFORE preprocessing: every provider session this execution opens
+    // (research query-plan turn included) receives scope.signal, and every
+    // acquired resource registers its release here — drained in the finally so
+    // a crashing pipeline can never leak a pin.
+    const scope = new ExecutionScope(taskId);
+
     try {
       process.stderr.write(
         `[mma] event=executor_started ts=${new Date().toISOString()} task=${taskId} route=${input.type}\n`,
@@ -165,6 +177,7 @@ export class ExecutionRuntime {
         try {
           pre = await preprocessor({
             taskId, cwd, payload, input, skills,
+            signal: scope.signal,
             config: deps.config,
             implementerProvider: implAgent.provider,
           });
@@ -187,7 +200,6 @@ export class ExecutionRuntime {
       // on server restart, and a stale block should not kill the task.
       const inputBlockIds = (input.contextBlockIds ?? []) as string[];
       let resolvedContextBlocks: string[] | undefined;
-      const pinnedIds: string[] = [];
       if (inputBlockIds.length > 0) {
         const blocks: string[] = [];
         for (const id of inputBlockIds) {
@@ -198,7 +210,10 @@ export class ExecutionRuntime {
           }
           blocks.push(content);
           contextBlockStore.pin(id);
-          pinnedIds.push(id);
+          // Scope-registered so a crashing pipeline releases the pin too —
+          // previously a runner crash left the block pinned forever (DELETE
+          // /context-blocks/:id would 409 until server restart).
+          scope.registerCleanup(() => contextBlockStore.unpin(id));
         }
         if (blocks.length > 0) resolvedContextBlocks = blocks;
       }
@@ -254,9 +269,6 @@ export class ExecutionRuntime {
         ...(resolvedContextBlocks && { contextBlocks: resolvedContextBlocks }),
       });
       const durationMs = Date.now() - startedAtMs;
-
-      // Unpin context blocks now that the pipeline is done
-      for (const id of pinnedIds) contextBlockStore.unpin(id);
 
       // Auto-register a terminal context block for read-only routes
       // so callers can reference the output in subsequent dispatches (delta mode).
@@ -400,6 +412,8 @@ export class ExecutionRuntime {
       process.stderr.write(
         `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
       );
+    } finally {
+      await scope.drain();
     }
   }
 }
