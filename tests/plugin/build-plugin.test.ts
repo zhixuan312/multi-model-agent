@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, writeFileSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { buildPlugin, PLUGIN_NAME, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
+import { buildPlugin, PLUGIN_NAME, MCP_SERVER_KEY, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
 const SKILL_COMPONENTS = SUPPORTED_SKILLS.map(pluginComponentName);
@@ -103,7 +103,7 @@ describe('buildPlugin', () => {
   it('registers the MCP server with headersHelper — never a baked-in token', () => {
     const r = build();
     const mcp = JSON.parse(readFileSync(join(out, '.mcp.json'), 'utf8'));
-    const entry = mcp.mcpServers[PLUGIN_NAME];
+    const entry = mcp.mcpServers[MCP_SERVER_KEY];
     expect(entry.type).toBe('http');
     expect(entry.url).toBe('http://127.0.0.1:7337/mcp');
     expect(entry.url).toBe(r.mcpUrl);
@@ -167,7 +167,7 @@ describe('buildPlugin', () => {
     const r = buildPlugin({ outDir: out, version: '9.9.9', port: 9999 });
     expect(r.mcpUrl).toBe('http://127.0.0.1:9999/mcp');
     const mcp = JSON.parse(readFileSync(join(out, '.mcp.json'), 'utf8'));
-    expect(mcp.mcpServers[PLUGIN_NAME].url).toBe('http://127.0.0.1:9999/mcp');
+    expect(mcp.mcpServers[MCP_SERVER_KEY].url).toBe('http://127.0.0.1:9999/mcp');
   });
 });
 

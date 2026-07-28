@@ -22,6 +22,20 @@ import { inlineIncludes } from '../skill-install/include-utils.js';
 export const PLUGIN_NAME = 'mma';
 
 /**
+ * Key for the bundled MCP server inside `.mcp.json`.
+ *
+ * Claude Code scopes a plugin's server as `<plugin>:<server>` in the UI and as
+ * `mcp__plugin_<plugin>_<server>__<tool>` in hook matchers, so naming it `mma`
+ * inside plugin `mma` renders "Plugin:mma:mma MCP Server" and
+ * `mcp__plugin_mma_mma__mma_run`. `daemon` is both shorter and accurate — it is
+ * the local HTTP daemon — giving `mma:daemon`.
+ *
+ * The TOOL names keep their `mma_` prefix: they are also served over the plain
+ * `POST /mcp` endpoint to non-plugin clients, where nothing namespaces them.
+ */
+export const MCP_SERVER_KEY = 'daemon';
+
+/**
  * Packaged skill name -> plugin component name.
  *
  * Packaged skills carry an `mma-` prefix because a standalone `sync-skills`
@@ -205,7 +219,7 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   // ${CLAUDE_PLUGIN_ROOT} is quoted because the install path may contain spaces.
   writeFile(path.join(out, '.mcp.json'), `${JSON.stringify({
     mcpServers: {
-      [PLUGIN_NAME]: {
+      [MCP_SERVER_KEY]: {
         type: 'http',
         url: mcpUrl,
         headersHelper: '"${CLAUDE_PLUGIN_ROOT}"/scripts/mma-mcp-headers.sh',
@@ -224,7 +238,7 @@ edit by hand: re-run the command to regenerate.
 
 - **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
 - **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
-- **1 MCP server** — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`
+- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`
 
 ## Requirements
 

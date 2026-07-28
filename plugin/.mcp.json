@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "mma": {
+    "daemon": {
       "type": "http",
       "url": "http://127.0.0.1:7337/mcp",
       "headersHelper": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/mma-mcp-headers.sh"

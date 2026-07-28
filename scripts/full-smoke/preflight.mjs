@@ -145,7 +145,7 @@ function pluginSurfaceGate() {
 
   // Auth: the artifact must register the MCP server WITHOUT embedding a token.
   const mcp = JSON.parse(readFileSync(join(pluginDir, '.mcp.json'), 'utf8'));
-  const server = mcp.mcpServers?.mma;
+  const server = mcp.mcpServers?.daemon;
   if (!server || server.type !== 'http' || !server.headersHelper) {
     throw new AbortError('plugin-surface', `plugin .mcp.json mma entry=${JSON.stringify(server)}`,
       'the MCP entry must be an http server using headersHelper');

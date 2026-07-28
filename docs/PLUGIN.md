@@ -10,7 +10,7 @@ produced, how the marketplace works, and how to publish it.
 |---|---|---|
 | Skills | 16 | `/mma:audit`, `/mma:delegate`, `/mma:router`, … (also auto-matched by intent) |
 | Commands | 2 | `/mma:flow`, `/mma:breakout` (explicit only) |
-| MCP server | 1 | tools `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel` |
+| MCP server | 1 (`mma:daemon`) | tools `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel` |
 
 ```
 plugin/
@@ -82,12 +82,19 @@ mma plugin build --out ./p --port 7337  # explicit
 The MCP entry uses `headersHelper`, not a static `headers` block:
 
 ```json
-{ "mcpServers": { "mma": {
+{ "mcpServers": { "daemon": {
   "type": "http",
   "url": "http://127.0.0.1:7337/mcp",
   "headersHelper": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/mma-mcp-headers.sh"
 } } }
 ```
+
+The server key is `daemon`, not `mma`: Claude Code scopes a plugin's server as
+`<plugin>:<server>`, so `mma` inside plugin `mma` would render
+"Plugin:mma:mma MCP Server" and a hook matcher of `mcp__plugin_mma_mma__mma_run`.
+`mma:daemon` is shorter and accurate. The TOOL names keep their `mma_` prefix —
+they are also served over the plain `POST /mcp` endpoint to non-plugin clients,
+where nothing namespaces them.
 
 The helper prints `{"Authorization": "Bearer <token>"}` on stdout, resolving the
 token at **connection time** from `$MMA_AUTH_TOKEN` → `$MMA_TOKEN_FILE` →
