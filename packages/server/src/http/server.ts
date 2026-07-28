@@ -202,6 +202,12 @@ export async function startServer(
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
       router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
+
+      // MCP adapter — a second transport over the SAME runtime (single daemon
+      // owns all live executions). Bearer auth + loopback apply like any route.
+      const { handleMcpRequest } = await import('../mcp/mcp-adapter.js');
+      const mcpDeps = { runtime, taskRegistry, store: executionStore, serverVersion: SERVER_VERSION };
+      router.register('POST', '/mcp', (req, res, _params, ctx) => handleMcpRequest(mcpDeps, req, res, ctx.body));
     } else {
       router.register('POST', '/task', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');

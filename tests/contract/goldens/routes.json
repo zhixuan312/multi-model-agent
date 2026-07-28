@@ -7,5 +7,6 @@
   "GET /task/:taskId",
   "POST /configure-provider",
   "POST /context-blocks",
+  "POST /mcp",
   "POST /task"
 ]

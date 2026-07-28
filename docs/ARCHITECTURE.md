@@ -17,13 +17,19 @@ multi-model-agent is organized around three axes. A request is a *path* through 
 Each stage decomposes into sub-layers that always run in this order. The pipeline is one-way.
 
 ```
-Stage 1 — INGRESS  (HTTP boundary — thin adapters only)
+Stage 1 — INGRESS  (transport boundary — thin adapters only)
   1.1  Transport          server/src/http/server.ts
   1.2  Authentication     server/src/http/auth.ts
   1.3  Unified handlers   server/src/http/handlers/unified-task.ts
                           (POST /task + GET /task/:taskId + DELETE /task/:taskId)
                           Builds a CallerContext (application/caller-context.ts)
                           from the request; owns no task logic.
+  1.4  MCP adapter        server/src/mcp/{mcp-adapter,tool-surface}.ts
+                          (POST /mcp, streamable HTTP, stateless; tools mma_run /
+                          mma_task_get / mma_task_wait / mma_task_cancel over the
+                          SAME ExecutionRuntime — MCP wire types never leave this
+                          directory; mma_run's request schema is generated from
+                          the task-input Zod union, never hand-written)
 
 Stage 2 — ADMISSION + PREPROCESSING  (application layer)
   2.1  Zod validation      core/src/unified/task-input-schema.ts (discriminated union,

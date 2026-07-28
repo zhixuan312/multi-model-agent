@@ -333,7 +333,18 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope; `DELETE /task/:id` requests cooperative cancellation (terminal `cancelled` unless completion won the race). Task IDs and terminal results survive daemon restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back `interrupted` with a retryable error — resubmit, nothing resumes.
+
+### MCP endpoint
+
+The same daemon exposes the same runtime over MCP at `POST /mcp` (streamable HTTP, stateless), for MCP clients that prefer tools over skills:
+
+```bash
+claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
+  --header "Authorization: Bearer $(mma print-token)"
+```
+
+Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_cancel`. `mma_run` returns short task results inline and a `{ taskId }` handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
