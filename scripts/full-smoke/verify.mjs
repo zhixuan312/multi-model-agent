@@ -169,6 +169,81 @@ export function verify(rec) {
     return out;
   }
 
+  // ─── Cooperative cancellation (#39): DELETE /task/:id ───
+  //     202 means REQUESTED, not stopped. The contract is the whole lifecycle:
+  //     the ack carries the flag, a poll taken immediately after still reports
+  //     `running` WITH the flag, and only once the runner confirms termination
+  //     does the task seal as `cancelled`. The reviewer must never have run —
+  //     cancellation has to stop the pipeline before review, or a half-finished
+  //     draft would get refined into a fabricated answer.
+  if (e.kind === 'cancel') {
+    const c = rec.cancel ?? {};
+    out.push(C('cancel-202', c.status === 202 ? 'PASS' : 'FAIL', `status=${c.status}`));
+    out.push(C('cancel-ack', c.body?.cancellationRequested === true && c.body?.status === 'running'
+      ? 'PASS' : 'FAIL', `body=${JSON.stringify(c.body)}`));
+
+    const p = rec.pollAfterCancel ?? {};
+    // Tolerate the race where the runner tore down between the ack and this poll.
+    const midFlight = p.status === 202 && p.body?.cancellationRequested === true;
+    const alreadyTerminal = p.status === 200;
+    out.push(C('cancel-flag-visible', midFlight || alreadyTerminal ? 'PASS' : 'FAIL',
+      `status=${p.status} flag=${p.body?.cancellationRequested}`));
+
+    out.push(C('terminal-cancelled', r?.task?.status === 'cancelled' ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status}`));
+    out.push(C('cancel-error-code', r?.error?.code === 'aborted' ? 'PASS' : 'FAIL',
+      `error=${JSON.stringify(r?.error)}`));
+    out.push(C('reviewer-skipped', r?.metrics?.reviewer === null ? 'PASS' : 'FAIL',
+      `reviewer=${JSON.stringify(r?.metrics?.reviewer)}`));
+
+    const rd = rec.repeatCancel ?? {};
+    out.push(C('cancel-idempotent',
+      rd.status === 200 && rd.body?.alreadyTerminal === true && rd.body?.status === 'cancelled'
+        ? 'PASS' : 'FAIL', `status=${rd.status} body=${JSON.stringify(rd.body)}`));
+
+    const keys = Object.keys(r ?? {}).sort();
+    out.push(C('layered-200',
+      JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task'])
+        ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
+    return out;
+  }
+
+  // ─── MCP adapter (#40): POST /mcp, second transport over the SAME runtime ───
+  if (e.kind === 'mcp') {
+    const m = rec.mcp ?? {};
+    const serverInfo = m.init?.json?.result?.serverInfo;
+    out.push(C('mcp-initialize', serverInfo?.name === 'multi-model-agent' ? 'PASS' : 'FAIL',
+      `serverInfo=${JSON.stringify(serverInfo)}`));
+
+    const toolNames = (m.tools?.json?.result?.tools ?? []).map((t) => t.name).sort();
+    const expected = ['mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_wait'];
+    out.push(C('mcp-tools', JSON.stringify(toolNames) === JSON.stringify(expected) ? 'PASS' : 'FAIL',
+      `tools=${toolNames.join(',')}`));
+
+    // mma_run's request schema is GENERATED from the task-input Zod union — one
+    // variant per task type. A hand-written schema would drift; this catches it.
+    const runTool = (m.tools?.json?.result?.tools ?? []).find((t) => t.name === 'mma_run');
+    const reqSchema = runTool?.inputSchema?.properties?.request;
+    const variants = reqSchema?.oneOf ?? reqSchema?.anyOf ?? [];
+    out.push(C('mcp-generated-schema', variants.length === 12 ? 'PASS' : 'FAIL',
+      `request variants=${variants.length} (expected 12, one per task type)`));
+
+    out.push(C('mcp-run-handle', m.taskId ? 'PASS' : 'FAIL',
+      `payload=${JSON.stringify(m.runPayload).slice(0, 160)}`));
+
+    const w = m.waitPayload;
+    out.push(C('mcp-terminal', w?.task?.status && w.task.status !== 'failed' ? 'PASS' : 'FAIL',
+      `status=${w?.task?.status} error=${JSON.stringify(w?.error)}`));
+
+    // THE load-bearing assertion: the same execution read over REST must be
+    // byte-identical — one runtime, two transports, no duplicated state.
+    const parity = m.restStatus === 200
+      && JSON.stringify(m.restEnvelope) === JSON.stringify(w);
+    out.push(C('mcp-rest-parity', parity ? 'PASS' : 'FAIL',
+      `restStatus=${m.restStatus} identical=${JSON.stringify(m.restEnvelope) === JSON.stringify(w)}`));
+    return out;
+  }
+
   // ─── Async-error tasks (F5): a task that fails AFTER the 202 (e.g. an unresolvable
   //     target path) must return the SAME 6-field envelope as any terminal result,
   //     with the failure in `error` — not a bare { code, message } callers can't detect

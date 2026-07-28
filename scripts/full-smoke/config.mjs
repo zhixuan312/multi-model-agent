@@ -1,7 +1,7 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 38 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 40 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
@@ -34,6 +34,15 @@ export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
 export const EVENTS_RAW_COLUMNS = ['event_id', 'install_id', 'received_at', 'route', 'terminal_status', 'schema_version'];
 
 export const APPROVED_DB_HOSTS = ['localhost', '127.0.0.1', '::1', ''];
+
+// Task types that isolate their work in a git worktree and MERGE it back
+// (TYPE_REGISTRY `worktree: true` in packages/core/src/unified/type-registry.ts).
+// Only these can be asserted with `merge-landed`: an in-place write route
+// (spec, plan, journal_record) never merges, so its output is legitimately
+// untracked — those artifacts live under `.mma/`, which real repos gitignore.
+// Asserting merge-back on an in-place route only ever passed by accident, when
+// the harness's own keepWorkspaceClean() happened to commit the file first.
+export const WORKTREE_MERGE_TYPES = new Set(['delegate', 'execute_plan']);
 
 export const POLL = {
   taskEveryMs: 1500, taskMaxMs: 15 * 60 * 1000,
@@ -79,6 +88,12 @@ export const POLL = {
 //      #21 delegate cd-chain    — worker instructed to cd /tmp && touch; hardened hook catches
 //      #22 audit read-only      — read-only sandbox completes normally without write capability
 //
+//   G. Lifecycle & transports (5.16.0):
+//      #39 cancel  — DELETE /task/:id: 202 requested → still-running poll carries the flag
+//                    → terminal `cancelled` (error.code=aborted, reviewer never ran)
+//      #40 mcp     — POST /mcp: initialize → tools/list → mma_run → mma_task_wait, and the
+//                    SAME execution polled over REST returns an identical envelope
+//
 //   Cross-cutting invariant (verify.mjs check ①b `reviewer-degrade`, not a scenario):
 //      Whenever a live reviewer flakes on output format (emits non-JSON), the task must
 //      degrade — error:null, status done_with_concerns, output.summary carries the
@@ -93,6 +108,7 @@ export const POLL = {
 //   - context-blocks → 0 (synchronous state op, no worker run)
 //   - research       → 0 (aggregation fan-out; no per-task wire record)
 //   - error cases    → 0 (rejected at validation, no worker dispatched)
+//   - cancelled      → 0 (a cancelled execution seals no wire record)
 //   - all others     → 1
 // ─────────────────────────────────────────────────────────────────────────────
 export const SCENARIOS = [
@@ -210,4 +226,24 @@ export const SCENARIOS = [
   //    task's own worktree is cleaned — proving no worktree leaks. seedOrphan drives the
   //    seed + filesystem assertions in index.mjs (not verify.mjs).
   { id: 38, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', seedOrphan: true, emits: 1 },
+
+  // O. Cooperative cancellation (5.16.0) — DELETE /task/:taskId.
+  //    Cancellation is REQUESTED, not instantaneous: the 202 acknowledges intent and the
+  //    task keeps running until the runner confirms termination, so #39 asserts the whole
+  //    wire lifecycle — 202 { cancellationRequested }, a poll that still reports running
+  //    WITH the flag, then terminal `cancelled` carrying error.code=aborted and a null
+  //    reviewer (cancellation must stop the pipeline BEFORE review, never let the reviewer
+  //    refine a half-finished draft). Repeat DELETE after terminal must be idempotent.
+  //    Emits 0: a cancelled execution seals no wire record.
+  { id: 39, type: 'investigate', tier: 'complex', kind: 'cancel', emits: 0 },
+
+  // P. MCP adapter (5.16.0) — POST /mcp, the second transport over the SAME runtime.
+  //    #40 drives a real JSON-RPC exchange: initialize → tools/list (exactly the four
+  //    control tools, with mma_run's request schema GENERATED from the task-input union,
+  //    one variant per task type) → tools/call mma_run → mma_task_wait to terminal. The
+  //    load-bearing assertion is CROSS-SURFACE PARITY: the same execution polled over REST
+  //    must return a byte-identical envelope, proving one runtime with two transports and
+  //    no duplicated state. Emits 1 — an MCP-submitted task seals a wire record like any
+  //    other, with client=mcp.
+  { id: 40, type: 'investigate', tier: 'complex', kind: 'mcp', emits: 1 },
 ];

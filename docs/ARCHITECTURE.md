@@ -112,8 +112,8 @@ Per-type fill of the stack:
 | `journal_recall` | reviewed | no | read-only | mma-journal-recall |
 | `journal_record` | reviewed | no | cwd-only | mma-journal-record |
 | `orchestrate` | none | no | cwd-only | mma-orchestrate |
-| `spec` | reviewed | yes | cwd-only | mma-spec |
-| `plan` | reviewed | yes | cwd-only | mma-plan |
+| `spec` | reviewed | no (in-place) | cwd-only | mma-spec |
+| `plan` | reviewed | no (in-place) | cwd-only | mma-plan |
 
 Two invariants the layered stack enforces:
 
@@ -184,7 +184,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 
 **Restart** — Task IDs and terminal results survive in `<stateDir>/executions.db`. On boot (before the listener accepts), `reconcileOnBoot` finds pending records owned by dead daemons, SIGKILLs any surviving detached codex worker group (verified by command line so a reused pid is never signalled), then marks each execution `interrupted` with a retryable `daemon_restarted` envelope. Execution is never resumed — the caller retries with a new task. Dev watch mode sets `MMA_DEV_NO_RECONCILE=1` so tsx restarts don't kill in-flight work.
 
-**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
+**Same-repo dispatch serialization:** `delegate` and `execute_plan` are the only types with `worktree: true` in `TYPE_REGISTRY`; they isolate their work in git worktrees and merge back. The other write types (`spec`, `plan`, `journal_record`, `orchestrate`) run **in place** — their artifacts land under `.mma/`, which repos gitignore, so there is nothing to merge and nothing to commit. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
 
 ## Testing layers
 

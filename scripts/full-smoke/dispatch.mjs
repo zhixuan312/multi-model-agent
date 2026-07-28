@@ -1,6 +1,98 @@
-import { dispatch, getTask } from './http.mjs';
+import { dispatch, getTask, cancelTask, mcpCall } from './http.mjs';
 import { POLL, BASE_URL } from './config.mjs';
 import { readToken } from './http.mjs';
+
+/** A prompt long enough that the task is still running when the cancel lands —
+ *  cancelling an already-finished task would assert nothing. */
+const LONG_RUNNING_PROMPT =
+  'Read every file under src/ and write an exhaustive, multi-paragraph analysis of '
+  + 'each function: its inputs, outputs, edge cases, failure modes, and how it '
+  + 'interacts with every other function. Be maximally detailed and thorough.';
+
+/**
+ * #39 — cooperative cancellation over the wire.
+ *
+ * Cancellation is REQUESTED, not instantaneous, so this walks the whole lifecycle:
+ * dispatch → let it get into the implementer phase → DELETE (202 + flag) → poll
+ * once (still running, flag visible) → poll to terminal `cancelled` → repeat
+ * DELETE (idempotent, 200 alreadyTerminal).
+ */
+export async function runCancelScenario(ctx) {
+  const { status: dStatus, json: dJson } = await dispatch(
+    ctx.token, 'investigate',
+    { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } },
+    ctx.dir,
+  );
+  if (dStatus !== 202 || !dJson.taskId) {
+    throw new Error(`cancel scenario dispatch failed: HTTP ${dStatus} ${JSON.stringify(dJson)}`);
+  }
+  const taskId = dJson.taskId;
+
+  // Let the implementer actually start; cancelling pre-dispatch tests a different path.
+  await new Promise((r) => setTimeout(r, 4000));
+
+  const del = await cancelTask(ctx.token, taskId);
+  const pollAfterCancel = await getTask(ctx.token, taskId);
+  const { envelope } = await pollTask(ctx.token, taskId);
+  const repeatDel = await cancelTask(ctx.token, taskId);
+
+  return { taskId, cancel: del, pollAfterCancel, envelope, repeatCancel: repeatDel };
+}
+
+/**
+ * #40 — the MCP adapter as a second transport over the SAME runtime.
+ *
+ * Drives a real JSON-RPC exchange and then re-reads the identical execution over
+ * REST. Parity is the load-bearing assertion: one runtime, two transports.
+ */
+export async function runMcpScenario(ctx) {
+  const init = await mcpCall(ctx.token, 'initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'full-smoke', version: '1.0.0' },
+  }, 1);
+
+  const tools = await mcpCall(ctx.token, 'tools/list', undefined, 2);
+
+  const run = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_run',
+    arguments: {
+      cwd: ctx.dir,
+      mainModel: 'claude-opus-4-7',
+      request: {
+        type: 'investigate',
+        prompt: 'In src/math.ts, does divide handle a zero divisor? Answer in one sentence.',
+        target: { paths: ['src/'] },
+      },
+    },
+  }, 3);
+
+  const parseToolText = (r) => {
+    const text = r?.json?.result?.content?.[0]?.text;
+    try { return text ? JSON.parse(text) : null; } catch { return null; }
+  };
+  const runPayload = parseToolText(run);
+  const taskId = runPayload?.taskId ?? null;
+  if (!taskId) {
+    return { init, tools, run, runPayload, taskId: null, waitPayload: null, restEnvelope: null };
+  }
+
+  const wait = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_task_wait',
+    arguments: { taskId, timeoutMs: 240000 },
+  }, 4);
+  let waitPayload = parseToolText(wait);
+
+  // mma_task_wait is bounded; if the task outlives the cap, finish over REST so
+  // the parity assertion still compares two terminal reads of one execution.
+  if (!waitPayload?.task) {
+    const { envelope } = await pollTask(ctx.token, taskId);
+    waitPayload = envelope;
+  }
+
+  const rest = await getTask(ctx.token, taskId);
+  return { init, tools, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
+}
 
 // Returns { type, body } for a scenario given run context.
 export function buildRequest(spec, ctx) {

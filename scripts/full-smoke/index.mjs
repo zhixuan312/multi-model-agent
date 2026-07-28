@@ -33,8 +33,8 @@ function keepWorkspaceClean(dir) {
   } catch { /* best-effort */ }
 }
 import { createProject } from './fixtures.mjs';
-import { SCENARIOS } from './config.mjs';
-import { runDispatch, pollTask } from './dispatch.mjs';
+import { SCENARIOS, WORKTREE_MERGE_TYPES } from './config.mjs';
+import { runDispatch, pollTask, runCancelScenario, runMcpScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
@@ -86,6 +86,30 @@ async function runScenario(spec, ctx, log) {
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
       log(`#${spec.id}  ${spec.type ?? '?'}  → HTTP ${res.status}`);
+      return;
+    }
+
+    // Cooperative cancellation: dispatch, cancel mid-flight, walk to terminal.
+    if (spec.kind === 'cancel') {
+      const res = await runCancelScenario(ctx);
+      const rec = normalize(spec, { response: res.envelope });
+      rec.cancel = res.cancel;
+      rec.pollAfterCancel = res.pollAfterCancel;
+      rec.repeatCancel = res.repeatCancel;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      return;
+    }
+
+    // MCP adapter: JSON-RPC round trip + REST cross-surface parity.
+    if (spec.kind === 'mcp') {
+      const res = await runMcpScenario(ctx);
+      const rec = normalize(spec, { response: res.waitPayload });
+      rec.mcp = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  mcp  → taskId=${res.taskId} status=${res.waitPayload?.task?.status}`);
       return;
     }
 
@@ -144,7 +168,13 @@ async function runScenario(spec, ctx, log) {
     // landed, not merely that the engine claimed merged:true. Combined with the fixture's failing
     // pre-commit hook, this catches the silent-drop signature (merged:true + file absent from HEAD)
     // that a commit gate or missing git identity used to cause. HARD check.
-    if (spec.kind === 'write' && !spec.nonGitCwd && spec.reviewPolicy !== 'none' && spec.type !== 'journal_record') {
+    // Only worktree-merging types can be asserted here. spec/plan/journal_record
+    // write IN PLACE (TYPE_REGISTRY worktree:false) — there is no merge-back, and
+    // their `.mma/` artifacts are intentionally untracked. Those routes get the
+    // `artifact-on-disk` check below instead, which is the assertion that
+    // actually catches a dropped output for them.
+    if (spec.kind === 'write' && !spec.nonGitCwd && spec.reviewPolicy !== 'none'
+        && WORKTREE_MERGE_TYPES.has(spec.type)) {
       const fc = rec?.response?.output?.filesChanged;
       if (Array.isArray(fc) && fc.length > 0) {
         // filesChanged may arrive repo-relative (git-diff) OR as an absolute worktree path (the
@@ -175,6 +205,29 @@ async function runScenario(spec, ctx, log) {
           detail: missing.length === 0
             ? `all ${fc.length} reported file(s) tracked in the target repo`
             : `${missing.length}/${fc.length} reported file(s) NOT in the target tree — silent merge-back drop: ${missing.map(norm).join(', ')}`,
+        });
+      }
+    }
+
+    // In-place write routes (spec, plan — TYPE_REGISTRY worktree:false) never merge
+    // back, so the equivalent "did the output actually land" proof is the file
+    // existing ON DISK at the declared outputPath. This is the assertion that
+    // catches a silently dropped artifact for these routes; git-tracking is the
+    // wrong question, since `.mma/` is gitignored in real repos. HARD check.
+    if (spec.kind === 'write' && !WORKTREE_MERGE_TYPES.has(spec.type)
+        && (spec.type === 'spec' || spec.type === 'plan')) {
+      const fc = rec?.response?.output?.filesChanged;
+      if (Array.isArray(fc) && fc.length > 0) {
+        // Resolve each reported path against the target dir; macOS reports both
+        // /var/... and /private/var/... forms for the same file, so compare on
+        // existence rather than string shape.
+        const landed = fc.filter((f) => existsSync(f) || existsSync(join(ctx.dir, f)));
+        checks.push({
+          checkId: 'artifact-on-disk',
+          status: landed.length > 0 ? 'PASS' : 'FAIL',
+          detail: landed.length > 0
+            ? `${landed.length}/${fc.length} reported artifact(s) present on disk`
+            : `NONE of the ${fc.length} reported artifact(s) exist on disk — output silently dropped: ${fc.join(', ')}`,
         });
       }
     }
@@ -311,7 +364,30 @@ try {
       [36],          // journal_record mixed shape (records + prompt) → 400
       [37],          // journal_record empty records[] → 400
       [38],          // worktree lifecycle: seed orphan → reaper reaps it + own worktree cleaned (no leak)
+      [39],          // cancellation: DELETE /task/:id → 202 requested → terminal cancelled
+      [40],          // MCP adapter: JSON-RPC round trip + REST cross-surface parity
     ];
+
+    // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
+    // added to SCENARIOS but not to a thread would simply never run — a SILENT
+    // coverage hole in a release gate (exactly how #39/#40 were dropped from a
+    // full sweep while passing under --only). Fail loudly instead.
+    {
+      const scheduled = new Set(phase2Threads.flat());
+      const unscheduled = SCENARIOS
+        .map((s) => s.id)
+        .filter((id) => id !== 1 && !scheduled.has(id));   // #1 runs in phase 1
+      if (unscheduled.length > 0) {
+        console.error(`[smoke] FATAL: scenario(s) ${unscheduled.join(', ')} are in SCENARIOS but not in phase2Threads — `
+          + 'they would never run. Add them to the schedule.');
+        process.exit(2);
+      }
+      const orphaned = [...scheduled].filter((id) => !SCENARIOS.some((s) => s.id === id));
+      if (orphaned.length > 0) {
+        console.error(`[smoke] FATAL: phase2Threads schedules unknown scenario id(s) ${orphaned.join(', ')}.`);
+        process.exit(2);
+      }
+    }
 
     // Filter threads if --only is active
     const filterThread = (thread) => {
