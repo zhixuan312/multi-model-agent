@@ -4,6 +4,12 @@
 //
 // Auth precedence:
 //   1. cfg.apiKey (or value resolved from cfg.apiKeyEnv at factory time).
+//      With a cfg.baseUrl set it is sent as BOTH ANTHROPIC_AUTH_TOKEN
+//      (Authorization: Bearer — Ollama Cloud, z.ai, DeepSeek, Kimi, MiniMax)
+//      and ANTHROPIC_API_KEY (x-api-key — gateways fronting api.anthropic.com),
+//      so any Anthropic-compatible endpoint finds the header it expects.
+//      Without a baseUrl it goes to api.anthropic.com as ANTHROPIC_API_KEY only.
+//      Either way an inherited ANTHROPIC_* value is cleared first.
 //   2. ~/.claude OAuth (Claude Max subscription) → ANTHROPIC_AUTH_TOKEN.
 //   3. Otherwise the SDK reads ANTHROPIC_API_KEY from env itself.
 

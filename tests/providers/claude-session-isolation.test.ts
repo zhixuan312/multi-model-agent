@@ -56,6 +56,78 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
     expect(keys).toEqual(['KEY-A', 'KEY-B']);
   });
 
+  const sessionOpts = (taskId: string) => ({
+    cwd: '/tmp',
+    wallClockDeadline: Date.now() + 60000,
+    abortSignal: new AbortController().signal,
+    taskId,
+    taskIndex: 0,
+  }) as any;
+
+  it('no baseUrl — key goes out as x-api-key only (Bearer is reserved for OAuth)', async () => {
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+    process.env.ANTHROPIC_AUTH_TOKEN = 'INHERITED-TOKEN';
+
+    await new ClaudeSession({ model: 'm', opts: sessionOpts('direct'), apiKey: 'KEY' }).send('hi');
+
+    const env = mockSdk.__capturedQueries[0].env;
+    expect(env.ANTHROPIC_API_KEY).toBe('KEY');
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it('baseUrl — key goes out as BOTH Bearer and x-api-key so any proxy finds its header', async () => {
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+
+    await new ClaudeSession({
+      model: 'm',
+      opts: sessionOpts('proxied'),
+      apiKey: 'PROXY-KEY',
+      baseUrl: 'https://ollama.com',
+    }).send('hi');
+
+    const env = mockSdk.__capturedQueries[0].env;
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('PROXY-KEY');
+    expect(env.ANTHROPIC_API_KEY).toBe('PROXY-KEY');
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://ollama.com');
+  });
+
+  it('baseUrl without a configured key — inherited ANTHROPIC_* never leaks to the proxy', async () => {
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+    process.env.ANTHROPIC_API_KEY = 'INHERITED-ANTHROPIC-KEY';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'INHERITED-TOKEN';
+
+    await new ClaudeSession({
+      model: 'm',
+      opts: sessionOpts('proxied-nokey'),
+      baseUrl: 'https://api.z.ai/api/anthropic',
+    }).send('hi');
+
+    const env = mockSdk.__capturedQueries[0].env;
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://api.z.ai/api/anthropic');
+  });
+
+  it('OAuth subscription token wins and no inherited api key rides along', async () => {
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+    process.env.ANTHROPIC_API_KEY = 'INHERITED-ANTHROPIC-KEY';
+
+    await new ClaudeSession({
+      model: 'm',
+      opts: sessionOpts('oauth'),
+      oauthAccessToken: 'OAUTH-TOKEN',
+    }).send('hi');
+
+    const env = mockSdk.__capturedQueries[0].env;
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('OAUTH-TOKEN');
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
   it('cwd-only sandboxPolicy wires PreToolUse confinement hook into SDK query', async () => {
     const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
     mockSdk.__capturedQueries.length = 0;

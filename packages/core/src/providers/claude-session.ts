@@ -131,6 +131,38 @@ export class ClaudeSession implements Session {
       ? { thinking: { type: 'disabled' } }
       : this.args.effort ? { effort: this.args.effort } : {};
 
+    // Auth env. `type: 'claude'` spans both api.anthropic.com and any
+    // Anthropic-compatible proxy, and they differ in auth header: the real API
+    // takes x-api-key (ANTHROPIC_API_KEY) only, while proxies vary — Ollama
+    // Cloud, z.ai, DeepSeek, Kimi and MiniMax all document Authorization:
+    // Bearer (ANTHROPIC_AUTH_TOKEN), but gateways fronting api.anthropic.com
+    // forward x-api-key. Sending only the wrong one surfaces as a hung turn
+    // rather than an error, so against a custom baseUrl the key goes out as
+    // both and each endpoint reads the header it knows (the SDK merges the two
+    // auth headers rather than picking one). No baseUrl means api.anthropic.com,
+    // where Bearer is reserved for OAuth — key stays on x-api-key alone.
+    const proxied = Boolean(this.args.baseUrl);
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
+    };
+    // Cleared unconditionally when proxied: an inherited Anthropic key must
+    // never outrank the configured one, nor leak to a third-party endpoint.
+    if (proxied || this.args.apiKey) {
+      delete env.ANTHROPIC_API_KEY;
+      delete env.ANTHROPIC_AUTH_TOKEN;
+    }
+    if (this.args.apiKey) {
+      env.ANTHROPIC_API_KEY = this.args.apiKey;
+      if (proxied) env.ANTHROPIC_AUTH_TOKEN = this.args.apiKey;
+    }
+    // Subscription OAuth: drop any inherited key too, or api.anthropic.com sees
+    // an x-api-key beside the Bearer token and bills the key instead of the plan.
+    if (this.args.oauthAccessToken) {
+      delete env.ANTHROPIC_API_KEY;
+      env.ANTHROPIC_AUTH_TOKEN = this.args.oauthAccessToken;
+    }
+
     const q = query({
       prompt: promptIterable(),
       options: {
@@ -138,12 +170,7 @@ export class ClaudeSession implements Session {
         permissionMode: 'bypassPermissions',
         cwd: this.args.opts.cwd,
         abortSignal: this.args.opts.abortSignal,
-        env: {
-          ...process.env,
-          ...(this.args.apiKey && { ANTHROPIC_API_KEY: this.args.apiKey }),
-          ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
-          ...(this.args.oauthAccessToken && { ANTHROPIC_AUTH_TOKEN: this.args.oauthAccessToken }),
-        },
+        env,
         ...skillOptions,
         ...effortOptions,
         ...(this.sessionId && { resume: this.sessionId }),
