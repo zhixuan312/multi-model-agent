@@ -17,6 +17,7 @@ import type { HandlerDeps } from './handler-deps.js';
 import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
+import { expandHome } from '../expand-home.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
@@ -99,14 +100,37 @@ export async function startServer(
 
   const router = new RouteDispatcher<RawHandler>();
 
-  // ── Create shared registries ───────────────────────────────────────────────
+  // ── Create shared registries + durable execution store ────────────────────
   const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
   const { ProjectRegistry } = await import('../application/project-registry.js');
+  const { ExecutionStore } = await import('../application/execution-store.js');
+  const { reconcileOnBoot } = await import('../application/reconcile.js');
 
   // batchTtlMs bounds how long terminal task entries (with their full result
   // envelope) are retained for polling before eviction — prevents unbounded
   // growth of the task registry on a long-running server.
   const taskRegistry = new TaskRegistry({ ttlMs: config.server.limits.batchTtlMs });
+
+  // Durable execution records: task IDs + terminal results survive a restart;
+  // the same TTL governs both the in-memory entries and the persistent rows.
+  const executionStore = new ExecutionStore({
+    dbPath: join(expandHome(config.server.stateDir), 'executions.db'),
+    ttlMs: config.server.limits.batchTtlMs,
+  });
+
+  // Boot reconciliation — BEFORE the listener accepts requests: fence worker
+  // process groups that survived a dead daemon, then mark their executions
+  // `interrupted` (retryable). Guarded for dev watch mode (PD-2): under
+  // `tsx watch` every file save restarts the process, and reconciling there
+  // would SIGKILL in-flight work on each keystroke.
+  if (process.env.MMA_DEV_NO_RECONCILE !== '1') {
+    const outcome = reconcileOnBoot(executionStore);
+    if (outcome.interrupted > 0 || outcome.fencedWorkers > 0) {
+      process.stderr.write(
+        `[mma] event=boot_reconcile ts=${new Date().toISOString()} interrupted=${outcome.interrupted} fenced_workers=${outcome.fencedWorkers} pruned=${outcome.prunedExpired}\n`,
+      );
+    }
+  }
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
@@ -166,17 +190,26 @@ export async function startServer(
         }),
       }));
 
+      // Persist detached codex worker pids so boot reconciliation can fence
+      // stragglers that outlive a crashed daemon.
+      const { WorkerPidRecorder } = await import('../application/worker-pid-recorder.js');
+      bus.subscribe(new WorkerPidRecorder(executionStore));
+
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
-      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry });
-      const deps: HandlerDeps = { runtime, taskRegistry };
-      const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore });
+      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore };
+      const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
+      router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
     } else {
       router.register('POST', '/task', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
       router.register('GET', '/task/:taskId', (_req, res) => {
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
+      });
+      router.register('DELETE', '/task/:taskId', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
     }
@@ -220,7 +253,10 @@ export async function startServer(
   return {
     port,
     serverAddress,
-    stop: () => listener.stop(),
+    stop: async () => {
+      await listener.stop();
+      executionStore.close();
+    },
     taskRegistry,
     projectRegistry,
     serverStartedAt,

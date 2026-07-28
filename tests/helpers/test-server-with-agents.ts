@@ -36,6 +36,9 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         maxContextBlocksPerProject: 32,
         shutdownDrainMs: 30_000,
       },
+      // Isolated per-process state dir — server tests must never touch the
+      // developer's real ~/.mma/state (executions.db).
+      stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     },
     ...overrides,
   } as MultiModelConfig;

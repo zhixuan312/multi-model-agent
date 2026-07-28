@@ -26,7 +26,9 @@ import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/
 import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 import type { CallerContext } from './caller-context.js';
 import { ExecutionScope } from './execution-scope.js';
+import type { ExecutionStore } from './execution-store.js';
 import type { ProjectRegistry } from './project-registry.js';
+import type { TaskEntry } from '@zhixuan92/multi-model-agent-core';
 import { SKILLS_DIR } from './skills-dir.js';
 import { buildGoalCondition } from './goal-conditions.js';
 import { buildErrorEnvelope, tryParseJson } from './result-shape.js';
@@ -38,6 +40,9 @@ export interface ExecutionRuntimeDeps {
   bus: EnvelopeBus;
   taskRegistry: TaskRegistry;
   projectRegistry: ProjectRegistry;
+  /** Durable execution records — admission is persisted before the handle is
+   *  returned; terminal transitions mirror the in-memory registry. */
+  store: ExecutionStore;
   /** Injectable agent resolver — tests substitute mock providers; production
    *  uses the config-driven resolveAgent (same pattern as PipelineInput's
    *  runAcceptanceCommand). */
@@ -53,8 +58,35 @@ export type SubmitResult =
   | { ok: true; taskId: string }
   | { ok: false; error: SubmitError };
 
+export type CancelResult =
+  | { outcome: 'not_found' }
+  | { outcome: 'terminal'; entry: TaskEntry }
+  | { outcome: 'requested'; entry: TaskEntry };
+
 export class ExecutionRuntime {
+  /** Live abort channels, keyed by taskId. An entry exists from admission until
+   *  the execution's finally block — cancel() fires the scope's signal, the
+   *  provider guards terminate the worker process group, and the terminal CAS
+   *  decides between cancelled and a completed/failed that won the race. */
+  private readonly liveScopes = new Map<string, ExecutionScope>();
+
   constructor(private readonly deps: ExecutionRuntimeDeps) {}
+
+  /**
+   * Request cooperative cancellation. 202-semantics: 'requested' means the
+   * abort channel fired, not that the work already stopped — the task stays
+   * `pending` (with cancellationRequestedAt set) until the runner confirms
+   * termination, then transitions to `cancelled` unless completion won the
+   * race. Idempotent; terminal tasks report 'terminal' with their final entry.
+   */
+  cancel(taskId: string): CancelResult {
+    const res = this.deps.taskRegistry.requestCancel(taskId);
+    if (res.outcome === 'not_found') return { outcome: 'not_found' };
+    if (res.outcome === 'terminal') return { outcome: 'terminal', entry: res.entry! };
+    this.deps.store.requestCancel(taskId);
+    this.liveScopes.get(taskId)?.abort('cancel requested by caller');
+    return { outcome: 'requested', entry: res.entry! };
+  }
 
   /**
    * Synchronous admission: resolve tiers/agents/skills, reserve the project,
@@ -105,9 +137,15 @@ export class ExecutionRuntime {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    // Register task in TaskRegistry; the adapter responds 202 immediately.
+    // Register task in TaskRegistry AND persist the admission record — a
+    // handle that exists is always a handle that survives a restart. The
+    // scope (the live abort channel) is created here too, so a cancel that
+    // lands before the async executor starts still aborts the execution.
     const taskId = randomUUID();
     deps.taskRegistry.register(taskId, cwd, input.type);
+    deps.store.admit(taskId, input.type, cwd, process.pid);
+    const scope = new ExecutionScope(taskId);
+    this.liveScopes.set(taskId, scope);
 
     // Emit task-created diagnostic for observability.
     deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { batch_id: taskId, route: input.type } });
@@ -116,7 +154,7 @@ export class ExecutionRuntime {
     const startedAtMs = Date.now();
     setImmediate(() => {
       void this.execute({
-        taskId, input, caller, cwd, pc, skills,
+        taskId, input, caller, cwd, pc, skills, scope,
         implAgent, revAgent, implTier, revTier,
         reviewPolicy, callerForcedReview, startedAtMs,
         worktree: typeConfig.worktree,
@@ -134,6 +172,11 @@ export class ExecutionRuntime {
     cwd: string;
     pc: ProjectContext;
     skills: SkillPair;
+    /** Created at admission (before preprocessing): every provider session this
+     *  execution opens receives scope.signal, and every acquired resource
+     *  registers its release here — drained in the finally so a crashing
+     *  pipeline can never leak a pin. */
+    scope: ExecutionScope;
     implAgent: ResolvedAgent;
     revAgent: ResolvedAgent;
     implTier: AgentType;
@@ -146,7 +189,7 @@ export class ExecutionRuntime {
   }): Promise<void> {
     const { deps } = this;
     const {
-      taskId, input, caller, cwd, pc, implAgent, revAgent,
+      taskId, input, caller, cwd, pc, scope, implAgent, revAgent,
       implTier, revTier, reviewPolicy, callerForcedReview, startedAtMs,
     } = run;
     let { skills } = run;
@@ -154,13 +197,24 @@ export class ExecutionRuntime {
     const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
     const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, ...payload } = input as Record<string, unknown>;
 
-    // Created BEFORE preprocessing: every provider session this execution opens
-    // (research query-plan turn included) receives scope.signal, and every
-    // acquired resource registers its release here — drained in the finally so
-    // a crashing pipeline can never leak a pin.
-    const scope = new ExecutionScope(taskId);
+    // Terminal cancelled path — shared by the pre-start check, the pipeline
+    // aborted mapping, and the crash path when the abort raced an error.
+    const finishCancelled = (durationMs: number, envelope: Record<string, unknown>) => {
+      deps.taskRegistry.cancel(taskId, envelope);
+      deps.store.cancel(taskId, JSON.stringify(envelope));
+      deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_cancelled', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs } });
+      process.stderr.write(
+        `[mma] event=task_cancelled ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
+      );
+    };
 
     try {
+      // Cancelled before the executor even started (cancel raced setImmediate):
+      // finish immediately with zero provider sessions.
+      if (scope.signal.aborted) {
+        finishCancelled(0, buildErrorEnvelope(taskId, input.type, { code: 'aborted', message: 'Execution cancelled by caller before it started' }, 'cancelled'));
+        return;
+      }
       process.stderr.write(
         `[mma] event=executor_started ts=${new Date().toISOString()} task=${taskId} route=${input.type}\n`,
       );
@@ -183,7 +237,9 @@ export class ExecutionRuntime {
           });
         } catch (err) {
           if (err instanceof PreprocessFailure) {
-            deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message }));
+            const envelope = buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message });
+            deps.taskRegistry.fail(taskId, envelope);
+            deps.store.fail(taskId, JSON.stringify(envelope));
             return;
           }
           throw err;
@@ -243,6 +299,7 @@ export class ExecutionRuntime {
         type: input.type,
         implementerSkill: skills.implement,
         reviewerSkill: skills.review,
+        abortSignal: scope.signal,
         taskPayload: enrichedPayload,
         implementerProvider: implAgent.provider,
         reviewerProvider: revAgent.provider,
@@ -297,6 +354,13 @@ export class ExecutionRuntime {
       const mainEquivalentUSD = mainCard ? priceTokens(totalUsage, mainCard) : null;
       const costDeltaVsMain = mainEquivalentUSD !== null ? mainEquivalentUSD - totalActualCostUSD : null;
 
+      // Cancellation mapping: an aborted pipeline surfaces as status 'failed'
+      // with failureReason 'aborted'. When OUR scope fired the abort, the
+      // terminal state is `cancelled` — the caller asked for this outcome, it
+      // is not a failure. A pipeline that finished despite a late cancel won
+      // the race and keeps its real status (first writer wins).
+      const wasCancelled = result.status === 'failed' && scope.signal.aborted;
+
       const resultObj = {
         task: {
           taskId,
@@ -304,7 +368,7 @@ export class ExecutionRuntime {
           ...(input.type === 'audit' && (input as Record<string, unknown>).subtype
             ? { subtype: (input as Record<string, unknown>).subtype }
             : {}),
-          status: result.status,
+          status: wasCancelled ? ('cancelled' as const) : result.status,
         },
         output: {
           // When the reviewer parsed cleanly, its refined structured output IS the answer.
@@ -366,7 +430,10 @@ export class ExecutionRuntime {
       };
 
       // Emit telemetry via the bus — TelemetryUploader picks up the
-      // sealed envelope snapshot and enqueues a wire record.
+      // sealed envelope snapshot and enqueues a wire record. A cancelled
+      // execution rides as its raw pipeline status (wire schema v6 has no
+      // cancelled state; the caller-initiated outcome lives in the task
+      // envelope above, not the billing record).
       try {
         const implModelId = deps.config.agents[implTier]?.model ?? 'unknown';
         const revModelId = deps.config.agents[revTier]?.model ?? 'unknown';
@@ -385,20 +452,31 @@ export class ExecutionRuntime {
         );
       }
 
-      if (result.status === 'failed') {
+      if (wasCancelled) {
+        finishCancelled(durationMs, resultObj);
+      } else if (result.status === 'failed') {
         deps.taskRegistry.fail(taskId, resultObj);
+        deps.store.fail(taskId, JSON.stringify(resultObj));
         deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: result.failureReason?.code ?? 'pipeline_failed', error_message: result.failureReason?.message ?? 'Pipeline completed with failed status' } });
         process.stderr.write(
           `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
         );
       } else {
         deps.taskRegistry.complete(taskId, resultObj);
+        deps.store.complete(taskId, JSON.stringify(resultObj));
         deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs } });
         process.stderr.write(
           `[mma] event=task_completed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
         );
       }
     } catch (err) {
+      const durationMs = Date.now() - startedAtMs;
+      if (scope.signal.aborted) {
+        // The abort raced an in-flight operation into an exception — the
+        // caller's cancel is the real outcome, not a runner crash.
+        finishCancelled(durationMs, buildErrorEnvelope(taskId, input.type, { code: 'aborted', message: 'Execution cancelled by caller' }, 'cancelled'));
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
       const errObj = {
@@ -406,13 +484,15 @@ export class ExecutionRuntime {
         message,
         ...(stack !== undefined && { stack }),
       };
-      deps.taskRegistry.fail(taskId, buildErrorEnvelope(taskId, input.type, errObj));
-      const durationMs = Date.now() - startedAtMs;
+      const envelope = buildErrorEnvelope(taskId, input.type, errObj);
+      deps.taskRegistry.fail(taskId, envelope);
+      deps.store.fail(taskId, JSON.stringify(envelope));
       deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
       process.stderr.write(
         `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
       );
     } finally {
+      this.liveScopes.delete(taskId);
       await scope.drain();
     }
   }

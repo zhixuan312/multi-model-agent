@@ -65,6 +65,16 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
 
     const entry = deps.taskRegistry.get(taskId);
     if (!entry) {
+      // Durable fallback: terminal results survive a daemon restart (and
+      // registry TTL eviction) in the ExecutionStore — including executions
+      // reconciled to `interrupted` at boot, whose envelope tells the caller
+      // to resubmit. Non-terminal store rows belong to another live daemon
+      // and are not pollable here.
+      const record = deps.store.get(taskId);
+      if (record?.resultJson != null) {
+        sendJson(res, 200, JSON.parse(record.resultJson));
+        return;
+      }
       sendError(res, 404, 'not_found', `Task ${taskId} not found`);
       return;
     }
@@ -81,10 +91,41 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
         phaseElapsedMs: entry.phaseStartedAt ? now - entry.phaseStartedAt : now - entry.startedAt,
         startedAt: new Date(entry.startedAt).toISOString(),
       };
+      if (entry.cancellationRequestedAt !== null) {
+        polling.cancellationRequested = true;
+      }
       if (entry.tool === 'execute_plan' && entry.totalTasks != null) {
         polling.totalTasks = entry.totalTasks;
       }
       sendJson(res, 202, polling);
     }
+  };
+}
+
+/**
+ * DELETE /task/:taskId — request cooperative cancellation. 202 means
+ * REQUESTED, not stopped: the task stays `running` (with
+ * cancellationRequested: true on polls) until the runner confirms
+ * termination, then reaches terminal `cancelled` — unless completion won the
+ * race, in which case the completed/failed result stands. Idempotent.
+ */
+export function buildTaskCancelHandler(deps: HandlerDeps): RawHandler {
+  return async (_req, res, params, _ctx) => {
+    const taskId = params.taskId;
+    if (!taskId) {
+      sendError(res, 400, 'missing_task_id', 'taskId required');
+      return;
+    }
+
+    const result = deps.runtime.cancel(taskId);
+    if (result.outcome === 'not_found') {
+      sendError(res, 404, 'not_found', `Task ${taskId} not found`);
+      return;
+    }
+    if (result.outcome === 'terminal') {
+      sendJson(res, 200, { taskId, status: result.entry.state, alreadyTerminal: true });
+      return;
+    }
+    sendJson(res, 202, { taskId, status: 'running', cancellationRequested: true });
   };
 }

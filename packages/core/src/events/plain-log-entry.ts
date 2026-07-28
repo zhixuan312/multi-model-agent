@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const PlainLogKindEnum = z.enum([
   'server_started','server_stopped',
   'batch_created','request_received','request_spilled',
-  'batch_completed','batch_failed',
+  'batch_completed','batch_failed','batch_cancelled',
   'project_evicted',
   'stall_watchdog_armed','stall_watchdog_fired',
   'provider_event',

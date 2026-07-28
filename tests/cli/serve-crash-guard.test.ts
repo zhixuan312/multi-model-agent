@@ -23,6 +23,7 @@ function minimalConfig(tokenFile: string) {
         maxContextBlockBytes: 1_000_000,
       },
       autoUpdateSkills: false,
+      stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     },
     diagnostics: { log: false },
   };

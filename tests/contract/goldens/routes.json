@@ -1,10 +1,11 @@
 [
   "DELETE /context-blocks/:blockId",
+  "DELETE /task/:taskId",
   "GET /__routes",
   "GET /health",
   "GET /status",
   "GET /task/:taskId",
-  "POST /context-blocks",
   "POST /configure-provider",
+  "POST /context-blocks",
   "POST /task"
 ]

@@ -1,3 +1,6 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtempSync } from 'node:fs';
 import { describe, it, expect, afterEach } from 'vitest';
 import type { Provider } from '@zhixuan92/multi-model-agent-core';
 import { createProvider } from '../../packages/core/src/providers/provider-factory.js';
@@ -56,6 +59,7 @@ describe('provider auth failure rewrite', () => {
         maxContextBlocksPerProject: 32,
         shutdownDrainMs: 30_000,
       },
+      stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
       autoUpdateSkills: false,
     },
     research: {

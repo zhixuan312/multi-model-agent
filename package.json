@@ -32,7 +32,7 @@
     "test:watch": "vitest",
     "test:perf": "vitest run tests/perf/",
     "serve": "node packages/server/dist/cli/index.js serve",
-    "dev": "TSX_TSCONFIG_PATH=packages/server/tsconfig.dev.json pnpm tsx watch --clear-screen=false packages/server/src/cli/index.ts serve",
+    "dev": "MMA_DEV_NO_RECONCILE=1 TSX_TSCONFIG_PATH=packages/server/tsconfig.dev.json pnpm tsx watch --clear-screen=false packages/server/src/cli/index.ts serve",
     "smoke:full": "node scripts/full-smoke/index.mjs",
     "smoke:disable-enable": "node scripts/demo-disable-enable.mjs",
     "regen:observability-golden": "pnpm tsx tests/contract/regen-observability-golden.ts",

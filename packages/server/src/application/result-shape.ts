@@ -21,9 +21,10 @@ export function buildErrorEnvelope(
   taskId: string,
   type: TaskType,
   error: { code: string; message: string } & Record<string, unknown>,
+  status: 'failed' | 'cancelled' | 'interrupted' = 'failed',
 ): Record<string, unknown> {
   return {
-    task: { taskId, type, status: 'failed' as const },
+    task: { taskId, type, status },
     output: { summary: null, filesChanged: [], contextBlockId: null, reviewerNote: null },
     execution: { sessions: { implementer: null, reviewer: null }, worktree: null },
     metrics: {

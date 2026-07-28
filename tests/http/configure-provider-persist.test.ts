@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
@@ -33,6 +34,7 @@ describe('configure-provider persistence', () => {
           maxContextBlocksPerProject: 32,
           shutdownDrainMs: 30_000,
         },
+        stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
         autoUpdateSkills: false,
       },
       research: {
