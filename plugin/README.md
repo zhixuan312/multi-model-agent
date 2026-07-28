@@ -5,8 +5,8 @@ edit by hand: re-run the command to regenerate.
 
 ## What it installs
 
-- **16 skills** — auto-matched by intent (`/mma:mma-audit`, `/mma:mma-delegate`, …)
-- **2 commands** — explicitly invoked (`/mma:mma-flow`, `/mma:mma-breakout`)
+- **16 skills** — auto-matched by intent (`/mma:audit`, `/mma:delegate`, …)
+- **2 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)
 - **1 MCP server** — `http://127.0.0.1:7337/mcp`, exposing `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel`
 
 ## Requirements
@@ -24,5 +24,5 @@ claude --plugin-dir /Users/zhangzhixuan/Documents/code/mma-parent/multi-model-ag
 ## Already using `mma sync-skills`?
 
 Standalone skills (`~/.claude/skills/`) and plugin skills coexist — you would
-see both `/mma-audit` and `/mma:mma-audit`. Run `mma disable --target=claude-code`
+see both `/mma-audit` and `/mma:audit`. Run `mma disable --target=claude-code`
 to remove the standalone copies before switching to the plugin.

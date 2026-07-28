@@ -21,6 +21,60 @@ import { inlineIncludes } from '../skill-install/include-utils.js';
 
 export const PLUGIN_NAME = 'mma';
 
+/**
+ * Packaged skill name -> plugin component name.
+ *
+ * Packaged skills carry an `mma-` prefix because a standalone `sync-skills`
+ * install drops them into a FLAT `~/.claude/skills/` shared with every other
+ * tool — there, the prefix IS the namespace. A plugin already namespaces every
+ * component as `/<plugin>:<component>`, so keeping the prefix would produce
+ * `/mma:mma-audit`. Strip it: the directory name is the invocation name, so
+ * `audit/` yields `/mma:audit`.
+ *
+ * The router skill is packaged as `multi-model-agent` (the product name); as a
+ * plugin component that reads as `/mma:multi-model-agent`, so it becomes
+ * `router` — what it actually is.
+ */
+export function pluginComponentName(packagedName: string): string {
+  if (packagedName === 'multi-model-agent') return 'router';
+  return packagedName.startsWith('mma-') ? packagedName.slice('mma-'.length) : packagedName;
+}
+
+/**
+ * Rewrite cross-skill references in skill prose to the namespaced plugin form:
+ * `mma-investigate` -> `mma:investigate`, and `/mma-flow` -> `/mma:flow` (which
+ * is the real invocation). Only exact packaged skill names are matched, so
+ * unrelated text — `mma serve`, `.mma/plans/`, `mma-parent` — is untouched.
+ *
+ * The frontmatter `name:` field is NOT handled here; it must be the bare
+ * component name and is rewritten separately. The product name
+ * `multi-model-agent` is deliberately never rewritten — it appears throughout
+ * the prose as the project's name, not as a skill reference.
+ */
+export function rewriteSkillReferences(content: string, packagedNames: readonly string[]): string {
+  const prefixed = packagedNames.filter((n) => n.startsWith('mma-'));
+  if (prefixed.length === 0) return content;
+  // Longest-first so `mma-journal-record` is never partially matched by a
+  // shorter sibling.
+  const alternation = [...prefixed]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const renamed = content.replace(
+    new RegExp(`(?<![\\w-])(${alternation})(?![\\w-])`, 'g'),
+    (match) => `${PLUGIN_NAME}:${match.slice('mma-'.length)}`,
+  );
+  // `mma-*` is prose shorthand for "the whole skill family"; inside the plugin
+  // that family is `mma:*`. Matched separately because `*` is not a skill name.
+  return renamed.replace(/(?<![\w-])mma-\*/g, `${PLUGIN_NAME}:*`);
+}
+
+/** Replace the frontmatter `name:` value with the bare plugin component name. */
+function rewriteFrontmatterName(content: string, componentName: string): string {
+  return content.replace(/^(---\r?\n(?:.*\r?\n)*?name:[ \t]*)["']?[^\r\n"']+["']?([ \t]*\r?\n)/,
+    `$1${componentName}$2`);
+}
+
 /** Emitted at <plugin>/scripts/mma-mcp-headers.sh and referenced by .mcp.json.
  *  Must print a JSON object of string header pairs on stdout (Claude Code
  *  merges it into the connection headers). Prints `{}` when no token is
@@ -116,23 +170,34 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   // marketplace, or committed. Omitting it leaves the shell-helper form
   // (`${MMA_AUTH_TOKEN:-$(mma print-token)}`), which resolves at runtime on the
   // user's own machine. No secret is ever written into this directory.
+  const allPackaged = [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS];
+  const render = (packagedName: string, raw: string): string => {
+    const component = pluginComponentName(packagedName);
+    return rewriteFrontmatterName(
+      rewriteSkillReferences(inlineIncludes(packagedName, raw, skillsRoot), allPackaged),
+      component,
+    );
+  };
+
   const skills: string[] = [];
   for (const name of SUPPORTED_SKILLS) {
     const raw = readSkillContent(name, skillsRoot);
     if (raw === null) continue;
-    writeFile(path.join(out, 'skills', name, 'SKILL.md'), inlineIncludes(name, raw, skillsRoot));
-    skills.push(name);
+    const component = pluginComponentName(name);
+    writeFile(path.join(out, 'skills', component, 'SKILL.md'), render(name, raw));
+    skills.push(component);
   }
 
-  // ── Commands (explicitly invoked: /mma:mma-flow) ──
+  // ── Commands (explicitly invoked: /mma:flow) ──
   // Flat markdown per the plugin layout; these are user-invoked playbooks, not
   // intent-matched skills.
   const commands: string[] = [];
   for (const name of SUPPORTED_COMMANDS) {
     const raw = readSkillContent(name, skillsRoot);
     if (raw === null) continue;
-    writeFile(path.join(out, 'commands', `${name}.md`), inlineIncludes(name, raw, skillsRoot));
-    commands.push(name);
+    const component = pluginComponentName(name);
+    writeFile(path.join(out, 'commands', `${component}.md`), render(name, raw));
+    commands.push(component);
   }
 
   // ── MCP server registration ──
@@ -157,8 +222,8 @@ edit by hand: re-run the command to regenerate.
 
 ## What it installs
 
-- **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:mma-audit\`, \`/${PLUGIN_NAME}:mma-delegate\`, …)
-- **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:mma-flow\`, \`/${PLUGIN_NAME}:mma-breakout\`)
+- **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
+- **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
 - **1 MCP server** — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`
 
 ## Requirements
@@ -176,7 +241,7 @@ claude --plugin-dir ${out}      # try it for one session
 ## Already using \`mma sync-skills\`?
 
 Standalone skills (\`~/.claude/skills/\`) and plugin skills coexist — you would
-see both \`/mma-audit\` and \`/${PLUGIN_NAME}:mma-audit\`. Run \`mma disable --target=claude-code\`
+see both \`/mma-audit\` and \`/${PLUGIN_NAME}:audit\`. Run \`mma disable --target=claude-code\`
 to remove the standalone copies before switching to the plugin.
 `);
 

@@ -7,8 +7,11 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, writeFileSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { buildPlugin, PLUGIN_NAME } from '../../packages/server/src/plugin/build-plugin.js';
+import { buildPlugin, PLUGIN_NAME, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
+
+const SKILL_COMPONENTS = SUPPORTED_SKILLS.map(pluginComponentName);
+const COMMAND_COMPONENTS = SUPPORTED_COMMANDS.map(pluginComponentName);
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -23,14 +26,66 @@ describe('buildPlugin', () => {
 
   it('emits every packaged skill and command', () => {
     const r = build();
-    expect(r.skills).toEqual([...SUPPORTED_SKILLS]);
-    expect(r.commands).toEqual([...SUPPORTED_COMMANDS]);
-    for (const s of SUPPORTED_SKILLS) {
+    expect(r.skills).toEqual(SKILL_COMPONENTS);
+    expect(r.commands).toEqual(COMMAND_COMPONENTS);
+    for (const s of SKILL_COMPONENTS) {
       expect(existsSync(join(out, 'skills', s, 'SKILL.md')), `missing skill ${s}`).toBe(true);
     }
-    for (const c of SUPPORTED_COMMANDS) {
+    for (const c of COMMAND_COMPONENTS) {
       expect(existsSync(join(out, 'commands', `${c}.md`)), `missing command ${c}`).toBe(true);
     }
+  });
+
+  // Claude Code namespaces plugin components as /<plugin>:<component>, and the
+  // directory name IS the component name. Keeping the packaged `mma-` prefix
+  // would yield `/mma:mma-audit`.
+  it('strips the redundant mma- prefix so invocation reads /mma:audit', () => {
+    const r = build();
+    expect(pluginComponentName('mma-audit')).toBe('audit');
+    expect(pluginComponentName('mma-execute-plan')).toBe('execute-plan');
+    // The router is packaged under the product name; `/mma:multi-model-agent`
+    // is worse than naming it what it is.
+    expect(pluginComponentName('multi-model-agent')).toBe('router');
+
+    expect(r.skills).toContain('audit');
+    expect(r.skills).toContain('router');
+    expect(r.commands).toEqual(['flow', 'breakout']);
+    expect(r.skills.some((n) => n.startsWith('mma-'))).toBe(false);
+    expect(existsSync(join(out, 'skills', 'mma-audit'))).toBe(false);
+  });
+
+  it('rewrites frontmatter name and cross-skill references to the plugin form', () => {
+    build();
+    const audit = readFileSync(join(out, 'skills', 'audit', 'SKILL.md'), 'utf8');
+    // Frontmatter must be the BARE component name (it backs the directory).
+    expect(audit).toMatch(/^name: audit$/m);
+
+    const router = readFileSync(join(out, 'skills', 'router', 'SKILL.md'), 'utf8');
+    expect(router).toMatch(/^name: router$/m);
+    // Prose references become namespaced so they match the real invocation.
+    expect(router).toContain('mma:investigate');
+    expect(router).not.toMatch(/(?<![\w-])mma-investigate(?![\w-])/);
+    // The PRODUCT name must survive untouched — it is not a skill reference.
+    expect(router).toContain('multi-model-agent');
+
+    // A command's self-reference becomes its real invocation.
+    const flow = readFileSync(join(out, 'commands', 'flow.md'), 'utf8');
+    expect(flow).toContain('/mma:flow');
+  });
+
+  it('reference rewriting never touches non-skill mma text', () => {
+    const names = [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS];
+    const sample = 'run mma serve; write .mma/plans/x.md in mma-parent; mktemp -t mma-poll.XXXX; use mma-audit';
+    const got = rewriteSkillReferences(sample, names);
+    expect(got).toContain('mma serve');
+    expect(got).toContain('.mma/plans/x.md');
+    expect(got).toContain('mma-parent');
+    expect(got).toContain('mma-poll.XXXX');
+    expect(got).toContain('mma:audit');
+    // Longest-first matching: a shorter sibling must not partially consume it.
+    expect(rewriteSkillReferences('see mma-journal-record', names)).toBe('see mma:journal-record');
+    // Family shorthand follows the rename too.
+    expect(rewriteSkillReferences('every mma-* call', names)).toBe('every mma:* call');
   });
 
   it('writes a valid manifest with components at the plugin ROOT, not inside .claude-plugin', () => {
@@ -88,20 +143,20 @@ describe('buildPlugin', () => {
 
   it('inlines @include directives and leaks no live auth token', () => {
     build();
-    for (const s of SUPPORTED_SKILLS) {
+    for (const s of SKILL_COMPONENTS) {
       const body = readFileSync(join(out, 'skills', s, 'SKILL.md'), 'utf8');
       expect(body, `${s} has an unresolved @include`).not.toMatch(/^@include /m);
     }
     // The per-client installers substitute the live token into skill text; the
     // plugin is a distributable artifact and must keep the runtime form.
-    const delegate = readFileSync(join(out, 'skills', 'mma-delegate', 'SKILL.md'), 'utf8');
+    const delegate = readFileSync(join(out, 'skills', 'delegate', 'SKILL.md'), 'utf8');
     expect(delegate).toContain('${MMA_AUTH_TOKEN:-$(mma print-token)}');
     expect(delegate).toContain('Authentication & identity headers'); // _shared/auth.md inlined
   });
 
   it('rebuild replaces generated trees so a removed skill cannot linger', () => {
     build();
-    const stale = join(out, 'skills', 'mma-ghost');
+    const stale = join(out, 'skills', 'ghost');
     mkdirSync(stale, { recursive: true });
     writeFileSync(join(stale, 'SKILL.md'), 'removed upstream');
     build();
@@ -139,13 +194,13 @@ describe('marketplace catalog', () => {
         readFileSync(join(committed, '.claude-plugin', 'plugin.json'), 'utf8'),
       ).version;
       buildPlugin({ outDir: fresh, version: committedVersion, port: 7337 });
-      for (const s of SUPPORTED_SKILLS) {
+      for (const s of SKILL_COMPONENTS) {
         expect(
           readFileSync(join(committed, 'skills', s, 'SKILL.md'), 'utf8'),
           `plugin/skills/${s} is stale — run \`npm run build:plugin\``,
         ).toBe(readFileSync(join(fresh, 'skills', s, 'SKILL.md'), 'utf8'));
       }
-      for (const c of SUPPORTED_COMMANDS) {
+      for (const c of COMMAND_COMPONENTS) {
         expect(
           readFileSync(join(committed, 'commands', `${c}.md`), 'utf8'),
           `plugin/commands/${c} is stale — run \`npm run build:plugin\``,

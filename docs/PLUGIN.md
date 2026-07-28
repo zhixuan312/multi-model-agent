@@ -8,8 +8,8 @@ produced, how the marketplace works, and how to publish it.
 
 | Component | Count | Invoked as |
 |---|---|---|
-| Skills | 16 | `/mma:mma-audit`, `/mma:mma-delegate`, … (also auto-matched by intent) |
-| Commands | 2 | `/mma:mma-flow`, `/mma:mma-breakout` (explicit only) |
+| Skills | 16 | `/mma:audit`, `/mma:delegate`, `/mma:router`, … (also auto-matched by intent) |
+| Commands | 2 | `/mma:flow`, `/mma:breakout` (explicit only) |
 | MCP server | 1 | tools `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel` |
 
 ```
@@ -21,6 +21,36 @@ plugin/
 ├── .mcp.json
 └── README.md
 ```
+
+## Component naming — the `mma-` prefix is stripped
+
+Packaged skills are named `mma-audit`, `mma-delegate`, … because a standalone
+`mma sync-skills` install writes them into a **flat** `~/.claude/skills/` shared
+with every other tool: there, the prefix *is* the namespace.
+
+A plugin already namespaces every component as `/<plugin>:<component>`, and the
+directory name is the invocation name — so keeping the prefix would produce
+`/mma:mma-audit`. The generator strips it:
+
+| Packaged | Plugin component | Invoked as |
+|---|---|---|
+| `mma-audit` | `audit` | `/mma:audit` |
+| `mma-execute-plan` | `execute-plan` | `/mma:execute-plan` |
+| `mma-flow` | `flow` | `/mma:flow` |
+| `multi-model-agent` (router) | `router` | `/mma:router` |
+
+Three things move together so nothing goes stale:
+
+1. **Directory name** — backs the invocation name.
+2. **Frontmatter `name:`** — rewritten to the bare component name.
+3. **Cross-references in prose** — `mma-investigate` becomes `mma:investigate`,
+   `/mma-flow` becomes `/mma:flow`, and the family shorthand `mma-*` becomes
+   `mma:*`, so a skill that tells Claude to use a sibling names it correctly.
+
+The rewriter matches only exact packaged skill names, so unrelated text is
+untouched: `mma serve`, `.mma/plans/`, `mma-parent`, and `mktemp -t mma-poll`
+all survive verbatim. The product name `multi-model-agent` is never rewritten —
+it appears throughout the prose as the project's name, not as a skill reference.
 
 ## It is generated, never hand-edited
 

@@ -68,9 +68,9 @@ Claude Code users can install the skills **and** the MCP server in a single step
 /plugin install mma@multi-model-agent
 ```
 
-That delivers 16 skills (`/mma:mma-audit`, `/mma:mma-delegate`, …), 2 SDLC commands (`/mma:mma-flow`, `/mma:mma-breakout`), and the MCP server pointed at your local daemon. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 SDLC commands (`/mma:flow`, `/mma:breakout`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
-> Use either `mma sync-skills` **or** the plugin, not both — standalone and plugin skills coexist, so you would see both `/mma-audit` and `/mma:mma-audit`. Run `mma disable --target=claude-code` before switching to the plugin.
+> Use either `mma sync-skills` **or** the plugin, not both — standalone and plugin skills coexist, so you would see both `/mma-audit` and `/mma:audit`. Run `mma disable --target=claude-code` before switching to the plugin.
 
 ### 2. Choose your main model — intentionally (4.0.3+)
 
