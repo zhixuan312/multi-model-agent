@@ -1,4 +1,3 @@
-// live-smoke
 import type { AgentType } from '../types/task-spec.js';
 
 export const TASK_TYPES = [

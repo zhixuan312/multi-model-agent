@@ -2,7 +2,7 @@ import type { PipelineResult, AgentType, TaskType } from '@zhixuan92/multi-model
 import type { TaskEnvelope, StageRecord, Route } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 
 /** Map unified TaskType (underscores) to wire Route (hyphens). */
-export function taskTypeToRoute(type: TaskType): Route {
+function taskTypeToRoute(type: TaskType): Route {
   const map: Record<string, Route> = {
     execute_plan: 'execute-plan',
     journal_recall: 'journal-recall',
