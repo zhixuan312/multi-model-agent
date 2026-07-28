@@ -2,7 +2,7 @@ import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readServerVersion } from '../server-version.js';
-import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { ServerConfig, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
@@ -17,16 +17,16 @@ import type { HandlerDeps } from './handler-deps.js';
 import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
-import type { ProjectRegistry } from './project-registry.js';
+import type { ProjectRegistry } from '../application/project-registry.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
 /** Server package version — read once at module load time (single source: server-version.ts). */
 export const SERVER_VERSION = readServerVersion();
 
-function extractMultiModelConfig(config: ServerConfig): HandlerDeps['config'] | undefined {
+function extractMultiModelConfig(config: ServerConfig): MultiModelConfig | undefined {
   return (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as HandlerDeps['config'])
+    ? (config as unknown as MultiModelConfig)
     : undefined;
 }
 
@@ -69,7 +69,6 @@ const MAIN_MODEL_REQUIRED_PATHS = new Set([
 async function registerControlHandlers(
   router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
-  taskRegistry: TaskRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
@@ -102,7 +101,7 @@ export async function startServer(
 
   // ── Create shared registries ───────────────────────────────────────────────
   const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
-  const { ProjectRegistry } = await import('./project-registry.js');
+  const { ProjectRegistry } = await import('../application/project-registry.js');
 
   // batchTtlMs bounds how long terminal task entries (with their full result
   // envelope) are retained for polling before eviction — prevents unbounded
@@ -136,7 +135,7 @@ export async function startServer(
   router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
   // Register control handlers
-  await registerControlHandlers(router, config, taskRegistry, projectRegistry);
+  await registerControlHandlers(router, config, projectRegistry);
 
   // Register unified task handler (POST /task, GET /task/:taskId)
   {
@@ -167,7 +166,9 @@ export async function startServer(
         }),
       }));
 
-      const deps: HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
+      const { ExecutionRuntime } = await import('../application/execution-runtime.js');
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry });
+      const deps: HandlerDeps = { runtime, taskRegistry };
       const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));

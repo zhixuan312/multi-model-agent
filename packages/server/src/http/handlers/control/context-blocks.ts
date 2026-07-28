@@ -6,7 +6,7 @@ import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
-import type { ProjectRegistry } from '../../project-registry.js';
+import type { ProjectRegistry } from '../../../application/project-registry.js';
 
 export interface ContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;

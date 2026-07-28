@@ -48,7 +48,7 @@ export interface TestServerWithAgents {
   /** Shared TaskRegistry — exposed for test helpers that need to inject state. */
   taskRegistry: import('@zhixuan92/multi-model-agent-core').TaskRegistry;
   /** Shared ProjectRegistry — exposed for test helpers that need to access project state. */
-  projectRegistry: import('../../packages/server/src/http/project-registry.js').ProjectRegistry;
+  projectRegistry: import('../../packages/server/src/application/project-registry.js').ProjectRegistry;
 }
 
 export async function startTestServerWithAgents(
