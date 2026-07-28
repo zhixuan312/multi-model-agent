@@ -59,6 +59,19 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
+#### Claude Code: one-step plugin install (alternative)
+
+Claude Code users can install the skills **and** the MCP server in a single step, from this repo's plugin marketplace:
+
+```bash
+/plugin marketplace add zhixuan312/multi-model-agent
+/plugin install mma@multi-model-agent
+```
+
+That delivers 16 skills (`/mma:mma-audit`, `/mma:mma-delegate`, …), 2 SDLC commands (`/mma:mma-flow`, `/mma:mma-breakout`), and the MCP server pointed at your local daemon. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+
+> Use either `mma sync-skills` **or** the plugin, not both — standalone and plugin skills coexist, so you would see both `/mma-audit` and `/mma:mma-audit`. Run `mma disable --target=claude-code` before switching to the plugin.
+
 ### 2. Choose your main model — intentionally (4.0.3+)
 
 Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
@@ -347,6 +360,7 @@ claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
 Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_cancel`. `mma_run` returns short task results inline and a `{ taskId }` handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
+- [docs/PLUGIN.md](./docs/PLUGIN.md) — Claude Code plugin: how it's generated, the marketplace, publishing
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
 - [DIRECTION.md](./DIRECTION.md) — product north star
 - [packages/core/README.md](./packages/core/README.md) — embedding the runtime as a library (no HTTP server)

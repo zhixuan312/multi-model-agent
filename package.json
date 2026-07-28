@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "pnpm -r run build",
+    "build:plugin": "pnpm tsx packages/server/src/cli/index.ts plugin build --out ./plugin",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:perf": "vitest run tests/perf/",
