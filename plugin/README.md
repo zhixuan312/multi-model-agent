@@ -18,7 +18,7 @@ token**: `scripts/mma-mcp-headers.sh` reads it at connection time from
 ## Install
 
 ```bash
-claude --plugin-dir /Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/plugin      # try it for one session
+claude --plugin-dir plugin      # try it for one session
 ```
 
 ## Already using `mma sync-skills`?

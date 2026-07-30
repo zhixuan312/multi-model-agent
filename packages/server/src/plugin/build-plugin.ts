@@ -249,7 +249,7 @@ token**: \`scripts/mma-mcp-headers.sh\` reads it at connection time from
 ## Install
 
 \`\`\`bash
-claude --plugin-dir ${out}      # try it for one session
+claude --plugin-dir ${path.relative(process.cwd(), out) || '.'}      # try it for one session
 \`\`\`
 
 ## Already using \`mma sync-skills\`?
