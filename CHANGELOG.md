@@ -27,8 +27,10 @@ and the test suite no longer depends on which CLIs happen to be installed on the
   verifies a codex tier by really spawning `codex --version`, so roughly 15 tests passed or failed
   according to the developer's `PATH` rather than the code — and failed confusingly, with the
   response's `probe` field simply absent because an unverified request never reaches the probe.
-  `tests/vitest-setup.ts` now pins `MMA_CODEX_BIN` to the running Node binary. The test that
-  deliberately covers the codex-absent path still overrides it, so that case stays covered.
+  Those four test files now pin `MMA_CODEX_BIN` to the running Node binary. The pin is per-file
+  rather than a global hook on purpose: applied globally it also reaches tests that drive a real
+  `CodexCliSession`, whose stdin write then EPIPEs against a process that is not codex. The test
+  that deliberately covers the codex-absent path still overrides it, so that case stays covered.
 - **Two journal contract tests no longer depend on the developer's own journal.** The
   "skips the reviewer when invariants pass" tests in `route-contract` and `journal-engine-route`
   merged onto node `0001` in `process.cwd()`, so they silently required the maintainer's real
