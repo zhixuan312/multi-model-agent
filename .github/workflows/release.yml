@@ -218,13 +218,40 @@ jobs:
           echo "### Dry run — gates green, both tarballs pass every assertion" >> "$GITHUB_STEP_SUMMARY"
           echo "Nothing was published, tagged, or released." >> "$GITHUB_STEP_SUMMARY"
 
+      # `pnpm publish` does NOT perform the npm OIDC exchange here — 5.16.1's first real
+      # release attempt died with `npm error code ENEEDAUTH` having never attempted a
+      # token exchange. npm is the reference implementation for both trusted publishing
+      # and provenance, and it needs >= 11.5.1; the npm bundled with Node 22 is 10.x.
+      #
+      # So publish with npm, and publish the TARBALLS packed above rather than the
+      # working tree. That is strictly better: the bytes that go to the registry are
+      # exactly the bytes every assertion above just ran against, and pnpm has already
+      # rewritten `workspace:^` inside them.
+      - name: Install an npm new enough for trusted publishing
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          V="$(npm --version)"
+          echo "npm $V"
+          node -e '
+            const v = process.argv[1].split(".").map(Number);
+            const ok = v[0] > 11 || (v[0] === 11 && (v[1] > 5 || (v[1] === 5 && v[2] >= 1)));
+            if (!ok) { console.error("::error::npm " + process.argv[1] + " predates trusted publishing (need >= 11.5.1)"); process.exit(1); }
+          ' "$V"
+          # OIDC must actually be available, or the publish falls back to ENEEDAUTH — which
+          # is exactly how the first 5.16.1 attempt failed.
+          [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] \
+            || { echo '::error::no OIDC id-token available — check permissions: id-token: write'; exit 1; }
+          echo "OIDC id-token endpoint present"
+
       # ── Order is sacred: core, then server ─────────────────────────────────
       # packages/server depends on ^VERSION of core, so a server published before its
       # core exists on the registry breaks every consumer install. Both publishes use
       # OIDC trusted publishing (no NPM_TOKEN in this workflow) and attach provenance.
       - name: Publish core
         if: ${{ inputs.dry_run == false }}
-        run: cd packages/core && pnpm publish --access public --provenance --no-git-checks
+        run: npm publish /tmp/pack/zhixuan92-multi-model-agent-core-${{ inputs.version }}.tgz --access public --provenance
 
       - name: Wait for core to be resolvable on the registry
         if: ${{ inputs.dry_run == false }}
@@ -240,7 +267,7 @@ jobs:
 
       - name: Publish server
         if: ${{ inputs.dry_run == false }}
-        run: cd packages/server && pnpm publish --access public --provenance --no-git-checks
+        run: npm publish /tmp/pack/zhixuan92-multi-model-agent-${{ inputs.version }}.tgz --access public --provenance
 
       - name: Verify both packages on the registry
         if: ${{ inputs.dry_run == false }}
