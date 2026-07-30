@@ -42,19 +42,49 @@ const defaultRunAcceptanceCommand: RunAcceptanceCommand = (command, cwd) =>
     });
   });
 
+/**
+ * Strip a plan heading's trailing acceptance-criteria traceability annotation.
+ *
+ * Contract plans written by `mma-plan` annotate task headings with the acceptance
+ * criteria they satisfy — `### Task I-1: Do the thing (← AC-1.1, AC-1.2)` — and
+ * `parseContractPlan` keeps that annotation as part of `title`, so it also rides
+ * into `dispatchedTasks`. A reviewer asked to echo the title back routinely omits
+ * the parenthetical, because it reads as metadata rather than as part of the name.
+ *
+ * Requiring a byte-exact echo therefore failed the completion gate for *every*
+ * AC-annotated plan even when the implementation and its tests were correct: the
+ * generator emits a format its own validator rejects. Matching on the title with
+ * this annotation removed closes that boundary without weakening anything else —
+ * one-to-one, no duplicates, no unknowns, and every task still 'done'.
+ */
+function stripAcTraceability(title: string): string {
+  return title.replace(/\s*\(\s*(?:←|<-)?\s*AC-[^)]*\)\s*$/i, '').trim();
+}
+
 /** Contract satisfaction for execute_plan: the reviewer's tasks[] must match the
  *  dispatched-task titles one-to-one (case-sensitive, no duplicate/unknown/missing)
- *  and every matched task's status must be 'done'. */
+ *  and every matched task's status must be 'done'. Titles are compared with their
+ *  trailing `(← AC-…)` traceability annotation removed — see {@link stripAcTraceability}. */
 function contractSatisfiedFromReviewer(parsedData: unknown, dispatchedTasks: readonly string[] | undefined): boolean {
   const data = parsedData as { tasks?: unknown };
   const tasks = Array.isArray(data?.tasks) ? (data.tasks as Array<{ title?: unknown; status?: unknown }>) : null;
   if (!tasks) return false;
   const dispatched = dispatchedTasks ?? [];
   if (tasks.length !== dispatched.length) return false;
-  const remaining = new Set(dispatched);
+
+  // Normalize only while doing so stays injective. If two dispatched titles differ
+  // ONLY by their AC annotation, normalizing would let one reviewer entry satisfy
+  // the other, so fall back to exact matching rather than accept an ambiguous match.
+  const stripped = dispatched.map(stripAcTraceability);
+  const canNormalize = new Set(stripped).size === dispatched.length;
+  const key = (title: string): string => (canNormalize ? stripAcTraceability(title) : title);
+
+  const remaining = new Set(dispatched.map(key));
   for (const t of tasks) {
-    if (typeof t.title !== 'string' || !remaining.has(t.title)) return false; // unknown or duplicate
-    remaining.delete(t.title);
+    if (typeof t.title !== 'string') return false;
+    const k = key(t.title);
+    if (!remaining.has(k)) return false; // unknown or duplicate
+    remaining.delete(k);
     if (t.status !== 'done') return false;
   }
   return remaining.size === 0;
