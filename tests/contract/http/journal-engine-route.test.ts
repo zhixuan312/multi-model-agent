@@ -30,16 +30,52 @@ async function postTask(h: { baseUrl: string; token: string }, body: object) {
   return postTaskCwd(h, process.cwd(), body);
 }
 
+/**
+ * A merge decision is only valid if its target node already exists, so a test that
+ * merges onto `0001` needs a journal that HAS an `0001`. This seeds one in a throwaway
+ * cwd by recording a create decision through the engine itself, which keeps the test
+ * independent of the on-disk node format.
+ *
+ * These tests used to run against `process.cwd()` and silently depended on the
+ * maintainer's real `<repo>/.mma/journal/` happening to contain node 0001 — green on
+ * that one machine, red on any fresh checkout (`.mma/` is gitignored), and they wrote
+ * into that real journal as a side effect. The outcome also depended on which other
+ * test files had run first in the same worker.
+ */
+async function seedJournalWithNode0001(): Promise<string> {
+  const cwd = await mkdtemp(join(tmpdir(), 'mma-journal-seed-'));
+  const create = JSON.stringify([{
+    learning: 'Seed learning',
+    decision: {
+      kind: 'create', title: 'Seed', type: 'process', topic: 'journal-engine',
+      tags: ['seed'], links: [], status: 'adopted',
+      description: 'seed', context: 'ctx', consequences: '- c',
+    },
+  }]);
+  const h = await boot({ provider: mockProvider({ sequence: [{ output: create }] }), cwd });
+  try {
+    await postTaskCwd(h, cwd, { type: 'journal_record', records: [{ prompt: 'Seed learning', topic: 'journal-engine' }] });
+  } finally {
+    await h.close();
+  }
+  const nodes = await readdir(join(cwd, '.mma', 'journal', 'nodes'));
+  if (!nodes.some((file) => file.startsWith('0001-'))) {
+    throw new Error(`seed failed — no 0001 node in ${nodes.join(', ')}`);
+  }
+  return cwd;
+}
+
 describe('journal engine routes', () => {
   it('skips reviewer when invariants pass and caller omitted reviewPolicy', async () => {
+    const cwd = await seedJournalWithNode0001();
     let opened = 0;
     const provider = mockProvider({
       sequence: [{ output: JSON.stringify([{ learning: 'A', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } }]) }],
       onOpen: () => { opened += 1; },
     });
-    const h = await boot({ provider, cwd: process.cwd() });
+    const h = await boot({ provider, cwd });
     try {
-      const env = await postTask(h, { type: 'journal_record', records: [{ prompt: 'A', topic: 'journal-engine' }] });
+      const env = await postTaskCwd(h, cwd, { type: 'journal_record', records: [{ prompt: 'A', topic: 'journal-engine' }] });
       expect((env.task as { status: string }).status).toBe('done');
       expect(opened).toBe(1);
     } finally {
