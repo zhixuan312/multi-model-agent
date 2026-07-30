@@ -13,10 +13,14 @@ const HEADERS = (token: string) => ({
   Authorization: `Bearer ${token}`,
 });
 
-async function dispatch(h: { baseUrl: string; token: string }, body: object) {
-  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+async function dispatchCwd(h: { baseUrl: string; token: string }, cwd: string, body: object) {
+  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
     method: 'POST', headers: HEADERS(h.token), body: JSON.stringify(body),
   });
+}
+
+async function dispatch(h: { baseUrl: string; token: string }, body: object) {
+  return dispatchCwd(h, process.cwd(), body);
 }
 
 async function poll202(h: { baseUrl: string; token: string }, taskId: string) {
@@ -77,7 +81,28 @@ describe('route contract', () => {
       } finally { await h.close(); }
     });
 
+    // Seeded in a throwaway cwd because a merge decision needs its target node to exist.
+    // This used to run against process.cwd() and depended on the maintainer's real
+    // <repo>/.mma/journal/ containing node 0001 — green on that machine, red on a fresh
+    // checkout, and order-dependent within a worker. See the same note in
+    // tests/contract/http/journal-engine-route.test.ts.
     it('applies decisions then SKIPS the reviewer when invariants pass and reviewPolicy is omitted', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'mma-route-journal-'));
+      const seed = JSON.stringify([{
+        learning: 'Seed learning',
+        decision: {
+          kind: 'create', title: 'Seed', type: 'process', topic: 'worker-runtime',
+          tags: ['seed'], links: [], status: 'adopted',
+          description: 'seed', context: 'ctx', consequences: '- c',
+        },
+      }]);
+      const seedHarness = await boot({ provider: mockProvider({ sequence: [{ output: seed }] }), cwd });
+      try {
+        const seedRes = await dispatchCwd(seedHarness, cwd, { type: 'journal_record', prompt: 'Seed learning', topic: 'worker-runtime' });
+        const { taskId: seedId } = (await seedRes.json()) as { taskId: string };
+        await pollToTerminal(seedHarness, seedId);
+      } finally { await seedHarness.close(); }
+
       let openCount = 0;
       const decisionArray = JSON.stringify([
         { learning: 'A', decision: { kind: 'merge', targetNodeId: '0001', reason: 'covered' } },
@@ -87,10 +112,10 @@ describe('route contract', () => {
           sequence: [{ output: decisionArray }],
           onOpen: () => { openCount += 1; },
         }),
-        cwd: process.cwd(),
+        cwd,
       });
       try {
-        const res = await dispatch(h, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
+        const res = await dispatchCwd(h, cwd, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
         expect(res.status).toBe(202);
         const { taskId } = (await res.json()) as { taskId: string };
         const env = await pollToTerminal(h, taskId);

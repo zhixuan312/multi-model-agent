@@ -29,6 +29,12 @@ and the test suite no longer depends on which CLIs happen to be installed on the
   response's `probe` field simply absent because an unverified request never reaches the probe.
   `tests/vitest-setup.ts` now pins `MMA_CODEX_BIN` to the running Node binary. The test that
   deliberately covers the codex-absent path still overrides it, so that case stays covered.
+- **Two journal contract tests no longer depend on the developer's own journal.** The
+  "skips the reviewer when invariants pass" tests in `route-contract` and `journal-engine-route`
+  merged onto node `0001` in `process.cwd()`, so they silently required the maintainer's real
+  gitignored `<repo>/.mma/journal/` to contain that node — and wrote into it as a side effect.
+  They passed on that one machine, failed on any fresh checkout, and their result depended on
+  which test file ran first in the same worker. Both now seed node `0001` in a throwaway cwd.
 
 ### Changed
 
