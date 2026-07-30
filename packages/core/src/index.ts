@@ -109,12 +109,10 @@ export { loadSkill } from './unified/skill-loader.js';
 export type { SkillPair } from './unified/skill-loader.js';
 export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
-export {
-  dispatchedTasksFromSnapshot,
-  contractMatchFromReviewer,
-  describeContractMismatch,
-} from './unified/contract-match.js';
-export type { DispatchedContractTask, ContractMatchResult } from './unified/contract-match.js';
+// Only what a package CONSUMER needs. contractMatchFromReviewer / describeContractMismatch /
+// ContractMatchResult stay internal to core — the pipeline is their only caller.
+export { dispatchedTasksFromSnapshot, resolveSelectors, describeSelectorFailure } from './unified/contract-match.js';
+export type { DispatchedContractTask } from './unified/contract-match.js';
 export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
 export type { ParseResult } from './unified/reviewer-output-parser.js';
 export { REFINER_SCHEMAS, parseRecordDecisions } from './unified/refiner-schemas.js';

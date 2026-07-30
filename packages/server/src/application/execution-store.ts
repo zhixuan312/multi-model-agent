@@ -78,6 +78,12 @@ function toRecord(r: Row): ExecutionRecord {
 export class ExecutionStore {
   private readonly db: DatabaseSync;
   private readonly ttlMs: number;
+  /** Set by close(). Executions are detached async work, so one can still be finishing when
+   *  the daemon (or a test harness) shuts the store down. Writing to a closed DatabaseSync
+   *  throws ERR_INVALID_STATE from a promise nobody awaits — an unhandled rejection that
+   *  crashes the process on a path where there is nothing left to persist to anyway. After
+   *  close, durable writes become no-ops; every other DB error still propagates. */
+  private closed = false;
 
   constructor(opts: { dbPath: string; ttlMs: number }) {
     fs.mkdirSync(path.dirname(opts.dbPath), { recursive: true });
@@ -105,6 +111,7 @@ export class ExecutionStore {
   /** Persist the admission record. Called BEFORE the handle is returned to the
    *  caller, so a handle that exists is always a handle that survives. */
   admit(id: string, type: string, cwd: string, daemonPid: number): void {
+    if (this.closed) return;
     const now = Date.now();
     this.db.prepare(`
       INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid)
@@ -115,6 +122,7 @@ export class ExecutionStore {
   /** Record the detached worker's process-group leader pid (codex). Only
    *  meaningful while pending — a terminal row's worker is already reaped. */
   recordWorkerPid(id: string, workerPid: number): void {
+    if (this.closed) return;
     this.db.prepare(`
       UPDATE executions SET worker_pid = ?, updated_at = ?
       WHERE id = ? AND state = 'pending'
@@ -124,6 +132,7 @@ export class ExecutionStore {
   /** Set the cancellation-requested flag (not a state transition). Idempotent;
    *  a terminal row is untouched. */
   requestCancel(id: string): void {
+    if (this.closed) return;
     this.db.prepare(`
       UPDATE executions SET cancellation_requested_at = ?, updated_at = ?
       WHERE id = ? AND state = 'pending' AND cancellation_requested_at IS NULL
@@ -133,6 +142,7 @@ export class ExecutionStore {
   /** Terminal CAS: only a pending row transitions; a row that already reached
    *  a terminal state is never overwritten (first writer wins). */
   private terminalize(id: string, state: 'complete' | 'failed' | 'cancelled' | 'interrupted', resultJson: string): boolean {
+    if (this.closed) return false;
     const now = Date.now();
     const res = this.db.prepare(`
       UPDATE executions
@@ -147,6 +157,7 @@ export class ExecutionStore {
   cancel(id: string, resultJson: string): boolean { return this.terminalize(id, 'cancelled', resultJson); }
 
   get(id: string): ExecutionRecord | undefined {
+    if (this.closed) return undefined;
     const row = this.db.prepare('SELECT * FROM executions WHERE id = ?').get(id) as Row | undefined;
     return row ? toRecord(row) : undefined;
   }
@@ -155,6 +166,7 @@ export class ExecutionStore {
    *  to reconciliation: rows whose owning daemon is dead get fenced +
    *  interrupted; rows owned by a still-alive daemon are left alone. */
   stalePending(ownPid: number): ExecutionRecord[] {
+    if (this.closed) return [];
     const rows = this.db.prepare(
       `SELECT * FROM executions WHERE state = 'pending' AND daemon_pid != ?`,
     ).all(ownPid) as unknown as Row[];
@@ -166,6 +178,7 @@ export class ExecutionStore {
 
   /** Drop terminal rows past their retention TTL. Returns rows removed. */
   pruneExpired(now = Date.now()): number {
+    if (this.closed) return 0;
     const res = this.db.prepare(
       `DELETE FROM executions WHERE terminal_at IS NOT NULL AND expires_at < ?`,
     ).run(now);
@@ -173,6 +186,8 @@ export class ExecutionStore {
   }
 
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.db.close();
   }
 }

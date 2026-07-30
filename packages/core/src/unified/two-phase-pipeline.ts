@@ -7,6 +7,7 @@ import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { captureBaseline, commitAll, assertRepoUntampered, type CommitOutcome } from './repo-commit.js';
 import {
   contractMatchFromReviewer,
+  taskCompletionPercent,
   describeContractMismatch,
   type ContractMatchResult,
   type DispatchedContractTask,
@@ -167,10 +168,11 @@ function buildCompletenessSection(input: PipelineInput): string {
 
 /** How many sub-items the reviewer's structured output reports as addressed, so the
  *  pipeline can flag done_with_concerns when fewer than dispatched were handled. */
+/** Completeness count for routes whose reviewer reports N sub-items. `execute_plan` is NOT
+ *  here on purpose: {@link contractMatchFromReviewer} already resolves its reviewer output
+ *  one-to-one by task id, which subsumes a bare count (it also catches unknown, duplicate and
+ *  missing ids). Counting again would be a weaker second opinion on the same question. */
 function getReportedCompletenessCount(type: TaskType, data: Record<string, unknown>): number {
-  if (type === 'execute_plan') {
-    return Array.isArray(data.tasks) ? data.tasks.length : 0;
-  }
   if (type === 'journal_record') {
     const recorded = Array.isArray(data.recorded) ? data.recorded.length : 0;
     const failed = Array.isArray(data.failed) ? data.failed.length : 0;
@@ -475,12 +477,13 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // contract satisfaction (reviewer tasks[] all 'done', matched 1:1 to dispatched titles) AND all
     // commands passing. Test integrity is structural — the scored run always uses the plan's bytes.
     let completionPercent = 100;
-    let epFailure: { code: string; message: string } | undefined;
+    // Advisory concern surfaced alongside a LANDED commit — never a terminal failure.
+    let epConcern: { code: string; message: string } | undefined;
     if (input.type === 'execute_plan' && !input.acceptanceTestSnapshot) {
       // Defense-in-depth: a contract-first execute_plan is unscorable without its frozen snapshot.
       // The handler always supplies one; a direct pipeline caller that omits it must NOT auto-pass.
       completionPercent = 0;
-      epFailure = { code: 'missing_contract_snapshot', message: 'execute_plan requires a contract-first acceptanceTestSnapshot to be scorable' };
+      epConcern = { code: 'missing_contract_snapshot', message: 'execute_plan ran without a contract-first acceptanceTestSnapshot, so per-task completion could not be scored' };
     } else if (input.type === 'execute_plan' && input.acceptanceTestSnapshot) {
       const runAccept = input.runAcceptanceCommand ?? defaultRunAcceptanceCommand;
       const commands = [...new Set(input.acceptanceTestSnapshot.tasks.flatMap(t => t.acceptanceTests.map(a => a.command)))];
@@ -534,44 +537,50 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         testsPass = true;
         planTestNote = ' Note: a plan-authored acceptance test was broken; the executor\'s corrected version passed and was kept.';
       }
-      // --- FR-9 completion matrix ---
+      // --- Completion reporting (NOT a gate) ---
       //
-      // Deterministic test outcome is evaluated FIRST and is authoritative: a test failure can
-      // never be upgraded by contract state. The contract signal may only ever reduce
-      // confidence, never manufacture it. Previously `contractSatisfied && testsPass` ANDed a
-      // brittle LLM echo with a deterministic signal and let the brittle one veto — which is
-      // why complete, green work terminated as `failed`.
+      // execute_plan never fails for a JUDGEMENT about the work. A plan is written before you
+      // know what you don't know, so an implementation legitimately diverges from it — and a
+      // plan can simply be wrong. Terminally failing on that used to mean abandoning a whole
+      // worktree of correct work over a cosmetic mismatch. The work now lands on the caller's
+      // branch, so the honest thing is to deliver it and report per task; PR REVIEW is the gate.
+      //
+      // `failed` is reserved for the route not RUNNING or not DELIVERING (plan unreadable,
+      // materialization failure, dead implementer, cancelled, commit failure). Everything below
+      // is a concern attached to a landed commit.
       const detail = (frozenRun.failures.length ? frozenRun.failures : executorRun.failures).join('\n---\n');
 
       if (!testsPass) {
-        // Rows 4-6: tests failed. Always terminal `failed`, regardless of matching state.
-        completionPercent = 40;
-        epFailure = {
+        // Deterministic and worth surfacing loudly — but the work is committed and reviewable.
+        // Still report the per-task percentage when we have one; the tests are a separate axis.
+        completionPercent = taskCompletionPercent(match) ?? 100;
+        epConcern = {
           code: 'tests_failed',
-          message: 'execute_plan acceptance tests failed'
+          message: 'Acceptance tests did not pass. The work IS committed on your branch — review '
+            + 'the diff and the failures below; the plan itself may be what needs correcting'
             + (detail ? `.\nFailing acceptance command(s):\n${detail}` : '')
             + planTestNote,
         };
-        // Diagnostic context only — must not soften the failure.
         if (!match.matched) contractNote = buildContractNote(match);
       } else if (!match.matched) {
-        // Row 3: tests pass but we could not resolve the reviewer's echo onto dispatched ids.
-        // That is OUR plumbing failing, not the work being incomplete. Keep the commit, report
-        // honestly, and do NOT claim the implementation is unfinished.
+        // Our plumbing could not resolve the reviewer's report onto dispatched ids.
         completionPercent = 100;
         contractNote = buildContractNote(match);
       } else if (!match.allDone) {
-        // Row 2: matched, and the reviewer says a task is genuinely not done.
-        completionPercent = 60;
-        epFailure = {
+        // The reviewer says a task is not finished. Advisory: one opinion about work that is now
+        // on the branch. The percentage is DERIVED from the per-task verdicts and the message
+        // names the specific tasks, so the caller sees exactly what is outstanding.
+        completionPercent = taskCompletionPercent(match) ?? 100;
+        epConcern = {
           code: 'contract_not_satisfied',
-          message: 'the reviewer confirmed a dispatched task did not satisfy its contract'
-            + (detail ? `.\nFailing acceptance command(s):\n${detail}` : '')
+          message: `${completionPercent}% of dispatched tasks completed. Not done: `
+            + `${match.notDoneIds.join(', ')} (done: ${match.doneIds.join(', ') || 'none'}). `
+            + 'The work IS committed on your branch — treat this as input to PR review, not as a '
+            + 'failed run; the plan itself may be what needs correcting'
             + planTestNote,
         };
       } else {
-        // Row 1: everything green and confirmed.
-        completionPercent = 100;
+        completionPercent = taskCompletionPercent(match) ?? 100;
       }
     }
 
@@ -584,20 +593,20 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       await commitWork(buildCommitMessage());
     }
 
-    // Completeness check: if dispatched tasks > reported tasks, flag as partial
+    // Completeness check for count-based routes (journal_record). execute_plan's completeness
+    // is decided by the id matcher above, not here.
     let status: 'done' | 'done_with_concerns' | 'failed' = parsed.ok ? 'done' : 'done_with_concerns';
-    if (parsed.ok && input.dispatchedTasks?.length) {
+    if (parsed.ok && input.type !== 'execute_plan' && input.dispatchedTasks?.length) {
       const reported = parsed.data as Record<string, unknown>;
       const reportedTasks = getReportedCompletenessCount(input.type, reported);
       if (reportedTasks < input.dispatchedTasks.length) {
         status = 'done_with_concerns';
       }
     }
-    if (input.type === 'execute_plan' && completionPercent < 80) status = 'failed';
-    // FR-9 row 3: tests passed and the work was committed, but we could not resolve the
-    // reviewer's report onto the dispatched task ids. That is a concern, not a failure — and
-    // explicitly not a claim that the implementation is incomplete.
-    if (contractNote && status === 'done') status = 'done_with_concerns';
+    // Any execute_plan concern (failing tests, an unfinished task, an unresolvable reviewer
+    // report) downgrades to done_with_concerns — never to failed. The commit is on the branch
+    // and the per-task detail is in the envelope; a human decides at PR review.
+    if ((contractNote || epConcern) && status === 'done') status = 'done_with_concerns';
 
     return {
       status,
@@ -617,7 +626,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       filesChangedFromGit: commitState.outcome ? commitState.outcome.filesChanged : null,
       contractNote,
       completionPercent,
-      ...(epFailure && { failureReason: epFailure }),
+      ...(epConcern && { failureReason: epConcern }),
     };
   } finally {
     await closeSessions();

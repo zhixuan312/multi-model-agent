@@ -4,11 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  isGitRepo,
   captureBaseline,
   commitAll,
   assertRepoUntampered,
-  filesChangedSince,
 } from '../../packages/core/src/unified/repo-commit.js';
 
 /**
@@ -37,18 +35,6 @@ beforeEach(() => {
 });
 
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
-
-describe('isGitRepo', () => {
-  it('detects a repo root', async () => {
-    expect(await isGitRepo(repo)).toBe(true);
-  });
-
-  it('is false for a plain directory', async () => {
-    const plain = mkdtempSync(join(tmpdir(), 'mma-plain-'));
-    try { expect(await isGitRepo(plain)).toBe(false); }
-    finally { rmSync(plain, { recursive: true, force: true }); }
-  });
-});
 
 describe('captureBaseline', () => {
   it('records HEAD, the caller branch, and a clean tree', async () => {
@@ -162,13 +148,12 @@ describe('assertRepoUntampered', () => {
   });
 });
 
-describe('filesChangedSince', () => {
-  it('lists files between two commits', async () => {
-    const from = git(['rev-parse', 'HEAD']).trim();
+describe('git-derived filesChanged', () => {
+  it('lists every file the engine commit touched, in git order', async () => {
+    const baseline = await captureBaseline(repo);
     writeFileSync(join(repo, 'a.ts'), 'a\n');
     writeFileSync(join(repo, 'b.ts'), 'b\n');
-    git(['add', '-A']);
-    git(['commit', '-qm', 'two files']);
-    expect((await filesChangedSince(repo, from)).sort()).toEqual(['a.ts', 'b.ts']);
+    const out = await commitAll(repo, baseline, '[mma] delegate: two files');
+    expect(out.filesChanged.sort()).toEqual(['a.ts', 'b.ts']);
   });
 });

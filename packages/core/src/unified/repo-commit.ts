@@ -50,7 +50,7 @@ async function git(cwd: string, args: string[]): Promise<{ code: number; stdout:
 
 /** A `.git` ENTRY check — a directory in a normal checkout, a file in a linked worktree. Both
  *  count, because a caller (Forge loops) may legitimately hand us its own worktree as the cwd. */
-export async function isGitRepo(cwd: string): Promise<boolean> {
+async function isGitRepo(cwd: string): Promise<boolean> {
   try {
     await access(join(cwd, '.git'));
     return true;
@@ -185,7 +185,7 @@ export async function commitAll(cwd: string, baseline: RepoBaseline, message: st
 }
 
 /** FR-3 — the frozen evidence command. Never the worker's self-report. */
-export async function filesChangedSince(cwd: string, from: string, to = 'HEAD'): Promise<string[]> {
+async function filesChangedSince(cwd: string, from: string, to = 'HEAD'): Promise<string[]> {
   const diff = await git(cwd, ['diff', '--name-only', `${from}..${to}`]);
   if (diff.code !== 0) return [];
   return diff.stdout.split('\n').map(l => l.trim()).filter(l => l.length > 0);

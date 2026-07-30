@@ -28,7 +28,7 @@ const createBodySchema = z.object({
  */
 export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): RawHandler {
   return async (
-    req: IncomingMessage,
+    _req: IncomingMessage,
     res: ServerResponse,
     _params: Record<string, string>,
     ctx,

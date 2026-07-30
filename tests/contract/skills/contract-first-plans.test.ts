@@ -110,11 +110,22 @@ describe('public skill docs describe contract-first (I-8)', () => {
     expect(mmaPlanDoc.toLowerCase()).toContain('plan-authored acceptance tests');
     expect(mmaPlanDoc.toLowerCase()).not.toContain('follow mechanically');
   });
-  it('mma-execute-plan/SKILL.md describes autonomous execution + error codes + the 80 gate', () => {
+  // Ratchet updated deliberately: this previously required the doc to state a
+  // `completionPercent >= 80` commit gate. That gate is gone — execute_plan reports completion
+  // rather than gating on it, because failing terminally on a judgement about the work is what
+  // caused correct implementations to be abandoned. The doc must now say the opposite, and the
+  // assertions below pin the REPLACEMENT contract so it cannot silently regress to a gate.
+  it('mma-execute-plan/SKILL.md describes autonomous execution + error codes + advisory completion', () => {
     expect(mmaExecDoc.toLowerCase()).toContain('autonomous');
     for (const code of ['unsupported-legacy-plan', 'malformed-plan', 'unsafe-test-path', 'test-path-collision']) {
       expect(mmaExecDoc).toContain(code);
     }
-    expect(mmaExecDoc).toContain('completionPercent >= 80');
+    // Completion is reported, and reporting is per-task.
+    expect(mmaExecDoc).toContain('completionPercent');
+    expect(mmaExecDoc).toContain('done_with_concerns');
+    // The doc must state that work lands even when there are concerns…
+    expect(mmaExecDoc.toLowerCase()).toContain('committed on your branch');
+    // …and must NOT reintroduce a numeric commit gate.
+    expect(mmaExecDoc).not.toContain('>= 80');
   });
 });

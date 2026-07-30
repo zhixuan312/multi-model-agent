@@ -221,7 +221,7 @@ export class ExecutionRuntime {
       const reviewerGoal = buildGoalCondition(input.type, 'reviewer', skills.review);
 
       // ── Per-type pre-processing (execute_plan contract parse, journal candidate
-      //    injection, spec/plan outputPath + copyToWorktree, research evidence).
+      //    injection, spec/plan outputPath validation, research evidence).
       //    A PreprocessFailure fails the task terminally with zero provider
       //    sessions opened — the client learns of it by polling. ──
       let pre: PreprocessResult = {};

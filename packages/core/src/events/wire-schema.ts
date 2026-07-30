@@ -5,15 +5,6 @@ export const SCHEMA_VERSION = 6;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
-// ── Version and environment strings ──────────────────────────────────────
-
-const VersionString = z
-  .string()
-  .regex(
-    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/,
-  )
-  .max(64);
-
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
@@ -101,7 +92,7 @@ export const ReworkStageEntrySchema = StageEntryBase.extend({
 export const AnnotatingStageEntrySchema = StageEntryBase.extend({
   name: z.literal('annotating'),
   outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
-  skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
+  skipReason: z.enum(['no_command', 'not_applicable', 'other']).nullable(),
 }).strict();
 
 export const CommitStageEntrySchema = StageEntryBase.extend({

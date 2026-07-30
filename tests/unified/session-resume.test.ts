@@ -1,10 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runTwoPhasePipeline } from '../../packages/core/src/unified/two-phase-pipeline.js';
 
-vi.mock('../../packages/core/src/unified/worktree-manager.js', () => ({
-  WorktreeManager: vi.fn(),
-}));
-
 const mockTurn = (output: string) => ({
   output,
   usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },

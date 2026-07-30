@@ -38,10 +38,9 @@ import {
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
-import {
-  atomicWriteClaudeDesktopConfig as realAtomicWrite,
-  type AtomicClaudeDesktopFileDeps,
-  type AtomicClaudeDesktopWriteInput,
+import type {
+  AtomicClaudeDesktopFileDeps,
+  AtomicClaudeDesktopWriteInput,
 } from '../claude-desktop-file.js';
 
 /** The single MCP server name this module owns inside `mcpServers`. */

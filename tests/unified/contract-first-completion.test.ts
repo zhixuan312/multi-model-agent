@@ -68,15 +68,15 @@ const PASS = () => vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: 
 const FAIL = () => vi.fn().mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'boom' });
 
 /**
- * The FR-9 completion matrix.
+ * execute_plan completion REPORTING — deliberately not a gate.
  *
- * Deterministic acceptance-test outcome is evaluated FIRST and is authoritative — a test failure
- * can never be upgraded by contract state. The three tests-failing rows previously had NO defined
- * outcome, which is how a genuine test failure could surface as done_with_concerns. The old gate
- * (`contractSatisfied && testsPass`) also ANDed a brittle LLM title echo with a deterministic
- * signal and let the brittle one veto, failing complete and green work.
+ * A plan is written before you know what you don't know, so an implementation legitimately
+ * diverges from it, and the plan itself can be wrong. Terminally failing on that judgement used
+ * to mean abandoning a whole worktree of correct work over a cosmetic mismatch. The work now
+ * lands on the caller's branch, so the route delivers it and reports per task; PR review is the
+ * gate. `failed` is reserved for the route not RUNNING or not DELIVERING.
  */
-describe('execute_plan completion matrix (FR-9)', () => {
+describe('execute_plan completion reporting (advisory, never a hard gate)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   // --- tests PASS ---
@@ -101,12 +101,13 @@ describe('execute_plan completion matrix (FR-9)', () => {
     expect(r.failureReason).toBeUndefined();
   });
 
-  it('row 2: tests pass + matched + NOT done → failed with contract_not_satisfied', async () => {
+  it('a task reported not-done is a CONCERN, not a failure — and names the task', async () => {
     const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"failed"}]}', run: PASS() }));
-    expect(r.status).toBe('failed');
+    expect(r.status).toBe('done_with_concerns');
     expect(r.failureReason?.code).toBe('contract_not_satisfied');
-    expect(r.contractNote).toBeNull();
-    expect(commitAll).toHaveBeenCalledOnce(); // work is still committed, never discarded
+    expect(r.failureReason?.message).toContain('I-9');   // which task
+    expect(r.failureReason?.message).toContain('0%');    // derived from per-task verdicts
+    expect(commitAll).toHaveBeenCalledOnce();            // work is committed, never discarded
   });
 
   it('row 3: tests pass + UNMATCHED → done_with_concerns + contract_unverifiable, NOT failed', async () => {
@@ -125,38 +126,48 @@ describe('execute_plan completion matrix (FR-9)', () => {
 
   // --- tests FAIL: all three rows must be `failed` / tests_failed ---
 
-  it('row 4: tests fail + matched + all done → failed with tests_failed (never done)', async () => {
+  it('failing acceptance tests are surfaced loudly but still land the work', async () => {
     const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"done"}]}', run: FAIL() }));
-    expect(r.status).toBe('failed');
+    expect(r.status).toBe('done_with_concerns');
     expect(r.failureReason?.code).toBe('tests_failed');
+    expect(r.failureReason?.message).toContain('committed on your branch');
+    expect(commitAll).toHaveBeenCalledOnce();
   });
 
-  it('row 5: tests fail + matched + not done → failed with tests_failed (tests take precedence)', async () => {
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"failed"}]}', run: FAIL() }));
-    expect(r.status).toBe('failed');
-    expect(r.failureReason?.code).toBe('tests_failed');
-  });
-
-  it('row 6: tests fail + unmatched → failed with tests_failed; note is diagnostic only', async () => {
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-404","status":"done"}]}', run: FAIL() }));
-    expect(r.status).toBe('failed');
-    expect(r.failureReason?.code).toBe('tests_failed');
-    // Populated for diagnosis, but it must not have softened the failure.
-    expect(r.contractNote?.code).toBe('contract_unverifiable');
-  });
-
-  it('never discards work: the engine commits on every terminal state', async () => {
+  it('never terminates `failed` for any judgement about the work', async () => {
     const cases: Array<[string, PipelineInput['runAcceptanceCommand']]> = [
       ['{"tasks":[{"id":"I-9","status":"done"}]}', PASS()],
       ['{"tasks":[{"id":"I-9","status":"failed"}]}', PASS()],
       ['{"tasks":[{"id":"I-404","status":"done"}]}', PASS()],
       ['{"tasks":[{"id":"I-9","status":"done"}]}', FAIL()],
+      ['{"tasks":[{"id":"I-9","status":"failed"}]}', FAIL()],
+      ['{"tasks":[{"id":"I-404","status":"done"}]}', FAIL()],
     ];
     for (const [reviewerOutput, run] of cases) {
       vi.clearAllMocks();
-      await runTwoPhasePipeline(baseInput({ reviewerOutput, run }));
+      const r = await runTwoPhasePipeline(baseInput({ reviewerOutput, run }));
+      expect(r.status, reviewerOutput).not.toBe('failed');
       expect(commitAll).toHaveBeenCalledOnce();
     }
+  });
+
+  it('reports a DERIVED percentage naming which tasks are outstanding', async () => {
+    const three = [
+      { id: 'I-1', title: 'Task I-1: a' },
+      { id: 'I-2', title: 'Task I-2: b' },
+      { id: 'I-3', title: 'Task I-3: c' },
+    ];
+    const r = await runTwoPhasePipeline(baseInput({
+      dispatchedContractTasks: three,
+      dispatchedTasks: three.map(t => `${t.id}: ${t.title}`),
+      acceptanceTestSnapshot: { tasks: three.map(t => ({ ...snapshot.tasks[0]!, id: t.id, title: t.title })) },
+      reviewerOutput: '{"tasks":[{"id":"I-1","status":"done"},{"id":"I-2","status":"done"},{"id":"I-3","status":"failed"}]}',
+      run: PASS(),
+    }));
+    expect(r.completionPercent).toBe(67);                              // 2 of 3
+    expect(r.failureReason?.message).toContain('Not done: I-3');       // names the outstanding task
+    expect(r.failureReason?.message).toContain('done: I-1, I-2');      // and what did land
+    expect(r.status).toBe('done_with_concerns');
   });
 
   it('keeps the executor\'s corrected test when the plan-authored test is broken but the contract is satisfied', async () => {

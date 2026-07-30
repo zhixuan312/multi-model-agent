@@ -3,6 +3,9 @@ import { parseContractPlan } from '../../packages/core/src/unified/contract-plan
 import {
   dispatchedTasksFromSnapshot,
   contractMatchFromReviewer,
+  resolveSelectors,
+  describeSelectorFailure,
+  extractTaskId,
 } from '../../packages/core/src/unified/contract-match.js';
 
 /**
@@ -156,5 +159,63 @@ describe('contract chain round-trip', () => {
     expect(contractMatchFromReviewer({}, dispatched).matched).toBe(false);
     expect(contractMatchFromReviewer({ tasks: 'nope' }, dispatched).matched).toBe(false);
     expect(contractMatchFromReviewer({ tasks: [{ status: 'done' }] }, dispatched).matched).toBe(false);
+  });
+
+  /**
+   * Selection and reviewer-matching must use ONE identity scheme. Selection used to compare
+   * byte-exact titles while the reviewer contract compared ids — two ways to name one task, and
+   * the selector side produced the same spurious `no_match` on a heading copied without its
+   * `(← AC-…)` annotation.
+   */
+  describe('selector resolution shares the task-id scheme', () => {
+    const dispatched = () => dispatchedTasksFromSnapshot(parseContractPlan(PLAN));
+
+    it('accepts every spelling of the same task', () => {
+      for (const sel of [
+        'I-1',
+        'i-1',
+        'Task I-1',
+        'Task I-1: Parse and validate frozen Contract Tasks (← AC-1.1)',
+        '### Task I-1: Parse and validate frozen Contract Tasks',
+        'Task I-1: a title the caller paraphrased',
+      ]) {
+        const r = resolveSelectors([sel], dispatched());
+        expect(r.ok, sel).toBe(true);
+        if (r.ok) expect(r.ids).toEqual(['I-1']);
+      }
+    });
+
+    it('preserves caller order', () => {
+      const r = resolveSelectors(['I-2', 'I-1'], dispatched());
+      expect(r.ok && r.ids).toEqual(['I-2', 'I-1']);
+    });
+
+    it('rejects an unknown task and names the available ids (FR-11)', () => {
+      const r = resolveSelectors(['I-9'], dispatched());
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.availableTaskIds).toEqual(['I-1', 'I-2']);
+        const msg = describeSelectorFailure(r);
+        expect(msg).toContain('I-1');
+        expect(msg).toContain('I-2');
+      }
+    });
+
+    it('rejects two selectors resolving to the same task', () => {
+      const r = resolveSelectors(['I-1', 'Task I-1: whatever'], dispatched());
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.duplicated).toEqual(['I-1']);
+    });
+
+    it('rejects a selector carrying no id at all', () => {
+      const r = resolveSelectors(['Do the thing'], dispatched());
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.unresolvable).toEqual(['Do the thing']);
+    });
+
+    it('extractTaskId returns null when there is no id', () => {
+      expect(extractTaskId('no identity here')).toBeNull();
+      expect(extractTaskId('Task II-12: x')).toBe('II-12');
+    });
   });
 });

@@ -21,10 +21,10 @@
  */
 
 /** The only git subcommands a worker may run. Everything else is denied. */
-export const ALLOWED_GIT_SUBCOMMANDS = new Set(['status', 'log', 'diff', 'show']);
+const ALLOWED_GIT_SUBCOMMANDS = new Set(['status', 'log', 'diff', 'show']);
 
 /** The only flags permitted on an allowed subcommand. Everything else is denied. */
-export const ALLOWED_GIT_FLAGS = new Set([
+const ALLOWED_GIT_FLAGS = new Set([
   '--porcelain', '--short', '-s',
   '--oneline', '--stat', '--numstat', '--shortstat',
   '--name-only', '--name-status',
@@ -35,7 +35,7 @@ export const ALLOWED_GIT_FLAGS = new Set([
 ]);
 
 /** Flags that take a value and are safe in the `--flag=value` / `-n 5` forms. */
-export const ALLOWED_GIT_VALUE_FLAGS = new Set(['-n', '--max-count', '--format', '--pretty', '--since', '--until']);
+const ALLOWED_GIT_VALUE_FLAGS = new Set(['-n', '--max-count', '--format', '--pretty', '--since', '--until']);
 
 /** Global options that select the repository but do not alter execution behaviour. */
 const ALLOWED_GLOBAL_VALUE_OPTS = new Set(['-C']);

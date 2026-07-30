@@ -96,3 +96,32 @@ describe('ExecutionStore', () => {
     expect(store.get('t1')!.workerPid).toBe(4242);
   });
 });
+
+describe('ExecutionStore after close', () => {
+  /**
+   * Executions are detached async work, so one can still be finishing when the daemon (or a
+   * test harness) shuts the store down. Writing to a closed DatabaseSync throws
+   * ERR_INVALID_STATE from a promise nobody awaits — an unhandled rejection that takes the
+   * process down on a path where there is nothing left to persist to anyway.
+   */
+  it('turns every operation into a no-op instead of throwing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-store-closed-'));
+    const store = new ExecutionStore({ dbPath: join(dir, 'executions.db'), ttlMs: TTL });
+    store.admit('t1', 'delegate', '/tmp/x', process.pid);
+    store.close();
+
+    expect(() => store.admit('t2', 'delegate', '/tmp/x', process.pid)).not.toThrow();
+    expect(() => store.recordWorkerPid('t1', 123)).not.toThrow();
+    expect(() => store.requestCancel('t1')).not.toThrow();
+    expect(store.complete('t1', '{}')).toBe(false);
+    expect(store.fail('t1', '{}')).toBe(false);
+    expect(store.cancel('t1', '{}')).toBe(false);
+    expect(store.interrupt('t1', '{}')).toBe(false);
+    expect(store.get('t1')).toBeUndefined();
+    expect(store.stalePending(process.pid)).toEqual([]);
+    expect(store.pruneExpired()).toBe(0);
+    expect(() => store.close()).not.toThrow();   // idempotent
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
