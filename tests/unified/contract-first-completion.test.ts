@@ -12,16 +12,18 @@ vi.mock('../../packages/core/src/unified/contract-plan.js', async (importOrigina
   };
 });
 
-vi.mock('../../packages/core/src/unified/worktree-manager.js', () => {
-  const WorktreeManager = vi.fn();
-  WorktreeManager.prototype.create = vi.fn().mockResolvedValue({ branch: 'mma/x', path: '/tmp/wt' });
-  WorktreeManager.prototype.mergeAndCleanup = vi.fn().mockResolvedValue({ branch: 'mma/x', path: '/tmp/wt', merged: true });
-  WorktreeManager.prototype.remove = vi.fn().mockResolvedValue(undefined);
-  return { WorktreeManager };
-});
+// The engine now commits in the caller's checkout instead of merging a worktree, so the git
+// layer is mocked to keep these pure scoring tests.
+vi.mock('../../packages/core/src/unified/repo-commit.js', () => ({
+  captureBaseline: vi.fn().mockResolvedValue({ head: 'abc123', branch: 'mma/2026-07-31-demo', dirtyAtDispatch: false }),
+  assertRepoUntampered: vi.fn().mockResolvedValue(undefined),
+  commitAll: vi.fn().mockResolvedValue({ committed: true, head: 'def456', filesChanged: ['src/a.ts'] }),
+  isGitRepo: vi.fn().mockResolvedValue(true),
+  filesChangedSince: vi.fn().mockResolvedValue([]),
+}));
 
 import { runTwoPhasePipeline, type PipelineInput } from '../../packages/core/src/unified/two-phase-pipeline.js';
-import { WorktreeManager } from '../../packages/core/src/unified/worktree-manager.js';
+import { commitAll } from '../../packages/core/src/unified/repo-commit.js';
 import type { ContractPlanSnapshot } from '../../packages/core/src/unified/contract-plan.js';
 
 const mockTurn = (output: string) => ({
@@ -38,6 +40,7 @@ const mockProvider = (s: ReturnType<typeof mockSession>) => ({ name: 'mock', con
 
 const snapshot: ContractPlanSnapshot = {
   tasks: [{
+    id: 'I-9',
     title: 'Task I-9: Demo (AC-1.1)',
     contract: { inputsRequest: 'x', outputsResponse: 'y', dataMapping: 'z', errors: 'e', behaviorInvariants: 'b' },
     acceptanceTests: [{ path: 'tests/gen/demo.test.ts', source: 'test', command: 'true ok' }],
@@ -49,125 +52,130 @@ function baseInput(overrides: Partial<PipelineInput> & { reviewerOutput: string;
   return {
     type: 'execute_plan',
     implementerSkill: '# impl', reviewerSkill: '# rev', taskPayload: 'do',
-    implementerProvider: mockProvider(mockSession('{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}')),
+    implementerProvider: mockProvider(mockSession('{"tasks":[{"id":"I-9","status":"done"}]}')),
     reviewerProvider: mockProvider(mockSession(reviewerOutput)),
     implementerTier: 'standard', reviewerTier: 'complex', reviewPolicy: 'reviewed',
-    cwd: '/tmp/repo', sandboxPolicy: 'cwd-only', worktreeEnabled: true, taskId: 't1',
-    dispatchedTasks: ['Task I-9: Demo (AC-1.1)'], acceptanceTestSnapshot: snapshot,
+    cwd: '/tmp/repo', sandboxPolicy: 'cwd-only', writeRoute: true, taskId: 't1',
+    dispatchedTasks: ['I-9: Task I-9: Demo (AC-1.1)'],
+    dispatchedContractTasks: [{ id: 'I-9', title: 'Task I-9: Demo (AC-1.1)' }],
+    acceptanceTestSnapshot: snapshot,
     runAcceptanceCommand: run,
     ...rest,
   };
 }
 
-describe('execute_plan contract-first completion scoring', () => {
+const PASS = () => vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+const FAIL = () => vi.fn().mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'boom' });
+
+/**
+ * The FR-9 completion matrix.
+ *
+ * Deterministic acceptance-test outcome is evaluated FIRST and is authoritative — a test failure
+ * can never be upgraded by contract state. The three tests-failing rows previously had NO defined
+ * outcome, which is how a genuine test failure could surface as done_with_concerns. The old gate
+ * (`contractSatisfied && testsPass`) also ANDed a brittle LLM title echo with a deterministic
+ * signal and let the brittle one veto, failing complete and green work.
+ */
+describe('execute_plan completion matrix (FR-9)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('scores 100 and merges when contract satisfied and all acceptance commands pass', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run }));
+  // --- tests PASS ---
+
+  it('row 1: tests pass + matched + all done → done/100, commit made, no contract note', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"done"}]}', run: PASS() }));
     expect(r.completionPercent).toBe(100);
     expect(r.status).toBe('done');
-    expect(r.worktree).not.toBeNull();
-    expect(WorktreeManager.prototype.mergeAndCleanup).toHaveBeenCalledOnce();
-    expect(WorktreeManager.prototype.remove).not.toHaveBeenCalled();
-    expect(run).toHaveBeenCalledWith('true ok', expect.any(String));
+    expect(r.contractNote).toBeNull();
+    expect(r.worktree).toBeNull();
+    expect(commitAll).toHaveBeenCalledOnce();
+    expect(r.filesChangedFromGit).toEqual(['src/a.ts']);
   });
 
-  // Regression: `mma-plan` annotates task headings with the acceptance criteria they
-  // satisfy — `### Task I-1: Do it (← AC-1.1, AC-1.2)` — and parseContractPlan keeps
-  // that annotation in `title`, so it rides into dispatchedTasks. A reviewer echoing
-  // the title back routinely drops the parenthetical. Byte-exact matching therefore
-  // failed the gate at completion 60 for a correct, fully-tested implementation: the
-  // plan generator emitted a format its own validator rejected.
-  it('scores 100 when the reviewer omits the (← AC-…) traceability annotation from an echoed title', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const annotated = 'Task I-1: Implement the pinned-loopback stdio bridge (← AC-1.1, AC-1.2, AC-1.11b)';
-    const echoedWithoutSuffix = 'Task I-1: Implement the pinned-loopback stdio bridge';
+  it('row 1: a reviewer that paraphrases the title still scores 100 — ids are what match', async () => {
     const r = await runTwoPhasePipeline(baseInput({
-      dispatchedTasks: [annotated],
-      acceptanceTestSnapshot: { tasks: [{ ...snapshot.tasks[0]!, title: annotated }] },
-      reviewerOutput: JSON.stringify({ tasks: [{ title: echoedWithoutSuffix, status: 'done' }] }),
-      run,
+      reviewerOutput: '{"tasks":[{"id":"I-9","title":"totally different wording","status":"done"}]}',
+      run: PASS(),
     }));
     expect(r.completionPercent).toBe(100);
     expect(r.status).toBe('done');
-    expect(WorktreeManager.prototype.mergeAndCleanup).toHaveBeenCalledOnce();
+    expect(r.failureReason).toBeUndefined();
   });
 
-  // Normalization must not create ambiguity: when two dispatched titles differ ONLY by
-  // their AC annotation, stripping it would let one reviewer entry satisfy the other.
-  // In that case exact matching is retained, so a partial echo still fails the gate.
-  it('falls back to exact matching when stripping the annotation would collide two titles', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const a = 'Task I-1: Same name (← AC-1.1)';
-    const b = 'Task I-1: Same name (← AC-2.2)';
-    const r = await runTwoPhasePipeline(baseInput({
-      dispatchedTasks: [a, b],
-      acceptanceTestSnapshot: {
-        tasks: [{ ...snapshot.tasks[0]!, title: a }, { ...snapshot.tasks[0]!, title: b }],
-      },
-      // Both echoed WITHOUT the annotation — indistinguishable once stripped.
-      reviewerOutput: JSON.stringify({
-        tasks: [{ title: 'Task I-1: Same name', status: 'done' }, { title: 'Task I-1: Same name', status: 'done' }],
-      }),
-      run,
-    }));
-    expect(r.completionPercent).toBeLessThan(80);
+  it('row 2: tests pass + matched + NOT done → failed with contract_not_satisfied', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"failed"}]}', run: PASS() }));
     expect(r.status).toBe('failed');
+    expect(r.failureReason?.code).toBe('contract_not_satisfied');
+    expect(r.contractNote).toBeNull();
+    expect(commitAll).toHaveBeenCalledOnce(); // work is still committed, never discarded
   });
 
-  it('scores below 80, fails, and PRESERVES the worktree (never discards) when a reviewer task is not done', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"failed"}]}', run }));
-    expect(r.completionPercent).toBeLessThan(80);
+  it('row 3: tests pass + UNMATCHED → done_with_concerns + contract_unverifiable, NOT failed', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-404","status":"done"}]}', run: PASS() }));
+    expect(r.status).toBe('done_with_concerns');
+    expect(r.completionPercent).toBe(100);
+    expect(r.failureReason).toBeUndefined();
+    expect(r.contractNote?.code).toBe('contract_unverifiable');
+    expect(r.contractNote?.availableTaskIds).toEqual(['I-9']);
+    // FR-11: the diagnostic names what WOULD have matched.
+    expect(r.contractNote?.message).toContain('I-9');
+    // It must never assert the work is incomplete.
+    expect(r.contractNote?.message).toContain('does NOT mean the implementation is incomplete');
+    expect(commitAll).toHaveBeenCalledOnce();
+  });
+
+  // --- tests FAIL: all three rows must be `failed` / tests_failed ---
+
+  it('row 4: tests fail + matched + all done → failed with tests_failed (never done)', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"done"}]}', run: FAIL() }));
     expect(r.status).toBe('failed');
-    // The worktree is PRESERVED for inspection, NOT discarded — silently deleting a (possibly complete)
-    // implementation was the reported data-loss regression. It is not merged, and remove is not called.
-    expect(r.worktree).not.toBeNull();
-    expect(r.worktree?.merged).toBe(false);
-    expect(WorktreeManager.prototype.mergeAndCleanup).not.toHaveBeenCalled();
-    expect(WorktreeManager.prototype.remove).not.toHaveBeenCalled();
-    expect(r.failureReason?.message ?? '').toContain('preserved');
+    expect(r.failureReason?.code).toBe('tests_failed');
   });
 
-  it('keeps the executor\'s corrected test and MERGES when the plan-authored test is broken but the contract is satisfied', async () => {
-    // Regression for the re-materialization data-loss: the executor\'s tests pass (1st runAll) but the
-    // re-materialized FROZEN plan test fails (2nd runAll) because the plan-authored test itself is buggy.
-    // With the reviewer confirming the contract, the executor\'s corrected version is accepted + kept, so
-    // completion is 100 and the work merges instead of being discarded.
+  it('row 5: tests fail + matched + not done → failed with tests_failed (tests take precedence)', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"failed"}]}', run: FAIL() }));
+    expect(r.status).toBe('failed');
+    expect(r.failureReason?.code).toBe('tests_failed');
+  });
+
+  it('row 6: tests fail + unmatched → failed with tests_failed; note is diagnostic only', async () => {
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-404","status":"done"}]}', run: FAIL() }));
+    expect(r.status).toBe('failed');
+    expect(r.failureReason?.code).toBe('tests_failed');
+    // Populated for diagnosis, but it must not have softened the failure.
+    expect(r.contractNote?.code).toBe('contract_unverifiable');
+  });
+
+  it('never discards work: the engine commits on every terminal state', async () => {
+    const cases: Array<[string, PipelineInput['runAcceptanceCommand']]> = [
+      ['{"tasks":[{"id":"I-9","status":"done"}]}', PASS()],
+      ['{"tasks":[{"id":"I-9","status":"failed"}]}', PASS()],
+      ['{"tasks":[{"id":"I-404","status":"done"}]}', PASS()],
+      ['{"tasks":[{"id":"I-9","status":"done"}]}', FAIL()],
+    ];
+    for (const [reviewerOutput, run] of cases) {
+      vi.clearAllMocks();
+      await runTwoPhasePipeline(baseInput({ reviewerOutput, run }));
+      expect(commitAll).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('keeps the executor\'s corrected test when the plan-authored test is broken but the contract is satisfied', async () => {
+    // The executor's own tests pass (1st runAll) but the re-materialized FROZEN plan test fails
+    // (2nd runAll) because the plan-authored test itself is buggy. With the reviewer confirming
+    // the contract, the executor's corrected version is accepted and completion is 100.
     let call = 0;
-    const run = vi.fn().mockImplementation(async () =>
-      ++call <= 1 ? { exitCode: 0, stdout: '', stderr: '' } : { exitCode: 1, stdout: '', stderr: 'plan-authored test failed to load' });
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run }));
+    const run = vi.fn().mockImplementation(async () => {
+      call += 1;
+      return call === 1 ? { exitCode: 0, stdout: '', stderr: '' } : { exitCode: 1, stdout: '', stderr: 'frozen test bug' };
+    });
+    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"done"}]}', run }));
     expect(r.completionPercent).toBe(100);
     expect(r.status).toBe('done');
-    expect(r.worktree).not.toBeNull();
-    expect(WorktreeManager.prototype.mergeAndCleanup).toHaveBeenCalledOnce();
   });
 
-  it('scores below 80 and fails when an acceptance command exits non-zero (even if reviewer says done)', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'boom' });
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run }));
-    expect(r.completionPercent).toBeLessThan(80);
-    expect(r.status).toBe('failed');
-    expect(WorktreeManager.prototype.mergeAndCleanup).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unknown reviewer title (not one-to-one with dispatched)', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-99: Ghost","status":"done"}]}', run }));
-    expect(r.completionPercent).toBeLessThan(80);
-    expect(r.status).toBe('failed');
-  });
-
-  it('refuses to auto-pass an execute_plan dispatched without a contract snapshot (defense-in-depth)', async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const input = baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"done"}]}', run });
-    delete input.acceptanceTestSnapshot;
-    const r = await runTwoPhasePipeline(input);
-    expect(r.completionPercent).toBe(0);
-    expect(r.status).toBe('failed');
-    expect(r.failureReason?.code).toBe('missing_contract_snapshot');
-    expect(WorktreeManager.prototype.mergeAndCleanup).not.toHaveBeenCalled();
+  it('runs the plan-authored acceptance command', async () => {
+    const run = PASS();
+    await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"id":"I-9","status":"done"}]}', run }));
+    expect(run).toHaveBeenCalledWith('true ok', expect.any(String));
   });
 });

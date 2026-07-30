@@ -6,7 +6,7 @@ Only `orchestrate` forces `"none"`. Callers can override per-request.
 For read-only routes (audit, review, debug, investigate, research, journal_recall),
 the refiner verifies the implementer's output against source material — checking
 citations, evidence accuracy, and completeness. For write routes (delegate,
-execute_plan, journal_record), the refiner also fixes issues in the worktree.
+execute_plan), the refiner also fixes issues directly in the working tree.
 
 | Value | Behavior | Use when |
 |---|---|---|

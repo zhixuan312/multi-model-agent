@@ -4,6 +4,7 @@ import {
   parseContractPlan,
   assertSafeAcceptanceTestPaths,
   ContractPlanError,
+  dispatchedTasksFromSnapshot,
   type ContractPlanSnapshot,
 } from '@zhixuan92/multi-model-agent-core';
 import { PreprocessFailure, type Preprocessor } from './types.js';
@@ -78,10 +79,14 @@ export const executePlanPreprocessor: Preprocessor = async ({ cwd, payload }) =>
     }
   }
 
+  const contractTasks = dispatchedTasksFromSnapshot(selectedSnapshot);
+
   return {
     acceptanceTestSnapshot: selectedSnapshot,
-    dispatchedTasks: selectedSnapshot.tasks.map((t) => t.title),
-    copyToWorktree: [path.isAbsolute(planPath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(resolvedPlanPath)) : planPath],
+    // Prompt-facing labels lead with the stable id so the reviewer echoes it back.
+    dispatchedTasks: contractTasks.map((t) => `${t.id}: ${t.title}`),
+    // Authoritative matching key — never the prose title.
+    dispatchedContractTasks: contractTasks,
     totalTasks: selectedSnapshot.tasks.length,
   };
 };

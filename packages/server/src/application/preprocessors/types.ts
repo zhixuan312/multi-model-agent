@@ -3,6 +3,7 @@ import type {
   Provider,
   TaskType,
   ContractPlanSnapshot,
+  DispatchedContractTask,
   SkillPair,
   TaskInput,
 } from '@zhixuan92/multi-model-agent-core';
@@ -41,8 +42,9 @@ export interface PreprocessorArgs {
 export interface PreprocessResult {
   /** execute_plan / journal_record: labels the reviewer verifies for completeness. */
   dispatchedTasks?: string[];
-  /** Files (cwd-relative) the pipeline must copy into the worktree. */
-  copyToWorktree?: string[];
+  /** execute_plan: the authoritative id-keyed records the contract matcher resolves against.
+   *  Distinct from `dispatchedTasks`, which is prompt prose the reviewer may paraphrase. */
+  dispatchedContractTasks?: DispatchedContractTask[];
   /** execute_plan: frozen parsed Contract snapshot for acceptance-test scoring. */
   acceptanceTestSnapshot?: ContractPlanSnapshot;
   /** Progress denominator surfaced by the poll endpoint. */

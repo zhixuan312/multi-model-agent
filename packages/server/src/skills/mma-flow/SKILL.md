@@ -93,7 +93,7 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Trigger : mma-execute-plan  (worker), once per repo
 - Read    : mma-execute-plan/SKILL.md
 - Wire    : plan → target.paths[0] ; headings → tasks[] (empty = whole plan)
-- Out     : code (MMA commits)
+- Out     : code (MMA commits on the branch cut at B4)
 - Uses    : Common: Multi-repo · Never-halt
 
 ### B6 — Review
@@ -219,18 +219,18 @@ rest of the chain — see Common: Artifact stem).
 
 ## Common: Fixes inline   (B1, B3, B6)
 
-The audit/review PASS runs on a worker; the FIX does not. The main agent applies
-every fix directly with `Edit` on the real file — never via mma-delegate or
-mma-execute-plan.
+The audit/review PASS runs on a worker; the FIX is applied by the main agent with
+`Edit` on the real file.
 
-Why: those are worktree routes — the worker edits a copy that git merges back.
-Spec/plan artifacts live under `.mma/`, which is gitignored, so the merge silently
-discards the edits (and the worker still reports success) → the loop never
-converges. B6 targets tracked source, where inline `Edit` also applies cleanly —
-keep it inline for consistency.
+This used to be a hard prohibition, because delegate/execute_plan ran inside a git
+worktree: the worker edited a copy that was merged back, and `.mma/` is gitignored,
+so a merge silently discarded every spec/plan edit while the worker still reported
+success — the loop could never converge. Write routes now edit the caller's checkout
+IN PLACE, so that failure mode is gone and a gitignored path is no longer special.
 
-If a fix is genuinely too large for inline, route it through a `worktree:false`
-type (orchestrate), which edits in place — never delegate/execute_plan.
+Inline `Edit` remains the default because it is faster and keeps the audit-fix loop
+in one context. A fix genuinely too large for inline may go to a worker; there is no
+longer a route that would silently drop it.
 
 **Bump the version each fix round.** The `.mma/` design artifacts (exploration, spec,
 plan) carry YAML frontmatter (`version` + `updated_at`). After applying a round's fixes
@@ -310,11 +310,11 @@ plan (see mma-plan).
 `topic = <repo-slug>` (lowercase-kebab) so product-level knowledge slices per repo.
 
 **Per-target git, B4–B9.** Each involved target is handled by its own git status:
-- **Git target** → branch → `execute_plan` (worktree) → review → verify → PR → merge.
-- **Non-git target** → `execute_plan` runs **in-place** (no worktree, edits the folder
-  directly); **skip** branch/PR/merge and record `delivered in-place, no PR (non-git target)`
-  in the backlog. Git is never forced. B5 still copies each secondary repo's plan into its
-  cwd for the worker (`copyToWorktree` is cwd-relative); the parent/single repo needs no copy.
+- **Git target** → branch → `execute_plan` (in place on that branch) → review → verify → PR → merge.
+- **Non-git target** → `execute_plan` edits the folder directly and the engine makes no
+  commit; **skip** branch/PR/merge and record `delivered in-place, no PR (non-git target)`
+  in the backlog. Git is never forced. Plans are read straight from the caller's cwd — no
+  file copying is involved any more.
 
 Barrier per stage: finish a stage across ALL involved repos before advancing; LOCATE resumes
 at the earliest stage not complete for all of them.

@@ -9,24 +9,24 @@ describe('TypeRegistry', () => {
     expect(TASK_TYPES).toHaveLength(12);
   });
 
-  it('delegate defaults to standard/worktree/cwd-only', () => {
+  it('delegate defaults to standard/writeRoute/cwd-only', () => {
     const c = getTypeConfig('delegate');
-    expect(c).toMatchObject({ defaultTier: 'standard', worktree: true, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'standard', writeRoute: true, sandbox: 'cwd-only' });
   });
 
-  it('audit defaults to complex/no-worktree/read-only', () => {
+  it('audit defaults to complex/no-writeRoute/read-only', () => {
     const c = getTypeConfig('audit');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'read-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', writeRoute: false, sandbox: 'read-only' });
   });
 
-  it('journal_record defaults to complex/no-worktree/cwd-only', () => {
+  it('journal_record defaults to complex/no-writeRoute/cwd-only', () => {
     const c = getTypeConfig('journal_record');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', writeRoute: false, sandbox: 'cwd-only' });
   });
 
-  it('orchestrate defaults to main/no-worktree/cwd-only', () => {
+  it('orchestrate defaults to main/no-writeRoute/cwd-only', () => {
     const c = getTypeConfig('orchestrate');
-    expect(c).toMatchObject({ defaultTier: 'main', worktree: false, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'main', writeRoute: false, sandbox: 'cwd-only' });
   });
 
   it('throws for unknown type', () => {
@@ -43,7 +43,7 @@ describe('TypeRegistry', () => {
     for (const t of TASK_TYPES) {
       const c = getTypeConfig(t);
       expect(['standard', 'complex', 'main']).toContain(c.defaultTier);
-      expect(typeof c.worktree).toBe('boolean');
+      expect(typeof c.writeRoute).toBe('boolean');
       expect(['read-only', 'cwd-only']).toContain(c.sandbox);
       expect(typeof c.targetAcceptance.paths).toBe('boolean');
       expect(typeof c.targetAcceptance.inline).toBe('boolean');
@@ -81,15 +81,15 @@ describe('TypeRegistry', () => {
     expect(getTypeConfig('debug').targetAcceptance.inline).toBe(false);
   });
 
-  it('spec defaults to complex/no-worktree/cwd-only with required target', () => {
+  it('spec defaults to complex/no-writeRoute/cwd-only with required target', () => {
     const c = getTypeConfig('spec');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', writeRoute: false, sandbox: 'cwd-only' });
     expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
   });
 
-  it('plan defaults to complex/no-worktree/cwd-only with required target', () => {
+  it('plan defaults to complex/no-writeRoute/cwd-only with required target', () => {
     const c = getTypeConfig('plan');
-    expect(c).toMatchObject({ defaultTier: 'complex', worktree: false, sandbox: 'cwd-only' });
+    expect(c).toMatchObject({ defaultTier: 'complex', writeRoute: false, sandbox: 'cwd-only' });
     expect(c.targetAcceptance).toEqual({ paths: true, inline: true, required: true });
   });
 });

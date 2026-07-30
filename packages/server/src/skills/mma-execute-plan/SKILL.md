@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch Contract Tasks from a **contract-first** plan file to a single worker session. The `tasks` array selects which Contract Task headings to execute — the worker receives them all in one prompt and executes them sequentially in plan order within one worktree. Empty `tasks` = run all.
+Dispatch Contract Tasks from a **contract-first** plan file to a single worker session. The `tasks` array selects which Contract Task headings to execute — the worker receives them all in one prompt and executes them sequentially in plan order in your checkout, on the branch you already have checked out. Empty `tasks` = run all.
 
 **Core principle:** The plan IS the prompt. The worker is an **autonomous** implementer of each task's contract — it implements freely and makes the plan-authored acceptance tests pass, rather than copying implementation code.
 
@@ -138,17 +138,19 @@ Worker rejects with "no matching task" or matches the wrong one. **Fix:** copy t
 
 Worker can't read the task body. **Fix:** always include the plan path: `target.paths: ["/project/.mma/plans/2026-07-11-feature.md"]`.
 
-execute_plan handles dependencies naturally since tasks run sequentially in one session — the worker executes them in order within a single worktree.
+execute_plan handles dependencies naturally since tasks run sequentially in one session — the worker executes them in order in your checkout, and the engine makes one commit at the end.
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit the engine makes on your branch, plus `output.filesChanged` (which is `git diff --name-only` across that commit, not a worker self-report). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
 ## Non-git targets
 
-Execution is **one plan file** per request. Git targets use worktree isolation; **non-git** targets run
-**in-place** (no worktree, edits the folder directly), skipping branch/PR/merge. No new execution task type
+Execution is **one plan file** per request. execute_plan always runs **in-place**: it edits the `cwd`
+you submit, on whatever branch that checkout already has. **You own the branch** — cut and check out
+your task branch BEFORE dispatching; the engine never creates a branch or a worktree, it commits your
+work on yours. A **non-git** target is edited in-place too, just with no commit. No new execution task type
 is introduced, and git is never forced.
 
 @include _shared/error-handling.md

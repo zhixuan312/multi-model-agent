@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runTwoPhasePipeline, type PipelineInput } from '../../packages/core/src/unified/two-phase-pipeline.js';
-import { WorktreeManager } from '../../packages/core/src/unified/worktree-manager.js';
+import { captureBaseline, commitAll } from '../../packages/core/src/unified/repo-commit.js';
 
-vi.mock('../../packages/core/src/unified/worktree-manager.js', () => {
-  const WorktreeManager = vi.fn();
-  WorktreeManager.prototype.create = vi.fn();
-  WorktreeManager.prototype.mergeAndCleanup = vi.fn();
-  WorktreeManager.prototype.remove = vi.fn().mockResolvedValue(undefined);
-  return { WorktreeManager };
-});
+// The engine commits in the caller's checkout — no worktree, no branch, no merge.
+vi.mock('../../packages/core/src/unified/repo-commit.js', () => ({
+  captureBaseline: vi.fn().mockResolvedValue({ head: 'base0', branch: 'mma/2026-07-31-x', dirtyAtDispatch: false }),
+  assertRepoUntampered: vi.fn().mockResolvedValue(undefined),
+  commitAll: vi.fn().mockResolvedValue({ committed: true, head: 'new1', filesChanged: ['a.ts'] }),
+  isGitRepo: vi.fn().mockResolvedValue(true),
+  filesChangedSince: vi.fn().mockResolvedValue([]),
+}));
 
 const mockTurn = (output: string) => ({
   output,
@@ -212,26 +213,9 @@ describe('runTwoPhasePipeline', () => {
     expect(result.worktree).toBeNull();
   });
 
-  it('creates worktree when worktreeEnabled=true and cleans up', async () => {
-    const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
-
-    createMock.mockResolvedValue({
-      branch: 'mma/delegate-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: false,
-      merged: false,
-    });
-    cleanupMock.mockResolvedValue({
-      branch: 'mma/delegate-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: true,
-      merged: true,
-    });
-
+  it('runs in the CALLER cwd and commits there — no worktree, no branch', async () => {
     const impl = mockSession('{"status":"done","notes":"done"}');
     const rev = mockSession('{"status":"done","notes":"reviewed"}');
-
     const implProvider = mockProvider(impl);
     const revProvider = mockProvider(rev);
 
@@ -247,175 +231,113 @@ describe('runTwoPhasePipeline', () => {
       reviewPolicy: 'reviewed',
       cwd: '/tmp/test',
       sandboxPolicy: 'cwd-only',
-      worktreeEnabled: true,
+      writeRoute: true,
       taskId: 'abcd1234-5678-9abc-def0-1234567890ab',
     });
 
-    // Worktree was created with the worktree path
-    expect(createMock).toHaveBeenCalledWith('/tmp/test', 'abcd1234-5678-9abc-def0-1234567890ab', 'delegate');
+    // The baseline is captured against the caller's own checkout.
+    expect(captureBaseline).toHaveBeenCalledWith('/tmp/test');
 
-    // Implementer runs in worktree cwd, with cwd-only tools disallowed
+    // BOTH phases run in the caller's cwd — there is no second directory any more.
     expect(implProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: '/tmp/test/.mma/worktrees/abcd1234',
-        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
-      }),
+      expect.objectContaining({ cwd: '/tmp/test', disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'] }),
     );
-    // Reviewer ALSO runs in the worktree cwd: it reviews AND fixes, so its edits
-    // must land on the worktree branch that gets merged. Same cwd-only sandbox.
     expect(revProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: '/tmp/test/.mma/worktrees/abcd1234',
-        disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'],
-      }),
+      expect.objectContaining({ cwd: '/tmp/test', disallowedTools: ['Agent', 'EnterWorktree', 'ExitWorktree'] }),
     );
 
-    // mergeAndCleanup was called with original cwd + commit message
-    expect(cleanupMock).toHaveBeenCalledWith(
-      '/tmp/test/.mma/worktrees/abcd1234',
-      'mma/delegate-abcd1234',
-      '/tmp/test',
-      expect.any(String),
-    );
+    // The engine commits once, in the caller's cwd.
+    expect(commitAll).toHaveBeenCalledOnce();
+    expect(vi.mocked(commitAll).mock.calls[0]![0]).toBe('/tmp/test');
 
-    // Result includes worktree info with merged=true
-    expect(result.worktree).toEqual({
-      branch: 'mma/delegate-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: true,
-      merged: true,
-    });
-
-    expect(result.status).toBe('done');
-  });
-
-  it('treats in-place fallback as worktree=null even when worktreeEnabled=true (non-git target)', async () => {
-    // create() returns in-place info (empty branch, path === cwd) for a non-git target.
-    const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
-    createMock.mockResolvedValue({ branch: '', path: '/tmp/plain-project', hasChanges: false, merged: false });
-
-    const impl = mockSession('{"status":"done","notes":"done"}');
-    const rev = mockSession('{"status":"done","notes":"reviewed"}');
-    const implProvider = mockProvider(impl);
-
-    const result = await runTwoPhasePipeline({
-      type: 'delegate',
-      implementerSkill: '# Implement',
-      reviewerSkill: '# Review',
-      taskPayload: 'do X',
-      implementerProvider: implProvider,
-      reviewerProvider: mockProvider(rev),
-      implementerTier: 'standard',
-      reviewerTier: 'complex',
-      reviewPolicy: 'reviewed',
-      cwd: '/tmp/plain-project',
-      sandboxPolicy: 'cwd-only',
-      worktreeEnabled: true,
-      taskId: 'abcd1234-5678-9abc-def0-1234567890ab',
-    });
-
-    // In-place: worktree null, no merge/cleanup, implementer runs in the ORIGINAL cwd.
+    // Response-compatibility key stays present and permanently null.
     expect(result.worktree).toBeNull();
-    expect(cleanupMock).not.toHaveBeenCalled();
-    expect(implProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/plain-project' }),
-    );
+    expect(result.filesChangedFromGit).toEqual(['a.ts']);
     expect(result.status).toBe('done');
   });
 
-  it('returns worktree=null when worktreeEnabled=false', async () => {
-    const createMock = vi.mocked(WorktreeManager.prototype.create);
-
-    const impl = mockSession('{"status":"done","notes":"done"}');
+  it('surfaces dirtyAtDispatch so a swept-in pre-existing change is visible', async () => {
+    vi.mocked(captureBaseline).mockResolvedValueOnce({ head: 'base0', branch: 'mma/x', dirtyAtDispatch: true });
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'do X',
-      implementerProvider: mockProvider(impl),
-      reviewerProvider: mockProvider(mockSession('')),
+      implementerProvider: mockProvider(mockSession('{"status":"done"}')),
+      reviewerProvider: mockProvider(mockSession('{"status":"done"}')),
       implementerTier: 'standard',
       reviewerTier: 'complex',
       reviewPolicy: 'none',
       cwd: '/tmp/test',
       sandboxPolicy: 'cwd-only',
-      worktreeEnabled: false,
+      writeRoute: true,
       taskId: 'test-id',
     });
 
-    expect(createMock).not.toHaveBeenCalled();
-    expect(result.worktree).toBeNull();
+    expect(result.dirtyAtDispatch).toBe(true);
   });
 
-  it('BUG REPRO: implementer prompt has original-cwd paths while session cwd is worktree', async () => {
-    const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
-
-    const ORIGINAL_CWD = '/project/repo';
-    const WORKTREE_CWD = '/project/repo/.mma/worktrees/abcd1234';
-
-    createMock.mockResolvedValue({
-      branch: 'mma/execute_plan-abcd1234',
-      path: WORKTREE_CWD,
-      hasChanges: false,
-      merged: false,
-    });
-    cleanupMock.mockResolvedValue({
-      branch: 'mma/execute_plan-abcd1234',
-      path: WORKTREE_CWD,
-      hasChanges: true,
-      merged: true,
+  it('does not touch git for a read route', async () => {
+    const result = await runTwoPhasePipeline({
+      type: 'investigate',
+      implementerSkill: '# Implement',
+      reviewerSkill: '# Review',
+      taskPayload: 'look at X',
+      implementerProvider: mockProvider(mockSession('{"status":"done"}')),
+      reviewerProvider: mockProvider(mockSession('')),
+      implementerTier: 'complex',
+      reviewerTier: 'complex',
+      reviewPolicy: 'none',
+      cwd: '/tmp/test',
+      sandboxPolicy: 'read-only',
+      writeRoute: false,
+      taskId: 'test-id',
     });
 
-    const impl = mockSession('{"tasks":[{"title":"x","status":"done"}],"notes":"done"}');
-    const rev = mockSession('{"tasks":[{"title":"x","status":"done"}],"notes":"reviewed"}');
+    expect(captureBaseline).not.toHaveBeenCalled();
+    expect(commitAll).not.toHaveBeenCalled();
+    expect(result.worktree).toBeNull();
+    expect(result.filesChangedFromGit).toBeNull();
+    expect(result.dirtyAtDispatch).toBe(false);
+  });
 
+  it('does NOT rewrite cwd paths in the payload — the worker cwd IS the caller cwd', async () => {
+    // The old pipeline string-replaced the cwd throughout the payload so worker paths pointed
+    // into the worktree. That substitution was blind (it would corrupt any incidental
+    // occurrence of the cwd string) and is now unnecessary: there is only one directory.
+    const CWD = '/project/repo';
+    const impl = mockSession('{"tasks":[{"id":"I-1","status":"done"}],"notes":"done"}');
     const implProvider = mockProvider(impl);
-    const revProvider = mockProvider(rev);
 
-    // Simulate execute_plan payload — paths use the ORIGINAL cwd
     const taskPayload = JSON.stringify({
-      target: { paths: [`${ORIGINAL_CWD}/docs/plans/my-plan.md`] },
+      target: { paths: [`${CWD}/docs/plans/my-plan.md`] },
       tasks: ['## 1. Add validation'],
     }, null, 2);
 
     await runTwoPhasePipeline({
-      type: 'execute_plan',
-      implementerSkill: '# Execute Plan — Implementer\n\nImplement the task.',
+      type: 'delegate',
+      implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload,
       implementerProvider: implProvider,
-      reviewerProvider: revProvider,
+      reviewerProvider: mockProvider(mockSession('{"status":"done"}')),
       implementerTier: 'standard',
       reviewerTier: 'complex',
-      reviewPolicy: 'reviewed',
-      cwd: ORIGINAL_CWD,
+      reviewPolicy: 'none',
+      cwd: CWD,
       sandboxPolicy: 'cwd-only',
-      worktreeEnabled: true,
+      writeRoute: true,
       taskId: 'abcd1234-5678-9abc-def0-1234567890ab',
     });
 
-    // The session was opened with the WORKTREE cwd
-    expect(implProvider.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: WORKTREE_CWD }),
-    );
+    expect(implProvider.openSession).toHaveBeenCalledWith(expect.objectContaining({ cwd: CWD }));
 
-    // But the prompt sent to the implementer contains the ORIGINAL cwd path
-    const implSendCall = impl.send.mock.calls[0];
-    const promptSent = implSendCall[0] as string;
-
-    // FIXED: The pipeline rewrites original-cwd paths to worktree paths
-    // so the implementer sees only worktree paths in its prompt.
-    const hasOriginalPath = promptSent.includes(`${ORIGINAL_CWD}/docs`);
-    const hasWorktreePath = promptSent.includes(WORKTREE_CWD);
-
-    expect(hasOriginalPath).toBe(false);  // original-cwd paths are rewritten
-    expect(hasWorktreePath).toBe(true);   // prompt now references the worktree
-
-    // Verify the rewritten path is correct
-    expect(promptSent).toContain(`${WORKTREE_CWD}/docs/plans/my-plan.md`);
+    const promptSent = impl.send.mock.calls[0]![0] as string;
+    // The path survives verbatim — no rewriting, no corruption.
+    expect(promptSent).toContain(`${CWD}/docs/plans/my-plan.md`);
+    // And the worker is told git is off-limits.
+    expect(promptSent).toContain('Do NOT run git');
   });
 
   it('threads bus into both openSession calls', async () => {
@@ -530,48 +452,26 @@ describe('runTwoPhasePipeline', () => {
     );
   });
 
-  it('creates worktree with reviewPolicy=none and cleans up', async () => {
-    const createMock = vi.mocked(WorktreeManager.prototype.create);
-    const cleanupMock = vi.mocked(WorktreeManager.prototype.mergeAndCleanup);
-
-    createMock.mockResolvedValue({
-      branch: 'mma/audit-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: false,
-      merged: false,
-    });
-    cleanupMock.mockResolvedValue({
-      branch: 'mma/audit-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: false,
-      merged: false,
-    });
-
-    const impl = mockSession('done');
-
+  it('commits on the review-skipped path too (reviewPolicy=none)', async () => {
     const result = await runTwoPhasePipeline({
-      type: 'audit',
+      type: 'delegate',
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
-      taskPayload: 'audit',
-      implementerProvider: mockProvider(impl),
+      taskPayload: 'do X',
+      implementerProvider: mockProvider(mockSession('{"status":"done"}')),
       reviewerProvider: mockProvider(mockSession('')),
-      implementerTier: 'complex',
+      implementerTier: 'standard',
       reviewerTier: 'standard',
       reviewPolicy: 'none',
       cwd: '/tmp/test',
-      sandboxPolicy: 'read-only',
-      worktreeEnabled: true,
+      sandboxPolicy: 'cwd-only',
+      writeRoute: true,
       taskId: 'abcd1234-0000-0000-0000-000000000000',
     });
 
-    expect(createMock).toHaveBeenCalled();
-    expect(cleanupMock).toHaveBeenCalled();
-    expect(result.worktree).toEqual({
-      branch: 'mma/audit-abcd1234',
-      path: '/tmp/test/.mma/worktrees/abcd1234',
-      hasChanges: false,
-      merged: false,
-    });
+    expect(commitAll).toHaveBeenCalledOnce();
+    expect(result.worktree).toBeNull();
+    expect(result.filesChangedFromGit).toEqual(['a.ts']);
+    expect(result.status).toBe('done');
   });
 });

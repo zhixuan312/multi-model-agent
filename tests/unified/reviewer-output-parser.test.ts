@@ -17,7 +17,7 @@ const VALID_DELEGATE = JSON.stringify({
 });
 
 const VALID_EXECUTE_PLAN = JSON.stringify({
-  tasks: [{ title: 'Add error handler', status: 'done' }],
+  tasks: [{ id: 'I-1', title: 'Add error handler', status: 'done' }],
   notes: 'Applied verbatim',
 });
 
@@ -165,8 +165,9 @@ describe('parseReviewerOutput', () => {
       const r = parseReviewerOutput(VALID_EXECUTE_PLAN, 'execute_plan');
       expect(r.ok).toBe(true);
       if (r.ok) {
-        const data = r.data as { tasks: { title: string; status: string }[] };
+        const data = r.data as { tasks: { id: string; title?: string; status: string }[] };
         expect(data.tasks).toHaveLength(1);
+        expect(data.tasks[0].id).toBe('I-1');
         expect(data.tasks[0].status).toBe('done');
       }
     });

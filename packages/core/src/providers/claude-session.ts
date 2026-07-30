@@ -99,7 +99,7 @@ export class ClaudeSession implements Session {
     //   1. Goal-mode Stop hook (replicates /goal): re-block stop until the
     //      goalCondition is met.
     //   2. cwd confinement (cwd-only tasks): a PreToolUse hook that denies writes
-    //      escaping the worktree — the SDK equivalent of codex `-s workspace-write`,
+    //      escaping the workspace — the SDK equivalent of codex `-s workspace-write`,
     //      since `bypassPermissions` itself applies no filesystem boundary.
     const hookMap: Record<string, unknown> = {};
     if (_opts?.goalCondition) {

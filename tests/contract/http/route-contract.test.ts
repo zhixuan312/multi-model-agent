@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -417,11 +418,19 @@ describe('route contract', () => {
     });
 
     it('accepts delegate flat shape (prompt, not tasks array)', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+      // MUST run against a throwaway dir, never `process.cwd()`. `delegate` is a WRITE route:
+      // dispatching it at the engine checkout makes the engine commit in this repo. That is not
+      // hypothetical — it committed a developer's uncommitted work here under
+      // "[mma] delegate: do something" before the no-op guard in repo-commit.ts existed.
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-shape-'));
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await dispatch(h, { type: 'delegate', prompt: 'do something' });
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({ type: 'delegate', prompt: 'do something' }),
+        });
         expect(res.status).toBe(202);
-      } finally { await h.close(); }
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
     it('rejects old delegate tasks array with 400', async () => {
@@ -479,7 +488,7 @@ describe('route contract', () => {
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
-    it('delegate still creates a worktree (non-null) for a git cwd target — no regression', async () => {
+    it('delegate on a GIT cwd creates no branch and no worktree — it stays on the caller branch', async () => {
       // Isolated temp git repo (not the engine repo) so the git path is exercised deterministically.
       const tmp = await mkdtemp(join(tmpdir(), 'mma-git-'));
       execFileSync('git', ['init', '-q'], { cwd: tmp });
@@ -488,6 +497,12 @@ describe('route contract', () => {
       await writeFile(join(tmp, 'f.txt'), 'x\n');
       execFileSync('git', ['add', '-A'], { cwd: tmp });
       execFileSync('git', ['commit', '-qm', 'init'], { cwd: tmp });
+      // The caller owns the branch — exactly what /mma:flow and Forge do before dispatching.
+      execFileSync('git', ['checkout', '-q', '-b', 'mma/2026-07-31-demo'], { cwd: tmp });
+
+      const branchesBefore = execFileSync('git', ['branch', '--format=%(refname:short)'], { cwd: tmp, encoding: 'utf8' })
+        .split('\n').map(s => s.trim()).filter(Boolean).sort();
+
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
         const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
@@ -496,7 +511,23 @@ describe('route contract', () => {
         });
         const { taskId } = (await res.json()) as { taskId: string };
         const env = await pollToTerminal(h, taskId);
-        expect((env.execution as Record<string, unknown>).worktree).not.toBeNull();
+
+        // The engine owns no worktree any more; the key stays present and null.
+        const execution = env.execution as Record<string, unknown>;
+        expect(execution.worktree).toBeNull();
+        expect(typeof execution.dirtyAtDispatch).toBe('boolean');
+
+        // It created NO branch of its own …
+        const branchesAfter = execFileSync('git', ['branch', '--format=%(refname:short)'], { cwd: tmp, encoding: 'utf8' })
+          .split('\n').map(s => s.trim()).filter(Boolean).sort();
+        expect(branchesAfter).toEqual(branchesBefore);
+
+        // … left the caller's branch checked out …
+        const head = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: tmp, encoding: 'utf8' }).trim();
+        expect(head).toBe('mma/2026-07-31-demo');
+
+        // … and created no worktree directory.
+        expect(existsSync(join(tmp, '.mma', 'worktrees'))).toBe(false);
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
   });

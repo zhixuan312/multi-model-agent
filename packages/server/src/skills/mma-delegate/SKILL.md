@@ -126,13 +126,21 @@ The reviewer sees the full diff with the original prompt as context. Reading inl
 
 ## Terminal context block
 
-Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit (merged worktree branch + `output.filesChanged`). The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
+Write-route tasks (delegate / execute-plan) do NOT register a terminal context block — their durable record is the commit the engine makes on your branch, plus `output.filesChanged`. The result's `contextBlockId` is always `null` for these routes. Read routes (audit / review / debug / investigate / research) return a non-null `contextBlockId`; see those skills for the delta-follow-up recipe.
 
 
 ## Non-git targets
 
-When the target `cwd` is **non-git**, delegate runs **in-place** with **no worktree** — it edits the
-folder directly under the cwd-only sandbox, and there is no branch/PR/merge. Git targets keep worktree
-isolation unchanged. Git is never forced.
+Delegate always runs **in-place**: it edits the `cwd` you submit, on whatever branch that checkout
+already has, under the cwd-only sandbox. The engine never creates a branch or a worktree — **you own
+the branch**, so cut and check it out before dispatching.
+
+For a **git** target the engine commits your work on that branch after the worker finishes, and
+`output.filesChanged` is measured from that commit (`git diff --name-only`), not self-reported. For a
+**non-git** target the in-place edits are simply left on disk and there is no commit, no branch, no
+PR. Git is never forced.
+
+Workers may not run git themselves (only `status` / `log` / `diff` / `show` are permitted) — the
+engine owns the commit, from outside the worker sandbox.
 
 @include _shared/error-handling.md

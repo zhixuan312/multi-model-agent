@@ -5,11 +5,13 @@ import { deriveDefaultOutputPath } from './derive-output-path.js';
 import { PreprocessFailure, type Preprocessor, type PreprocessResult } from './types.js';
 
 /**
- * Spec/Plan shared pre-processing: outputPath validation + derivation, and
- * copyToWorktree for ALL target.paths so the worker reads every input (e.g.
- * the dated exploration it is named after), not just paths[0]. Each entry must
- * resolve BEFORE dispatch — any missing / unreadable / broken-symlink path
- * fails the task; no partial copyToWorktree is produced.
+ * Spec/Plan shared pre-processing: outputPath validation + derivation, plus a resolvability
+ * preflight over ALL target.paths.
+ *
+ * The preflight survives the removal of worktrees even though the copying it used to feed does
+ * not: workers now read these paths directly out of the caller's cwd, so nothing needs copying,
+ * but failing fast on a missing / unreadable / broken-symlink input is still far better than
+ * letting a worker discover it mid-turn and improvise around it.
  */
 function preprocessSpecPlan(
   type: 'spec' | 'plan',
@@ -45,23 +47,16 @@ function preprocessSpecPlan(
     if (derived) (payload as Record<string, unknown>).outputPath = derived;
   }
 
-  let copyToWorktree: string[] | undefined;
   if (hasPaths) {
-    const allPaths = spPayload.target!.paths!;
-    const unresolvable = allPaths.find(
+    const unresolvable = spPayload.target!.paths!.find(
       (filePath) => !fs.existsSync(path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath)),
     );
     if (unresolvable !== undefined) {
       throw new PreprocessFailure('invalid_request', `target.paths contains an unresolvable path: ${unresolvable}`);
     }
-    copyToWorktree = allPaths.map((filePath) =>
-      path.isAbsolute(filePath)
-        ? path.relative(fs.realpathSync(cwd), fs.realpathSync(path.resolve(cwd, filePath)))
-        : filePath,
-    );
   }
 
-  return copyToWorktree ? { copyToWorktree } : {};
+  return {};
 }
 
 export const planPreprocessor: Preprocessor = async ({ cwd, payload }) =>

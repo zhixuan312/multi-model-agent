@@ -13,7 +13,6 @@ import {
   loadSkill,
   resolveAgent,
   runTwoPhasePipeline,
-  WorktreeManager,
   type SkillPair,
   type TaskInput,
   type MultiModelConfig,
@@ -157,7 +156,7 @@ export class ExecutionRuntime {
         taskId, input, caller, cwd, pc, skills, scope,
         implAgent, revAgent, implTier, revTier,
         reviewPolicy, callerForcedReview, startedAtMs,
-        worktree: typeConfig.worktree,
+        writeRoute: typeConfig.writeRoute,
         sandbox: typeConfig.sandbox,
       });
     });
@@ -184,7 +183,7 @@ export class ExecutionRuntime {
     reviewPolicy: 'reviewed' | 'none';
     callerForcedReview: boolean;
     startedAtMs: number;
-    worktree: boolean;
+    writeRoute: boolean;
     sandbox: 'read-only' | 'cwd-only';
   }): Promise<void> {
     const { deps } = this;
@@ -282,19 +281,6 @@ export class ExecutionRuntime {
         deps.taskRegistry.setPhase(taskId, phase);
       };
 
-      // Reap worktrees under <cwd>/.mma/worktrees/ orphaned by a prior process kill
-      // (tsx-restart / SIGKILL) that could not run its own cleanup. A worktree's shortId
-      // is its owning task's `taskId.slice(0, 8)`, so a still-in-flight task is never
-      // reaped. This runs before the pipeline creates THIS task's worktree, and only for
-      // worktree-enabled types. Best-effort — a reap failure never blocks the dispatch.
-      if (run.worktree) {
-        await new WorktreeManager()
-          .reapOrphans(cwd, (shortId) =>
-            deps.taskRegistry.allInFlight().some((e) => e.taskId.startsWith(shortId)),
-          )
-          .catch(() => undefined);
-      }
-
       const result = await runTwoPhasePipeline({
         type: input.type,
         implementerSkill: skills.implement,
@@ -308,9 +294,9 @@ export class ExecutionRuntime {
         reviewPolicy,
         cwd,
         sandboxPolicy: run.sandbox,
-        // Git detection lives in the shared WorktreeManager (WorktreeManager.isGitRepo):
-        // for a non-git target it runs in-place, so the route just passes the type's intent.
-        worktreeEnabled: run.worktree,
+        // Write routes commit on the caller's already-checked-out branch. Git detection
+        // happens in repo-commit (a `.git` entry check); a non-git target simply skips git.
+        writeRoute: run.writeRoute,
         taskId,
         implementerGoal,
         reviewerGoal,
@@ -319,7 +305,7 @@ export class ExecutionRuntime {
         forceReview: callerForcedReview,
         ...(pre.applyDecisions && { applyDecisions: pre.applyDecisions }),
         ...(pre.dispatchedTasks && { dispatchedTasks: pre.dispatchedTasks }),
-        ...(pre.copyToWorktree && { copyToWorktree: pre.copyToWorktree }),
+        ...(pre.dispatchedContractTasks && { dispatchedContractTasks: pre.dispatchedContractTasks }),
         ...(pre.acceptanceTestSnapshot && { acceptanceTestSnapshot: pre.acceptanceTestSnapshot }),
         ...(sessionIds?.implementer && { resumeImplementer: sessionIds.implementer }),
         ...(sessionIds?.reviewer && { resumeReviewer: sessionIds.reviewer }),
@@ -376,7 +362,11 @@ export class ExecutionRuntime {
           // answer — never to result.reviewerTurn.output, which is the unparseable prose
           // that failed and would otherwise pollute summary.
           summary: result.reviewerOutput ?? tryParseJson(result.implementerOutput),
-          filesChanged: result.worktree?.filesChanged ?? result.implementerTurn.filesWritten,
+          // FR-3: for a git target this is `git diff --name-only <headBeforeDispatch>..HEAD`
+          // — engine-measured, never the worker's self-report. Non-git targets have no git
+          // evidence, so they keep the provider-reported list.
+          filesChanged: result.filesChangedFromGit ?? result.implementerTurn.filesWritten,
+          ...(result.contractNote && { contractNote: result.contractNote }),
           contextBlockId,
           // Advisory: the reviewer ran but its output wasn't parseable, so the answer above
           // is the un-refined implementer output. This is a concern (status is already
@@ -390,13 +380,10 @@ export class ExecutionRuntime {
             implementer: result.sessions.implementer.sessionId,
             reviewer: result.sessions.reviewer?.sessionId ?? null,
           },
-          worktree: result.worktree
-            ? {
-                merged: result.status !== 'failed',
-                branch: result.worktree.branch,
-                ...(result.status === 'failed' ? { path: result.worktree.path } : {}),
-              }
-            : null,
+          // Permanently null: the engine no longer owns worktrees. Kept as a structural
+          // response key so existing typed consumers stay compatible.
+          worktree: null,
+          dirtyAtDispatch: result.dirtyAtDispatch,
         },
         metrics: {
           totalDurationMs: durationMs,

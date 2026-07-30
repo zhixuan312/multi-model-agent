@@ -109,8 +109,12 @@ export { loadSkill } from './unified/skill-loader.js';
 export type { SkillPair } from './unified/skill-loader.js';
 export { runTwoPhasePipeline } from './unified/two-phase-pipeline.js';
 export type { PipelineInput, PipelineResult, SessionInfo } from './unified/two-phase-pipeline.js';
-export { WorktreeManager } from './unified/worktree-manager.js';
-export type { WorktreeInfo } from './unified/worktree-manager.js';
+export {
+  dispatchedTasksFromSnapshot,
+  contractMatchFromReviewer,
+  describeContractMismatch,
+} from './unified/contract-match.js';
+export type { DispatchedContractTask, ContractMatchResult } from './unified/contract-match.js';
 export { parseReviewerOutput } from './unified/reviewer-output-parser.js';
 export type { ParseResult } from './unified/reviewer-output-parser.js';
 export { REFINER_SCHEMAS, parseRecordDecisions } from './unified/refiner-schemas.js';

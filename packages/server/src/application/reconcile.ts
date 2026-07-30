@@ -9,9 +9,9 @@
 //   3. mark each execution `interrupted` with a structured retryable reason
 //
 // Order matters: fencing before marking means a retry can never race a
-// straggler writing the same repo. Physical worktree cleanup stays with the
-// existing dispatch-time reaper (WorktreeManager.reapOrphans) — once the
-// process group is dead the orphaned worktree is inert, and interrupted
+// straggler writing the same repo. Fencing is MORE important now than it was
+// under worktrees: an orphaned worker no longer scribbles into a throwaway
+// directory, it writes the caller's live checkout. Interrupted
 // executions are terminal so the reaper no longer sees them as owned.
 //
 // Windows: process groups don't exist and `detached` is off there (workers die
