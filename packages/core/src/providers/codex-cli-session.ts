@@ -23,7 +23,7 @@ import type { ChildProcess } from 'node:child_process';
 // would be unsafe for our args (the `-c model_providers.X={…}` block contains shell
 // metacharacters that cmd.exe would mangle). Single-purpose import.
 import spawn from 'cross-spawn';
-import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

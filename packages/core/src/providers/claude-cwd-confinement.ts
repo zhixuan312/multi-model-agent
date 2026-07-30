@@ -13,6 +13,7 @@
 
 import { resolve, relative, isAbsolute, sep } from 'node:path';
 import type { SandboxPolicy } from '../unified/type-registry.js';
+import { gitDenialInCommand, pathTouchesGitDir } from './git-policy.js';
 
 /** The claude SDK tools that mutate a file at a caller-supplied path. */
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -135,17 +136,30 @@ export function evaluateConfinement(toolName: string, toolInput: unknown, cwd: s
     if (target && pathEscapesCwd(target, cwd)) {
       return deny(
         `Write blocked: "${target}" is outside the task workspace (${cwd}). ` +
-          `This task may only modify files inside its worktree — make your change there.`,
+          `This task may only modify files inside that directory — make your change there.`,
+      );
+    }
+    // FR-7: the workspace now IS the caller's real checkout, so `.git` is inside the writable
+    // subtree for the first time. Corrupting it would destroy the caller's history.
+    if (target && pathTouchesGitDir(target)) {
+      return deny(
+        `Write blocked: "${target}" is inside the repository's .git directory. ` +
+          `Workers may not modify git metadata; the engine commits your work for you.`,
       );
     }
   }
 
   if (toolName === 'Bash' && typeof ti.command === 'string') {
+    // FR-7 — worker git is default-deny (subcommands AND flags). Checked before the
+    // path-escape scan because a denied git command is denied regardless of where it points.
+    const gitDenial = gitDenialInCommand(ti.command);
+    if (gitDenial) return deny(`Git blocked: ${gitDenial}`);
+
     const escape = bashWritesOutsideCwd(ti.command, cwd);
     if (escape) {
       return deny(
         `Bash write blocked: the command writes to "${escape}", outside the task workspace (${cwd}). ` +
-          `Reads are fine, but only write inside your worktree.`,
+          `Reads are fine, but only write inside the task workspace.`,
       );
     }
   }
@@ -166,6 +180,11 @@ export function evaluateReadOnly(toolName: string, toolInput: unknown): HookResu
 
   if (toolName === 'Bash' && typeof (toolInput as { command?: unknown })?.command === 'string') {
     const command = (toolInput as { command: string }).command;
+    // A read-only task must be at least as restricted as a write task, so the same
+    // default-deny git policy applies here too.
+    const gitDenial = gitDenialInCommand(command);
+    if (gitDenial) return deny(`Git blocked: ${gitDenial}`);
+
     if (BASH_WRITE_CMD_RE.test(command) || INTERPRETER_WRITE_RE.test(command) || DOWNLOAD_WRITE_RE.test(command)) {
       return deny(
         `Bash write blocked: this is a read-only task. Mutating shell commands are not permitted. ` +

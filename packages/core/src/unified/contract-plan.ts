@@ -56,6 +56,9 @@ interface ContractClauses {
 }
 
 export interface ParsedContractTask {
+  /** Stable identity parsed from the `### Task <id>: …` heading (e.g. `I-1`). This is the key
+   *  the reviewer contract matches on — titles are prose and must never be load-bearing. */
+  readonly id: string;
   readonly title: string;
   readonly contract: ContractClauses;
   readonly acceptanceTests: readonly PlanAcceptanceTest[];
@@ -127,8 +130,20 @@ function extractDeclaredTestPaths(filesBlock: string): string[] {
     .filter(p => p.length > 0);
 }
 
+/** Pull the stable id out of a `### Task I-1: …` heading. TASK_HEADING_RE already guaranteed
+ *  the shape, so a miss here means the two regexes drifted apart — fail loudly rather than
+ *  silently synthesising an id the reviewer could never echo. */
+function parseTaskId(headingLine: string, title: string): string {
+  const m = headingLine.match(/^###\s+Task\s+([IVXLCDM]+-\d+)\s*:/);
+  if (!m) {
+    throw new ContractPlanError('malformed-plan', `Task "${title}" has no parseable "Task <roman>-<n>:" identity in its heading`);
+  }
+  return m[1]!;
+}
+
 function parseTaskSection(headingLine: string, body: string): ParsedContractTask {
   const title = headingLine.replace(/^###\s+/, '').trim();
+  const id = parseTaskId(headingLine, title);
 
   const filesMatch = body.match(FILES_BLOCK_RE);
   if (!filesMatch) {
@@ -218,6 +233,7 @@ function parseTaskSection(headingLine: string, body: string): ParsedContractTask
   }
 
   return Object.freeze({
+    id,
     title,
     contract: Object.freeze({
       inputsRequest: bulletContents[0]!,
@@ -238,12 +254,19 @@ export function parseContractPlan(markdown: string): ContractPlanSnapshot {
 
   const tasks: ParsedContractTask[] = [];
   const seenTestPaths = new Set<string>();
+  const seenTaskIds = new Set<string>();
   for (let i = 0; i < headingMatches.length; i++) {
     const heading = headingMatches[i]!;
     const start = heading.index!;
     const end = i + 1 < headingMatches.length ? headingMatches[i + 1]!.index! : markdown.length;
     const body = markdown.slice(start, end);
     const task = parseTaskSection(heading[0], body);
+    // Ids are the reviewer-contract key, so a duplicate would let one reviewer entry satisfy
+    // two dispatched tasks. Reject at parse time rather than mis-matching at validation time.
+    if (seenTaskIds.has(task.id)) {
+      throw new ContractPlanError('malformed-plan', `Plan declares duplicate Contract Task id "${task.id}"`);
+    }
+    seenTaskIds.add(task.id);
     for (const test of task.acceptanceTests) {
       if (seenTestPaths.has(test.path)) {
         throw new ContractPlanError('malformed-plan', `Plan declares duplicate acceptance test path "${test.path}" across Contract Tasks`);

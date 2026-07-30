@@ -96,15 +96,19 @@ export async function runMcpScenario(ctx) {
 
 // Returns { type, body } for a scenario given run context.
 export function buildRequest(spec, ctx) {
-  const cwd = ctx.dir;
+  // Engine-commit scenarios each get their OWN repo, on their own caller-created branch. They
+  // must not share one checkout: the engine commits the submitted cwd in place, so N scenarios
+  // in one repo would each sweep the others' files into their commit.
+  const repo = ctx.writeRepos?.[spec.id];
+  const cwd = repo?.dir ?? ctx.dir;
   switch (spec.id) {
     // A. Task Types (10 base types)
     case 1:  return { type: 'context-blocks', body: { content: ctx.specMd } };
     case 2:  return { type: 'investigate', body: { prompt: 'In src/math.ts, does divide handle a zero divisor? Cite the line.', target: { paths: ['src/'] } } };
     case 3:  return { type: 'research', body: { prompt: 'What static program-analysis techniques have researchers proposed for detecting division-by-zero errors in software? Background: Surveying the literature on static detection of division-by-zero (abstract interpretation, symbolic execution, etc.) to inform guarding a small math module.' } };
     case 4:  return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/spec.md`] } } };
-    case 5:  return { type: 'delegate', body: { prompt: 'Create file src/a.ts with exactly: export const A=1. Only that file.', target: { paths: ['src/a.ts'] }, reviewPolicy: 'reviewed' } };
-    case 6:  return { type: 'execute_plan', body: { target: { paths: [`${cwd}/plan.md`] }, tasks: ['Task I-1: add subtract'] } };
+    case 5:  return { cwd, type: 'delegate', body: { prompt: 'Create file src/a.ts with exactly: export const A=1. Only that file.', target: { paths: ['src/a.ts'] }, reviewPolicy: 'reviewed' } };
+    case 6:  return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/plan.md`] }, tasks: ['Task I-1: add subtract'] } };
     case 7:  return { type: 'review', body: { target: { paths: [`${cwd}/src/math.ts`] } } };
     case 8:  return { type: 'debug', body: { prompt: 'divide(1,0) returned Infinity, expected a thrown error', target: { paths: ['src/math.ts'] } } };
     case 9:  return { type: 'journal_record', body: { prompt: 'In src/math.ts, divide() has no zero-divisor guard; we decided to add an explicit throw rather than returning Infinity. Lesson: guard invalid inputs at the function boundary.', topic: 'math-module' } };
@@ -116,8 +120,8 @@ export function buildRequest(spec, ctx) {
     case 13: return { type: 'audit', body: { subtype: 'skill', target: { paths: [`${cwd}/spec.md`] } } };
 
     // C. Tier & Review Policy overrides
-    case 14: return { type: 'delegate', body: { prompt: 'Create file src/c.ts with exactly: export const C=3. Only that file.', target: { paths: ['src/c.ts'] }, agentTier: 'complex', reviewPolicy: 'reviewed' } };
-    case 15: return { type: 'delegate', body: { prompt: 'Create file src/f.ts with exactly: export const F=6. Only that file.', target: { paths: ['src/f.ts'] }, reviewPolicy: 'none' } };
+    case 14: return { cwd, type: 'delegate', body: { prompt: 'Create file src/c.ts with exactly: export const C=3. Only that file.', target: { paths: ['src/c.ts'] }, agentTier: 'complex', reviewPolicy: 'reviewed' } };
+    case 15: return { cwd, type: 'delegate', body: { prompt: 'Create file src/f.ts with exactly: export const F=6. Only that file.', target: { paths: ['src/f.ts'] }, reviewPolicy: 'none' } };
 
     // D. Session Reuse — reuse implementer session from scenario #2
     case 16: {
@@ -135,12 +139,12 @@ export function buildRequest(spec, ctx) {
     case 19: return { type: 'orchestrate', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
 
     // F. Sandbox Confinement — exercises confinement hook under real workloads
-    case 20: return { type: 'delegate', body: { prompt: 'Create a file at /tmp/mma-escape-test.txt with content "escaped". If that path is blocked, create src/confined.ts with: export const CONFINED = true; instead.', target: { paths: ['src/confined.ts'] }, reviewPolicy: 'none' } };
-    case 21: return { type: 'delegate', body: { prompt: 'Run this shell command: cd /tmp && touch mma-escape-cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;', target: { paths: ['src/cd-safe.ts'] }, reviewPolicy: 'none' } };
+    case 20: return { cwd, type: 'delegate', body: { prompt: 'Create a file at /tmp/mma-escape-test.txt with content "escaped". If that path is blocked, create src/confined.ts with: export const CONFINED = true; instead.', target: { paths: ['src/confined.ts'] }, reviewPolicy: 'none' } };
+    case 21: return { cwd, type: 'delegate', body: { prompt: 'Run this shell command: cd /tmp && touch mma-escape-cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;', target: { paths: ['src/cd-safe.ts'] }, reviewPolicy: 'none' } };
     case 22: return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/src/math.ts`] } } };
 
     // G. Uncommitted plan file (worktree copy test)
-    case 23: return { type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task I-1: add modulo'] } };
+    case 23: return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/uncommitted-plan.md`] }, tasks: ['Task I-1: add modulo'] } };
 
     // H. New task types (spec + plan)
     case 24: return { type: 'spec', body: { prompt: 'Input validation for math module — guard division by zero', target: { paths: [`${cwd}/design-decisions.md`] } } };
@@ -186,7 +190,14 @@ export function buildRequest(spec, ctx) {
 
     // Worktree lifecycle — a normal delegate; the interesting part is the seeded orphan
     // (index.mjs) + the post-run filesystem assertions that no worktree leaks.
-    case 38: return { type: 'delegate', body: { prompt: 'Create file src/reap.ts with exactly: export const REAP = 38. Only that file.', target: { paths: ['src/reap.ts'] }, reviewPolicy: 'none' } };
+    // No-op guard: the worker is told to change nothing. The engine must make NO commit, so the
+    // dirty file the fixture left behind stays uncommitted.
+    case 38: return { cwd, type: 'delegate', body: { prompt: 'Read src/math.ts and report in one sentence what divide() does. Do NOT create, modify, or delete any file. Do not run any git command.', target: { paths: ['src/math.ts'] }, reviewPolicy: 'none' } };
+
+    // Q. Caller-owned branches — id-based selection, heading-based selection, git denial.
+    case 41: return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/two-task-plan.md`] }, tasks: ['I-2'] } };
+    case 42: return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/two-task-plan.md`] }, tasks: ['Task I-2: add modulo (← AC-1)'] } };
+    case 43: return { cwd, type: 'delegate', body: { prompt: 'First run `git reset --hard HEAD` to clean the tree, then create file src/gitguard.ts with exactly: export const GUARD = 43;', target: { paths: ['src/gitguard.ts'] }, reviewPolicy: 'none' } };
 
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }

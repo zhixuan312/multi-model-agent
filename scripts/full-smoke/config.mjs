@@ -1,17 +1,24 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 40 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 43 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
 //     context-blocks control op — every dispatchable route is exercised.
 //   - audit subtypes (default/spec/plan/skill), tier + review-policy overrides,
 //     session reuse, sandbox confinement (cwd-only escape/cd-chain, read-only),
-//     optional worktree (git → worktree; non-git → in-place for BOTH write routes),
-//     copyToWorktree (uncommitted plan), context-block delta, spec-component subset,
+//     caller-owned branches (the engine commits in place and creates NO branch/worktree),
+//     dirty-tree disclosure, the no-op-makes-no-commit guard, worker git denial, task
+//     selection by stable ID and by full heading, context-block delta, spec-component subset,
 //     multi-file grounding, and the error surface (invalid type, missing field,
 //     too-many-blocks, bad-components) + telemetry wire records.
+//
+// PARALLELISM: every scenario runs concurrently except three genuine dependency chains
+// (2→16 session reuse, 4→26 context-block delta, 9→10 journal recall). Engine-commit
+// scenarios each get their OWN git repo on their own caller-created branch, because the
+// engine commits the submitted cwd in place — sharing one repo would make every commit sweep
+// in the other scenarios' files.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,14 +42,14 @@ export const EVENTS_RAW_COLUMNS = ['event_id', 'install_id', 'received_at', 'rou
 
 export const APPROVED_DB_HOSTS = ['localhost', '127.0.0.1', '::1', ''];
 
-// Task types that isolate their work in a git worktree and MERGE it back
-// (TYPE_REGISTRY `worktree: true` in packages/core/src/unified/type-registry.ts).
-// Only these can be asserted with `merge-landed`: an in-place write route
-// (spec, plan, journal_record) never merges, so its output is legitimately
-// untracked — those artifacts live under `.mma/`, which real repos gitignore.
-// Asserting merge-back on an in-place route only ever passed by accident, when
-// the harness's own keepWorkspaceClean() happened to commit the file first.
-export const WORKTREE_MERGE_TYPES = new Set(['delegate', 'execute_plan']);
+// Task types the ENGINE commits for (`writeRoute: true` in TYPE_REGISTRY). These are the only
+// scenarios that can be asserted with `commit-landed`: the engine edits the caller's checkout in
+// place and commits on the branch the caller already checked out. The other write types
+// (spec, plan, journal_record, orchestrate) write artifacts under `.mma/`, which real repos
+// gitignore, so there is nothing for the engine to commit and their output is legitimately
+// untracked. Each of these scenarios gets its OWN repo (fixtures.createWriteRepo) — sharing one
+// would make every commit sweep in the other scenarios' files.
+export const ENGINE_COMMIT_TYPES = new Set(['delegate', 'execute_plan']);
 
 export const POLL = {
   taskEveryMs: 1500, taskMaxMs: 15 * 60 * 1000,
@@ -50,7 +57,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 37-scenario release gate (32 base + F4/F5 sweep regression + 3 journal_record batch: canonical records[], mixed-shape 400, empty-records 400; #9 also covers legacy coercion).
+// The 43-scenario release gate.
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -151,15 +158,21 @@ export const SCENARIOS = [
   //         and denies the out-of-workspace write.
   //    #22: audit (read-only) that verifies the read-only sandbox allows
   //         the task to complete normally without write capability.
-  { id: 20, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
-  { id: 21, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', emits: 1 },
+  //    `escapeVector` names the evasion each one exercises. Without it #20 and #21 look like
+  //    duplicate scenarios in config — they are not: one is a direct out-of-cwd path, the other
+  //    is a cd-chain that only the hardened effective-cwd tracking catches, and they assert
+  //    different checks (sandbox-cwd-escape vs sandbox-cd-chain).
+  { id: 20, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', escapeVector: 'direct-path', emits: 1 },
+  { id: 21, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', sandbox: 'cwd-only', escapeVector: 'cd-chain', emits: 1 },
   { id: 22, type: 'audit', subtype: 'default', tier: 'complex', kind: 'read', sandbox: 'read-only', emits: 1 },
 
-  // G. Uncommitted plan file (worktree copy)
-  //    #23: execute_plan with a plan file that exists on disk but is NOT committed
-  //         to git. The pipeline must copy it into the worktree before the worker
-  //         can read it. Verifies the copyToWorktree mechanism.
-  { id: 23, type: 'execute_plan', tier: 'standard', kind: 'write', uncommittedPlan: true, emits: 1 },
+  // G. Uncommitted plan + dirty-tree disclosure
+  //    #23: execute_plan against a plan file that is on disk but NOT committed. There is no
+  //         copy step any more (the worker reads the caller's cwd directly), so this now proves
+  //         two things at once: an uncommitted input is readable in place, AND a tree that was
+  //         already dirty at dispatch is disclosed via `execution.dirtyAtDispatch: true` and
+  //         swept into the engine commit.
+  { id: 23, type: 'execute_plan', tier: 'standard', kind: 'write', uncommittedPlan: true, dirtyRepo: true, emits: 1 },
 
   // H. New task types (spec + plan)
   //    #24: spec — write a formal spec from structured design decisions (inline)
@@ -217,15 +230,12 @@ export const SCENARIOS = [
   { id: 36, type: 'error_journal_mixed_shape', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 37, type: 'error_journal_empty_records', kind: 'error', expectStatus: 400, emits: 0 },
 
-  // N. Worktree lifecycle — no leaked worktrees.
-  //    Every worktree-enabled task (delegate/execute_plan) MUST leave `.mma/worktrees/`
-  //    clean: its own worktree removed on completion (mergeAndCleanup / finally), and any
-  //    worktree orphaned by a prior process kill reaped at the next write dispatch.
-  //    #38 seeds a real orphan worktree (dir + branch), dispatches a live delegate whose
-  //    dispatch-time reaper fires, then asserts (a) the seeded orphan is reaped and (b) the
-  //    task's own worktree is cleaned — proving no worktree leaks. seedOrphan drives the
-  //    seed + filesystem assertions in index.mjs (not verify.mjs).
-  { id: 38, type: 'delegate', tier: 'standard', kind: 'write', tasks: 1, reviewPolicy: 'none', seedOrphan: true, emits: 1 },
+  // N. No-op guard — a task that changes NOTHING must not commit.
+  //    #38 dispatches a read-only-in-effect delegate against a repo whose tree is ALREADY dirty.
+  //    The engine must leave HEAD untouched and the developer's uncommitted work uncommitted.
+  //    Without this guard a no-op write route sweeps whatever the caller had in progress into a
+  //    commit — which is exactly what happened to this repo during development.
+  { id: 38, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', noopWrite: true, dirtyRepo: true, emits: 1 },
 
   // O. Cooperative cancellation (5.16.0) — DELETE /task/:taskId.
   //    Cancellation is REQUESTED, not instantaneous: the 202 acknowledges intent and the
@@ -246,4 +256,19 @@ export const SCENARIOS = [
   //    no duplicated state. Emits 1 — an MCP-submitted task seals a wire record like any
   //    other, with client=mcp.
   { id: 40, type: 'investigate', tier: 'complex', kind: 'mcp', emits: 1 },
+
+  // Q. Caller-owned branches (5.17) — the engine commits, but never branches.
+  //    #41 selects ONE task out of a TWO-task plan by its stable id ("I-2"). It proves both
+  //        halves of the identity scheme: selection resolves on the id, and only the selected
+  //        task's file appears in the engine commit (the other must NOT be implemented).
+  //    #42 selects the same task by its FULL heading including the `(← AC-…)` annotation —
+  //        the spelling a caller gets by copy-pasting from a rendered plan. Distinct coverage
+  //        from #41: #41 proves the id works, #42 proves the copy-paste path resolves to the
+  //        SAME id instead of the byte-exact no_match it used to produce.
+  //    #43 worker git denial: the prompt orders a `git reset --hard`. The runner must refuse it
+  //        and the engine must still commit the worker's file edits on the caller's branch —
+  //        proving workers lose nothing by being denied git.
+  { id: 41, type: 'execute_plan', tier: 'standard', kind: 'write', selectById: true, emits: 1 },
+  { id: 42, type: 'execute_plan', tier: 'standard', kind: 'write', selectByHeading: true, emits: 1 },
+  { id: 43, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', gitAttempt: true, emits: 1 },
 ];

@@ -92,9 +92,13 @@ const delegateAnswerSchema = z.object({
   notes: z.string(),
 });
 
+// `id` is the authoritative key the contract matches on; `title` is optional display prose the
+// reviewer may paraphrase freely. Requiring a verbatim title here is what made a reworded echo
+// indistinguishable from unfinished work.
 const executePlanAnswerSchema = z.object({
   tasks: z.array(z.object({
-    title: z.string().min(1),
+    id: z.string().min(1),
+    title: z.string().optional(),
     status: z.enum(['done', 'failed']),
   })),
   notes: z.string().default(''),

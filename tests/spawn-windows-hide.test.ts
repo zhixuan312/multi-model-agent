@@ -26,9 +26,9 @@ function walk(dir: string): string[] {
   return out;
 }
 
-// Matches spawn / spawnSync / execFile / execFileSync / exec called with a
-// literal 'git' (or "git") first argument.
-const GIT_SPAWN = /\b(?:spawnSync|spawn|execFileSync|execFile|exec)\(\s*['"]git['"]/g;
+// Matches spawn / spawnSync / execFile / execFileSync / exec — and the promisified
+// execFileAsync form used by repo-commit.ts — called with a literal 'git' first argument.
+const GIT_SPAWN = /\b(?:spawnSync|spawn|execFileSync|execFileAsync|execFile|exec)\(\s*['"]git['"]/g;
 
 describe('git child_process spawns set windowsHide (Windows flash guard)', () => {
   const files = walk(CORE_SRC);

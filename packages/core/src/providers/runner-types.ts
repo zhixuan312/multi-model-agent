@@ -1,8 +1,4 @@
-import type {
-  AgentType,
-  SandboxPolicy,
-  TaskSpec,
-} from '../types.js';
+import type { SandboxPolicy } from '../types.js';
 import type { EnvelopeBus } from '../events/envelope-bus.js';
 export type { TokenUsage } from '../types/run-result.js';
 

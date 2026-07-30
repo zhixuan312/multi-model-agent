@@ -26,7 +26,7 @@ export function buildErrorEnvelope(
   return {
     task: { taskId, type, status },
     output: { summary: null, filesChanged: [], contextBlockId: null, reviewerNote: null },
-    execution: { sessions: { implementer: null, reviewer: null }, worktree: null },
+    execution: { sessions: { implementer: null, reviewer: null }, worktree: null, dirtyAtDispatch: false },
     metrics: {
       totalDurationMs: 0,
       totalCostUsd: 0,

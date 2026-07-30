@@ -6,7 +6,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 
 export async function teardown(ctx) {
   const errors = [];
-  try { destroyProject(ctx.dir); } catch (e) { errors.push(`repo: ${e.message || e}`); }
+  try { destroyProject(ctx.dir, ctx.nonGitDir, ctx.writeRepos); } catch (e) { errors.push(`repo: ${e.message || e}`); }
   for (const id of ctx.contextBlockIds ?? []) {
     try { await deleteContextBlock(ctx.token, id, ctx.dir); } catch (e) { errors.push(`block ${id}: ${e.message || e}`); }
   }

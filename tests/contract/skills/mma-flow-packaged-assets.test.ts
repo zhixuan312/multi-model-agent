@@ -22,7 +22,10 @@ const CHANGED: Record<string, string[]> = {
   'mma-plan': ['one repo', 'exactly one repo', 'shared spec', '.mma/plans/<stem>--<repo-slug>.md', 'Contract Task', 'plan-authored acceptance tests'],
   'mma-journal-record': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
   'mma-journal-recall': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
-  'mma-delegate': ['non-git', 'in-place', 'no worktree'],
+  // Ratchet updated deliberately: this previously required the phrase "no worktree", which
+  // encoded the older invariant that only NON-GIT targets skipped the worktree. The engine no
+  // longer creates a worktree for ANY target, so the doc must state the stronger fact.
+  'mma-delegate': ['non-git', 'in-place', 'never creates a branch or a worktree'],
   'mma-execute-plan': ['non-git', 'in-place', 'one plan file', 'autonomous', 'test-path-collision', 'completionPercent'],
 };
 

@@ -17,24 +17,26 @@ export interface TargetAcceptance {
 
 export interface TypeConfig {
   defaultTier: AgentType;
-  worktree: boolean;
+  /** Write routes: the engine captures a git baseline and commits on the caller's branch.
+   *  It never creates a branch or a worktree — the caller owns those. */
+  writeRoute: boolean;
   sandbox: SandboxPolicy;
   targetAcceptance: TargetAcceptance;
 }
 
 export const TYPE_REGISTRY: Record<TaskType, TypeConfig> = {
-  audit:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  investigate:    { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
-  delegate:       { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: false } },
-  execute_plan:   { defaultTier: 'standard', worktree: true,  sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: true  } },
-  review:         { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  debug:          { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
-  research:       { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
-  journal_recall: { defaultTier: 'complex',  worktree: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
-  journal_record: { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
-  orchestrate:    { defaultTier: 'main',     worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
-  spec:           { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
-  plan:           { defaultTier: 'complex',  worktree: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  audit:          { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  investigate:    { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
+  delegate:       { defaultTier: 'standard', writeRoute: true, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: false } },
+  execute_plan:   { defaultTier: 'standard', writeRoute: true, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: false, required: true  } },
+  review:         { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  debug:          { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: true,  inline: false, required: false } },
+  research:       { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
+  journal_recall: { defaultTier: 'complex',  writeRoute: false, sandbox: 'read-only', targetAcceptance: { paths: false, inline: false, required: false } },
+  journal_record: { defaultTier: 'complex',  writeRoute: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
+  orchestrate:    { defaultTier: 'main',     writeRoute: false, sandbox: 'cwd-only',  targetAcceptance: { paths: false, inline: false, required: false } },
+  spec:           { defaultTier: 'complex',  writeRoute: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
+  plan:           { defaultTier: 'complex',  writeRoute: false, sandbox: 'cwd-only',  targetAcceptance: { paths: true,  inline: true,  required: true  } },
 };
 
 export function getTypeConfig(type: TaskType): TypeConfig {

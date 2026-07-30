@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { CostTier, ProviderConfig } from '../types.js';
 import profileData from '../model-profiles.json' with { type: 'json' };
 
 

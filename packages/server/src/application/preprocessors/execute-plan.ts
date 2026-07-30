@@ -4,6 +4,9 @@ import {
   parseContractPlan,
   assertSafeAcceptanceTestPaths,
   ContractPlanError,
+  dispatchedTasksFromSnapshot,
+  resolveSelectors,
+  describeSelectorFailure,
   type ContractPlanSnapshot,
 } from '@zhixuan92/multi-model-agent-core';
 import { PreprocessFailure, type Preprocessor } from './types.js';
@@ -35,22 +38,21 @@ export const executePlanPreprocessor: Preprocessor = async ({ cwd, payload }) =>
     throw err;
   }
 
-  // Task selection comes from the parsed Contract snapshot, not the legacy
-  // matchTasks/parsePlanHeadings matcher (which never recognized roman-numeral
-  // "### Task I-N:" headings): select by exact, case-sensitive title match, or
-  // every parsed Contract Task when the selector is empty.
+  // Selection resolves through the SAME task-id scheme the reviewer contract uses — one
+  // identity for a task, everywhere. A selector may be the bare id ("I-1") or any spelling of
+  // the heading it came from; resolveSelectors extracts the id either way, so a caller who
+  // copied a heading and dropped its `(← AC-…)` annotation no longer gets a spurious no_match.
+  // An empty selector list means every parsed Contract Task.
   let selectedTasks: ContractPlanSnapshot['tasks'];
   if (epPayload.tasks.length === 0) {
     selectedTasks = fullSnapshot.tasks;
   } else {
-    const byTitle = new Map(fullSnapshot.tasks.map((t) => [t.title, t] as const));
-    const missing = epPayload.tasks.filter((title) => !byTitle.has(title));
-    const duplicated = epPayload.tasks.filter((title, index) => epPayload.tasks.indexOf(title) !== index);
-    if (missing.length > 0 || duplicated.length > 0) {
-      const invalid = [...new Set([...missing, ...duplicated])];
-      throw new PreprocessFailure('no_match', `No Contract Task matches selector(s) one-to-one: ${invalid.join(', ')}`);
+    const byId = new Map(fullSnapshot.tasks.map((t) => [t.id, t] as const));
+    const resolution = resolveSelectors(epPayload.tasks, dispatchedTasksFromSnapshot(fullSnapshot));
+    if (!resolution.ok) {
+      throw new PreprocessFailure('no_match', describeSelectorFailure(resolution));
     }
-    selectedTasks = epPayload.tasks.map((title) => byTitle.get(title)!);
+    selectedTasks = resolution.ids.map((id) => byId.get(id)!);
   }
   const selectedSnapshot: ContractPlanSnapshot = Object.freeze({ tasks: Object.freeze(selectedTasks) });
 
@@ -78,10 +80,14 @@ export const executePlanPreprocessor: Preprocessor = async ({ cwd, payload }) =>
     }
   }
 
+  const contractTasks = dispatchedTasksFromSnapshot(selectedSnapshot);
+
   return {
     acceptanceTestSnapshot: selectedSnapshot,
-    dispatchedTasks: selectedSnapshot.tasks.map((t) => t.title),
-    copyToWorktree: [path.isAbsolute(planPath) ? path.relative(fs.realpathSync(cwd), fs.realpathSync(resolvedPlanPath)) : planPath],
+    // Prompt-facing labels lead with the stable id so the reviewer echoes it back.
+    dispatchedTasks: contractTasks.map((t) => `${t.id}: ${t.title}`),
+    // Authoritative matching key — never the prose title.
+    dispatchedContractTasks: contractTasks,
     totalTasks: selectedSnapshot.tasks.length,
   };
 };

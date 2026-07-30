@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-The orchestrate endpoint provides a session-persistent, high-quality LLM agent for multi-phase workflow orchestration. Unlike worker routes (audit, delegate, review), the orchestrate agent has no reviewer, no worktree, and no findings structure — it takes a prompt and returns the output the caller needs.
+The orchestrate endpoint provides a session-persistent, high-quality LLM agent for multi-phase workflow orchestration. Unlike worker routes (audit, delegate, review), the orchestrate agent has no reviewer, no commit, and no findings structure — it takes a prompt and returns the output the caller needs.
 
 **Core principle:** The frontend owns the workflow state; MMA provides the LLM continuity. Each prompt is self-contained; session reuse provides project context across phases.
 
