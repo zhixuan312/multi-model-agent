@@ -5,6 +5,10 @@ export default defineConfig({
   test: {
     globals: true,
     root: '.',
+    // Makes the suite hermetic w.r.t. a globally installed codex CLI — see the file's
+    // header. Without it, ~15 configure-provider tests pass or fail based on the
+    // developer's PATH rather than on the code.
+    setupFiles: ['./tests/vitest-setup.ts'],
     // NOTE: tests/perf/ holds the deterministic journal benchmark + gate
     // (tests/perf/journal-engine-benchmark*.test.ts) — they always run, no skips.
     // (The old wall-clock baseline-vs-baseline harness was removed; it compared
