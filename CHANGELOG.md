@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.16.1] - 2026-07-30
+
+Release engineering and test hygiene. Both packages are now published by CI with **npm provenance**,
+and the test suite no longer depends on which CLIs happen to be installed on the machine running it.
+`SCHEMA_VERSION` stays at **6** — no wire or API change.
+
+### Added
+
+- **Automated release pipeline** — `.github/workflows/release.yml`. It gates (build · test · lint ·
+  lint:deps), packs both packages, asserts the real tarballs before anything is irreversible, then
+  publishes core → server, smoke-installs the published package as an outside consumer, and creates
+  the git tag **last** so a tagged version is always a fully published one.
+- **npm provenance on both packages** — every tarball now carries a signed statement binding it to
+  the commit and workflow that built it, via OIDC trusted publishing. Provenance cannot be produced
+  by a local `npm publish`, so this is new information for anyone auditing the supply chain.
+
+### Fixed
+
+- **The test suite no longer depends on a globally installed `codex` CLI.** `configure-provider`
+  verifies a codex tier by really spawning `codex --version`, so roughly 15 tests passed or failed
+  according to the developer's `PATH` rather than the code — and failed confusingly, with the
+  response's `probe` field simply absent because an unverified request never reaches the probe.
+  `tests/vitest-setup.ts` now pins `MMA_CODEX_BIN` to the running Node binary. The test that
+  deliberately covers the codex-absent path still overrides it, so that case stays covered.
+
+### Changed
+
+- **`/mma-flow` review gate is capped at 3 rounds, down from 5.** The advance rule is now per-round:
+  round 1 must be clean of critical and high findings, round 2 tolerates high (routed to backlog),
+  and round 3 applies its fixes and then always advances. Round 4 never runs.
+
 ## [5.16.0] - 2026-07-30
 
 MMA gains a second transport and a real task lifecycle: an MCP endpoint over the same

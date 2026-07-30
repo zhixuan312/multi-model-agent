@@ -1,0 +1,317 @@
+# Engine release — the artifact tail (npm publish), run on GitHub's infrastructure.
+#
+# WHY THIS EXISTS. Three things this buys that a laptop publish structurally cannot:
+#
+#   1. TRUSTED PUBLISHING (OIDC). The old runbook's most fragile step was a human 2FA
+#      hand-off: the maintainer ran `npm publish` on core, answered an OTP prompt, and
+#      the SERVER package then had to land inside a ~5-minute grace window or the whole
+#      dance restarted. Here each package mints its own short-lived registry token by
+#      exchanging the workflow's OIDC id-token. No OTP, no long-lived NPM_TOKEN secret,
+#      no window, no half-published state.
+#   2. PROVENANCE. `--provenance` requires a supported CI with `id-token: write`; it is
+#      unobtainable from a laptop. This package runs other people's LLM agents with
+#      filesystem write access, so a signed statement binding each tarball to a commit
+#      and a workflow is worth having.
+#   3. A CLEAN TREE. The publish builds from a fresh checkout of the tagged commit, so
+#      the stale-`dist` class of bug (shipped once already) cannot recur.
+#
+# WHY THE TAG IS CREATED LAST. The tag is the PROOF of a finished release, not the
+# trigger for one. Nothing is tagged until gates, both publishes and the consumer
+# install smoke have all passed, so "tagged but not on npm" is impossible.
+#
+# WHY GATES RUN ON LINUX. The suite is fully green on Linux (1586/1586, verified in a
+# node:22-bookworm container at 5.16.1). It had LOOKED red — 23 failures — but every one
+# of those traced to tooling missing from a bare slim image (git, procps) or to the
+# codex-CLI dependency below, not to any cross-platform defect. GitHub's ubuntu runners
+# ship git and procps, and 5.16.1 made the codex dependency hermetic, so ubuntu is both
+# correct and the platform most consumers actually install on.
+#
+# ONE TEST DEPENDENCY WORTH KNOWING. configure-provider verifies a codex tier by really
+# spawning `codex --version`, so ~15 tests used to pass or fail based on whether the
+# machine happened to have codex installed. tests/vitest-setup.ts now pins
+# MMA_CODEX_BIN to process.execPath, which makes that deterministic everywhere. Do not
+# "fix" a future codex-related CI failure by apt-installing codex on the runner.
+#
+# WHY NO SEPARATE ci.yml. Single-maintainer repo; the `gates` job blocks `publish`, so a
+# release can never be cut from a red tree. Use `dry_run: true` for gates + packaging +
+# every tarball assertion with nothing published.
+#
+# SETUP REQUIRED ONCE PER PACKAGE (npmjs.com → package → Settings → Trusted publisher):
+#   organization/user: zhixuan312   repository: multi-model-agent
+#   workflow filename: release.yml  environment: (none)
+# Do both @zhixuan92/multi-model-agent-core AND @zhixuan92/multi-model-agent.
+# NOTE: that config pins this FILENAME. Renaming this file silently breaks publishing.
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release — MUST already equal package.json#version on master'
+        required: true
+        type: string
+      dry_run:
+        description: 'Verify only: gates + pack + all tarball assertions, publish nothing'
+        required: false
+        default: false
+        type: boolean
+
+# Least privilege. id-token: write is what mints the npm OIDC token AND signs provenance.
+# contents: write is only for the tag and the Release, both created last.
+permissions:
+  contents: write
+  id-token: write
+
+# Two releases at once would race the `latest` dist-tag and the core→server ordering.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # ── 1. Gates ────────────────────────────────────────────────────────────────
+  # The same commands the maintainer runs locally. Running them here means a release
+  # can never be cut from a tree that does not pass them.
+  gates:
+    runs-on: ubuntu-24.04      # suite is Linux-green; see header
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to release from a non-default branch
+        if: ${{ inputs.dry_run == false && github.ref != 'refs/heads/master' }}
+        run: |
+          echo "::error::Real releases must be dispatched from master (got ${{ github.ref }})."
+          exit 1
+
+      # The version is an INPUT rather than something CI bumps, because the bump +
+      # CHANGELOG + doc sweep are judgement work that belongs in a reviewed PR. CI's
+      # job is to prove the input matches what was actually merged — in all THREE
+      # package.json files, which must move in lockstep.
+      - name: Version input must match all three package.json files
+        run: |
+          set -euo pipefail
+          fail=0
+          for p in package.json packages/core/package.json packages/server/package.json; do
+            V="$(node -p "require('./$p').version")"
+            if [ "$V" != "${{ inputs.version }}" ]; then
+              echo "::error::$p is $V, expected ${{ inputs.version }}"; fail=1
+            fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::Merge the version bump first."; exit 1; }
+          echo "all three at ${{ inputs.version }}"
+
+      # packages/server MUST keep the pnpm workspace protocol in source. A literal
+      # ^VERSION here breaks `pnpm install` (pnpm tries to fetch a version that does not
+      # exist yet → ERR_PNPM_NO_MATCHING_VERSION). pnpm rewrites it at pack time; the
+      # publish job asserts the rewrite actually happened.
+      - name: Server core dependency must still be the workspace protocol
+        run: |
+          D="$(node -p "require('./packages/server/package.json').dependencies['@zhixuan92/multi-model-agent-core']")"
+          [ "$D" = "workspace:^" ] || {
+            echo "::error::server core dep is '$D', must be 'workspace:^' in source"; exit 1; }
+
+      # Re-releasing an existing version would move a published tag.
+      - name: Tag must not already exist
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::tag v${{ inputs.version }} already exists. Bump to a new version."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4          # reads packageManager: pnpm@10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22                  # matches engines.node >=22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm lint:deps
+
+      - name: Built CLI must report the release version
+        run: |
+          OUT="$(node packages/server/dist/cli/index.js --version)"
+          echo "$OUT" | grep -qF "${{ inputs.version }}" || {
+            echo "::error::built CLI reported '$OUT', expected ${{ inputs.version }}"; exit 1; }
+
+  # ── 2. Pack, assert, publish, smoke, then tag ──────────────────────────────
+  # Runs on Linux deliberately: the consumer install smoke at the end is the one place
+  # a non-macOS check is both cheap and meaningful, since Linux is where most people
+  # install this. tsc output is platform-independent, so the artifact is unaffected.
+  publish:
+    needs: gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # ── Pack first, assert on the REAL tarballs, publish only after ─────────
+      # These assertions used to be a manual eyeball step in the runbook ("inspect the
+      # tarball, verify no src/, no tests/"). Here they are blocking, and they run
+      # before anything is irreversible.
+      - name: Pack both packages
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pack
+          (cd packages/core   && pnpm pack --pack-destination /tmp/pack)
+          (cd packages/server && pnpm pack --pack-destination /tmp/pack)
+          ls -la /tmp/pack
+
+      - name: Assert core tarball shape
+        run: |
+          set -euo pipefail
+          T=/tmp/pack/zhixuan92-multi-model-agent-core-${{ inputs.version }}.tgz
+          test -f "$T" || { echo "::error::core tarball not found at $T"; exit 1; }
+          tar -tzf "$T" > /tmp/core.list
+          grep -q '^package/dist/' /tmp/core.list || { echo "::error::core: no dist/"; exit 1; }
+          # core ships src/skills ON PURPOSE — the skill markdown is read at runtime, so a
+          # tarball without it installs clean and then fails on the first task.
+          SKILLS=$(grep -c '^package/src/skills/.*\.md$' /tmp/core.list || true)
+          [ "$SKILLS" -ge 20 ] || { echo "::error::core: only $SKILLS skill .md files (27 across 12 types at 5.16.0)"; exit 1; }
+          grep -qE '^package/(tests|node_modules)/' /tmp/core.list && {
+            echo "::error::core: tarball contains tests/ or node_modules/"; exit 1; } || true
+          echo "core OK — $SKILLS skill files, dist present"
+
+      - name: Assert server tarball shape and that the workspace protocol was resolved
+        run: |
+          set -euo pipefail
+          T=/tmp/pack/zhixuan92-multi-model-agent-${{ inputs.version }}.tgz
+          test -f "$T" || { echo "::error::server tarball not found at $T"; exit 1; }
+          tar -tzf "$T" > /tmp/srv.list
+          grep -q '^package/dist/cli/index.js' /tmp/srv.list || { echo "::error::server: no dist/cli/index.js"; exit 1; }
+          grep -q '^package/scripts/postinstall.js' /tmp/srv.list || { echo "::error::server: no postinstall"; exit 1; }
+          grep -qE '^package/(tests|node_modules)/' /tmp/srv.list && {
+            echo "::error::server: tarball contains tests/ or node_modules/"; exit 1; } || true
+          # THE critical one: npm publish leaks `workspace:^` to the registry and breaks
+          # every consumer install. pnpm rewrites it — prove the rewrite happened.
+          tar -xzOf "$T" package/package.json > /tmp/srv-pkg.json
+          DEP="$(node -p "require('/tmp/srv-pkg.json').dependencies['@zhixuan92/multi-model-agent-core']")"
+          [ "$DEP" = "^${{ inputs.version }}" ] || {
+            echo "::error::packed server core dep is '$DEP', expected ^${{ inputs.version }}"; exit 1; }
+          # The bin must be node-executable for `mma` to work after a global install.
+          # Extract to a file rather than piping into head: under `set -o pipefail` the
+          # early-exiting reader SIGPIPEs tar (exit 141) and fails this step even when
+          # the shebang is perfectly fine.
+          tar -xzOf "$T" package/dist/cli/index.js > /tmp/srv-cli.js
+          read -r FIRST < /tmp/srv-cli.js
+          [ "$FIRST" = '#!/usr/bin/env node' ] || {
+            echo "::error::server: dist/cli/index.js first line is '$FIRST', expected the node shebang"; exit 1; }
+          echo "server OK — core dep resolved to $DEP, shebang present"
+
+      - name: Dry-run summary (nothing published)
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "### Dry run — gates green, both tarballs pass every assertion" >> "$GITHUB_STEP_SUMMARY"
+          echo "Nothing was published, tagged, or released." >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Order is sacred: core, then server ─────────────────────────────────
+      # packages/server depends on ^VERSION of core, so a server published before its
+      # core exists on the registry breaks every consumer install. Both publishes use
+      # OIDC trusted publishing (no NPM_TOKEN in this workflow) and attach provenance.
+      - name: Publish core
+        if: ${{ inputs.dry_run == false }}
+        run: cd packages/core && pnpm publish --access public --provenance --no-git-checks
+
+      - name: Wait for core to be resolvable on the registry
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            V="$(npm view @zhixuan92/multi-model-agent-core@${{ inputs.version }} version 2>/dev/null || true)"
+            [ "$V" = "${{ inputs.version }}" ] && { echo "core ${{ inputs.version }} is live"; exit 0; }
+            echo "attempt $i: not yet visible, waiting 10s"; sleep 10
+          done
+          echo "::error::core ${{ inputs.version }} never became visible; server publish would break consumers"
+          exit 1
+
+      - name: Publish server
+        if: ${{ inputs.dry_run == false }}
+        run: cd packages/server && pnpm publish --access public --provenance --no-git-checks
+
+      - name: Verify both packages on the registry
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          CORE="$(npm view @zhixuan92/multi-model-agent-core version)"
+          SRV="$(npm view @zhixuan92/multi-model-agent version)"
+          DEP="$(npm view @zhixuan92/multi-model-agent@${{ inputs.version }} dependencies --json \
+                  | node -p "JSON.parse(require('fs').readFileSync(0,'utf8'))['@zhixuan92/multi-model-agent-core']")"
+          echo "core=$CORE server=$SRV dep=$DEP"
+          [ "$CORE" = "${{ inputs.version }}" ] || { echo "::error::core is $CORE"; exit 1; }
+          [ "$SRV"  = "${{ inputs.version }}" ] || { echo "::error::server is $SRV"; exit 1; }
+          [ "$DEP"  = "^${{ inputs.version }}" ] || { echo "::error::published dep is $DEP"; exit 1; }
+          # Provenance is best-effort to report, not worth failing a landed publish over.
+          if npm view @zhixuan92/multi-model-agent@${{ inputs.version }} dist.attestations >/dev/null 2>&1; then
+            echo "provenance attestation present"
+          else
+            echo "::warning::no provenance attestation reported for the server package"
+          fi
+
+      # Prove the third-party path from a clean state. `npm install` in a scratch dir,
+      # NOT npx — npx can silently fall back to a globally installed mma on PATH and
+      # report the wrong version.
+      - name: Consumer install smoke
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mma-smoke && mkdir -p /tmp/mma-smoke && cd /tmp/mma-smoke
+          npm init -y >/dev/null
+          npm install --silent @zhixuan92/multi-model-agent@${{ inputs.version }}
+          OUT="$(./node_modules/.bin/mma --version)"
+          echo "$OUT" | grep -qF "${{ inputs.version }}" || {
+            echo "::error::installed mma reported '$OUT'"; exit 1; }
+          test -d node_modules/@zhixuan92/multi-model-agent-core || {
+            echo "::error::core was not installed transitively"; exit 1; }
+          # The 5.0.x binary-distribution failure in one assertion: the claude tier
+          # resolves the SDK's native CLI via require.resolve, so it MUST be a real file
+          # on disk under node_modules.
+          ls node_modules/@anthropic-ai/claude-agent-sdk-*/claude* >/dev/null 2>&1 \
+            || ls node_modules/@anthropic-ai/claude-agent-sdk/cli.js >/dev/null 2>&1 \
+            || echo "::warning::could not locate the claude-agent-sdk native CLI on disk"
+          echo "consumer install OK — mma --version = $OUT"
+
+      # Only now, after everything above passed. See the header note.
+      - name: Tag the release
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+      - name: Publish the GitHub Release
+        if: ${{ inputs.dry_run == false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Lift this version's CHANGELOG section, if it has one.
+          awk -v v="${{ inputs.version }}" '
+            $0 ~ "^## \\[" v "\\]" {f=1; next}
+            f && /^## \[/ {exit}
+            f {print}
+          ' CHANGELOG.md > /tmp/notes.md || true
+          {
+            echo
+            echo '### Packages'
+            echo
+            echo "- \`@zhixuan92/multi-model-agent@${{ inputs.version }}\` — https://www.npmjs.com/package/@zhixuan92/multi-model-agent/v/${{ inputs.version }}"
+            echo "- \`@zhixuan92/multi-model-agent-core@${{ inputs.version }}\` — https://www.npmjs.com/package/@zhixuan92/multi-model-agent-core/v/${{ inputs.version }}"
+            echo
+            echo '```'
+            echo 'npm i -g @zhixuan92/multi-model-agent'
+            echo '```'
+            echo
+            echo 'Requires Node >= 22. Both packages are published with npm provenance from this workflow.'
+          } >> /tmp/notes.md
+          gh release create "v${{ inputs.version }}" \
+            --title "multi-model-agent ${{ inputs.version }}" \
+            --notes-file /tmp/notes.md

@@ -393,8 +393,9 @@ Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task u
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.16.0
+## What's new in 5.16
 
+- **Published with provenance.** Both packages are now built and published by GitHub Actions via npm trusted publishing, so each tarball carries a signed statement binding it to the commit and workflow that produced it (5.16.1).
 - **MCP endpoint.** `POST /mcp` exposes `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the *same* runtime as the REST API — a task submitted over MCP is pollable over REST and vice versa. `mma_run`'s schema is generated from the existing task-input union, so it can't drift from `POST /task`.
 - **Cancellation.** `DELETE /task/:taskId` — 202 means *requested*; the task reaches terminal `cancelled` once the worker confirms. Claude-tier cancel latency went **48s → 0.1s**.
 - **Restarts no longer lose track of work.** Task IDs and terminal results persist in `~/.mma/state`; executions caught mid-flight come back `interrupted` and retryable, and any worker that outlived the daemon is terminated before its record is retired.
