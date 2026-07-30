@@ -28,9 +28,13 @@
 #
 # ONE TEST DEPENDENCY WORTH KNOWING. configure-provider verifies a codex tier by really
 # spawning `codex --version`, so ~15 tests used to pass or fail based on whether the
-# machine happened to have codex installed. tests/vitest-setup.ts now pins
-# MMA_CODEX_BIN to process.execPath, which makes that deterministic everywhere. Do not
-# "fix" a future codex-related CI failure by apt-installing codex on the runner.
+# machine happened to have codex installed. The four configure-provider test files now
+# pin MMA_CODEX_BIN to process.execPath themselves. That pin is deliberately per-file,
+# NOT a global setupFiles hook: applied globally it also reaches tests that drive a real
+# CodexCliSession, whose stdin write then EPIPEs against a process that is not codex and
+# fails the run intermittently even when all 1586 tests pass. Do not "fix" a future
+# codex-related CI failure by apt-installing codex on the runner, and do not hoist that
+# pin back up to a global hook.
 #
 # WHY NO SEPARATE ci.yml. Single-maintainer repo; the `gates` job blocks `publish`, so a
 # release can never be cut from a red tree. Use `dry_run: true` for gates + packaging +
