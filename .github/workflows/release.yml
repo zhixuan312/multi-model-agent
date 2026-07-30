@@ -79,7 +79,7 @@ jobs:
   gates:
     runs-on: ubuntu-24.04      # suite is Linux-green; see header
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Refuse to release from a non-default branch
         if: ${{ inputs.dry_run == false && github.ref != 'refs/heads/master' }}
@@ -131,8 +131,8 @@ jobs:
             exit 1
           fi
 
-      - uses: pnpm/action-setup@v4          # reads packageManager: pnpm@10.33.0
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6          # reads packageManager: pnpm@10.33.0
+      - uses: actions/setup-node@v7
         with:
           node-version: 22                  # matches engines.node >=22
           cache: pnpm
@@ -173,9 +173,9 @@ jobs:
     needs: gates
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm

@@ -1,2 +1,7 @@
 packages:
   - 'packages/*'
+
+# pnpm settings live here rather than in .npmrc: npm does not understand them and warns
+# on every invocation ("Unknown project config"), which now pollutes the release logs
+# because CI publishes with npm. npm says such keys stop working in its next major.
+nodeLinker: hoisted
