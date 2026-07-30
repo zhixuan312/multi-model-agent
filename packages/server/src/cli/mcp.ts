@@ -70,9 +70,23 @@ export interface McpBridgeDeps {
    * token source.
    */
   readFile: (filePath: string) => string;
+  /** Per-frame upper bound in ms (POST + SSE body read). Defaults to
+   *  {@link FRAME_TIMEOUT_MS}; tests override it so the abandon path is coverable
+   *  without waiting two minutes. */
+  frameTimeoutMs?: number;
 }
 
 type JsonRpcId = string | number | null;
+
+/** Upper bound on ONE forwarded frame — the POST plus reading its SSE body. Frames are
+ *  processed sequentially, so an unbounded wait on one frame stalls every later frame.
+ *  Generous enough for a slow local daemon while still guaranteeing progress. */
+const FRAME_TIMEOUT_MS = 120_000;
+
+/** Cap on stdin lines held while a frame is in flight. Unbounded queuing plus a stalled
+ *  upstream would let a fast client grow the bridge's memory without limit. Overflow is
+ *  reported and dropped rather than silently retained. */
+const MAX_QUEUED_LINES = 1024;
 
 interface JsonRpcErrorFrame {
   jsonrpc: '2.0';
@@ -237,13 +251,26 @@ export function bufferedLines(source: {
 }): AsyncIterable<string> {
   const queue: string[] = [];
   let closed = false;
+  let dropped = 0;
   let wake: (() => void) | null = null;
   const signal = (): void => {
     const w = wake;
     wake = null;
     w?.();
   };
-  source.on('line', (line: string) => { queue.push(line); signal(); });
+  source.on('line', (line: string) => {
+    // Bounded: a client that keeps writing while one frame is stalled upstream must not
+    // be able to grow this array without limit.
+    if (queue.length >= MAX_QUEUED_LINES) {
+      dropped += 1;
+      if (dropped === 1) {
+        process.stderr.write(`mma mcp: more than ${MAX_QUEUED_LINES} frames queued; dropping further input until the backlog drains\n`);
+      }
+      return;
+    }
+    queue.push(line);
+    signal();
+  });
   source.on('close', () => { closed = true; signal(); });
 
   return {
@@ -339,6 +366,14 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
     const hasId = Object.prototype.hasOwnProperty.call(frame, 'id');
     const id: JsonRpcId = hasId ? (frame['id'] as JsonRpcId) : null;
 
+    // Bound every forwarded frame. Frames are processed sequentially, so a daemon that
+    // accepts a request and then never completes the response would block this single
+    // await forever — stalling every LATER stdin frame too. That is precisely the "one
+    // bad frame kills a live session" outcome this bridge is built to avoid, so the
+    // timeout covers both the fetch AND the response-body read below.
+    const frameBudgetMs = deps.frameTimeoutMs ?? FRAME_TIMEOUT_MS;
+    const frameTimeout = new AbortController();
+    const frameTimer = setTimeout(() => frameTimeout.abort(), frameBudgetMs);
     let res: Response;
     try {
       res = await deps.fetch(mcpUrl, {
@@ -350,8 +385,17 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
           Host: '127.0.0.1',
         },
         body: JSON.stringify(frame),
+        signal: frameTimeout.signal,
       });
     } catch (err) {
+      clearTimeout(frameTimer);
+      if (frameTimeout.signal.aborted) {
+        stderr(redact(`mma mcp: request ${String(id)} exceeded ${frameBudgetMs}ms with no response from the daemon; abandoning this frame.\n`));
+        if (hasId) {
+          writeProtocol(errorFrame(id, -32603, `The daemon did not respond within ${frameBudgetMs}ms.`) + '\n');
+        }
+        continue;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       stderr(
         redact(
@@ -372,6 +416,7 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
     }
 
     if (!res.ok) {
+      clearTimeout(frameTimer);
       if (hasId) {
         writeProtocol(
           errorFrame(id, -32603, `Upstream request failed`, { httpStatus: res.status }) + '\n',
@@ -380,15 +425,24 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
       continue;
     }
 
+    // The timer is still armed here on purpose: reading the SSE body is part of the
+    // same bounded frame, so a response whose body never completes also aborts.
     let payload: unknown;
     try {
       payload = await parseSseJson(res);
-    } catch {
+    } catch (err) {
+      const timedOut = frameTimeout.signal.aborted;
+      clearTimeout(frameTimer);
       if (hasId) {
-        writeProtocol(errorFrame(id, -32603, 'Malformed upstream response') + '\n');
+        writeProtocol(errorFrame(
+          id,
+          -32603,
+          timedOut ? `The daemon did not finish the response within ${frameBudgetMs}ms.` : 'Malformed upstream response',
+        ) + '\n');
       }
       continue;
     }
+    clearTimeout(frameTimer);
 
     // Notifications (no `id`) never get a response, per JSON-RPC 2.0 —
     // even though we still forwarded them as their own independent POST.

@@ -127,6 +127,30 @@ describe('Claude Desktop MCP installer', () => {
     }
   });
 
+  // The merge is computed from bytes read earlier and the rename replaces the WHOLE
+  // file. If Claude Desktop saves in that window, renaming the stale merge would
+  // silently discard the user's newest edit — the exact outcome this module exists to
+  // prevent. Atomic replacement prevents a torn file, not a stale one.
+  it('refuses without writing when the config changes between read and write', async () => {
+    const first = JSON.stringify({ preferences: { theme: 'dark' }, mcpServers: {} }, null, 2) + '\n';
+    const secondWriter = JSON.stringify({ preferences: { theme: 'light' }, mcpServers: {} }, null, 2) + '\n';
+    let reads = 0;
+    let written: Buffer | undefined;
+    const deps = {
+      platform: 'darwin', homeDir: '/Users/a', appData: '', localAppData: '',
+      execPath: '/opt/node/bin/node', resolveEntrypoint: () => '/opt/mma/dist/cli/index.js',
+      exists: (_p: string) => true,
+      // First read = the merge source; the guard's re-read sees someone else's newer save.
+      readConfig: () => Buffer.from(++reads === 1 ? first : secondWriter),
+      atomicWriteClaudeDesktopConfig: async ({ nextBytes }: { nextBytes: Buffer }) => { written = nextBytes; return null; },
+    };
+    await expect(installClaudeDesktop(deps)).rejects.toThrow(/changed on disk/);
+    expect(written).toBeUndefined(); // the writer was never reached
+
+    reads = 0;
+    await expect(uninstallClaudeDesktop({ ...deps, readConfig: () => Buffer.from(++reads === 1 ? JSON.stringify({ mcpServers: { mma: owned } }) : secondWriter) })).rejects.toThrow(/changed on disk/);
+  });
+
   it('detects only Desktop evidence and resolves the Windows config location', async () => {
     const deps = fixture();
     deps.platform = 'win32';

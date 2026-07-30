@@ -139,7 +139,11 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
  */
 export function buildServerUrl(bind: string, port: number): string {
   const host = (bind === '0.0.0.0' || bind === '::') ? '127.0.0.1' : bind;
-  return `http://${host}:${port}`;
+  // IPv6 literals must be bracketed or the result is not a parseable URL:
+  // `http://::1:7337` is rejected by `new URL()`, which made every consumer of this
+  // helper fail outright for an otherwise-supported `server.bind: "::1"`.
+  const authority = host.includes(':') ? `[${host}]` : host;
+  return `http://${authority}:${port}`;
 }
 
 export interface RunStatusDeps {

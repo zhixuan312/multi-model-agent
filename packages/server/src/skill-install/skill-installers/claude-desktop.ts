@@ -50,6 +50,33 @@ export const CLAUDE_DESKTOP_MCP_KEY = 'mma';
 /** The entrypoint suffix an MMA-written entry always points at (POSIX-normalized). */
 const ENTRYPOINT_SUFFIX = 'dist/cli/index.js';
 
+/**
+ * Refuse the write when the config changed between our read and our rename.
+ *
+ * The merge is computed from bytes read earlier, and the atomic rename replaces the
+ * whole file. If Claude Desktop saved its own settings — or a concurrent `mma mcp
+ * install`/`uninstall` ran — in that window, renaming a stale merge over the newer
+ * bytes silently discards the user's most recent edit. That is exactly the outcome this
+ * module exists to prevent, so re-check immediately before handing off to the writer
+ * and abort instead. Atomic replacement guarantees no torn file; it does not guarantee
+ * the file is still the one we merged.
+ */
+function assertConfigUnchanged(
+  deps: ClaudeDesktopDeps,
+  configPath: string,
+  expected: Buffer | undefined,
+): void {
+  const read = deps.readConfig ?? ((p: string) => (existsSync(p) ? readFileSync(p) : undefined));
+  const current = read(configPath);
+  const same = expected === undefined ? current === undefined : current !== undefined && current.equals(expected);
+  if (!same) {
+    throw new Error(
+      `Refusing to modify ${configPath}: it changed on disk while this command was preparing its update `
+      + '(Claude Desktop may have saved, or another mma command ran). Nothing was written — re-run the command.',
+    );
+  }
+}
+
 export interface ClaudeDesktopDeps {
   /** `process.platform`. Typed as string because callers and tests assign it freely. */
   platform: string;
@@ -318,6 +345,7 @@ export async function installClaudeDesktop(deps: ClaudeDesktopDeps): Promise<Cla
   if (originalBytes !== undefined && originalBytes.equals(nextBytes)) {
     return { configPath, support: 'mcp-only', changed: false, backupPath: null };
   }
+  assertConfigUnchanged(deps, configPath, originalBytes);
   const backupPath = await deps.atomicWriteClaudeDesktopConfig({ configPath, originalBytes, nextBytes }, realSeamDeps());
   return { configPath, support: 'mcp-only', changed: true, backupPath };
 }
@@ -335,6 +363,7 @@ export async function uninstallClaudeDesktop(deps: ClaudeDesktopDeps): Promise<C
   const remaining = { ...mcpServers };
   delete remaining[CLAUDE_DESKTOP_MCP_KEY];
   const nextBytes = serialize({ ...root, mcpServers: remaining });
+  assertConfigUnchanged(deps, configPath, originalBytes);
   const backupPath = await deps.atomicWriteClaudeDesktopConfig({ configPath, originalBytes, nextBytes }, realSeamDeps());
   return { configPath, support: 'mcp-only', changed: true, backupPath };
 }
