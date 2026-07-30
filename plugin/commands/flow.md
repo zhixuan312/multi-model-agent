@@ -82,12 +82,12 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 - Out     : findings (in context)
 - Uses    : Common: Gate · Fixes inline
 
-### B4 — Branch
+### B4 — Branch + clean start
 - Trigger : main agent (git), per repo
 - Read    : —
 - Wire    : —
-- Out     : `mma/<slug>` branch in each target repo
-- Uses    : Common: Branch & PR · Multi-repo
+- Out     : `mma/<slug>` branch in each target repo, with a CLEAN working tree
+- Uses    : Common: Branch & PR · Common: Clean start · Multi-repo
 
 ### B5 — Execute
 - Trigger : mma:execute-plan  (worker), once per repo
@@ -249,7 +249,8 @@ Per repo (see Common: Multi-repo):
 
 ```bash
 srcBranch=$(git -C <repo> rev-parse --abbrev-ref HEAD)     # B4
-git  -C <repo> checkout -b mma/<slug>
+git  -C <repo> checkout -b mma/<slug>                      # B4 — branch BEFORE committing WIP
+git  -C <repo> add -A && git -C <repo> commit -m "chore: pre-existing work"   # B4 — see Clean start
 git  -C <repo> push -u origin mma/<slug>                   # B8
 gh   pr create --base <srcBranch> --head mma/<slug>        # B8, run from <repo>
 gh   pr merge  <n> --merge                                 # B9
@@ -257,6 +258,32 @@ gh   pr merge  <n> --merge                                 # B9
 
 PR title: `build(<slug>): <one-line spec summary>`.
 Open a repo's PR only after B7 passes for that repo this session.
+
+## Common: Clean start   (B4)
+
+**Execution must begin from a clean tree.** The engine commits with `git add -A`, so anything
+uncommitted when B5 dispatches gets swept into the task's commit — mixing your in-progress work
+into MMA's, and making `output.filesChanged` describe both.
+
+So at B4, per repo, **in this order**:
+
+```bash
+git -C <repo> checkout -b mma/<slug>          # 1. cut the branch FIRST
+git -C <repo> status --porcelain              # 2. anything left?
+git -C <repo> add -A                          # 3. …then commit it, on the NEW branch
+git -C <repo> commit -m "chore: pre-existing work before <slug>"
+```
+
+The order is the point. Committing BEFORE branching would put your in-progress work on the
+source branch (often `master`) — the one place it must not land. Branching first keeps the
+source branch untouched and preserves the work as its own commit on the task branch, where it
+stays separable in review: one commit that is yours, then MMA's commits on top.
+
+After this, `execution.dirtyAtDispatch` comes back `false` for every B5 dispatch and each
+engine commit contains only that task's work. If it comes back `true`, B4 did not run or
+something wrote to the tree mid-flow — worth a look, not a halt.
+
+Nothing is ever stashed or discarded. A clean start means *committed*, never *thrown away*.
 
 `srcBranch` is captured at B4 for in-session use. On a fresh-session resume it's gone,
 so default `--base` to the repo's default branch (`origin/HEAD`). Branching from a
