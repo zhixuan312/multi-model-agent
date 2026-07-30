@@ -4,24 +4,14 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { preflight, AbortError } from './preflight.mjs';
 
-// Seed a real orphan worktree (dir + branch) under <dir>/.mma/worktrees/ to exercise the
-// dispatch-time reaper. Retries `git worktree add` on the `.git` lock contended by
-// concurrently-running write scenarios. Returns { orphanDir, branch, orphanId } or null.
-function seedOrphanWorktree(dir, orphanId) {
-  const orphanDir = join(dir, '.mma', 'worktrees', orphanId);
-  const branch = `mma/delegate-${orphanId}`;
-  for (let i = 0; i < 8; i++) {
-    try {
-      execFileSync('git', ['-C', dir, 'worktree', 'add', '-b', branch, orphanDir], { stdio: 'pipe' });
-      return { orphanDir, branch, orphanId };
-    } catch {
-      try { execFileSync('git', ['-C', dir, 'worktree', 'remove', '--force', orphanDir], { stdio: 'ignore' }); } catch { /* best-effort */ }
-      try { execFileSync('git', ['-C', dir, 'branch', '-D', branch], { stdio: 'ignore' }); } catch { /* best-effort */ }
-    }
-  }
-  return null; // seeding failed after retries — the seed-orphan check below flags it
-}
-
+/**
+ * Commit whatever an in-place artifact route (spec / plan / journal_record) left in the SHARED
+ * fixture repo, so the next scenario starts from a clean tree.
+ *
+ * Engine-commit scenarios (delegate / execute_plan) do NOT go through here — each has its own
+ * repo and the ENGINE owns its commit. Committing under them would destroy the very thing their
+ * assertions measure (`dirtyAtDispatch`, and the no-op guard's "HEAD must not move").
+ */
 function keepWorkspaceClean(dir) {
   try {
     const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim();
@@ -32,8 +22,8 @@ function keepWorkspaceClean(dir) {
     execFileSync('git', ['-C', dir, 'commit', '--no-verify', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
   } catch { /* best-effort */ }
 }
-import { createProject } from './fixtures.mjs';
-import { SCENARIOS, WORKTREE_MERGE_TYPES } from './config.mjs';
+import { createProject, createWriteRepo } from './fixtures.mjs';
+import { SCENARIOS, ENGINE_COMMIT_TYPES } from './config.mjs';
 import { runDispatch, pollTask, runCancelScenario, runMcpScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
@@ -113,10 +103,6 @@ async function runScenario(spec, ctx, log) {
       return;
     }
 
-    // Worktree-lifecycle scenario: seed a real orphan worktree BEFORE dispatch so this
-    // task's dispatch-time reaper (or any concurrent write dispatch) reaps it. Asserted below.
-    const orphan = spec.seedOrphan ? seedOrphanWorktree(ctx.dir, 'deadbe11') : null;
-
     const queueBefore = queueLineCount();
     const res = await runDispatch(spec, ctx);
 
@@ -162,65 +148,98 @@ async function runScenario(spec, ctx, log) {
     records.push(rec);
     const checks = verify(rec);
     checksByScenario[spec.id] = checks;
+    // ── Engine-commit assertions, per scenario, in that scenario's OWN repo ──
+    //
+    // The engine edits the caller's checkout in place and commits there. Three things must hold,
+    // and each catches a different regression:
+    //   commit-landed    — HEAD advanced AND every reported file is tracked at HEAD. Combined
+    //                      with the fixture's failing pre-commit hook this is the B-317 guard:
+    //                      if the engine's commit stops bypassing the hook, the branch never
+    //                      advances and the worker's output is silently dropped.
+    //   caller-branch    — the engine created NO branch and left the caller's branch checked
+    //                      out. This is the whole point of caller-owned branches.
+    //   no-worktree-dir  — no `.mma/worktrees/` was created.
+    const repo = ctx.writeRepos?.[spec.id];
+    if (repo && spec.kind === 'write') {
+      const git = (...a) => {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try { return execFileSync('git', ['-C', repo.dir, ...a], { encoding: 'utf8' }).trim(); }
+          catch { /* transient */ }
+        }
+        return '';
+      };
+      const headAfter = git('rev-parse', 'HEAD');
+      const branchAfter = git('rev-parse', '--abbrev-ref', 'HEAD');
+      const branchesAfter = git('branch', '--format=%(refname:short)').split('\n').map((x) => x.trim()).filter(Boolean).sort();
 
-    // Real-tree landing (B-317 regression): for a git write route, every file the engine reports in
-    // filesChanged MUST actually be tracked in the target repo — proof the worktree merge-back truly
-    // landed, not merely that the engine claimed merged:true. Combined with the fixture's failing
-    // pre-commit hook, this catches the silent-drop signature (merged:true + file absent from HEAD)
-    // that a commit gate or missing git identity used to cause. HARD check.
-    // Only worktree-merging types can be asserted here. spec/plan/journal_record
-    // write IN PLACE (TYPE_REGISTRY worktree:false) — there is no merge-back, and
-    // their `.mma/` artifacts are intentionally untracked. Those routes get the
-    // `artifact-on-disk` check below instead, which is the assertion that
-    // actually catches a dropped output for them.
-    if (spec.kind === 'write' && !spec.nonGitCwd && spec.reviewPolicy !== 'none'
-        && WORKTREE_MERGE_TYPES.has(spec.type)) {
-      const fc = rec?.response?.output?.filesChanged;
-      if (Array.isArray(fc) && fc.length > 0) {
-        // filesChanged may arrive repo-relative (git-diff) OR as an absolute worktree path (the
-        // tool-tracking fallback when worktree.filesChanged was absent) — normalize to repo-relative.
-        const norm = (f) => {
-          const m = f.match(/[/\\]\.mma[/\\]worktrees[/\\][^/\\]+[/\\](.+)$/);
-          if (m) return m[1];
-          if (f.startsWith(ctx.dir + '/')) return f.slice(ctx.dir.length + 1);
-          return f;
-        };
-        // `git ls-files` reads committed state (no lock needed), but under 8-way concurrent writes to
-        // one repo a spawn can still fail transiently — retry a few times before declaring a file gone.
-        const tracked = (f) => {
-          const rel = norm(f);
-          for (let a = 0; a < 4; a++) {
-            try { return execFileSync('git', ['-C', ctx.dir, 'ls-files', '--', rel], { encoding: 'utf8' }).trim() !== ''; }
-            catch { /* transient concurrent git access — retry */ }
-          }
-          return false;
-        };
-        const missing = fc.filter((f) => !tracked(f));
-        // HARD gate. A silent merge-back drop (B-317 hook/identity, or the target-moved rebase bug)
-        // fails this even under the full parallel-writes-to-one-repo stress now that concurrent merges
-        // are serialized per repo + rebased in the worktree — so a FAIL here is a real regression.
+      if (spec.noopWrite) {
+        // A task that changed nothing must NOT commit — otherwise it sweeps whatever the caller
+        // had in progress into a commit (this exact accident happened during development).
+        const stillDirty = git('status', '--porcelain').length > 0;
+        checks.push(
+          { checkId: 'noop-no-commit', status: headAfter === repo.headBefore ? 'PASS' : 'FAIL',
+            detail: headAfter === repo.headBefore ? 'HEAD unchanged — no-op made no commit' : `HEAD MOVED ${repo.headBefore.slice(0,8)} → ${headAfter.slice(0,8)}: a no-op task committed the caller's tree` },
+          { checkId: 'noop-preserved-wip', status: stillDirty ? 'PASS' : 'FAIL',
+            detail: stillDirty ? "caller's uncommitted work left untouched" : "caller's uncommitted work disappeared" },
+        );
+      } else {
+        const fc = rec?.response?.output?.filesChanged;
+        const advanced = headAfter !== '' && headAfter !== repo.headBefore;
+        if (Array.isArray(fc) && fc.length > 0) {
+          const norm = (f) => (f.startsWith(repo.dir + '/') ? f.slice(repo.dir.length + 1) : f);
+          const missing = fc.filter((f) => git('ls-files', '--', norm(f)) === '');
+          checks.push({
+            checkId: 'commit-landed',
+            status: advanced && missing.length === 0 ? 'PASS' : 'FAIL',
+            detail: !advanced
+              ? `HEAD did not advance (${repo.headBefore.slice(0,8)}) — the engine commit never landed`
+              : missing.length === 0
+                ? `HEAD ${repo.headBefore.slice(0,8)} → ${headAfter.slice(0,8)}; all ${fc.length} reported file(s) tracked`
+                : `${missing.length}/${fc.length} reported file(s) NOT tracked at HEAD: ${missing.map(norm).join(', ')}`,
+          });
+        }
+      }
+
+      const sameBranch = branchAfter === repo.branch;
+      const sameBranchSet = branchesAfter.join(',') === repo.branchesBefore.join(',');
+      checks.push(
+        { checkId: 'caller-branch', status: sameBranch && sameBranchSet ? 'PASS' : 'FAIL',
+          detail: sameBranch && sameBranchSet
+            ? `still on ${repo.branch}; engine created no branch`
+            : `branch=${branchAfter} (want ${repo.branch}); branches ${branchesAfter.join('|')} (want ${repo.branchesBefore.join('|')})` },
+        { checkId: 'no-worktree-dir', status: !existsSync(join(repo.dir, '.mma', 'worktrees')) ? 'PASS' : 'FAIL',
+          detail: !existsSync(join(repo.dir, '.mma', 'worktrees')) ? 'no .mma/worktrees created' : '.mma/worktrees EXISTS — the engine created a worktree' },
+      );
+
+      // #41/#42 select ONE task from a two-task plan. Only that task's file may exist.
+      if (spec.selectById || spec.selectByHeading) {
+        const selected = existsSync(join(repo.dir, 'src', 'modulo.mjs'));
+        const other = existsSync(join(repo.dir, 'src', 'subtract.mjs'));
         checks.push({
-          checkId: 'merge-landed',
-          status: missing.length === 0 ? 'PASS' : 'FAIL',
-          detail: missing.length === 0
-            ? `all ${fc.length} reported file(s) tracked in the target repo`
-            : `${missing.length}/${fc.length} reported file(s) NOT in the target tree — silent merge-back drop: ${missing.map(norm).join(', ')}`,
+          checkId: 'partial-selection',
+          status: selected && !other ? 'PASS' : 'FAIL',
+          detail: `I-2 implemented=${selected}, unselected I-1 implemented=${other} (want true/false)`,
+        });
+      }
+
+      // #43 ordered the worker to run `git reset --hard`. The runner must refuse it, and the
+      // engine must still commit the worker's file edits — workers lose nothing by losing git.
+      if (spec.gitAttempt) {
+        const fileMade = existsSync(join(repo.dir, 'src', 'gitguard.ts'));
+        checks.push({
+          checkId: 'worker-git-denied',
+          status: headAfter !== repo.headBefore && fileMade ? 'PASS' : 'WARN',
+          detail: `HEAD advanced=${headAfter !== repo.headBefore}, file written=${fileMade} — a reset that succeeded would have discarded the edit`,
         });
       }
     }
 
-    // In-place write routes (spec, plan — TYPE_REGISTRY worktree:false) never merge
-    // back, so the equivalent "did the output actually land" proof is the file
-    // existing ON DISK at the declared outputPath. This is the assertion that
-    // catches a silently dropped artifact for these routes; git-tracking is the
-    // wrong question, since `.mma/` is gitignored in real repos. HARD check.
-    if (spec.kind === 'write' && !WORKTREE_MERGE_TYPES.has(spec.type)
+    // In-place artifact routes (spec, plan) write under `.mma/`, which real repos gitignore, so
+    // the "did the output land" proof is the file existing ON DISK, not git tracking.
+    if (spec.kind === 'write' && !ENGINE_COMMIT_TYPES.has(spec.type)
         && (spec.type === 'spec' || spec.type === 'plan')) {
       const fc = rec?.response?.output?.filesChanged;
       if (Array.isArray(fc) && fc.length > 0) {
-        // Resolve each reported path against the target dir; macOS reports both
-        // /var/... and /private/var/... forms for the same file, so compare on
-        // existence rather than string shape.
         const landed = fc.filter((f) => existsSync(f) || existsSync(join(ctx.dir, f)));
         checks.push({
           checkId: 'artifact-on-disk',
@@ -232,48 +251,12 @@ async function runScenario(spec, ctx, log) {
       }
     }
 
-    // Worktree-lifecycle assertions (#38): the task is terminal, so its worktree cleanup
-    // (mergeAndCleanup / finally) has run and the dispatch-time reaper has fired. Assert no
-    // worktree leaked — the seeded orphan is reaped and the task's OWN worktree is cleaned.
-    if (spec.seedOrphan) {
-      const wtRoot = join(ctx.dir, '.mma', 'worktrees');
-      const orphanReaped = orphan ? !existsSync(orphan.orphanDir) : false;
-      const ownShort = String(res.taskId).slice(0, 8); // create(): shortId = taskId.slice(0,8)
-      // Own worktree cleanup: mergeAndCleanup removes it on completion (proven deterministic in
-      // isolation — see `--only=38`). Under the smoke's artificial parallel-writes-to-ONE-repo
-      // stress (which the product NEVER does — writes are one-per-batch sequential), a task can
-      // lose the merge/remove race against a peer's git worktree-admin mutation and its dir can
-      // linger. That is NOT a permanent leak: the product's durable guarantee is the dispatch-
-      // time reaper, asserted as a HARD check below (reaper-removed-orphan — green every run).
-      // So self-cleanup is informational (WARN if it lost the race), not a gate failure; settle
-      // briefly first so a genuine sub-second race still reports the true PASS end-state.
-      let ownReaped = !existsSync(join(wtRoot, ownShort));
-      for (let i = 0; i < 10 && !ownReaped; i++) { await sleep(500); ownReaped = !existsSync(join(wtRoot, ownShort)); }
-      let branchGone = true;
-      if (orphan) {
-        try {
-          branchGone = execFileSync('git', ['-C', ctx.dir, 'branch', '--list', orphan.branch], { encoding: 'utf8' }).trim() === '';
-        } catch { branchGone = true; }
-      }
-      const ownCheck = { checkId: 'own-worktree-cleaned', status: ownReaped ? 'PASS' : 'WARN', detail: `own shortId ${ownShort} ${ownReaped ? 'cleaned on completion' : 'lingered under concurrent-write stress — re-checked at end of run (dispatch-time reaper is the durable catch-all; see reaper-removed-orphan)'}` };
-      checks.push(
-        { checkId: 'seed-orphan', status: orphan ? 'PASS' : 'FAIL', detail: orphan ? `seeded orphan ${orphan.orphanId}` : 'failed to seed orphan worktree after retries' },
-        { checkId: 'reaper-removed-orphan', status: orphanReaped ? 'PASS' : 'FAIL', detail: orphan ? `${orphan.orphanDir} ${orphanReaped ? 'reaped by dispatch-time reaper' : 'STILL PRESENT — reaper did not run'}` : 'no seed to reap' },
-        ownCheck,
-        { checkId: 'reaper-removed-orphan-branch', status: branchGone ? 'PASS' : 'WARN', detail: `${orphan?.branch}: ${branchGone ? 'deleted' : 'still present (reaper branch-delete is best-effort under lock contention)'}` },
-      );
-      // If the own worktree lost the merge/remove race against a peer's git worktree-admin
-      // mutation, its dir lingers until a later dispatch's reaper. Record it for the end-of-run
-      // sweep, which confirms the durable end-state (every own-worktree dir gone) before the report.
-      if (!ownReaped) { (ctx.lingeringWorktrees ??= []).push({ path: join(wtRoot, ownShort), check: ownCheck }); }
-    }
-
     const fails = checks.filter(c => c.status === 'FAIL').length;
     const warns = checks.filter(c => c.status === 'WARN').length;
     const cost = envelope.metrics?.implementer?.costUsd ?? 0;
     const status = envelope.task?.status ?? '?';
     log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
-    if (spec.kind === 'write') keepWorkspaceClean(ctx.dir);
+    if (spec.kind === 'write' && !ctx.writeRepos?.[spec.id]) keepWorkspaceClean(ctx.dir);
     totalCostUSD += envelope.metrics?.totalCostUsd ?? 0;
   } catch (err) {
     records.push(normalize(spec, {}));
@@ -295,6 +278,15 @@ try {
   const { dir, nonGitDir } = createProject();
   ctx.dir = dir;
   ctx.nonGitDir = nonGitDir;
+
+  // One isolated repo per engine-commit scenario, each on its own caller-created branch. The
+  // engine commits the submitted cwd IN PLACE, so scenarios sharing a checkout would sweep each
+  // other's files into their commits — and this is also what lets them run in parallel.
+  ctx.writeRepos = {};
+  for (const spec of SCENARIOS) {
+    if (!ENGINE_COMMIT_TYPES.has(spec.type) || spec.nonGitCwd) continue;
+    ctx.writeRepos[spec.id] = createWriteRepo(spec.id, { dirty: spec.dirtyRepo === true });
+  }
   ctx.specMd = readFileSync(`${dir}/spec.md`, 'utf8');
 
   const log = (msg) => { process.stderr.write(msg + '\n'); };
@@ -317,55 +309,59 @@ try {
   } else {
     // ── Parallel phased execution ──
     //
-    // Phase 1: #1 context-blocks (prerequisite for #11, #12 blockId)
-    // Phase 2: 14 parallel threads (dependencies chain within a thread)
-    //   Thread A: #2 investigate → #16 investigate/resume  (session reuse needs #2)
-    //   Thread B: #3 research
-    //   Thread C: #4 audit/default
-    //   Thread D: #5 delegate → #6 execute_plan → #9 journal_record → #10 journal_recall
-    //   Thread E: #7 review
-    //   Thread F: #8 debug
-    //   Thread G: #11 audit/spec
-    //   Thread H: #12 audit/plan
-    //   Thread I: #13 audit/skill
-    //   Thread J: #14 delegate/complex → #15 delegate/none → #20 sandbox-escape → #21 sandbox-cd
-    //   Thread K: #17 error/invalid
-    //   Thread L: #18 error/missing
-    //   Thread M: #19 orchestrate
-    //   Thread N: #22 audit/read-only-sandbox
-
+    // Phase 1: #1 context-blocks — the only true prerequisite (mints the blockId #11/#12 use).
+    // Phase 2: one thread per scenario, EXCEPT where a scenario genuinely consumes a previous
+    //          scenario's output. A thread is a dependency chain, not a grouping convenience.
+    //
+    // Only three real dependencies exist:
+    //   [2, 16]  — #16 resumes the session #2 created.
+    //   [4, 26]  — #26 passes the contextBlockId #4 produced.
+    //   [9, 10]  — #10 recalls the journal node #9 recorded.
+    //
+    // Everything else runs concurrently. Write scenarios used to be chained as well, but only to
+    // stop them racing the git index of one shared repo; each now gets its OWN repo on its own
+    // caller-created branch (fixtures.createWriteRepo), which is both what the product actually
+    // does and what makes their commits independently assertable.
     const phase2Threads = [
-      [2, 16],       // investigate → session reuse
+      [2, 16],       // investigate → session reuse            (DEPENDENCY)
+      [4, 26],       // audit/default → context-block delta    (DEPENDENCY)
+      [9, 10],       // journal_record → journal_recall        (DEPENDENCY)
       [3],           // research
-      [4, 26],       // audit/default → delta round 2
-      [5, 6, 9, 10], // write chain → journal_recall
+      [5],           // delegate (reviewed)
+      [6],           // execute_plan
       [7],           // review
       [8],           // debug
       [11],          // audit/spec
       [12],          // audit/plan
       [13],          // audit/skill
-      [14, 15, 20, 21], // write chain → sandbox tests
-      [17],          // error/invalid
-      [18],          // error/missing
+      [14],          // delegate @complex (tier override)
+      [15],          // delegate reviewPolicy=none
+      [17],          // error: invalid type
+      [18],          // error: missing field
       [19],          // orchestrate
-      [22],          // audit/read-only-sandbox
-      [23],          // execute_plan with uncommitted plan file
-      [24],          // spec task type
-      [25],          // plan task type
+      [20],          // sandbox: cwd escape
+      [21],          // sandbox: cd-chain escape
+      [22],          // sandbox: read-only
+      [23],          // execute_plan: uncommitted plan + dirty tree
+      [24],          // spec
+      [25],          // plan
       [27],          // error: too many context blocks
-      [28],          // delegate in non-git cwd (in-place, no worktree)
-      [32],          // execute_plan in non-git cwd (in-place, no worktree)
-      [29],          // spec with a components subset (canonical reorder)
-      [30],          // error: unknown component label → 400
-      [31],          // spec with two target files: decisions [authoritative] + exploration.md [grounding]
-      [33],          // F4: audit with empty target {} → 400 invalid_request
-      [34],          // F5: spec with unresolvable path → async fail returns 6-field error envelope
-      [35],          // journal_record canonical records[] batch (2 records, sequential + completeness)
-      [36],          // journal_record mixed shape (records + prompt) → 400
-      [37],          // journal_record empty records[] → 400
-      [38],          // worktree lifecycle: seed orphan → reaper reaps it + own worktree cleaned (no leak)
-      [39],          // cancellation: DELETE /task/:id → 202 requested → terminal cancelled
-      [40],          // MCP adapter: JSON-RPC round trip + REST cross-surface parity
+      [28],          // delegate in a non-git cwd (no commit)
+      [29],          // spec: component subset (canonical reorder)
+      [30],          // error: unknown component label
+      [31],          // spec: decisions + exploration grounding
+      [32],          // execute_plan in a non-git cwd (no commit)
+      [33],          // error: empty target
+      [34],          // spec: unresolvable path → async 6-field error envelope
+      [35],          // journal_record: canonical records[] batch
+      [36],          // error: journal_record mixed shape
+      [37],          // error: journal_record empty records[]
+      [38],          // no-op write makes NO commit (caller's WIP preserved)
+      [39],          // cancellation lifecycle
+      [40],          // MCP transport + REST parity
+      [41],          // execute_plan: partial selection by task ID
+      [42],          // execute_plan: partial selection by full heading
+      [43],          // worker git denial
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
@@ -418,17 +414,6 @@ try {
       await Promise.all(Array.from({ length: Math.min(cap, p2Threads.length) }, worker));
     }
 
-  }
-
-  // #38 end-of-run worktree sweep: any own-worktree that lingered under peak concurrent-write
-  // contention is cleaned by a later dispatch's reaper (the product's durable guarantee). By now
-  // every own-worktree dir should be gone — confirm it and upgrade the transient WARN to PASS.
-  for (const lw of (ctx.lingeringWorktrees ?? [])) {
-    for (let i = 0; i < 20 && existsSync(lw.path); i++) await sleep(500);
-    if (!existsSync(lw.path)) {
-      lw.check.status = 'PASS';
-      lw.check.detail = 'own worktree lingered transiently under concurrent-write stress, then cleaned by the durable reaper before run end';
-    }
   }
 
   // Telemetry final settle: a short grace so trailing wire records from the last scenarios that

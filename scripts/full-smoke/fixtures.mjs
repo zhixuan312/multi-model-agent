@@ -116,9 +116,9 @@ export function createProject() {
     '#!/bin/sh\necho "smoke pre-commit gate: blocked (B-317 regression guard)" >&2\nexit 1\n',
     { mode: 0o755 });
 
-  // Non-git directory for the optional-worktree scenarios:
-  //   #28 delegate  — write in-place, no worktree
-  //   #32 execute_plan — run a contract-first plan in-place, no worktree
+  // Non-git directory for the non-git in-place scenarios:
+  //   #28 delegate     — edits the folder directly; the engine makes no commit
+  //   #32 execute_plan — runs a contract-first plan there, likewise uncommitted
   const nonGitDir = mkdtempSync(join(tmpdir(), 'mma-nongit-'));
   mkdirSync(join(nonGitDir, 'src'));
   writeFileSync(join(nonGitDir, 'src', 'hello.ts'), 'export const hello = "world";\n');
@@ -128,7 +128,69 @@ export function createProject() {
   return { dir, nonGitDir };
 }
 
-export function destroyProject(dir, nonGitDir) {
+export function destroyProject(dir, nonGitDir, writeRepos) {
   if (dir && dir.includes('mma-fullsmoke-')) rmSync(dir, { recursive: true, force: true });
   if (nonGitDir && nonGitDir.includes('mma-nongit-')) rmSync(nonGitDir, { recursive: true, force: true });
+  for (const repo of Object.values(writeRepos ?? {})) {
+    if (repo?.dir?.includes('mma-smoke-w')) rmSync(repo.dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * One ISOLATED git repo per write scenario, checked out on its own caller-owned branch.
+ *
+ * This is not an optimisation — it is required for correctness. The engine now edits the
+ * submitted cwd IN PLACE and commits there, so N write scenarios sharing one repo would each
+ * `git add -A` the same tree: every commit would sweep in the other scenarios' files, and
+ * `output.filesChanged` (the git diff of that commit) would be meaningless. Worktrees used to
+ * hide this by giving every task a private checkout.
+ *
+ * Giving each write scenario its own repo also mirrors the product exactly — a caller cuts a
+ * branch per task — and it is what lets the write scenarios run genuinely in PARALLEL instead of
+ * being chained purely to dodge index races.
+ */
+export function createWriteRepo(scenarioId, { dirty = false, precommitGate = true } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), `mma-smoke-w${scenarioId}-`));
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' });
+  git('init', '-q'); git('config', 'user.email', 's@s'); git('config', 'user.name', 's');
+
+  mkdirSync(join(dir, 'src'));
+  writeFileSync(join(dir, 'src', 'math.ts'),
+    'export const add = (a: number, b: number) => a + b;\n' +
+    'export const multiply = (a: number, b: number) => a * b;\n' +
+    'export const divide = (a: number, b: number) => a / b; // no b===0 guard\n');
+  writeFileSync(join(dir, 'spec.md'),
+    `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
+  writeFileSync(join(dir, 'plan.md'),
+    contractPlan('add subtract', 'Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest));
+  // A two-task plan for the partial-selection scenario: selecting by ID must run ONLY task I-2.
+  writeFileSync(join(dir, 'two-task-plan.md'),
+    contractPlan('add subtract', 'Two-task Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest)
+      + '\n' + contractPlan('add modulo', '', 'src/modulo.mjs', 'tests/modulo.test.mjs', moduloTest)
+          .replace('# \n\n', '').replace('### Task I-1:', '### Task I-2:'));
+  git('add', '.'); git('commit', '-qm', 'seed');
+
+  // The caller owns the branch — exactly what /mma:flow and Forge do before dispatching.
+  const branch = `mma/2026-07-31-smoke-${scenarioId}`;
+  git('checkout', '-q', '-b', branch);
+
+  // An UNCOMMITTED plan: still readable in place (no copy step exists any more), and it makes
+  // the tree dirty at dispatch so `execution.dirtyAtDispatch` has something true to report.
+  writeFileSync(join(dir, 'uncommitted-plan.md'),
+    contractPlan('add modulo', 'Uncommitted Plan', 'src/modulo.mjs', 'tests/modulo.test.mjs', moduloTest));
+  if (!dirty) { git('add', '.'); git('commit', '-qm', 'add uncommitted-plan (committed for a clean baseline)'); }
+
+  // A failing pre-commit hook (B-317 guard). The engine's commit must bypass it
+  // (`--no-verify`); if that regresses, the branch never advances and the worker's output is
+  // silently dropped — caught by the commit-landed + files-changed checks.
+  if (precommitGate) {
+    writeFileSync(join(dir, '.git', 'hooks', 'pre-commit'),
+      '#!/bin/sh\necho "smoke pre-commit gate: blocked (B-317 regression guard)" >&2\nexit 1\n',
+      { mode: 0o755 });
+  }
+
+  const head = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const branches = execFileSync('git', ['-C', dir, 'branch', '--format=%(refname:short)'], { encoding: 'utf8' })
+    .split('\n').map((x) => x.trim()).filter(Boolean).sort();
+  return { dir, branch, headBefore: head, branchesBefore: branches, dirty };
 }

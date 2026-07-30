@@ -336,20 +336,26 @@ export function verify(rec) {
     out.push(C('terminal-status', ok ? 'PASS' : (soft ? 'WARN' : 'FAIL'),
       `status=${st}${!ok && soft ? ' (no-guarantor -> soft)' : ''}`));
 
-    // Only delegate + execute_plan are worktree:true (per TYPE_REGISTRY); with a GIT cwd they
-    // MUST run in a worktree — the positive half of the optional-worktree contract, guarding a
-    // regression where a git target accidentally runs in-place. All other write types
-    // (journal_record, spec, plan, orchestrate) are worktree:false and legitimately have a null
-    // worktree, as do non-git targets (asserted null in check ⑱).
+    // `execution.worktree` is a structurally-required response key whose value is now
+    // permanently null — the engine owns no worktrees. Asserting null on EVERY route (not just
+    // non-git ones) is what catches a regression that reintroduces engine-side worktrees.
     const wt = r?.execution?.worktree;
-    const expectsWorktree = (e.type === 'delegate' || e.type === 'execute_plan') && !e.nonGitCwd;
-    if (expectsWorktree) {
-      const okWt = wt !== null && typeof wt === 'object' && typeof wt.branch === 'string';
-      out.push(C('worktree', okWt ? 'PASS' : 'FAIL',
-        `git write route → expect a worktree; got branch=${wt?.branch} merged=${wt?.merged}`));
-    } else if (wt && typeof wt === 'object') {
-      out.push(C('worktree', typeof wt.branch === 'string' ? 'PASS' : 'FAIL',
-        `branch=${wt.branch} merged=${wt.merged}`));
+    out.push(C('worktree-null', wt === null ? 'PASS' : 'FAIL',
+      wt === null ? 'execution.worktree null (engine owns no worktrees)' : `expected null, got ${JSON.stringify(wt)}`));
+
+    // FR-4 — dirty-tree disclosure. Always present and boolean, so a caller can read it
+    // unconditionally; true exactly when the fixture left the tree dirty at dispatch.
+    const dirty = r?.execution?.dirtyAtDispatch;
+    if (typeof dirty !== 'boolean') {
+      out.push(C('dirty-at-dispatch', 'FAIL', `execution.dirtyAtDispatch must be a boolean, got ${JSON.stringify(dirty)}`));
+    } else if (e.dirtyRepo) {
+      out.push(C('dirty-at-dispatch', dirty === true ? 'PASS' : 'FAIL',
+        `fixture dispatched a dirty tree → expect true, got ${dirty}`));
+    } else if (e.nonGitCwd) {
+      out.push(C('dirty-at-dispatch', dirty === false ? 'PASS' : 'FAIL',
+        `non-git target has no dirty state → expect false, got ${dirty}`));
+    } else {
+      out.push(C('dirty-at-dispatch', 'PASS', `boolean (${dirty})`));
     }
   }
 
@@ -509,7 +515,7 @@ export function verify(rec) {
   // ⑮ Write route filesChanged — must be populated (from git diff or tool tracking).
   // Non-git (in-place) targets have no git diff to compute changed files from, so the
   // git-diff-based filesChanged is not asserted there.
-  if (e.kind === 'write' && e.reviewPolicy !== 'none' && !e.nonGitCwd && e.type !== 'journal_record') {
+  if (e.kind === 'write' && e.reviewPolicy !== 'none' && !e.nonGitCwd && !e.noopWrite && e.type !== 'journal_record') {
     const fc = r?.output?.filesChanged;
     const hasFiles = Array.isArray(fc) && fc.length > 0;
     out.push(C('files-changed', hasFiles ? 'PASS' : 'WARN',
@@ -560,11 +566,13 @@ export function verify(rec) {
     }
   }
 
-  // ⑱ Non-git cwd — verify delegate completed without worktree
+  // ⑱ Non-git cwd — the route edits the folder in place and the engine makes NO commit, so
+  //    there is no git evidence to derive: filesChanged falls back to the provider's list.
   if (e.nonGitCwd) {
     const wt = r?.execution?.worktree;
-    out.push(C('non-git-cwd', wt === null ? 'PASS' : 'FAIL',
-      `worktree=${JSON.stringify(wt)} (expect null — no git repo)`));
+    const dirty = r?.execution?.dirtyAtDispatch;
+    out.push(C('non-git-cwd', wt === null && dirty === false ? 'PASS' : 'FAIL',
+      `worktree=${JSON.stringify(wt)} (expect null), dirtyAtDispatch=${dirty} (expect false — a non-git dir has no dirty state)`));
   }
 
   // Queue (per-dispatch, best-effort)
