@@ -73,6 +73,49 @@ describe('execute_plan contract-first completion scoring', () => {
     expect(run).toHaveBeenCalledWith('true ok', expect.any(String));
   });
 
+  // Regression: `mma-plan` annotates task headings with the acceptance criteria they
+  // satisfy — `### Task I-1: Do it (← AC-1.1, AC-1.2)` — and parseContractPlan keeps
+  // that annotation in `title`, so it rides into dispatchedTasks. A reviewer echoing
+  // the title back routinely drops the parenthetical. Byte-exact matching therefore
+  // failed the gate at completion 60 for a correct, fully-tested implementation: the
+  // plan generator emitted a format its own validator rejected.
+  it('scores 100 when the reviewer omits the (← AC-…) traceability annotation from an echoed title', async () => {
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    const annotated = 'Task I-1: Implement the pinned-loopback stdio bridge (← AC-1.1, AC-1.2, AC-1.11b)';
+    const echoedWithoutSuffix = 'Task I-1: Implement the pinned-loopback stdio bridge';
+    const r = await runTwoPhasePipeline(baseInput({
+      dispatchedTasks: [annotated],
+      acceptanceTestSnapshot: { tasks: [{ ...snapshot.tasks[0]!, title: annotated }] },
+      reviewerOutput: JSON.stringify({ tasks: [{ title: echoedWithoutSuffix, status: 'done' }] }),
+      run,
+    }));
+    expect(r.completionPercent).toBe(100);
+    expect(r.status).toBe('done');
+    expect(WorktreeManager.prototype.mergeAndCleanup).toHaveBeenCalledOnce();
+  });
+
+  // Normalization must not create ambiguity: when two dispatched titles differ ONLY by
+  // their AC annotation, stripping it would let one reviewer entry satisfy the other.
+  // In that case exact matching is retained, so a partial echo still fails the gate.
+  it('falls back to exact matching when stripping the annotation would collide two titles', async () => {
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    const a = 'Task I-1: Same name (← AC-1.1)';
+    const b = 'Task I-1: Same name (← AC-2.2)';
+    const r = await runTwoPhasePipeline(baseInput({
+      dispatchedTasks: [a, b],
+      acceptanceTestSnapshot: {
+        tasks: [{ ...snapshot.tasks[0]!, title: a }, { ...snapshot.tasks[0]!, title: b }],
+      },
+      // Both echoed WITHOUT the annotation — indistinguishable once stripped.
+      reviewerOutput: JSON.stringify({
+        tasks: [{ title: 'Task I-1: Same name', status: 'done' }, { title: 'Task I-1: Same name', status: 'done' }],
+      }),
+      run,
+    }));
+    expect(r.completionPercent).toBeLessThan(80);
+    expect(r.status).toBe('failed');
+  });
+
   it('scores below 80, fails, and PRESERVES the worktree (never discards) when a reviewer task is not done', async () => {
     const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     const r = await runTwoPhasePipeline(baseInput({ reviewerOutput: '{"tasks":[{"title":"Task I-9: Demo (AC-1.1)","status":"failed"}]}', run }));
