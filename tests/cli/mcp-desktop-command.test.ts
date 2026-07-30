@@ -1,0 +1,53 @@
+import { main } from '../../packages/server/src/cli/index.js';
+import { runMcpBridge } from '../../packages/server/src/cli/mcp.js';
+import { installClaudeDesktop, uninstallClaudeDesktop } from '../../packages/server/src/skill-install/skill-installers/claude-desktop.js';
+
+import { startServe } from '../../packages/server/src/cli/serve.js';
+
+vi.mock('../../packages/server/src/cli/mcp.js', () => ({ runMcpBridge: vi.fn(async () => 0) }));
+vi.mock('../../packages/server/src/skill-install/skill-installers/claude-desktop.js', () => ({
+  installClaudeDesktop: vi.fn(async () => ({ code: 0, message: 'MCP setup only' })),
+  uninstallClaudeDesktop: vi.fn(async () => ({ code: 0, message: 'MCP setup only' })),
+}));
+// Mocked so "no verb starts a daemon" is assertable. Without this mock the symbol
+// is not controllable and the assertion below cannot compile.
+vi.mock('../../packages/server/src/cli/serve.js', () => ({ startServe: vi.fn(async () => 0) }));
+
+describe('mma mcp nested commands', () => {
+  // Mutual exclusivity means the OTHER two targets must be untouched. Asserting
+  // only "the intended target ran once" would still pass a handler that fires an
+  // extra side effect alongside the correct one.
+  const allTargets = [runMcpBridge, installClaudeDesktop, uninstallClaudeDesktop];
+  // Only the two verb rows live here. Bare `mcp` is deliberately excluded: it needs
+  // real config discovery, and invoking main() without cwd/homeDir/env overrides
+  // would fall through to the real os.homedir()/process.cwd()/process.env. Task I-2
+  // already covers bare `mcp` end-to-end with a deterministic fixture.
+  it.each([['mcp install', 1], ['mcp uninstall', 2]] as const)('dispatches %s to exactly its target and nothing else', async (raw, selected) => {
+    allTargets.forEach((t) => vi.mocked(t).mockClear());
+    vi.mocked(startServe).mockClear();
+    const argv = raw.split(' ');
+    await main({ argv: () => argv, stdout: () => true, stderr: () => true, exit: (() => { throw new Error('exit'); }) as never }).catch(() => undefined);
+    allTargets.forEach((t, i) => expect(t).toHaveBeenCalledTimes(i === selected ? 1 : 0));
+    expect(runMcpBridge).toHaveBeenCalledTimes(0); // a verb must never run the bridge
+    expect(startServe).toHaveBeenCalledTimes(0);   // no verb may start a daemon
+  });
+
+  it('rejects an unknown nested verb without touching any target', async () => {
+    allTargets.forEach((t) => vi.mocked(t).mockClear());
+    let err = '';
+    await main({
+      argv: () => ['mcp', 'bogus'],
+      stdout: () => true,
+      stderr: (s: string) => { err += s; return true; },
+      exit: (() => { throw new Error('exit'); }) as never,
+    }).catch(() => undefined);
+    expect(err).toMatch(/unknown subcommand "bogus"/);
+    allTargets.forEach((t) => expect(t).toHaveBeenCalledTimes(0));
+  });
+
+  it('does not register Desktop as a skill target', async () => {
+    const manifest = await import('node:fs/promises').then((fs) => fs.readFile('packages/server/src/skill-install/manifest.ts', 'utf8'));
+    expect(manifest).not.toContain("'claude-desktop'");
+    expect(manifest).toContain("'claude-code' | 'gemini' | 'codex' | 'cursor'");
+  });
+});
