@@ -43,18 +43,43 @@ export function findEnabledMmaPlugin(homeDir: string): string | null {
   return null;
 }
 
-/** Human-facing warning shown when standalone skills would duplicate the plugin. */
-export function pluginConflictWarning(pluginKey: string): string {
+/**
+ * Message for the auto-supersede path: the plugin is present, so the standalone
+ * Claude Code install is redundant and gets retired.
+ *
+ * Deliberately one-directional. MMA owns `~/.claude/skills/mma-*` and may clean
+ * up its own redundant copies, but it must NEVER uninstall the plugin:
+ *   - `sync-skills` runs from npm postinstall, so auto-removing the plugin would
+ *     mean `npm i -g @zhixuan92/multi-model-agent@latest` silently deleting a
+ *     Claude Code plugin the user chose. A package upgrade must not do that.
+ *   - the plugin is a strict SUPERSET (skills + commands + MCP server), so when
+ *     both exist the plugin is the one worth keeping.
+ * Choosing standalone instead is an explicit user action (uninstall the plugin),
+ * not something an upgrade decides.
+ */
+export function pluginSupersedesMessage(pluginKey: string, removed: number): string {
   return [
-    `warning: the "${pluginKey}" plugin is installed, which already provides these skills`,
-    `         as /mma:audit, /mma:delegate, … plus the MCP server.`,
+    `The "${pluginKey}" plugin already provides these skills (/mma:audit, /mma:delegate, …),`,
+    `the SDLC commands, and the MCP server — so the standalone copies are redundant.`,
+    removed > 0
+      ? `Retired ${removed} standalone Claude Code asset(s) to avoid two copies of every skill.`
+      : `Skipping the standalone Claude Code install for the same reason.`,
+    `Claude Code is unchanged; only MMA's own ~/.claude/skills entries were touched.`,
+    ``,
+    `  want standalone instead?  claude plugin uninstall ${pluginKey} && mma enable --target=claude-code`,
+    `  keep both anyway?         mma sync-skills --target=claude-code --keep-standalone`,
+    ``,
+  ].join('\n');
+}
+
+/** Warning when `mma enable` would recreate the duplicate the plugin supersedes. */
+export function enableDespitePluginWarning(pluginKey: string): string {
+  return [
+    `warning: the "${pluginKey}" plugin is installed and already provides these skills.`,
     `         Installing them standalone as well gives you TWO copies of every skill`,
     `         (/mma-audit AND /mma:audit) with near-identical descriptions, so Claude`,
-    `         picks between them arbitrarily and the copies drift on the next update.`,
-    ``,
-    `         Keep ONE:`,
-    `           plugin only      → mma disable --target=claude-code`,
-    `           standalone only  → claude plugin uninstall ${pluginKey}`,
+    `         picks between them arbitrarily. Uninstall the plugin first if you want`,
+    `         standalone only: claude plugin uninstall ${pluginKey}`,
     ``,
   ].join('\n');
 }

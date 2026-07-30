@@ -81,7 +81,11 @@ Claude Code users can install the skills **and** the MCP server in a single step
 
 That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 SDLC commands (`/mma:flow`, `/mma:breakout`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
-> Use either `mma sync-skills` **or** the plugin for Claude Code, not both. Claude Code namespaces plugin components rather than replacing standalone ones, so doing both leaves you with two copies of every skill (`/mma-audit` **and** `/mma:audit`) whose descriptions are near-identical — Claude then picks between them arbitrarily. `mma sync-skills` warns when it detects the plugin. To switch: `mma disable --target=claude-code`. Other clients are unaffected — this overlap is Claude-Code-only.
+> **The plugin supersedes standalone skills automatically.** Standalone (`mma sync-skills`) is the default, but the plugin is a strict superset — skills *plus* the SDLC commands *plus* the MCP server. So once the plugin is installed, `mma sync-skills` retires the standalone Claude Code copies and pins that client off, keeping exactly one install path. Without this you'd have two copies of every skill (`/mma-audit` **and** `/mma:audit`) with near-identical descriptions, and Claude would pick between them arbitrarily.
+>
+> This is deliberately **one-directional**: MMA cleans up its own `~/.claude/skills` entries but never uninstalls the plugin — `sync-skills` runs from npm postinstall, so the reverse would let a routine upgrade silently delete a plugin you chose. To go back to standalone: `claude plugin uninstall mma@multi-model-agent && mma enable --target=claude-code`. To keep both anyway: `mma sync-skills --target=claude-code --keep-standalone`.
+>
+> Other clients are unaffected — this overlap is Claude-Code-only.
 
 ### 2. Choose your main model — intentionally (4.0.3+)
 

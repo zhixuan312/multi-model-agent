@@ -13,6 +13,7 @@
  *
  * Usage:
  *   mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]
+ *                       [--keep-standalone]
  *                       [--silent] [--best-effort] [--if-exists]
  *
  * Exit codes:
@@ -37,7 +38,7 @@ import {
   type Client,
   type ManifestEntry,
 } from '../skill-install/manifest.js';
-import { findEnabledMmaPlugin, pluginConflictWarning } from '../skill-install/plugin-conflict.js';
+import { findEnabledMmaPlugin, pluginSupersedesMessage } from '../skill-install/plugin-conflict.js';
 import {
   SUPPORTED_SKILLS,
   SUPPORTED_COMMANDS,
@@ -53,7 +54,8 @@ import {
   writeCommandToClaudeCode,
   removeCommandFromClaudeCode,
 } from '../skill-install/skill-installer-common.js';
-import { disabledTargets } from '../skill-install/disabled-state.js';
+import { disabledTargets, addDisabledTargets } from '../skill-install/disabled-state.js';
+import { readServerVersion } from '../server-version.js';
 
 export const ExitCode = Object.freeze({
   SUCCESS: 0,
@@ -82,12 +84,14 @@ interface ParsedArgs {
   allTargets: boolean;
   dryRun: boolean;
   json: boolean;
+  /** Opt out of the plugin-supersedes-standalone retirement. */
+  keepStandalone: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = minimist(argv, {
     string: ['target'],
-    boolean: ['dry-run', 'json', 'all-targets'],
+    boolean: ['dry-run', 'json', 'all-targets', 'keep-standalone'],
     alias: { t: 'target', j: 'json' },
   });
   let targets: Client[] | null = null;
@@ -100,6 +104,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     allTargets: args['all-targets'] === true,
     dryRun: args['dry-run'] === true,
     json: args['json'] === true,
+    keepStandalone: args['keep-standalone'] === true,
   };
 }
 
@@ -224,14 +229,56 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     return ExitCode.SUCCESS;
   }
 
-  // Plugin overlap: the mma plugin already ships these skills to Claude Code
-  // (namespaced /mma:audit …). Claude Code keeps BOTH copies, so installing
-  // standalone as well doubles every skill with a near-identical description.
-  // Warn rather than block — a user may deliberately want both while migrating
-  // — but make it impossible to end up with duplicates unknowingly.
-  const conflictPlugin = targets.includes('claude-code') ? findEnabledMmaPlugin(homeDir) : null;
-  if (conflictPlugin && !parsed.json) {
-    stderr(pluginConflictWarning(conflictPlugin));
+  // ── Plugin supersedes standalone (Claude Code only) ──────────────────────
+  // Claude Code namespaces plugin components instead of replacing standalone
+  // ones, so having both means two copies of every skill with near-identical
+  // descriptions and arbitrary intent-matching. The plugin is a strict superset
+  // (skills + commands + MCP), so when it is present the standalone install is
+  // retired: remove MMA's own ~/.claude entries and pin claude-code off so the
+  // npm postinstall does not recreate them.
+  //
+  // Strictly one-directional — see pluginSupersedesMessage for why this must
+  // never uninstall the plugin instead.
+  const supersedingPlugin = targets.includes('claude-code') && !parsed.keepStandalone
+    ? findEnabledMmaPlugin(homeDir)
+    : null;
+  if (supersedingPlugin) {
+    // Count what was actually present — the remove helpers return void, so
+    // probing first is the only honest way to report how much was retired.
+    const presentSkills = SUPPORTED_SKILLS
+      .filter((skill) => readInstalledVersion(skill, 'claude-code', homeDir) !== null);
+    const presentCommands = SUPPORTED_COMMANDS
+      .filter((command) => readInstalledCommandVersion(command, homeDir) !== null);
+    const retired = presentSkills.length + presentCommands.length;
+
+    if (!parsed.dryRun) {
+      for (const skill of presentSkills) {
+        try { removeSkillFromClient(skill, 'claude-code', homeDir); } catch { /* best-effort */ }
+      }
+      for (const command of presentCommands) {
+        try { removeCommandFromClaudeCode(command, homeDir); } catch { /* best-effort */ }
+      }
+      for (const name of [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS]) {
+        removeEntry(name, ['claude-code'], homeDir);
+      }
+      // Pin claude-code off so the npm postinstall (which shells out to this
+      // command) does not recreate the duplicate on the next upgrade.
+      addDisabledTargets(homeDir, ['claude-code'], readServerVersion());
+    }
+    targets = targets.filter((t) => t !== 'claude-code');
+
+    if (parsed.json) {
+      stdout(JSON.stringify({
+        outcome: 'plugin-supersedes-standalone',
+        plugin: supersedingPlugin,
+        target: 'claude-code',
+        retired,
+        dryRun: parsed.dryRun,
+      }) + '\n');
+    } else {
+      log(pluginSupersedesMessage(supersedingPlugin, retired));
+    }
+    if (targets.length === 0) return ExitCode.SUCCESS;
   }
 
   let manifestEntries: ManifestEntry[];

@@ -178,6 +178,33 @@ Claude Code's in-app directory is a separate, optional step:
 `claude-plugins-official` is curated by Anthropic at their discretion — there is
 no application process, and the submission form does not add plugins to it.
 
+## Plugin supersedes standalone (one-directional)
+
+Standalone skills are the default install; the plugin is a strict superset
+(skills + commands + MCP server). When `sync-skills` detects an enabled mma
+plugin it therefore **retires** the standalone Claude Code copies and pins that
+client off via the existing disable sentinel, so exactly one install path
+survives and the npm postinstall cannot recreate the duplicate.
+
+It never runs the other way. `sync-skills` is invoked from npm postinstall, so
+auto-uninstalling the plugin would mean a routine
+`npm i -g @zhixuan92/multi-model-agent@latest` silently deleting a Claude Code
+plugin the user chose. MMA only removes files it owns (`~/.claude/skills/mma-*`,
+`~/.claude/commands/mma-*`); the plugin and Claude Code's `enabledPlugins`
+record are left untouched.
+
+| Situation | Result |
+|---|---|
+| No plugin | standalone installs normally (the default) |
+| Plugin enabled | standalone retired, `claude-code` pinned off |
+| `--keep-standalone` | retirement skipped, duplicates accepted |
+| `mma enable --target=claude-code` with plugin present | proceeds (explicit user action) but warns |
+
+Detection reads Claude Code's own `settings.json` → `enabledPlugins`, matching on
+the plugin name before the `@`, so a fork or the community catalog is caught too.
+A missing or malformed settings file degrades to "no plugins" rather than
+throwing.
+
 ## Release checklist
 
 1. `npm run build:plugin` — regenerate from current skills

@@ -1,61 +1,146 @@
-// Plugin-vs-standalone conflict detection.
+// Plugin-vs-standalone reconciliation.
 //
-// Claude Code keeps BOTH copies when a user has run `mma sync-skills` AND
-// installed the plugin — plugin components are namespaced, so nothing
-// overwrites anything. The result is two skills per capability with
-// near-identical descriptions. This must be detected and reported, never
-// silently doubled.
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+// Standalone (`mma sync-skills` → ~/.claude/skills/mma-*) is the default. The
+// plugin is a strict SUPERSET (skills + commands + MCP server), so when it is
+// detected the standalone Claude Code install is retired automatically.
+//
+// The automation is strictly ONE-DIRECTIONAL. MMA may clean up its own
+// ~/.claude/skills entries, but must never uninstall the plugin: sync-skills
+// runs from npm postinstall, so the reverse would make a routine
+// `npm i -g @zhixuan92/multi-model-agent@latest` silently delete a Claude Code
+// plugin the user chose.
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   findEnabledMmaPlugin,
   readEnabledPlugins,
-  pluginConflictWarning,
+  pluginSupersedesMessage,
+  enableDespitePluginWarning,
 } from '../../packages/server/src/skill-install/plugin-conflict.js';
+import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
+import { disabledTargets } from '../../packages/server/src/skill-install/disabled-state.js';
+import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
+const homes: string[] = [];
 function homeWith(settings: unknown | null): string {
   const home = mkdtempSync(join(tmpdir(), 'mma-conflict-'));
+  homes.push(home);
   if (settings !== null) {
     mkdirSync(join(home, '.claude'), { recursive: true });
     writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify(settings));
   }
   return home;
 }
+afterEach(() => { for (const h of homes.splice(0)) rmSync(h, { recursive: true, force: true }); });
 
-describe('plugin conflict detection', () => {
-  const homes: string[] = [];
-  const mk = (s: unknown | null) => { const h = homeWith(s); homes.push(h); return h; };
-  afterEach(() => { for (const h of homes.splice(0)) rmSync(h, { recursive: true, force: true }); });
-
+describe('plugin detection', () => {
   it('finds an enabled mma plugin regardless of which marketplace shipped it', () => {
-    expect(findEnabledMmaPlugin(mk({ enabledPlugins: { 'mma@multi-model-agent': true } })))
+    expect(findEnabledMmaPlugin(homeWith({ enabledPlugins: { 'mma@multi-model-agent': true } })))
       .toBe('mma@multi-model-agent');
     // A fork or the community catalog must match too — the plugin NAME is the key.
-    expect(findEnabledMmaPlugin(mk({ enabledPlugins: { 'mma@claude-community': true } })))
+    expect(findEnabledMmaPlugin(homeWith({ enabledPlugins: { 'mma@claude-community': true } })))
       .toBe('mma@claude-community');
   });
 
   it('ignores a disabled mma plugin and unrelated plugins', () => {
-    expect(findEnabledMmaPlugin(mk({ enabledPlugins: { 'mma@multi-model-agent': false } }))).toBeNull();
-    expect(findEnabledMmaPlugin(mk({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }))).toBeNull();
+    expect(findEnabledMmaPlugin(homeWith({ enabledPlugins: { 'mma@multi-model-agent': false } }))).toBeNull();
+    expect(findEnabledMmaPlugin(homeWith({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }))).toBeNull();
     // Not a substring match: a different plugin whose name merely contains "mma".
-    expect(findEnabledMmaPlugin(mk({ enabledPlugins: { 'mma-extras@x': true } }))).toBeNull();
+    expect(findEnabledMmaPlugin(homeWith({ enabledPlugins: { 'mma-extras@x': true } }))).toBeNull();
   });
 
   it('treats a missing or malformed settings file as "no plugins" rather than throwing', () => {
-    expect(findEnabledMmaPlugin(mk(null))).toBeNull();
-    const home = mk(null);
+    expect(findEnabledMmaPlugin(homeWith(null))).toBeNull();
+    const home = homeWith(null);
     mkdirSync(join(home, '.claude'), { recursive: true });
     writeFileSync(join(home, '.claude', 'settings.json'), '{ not json');
     expect(() => readEnabledPlugins(home)).not.toThrow();
     expect(findEnabledMmaPlugin(home)).toBeNull();
   });
 
-  it('warns with both concrete remediations, not just a description of the problem', () => {
-    const w = pluginConflictWarning('mma@multi-model-agent');
-    expect(w).toContain('mma disable --target=claude-code');
-    expect(w).toContain('claude plugin uninstall mma@multi-model-agent');
-    expect(w).toMatch(/\/mma-audit AND \/mma:audit/);
+  it('messages name the concrete escape hatches', () => {
+    const sup = pluginSupersedesMessage('mma@multi-model-agent', 18);
+    expect(sup).toContain('Retired 18');
+    expect(sup).toContain('--keep-standalone');
+    expect(sup).toContain('claude plugin uninstall mma@multi-model-agent');
+    // Must be explicit that the plugin itself was never touched.
+    expect(sup).toContain('Claude Code is unchanged');
+    expect(pluginSupersedesMessage('mma@x', 0)).toContain('Skipping');
+
+    expect(enableDespitePluginWarning('mma@x')).toContain('claude plugin uninstall mma@x');
+  });
+});
+
+describe('sync-skills: plugin supersedes standalone', () => {
+  /** A home with Claude Code detected and standalone skills+commands present. */
+  function homeWithStandalone(pluginEnabled: boolean): string {
+    const home = homeWith(pluginEnabled ? { enabledPlugins: { 'mma@multi-model-agent': true } } : {});
+    for (const s of SUPPORTED_SKILLS) {
+      mkdirSync(join(home, '.claude', 'skills', s), { recursive: true });
+      writeFileSync(join(home, '.claude', 'skills', s, 'SKILL.md'), `---\nname: ${s}\nversion: "1.0.0"\n---\nbody\n`);
+    }
+    mkdirSync(join(home, '.claude', 'commands'), { recursive: true });
+    for (const c of SUPPORTED_COMMANDS) {
+      writeFileSync(join(home, '.claude', 'commands', `${c}.md`), `---\nname: ${c}\nversion: "1.0.0"\n---\nbody\n`);
+    }
+    return home;
+  }
+
+  const run = (home: string, argv: string[]) =>
+    runSyncSkills({ argv, homeDir: home, silent: true, stdout: () => true, stderr: () => true });
+
+  it('retires the standalone install and pins claude-code off when the plugin is present', async () => {
+    const home = homeWithStandalone(true);
+    await run(home, ['--target=claude-code']);
+
+    const left = existsSync(join(home, '.claude', 'skills'))
+      ? readdirSync(join(home, '.claude', 'skills'))
+      : [];
+    expect(left, `standalone skills survived: ${left.join(', ')}`).toHaveLength(0);
+    for (const c of SUPPORTED_COMMANDS) {
+      expect(existsSync(join(home, '.claude', 'commands', `${c}.md`)), `${c} survived`).toBe(false);
+    }
+    // Pinned off so the npm postinstall cannot recreate the duplicate.
+    expect(disabledTargets(home)).toContain('claude-code');
+  });
+
+  it('NEVER touches the plugin — only MMA-owned files', async () => {
+    const home = homeWithStandalone(true);
+    await run(home, ['--target=claude-code']);
+    // The enabling record is Claude Code's state, not ours.
+    expect(readEnabledPlugins(home)['mma@multi-model-agent']).toBe(true);
+    expect(findEnabledMmaPlugin(home)).toBe('mma@multi-model-agent');
+  });
+
+  it('leaves standalone alone when no plugin is installed (standalone is the default)', async () => {
+    const home = homeWithStandalone(false);
+    await run(home, ['--target=claude-code']);
+    expect(readdirSync(join(home, '.claude', 'skills')).length).toBeGreaterThan(0);
+    expect(disabledTargets(home)).not.toContain('claude-code');
+  });
+
+  it('--keep-standalone opts out of the retirement', async () => {
+    const home = homeWithStandalone(true);
+    await run(home, ['--target=claude-code', '--keep-standalone']);
+    expect(readdirSync(join(home, '.claude', 'skills')).length).toBeGreaterThan(0);
+    expect(disabledTargets(home)).not.toContain('claude-code');
+  });
+
+  it('--dry-run reports without removing anything', async () => {
+    const home = homeWithStandalone(true);
+    await run(home, ['--target=claude-code', '--dry-run']);
+    expect(readdirSync(join(home, '.claude', 'skills')).length).toBeGreaterThan(0);
+    expect(disabledTargets(home)).not.toContain('claude-code');
+  });
+
+  it('retirement is Claude-Code-only — other clients still sync', async () => {
+    const home = homeWithStandalone(true);
+    // codex skills live under ~/.codex/skills and must be untouched by this path.
+    mkdirSync(join(home, '.codex', 'skills', 'mma-audit'), { recursive: true });
+    writeFileSync(join(home, '.codex', 'skills', 'mma-audit', 'SKILL.md'), '---\nname: mma-audit\n---\nx\n');
+    await run(home, ['--target=claude-code', '--target=codex']);
+    expect(existsSync(join(home, '.codex', 'skills', 'mma-audit', 'SKILL.md'))).toBe(true);
+    expect(disabledTargets(home)).not.toContain('codex');
   });
 });
