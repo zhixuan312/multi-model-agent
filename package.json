@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "5.15.4",
+  "version": "5.16.0",
   "private": true,
   "license": "MIT",
   "description": "Local HTTP service that delegates tool-using work to sub-agents on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
@@ -28,11 +28,12 @@
   ],
   "scripts": {
     "build": "pnpm -r run build",
+    "build:plugin": "pnpm tsx packages/server/src/cli/index.ts plugin build --out ./plugin",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:perf": "vitest run tests/perf/",
     "serve": "node packages/server/dist/cli/index.js serve",
-    "dev": "TSX_TSCONFIG_PATH=packages/server/tsconfig.dev.json pnpm tsx watch --clear-screen=false packages/server/src/cli/index.ts serve",
+    "dev": "MMA_DEV_NO_RECONCILE=1 TSX_TSCONFIG_PATH=packages/server/tsconfig.dev.json pnpm tsx watch --clear-screen=false packages/server/src/cli/index.ts serve",
     "smoke:full": "node scripts/full-smoke/index.mjs",
     "smoke:disable-enable": "node scripts/demo-disable-enable.mjs",
     "regen:observability-golden": "pnpm tsx tests/contract/regen-observability-golden.ts",

@@ -89,6 +89,95 @@ function skillSurfaceGate() {
   }
 }
 
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/**
+ * Claude Code plugin release gate (5.16.0). The committed `plugin/` tree is a
+ * GENERATED artifact published through the repo's own marketplace, so a release
+ * must never ship it stale or — far worse — carrying a secret. Like the
+ * skill-surface gate this is asserted against files, not a dispatch: there is no
+ * HTTP route for plugin packaging.
+ */
+function pluginSurfaceGate() {
+  const pluginDir = join(REPO_ROOT, 'plugin');
+  const marketplace = join(REPO_ROOT, '.claude-plugin', 'marketplace.json');
+
+  if (!existsSync(marketplace)) {
+    throw new AbortError('plugin-surface', `missing ${marketplace}`,
+      'the repo root must carry .claude-plugin/marketplace.json to act as a marketplace');
+  }
+  const catalog = JSON.parse(readFileSync(marketplace, 'utf8'));
+  const entry = (catalog.plugins ?? []).find((p) => p.name === 'mma');
+  if (!entry) {
+    throw new AbortError('plugin-surface', 'marketplace.json has no "mma" plugin entry',
+      'add the mma entry with a source path pointing at ./plugin');
+  }
+  // A source that does not resolve is the documented cause of the install-time
+  // "Plugin directory not found at path" failure.
+  const manifest = join(REPO_ROOT, entry.source, '.claude-plugin', 'plugin.json');
+  if (!existsSync(manifest)) {
+    throw new AbortError('plugin-surface', `marketplace source ${entry.source} has no .claude-plugin/plugin.json`,
+      'run `npm run build:plugin` and commit ./plugin');
+  }
+
+  // Components must live at the plugin ROOT — only plugin.json belongs inside
+  // .claude-plugin/, and a misplaced tree loads silently as an empty plugin.
+  for (const required of ['skills', 'commands', 'scripts', '.mcp.json']) {
+    if (!existsSync(join(pluginDir, required))) {
+      throw new AbortError('plugin-surface', `plugin/${required} is missing`,
+        'run `npm run build:plugin` — components belong at the plugin root');
+    }
+  }
+
+  // The mma- prefix is the FLAT-install namespace; a plugin namespaces its own
+  // components, so keeping it would produce /mma:mma-audit.
+  const skillDirs = readdirSync(join(pluginDir, 'skills'), { withFileTypes: true })
+    .filter((d) => d.isDirectory()).map((d) => d.name);
+  const doubled = skillDirs.filter((n) => n.startsWith('mma-'));
+  if (doubled.length > 0) {
+    throw new AbortError('plugin-surface', `plugin skills still carry the mma- prefix: ${doubled.join(', ')}`,
+      'the plugin namespaces components already — invocation must read /mma:audit, not /mma:mma-audit');
+  }
+  if (!skillDirs.includes('audit') || !skillDirs.includes('router')) {
+    throw new AbortError('plugin-surface', `plugin skills look wrong: ${skillDirs.join(', ')}`,
+      'expected bare component names (audit, delegate, router, …) — run `npm run build:plugin`');
+  }
+
+  // Auth: the artifact must register the MCP server WITHOUT embedding a token.
+  const mcp = JSON.parse(readFileSync(join(pluginDir, '.mcp.json'), 'utf8'));
+  const server = mcp.mcpServers?.daemon;
+  if (!server || server.type !== 'http' || !server.headersHelper) {
+    throw new AbortError('plugin-surface', `plugin .mcp.json mma entry=${JSON.stringify(server)}`,
+      'the MCP entry must be an http server using headersHelper');
+  }
+  if (server.headers) {
+    throw new AbortError('plugin-surface', 'plugin .mcp.json pins static headers',
+      'use headersHelper — a static headers block would ship a secret in a distributable artifact');
+  }
+
+  // Hard secret gate: the live daemon token must appear NOWHERE in the artifact.
+  // The per-client installers legitimately substitute it into skill text; the
+  // plugin must not, because it is published.
+  const token = (() => { try { return readToken(); } catch { return null; } })();
+  if (token && token.length > 8) {
+    const offenders = [];
+    const walk = (dir) => {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, ent.name);
+        if (ent.isDirectory()) { walk(p); continue; }
+        let body = '';
+        try { body = readFileSync(p, 'utf8'); } catch { continue; }
+        if (body.includes(token)) offenders.push(p);
+      }
+    };
+    walk(pluginDir);
+    if (offenders.length > 0) {
+      throw new AbortError('plugin-secret', `live auth token found in ${offenders.length} plugin file(s): ${offenders[0]}`,
+        'the plugin is distributable — never pass authToken to inlineIncludes when generating it');
+    }
+  }
+}
+
 export class AbortError extends Error {
   constructor(gate, observed, remediation) {
     super(`[preflight ${gate}] observed: ${observed} | fix: ${remediation}`);
@@ -166,6 +255,10 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
 
   // Skill-surface release gate (design→explore/brainstorm split intact).
   skillSurfaceGate();
+
+  // Plugin-surface release gate: the committed marketplace artifact is fresh,
+  // correctly namespaced, and carries no secret.
+  pluginSurfaceGate();
 
   const ctx = { token, serverVersion, bootId, serverBranch, installId,
                 runStartTs: new Date().toISOString(), databaseUrl: null,

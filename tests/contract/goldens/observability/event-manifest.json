@@ -30,6 +30,10 @@
       "provider_events": []
     },
     {
+      "kind": "batch_cancelled",
+      "provider_events": []
+    },
+    {
       "kind": "project_evicted",
       "provider_events": []
     },

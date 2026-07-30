@@ -1,0 +1,12 @@
+{
+  "name": "mma",
+  "description": "Delegate tool-using work to cost-optimized multi-model agents with cross-model review — skills plus the MMA MCP server.",
+  "version": "5.16.0",
+  "author": {
+    "name": "Zhang Zhixuan",
+    "email": "zhangzhixuan312@gmail.com"
+  },
+  "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
+  "repository": "https://github.com/zhixuan312/multi-model-agent",
+  "license": "MIT"
+}

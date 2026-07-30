@@ -2,7 +2,7 @@ import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readServerVersion } from '../server-version.js';
-import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { ServerConfig, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
@@ -17,16 +17,17 @@ import type { HandlerDeps } from './handler-deps.js';
 import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
-import type { ProjectRegistry } from './project-registry.js';
+import { expandHome } from '../expand-home.js';
+import type { ProjectRegistry } from '../application/project-registry.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
 /** Server package version — read once at module load time (single source: server-version.ts). */
 export const SERVER_VERSION = readServerVersion();
 
-function extractMultiModelConfig(config: ServerConfig): HandlerDeps['config'] | undefined {
+function extractMultiModelConfig(config: ServerConfig): MultiModelConfig | undefined {
   return (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as HandlerDeps['config'])
+    ? (config as unknown as MultiModelConfig)
     : undefined;
 }
 
@@ -69,7 +70,6 @@ const MAIN_MODEL_REQUIRED_PATHS = new Set([
 async function registerControlHandlers(
   router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
-  taskRegistry: TaskRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
@@ -100,14 +100,37 @@ export async function startServer(
 
   const router = new RouteDispatcher<RawHandler>();
 
-  // ── Create shared registries ───────────────────────────────────────────────
+  // ── Create shared registries + durable execution store ────────────────────
   const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
-  const { ProjectRegistry } = await import('./project-registry.js');
+  const { ProjectRegistry } = await import('../application/project-registry.js');
+  const { ExecutionStore } = await import('../application/execution-store.js');
+  const { reconcileOnBoot } = await import('../application/reconcile.js');
 
   // batchTtlMs bounds how long terminal task entries (with their full result
   // envelope) are retained for polling before eviction — prevents unbounded
   // growth of the task registry on a long-running server.
   const taskRegistry = new TaskRegistry({ ttlMs: config.server.limits.batchTtlMs });
+
+  // Durable execution records: task IDs + terminal results survive a restart;
+  // the same TTL governs both the in-memory entries and the persistent rows.
+  const executionStore = new ExecutionStore({
+    dbPath: join(expandHome(config.server.stateDir), 'executions.db'),
+    ttlMs: config.server.limits.batchTtlMs,
+  });
+
+  // Boot reconciliation — BEFORE the listener accepts requests: fence worker
+  // process groups that survived a dead daemon, then mark their executions
+  // `interrupted` (retryable). Guarded for dev watch mode (PD-2): under
+  // `tsx watch` every file save restarts the process, and reconciling there
+  // would SIGKILL in-flight work on each keystroke.
+  if (process.env.MMA_DEV_NO_RECONCILE !== '1') {
+    const outcome = reconcileOnBoot(executionStore);
+    if (outcome.interrupted > 0 || outcome.fencedWorkers > 0) {
+      process.stderr.write(
+        `[mma] event=boot_reconcile ts=${new Date().toISOString()} interrupted=${outcome.interrupted} fenced_workers=${outcome.fencedWorkers} pruned=${outcome.prunedExpired}\n`,
+      );
+    }
+  }
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
@@ -136,7 +159,7 @@ export async function startServer(
   router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
   // Register control handlers
-  await registerControlHandlers(router, config, taskRegistry, projectRegistry);
+  await registerControlHandlers(router, config, projectRegistry);
 
   // Register unified task handler (POST /task, GET /task/:taskId)
   {
@@ -167,15 +190,32 @@ export async function startServer(
         }),
       }));
 
-      const deps: HandlerDeps = { config: multiModelConfig, bus, logWriter, projectRegistry, taskRegistry };
-      const { buildUnifiedTaskHandler, buildTaskPollHandler } = await import('./handlers/unified-task.js');
+      // Persist detached codex worker pids so boot reconciliation can fence
+      // stragglers that outlive a crashed daemon.
+      const { WorkerPidRecorder } = await import('../application/worker-pid-recorder.js');
+      bus.subscribe(new WorkerPidRecorder(executionStore));
+
+      const { ExecutionRuntime } = await import('../application/execution-runtime.js');
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore });
+      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore };
+      const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
+      router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
+
+      // MCP adapter — a second transport over the SAME runtime (single daemon
+      // owns all live executions). Bearer auth + loopback apply like any route.
+      const { handleMcpRequest } = await import('../mcp/mcp-adapter.js');
+      const mcpDeps = { runtime, taskRegistry, store: executionStore, serverVersion: SERVER_VERSION };
+      router.register('POST', '/mcp', (req, res, _params, ctx) => handleMcpRequest(mcpDeps, req, res, ctx.body));
     } else {
       router.register('POST', '/task', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
       router.register('GET', '/task/:taskId', (_req, res) => {
+        sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
+      });
+      router.register('DELETE', '/task/:taskId', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
     }
@@ -219,7 +259,10 @@ export async function startServer(
   return {
     port,
     serverAddress,
-    stop: () => listener.stop(),
+    stop: async () => {
+      await listener.stop();
+      executionStore.close();
+    },
     taskRegistry,
     projectRegistry,
     serverStartedAt,

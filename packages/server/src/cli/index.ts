@@ -39,6 +39,7 @@ import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
+import { runPlugin } from './plugin.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -182,6 +183,7 @@ Commands:
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   sync-skills      Install + update + reconcile all shipped skills
+  plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
   disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
@@ -389,6 +391,23 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         homeDir: home,
         stdout: deps.stdout,
         stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'plugin': {
+      // Forward argv after the subcommand so plugin's own minimist sees
+      // `build`, `--out=`, `--port=`, `--json`.
+      const subCmdIdx = argv.indexOf('plugin');
+      const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const code = runPlugin({
+        argv: subArgv,
+        version: readServerVersion(),
+        port: config?.server.port ?? 7337,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        stdout,
+        stderr,
       });
       exit(code);
       break;

@@ -75,6 +75,11 @@ export interface PipelineInput {
   resumeImplementer?: string;
   resumeReviewer?: string;
   timeoutMs?: number;
+  /** The caller's per-execution abort signal (cooperative cancellation). Every
+   *  provider session this pipeline opens receives it; the pipeline also checks
+   *  it at phase boundaries and returns a terminal `aborted` failure instead of
+   *  starting the next phase. Callers that never cancel may omit it. */
+  abortSignal?: AbortSignal;
   worktreeEnabled?: boolean;
   taskId?: string;
   /** Goal condition for the implementer — keeps the agent working until met. */
@@ -208,7 +213,10 @@ function earlyFailureResult(input: PipelineInput, code: string, message: string)
 }
 
 export async function runTwoPhasePipeline(input: PipelineInput): Promise<PipelineResult> {
-  const ac = new AbortController();
+  // The signal handed to every provider session. When the caller supplied none,
+  // an inert local signal stands in — sessions still get a valid AbortSignal,
+  // it just never fires (the caller opted out of cancellation).
+  const abortSignal = input.abortSignal ?? new AbortController().signal;
   const deadline = Date.now() + (input.timeoutMs ?? 3_600_000);
 
   // --- Worktree setup ---
@@ -324,7 +332,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const implSession = input.implementerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
-      abortSignal: ac.signal,
+      abortSignal,
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 0,
       bus: input.bus,
@@ -345,6 +353,69 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
     const implId = implSession.getSessionId();
+
+    // Cooperative cancellation checkpoint. The abort signal has already
+    // terminated (or is terminating) the provider subprocess; the pipeline's
+    // job is to stop HERE — never open the next phase, never merge the
+    // worktree — and surface a terminal `aborted` failure carrying the real
+    // (possibly partial) implementer turn. The caller maps aborted → cancelled.
+    const abortedResult = async (): Promise<PipelineResult> => {
+      if (wtManager && wtInfo) {
+        await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+      }
+      worktreeResolved = true;
+      return {
+        status: 'failed',
+        implementerOutput: implTurn.output,
+        implementerTurn: implTurn,
+        reviewerOutput: null,
+        reviewerRaw: null,
+        reviewerTurn: null,
+        reviewerParseError: null,
+        sessions: {
+          implementer: { tier: input.implementerTier, sessionId: implId, resumeSupported: implId !== null },
+          reviewer: null,
+        },
+        cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+        worktree: null,
+        completionPercent: 0,
+        failureReason: { code: 'aborted', message: 'Execution cancelled by caller' },
+      };
+    };
+    if (abortSignal.aborted) return abortedResult();
+
+    // Dead-implementer guard: a turn with NO assistant events and NO output text
+    // did not execute. Reviewing it would let the reviewer fabricate an answer
+    // from an empty draft and the task would report done while the implementer
+    // tier was dead (unreachable proxy, auth rejection, crashed CLI). Fail
+    // terminally, carrying the real turn so callers see the provider's
+    // usage/duration/errorCode as evidence.
+    if (implTurn.turns === 0 && implTurn.output.trim() === '') {
+      if (wtManager && wtInfo) {
+        await wtManager.remove(wtInfo.path, wtInfo.branch, input.cwd).catch(() => undefined);
+      }
+      worktreeResolved = true;
+      const code = implTurn.errorCode ?? 'implementer_no_output';
+      const message = implTurn.errorMessage
+        ?? 'Implementer session produced no output (0 turns); the tier may be unreachable or misconfigured';
+      return {
+        status: 'failed',
+        implementerOutput: '',
+        implementerTurn: implTurn,
+        reviewerOutput: null,
+        reviewerRaw: null,
+        reviewerTurn: null,
+        reviewerParseError: null,
+        sessions: {
+          implementer: { tier: input.implementerTier, sessionId: implId, resumeSupported: implId !== null },
+          reviewer: null,
+        },
+        cost: { implementerUsd: implTurn.costUSD, reviewerUsd: null },
+        worktree: null,
+        completionPercent: 0,
+        failureReason: { code, message },
+      };
+    }
 
     // Deterministic apply hook (journal_record): apply the implementer's decision output to
     // the corpus BEFORE the review-skip decision. The effective output becomes the applied
@@ -393,11 +464,12 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // workspace-write sandbox confines the reviewer to the worktree, so the
     // parent worktree metadata is out of reach. Same cwd-only tool restriction
     // as the implementer applies.
+    if (abortSignal.aborted) return abortedResult();
     input.onPhaseChange?.('reviewing');
     const revSession = input.reviewerProvider.openSession({
       cwd: effectiveCwd,
       wallClockDeadline: deadline,
-      abortSignal: ac.signal,
+      abortSignal,
       taskId: input.taskId ?? 'pipeline',
       taskIndex: 1,
       bus: input.bus,
@@ -414,6 +486,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });
     const revId = revSession.getSessionId();
+    if (abortSignal.aborted) return abortedResult();
 
     const parsed = parseReviewerOutput(revTurn.output, input.type);
 

@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
-import type { ProjectRegistry } from '../../project-registry.js';
+import type { ProjectRegistry } from '../../../application/project-registry.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { resolveConfiguredAuthMode } from '@zhixuan92/multi-model-agent-core';
 import { deriveSkillManifestInfo } from '../../../skill-install/skill-drift.js';

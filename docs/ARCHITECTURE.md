@@ -10,24 +10,42 @@ multi-model-agent is organized around three axes. A request is a *path* through 
 - **Vertical** — tool surface: each task type exists as a stack of files at fixed layers (registry → schema → skill → pipeline → ...). Adding a type means filling the stack top-to-bottom; the layers themselves never change shape.
 - **Substrate** — orthogonal capabilities (auth, cost, telemetry, runners, research) every stage and every type borrows from.
 
-**Package rule of thumb:** `packages/core` has no knowledge of HTTP. `packages/server` has no LLM-calling logic — it hands off to core via the unified two-phase pipeline.
+**Package rule of thumb:** `packages/core` has no knowledge of HTTP. `packages/server` splits into two one-way layers: `server/src/http/` (thin transport adapters — parse, authenticate, serialize) and `server/src/application/` (the `ExecutionRuntime` and everything between wire validation and the core pipeline). HTTP depends on application, never the reverse; neither contains LLM-calling logic — that stays in core behind the unified two-phase pipeline.
 
 ## Horizontal axis — the five stages
 
 Each stage decomposes into sub-layers that always run in this order. The pipeline is one-way.
 
 ```
-Stage 1 — INGRESS  (HTTP boundary)
+Stage 1 — INGRESS  (transport boundary — thin adapters only)
   1.1  Transport          server/src/http/server.ts
   1.2  Authentication     server/src/http/auth.ts
-  1.3  Validation         server/src/http/cwd-validator.ts
-  1.4  Unified handler    server/src/http/handlers/unified-task.ts
-                          (POST /task + GET /task/:taskId)
+  1.3  Unified handlers   server/src/http/handlers/unified-task.ts
+                          (POST /task + GET /task/:taskId + DELETE /task/:taskId)
+                          Builds a CallerContext (application/caller-context.ts)
+                          from the request; owns no task logic.
+  1.4  MCP adapter        server/src/mcp/{mcp-adapter,tool-surface}.ts
+                          (POST /mcp, streamable HTTP, stateless; tools mma_run /
+                          mma_task_get / mma_task_wait / mma_task_cancel over the
+                          SAME ExecutionRuntime — MCP wire types never leave this
+                          directory; mma_run's request schema is generated from
+                          the task-input Zod union, never hand-written)
 
-Stage 2 — INPUT VALIDATION  (validate + route request via type discriminator)
-  2.1  Zod validation      core/src/unified/task-input-schema.ts (discriminated union)
-  2.2  Type registry       core/src/unified/type-registry.ts (TYPE_REGISTRY → defaults, sandbox, worktree)
-  2.3  Skill loading       core/src/unified/skill-loader.ts (implement.md + review.md per type)
+Stage 2 — ADMISSION + PREPROCESSING  (application layer)
+  2.1  Zod validation      core/src/unified/task-input-schema.ts (discriminated union,
+                           parsed at the adapter boundary)
+  2.2  Execution runtime   server/src/application/execution-runtime.ts
+                           (tier/agent/skill resolution, project reservation,
+                           registry + durable-store admission, async scheduling)
+  2.3  cwd validation      server/src/application/cwd-validator.ts
+  2.4  Type registry       core/src/unified/type-registry.ts (TYPE_REGISTRY → defaults, sandbox, worktree)
+  2.5  Skill loading       core/src/unified/skill-loader.ts (implement.md + review.md per type)
+  2.6  Preprocessors       server/src/application/preprocessors/ (per-type, keyed off
+                           TaskType: execute_plan contract parse, journal candidate
+                           injection, spec/plan outputPath, research evidence pack)
+  2.7  Execution scope     server/src/application/execution-scope.ts (per-execution
+                           abort channel + LIFO cleanup registry, created before
+                           preprocessing, drained in one finally)
 
 Stage 3 — DISPATCH  (pick agent, run implementer)
   3.1  Agent resolution   core/src/providers/agent-resolver.ts +
@@ -46,11 +64,17 @@ Stage 4 — REVIEW  (cross-agent verdict via two-phase pipeline)
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
   5.1  Evidence parsing   core/src/reporting/extract-evidence-sections.ts
   5.2  Status derivation  inline in core/src/unified/two-phase-pipeline.ts
-                          (done | done_with_concerns from the reviewer parse)
+                          (done | done_with_concerns from the reviewer parse);
+                          the runtime maps an aborted pipeline whose OWN scope
+                          fired to terminal `cancelled`
   5.3  Sentinels          core/src/reporting/not-applicable.ts
   5.4  Telemetry emit     core/src/events/{envelope-bus,task-envelope,wire-schema,
                           to-wire-record,consent-rules,telemetry-uploader}.ts
-  5.5  Persistence        core/src/unified/task-registry.ts,
+                          (envelope construction: server/src/application/
+                          {telemetry-snapshot,result-shape}.ts)
+  5.5  Persistence        core/src/unified/task-registry.ts (in-memory index) +
+                          server/src/application/execution-store.ts (durable
+                          SQLite mirror — terminal results survive restart),
                           core/src/stores/{context-block-tool,
                           project-context-registry}.ts
 ```
@@ -88,8 +112,8 @@ Per-type fill of the stack:
 | `journal_recall` | reviewed | no | read-only | mma-journal-recall |
 | `journal_record` | reviewed | no | cwd-only | mma-journal-record |
 | `orchestrate` | none | no | cwd-only | mma-orchestrate |
-| `spec` | reviewed | yes | cwd-only | mma-spec |
-| `plan` | reviewed | yes | cwd-only | mma-plan |
+| `spec` | reviewed | no (in-place) | cwd-only | mma-spec |
+| `plan` | reviewed | no (in-place) | cwd-only | mma-plan |
 
 Two invariants the layered stack enforces:
 
@@ -103,7 +127,7 @@ These layers underlie every stage and every tool. They aren't on either axis; th
 ```
 C.1  Identity & sandboxing      core/src/identity/{claude-oauth,secret-redactor}.ts,
                                 server/src/http/auth.ts,
-                                server/src/http/cwd-validator.ts,
+                                server/src/application/cwd-validator.ts,
                                 core/src/transport/loopback-enforcer.ts,
                                 core/src/providers/claude-cwd-confinement.ts
                                 (PreToolUse hook: cwd-only + read-only enforcement)
@@ -123,7 +147,15 @@ C.5  Telemetry & observability   core/src/events/{envelope-bus,task-envelope,
                                 wire-schema,to-wire-record,consent-rules,
                                 telemetry-uploader,jsonl-writer,log-writer,
                                 plain-log-entry,stderr-log-subscriber}.ts
-C.6  State stores (in-process)   core/src/unified/task-registry.ts,
+C.6  State stores                core/src/unified/task-registry.ts (in-memory),
+                                server/src/application/execution-store.ts
+                                (durable SQLite at <stateDir>/executions.db:
+                                admission before handle return, CAS terminal
+                                transitions, TTL pruning),
+                                server/src/application/{reconcile,
+                                worker-pid-recorder}.ts (boot crash fencing:
+                                kill surviving detached codex process groups,
+                                then mark executions interrupted/retryable),
                                 core/src/stores/{context-block-tool,
                                 project-context-registry}.ts
 C.7  Distribution                server/src/skill-install/skill-installers/{claude-code,
@@ -142,13 +174,17 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 
 ## Request lifecycle (concrete trace)
 
-1. **Ingress** — `server/src/http/server.ts` routes `POST /task?cwd=<abs>` to the unified handler (`handlers/unified-task.ts`). The handler validates the `type` discriminator via the Zod discriminated union in `unified/task-input-schema.ts`, reserves a `ProjectContext` per cwd, and registers a `TaskRegistry` entry.
-2. **Pipeline** — The unified two-phase pipeline (`unified/two-phase-pipeline.ts`) loads skill prompts from `skills/<type>/implement.md` + `review.md` via `unified/skill-loader.ts`, resolves agent tier from `TYPE_REGISTRY`, and drives the implement + review phases.
-3. **Dispatch** — The pipeline picks a provider via the type's default tier, invokes the provider runner, and bounds execution via provider-level `wallClockDeadline` + `abortSignal`.
-4. **Review** — When `reviewPolicy` is `reviewed`, the pipeline runs a second-phase review pass. When `none`, the review phase is skipped.
-5. **Reporting** — Results are aggregated into the uniform envelope, telemetry events emitted via the event bus, and the result stored in `TaskRegistry` for retrieval via `GET /task/:taskId`.
+1. **Ingress** — `server/src/http/server.ts` routes `POST /task?cwd=<abs>` to the unified handler (`handlers/unified-task.ts`). The handler validates the `type` discriminator via the Zod discriminated union in `unified/task-input-schema.ts`, builds a `CallerContext` (client name, main model, project root) from the request, and hands off to `ExecutionRuntime.submit()`. It owns no task logic.
+2. **Admission** — The runtime (`application/execution-runtime.ts`) resolves tiers/agents/skills, reserves a `ProjectContext` per cwd, registers a `TaskRegistry` entry AND persists the admission record to the `ExecutionStore` before the 202 handle is returned, creates the `ExecutionScope` (the live abort channel), and schedules the async execution.
+3. **Preprocessing** — The per-type preprocessor (`application/preprocessors/`) runs inside the scope: execute_plan contract parsing + path-safety + collision dry-run, journal candidate injection, spec/plan outputPath derivation, research evidence gathering. A `PreprocessFailure` fails the task terminally with zero provider sessions.
+4. **Pipeline** — The unified two-phase pipeline (`unified/two-phase-pipeline.ts`) drives implement + review, threading the scope's `abortSignal` into every provider session; provider-level `wallClockDeadline` bounds each turn, and cancellation checkpoints at phase boundaries stop the pipeline without merging the worktree. When `reviewPolicy` is `none`, the review phase is skipped. A dead implementer turn (0 assistant turns, empty output) fails terminally before review — never reviewed into a fabricated answer.
+5. **Reporting** — Results are aggregated into the uniform envelope, telemetry emitted via the event bus, and the terminal state CAS-written to BOTH `TaskRegistry` and `ExecutionStore` for retrieval via `GET /task/:taskId` (which falls back to the store after a restart). An aborted pipeline whose own scope fired maps to terminal `cancelled`.
 
-**Same-repo dispatch serialization:** Write types (`delegate`, `execute_plan`) with `worktree: true` in `TYPE_REGISTRY` isolate their work in git worktrees. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
+**Cancellation** — `DELETE /task/:taskId` sets the cancellation-requested flag (a flag, not a state), fires the scope's abort channel, and returns 202. Provider guards tear the worker down (codex: process-group SIGTERM→SIGKILL; claude: SDK abort). The task reaches terminal `cancelled` unless completion won the race — first writer wins, no post-terminal mutation.
+
+**Restart** — Task IDs and terminal results survive in `<stateDir>/executions.db`. On boot (before the listener accepts), `reconcileOnBoot` finds pending records owned by dead daemons, SIGKILLs any surviving detached codex worker group (verified by command line so a reused pid is never signalled), then marks each execution `interrupted` with a retryable `daemon_restarted` envelope. Execution is never resumed — the caller retries with a new task. Dev watch mode sets `MMA_DEV_NO_RECONCILE=1` so tsx restarts don't kill in-flight work.
+
+**Same-repo dispatch serialization:** `delegate` and `execute_plan` are the only types with `worktree: true` in `TYPE_REGISTRY`; they isolate their work in git worktrees and merge back. The other write types (`spec`, `plan`, `journal_record`, `orchestrate`) run **in place** — their artifacts land under `.mma/`, which repos gitignore, so there is nothing to merge and nothing to commit. Tasks that share a git toplevel run in their own worktree; tasks in different repos run in parallel. This eliminates commit-stage and implement-stage races within a single repo. Read-only types (`audit`, `review`, `debug`, `investigate`, `research`, `journal_recall`) keep full `Promise.all` fan-out.
 
 ## Testing layers
 

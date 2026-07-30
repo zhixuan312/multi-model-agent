@@ -195,6 +195,26 @@ export class ClaudeSession implements Session {
       deadlineTimer.unref();
     }
 
+    // Cancellation bound. Forwarding opts.abortSignal into the SDK alone is not
+    // enough: the SDK finishes the in-flight turn before honouring it, so a
+    // cancelled task kept billing tokens for tens of seconds (measured ~48s on
+    // a multi-turn file-reading turn). Force-close the query the same way the
+    // deadline guard does — this is the claude-side equivalent of the codex
+    // runner's process-group kill, giving both runners the same
+    // cancel-means-stop-now behaviour.
+    let aborted = false;
+    const signal = this.args.opts.abortSignal;
+    const onAbort = () => {
+      aborted = true;
+      try { q.close(); } catch { /* ignore */ }
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+    const clearGuards = () => {
+      if (deadlineTimer) clearTimeout(deadlineTimer);
+      signal.removeEventListener('abort', onAbort);
+    };
+
     const events: SDKMessage[] = [];
     try {
       for await (const ev of q) {
@@ -210,10 +230,11 @@ export class ClaudeSession implements Session {
         if ((ev as { type?: string }).type === 'result') break;
       }
     } catch (err) {
-      // A deadline-induced close() can surface as an iterator error — treat that
-      // as a bounded time-out, not a provider failure. Rethrow only real errors.
-      if (!timedOut) {
-        if (deadlineTimer) clearTimeout(deadlineTimer);
+      // A guard-induced close() (deadline or cancellation) surfaces as an
+      // iterator error — that is a bounded stop, not a provider failure.
+      // Rethrow only real errors.
+      if (!timedOut && !aborted) {
+        clearGuards();
         const e = err as { name?: string; message?: string };
         this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_error', {
           name: e.name ?? 'unknown',
@@ -225,17 +246,25 @@ export class ClaudeSession implements Session {
         throw err;
       }
     }
-    if (deadlineTimer) clearTimeout(deadlineTimer);
+    clearGuards();
     try { q.close(); } catch { /* ignore */ }
     this.activeQuery = undefined;
 
     const rateCard = resolveRateCard(this.args.model);
+    // Caller cancellation outranks the deadline: when both fired, `aborted` is
+    // the actionable reason (the caller asked to stop; the deadline is
+    // incidental). Either way the guard reason wins over the SDK's own
+    // termination — a force-closed stream must never report `ok`.
+    const guardReason = aborted ? 'aborted' as const : timedOut ? 'time_exceeded' as const : undefined;
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
       costUSD: 0,
-      ...(timedOut ? { guardTerminationReason: 'time_exceeded' as const } : {}),
+      ...(guardReason ? { guardTerminationReason: guardReason } : {}),
     });
-    if (timedOut && !norm.errorCode) norm.errorCode = 'wall_clock_exceeded';
+    if (!norm.errorCode) {
+      if (aborted) norm.errorCode = 'aborted';
+      else if (timedOut) norm.errorCode = 'wall_clock_exceeded';
+    }
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {

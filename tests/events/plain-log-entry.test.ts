@@ -17,7 +17,7 @@ describe('PlainLogEntrySchema', () => {
     expect(() => PlainLogEntrySchema.parse(e)).toThrow();
   });
 
-  it('covers all 12 kinds in PlainLogKindEnum', () => {
-    expect(PlainLogKindEnum.options).toHaveLength(12);
+  it('covers all 13 kinds in PlainLogKindEnum', () => {
+    expect(PlainLogKindEnum.options).toHaveLength(13);
   });
 });

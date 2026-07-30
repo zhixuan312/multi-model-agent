@@ -157,7 +157,9 @@ All task types dispatch through the unified `POST /task` endpoint with a `type` 
 | Endpoint | Purpose |
 |---|---|
 | `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
-| `GET /task/:taskId` | Poll task status and results |
+| `GET /task/:taskId` | Poll task status and results (terminal results survive daemon restarts) |
+| `DELETE /task/:taskId` | Request cooperative cancellation — 202 requested; terminal `cancelled` unless completion won the race; idempotent |
+| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the same runtime |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |

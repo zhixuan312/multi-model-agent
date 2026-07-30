@@ -1,5 +1,7 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { writeFileSync, rmSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
 import { startServer } from '../../packages/server/src/http/server.js';
 import type { MultiModelConfig } from '../../packages/core/src/types.js';
 
@@ -34,6 +36,7 @@ const CONFIG: MultiModelConfig = {
       maxContextBlocksPerProject: 32,
       shutdownDrainMs: 30_000,
     },
+    stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     autoUpdateSkills: false,
   },
 };

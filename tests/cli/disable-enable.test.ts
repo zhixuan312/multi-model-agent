@@ -159,7 +159,23 @@ describe('disable', () => {
     };
     expect(parsed.action).toBe('disable');
     expect(parsed.targets.sort()).toEqual(['claude-code', 'codex']);
-    expect(parsed.removed).toBe(SUPPORTED_SKILLS.length * 2);
+    // Skills across both targets, PLUS the Claude-Code-only SDLC commands.
+    // `sync-skills` installs those commands, so a disable that skipped them
+    // left /mma-flow and /mma-breakout behind — shadowing the plugin's
+    // /mma:flow and /mma:breakout, and reappearing for a user who believed
+    // MMA was fully removed.
+    expect(parsed.removed).toBe(SUPPORTED_SKILLS.length * 2 + SUPPORTED_COMMANDS.length);
+  });
+
+  it('removes the Claude-Code SDLC commands, not just the skills', async () => {
+    for (const c of SUPPORTED_COMMANDS) {
+      expect(existsSync(path.join(home, '.claude', 'commands', `${c}.md`)), `${c} not seeded`).toBe(true);
+    }
+    const code = await runDisable({ argv: ['--target=claude-code'], homeDir: home, stdout: () => true });
+    expect(code).toBe(0);
+    for (const c of SUPPORTED_COMMANDS) {
+      expect(existsSync(path.join(home, '.claude', 'commands', `${c}.md`)), `${c} survived disable`).toBe(false);
+    }
   });
 
   it('--target scopes removal and the sentinel to one client', async () => {

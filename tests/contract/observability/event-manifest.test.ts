@@ -3,9 +3,9 @@ import { PlainLogKindEnum, PROVIDER_EVENT_NAMES } from '../../../packages/core/s
 import { describe, expect, it } from 'vitest';
 
 describe('observability event manifest', () => {
-  it('contains exactly 12 plain log kinds', () => {
-    expect(PlainLogKindEnum.options).toHaveLength(12);
-    expect(manifest.kinds).toHaveLength(12);
+  it('contains exactly 13 plain log kinds', () => {
+    expect(PlainLogKindEnum.options).toHaveLength(13);
+    expect(manifest.kinds).toHaveLength(13);
   });
 
   it('every kind in manifest matches PlainLogKindEnum', () => {

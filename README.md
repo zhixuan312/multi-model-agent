@@ -59,6 +59,34 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
+#### Client support at a glance
+
+| Client | Skills | SDLC commands | MCP server | How |
+|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | one plugin install (below) — or `sync-skills` |
+| Codex CLI | ✅ | — | ✅ any MCP client may connect to `/mcp` | `mma sync-skills --target=codex-cli` |
+| Cursor | ✅ | — | ✅ | `mma sync-skills --target=cursor` |
+| Gemini CLI | ✅ | — | ✅ | `mma sync-skills --target=gemini-cli` |
+
+Claude Code is the optimized path — it is the only client that can install skills, the SDLC commands, and the MCP server as **one** unit. Every other client gets the full skill set through `mma sync-skills`, and the daemon's `POST /mcp` endpoint is client-agnostic, so any MCP-capable client can connect to it directly. The engine itself treats all clients equally: the same `POST /task` API, the same task types, the same worker tiers.
+
+#### Claude Code: one-step plugin install (alternative)
+
+Claude Code users can install the skills **and** the MCP server in a single step, from this repo's plugin marketplace:
+
+```bash
+/plugin marketplace add zhixuan312/multi-model-agent
+/plugin install mma@multi-model-agent
+```
+
+That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 SDLC commands (`/mma:flow`, `/mma:breakout`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+
+> **The plugin supersedes standalone skills automatically.** Standalone (`mma sync-skills`) is the default, but the plugin is a strict superset — skills *plus* the SDLC commands *plus* the MCP server. So once the plugin is installed, `mma sync-skills` retires the standalone Claude Code copies and pins that client off, keeping exactly one install path. Without this you'd have two copies of every skill (`/mma-audit` **and** `/mma:audit`) with near-identical descriptions, and Claude would pick between them arbitrarily.
+>
+> This is deliberately **one-directional**: MMA cleans up its own `~/.claude/skills` entries but never uninstalls the plugin — `sync-skills` runs from npm postinstall, so the reverse would let a routine upgrade silently delete a plugin you chose. To go back to standalone: `claude plugin uninstall mma@multi-model-agent && mma enable --target=claude-code`. To keep both anyway: `mma sync-skills --target=claude-code --keep-standalone`.
+>
+> Other clients are unaffected — this overlap is Claude-Code-only.
+
 ### 2. Choose your main model — intentionally (4.0.3+)
 
 Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
@@ -333,9 +361,21 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope.
+`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no worktree, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types with worktrees run in isolated git branches; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope; `DELETE /task/:id` requests cooperative cancellation (terminal `cancelled` unless completion won the race). Task IDs and terminal results survive daemon restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back `interrupted` with a retryable error — resubmit, nothing resumes.
+
+### MCP endpoint
+
+The same daemon exposes the same runtime over MCP at `POST /mcp` (streamable HTTP, stateless), for MCP clients that prefer tools over skills:
+
+```bash
+claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
+  --header "Authorization: Bearer $(mma print-token)"
+```
+
+Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_cancel`. `mma_run` returns short task results inline and a `{ taskId }` handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
+- [docs/PLUGIN.md](./docs/PLUGIN.md) — Claude Code plugin: how it's generated, the marketplace, publishing
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
 - [DIRECTION.md](./DIRECTION.md) — product north star
 - [packages/core/README.md](./packages/core/README.md) — embedding the runtime as a library (no HTTP server)
@@ -353,11 +393,13 @@ mma telemetry dump-queue                    # print the locally-queued events as
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.4
+## What's new in 5.16.0
 
-- **In-container reliability.** (1) Claude OAuth **auto-refresh works headless** — the refresh-on-expiry exchange no longer needs `curl` (absent in minimal Node images); it runs in a Node subprocess and logs the outcome, so an always-on container no longer goes dark ~8h after the last manual refresh. (2) A **codex tier fails `/configure-provider` verification when the codex CLI is absent** (verify now probes the runner, not just the creds), instead of verifying green and dying on the first task with `codex_not_installed`. No API or schema change.
-- **Contract-first `execute_plan` fixes (5.15.3).** Accepts the generator's acceptance-test format (no more `malformed-plan`); a buggy plan-authored test no longer discards correct work; `plan`/`spec` telemetry no longer dropped.
-- **Write routes no longer silently drop work (5.15.2); read routes read plainly (5.15.1); contract-first plans (5.15.0).** `SCHEMA_VERSION` still 6.
+- **MCP endpoint.** `POST /mcp` exposes `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the *same* runtime as the REST API — a task submitted over MCP is pollable over REST and vice versa. `mma_run`'s schema is generated from the existing task-input union, so it can't drift from `POST /task`.
+- **Cancellation.** `DELETE /task/:taskId` — 202 means *requested*; the task reaches terminal `cancelled` once the worker confirms. Claude-tier cancel latency went **48s → 0.1s**.
+- **Restarts no longer lose track of work.** Task IDs and terminal results persist in `~/.mma/state`; executions caught mid-flight come back `interrupted` and retryable, and any worker that outlived the daemon is terminated before its record is retired.
+- **One-install Claude Code plugin.** `/plugin marketplace add zhixuan312/multi-model-agent` then `/plugin install mma@multi-model-agent` — 16 skills, both SDLC commands, and the MCP server. No auth token is stored in the artifact.
+- **A dead tier can no longer look healthy.** An unreachable or auth-rejected tier used to report `done` carrying the reviewer's answer; it now fails terminally before review. `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

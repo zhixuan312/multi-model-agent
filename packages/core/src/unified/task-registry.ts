@@ -1,4 +1,7 @@
-export type TaskState = 'pending' | 'complete' | 'failed';
+/** In-memory lifecycle states. `interrupted` additionally exists in the
+ *  persistent ExecutionStore for executions found dead after a daemon restart —
+ *  a live registry never holds it (nothing survives in memory to interrupt). */
+export type TaskState = 'pending' | 'complete' | 'failed' | 'cancelled';
 
 export interface TaskEntry {
   taskId: string;
@@ -12,10 +15,15 @@ export interface TaskEntry {
   phase: 'implementing' | 'reviewing' | null;
   phaseStartedAt: number | null;
   totalTasks: number | null;
+  /** Set when a caller requested cancellation (DELETE /task/:id). A flag, not a
+   *  state: the entry stays `pending` until the runner confirms termination and
+   *  the terminal CAS decides between cancelled and a completed/failed that won
+   *  the race. */
+  cancellationRequestedAt: number | null;
 }
 
 function isTerminal(state: TaskState): boolean {
-  return state === 'complete' || state === 'failed';
+  return state === 'complete' || state === 'failed' || state === 'cancelled';
 }
 
 /** Default retention for terminal task entries (1h) — matches
@@ -55,6 +63,7 @@ export class TaskRegistry {
       phase: null,
       phaseStartedAt: null,
       totalTasks: null,
+      cancellationRequestedAt: null,
     });
   }
 
@@ -76,6 +85,28 @@ export class TaskRegistry {
     e.state = 'failed';
     e.result = result;
     e.terminalAt = Date.now();
+  }
+
+  /** Terminal transition to `cancelled`. Same CAS discipline as complete/fail:
+   *  a task that already reached a terminal state is never overwritten — if
+   *  completion won the race against cancellation, completed stands. */
+  cancel(taskId: string, result: unknown): void {
+    const e = this.entries.get(taskId);
+    if (!e || isTerminal(e.state)) return;
+    e.state = 'cancelled';
+    e.result = result;
+    e.terminalAt = Date.now();
+  }
+
+  /** Record a cancellation request on a non-terminal task. Returns the outcome
+   *  the caller reports: 'requested' (flag set now or already set — idempotent),
+   *  'terminal' (too late; entry carries the final state), or 'not_found'. */
+  requestCancel(taskId: string): { outcome: 'requested' | 'terminal' | 'not_found'; entry?: TaskEntry } {
+    const e = this.entries.get(taskId);
+    if (!e) return { outcome: 'not_found' };
+    if (isTerminal(e.state)) return { outcome: 'terminal', entry: e };
+    if (e.cancellationRequestedAt === null) e.cancellationRequestedAt = Date.now();
+    return { outcome: 'requested', entry: e };
   }
 
   setPhase(taskId: string, phase: 'implementing' | 'reviewing'): void {

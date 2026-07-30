@@ -1,4 +1,4 @@
-import { deriveDefaultOutputPath } from '../../../packages/server/src/http/handlers/derive-output-path.js';
+import { deriveDefaultOutputPath } from '../../../packages/server/src/application/preprocessors/derive-output-path.js';
 
 const TODAY = '2026-07-11';
 

@@ -7,7 +7,7 @@ import { sendError } from './errors.js';
 import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
-import { validateCwd } from './cwd-validator.js';
+import { validateCwd } from '../application/cwd-validator.js';
 import { shouldRejectNonLoopback, isAllowedHostHeader } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext, RawHandler } from './types.js';

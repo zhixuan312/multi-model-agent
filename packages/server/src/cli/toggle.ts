@@ -1,7 +1,8 @@
 /**
  * toggle.ts — `mma disable` / `mma enable` subcommands.
  *
- * disable: remove every shipped skill from the resolved clients, drop their
+ * disable: remove every shipped skill (plus the Claude-Code-only SDLC commands)
+ *   from the resolved clients, drop their
  *   manifest entries, and record a sticky sentinel so a later `npm install`
  *   postinstall (which shells out to `sync-skills`) does not silently
  *   reinstall them. This is the only "off switch" that survives an upgrade.
@@ -22,9 +23,10 @@
  */
 import * as os from 'node:os';
 import { removeEntry, ALL_CLIENTS, type Client } from '../skill-install/manifest.js';
-import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
+import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../skill-install/discover.js';
 import {
   removeSkillFromClient,
+  removeCommandFromClaudeCode,
   UnknownTargetError,
 } from '../skill-install/skill-installer-common.js';
 import {
@@ -33,6 +35,7 @@ import {
   disabledTargets,
 } from '../skill-install/disabled-state.js';
 import { resolveTargets, runSyncSkills, parseArgs } from './sync-skills.js';
+import { findEnabledMmaPlugin, enableDespitePluginWarning } from '../skill-install/plugin-conflict.js';
 
 export const ToggleExitCode = Object.freeze({
   SUCCESS: 0,
@@ -90,6 +93,10 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
   if (parsed.dryRun) {
     for (const target of targets) {
       for (const skill of SUPPORTED_SKILLS) removed.push({ skill, target });
+      // Commands are Claude-Code-only assets (~/.claude/commands/<name>.md).
+      if (target === 'claude-code') {
+        for (const command of SUPPORTED_COMMANDS) removed.push({ skill: command, target });
+      }
     }
   } else {
     for (const target of targets) {
@@ -105,8 +112,27 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
           });
         }
       }
+      // `sync-skills` installs the SDLC commands alongside the skills, so a
+      // disable that skipped them left /mma-flow and /mma-breakout behind —
+      // still shadowing the plugin's /mma:flow and /mma:breakout, and still
+      // reappearing to a user who thought MMA was fully removed.
+      if (target === 'claude-code') {
+        for (const command of SUPPORTED_COMMANDS) {
+          try {
+            removeCommandFromClaudeCode(command, homeDir);
+            removed.push({ skill: command, target });
+          } catch (err) {
+            errors.push({
+              skill: command,
+              target,
+              reason: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
     }
     for (const skill of SUPPORTED_SKILLS) removeEntry(skill, targets, homeDir);
+    for (const command of SUPPORTED_COMMANDS) removeEntry(command, targets, homeDir);
     addDisabledTargets(homeDir, targets, cliVersion);
   }
 
@@ -155,6 +181,16 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
 
   const wasDisabled = disabledTargets(homeDir);
   const bare = parsed.targets === null && !parsed.allTargets;
+
+  // `enable` is the one path that can legitimately recreate the duplicate the
+  // plugin supersedes: it is an explicit user action, so it proceeds — but it
+  // must not do so silently, or the user gets /mma-audit AND /mma:audit back
+  // without being told why. (sync-skills would retire them again on the next
+  // run, so say what is happening rather than looping quietly.)
+  if (!parsed.dryRun && (bare || targets.includes('claude-code'))) {
+    const plugin = findEnabledMmaPlugin(homeDir);
+    if (plugin) stderr(enableDespitePluginWarning(plugin));
+  }
 
   // Clear the sentinel BEFORE syncing — otherwise sync-skills would see the
   // targets as still-disabled and skip them. On --dry-run, leave it intact.

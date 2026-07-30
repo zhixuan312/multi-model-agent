@@ -31,6 +31,7 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
           maxContextBlocksPerProject: 100,
           shutdownDrainMs: 1_000,
         },
+        stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
         autoUpdateSkills: false,
       },
       diagnostics: { log: false },

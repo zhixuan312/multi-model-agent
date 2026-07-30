@@ -1,0 +1,28 @@
+{
+  "name": "multi-model-agent",
+  "owner": {
+    "name": "Zhang Zhixuan",
+    "email": "zhangzhixuan312@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "mma",
+      "source": "./plugin",
+      "description": "Delegate tool-using work to cost-optimized multi-model agents with cross-model review — 16 skills (/mma:audit, /mma:delegate, …), 2 SDLC commands (/mma:flow, /mma:breakout), and the MMA MCP server.",
+      "author": {
+        "name": "Zhang Zhixuan",
+        "email": "zhangzhixuan312@gmail.com"
+      },
+      "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
+      "license": "MIT",
+      "keywords": [
+        "multi-model",
+        "delegation",
+        "code-review",
+        "mcp",
+        "sdlc",
+        "cost-optimization"
+      ]
+    }
+  ]
+}

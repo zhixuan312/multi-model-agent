@@ -22,6 +22,7 @@ export function normalizeClaudeTurn(
   let usedShell = false;
   let turns = 0;
   let sdkTermination: TurnResult['terminationReason'] = 'ok';
+  let sawResult = false;
   let errorCode: string | undefined;
   let errorMessage: string | undefined;
 
@@ -40,6 +41,7 @@ export function normalizeClaudeTurn(
       }
       turns += 1;
     } else if (ev.type === 'result') {
+      sawResult = true;
       const u = (ev as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
       if (u) {
         usage.inputTokens += u.input_tokens ?? 0;
@@ -64,8 +66,25 @@ export function normalizeClaudeTurn(
           ?? 'Claude execution failed';
       } else if (subtype === 'error_max_structured_output_retries') {
         sdkTermination = 'error'; errorCode = 'sdk_max_structured_output_retries';
+      } else {
+        // Unknown non-success subtype (future SDK error variant): never let it
+        // pass as ok — an explicit success is the only path to 'ok'.
+        sdkTermination = 'error';
+        errorCode = `sdk_${subtype}`;
       }
     }
+  }
+
+  // 'ok' must be EARNED by an explicit success result. A stream that ended
+  // without any `result` event did not complete a turn — the SDK subprocess
+  // died, or an Anthropic-compatible proxy rejected the call (e.g. auth) before
+  // any result was produced. Reporting 'ok' here is what let a dead tier
+  // masquerade as a successful implementer (0 tokens, empty output, status
+  // done) while the reviewer fabricated the answer.
+  if (!sawResult && sdkTermination === 'ok' && !args.guardTerminationReason) {
+    sdkTermination = 'error';
+    errorCode = 'sdk_no_result';
+    errorMessage = 'SDK stream ended without a result event; the provider may be unreachable or rejecting requests';
   }
 
   const finalTermination = args.guardTerminationReason ?? sdkTermination;

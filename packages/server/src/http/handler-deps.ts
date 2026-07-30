@@ -1,20 +1,17 @@
 // packages/server/src/http/handler-deps.ts
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
-import type { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
-import type { ProjectRegistry } from './project-registry.js';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
+import type { ExecutionRuntime } from '../application/execution-runtime.js';
+import type { ExecutionStore } from '../application/execution-store.js';
 
 /**
- * Dependencies injected into every handler factory at server startup.
- * Built once; passed to buildUnifiedTaskHandler and buildTaskPollHandler.
+ * Dependencies injected into the unified task handler factories at server
+ * startup. The POST and DELETE handlers need the application runtime; the poll
+ * handler reads the in-memory TaskRegistry first and falls back to the durable
+ * ExecutionStore for terminal results that survived a restart or registry
+ * eviction.
  */
 export interface HandlerDeps {
-  /** Full multi-model config (agents + defaults). May be undefined in unit tests. */
-  config: MultiModelConfig;
-  logWriter: LogWriter;
-  /** EnvelopeBus for structured observability — emits envelope snapshots and plain log entries. */
-  bus: EnvelopeBus;
-  projectRegistry: ProjectRegistry;
+  runtime: ExecutionRuntime;
   taskRegistry: TaskRegistry;
+  store: ExecutionStore;
 }

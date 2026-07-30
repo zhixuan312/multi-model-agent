@@ -122,6 +122,7 @@ const DEFAULT_SERVER = {
   auth: DEFAULT_SERVER_AUTH,
   limits: DEFAULT_SERVER_LIMITS,
   autoUpdateSkills: true,
+  stateDir: '~/.mma/state',
 };
 
 const serverLimitsSchema = z.object({
@@ -141,6 +142,10 @@ const serverBlockSchema = z.object({
   }).default(() => DEFAULT_SERVER_AUTH),
   limits: serverLimitsSchema,
   autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
+  /** Directory for the daemon's durable state (execution records SQLite).
+   *  Terminal task results survive a restart here; previously-active tasks are
+   *  reconciled to `interrupted` on boot. */
+  stateDir: z.string().default(DEFAULT_SERVER.stateDir),
 }).default(() => DEFAULT_SERVER);
 
 export const serverConfigSchema = z.object({
