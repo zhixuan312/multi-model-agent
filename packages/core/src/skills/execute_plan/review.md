@@ -26,8 +26,17 @@ Fidelity means contract satisfaction, NOT source-text identity:
 ## Output
 
 ```json
-{"tasks": [{"title": "<task heading>", "status": "done|failed"}], "notes": "<what you verified/fixed>"}
+{"tasks": [{"id": "<task id>", "status": "done|failed"}], "notes": "<what you verified/fixed>"}
 ```
+
+`id` is REQUIRED and is the stable identity in the task's heading — the `I-1` in
+`### Task I-1: Do the thing (← AC-1.1)`. Report the id, not the prose title: identity is matched on
+the id alone, so a reworded or abbreviated title costs nothing, but a missing id makes your whole
+report unmatchable and completeness unverifiable.
+
+You MAY also include `"title"` for readability; it is optional and never used for matching.
 
 Per task, `status: "done"` only when its Contract is satisfied AND its plan-authored acceptance tests
 pass unweakened, `status: "failed"` otherwise.
+
+Report one entry per DISPATCHED task, using exactly the ids you were given.
