@@ -249,9 +249,22 @@ jobs:
       # packages/server depends on ^VERSION of core, so a server published before its
       # core exists on the registry breaks every consumer install. Both publishes use
       # OIDC trusted publishing (no NPM_TOKEN in this workflow) and attach provenance.
+      # Idempotent on purpose. npm versions are immutable, so if a run publishes and then
+      # dies further down the job (5.16.1 died in the verify step, after BOTH packages had
+      # landed), the release is stuck: it can never be tagged, because a re-dispatch would
+      # fail trying to republish. Skipping an already-published identical version lets a
+      # re-dispatch complete the tail. This never overwrites anything — it only declines to
+      # publish a version the registry already has.
       - name: Publish core
         if: ${{ inputs.dry_run == false }}
-        run: npm publish /tmp/pack/zhixuan92-multi-model-agent-core-${{ inputs.version }}.tgz --access public --provenance
+        run: |
+          set -euo pipefail
+          LIVE="$(npm view @zhixuan92/multi-model-agent-core@${{ inputs.version }} version 2>/dev/null || true)"
+          if [ "$LIVE" = "${{ inputs.version }}" ]; then
+            echo "::notice::core ${{ inputs.version }} is already on the registry — skipping publish"
+          else
+            npm publish /tmp/pack/zhixuan92-multi-model-agent-core-${{ inputs.version }}.tgz --access public --provenance
+          fi
 
       - name: Wait for core to be resolvable on the registry
         if: ${{ inputs.dry_run == false }}
@@ -267,16 +280,25 @@ jobs:
 
       - name: Publish server
         if: ${{ inputs.dry_run == false }}
-        run: npm publish /tmp/pack/zhixuan92-multi-model-agent-${{ inputs.version }}.tgz --access public --provenance
+        run: |
+          set -euo pipefail
+          LIVE="$(npm view @zhixuan92/multi-model-agent@${{ inputs.version }} version 2>/dev/null || true)"
+          if [ "$LIVE" = "${{ inputs.version }}" ]; then
+            echo "::notice::server ${{ inputs.version }} is already on the registry — skipping publish"
+          else
+            npm publish /tmp/pack/zhixuan92-multi-model-agent-${{ inputs.version }}.tgz --access public --provenance
+          fi
 
       - name: Verify both packages on the registry
         if: ${{ inputs.dry_run == false }}
         run: |
           set -euo pipefail
-          CORE="$(npm view @zhixuan92/multi-model-agent-core version)"
-          SRV="$(npm view @zhixuan92/multi-model-agent version)"
-          DEP="$(npm view @zhixuan92/multi-model-agent@${{ inputs.version }} dependencies --json \
-                  | node -p "JSON.parse(require('fs').readFileSync(0,'utf8'))['@zhixuan92/multi-model-agent-core']")"
+          CORE="$(npm view @zhixuan92/multi-model-agent-core@${{ inputs.version }} version)"
+          SRV="$(npm view @zhixuan92/multi-model-agent@${{ inputs.version }} version)"
+          # npm's own dot-path selector, NOT `--json | node -p`. The piped form returned an
+          # empty string during the 5.16.1 release and failed the job AFTER both packages had
+          # already published — a verification bug that stranded a perfectly good release.
+          DEP="$(npm view "@zhixuan92/multi-model-agent@${{ inputs.version }}" "dependencies.@zhixuan92/multi-model-agent-core")"
           echo "core=$CORE server=$SRV dep=$DEP"
           [ "$CORE" = "${{ inputs.version }}" ] || { echo "::error::core is $CORE"; exit 1; }
           [ "$SRV"  = "${{ inputs.version }}" ] || { echo "::error::server is $SRV"; exit 1; }
