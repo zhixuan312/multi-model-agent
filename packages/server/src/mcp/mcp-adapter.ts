@@ -12,6 +12,7 @@
 // them.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { z } from 'zod';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -21,6 +22,8 @@ import type { ExecutionStore } from '../application/execution-store.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import {
   MCP_TOOLS,
+  MCP_CAPABILITIES,
+  MCP_PROTOCOL_VERSION,
   INLINE_AUTO_TYPES,
   INLINE_WAIT_CAP_MS,
   WAIT_DEFAULT_MS,
@@ -28,6 +31,13 @@ import {
   type DeliveryMode,
   DELIVERY_MODES,
 } from './tool-surface.js';
+
+/** `server/discover` request shape — hand-rolled because SDK 1.30.0 defines none.
+ *  Params may be omitted entirely or carry unknown keys. */
+const DiscoverRequestSchema = z.object({
+  method: z.literal('server/discover'),
+  params: z.optional(z.object({}).loose()),
+});
 
 export interface McpAdapterDeps {
   runtime: ExecutionRuntime;
@@ -84,10 +94,17 @@ function runningSnapshot(entry: TaskEntry): Record<string, unknown> {
     status: 'running',
     phase: entry.phase ?? 'implementing',
     elapsedMs: now - entry.startedAt,
+    // Same fallback as the REST handler: without a phase start, phase elapsed IS task
+    // elapsed. Added here to close a pre-existing drift — REST already returned this
+    // field and MCP omitted it, so "one contract, two wires" was untrue in practice.
+    phaseElapsedMs: entry.phaseStartedAt ? now - entry.phaseStartedAt : now - entry.startedAt,
     startedAt: new Date(entry.startedAt).toISOString(),
   };
   if (entry.cancellationRequestedAt !== null) snapshot.cancellationRequested = true;
   if (entry.tool === 'execute_plan' && entry.totalTasks != null) snapshot.totalTasks = entry.totalTasks;
+  // The human-readable headline was written by TaskRegistry.setHeadline but read by
+  // nothing — dead state. Present only when non-null, identically on both wires.
+  if (entry.runningHeadline !== null) snapshot.runningHeadline = entry.runningHeadline;
   return snapshot;
 }
 
@@ -173,12 +190,27 @@ function handleCancel(deps: McpAdapterDeps, args: Record<string, unknown>): Tool
 /** Build a fresh SDK server wired to the shared runtime. One per request —
  *  the protocol core is stateless; all durable state lives in the runtime. */
 export function buildMcpServer(deps: McpAdapterDeps): Server {
-  const server = new Server(
-    { name: 'multi-model-agent', version: deps.serverVersion },
-    { capabilities: { tools: {} } },
-  );
+  const serverInfo = { name: 'multi-model-agent', version: deps.serverVersion };
+  const server = new Server(serverInfo, { capabilities: MCP_CAPABILITIES });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: MCP_TOOLS }));
+
+  // `server/discover` — the 2026-07-28 stateless capability-discovery method. The SDK
+  // ships no schema for it (grep `Discover` across its types: nothing), so the request
+  // shape is declared locally, consistent with MCP wire types never leaving this
+  // directory.
+  //
+  // This adapter is ALREADY stateless per request — a fresh Server per POST, no session
+  // id — so it redundantly re-runs `initialize` on every call. That is precisely the
+  // topology `server/discover` exists to serve.
+  //
+  // Both this response and the constructor above read the same MCP_CAPABILITIES
+  // binding, so discovery cannot drift from initialize.
+  server.setRequestHandler(DiscoverRequestSchema, async () => ({
+    serverInfo,
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    capabilities: MCP_CAPABILITIES,
+  }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;

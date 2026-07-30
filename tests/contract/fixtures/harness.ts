@@ -8,13 +8,17 @@ import { join } from 'node:path';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
-import { startServer } from '@zhixuan92/multi-model-agent/server';
+import { startServer, type RunningServer } from '@zhixuan92/multi-model-agent/server';
 
 import { freezeClock } from './deterministic-clock.js';
 
 export interface HarnessHandle {
   baseUrl: string;
   token: string;
+  /** The running server's already-public TaskRegistry. Exposed for contract tests that
+   *  need to seed non-terminal state (e.g. a running headline) deterministically —
+   *  deliberately NOT a production endpoint. */
+  taskRegistry: RunningServer['taskRegistry'];
   close(): Promise<void>;
 }
 
@@ -106,6 +110,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   return {
     baseUrl,
     token,
+    taskRegistry: server.taskRegistry,
     async close(): Promise<void> {
       await server.stop();
       __setCoreTestProviderOverride(null);

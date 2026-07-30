@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { main } from '../../packages/server/src/cli/index.js';
 import { runMcpBridge } from '../../packages/server/src/cli/mcp.js';
 
-vi.mock('../../packages/server/src/cli/mcp.js', () => ({ runMcpBridge: vi.fn(async () => 0) }));
+// `bufferedLines` must be stubbed too: the CLI wraps stdin with it before calling the
+// bridge, so a mock that omits it fails to resolve the import rather than the assertion.
+vi.mock('../../packages/server/src/cli/mcp.js', () => ({
+  runMcpBridge: vi.fn(async () => 0),
+  bufferedLines: vi.fn(() => ({ async *[Symbol.asyncIterator]() { /* no frames */ } })),
+}));
 
 describe('mma mcp command registration', () => {
   it('routes bare mcp through the normal config and status URL seam', async () => {

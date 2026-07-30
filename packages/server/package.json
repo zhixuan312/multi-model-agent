@@ -52,7 +52,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@zhixuan92/multi-model-agent-core": "workspace:^",
     "gray-matter": "^4.0.3",
     "minimist": "^1.2.8",
