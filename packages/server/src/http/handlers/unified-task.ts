@@ -97,6 +97,12 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
       if (entry.tool === 'execute_plan' && entry.totalTasks != null) {
         polling.totalTasks = entry.totalTasks;
       }
+      // The human-readable headline was written by TaskRegistry.setHeadline but read by
+      // nothing — dead state. Present only when non-null, identically to the MCP
+      // running snapshot (one contract, two wires).
+      if (entry.runningHeadline !== null) {
+        polling.runningHeadline = entry.runningHeadline;
+      }
       sendJson(res, 202, polling);
     }
   };

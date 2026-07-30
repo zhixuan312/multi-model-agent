@@ -23,6 +23,8 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import { createInterface } from 'node:readline';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { fileURLToPath } from 'node:url';
 import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
@@ -40,6 +42,12 @@ import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
+import { runMcpBridge, bufferedLines } from './mcp.js';
+import {
+  installClaudeDesktop,
+  uninstallClaudeDesktop,
+} from '../skill-install/skill-installers/claude-desktop.js';
+import { atomicWriteClaudeDesktopConfig } from '../skill-install/claude-desktop-file.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -183,6 +191,9 @@ Commands:
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   sync-skills      Install + update + reconcile all shipped skills
+  mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
+  mcp install      Add MMA to Claude Desktop's MCP config (MCP only — no skills)
+  mcp uninstall    Remove MMA from Claude Desktop's MCP config
   plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
   disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
@@ -412,6 +423,75 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       exit(code);
       break;
     }
+    case 'mcp': {
+      const nested = positional[1] ?? '';
+      // `mcp install` / `mcp uninstall` manage Claude Desktop's MCP configuration.
+      // They are handled BEFORE loadConfig on purpose: writing a config file must not
+      // require discovering (or starting) a daemon. They also never touch the skill
+      // installers — Desktop has no skills, so it is deliberately absent from
+      // `Client`/`ALL_CLIENTS` in skill-install/manifest.ts.
+      if (nested === 'install' || nested === 'uninstall') {
+        const desktopDeps = {
+          platform: process.platform as string,
+          homeDir: deps.homeDir?.() ?? os.homedir(),
+          appData: (deps.env?.() ?? process.env).APPDATA ?? '',
+          localAppData: (deps.env?.() ?? process.env).LOCALAPPDATA ?? '',
+          execPath: process.execPath,
+          resolveEntrypoint: resolveCliEntrypoint,
+          exists: (p: string) => fs.existsSync(p),
+          atomicWriteClaudeDesktopConfig,
+        };
+        try {
+          const result = nested === 'install'
+            ? await installClaudeDesktop(desktopDeps)
+            : await uninstallClaudeDesktop(desktopDeps);
+          const where = (result as { configPath?: string }).configPath ?? 'the Claude Desktop config';
+          const changed = (result as { changed?: boolean }).changed;
+          stdout(
+            `mma mcp ${nested}: ${changed === false ? 'no change needed' : 'updated'} ${where}\n`
+            + 'Claude Desktop receives MCP configuration only — it has no MMA skills.\n'
+            + (nested === 'install' ? 'Fully quit and relaunch Claude Desktop to pick it up.\n' : ''),
+          );
+          exit(0);
+        } catch (err) {
+          stderr(`mma mcp ${nested}: ${err instanceof Error ? err.message : String(err)}\n`);
+          exit(1);
+        }
+        break;
+      }
+      if (nested !== '') {
+        stderr(`mma mcp: unknown subcommand "${nested}" — expected "install", "uninstall", or no subcommand to run the bridge\n`);
+        exit(1);
+        break;
+      }
+      const config = await loadConfig(configArg, deps);
+      const daemonUrl = buildServerUrl(config.server.bind, config.server.port);
+      const homeDir = deps.homeDir?.() ?? os.homedir();
+      const env = deps.env?.() ?? process.env;
+      const rl = createInterface({ input: process.stdin });
+      // Buffer from creation: the bridge's startup (token, DNS pin, health preflight)
+      // is async, and a host writes `initialize` the instant it spawns us. Iterating
+      // `rl` directly would drop every line emitted before iteration attaches.
+      const stdinLines = bufferedLines(rl);
+      let code: number;
+      try {
+        code = await runMcpBridge({
+          daemonUrl,
+          env,
+          homeDir,
+          stdin: stdinLines,
+          stdout,
+          stderr,
+          fetch,
+          resolveHost: (hostname: string) => dnsLookup(hostname, { all: true }),
+          readFile: (p: string) => fs.readFileSync(p, 'utf-8'),
+        });
+      } finally {
+        rl.close();
+      }
+      exit(code);
+      break;
+    }
     case 'journal': {
       const nested = positional[1] ?? '';
       if (nested !== 'reindex') {
@@ -436,6 +516,26 @@ export async function main(deps: CliDeps = {}): Promise<void> {
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
+
+/**
+ * Absolute path of THIS distribution's CLI entrypoint, for the Claude Desktop config.
+ *
+ * Uses the same `process.argv[1]` + realpath technique as {@link isMain}, for the same
+ * reason: npm installs the bin as a symlink in `node_modules/.bin/`, so argv[1] points
+ * at the link rather than the real file. Resolving it matters because the Desktop entry
+ * must name the build doing the installing — a bare `mma` on PATH may be an older
+ * install, producing a config that looks right and runs the wrong binary.
+ */
+export function resolveCliEntrypoint(): string {
+  const fromModule = import.meta.url.startsWith('file://') ? fileURLToPath(import.meta.url) : '';
+  const argv1 = process.argv[1];
+  if (argv1) {
+    try {
+      return fs.realpathSync(path.resolve(argv1));
+    } catch { /* fall through to the module path */ }
+  }
+  return fromModule;
+}
 
 // Only run main() when this module is executed as the CLI entry point.
 // Tests import main() directly and pass CliDeps.

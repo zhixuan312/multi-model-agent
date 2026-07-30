@@ -12,6 +12,46 @@
 import { z } from 'zod';
 import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
 
+/*
+ * SDK-PROTOCOL-RECHECK
+ *
+ * Pinned SDK: @modelcontextprotocol/sdk 1.30.0 (the latest published release).
+ * Negotiated protocol: 2025-11-25 — the SDK's own `LATEST_PROTOCOL_VERSION`.
+ *
+ * MMA reports only a protocol version its SDK can actually negotiate. The
+ * 2026-07-28 revision is published as a specification but the TypeScript SDK does
+ * not implement it, and hand-rolling that version would mean fighting the SDK's own
+ * negotiation logic — a worse outcome than negotiating 2025-11-25 honestly.
+ *
+ * TRIGGER: when a future SDK release changes `LATEST_PROTOCOL_VERSION` away from
+ * 2025-11-25, revisit both the protocol version reported by `server/discover` and the
+ * hand-rolled `server/discover` request schema in mcp-adapter.ts — that method has no
+ * schema in 1.30.0, which is why it is defined locally.
+ */
+
+/**
+ * The ONE capability declaration for this server.
+ *
+ * Both the SDK `Server` constructor and the `server/discover` handler read this exact
+ * binding. Two hand-maintained copies would drift, and a discover response that
+ * disagrees with `initialize` is worse than having no discover at all.
+ *
+ * `extensions` is present and deliberately EMPTY. In particular it does not declare
+ * `io.modelcontextprotocol/ui` (MCP Apps): an extension declaration is a promise to a
+ * host, and a host seeing that key may preload UI resources this server cannot serve.
+ * It is added in the same change that first serves a real `ui://` resource.
+ *
+ * There is likewise no `resources` capability, because no resource handler is
+ * registered — `resources/list` and `resources/read` correctly answer method-not-found.
+ */
+export const MCP_CAPABILITIES = {
+  tools: {},
+  extensions: {},
+} as const;
+
+/** The protocol version this server reports. See SDK-PROTOCOL-RECHECK above. */
+export const MCP_PROTOCOL_VERSION = '2025-11-25';
+
 /** How the caller wants the result delivered. A preference, not a force —
  *  work likely to exceed the transport's patience is promoted to a handle. */
 export const DELIVERY_MODES = ['auto', 'inline', 'handle'] as const;
