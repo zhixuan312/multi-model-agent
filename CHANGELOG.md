@@ -40,6 +40,12 @@ and the test suite no longer depends on which CLIs happen to be installed on the
 
 ### Changed
 
+- **The 3x journal-latency benchmark gate no longer runs on CI.** The ratio measures ~7.2x on a
+  developer machine but ~2.99x on a shared GitHub runner, so a 3x threshold sat exactly on the
+  boundary and failed about half of all runs for reasons unrelated to the engine. It stays strict
+  where the measurement is trustworthy (the release runbook's local pre-flight). The three
+  deterministic gates alongside it — retrieval mAP, mechanical cleanliness, ≥80% token reduction —
+  still run in CI and are what protect the engine there.
 - **`/mma-flow` review gate is capped at 3 rounds, down from 5.** The advance rule is now per-round:
   round 1 must be clean of critical and high findings, round 2 tolerates high (routed to backlog),
   and round 3 applies its fixes and then always advances. Round 4 never runs.
