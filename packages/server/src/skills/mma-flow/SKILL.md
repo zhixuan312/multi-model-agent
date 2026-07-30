@@ -186,17 +186,19 @@ resolve in the primary repo.
 
 ## Common: Gate   (B1, B3, B6)
 
-Escalating gate, hard cap 5 rounds, never halts. Each round is judged on its OWN
+Escalating gate, hard cap 3 rounds, never halts. Each round is judged on its OWN
 findings — applying fixes never clears the gate; only a fresh round that comes back
 within threshold does.
 
-| Round | Advance when the round's own findings have… |
-|-------|---------------------------------------------|
-| 1–3   | 0 critical AND 0 high                       |
-| 4–5   | 0 critical   (high tolerated → backlog)     |
+| Round | Advance when the round's own findings have…     |
+|-------|------------------------------------------------|
+| 1     | 0 critical AND 0 high                          |
+| 2     | 0 critical   (high tolerated → backlog)        |
+| 3     | anything — round 3 always advances             |
 
 - Round doesn't clear the gate → fix inline (Common: Fixes inline), then run the next round.
-- Round 6 never runs. Residual after round 5 (critical or high) → backlog, advance anyway.
+- Round 3 is the last pass: apply its fixes, then advance unconditionally. Round 4 never
+  runs. Residual after round 3 (critical or high) → backlog, advance anyway.
 - Never returns `proceed: false` — the flow never stops here.
 
 ## Common: Never-halt
