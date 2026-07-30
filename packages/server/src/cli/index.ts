@@ -23,6 +23,8 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import { createInterface } from 'node:readline';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { fileURLToPath } from 'node:url';
 import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
@@ -40,6 +42,7 @@ import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
+import { runMcpBridge } from './mcp.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -183,6 +186,7 @@ Commands:
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   sync-skills      Install + update + reconcile all shipped skills
+  mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
   plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
   disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
   enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
@@ -409,6 +413,31 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         stdout,
         stderr,
       });
+      exit(code);
+      break;
+    }
+    case 'mcp': {
+      const config = await loadConfig(configArg, deps);
+      const daemonUrl = buildServerUrl(config.server.bind, config.server.port);
+      const homeDir = deps.homeDir?.() ?? os.homedir();
+      const env = deps.env?.() ?? process.env;
+      const rl = createInterface({ input: process.stdin });
+      let code: number;
+      try {
+        code = await runMcpBridge({
+          daemonUrl,
+          env,
+          homeDir,
+          stdin: rl,
+          stdout,
+          stderr,
+          fetch,
+          resolveHost: (hostname: string) => dnsLookup(hostname, { all: true }),
+          readFile: (p: string) => fs.readFileSync(p, 'utf-8'),
+        });
+      } finally {
+        rl.close();
+      }
       exit(code);
       break;
     }
