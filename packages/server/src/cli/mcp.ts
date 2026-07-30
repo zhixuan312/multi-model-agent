@@ -218,6 +218,45 @@ async function parseSseJson(res: Response): Promise<unknown> {
  * preflight). Every failure once frames are being processed is reported as
  * a per-frame JSON-RPC error and does not stop the loop.
  */
+/**
+ * Buffer every line a readline interface emits, from the moment it is created.
+ *
+ * `readline.createInterface()` starts consuming its input immediately, but
+ * {@link runMcpBridge} only begins iterating AFTER its async startup (token
+ * resolution, DNS pinning, health preflight). Lines emitted during that window are
+ * delivered to no one and silently lost — and because a host writes its `initialize`
+ * frame the instant it spawns the bridge, that race is the common case rather than an
+ * edge case. Piping input loses every frame.
+ *
+ * Iterating the interface directly is therefore unsafe here. This wraps it so lines
+ * are queued as they arrive and handed over once iteration starts.
+ */
+export function bufferedLines(source: {
+  on(event: 'line', listener: (line: string) => void): unknown;
+  on(event: 'close', listener: () => void): unknown;
+}): AsyncIterable<string> {
+  const queue: string[] = [];
+  let closed = false;
+  let wake: (() => void) | null = null;
+  const signal = (): void => {
+    const w = wake;
+    wake = null;
+    w?.();
+  };
+  source.on('line', (line: string) => { queue.push(line); signal(); });
+  source.on('close', () => { closed = true; signal(); });
+
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<string> {
+      for (;;) {
+        while (queue.length > 0) yield queue.shift()!;
+        if (closed) return;
+        await new Promise<void>((resolve) => { wake = resolve; });
+      }
+    },
+  };
+}
+
 export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
   const { stdout, stderr } = deps;
 

@@ -42,7 +42,7 @@ import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
-import { runMcpBridge } from './mcp.js';
+import { runMcpBridge, bufferedLines } from './mcp.js';
 import {
   installClaudeDesktop,
   uninstallClaudeDesktop,
@@ -469,13 +469,17 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const homeDir = deps.homeDir?.() ?? os.homedir();
       const env = deps.env?.() ?? process.env;
       const rl = createInterface({ input: process.stdin });
+      // Buffer from creation: the bridge's startup (token, DNS pin, health preflight)
+      // is async, and a host writes `initialize` the instant it spawns us. Iterating
+      // `rl` directly would drop every line emitted before iteration attaches.
+      const stdinLines = bufferedLines(rl);
       let code: number;
       try {
         code = await runMcpBridge({
           daemonUrl,
           env,
           homeDir,
-          stdin: rl,
+          stdin: stdinLines,
           stdout,
           stderr,
           fetch,
