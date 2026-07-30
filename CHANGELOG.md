@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.16.0] - 2026-07-30
+
+MMA gains a second transport and a real task lifecycle: an MCP endpoint over the same
+execution runtime, cooperative cancellation, execution records that survive a daemon
+restart, and a one-install Claude Code plugin. `SCHEMA_VERSION` stays at **6** — the
+telemetry wire format is unchanged.
+
+### Added
+
+- **MCP endpoint** — `POST /mcp` (streamable HTTP, stateless) exposes `mma_run`,
+  `mma_task_get`, `mma_task_wait` and `mma_task_cancel` over the *same* ExecutionRuntime the
+  REST API uses. `mma_run`'s request schema is generated from the existing task-input Zod
+  union, so it can never drift from `POST /task`. A task submitted over MCP is pollable over
+  REST and vice versa — one runtime, two transports, no duplicated state.
+- **Cooperative cancellation** — `DELETE /task/:taskId`. 202 means *requested*: the task keeps
+  running (polls report `cancellationRequested`) until the worker confirms termination, then
+  reaches terminal `cancelled`. Completion that wins the race stands. Idempotent.
+- **Durable execution records** — task IDs and terminal results survive a daemon restart, in
+  SQLite at the new `server.stateDir` (default `~/.mma/state`). `GET /task/:id` falls back to
+  the store after a restart or TTL eviction.
+- **Boot reconciliation with crash fencing** — a dead daemon does not imply dead workers, so on
+  startup any surviving detached codex process group is terminated (verified by command line so a
+  reused pid is never signalled) *before* its execution is marked `interrupted` with a retryable
+  `daemon_restarted` reason. Execution is never resumed; the caller resubmits.
+- **Claude Code plugin + marketplace** — `mma plugin build` generates a plugin carrying the 16
+  skills, both SDLC commands and the MCP server registration; `.claude-plugin/marketplace.json`
+  makes the repo installable via `/plugin marketplace add zhixuan312/multi-model-agent`. The
+  artifact contains no auth token: `headersHelper` reads it at connection time.
+
+### Fixed
+
+- **Dead-tier failure masking** — an unreachable or auth-rejected tier returned 0 tokens with
+  `terminationReason: "ok"`, and the task still reported `done` carrying the *refiner's* answer,
+  so a dead tier looked healthy. `ok` must now be earned by an explicit SDK success result, and a
+  turn with no output fails terminally *before* review.
+- **Cancellation latency 48s → 0.1s** — the claude runner only forwarded `abortSignal` to the SDK
+  and waited for the in-flight turn; it now force-closes the query the way the deadline guard
+  already did, matching the codex runner's process-group kill.
+- **`mma disable` left the SDLC commands behind** — it removed the 16 skills but never
+  `~/.claude/commands/mma-flow.md` or `mma-breakout.md`, so they survived a "full" disable.
+- **Context-block pins leaked on a runner crash** — releases now run through an execution-scoped
+  cleanup registry, so a crashing pipeline can no longer leave a block pinned until restart.
+- **Research preprocessing was uncancellable** — it opened a provider session with a throwaway
+  abort signal nothing could fire; it now receives the execution's real signal.
+
+### Changed
+
+- **Application layer extracted** — everything between wire validation and the two-phase pipeline
+  moved out of the 53 KB `unified-task.ts` closure into `packages/server/src/application/`
+  (`ExecutionRuntime` + per-type preprocessors + `CallerContext`). HTTP handlers are now thin
+  adapters; the public `POST /task` contract is unchanged.
+- **Telemetry `client` is the real caller** — previously hardcoded `claude-code` regardless of who
+  called; MCP traffic reports `mcp:<client>` from the protocol's `clientInfo` where available.
+- **The plugin supersedes standalone skills on Claude Code** — standalone stays the default, but
+  since the plugin is a strict superset, `mma sync-skills` retires the redundant standalone copies
+  and pins that client off. Strictly one-directional: MMA never uninstalls the plugin, because
+  `sync-skills` runs from npm postinstall. Opt out with `--keep-standalone`.
+
 ## [5.15.4] - 2026-07-27
 
 **In-container reliability: Claude OAuth auto-refresh actually works headless, and a codex tier fails verification when its CLI is absent instead of going green-but-broken.** No API or schema change (`SCHEMA_VERSION` still 6).

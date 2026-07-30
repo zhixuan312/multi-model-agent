@@ -393,11 +393,13 @@ Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task u
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.15.4
+## What's new in 5.16.0
 
-- **In-container reliability.** (1) Claude OAuth **auto-refresh works headless** — the refresh-on-expiry exchange no longer needs `curl` (absent in minimal Node images); it runs in a Node subprocess and logs the outcome, so an always-on container no longer goes dark ~8h after the last manual refresh. (2) A **codex tier fails `/configure-provider` verification when the codex CLI is absent** (verify now probes the runner, not just the creds), instead of verifying green and dying on the first task with `codex_not_installed`. No API or schema change.
-- **Contract-first `execute_plan` fixes (5.15.3).** Accepts the generator's acceptance-test format (no more `malformed-plan`); a buggy plan-authored test no longer discards correct work; `plan`/`spec` telemetry no longer dropped.
-- **Write routes no longer silently drop work (5.15.2); read routes read plainly (5.15.1); contract-first plans (5.15.0).** `SCHEMA_VERSION` still 6.
+- **MCP endpoint.** `POST /mcp` exposes `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the *same* runtime as the REST API — a task submitted over MCP is pollable over REST and vice versa. `mma_run`'s schema is generated from the existing task-input union, so it can't drift from `POST /task`.
+- **Cancellation.** `DELETE /task/:taskId` — 202 means *requested*; the task reaches terminal `cancelled` once the worker confirms. Claude-tier cancel latency went **48s → 0.1s**.
+- **Restarts no longer lose track of work.** Task IDs and terminal results persist in `~/.mma/state`; executions caught mid-flight come back `interrupted` and retryable, and any worker that outlived the daemon is terminated before its record is retired.
+- **One-install Claude Code plugin.** `/plugin marketplace add zhixuan312/multi-model-agent` then `/plugin install mma@multi-model-agent` — 16 skills, both SDLC commands, and the MCP server. No auth token is stored in the artifact.
+- **A dead tier can no longer look healthy.** An unreachable or auth-rejected tier used to report `done` carrying the reviewer's answer; it now fails terminally before review. `SCHEMA_VERSION` still 6.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

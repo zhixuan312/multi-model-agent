@@ -21,7 +21,7 @@ Emitted at the end of every delegate, audit, review, debug, execute-plan, invest
 | `eventId` | UUIDv4 string | At-most-once dedup within the 90-day retention window |
 | `route` | enum: `delegate`, `audit`, `review`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `journal-record`, `journal-recall`, `register-context-block`, `orchestrate` | Route distribution + per-route quality metrics |
 | `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
-| `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
+| `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking. The calling client's own name (`claude-code`, `codex-cli`, `cursor`, `gemini-cli`), or `mcp:<client>` when the task arrived over the MCP endpoint. Before 5.16.0 this was hardcoded `claude-code` regardless of caller. |
 
 #### Configuration (4 fields)
 
