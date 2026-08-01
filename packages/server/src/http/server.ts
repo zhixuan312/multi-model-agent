@@ -206,7 +206,18 @@ export async function startServer(
       // MCP adapter — a second transport over the SAME runtime (single daemon
       // owns all live executions). Bearer auth + loopback apply like any route.
       const { handleMcpRequest } = await import('../mcp/mcp-adapter.js');
-      const mcpDeps = { runtime, taskRegistry, store: executionStore, serverVersion: SERVER_VERSION };
+      const { resolveMcpCapabilities } = await import('../mcp/tool-surface.js');
+      const { getExecutionArtifact } = await import('../mcp/execution-artifact.js');
+      // Resolved EXACTLY ONCE, here, before the route is registered — never
+      // recomputed per request (buildMcpServer just reads the same reference off
+      // deps, so discover and initialize can never disagree within this process).
+      const capabilities = resolveMcpCapabilities(getExecutionArtifact().available);
+      if (!('resources' in capabilities)) {
+        process.stderr.write(
+          `[mma] event=mcp_capabilities_degraded ts=${new Date().toISOString()} reason=execution_artifact_unavailable\n`,
+        );
+      }
+      const mcpDeps = { runtime, taskRegistry, store: executionStore, serverVersion: SERVER_VERSION, capabilities };
       router.register('POST', '/mcp', (req, res, _params, ctx) => handleMcpRequest(mcpDeps, req, res, ctx.body));
     } else {
       router.register('POST', '/task', (_req, res) => {

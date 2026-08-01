@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
+import { EXECUTION_RESOURCE_URI } from './execution-artifact.js';
 
 /*
  * SDK-PROTOCOL-RECHECK
@@ -30,24 +31,45 @@ import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
  */
 
 /**
- * The ONE capability declaration for this server.
+ * The two frozen capability literals this server can ever declare, plus the pure
+ * selector between them (below).
  *
- * Both the SDK `Server` constructor and the `server/discover` handler read this exact
- * binding. Two hand-maintained copies would drift, and a discover response that
- * disagrees with `initialize` is worse than having no discover at all.
+ * Both the SDK `Server` constructor and the `server/discover` handler read the SAME
+ * resolved binding (carried on `McpAdapterDeps.capabilities`, resolved once at daemon
+ * start in `http/server.ts`). Two hand-maintained copies would drift, and a discover
+ * response that disagrees with `initialize` is worse than having no discover at all.
  *
- * `extensions` is present and deliberately EMPTY. In particular it does not declare
- * `io.modelcontextprotocol/ui` (MCP Apps): an extension declaration is a promise to a
- * host, and a host seeing that key may preload UI resources this server cannot serve.
- * It is added in the same change that first serves a real `ui://` resource.
- *
- * There is likewise no `resources` capability, because no resource handler is
- * registered — `resources/list` and `resources/read` correctly answer method-not-found.
+ * This one declares `resources` and the `io.modelcontextprotocol/ui` extension — a
+ * promise to the host that this server can serve UI resources — selected ONLY once a
+ * real execution-app bundle backs it (see `execution-artifact.ts`).
  */
-export const MCP_CAPABILITIES = {
+export const MCP_CAPABILITIES_WITH_APP = {
+  tools: {},
+  resources: {},
+  extensions: { 'io.modelcontextprotocol/ui': {} },
+} as const;
+
+/**
+ * Byte-identical to the pre-Flow-2 value: `extensions` is present and deliberately
+ * EMPTY, and there is no `resources` capability, so `resources/list` / `resources/read`
+ * correctly answer method-not-found when no real `ui://` resource is available to serve.
+ */
+export const MCP_CAPABILITIES_TOOLS_ONLY = {
   tools: {},
   extensions: {},
 } as const;
+
+export type McpCapabilities = typeof MCP_CAPABILITIES_TOOLS_ONLY | typeof MCP_CAPABILITIES_WITH_APP;
+
+/**
+ * PURE selector between the two frozen capability literals. No I/O — the caller
+ * (`http/server.ts`) resolves `executionAppResourceAvailable` from
+ * `getExecutionArtifact().available` exactly once at daemon start and passes the
+ * result down as `McpAdapterDeps.capabilities`; `buildMcpServer` never recomputes it.
+ */
+export function resolveMcpCapabilities(executionAppResourceAvailable: boolean): McpCapabilities {
+  return executionAppResourceAvailable ? MCP_CAPABILITIES_WITH_APP : MCP_CAPABILITIES_TOOLS_ONLY;
+}
 
 /** The protocol version this server reports. See SDK-PROTOCOL-RECHECK above. */
 export const MCP_PROTOCOL_VERSION = '2025-11-25';
@@ -76,6 +98,9 @@ export interface McpToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Host-facing metadata. Only `mma_run` carries `ui.resourceUri` — it is the sole
+   *  tool whose result is meant to be rendered by an MCP-App-capable host. */
+  _meta?: Record<string, unknown>;
 }
 
 export const MCP_TOOLS: McpToolDefinition[] = [
@@ -113,6 +138,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       required: ['cwd', 'request'],
       additionalProperties: false,
     },
+    _meta: { ui: { resourceUri: EXECUTION_RESOURCE_URI } },
   },
   {
     name: 'mma_task_get',
