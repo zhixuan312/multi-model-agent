@@ -209,20 +209,29 @@ async function resolvePinnedHost(
 
 /**
  * Parse the daemon's SSE-only `/mcp` reply (`event: message\ndata: {json}\n\n`)
- * and return the unwrapped JSON payload. Throws if no `data:` line is found
- * or its content is not valid JSON.
+ * and return the unwrapped JSON payload. A single message's JSON payload may
+ * be wrapped across several consecutive `data:` lines (large replies, e.g. an
+ * inlined HTML resource) that must be reassembled — prefix-stripped, trimmed,
+ * and concatenated back into one JSON text — before parsing. Collection stops
+ * at the first blank line or first non-`data:` line following the selected
+ * `event: message` line. Throws if no `data:` line is found following
+ * `event: message`, or if the reassembled content is not valid JSON.
  */
 async function parseSseJson(res: Response): Promise<unknown> {
   const text = await res.text();
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const messageIndex = lines.findIndex((line) => line === 'event: message');
-  const dataLine = messageIndex === -1
-    ? undefined
-    : lines.slice(messageIndex + 1).find((line) => line.startsWith('data:'));
-  if (dataLine === undefined) {
+  const dataLines: string[] = [];
+  if (messageIndex !== -1) {
+    for (const line of lines.slice(messageIndex + 1)) {
+      if (!line.startsWith('data:')) break;
+      dataLines.push(line.slice('data:'.length).trim());
+    }
+  }
+  if (dataLines.length === 0) {
     throw new Error('missing SSE data payload');
   }
-  return JSON.parse(dataLine.slice('data:'.length).trim());
+  return JSON.parse(dataLines.join(''));
 }
 
 /**
