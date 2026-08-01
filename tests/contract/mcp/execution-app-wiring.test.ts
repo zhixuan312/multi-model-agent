@@ -179,3 +179,70 @@ describe('contract: execution App bootstrap wiring', () => {
   });
 
 });
+/**
+ * The widget is a MONITOR, not a result viewer.
+ *
+ * MMA results routinely run to thousands of characters, and the full text is ALREADY delivered
+ * to the model as the tool result — rendering it again in the panel is duplication that turned
+ * the monitor into a wall of raw JSON overflowing its container. These tests pin the terminal
+ * view to: what happened, what it cost, and a short preview.
+ */
+describe('contract: terminal view stays compact', () => {
+  beforeEach(() => { document.body.innerHTML = '<main id="app"></main>'; vi.resetModules(); });
+
+  async function renderTerminal(envelope: Record<string, unknown>) {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify(envelope) }] });
+    await Promise.resolve();
+    return document.body.textContent ?? '';
+  }
+
+  it('never dumps the full result, however long it is', async () => {
+    const answer = 'X'.repeat(4000);
+    const text = await renderTerminal({
+      task: { taskId: 't1', status: 'done' },
+      metrics: { totalCostUsd: 1.038244, savedVsMainCostUsd: -0.046495574999999995 },
+      output: { summary: { answer } },
+    });
+    expect(text).not.toContain('X'.repeat(400));
+    expect(text.length, 'the whole panel must stay short').toBeLessThan(600);
+    expect(text).toMatch(/…/); // truncated, and visibly so
+    expect(text).toMatch(/Full result is in the conversation/);
+  });
+
+  it('never renders the raw JSON envelope as the summary', async () => {
+    const text = await renderTerminal({
+      task: { taskId: 't1', status: 'done' },
+      output: { summary: { answer: 'The runtime cancels cooperatively.', confidence: 'high' } },
+    });
+    expect(text).toContain('The runtime cancels cooperatively.');
+    expect(text).not.toContain('{"answer"');
+    expect(text).not.toContain('confidence');
+  });
+
+  it('formats money for reading, not raw floats', async () => {
+    const text = await renderTerminal({
+      task: { taskId: 't1', status: 'done' },
+      metrics: { totalCostUsd: 1.038244, savedVsMainCostUsd: -0.046495574999999995 },
+      output: { summary: 'ok' },
+    });
+    expect(text).toContain('$1.04');
+    // A negative "saved" is a cost. Say which, rather than printing a minus sign and making
+    // the reader do the sign arithmetic.
+    expect(text).toContain('over main');
+    expect(text).not.toMatch(/0\.0464955/);
+    expect(text).not.toMatch(/\$-/);
+  });
+
+  it('keeps sub-cent amounts meaningful instead of rounding them to zero', async () => {
+    const text = await renderTerminal({
+      task: { taskId: 't1', status: 'done' },
+      metrics: { totalCostUsd: 0.0021 },
+      output: { summary: 'ok' },
+    });
+    expect(text).toContain('$0.0021');
+    expect(text).not.toContain('$0.00 ');
+  });
+});
