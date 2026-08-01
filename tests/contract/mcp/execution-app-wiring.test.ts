@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFile } from 'node:fs/promises';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>((res) => { resolve = res; }); return { promise, resolve }; }
@@ -121,14 +122,55 @@ describe('contract: execution App bootstrap wiring', () => {
     expect(callsOf(app)).toContainEqual({ name: 'mma_task_get', arguments: { taskId: 'task-1' } });
   });
 
-  it('consumes host CSS variables --color-text-primary and --font-sans instead of fixed colours', async () => {
+  /**
+   * Caught by the manual Claude Desktop gate, invisible to every automated test before it:
+   * a bare `var(--color-text-primary)` is invalid at computed-value time on a host that does
+   * not define it, so the App rendered initial-black on a dark panel in the default serif
+   * face. jsdom computes no cascade and has no theme, so nothing here could have seen it.
+   */
+  it('every themed custom property carries a fallback, so an untheming host stays legible', async () => {
     installMockApp();
-
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     const root = document.getElementById('app')!;
-    const styling = (root.getAttribute('style') ?? '') + root.innerHTML;
-    expect(styling).toMatch(/var\(--color-text-primary\)/);
-    expect(styling).toMatch(/var\(--font-sans\)/);
+    const style = root.getAttribute('style') ?? '';
+    expect(style).toMatch(/var\(--color-text-primary,[^)]+\)/);
+    expect(style).toMatch(/var\(--font-sans,[^)]+\)/);
+
+    // The stylesheet the bundle ships must do the same, and must set color-scheme so the
+    // system-colour fallback resolves correctly in BOTH light and dark hosts.
+    const html = await readFile('packages/server/src/ui/execution/execution.html', 'utf8');
+    expect(html).toMatch(/color-scheme:\s*light dark/);
+    const bareVars = html.match(/var\(--[a-z-]+\)/g) ?? [];
+    expect(bareVars, `custom properties without a fallback: ${bareVars.join(', ')}`).toEqual([]);
   });
+
+  it('omits the phase lines entirely when a snapshot carries no phase yet', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
+      taskId: 'task-1', status: 'running', elapsedMs: 0, phaseElapsedMs: 0,
+    }) }] });
+    await Promise.resolve();
+    // A dangling "Phase:" with nothing after it is the FIRST thing a user sees on a new run,
+    // and it reads as a failure to load rather than as "not started yet".
+    expect(document.body.textContent).not.toMatch(/Phase:\s*(?:$|Elapsed)/m);
+    expect(document.body.textContent).toMatch(/Running/);
+  });
+
+  it('formats elapsed time for humans rather than raw milliseconds', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
+      taskId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1_847_293, phaseElapsedMs: 7065,
+    }) }] });
+    await Promise.resolve();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('30m 47s');
+    expect(text).toContain('7.1s');
+    expect(text).not.toContain('1847293');
+  });
+
 });

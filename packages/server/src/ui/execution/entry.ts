@@ -57,10 +57,14 @@ function mount(): HTMLElement {
   if (!root) {
     throw new Error('execution App bootstrap: missing #app mount point');
   }
-  // Follow the host's light/dark theme via its CSS custom properties rather than
-  // hardcoding colours.
-  root.style.color = 'var(--color-text-primary)';
-  root.style.fontFamily = 'var(--font-sans)';
+  // Follow the host's light/dark theme via its CSS custom properties rather than hardcoding
+  // colours — but always WITH a fallback. A host is not obliged to define these, and Claude
+  // Desktop does not: a bare `var(--color-text-primary)` is invalid at computed-value time
+  // there, so the text renders initial-black on a dark panel in the default serif face.
+  // `CanvasText` (paired with `color-scheme` in the stylesheet) tracks the host's light/dark
+  // mode, so the untheme case has real contrast rather than merely being visible.
+  root.style.color = 'var(--color-text-primary, CanvasText)';
+  root.style.fontFamily = 'var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif)';
   return root;
 }
 
@@ -91,6 +95,22 @@ function escapeHtml(value: string): string {
   });
 }
 
+/**
+ * Render a duration for humans. Raw milliseconds are fine at 200ms and useless at 7065ms —
+ * and this monitor exists precisely for the long tasks, where a run reads as "1847293ms".
+ */
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`;
+}
+
 function renderDisplay(display: DisplayState): string {
   if (display.mode === 'terminal') {
     const bits = [`<h2>Status: ${escapeHtml(display.status)}</h2>`];
@@ -107,12 +127,18 @@ function renderDisplay(display: DisplayState): string {
   }
 
   const label = display.mode === 'cancelling' ? 'Cancelling' : 'Running';
-  const bits = [
-    `<h2>${label}</h2>`,
-    `<p>Phase: ${escapeHtml(display.phase)}</p>`,
-    `<p>Elapsed: ${display.elapsedMs}ms</p>`,
-    `<p>Phase elapsed: ${display.phaseElapsedMs}ms</p>`,
-  ];
+  const bits = [`<h2>${label}</h2>`];
+  // Omit the phase lines entirely when there is no phase yet, rather than printing a bare
+  // "Phase:" with nothing after it. The very first snapshot of a run has no phase, so the
+  // dangling label is what a user sees FIRST — and a label with no value reads as a failure
+  // to load, not as "not started yet". Same rule already applied to runningHeadline.
+  if (display.phase) {
+    bits.push(`<p>Phase: ${escapeHtml(display.phase)}</p>`);
+  }
+  bits.push(`<p>Elapsed: ${formatDuration(display.elapsedMs)}</p>`);
+  if (display.phase) {
+    bits.push(`<p>Phase elapsed: ${formatDuration(display.phaseElapsedMs)}</p>`);
+  }
   if (display.mode === 'running') {
     if (display.runningHeadline) {
       bits.push(`<p>${escapeHtml(display.runningHeadline)}</p>`);

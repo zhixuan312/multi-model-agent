@@ -87,9 +87,21 @@ export const INLINE_AUTO_TYPES = new Set(['journal_recall', 'journal_record']);
  *  downgrading to a handle. Below typical MCP client tool timeouts. */
 export const INLINE_WAIT_CAP_MS = 55_000;
 
-/** Default + ceiling for mma_task_wait. */
+/**
+ * Default + ceiling for mma_task_wait — the SAME bound as `INLINE_WAIT_CAP_MS`, and for the
+ * same reason.
+ *
+ * The ceiling was 240s, four times the typical MCP client tool timeout. A long-poll cannot
+ * outlive the deadline the CLIENT enforces on the request carrying it: the host kills the
+ * JSON-RPC call and the caller sees `-32001 Request timed out` with no snapshot, no taskId
+ * context, and no indication the work is still running fine. Observed on Claude Desktop —
+ * the model read `capped at 240000` from this schema, asked for it, and got exactly that.
+ *
+ * Advertising a wait the transport cannot deliver invites the failure. Anything longer is
+ * expressed by CALLING AGAIN, which costs one cheap turn and always works.
+ */
 export const WAIT_DEFAULT_MS = 55_000;
-export const WAIT_CAP_MS = 240_000;
+export const WAIT_CAP_MS = 55_000;
 
 const requestJsonSchema = z.toJSONSchema(taskInputSchema) as Record<string, unknown>;
 delete requestJsonSchema.$schema; // rides inside a tool inputSchema — no standalone dialect header
@@ -159,7 +171,9 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: 'mma_task_wait',
     description:
       'Block until an MMA task reaches a terminal state (or the timeout elapses), then '
-      + 'return the same payload as mma_task_get.',
+      + 'return the same payload as mma_task_get. A timeout is NOT an error and NOT a '
+      + 'failure of the task: it returns the current running snapshot, and the task keeps '
+      + 'going. To wait longer, call again with the same taskId.',
     inputSchema: {
       type: 'object',
       properties: {
