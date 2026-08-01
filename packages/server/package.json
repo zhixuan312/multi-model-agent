@@ -63,6 +63,7 @@
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@types/minimist": "^1.2.5",
     "@types/proper-lockfile": "^4.1.4",
+    "jsdom": "^30.0.0",
     "vite": "^7.3.5",
     "vite-plugin-singlefile": "^2.3.3"
   }
