@@ -39,4 +39,11 @@ You MAY also include `"title"` for readability; it is optional and never used fo
 Per task, `status: "done"` only when its Contract is satisfied AND its plan-authored acceptance tests
 pass unweakened, `status: "failed"` otherwise.
 
+**A test that could not RUN is not a test that FAILED.** You execute inside an OS sandbox that denies
+binding a local port, so any test starting an HTTP server dies with `EPERM`, `listen`, or a bare
+timeout regardless of whether the implementation is correct. Do not mark a task `failed` on that
+basis: judge it on its Contract and on the tests that could actually execute, and record the
+unverifiable ones in `notes` so the caller can run them outside the sandbox. Conflating the two has
+repeatedly reported correct, complete work as broken.
+
 Report one entry per DISPATCHED task, using exactly the ids you were given.

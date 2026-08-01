@@ -30,6 +30,8 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

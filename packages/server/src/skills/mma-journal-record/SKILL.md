@@ -35,6 +35,8 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

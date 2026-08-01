@@ -44,3 +44,13 @@ Your FINAL text response must be exactly one JSON block:
 
 Report `status: "done"` for a task only when its Contract is satisfied and its plan-authored acceptance
 tests pass; `status: "failed"` (naming the unmet clause or faulty test) otherwise.
+
+
+### A test that could not RUN is not a test that FAILED
+
+Your sandbox denies binding a local port, so any test starting an HTTP server dies with `EPERM`,
+`listen`, or a bare timeout however correct your work is. Never report `failed` on that basis, and
+never edit, skip, or route around such a test. Judge the task on its Contract and on the tests that
+could actually execute, and name the unverifiable ones in `notes` so the caller can run them
+outside the sandbox. Conflating "unverifiable here" with "failed" has repeatedly reported correct,
+complete work as broken.

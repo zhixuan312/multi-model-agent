@@ -8,6 +8,10 @@ import { fileURLToPath } from 'node:url';
  * Frozen so `tool-surface.ts` and `mcp-adapter.ts` share a single source of
  * truth instead of re-declaring these literals.
  */
+/**
+ * Stable identity of the execution-app resource, WITHOUT the build fingerprint.
+ * `resources/read` still accepts this exact form — see `executionResourceUriMatches`.
+ */
 export const EXECUTION_RESOURCE_URI = 'ui://mma/execution.html';
 export const EXECUTION_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
 
@@ -88,3 +92,48 @@ export function getExecutionArtifact(): ExecutionArtifact {
 export function __setExecutionArtifactOverrideForTests(value: ExecutionArtifact | null): void {
   testOverride = value;
 }
+
+/**
+ * Advertised URI for the execution app, carrying a fingerprint of the bytes it serves:
+ * `ui://mma/execution.html?v=<8 hex>`.
+ *
+ * Hosts cache a UI resource by URI, and Claude Desktop caches it hard — hard enough that a
+ * rebuilt bundle kept being served stale across daemon restarts and new conversations. As a
+ * development annoyance that is merely slow; in production it is a shipping bug, because a
+ * user who UPGRADES mma would keep running the old App indefinitely with no way to know. A
+ * fixed URI gives the host nothing to invalidate on.
+ *
+ * Content-addressing fixes it at the only layer that can: new bytes produce a new URI, so the
+ * cache misses exactly when it should and hits every other time.
+ */
+export function getExecutionResourceUri(): string {
+  const artifact = getExecutionArtifact();
+  if (!artifact.available) return EXECUTION_RESOURCE_URI;
+  return `${EXECUTION_RESOURCE_URI}?v=${fingerprint(artifact.html)}`;
+}
+
+/**
+ * Accept the versioned URI AND the bare one.
+ *
+ * A host that cached an OLDER fingerprint will ask for that older URI. Refusing it would turn
+ * a stale cache into a hard failure — strictly worse than serving current bytes under a name
+ * the host happens to remember, since the response body is the truth either way. Any `?v=`
+ * is therefore accepted and ignored; only the path has to match.
+ */
+export function executionResourceUriMatches(uri: string): boolean {
+  const [base] = uri.split('?');
+  return base === EXECUTION_RESOURCE_URI;
+}
+
+function fingerprint(html: string): string {
+  // Cheap, dependency-free FNV-1a. This is a cache key, not a security boundary — it only
+  // needs to change when the bytes change.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < html.length; i += 1) {
+    hash ^= html.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  // Mix in the length so two files differing only by a transposition cannot collide trivially.
+  return ((hash ^ html.length) >>> 0).toString(16).padStart(8, '0');
+}
+

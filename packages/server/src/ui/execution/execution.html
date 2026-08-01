@@ -65,12 +65,20 @@
         color: var(--color-text-secondary, var(--mma-ink-dim));
       }
 
-      #app pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin: 0.5rem 0 0;
-        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      /*
+       * The result preview is capped in JS, but cap it in CSS too: a single unbroken token
+       * (a long path, a minified blob) has no spaces to wrap on and would still push the
+       * panel wide. The widget must never be the reason the conversation scrolls sideways.
+       */
+      #app .preview {
+        margin: 0.5rem 0 0.25rem;
+        overflow-wrap: anywhere;
+        color: var(--color-text-primary, var(--mma-ink));
+      }
+
+      #app .meta {
         font-size: 0.8125rem;
+        opacity: 0.85;
       }
 
       #app button {

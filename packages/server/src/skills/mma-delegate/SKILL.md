@@ -30,6 +30,8 @@ Dispatch a single ad-hoc task to a worker. The request is flat — prompt, targe
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

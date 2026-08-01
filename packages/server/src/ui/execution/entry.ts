@@ -114,17 +114,71 @@ function formatDuration(ms: number): string {
   return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+/**
+ * Money, for reading rather than for auditing. Raw floats leak straight out of the cost
+ * arithmetic — `$-0.046495574999999995` is a real observed value — and eighteen decimal places
+ * of binary-float noise reads as a bug even when the number is right. Sub-cent amounts keep
+ * more precision, because rounding those to `$0.00` would be worse than useless.
+ */
+function formatUsd(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs < 0.01 && abs > 0) return `$${abs.toFixed(4)}`;
+  return `$${abs.toFixed(2)}`;
+}
+
+/** Longest result preview the widget will show. See `renderDisplay` for why there is a cap. */
+const SUMMARY_PREVIEW_CHARS = 180;
+
+/**
+ * Reduce a structured report to one short line of plain text.
+ *
+ * The full result is ALREADY delivered to the model as the tool result — the widget showing it
+ * again is pure duplication, and these results run to thousands of characters, so it turned the
+ * monitor into a wall of raw JSON that overflowed the panel. A monitor should say what happened
+ * and what it cost; the answer itself belongs in the conversation.
+ */
+function summaryPreview(summary: unknown): string | null {
+  let text: string | null = null;
+  if (typeof summary === 'string') text = summary;
+  else if (summary && typeof summary === 'object') {
+    const record = summary as Record<string, unknown>;
+    // Prefer the fields our reports actually carry over a JSON dump of the whole object.
+    for (const key of ['answer', 'summary', 'finding', 'result']) {
+      if (typeof record[key] === 'string') { text = record[key] as string; break; }
+    }
+  }
+  if (text === null) return null;
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return null;
+  return collapsed.length > SUMMARY_PREVIEW_CHARS
+    ? `${collapsed.slice(0, SUMMARY_PREVIEW_CHARS).trimEnd()}…`
+    : collapsed;
+}
+
 function renderDisplay(display: DisplayState): string {
   if (display.mode === 'terminal') {
-    const bits = [`<h2>Status: ${escapeHtml(display.status)}</h2>`];
+    const bits = [`<h2>${escapeHtml(display.status)}</h2>`];
+
+    // One compact meta line rather than a stack of labelled rows.
+    const meta: string[] = [];
     if (typeof display.totalCostUsd === 'number') {
-      bits.push(`<p>Total cost: $${display.totalCostUsd}</p>`);
+      meta.push(`${formatUsd(display.totalCostUsd)} total`);
     }
     if (typeof display.savedVsMainCostUsd === 'number') {
-      bits.push(`<p>Saved vs main: $${display.savedVsMainCostUsd}</p>`);
+      // A negative "saved" is a cost, and printing it as `Saved: $-0.05` makes the reader do
+      // the sign arithmetic. Say which it was.
+      const v = display.savedVsMainCostUsd;
+      meta.push(v < 0 ? `${formatUsd(v)} over main` : `${formatUsd(v)} saved vs main`);
     }
-    if ('summary' in display) {
-      bits.push(`<pre>${escapeHtml(JSON.stringify(display.summary))}</pre>`);
+    if (meta.length > 0) {
+      bits.push(`<p class="meta">${escapeHtml(meta.join(' · '))}</p>`);
+    }
+
+    const preview = 'summary' in display ? summaryPreview(display.summary) : null;
+    if (preview) {
+      bits.push(`<p class="preview">${escapeHtml(preview)}</p>`);
+      bits.push('<p class="meta">Full result is in the conversation.</p>');
     }
     return bits.join('');
   }
@@ -149,6 +203,13 @@ function renderDisplay(display: DisplayState): string {
     if (typeof display.totalTasks === 'number') {
       bits.push(`<p>Tasks: ${display.totalTasks}</p>`);
     }
+  }
+  // The task reference makes a panel correlatable with the daemon log and the execution
+  // store. It also disambiguates two panels on screen: same ref means one task the host
+  // rendered twice, different refs mean two dispatches — a distinction that otherwise costs
+  // a database query to settle.
+  if (display.taskRef) {
+    bits.push(`<p class="meta">task ${escapeHtml(display.taskRef)}</p>`);
   }
   return bits.join('');
 }

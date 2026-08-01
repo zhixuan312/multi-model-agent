@@ -41,6 +41,8 @@ import {
 import {
   getExecutionArtifact,
   EXECUTION_RESOURCE_URI,
+  getExecutionResourceUri,
+  executionResourceUriMatches,
   EXECUTION_RESOURCE_MIME_TYPE,
   RESOURCE_NOT_FOUND,
 } from './execution-artifact.js';
@@ -209,7 +211,18 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
   const serverInfo = { name: 'multi-model-agent', version: deps.serverVersion };
   const server = new Server(serverInfo, { capabilities: deps.capabilities });
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: MCP_TOOLS }));
+  // Stamp the CURRENT build fingerprint onto the advertised App URI at request time rather
+  // than baking it into the MCP_TOOLS literal. The tool table is module-scope and the artifact
+  // can be swapped underneath it (test overrides, and a rebuilt bundle on the next daemon
+  // start), so a baked URI would advertise a fingerprint that no longer matches the bytes —
+  // reintroducing the stale-cache bug it exists to prevent, in a form that is harder to see.
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: MCP_TOOLS.map((tool) => {
+      const ui = tool._meta?.['ui'] as { resourceUri?: string } | undefined;
+      if (ui?.resourceUri !== EXECUTION_RESOURCE_URI) return tool;
+      return { ...tool, _meta: { ...tool._meta, ui: { ...ui, resourceUri: getExecutionResourceUri() } } };
+    }),
+  }));
 
   // `server/discover` — the 2026-07-28 stateless capability-discovery method. The SDK
   // ships no schema for it (grep `Discover` across its types: nothing), so the request
@@ -236,7 +249,7 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
     server.setRequestHandler(ListResourcesRequestSchema, async () => {
       return {
         resources: [{
-          uri: EXECUTION_RESOURCE_URI,
+          uri: getExecutionResourceUri(),
           name: 'MMA execution monitor',
           description: 'Live view of a running MMA task: phase, elapsed time, cancel control.',
           mimeType: EXECUTION_RESOURCE_MIME_TYPE,
@@ -255,7 +268,7 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
       if (parsed.protocol !== 'ui:' || !uri.startsWith('ui://')) {
         throw new McpError(ErrorCode.InvalidParams, 'resources/read: uri must be a well-formed ui:// URI');
       }
-      if (uri !== EXECUTION_RESOURCE_URI) {
+      if (!executionResourceUriMatches(uri)) {
         throw new McpError(RESOURCE_NOT_FOUND, 'resources/read: no resource is served at this uri');
       }
       const artifact = getExecutionArtifact();
