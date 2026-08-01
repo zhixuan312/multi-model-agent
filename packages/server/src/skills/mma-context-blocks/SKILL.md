@@ -32,6 +32,8 @@ Store large documents once; reference them by ID in subsequent `mma-*` calls via
 
 `POST /context-blocks?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 #### Request body

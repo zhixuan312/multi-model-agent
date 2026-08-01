@@ -30,6 +30,8 @@ Dispatch a spec file to a complex worker that writes a **contract-first** implem
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

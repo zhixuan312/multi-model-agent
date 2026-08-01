@@ -43,6 +43,8 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

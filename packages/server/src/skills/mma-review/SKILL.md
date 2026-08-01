@@ -39,6 +39,8 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

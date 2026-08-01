@@ -37,6 +37,8 @@ mean and which directions to pursue.
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Configuration prerequisites

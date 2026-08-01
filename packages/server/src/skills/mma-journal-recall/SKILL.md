@@ -31,6 +31,8 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

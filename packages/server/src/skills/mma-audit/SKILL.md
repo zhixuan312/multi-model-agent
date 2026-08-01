@@ -35,6 +35,8 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

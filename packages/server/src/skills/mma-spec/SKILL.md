@@ -30,6 +30,8 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 
 `POST /task?cwd=<abs-path>`
 
+@include _shared/prefer-mcp.md
+
 @include _shared/auth.md
 
 ## Request body

@@ -13,6 +13,14 @@ Local HTTP service that fans out tool-using work to workers on different LLM pro
 
 **Core principle:** Pick the most specific `mma:*` skill that fits the task. Specificity reduces input — specialized skills know their route, schema, and defaults so you write less.
 
+**Transport: if the `mma_run` MCP tool is available in this session, dispatch through it rather
+than the curl calls these skills document.** The skills describe the HTTP route because it always
+works; MCP is better wherever it exists. On hosts that support MCP Apps (Claude Desktop) `mma_run`
+renders a live execution monitor — phase and elapsed time updating in place, with a Cancel button,
+at no extra model turn — which the curl route cannot produce, since the host never learns a task is
+running. It also avoids handling the bearer token in a shell. Same task types, same request body:
+it rides inside `request`. Fall back to curl only where MCP is genuinely absent.
+
 ## Skill map
 
 ```dot
