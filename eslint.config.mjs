@@ -12,6 +12,10 @@ export default tseslint.config(
         project: [
           './packages/core/tsconfig.json',
           './packages/server/tsconfig.json',
+          // The browser-side MCP App: excluded from the server project (different libs and
+          // module resolution, bundled by Vite), but still lintable — and a .ts file under
+          // packages/ that belongs to no project is an ESLint parsing ERROR, not a skip.
+          './packages/server/tsconfig.ui.json',
         ],
         tsconfigRootDir: import.meta.dirname,
       },

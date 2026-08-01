@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mma execution monitor</title>
+    <style>
+      /*
+       * Every custom property here carries a FALLBACK, because a host is not obliged to
+       * define any of them. Claude Desktop does not: referencing an undefined property with
+       * no fallback is invalid at computed-value time, and the text then falls back to
+       * initial black — invisible on a dark panel — in the default serif face. The App must
+       * be legible on a host that injects no theme at all, and adopt the host's theme when
+       * one is present.
+       *
+       * `color-scheme` + the `CanvasText`/`Canvas` system colours are what make the untheme
+       * case correct rather than merely visible: they follow the host's light/dark mode, so
+       * the fallback has proper contrast in BOTH, which no fixed hex value can do.
+       *
+       * A test scans this file for fallback-less references, so keep prose free of that
+       * literal form — an example written to explain the rule would trip it.
+       */
+      :root {
+        color-scheme: light dark;
+        /*
+         * Resolved ONCE here and consumed everywhere below, so there is a single place that
+         * decides what "readable" means. The default is the light-mode ink; the dark-mode
+         * override follows. Explicit values rather than a lone system colour: whether
+         * `CanvasText` resolves against the HOST's scheme or the iframe's own is not
+         * something the App can rely on, and getting it wrong is invisible text.
+         */
+        --mma-ink: #1f2328;
+        --mma-ink-dim: #57606a;
+        --mma-line: rgba(127, 127, 127, 0.4);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --mma-ink: #e6edf3;
+          --mma-ink-dim: #9198a1;
+        }
+      }
+
+      body {
+        margin: 0;
+        background: transparent;
+      }
+
+      #app {
+        color: var(--color-text-primary, var(--mma-ink));
+        font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        padding: 0.25rem 0;
+      }
+
+      #app h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+
+      #app p {
+        margin: 0.25rem 0;
+        color: var(--color-text-secondary, var(--mma-ink-dim));
+      }
+
+      #app pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0.5rem 0 0;
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+        font-size: 0.8125rem;
+      }
+
+      #app button {
+        margin-top: 0.75rem;
+        padding: 0.3125rem 0.75rem;
+        font: inherit;
+        color: var(--color-text-primary, var(--mma-ink));
+        background: var(--color-bg-secondary, transparent);
+        border: 1px solid var(--color-border, var(--mma-line));
+        border-radius: 0.375rem;
+        cursor: pointer;
+      }
+
+      #app button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script type="module" src="./entry.ts"></script>
+  </body>
+</html>

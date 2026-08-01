@@ -10,6 +10,9 @@ export default defineConfig({
     // (The old wall-clock baseline-vs-baseline harness was removed; it compared
     // cross-machine absolute timings and could not run deterministically.)
     exclude: ['**/.mma/**', '**/node_modules/**'],
+    // Builds dist/ui/execution.html once, in the main process, before any fork starts —
+    // the built-artifact proofs in tests/contract/mcp/ assert against those real bytes.
+    globalSetup: ['tests/setup/build-execution-artifact.global-setup.ts'],
     pool: 'forks',
     poolOptions: { forks: { maxForks: 2, minForks: 1 } },
     server: {

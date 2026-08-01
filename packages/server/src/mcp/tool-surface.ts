@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
+import { EXECUTION_RESOURCE_URI } from './execution-artifact.js';
 
 /*
  * SDK-PROTOCOL-RECHECK
@@ -30,24 +31,45 @@ import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
  */
 
 /**
- * The ONE capability declaration for this server.
+ * The two frozen capability literals this server can ever declare, plus the pure
+ * selector between them (below).
  *
- * Both the SDK `Server` constructor and the `server/discover` handler read this exact
- * binding. Two hand-maintained copies would drift, and a discover response that
- * disagrees with `initialize` is worse than having no discover at all.
+ * Both the SDK `Server` constructor and the `server/discover` handler read the SAME
+ * resolved binding (carried on `McpAdapterDeps.capabilities`, resolved once at daemon
+ * start in `http/server.ts`). Two hand-maintained copies would drift, and a discover
+ * response that disagrees with `initialize` is worse than having no discover at all.
  *
- * `extensions` is present and deliberately EMPTY. In particular it does not declare
- * `io.modelcontextprotocol/ui` (MCP Apps): an extension declaration is a promise to a
- * host, and a host seeing that key may preload UI resources this server cannot serve.
- * It is added in the same change that first serves a real `ui://` resource.
- *
- * There is likewise no `resources` capability, because no resource handler is
- * registered — `resources/list` and `resources/read` correctly answer method-not-found.
+ * This one declares `resources` and the `io.modelcontextprotocol/ui` extension — a
+ * promise to the host that this server can serve UI resources — selected ONLY once a
+ * real execution-app bundle backs it (see `execution-artifact.ts`).
  */
-export const MCP_CAPABILITIES = {
+export const MCP_CAPABILITIES_WITH_APP = {
+  tools: {},
+  resources: {},
+  extensions: { 'io.modelcontextprotocol/ui': {} },
+} as const;
+
+/**
+ * Byte-identical to the pre-Flow-2 value: `extensions` is present and deliberately
+ * EMPTY, and there is no `resources` capability, so `resources/list` / `resources/read`
+ * correctly answer method-not-found when no real `ui://` resource is available to serve.
+ */
+export const MCP_CAPABILITIES_TOOLS_ONLY = {
   tools: {},
   extensions: {},
 } as const;
+
+export type McpCapabilities = typeof MCP_CAPABILITIES_TOOLS_ONLY | typeof MCP_CAPABILITIES_WITH_APP;
+
+/**
+ * PURE selector between the two frozen capability literals. No I/O — the caller
+ * (`http/server.ts`) resolves `executionAppResourceAvailable` from
+ * `getExecutionArtifact().available` exactly once at daemon start and passes the
+ * result down as `McpAdapterDeps.capabilities`; `buildMcpServer` never recomputes it.
+ */
+export function resolveMcpCapabilities(executionAppResourceAvailable: boolean): McpCapabilities {
+  return executionAppResourceAvailable ? MCP_CAPABILITIES_WITH_APP : MCP_CAPABILITIES_TOOLS_ONLY;
+}
 
 /** The protocol version this server reports. See SDK-PROTOCOL-RECHECK above. */
 export const MCP_PROTOCOL_VERSION = '2025-11-25';
@@ -65,9 +87,21 @@ export const INLINE_AUTO_TYPES = new Set(['journal_recall', 'journal_record']);
  *  downgrading to a handle. Below typical MCP client tool timeouts. */
 export const INLINE_WAIT_CAP_MS = 55_000;
 
-/** Default + ceiling for mma_task_wait. */
+/**
+ * Default + ceiling for mma_task_wait — the SAME bound as `INLINE_WAIT_CAP_MS`, and for the
+ * same reason.
+ *
+ * The ceiling was 240s, four times the typical MCP client tool timeout. A long-poll cannot
+ * outlive the deadline the CLIENT enforces on the request carrying it: the host kills the
+ * JSON-RPC call and the caller sees `-32001 Request timed out` with no snapshot, no taskId
+ * context, and no indication the work is still running fine. Observed on Claude Desktop —
+ * the model read `capped at 240000` from this schema, asked for it, and got exactly that.
+ *
+ * Advertising a wait the transport cannot deliver invites the failure. Anything longer is
+ * expressed by CALLING AGAIN, which costs one cheap turn and always works.
+ */
 export const WAIT_DEFAULT_MS = 55_000;
-export const WAIT_CAP_MS = 240_000;
+export const WAIT_CAP_MS = 55_000;
 
 const requestJsonSchema = z.toJSONSchema(taskInputSchema) as Record<string, unknown>;
 delete requestJsonSchema.$schema; // rides inside a tool inputSchema — no standalone dialect header
@@ -76,6 +110,9 @@ export interface McpToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Host-facing metadata. Only `mma_run` carries `ui.resourceUri` — it is the sole
+   *  tool whose result is meant to be rendered by an MCP-App-capable host. */
+  _meta?: Record<string, unknown>;
 }
 
 export const MCP_TOOLS: McpToolDefinition[] = [
@@ -113,6 +150,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       required: ['cwd', 'request'],
       additionalProperties: false,
     },
+    _meta: { ui: { resourceUri: EXECUTION_RESOURCE_URI } },
   },
   {
     name: 'mma_task_get',
@@ -133,7 +171,9 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: 'mma_task_wait',
     description:
       'Block until an MMA task reaches a terminal state (or the timeout elapses), then '
-      + 'return the same payload as mma_task_get.',
+      + 'return the same payload as mma_task_get. A timeout is NOT an error and NOT a '
+      + 'failure of the task: it returns the current running snapshot, and the task keeps '
+      + 'going. To wait longer, call again with the same taskId.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -141,8 +181,15 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         timeoutMs: {
           type: 'integer',
           minimum: 1,
-          maximum: WAIT_CAP_MS,
-          description: `Max wait in milliseconds (default ${WAIT_DEFAULT_MS}, capped at ${WAIT_CAP_MS}).`,
+          // Deliberately NO `maximum`. The server clamps to WAIT_CAP_MS anyway
+          // (mcp-adapter.ts), so a ceiling here converts a request the server would happily
+          // satisfy into a hard -32602 validation error. Asking to wait "5 minutes" is a
+          // perfectly reasonable intent; the right answer is a 55s wait and a running
+          // snapshot, not a schema violation the model has to decode and retry.
+          description:
+            `Max wait in milliseconds (default ${WAIT_DEFAULT_MS}). Larger values are `
+            + `accepted and clamped to ${WAIT_CAP_MS}, which is the most a single MCP tool `
+            + `call can block before the client's own request deadline fires.`,
         },
       },
       required: ['taskId'],

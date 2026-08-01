@@ -1,0 +1,22 @@
+{
+  // Browser-side type context for the execution-monitor MCP App.
+  //
+  // The App is excluded from `tsconfig.json` on purpose: that project compiles Node/NodeNext
+  // server code under `rootDir: src` into `dist`, and the App is bundled by Vite instead
+  // (`vite.ui.config.ts`) with DOM libs and bundler resolution. Compiling it through the
+  // server project would emit stray JS into `dist` and fail on `document`/`window`.
+  //
+  // It still needs A project, though — ESLint's `parserOptions.project` covers
+  // `packages/**/*.ts`, and a file belonging to no project is a lint error, not a skipped
+  // file. Without this, the App would be the one piece of shipped production code with no
+  // type-aware linting at all.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src/ui/execution", "vite.ui.config.ts"]
+}

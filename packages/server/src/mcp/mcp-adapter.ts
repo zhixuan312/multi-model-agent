@@ -15,22 +15,35 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ErrorCode,
+  McpError,
+} from '@modelcontextprotocol/sdk/types.js';
 import { taskInputSchema, type TaskRegistry, type TaskEntry } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import {
   MCP_TOOLS,
-  MCP_CAPABILITIES,
   MCP_PROTOCOL_VERSION,
   INLINE_AUTO_TYPES,
   INLINE_WAIT_CAP_MS,
   WAIT_DEFAULT_MS,
   WAIT_CAP_MS,
   type DeliveryMode,
+  type McpCapabilities,
   DELIVERY_MODES,
 } from './tool-surface.js';
+import {
+  getExecutionArtifact,
+  EXECUTION_RESOURCE_URI,
+  EXECUTION_RESOURCE_MIME_TYPE,
+  RESOURCE_NOT_FOUND,
+} from './execution-artifact.js';
 
 /** `server/discover` request shape — hand-rolled because SDK 1.30.0 defines none.
  *  Params may be omitted entirely or carry unknown keys. */
@@ -44,6 +57,9 @@ export interface McpAdapterDeps {
   taskRegistry: TaskRegistry;
   store: ExecutionStore;
   serverVersion: string;
+  /** Resolved ONCE at daemon start (see `http/server.ts`); read here for both the
+   *  `Server` constructor and the `server/discover` handler so they cannot disagree. */
+  capabilities: McpCapabilities;
 }
 
 interface ToolResult {
@@ -191,7 +207,7 @@ function handleCancel(deps: McpAdapterDeps, args: Record<string, unknown>): Tool
  *  the protocol core is stateless; all durable state lives in the runtime. */
 export function buildMcpServer(deps: McpAdapterDeps): Server {
   const serverInfo = { name: 'multi-model-agent', version: deps.serverVersion };
-  const server = new Server(serverInfo, { capabilities: MCP_CAPABILITIES });
+  const server = new Server(serverInfo, { capabilities: deps.capabilities });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: MCP_TOOLS }));
 
@@ -204,13 +220,50 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
   // id — so it redundantly re-runs `initialize` on every call. That is precisely the
   // topology `server/discover` exists to serve.
   //
-  // Both this response and the constructor above read the same MCP_CAPABILITIES
+  // Both this response and the constructor above read the SAME deps.capabilities
   // binding, so discovery cannot drift from initialize.
   server.setRequestHandler(DiscoverRequestSchema, async () => ({
     serverInfo,
     protocolVersion: MCP_PROTOCOL_VERSION,
-    capabilities: MCP_CAPABILITIES,
+    capabilities: deps.capabilities,
   }));
+
+  // Resource handlers are registered ONLY when the resolved capabilities include
+  // `resources` — with no real execution-app bundle, no handler is registered at all,
+  // so the SDK's own method-not-found honestly reproduces the pre-Flow-2 behaviour
+  // (rather than a hand-rolled -32601 special case).
+  if ('resources' in deps.capabilities) {
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: [{
+          uri: EXECUTION_RESOURCE_URI,
+          name: 'MMA execution monitor',
+          description: 'Live view of a running MMA task: phase, elapsed time, cancel control.',
+          mimeType: EXECUTION_RESOURCE_MIME_TYPE,
+        }],
+      };
+    });
+
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+      let parsed: URL;
+      try {
+        parsed = new URL(uri);
+      } catch {
+        throw new McpError(ErrorCode.InvalidParams, 'resources/read: uri must be a well-formed ui:// URI');
+      }
+      if (parsed.protocol !== 'ui:' || !uri.startsWith('ui://')) {
+        throw new McpError(ErrorCode.InvalidParams, 'resources/read: uri must be a well-formed ui:// URI');
+      }
+      if (uri !== EXECUTION_RESOURCE_URI) {
+        throw new McpError(RESOURCE_NOT_FOUND, 'resources/read: no resource is served at this uri');
+      }
+      const artifact = getExecutionArtifact();
+      return {
+        contents: [{ uri, mimeType: EXECUTION_RESOURCE_MIME_TYPE, text: artifact.html }],
+      };
+    });
+  }
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
