@@ -44,7 +44,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist",
-    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && node scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
+    "build": "vite build --config vite.ui.config.ts && tsc && rm -rf dist/skills && cp -R src/skills dist/skills && node scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
     "postinstall": "node scripts/postinstall.js",
     "prepublishOnly": "pnpm run build"
   },
@@ -60,7 +60,10 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
     "@types/minimist": "^1.2.5",
-    "@types/proper-lockfile": "^4.1.4"
+    "@types/proper-lockfile": "^4.1.4",
+    "vite": "^7.3.5",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }
