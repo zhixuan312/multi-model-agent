@@ -225,13 +225,25 @@ async function parseSseJson(res: Response): Promise<unknown> {
   if (messageIndex !== -1) {
     for (const line of lines.slice(messageIndex + 1)) {
       if (!line.startsWith('data:')) break;
-      dataLines.push(line.slice('data:'.length).trim());
+      // Per the SSE specification, a field's value is the text after the colon with
+      // exactly ONE leading space removed — not a full trim, which would destroy
+      // significant whitespace inside the payload.
+      const value = line.slice('data:'.length);
+      dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
     }
   }
   if (dataLines.length === 0) {
     throw new Error('missing SSE data payload');
   }
-  return JSON.parse(dataLines.join(''));
+  // Join with '\n', per the SSE specification — NOT by concatenation.
+  //
+  // This matters and is easy to get backwards: a producer splits a payload across
+  // `data:` lines precisely BECAUSE the payload contains newlines (a pretty-printed
+  // JSON document, say), and the receiver reconstructs it by rejoining with '\n'.
+  // A producer never splits at an arbitrary byte offset mid-token, because that
+  // would be corrupted by the very join the spec mandates. Concatenating instead
+  // would silently mangle any payload whose own newlines are significant.
+  return JSON.parse(dataLines.join('\n'));
 }
 
 /**
