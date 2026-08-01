@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
-import { __setExecutionArtifactOverrideForTests } from '../../../packages/server/src/mcp/execution-artifact.js';
+import { __setExecutionArtifactOverrideForTests, getExecutionResourceUri } from '../../../packages/server/src/mcp/execution-artifact.js';
 
 const FAKE_HTML = '<html><body>fake execution monitor</body></html>';
 
@@ -23,9 +23,10 @@ describe('contract: MCP execution resource', () => {
     try {
       const listed = await client.listResources();
       expect(listed.resources).toEqual([{
-        uri: 'ui://mma/execution.html', name: expect.any(String), description: expect.any(String),
+        uri: getExecutionResourceUri(), name: expect.any(String), description: expect.any(String),
         mimeType: 'text/html;profile=mcp-app',
       }]);
+      // The bare URI must still resolve: a host that cached an older fingerprint asks for it.
       const read = await client.readResource({ uri: 'ui://mma/execution.html' });
       expect(read.contents).toEqual([{ uri: 'ui://mma/execution.html', mimeType: 'text/html;profile=mcp-app', text: FAKE_HTML }]);
     } finally { await client.close(); await h.close(); }
@@ -73,7 +74,9 @@ describe('contract: MCP execution resource', () => {
     try {
       const { tools } = await client.listTools();
       const run = tools.find((t) => t.name === 'mma_run')!;
-      expect(run._meta).toEqual({ ui: { resourceUri: 'ui://mma/execution.html' } });
+      // Advertised WITH the build fingerprint, so a host cache invalidates when the bundle
+      // changes. See resource-cache-busting.test.ts for why.
+      expect(run._meta).toEqual({ ui: { resourceUri: getExecutionResourceUri() } });
       for (const t of tools.filter((t) => t.name !== 'mma_run')) {
         expect((t._meta as { ui?: unknown } | undefined)?.ui).toBeUndefined();
       }

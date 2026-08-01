@@ -23,6 +23,7 @@ import {
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import { attachHeadlineProducer } from './headline-from-events.js';
 import type { CallerContext } from './caller-context.js';
 import { ExecutionScope } from './execution-scope.js';
 import type { ExecutionStore } from './execution-store.js';
@@ -69,7 +70,20 @@ export class ExecutionRuntime {
    *  decides between cancelled and a completed/failed that won the race. */
   private readonly liveScopes = new Map<string, ExecutionScope>();
 
-  constructor(private readonly deps: ExecutionRuntimeDeps) {}
+  /** Detach the running-headline producer. Held so tests can subscribe/unsubscribe cleanly. */
+  private readonly detachHeadlines: () => void;
+
+  constructor(private readonly deps: ExecutionRuntimeDeps) {
+    // Populate `runningHeadline` from provider activity. Until this existed the field was
+    // readable on both wires and written by nothing, so every progress view showed a phase
+    // name and a clock and nothing about what the worker was actually doing.
+    this.detachHeadlines = attachHeadlineProducer(deps.bus, deps.taskRegistry);
+  }
+
+  /** Release the bus subscription. */
+  close(): void {
+    this.detachHeadlines();
+  }
 
   /**
    * Request cooperative cancellation. 202-semantics: 'requested' means the
