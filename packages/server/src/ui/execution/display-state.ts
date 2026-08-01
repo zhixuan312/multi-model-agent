@@ -11,6 +11,8 @@
 
 export interface RunningDisplayState {
   mode: 'running';
+  /** Short task id, surfaced so a panel can be correlated with the daemon log and store. */
+  taskRef?: string;
   phase: string;
   elapsedMs: number;
   phaseElapsedMs: number;
@@ -20,6 +22,7 @@ export interface RunningDisplayState {
 
 export interface CancellingDisplayState {
   mode: 'cancelling';
+  taskRef?: string;
   phase: string;
   elapsedMs: number;
   phaseElapsedMs: number;
@@ -91,11 +94,14 @@ function deriveRunningOrCancelling(
   const elapsedMs = typeof payload.elapsedMs === 'number' ? payload.elapsedMs : 0;
   const phaseElapsedMs = typeof payload.phaseElapsedMs === 'number' ? payload.phaseElapsedMs : 0;
 
+  const taskRef = typeof payload.taskId === 'string' ? payload.taskId.slice(0, 8) : undefined;
+
   if (payload.cancellationRequested === true) {
-    return { mode: 'cancelling', phase, elapsedMs, phaseElapsedMs };
+    return { mode: 'cancelling', phase, elapsedMs, phaseElapsedMs, ...(taskRef ? { taskRef } : {}) };
   }
 
   const state: RunningDisplayState = { mode: 'running', phase, elapsedMs, phaseElapsedMs };
+  if (taskRef) state.taskRef = taskRef;
   if (typeof payload.runningHeadline === 'string') {
     state.runningHeadline = payload.runningHeadline;
   }

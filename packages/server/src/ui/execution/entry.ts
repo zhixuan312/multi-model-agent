@@ -204,6 +204,13 @@ function renderDisplay(display: DisplayState): string {
       bits.push(`<p>Tasks: ${display.totalTasks}</p>`);
     }
   }
+  // The task reference makes a panel correlatable with the daemon log and the execution
+  // store. It also disambiguates two panels on screen: same ref means one task the host
+  // rendered twice, different refs mean two dispatches — a distinction that otherwise costs
+  // a database query to settle.
+  if (display.taskRef) {
+    bits.push(`<p class="meta">task ${escapeHtml(display.taskRef)}</p>`);
+  }
   return bits.join('');
 }
 
