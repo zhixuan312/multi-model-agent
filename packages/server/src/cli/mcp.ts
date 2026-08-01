@@ -13,8 +13,10 @@
  *      the bearer token off-box.
  *   2. Run a `/health` preflight against the pinned address.
  *   3. Resolve a bearer token (env → token file → default token path).
- *   4. Read stdio JSON-RPC frames one at a time; each valid frame becomes
- *      exactly one authenticated POST to the pinned `/mcp` endpoint. The
+ *   4. Read stdio JSON-RPC frames; each valid frame becomes exactly one
+ *      authenticated POST to the pinned `/mcp` endpoint, dispatched
+ *      CONCURRENTLY so a long-blocking call (mma_task_wait) cannot starve
+ *      later frames such as the execution App's polls. The
  *      endpoint always replies as SSE (`event: message\ndata: {json}\n\n`);
  *      this module unwraps that to a single bare JSON line on stdout.
  *
@@ -79,8 +81,9 @@ export interface McpBridgeDeps {
 type JsonRpcId = string | number | null;
 
 /** Upper bound on ONE forwarded frame — the POST plus reading its SSE body. Frames are
- *  processed sequentially, so an unbounded wait on one frame stalls every later frame.
- *  Generous enough for a slow local daemon while still guaranteeing progress. */
+ *  forwarded concurrently, so this bounds each one independently rather than protecting
+ *  later frames from an earlier stall. Generous enough for a slow local daemon while still
+ *  guaranteeing every frame terminates. */
 const FRAME_TIMEOUT_MS = 120_000;
 
 /** Cap on stdin lines held while a frame is in flight. Unbounded queuing plus a stalled
@@ -366,32 +369,26 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
   }
 
   // ── 4. Process stdin frames — each is exactly one independent POST ───
-  for await (const rawLine of deps.stdin) {
-    const line = rawLine.trim();
-    if (!line) continue;
+  //
+  // Frames are dispatched CONCURRENTLY, not one at a time. JSON-RPC multiplexes on `id`, so
+  // a response may arrive in any order, and the host correlates it — nothing here needs to
+  // preserve arrival order.
+  //
+  // Serializing them was a real, user-visible bug rather than a missed optimisation. A single
+  // `mma_task_wait` legitimately blocks for up to 55s server-side; with a sequential loop it
+  // also blocked every LATER frame, including the execution App's own `mma_task_get` polls.
+  // The App's per-poll timeout then fired and it displayed "update failed" while the daemon
+  // was perfectly healthy — the long-poll starved the very monitor that exists to show
+  // progress during long polls. Observed on Claude Desktop.
+  const inFlight = new Set<Promise<void>>();
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      writeProtocol(errorFrame(null, -32700, 'Parse error') + '\n');
-      continue;
-    }
+  /** Bound concurrent forwards so a pathological client cannot open unbounded sockets. */
+  const MAX_IN_FLIGHT = 32;
 
-    if (!isJsonRpcObject(parsed)) {
-      writeProtocol(errorFrame(null, -32600, 'Invalid Request') + '\n');
-      continue;
-    }
-
-    const frame = parsed;
-    const hasId = Object.prototype.hasOwnProperty.call(frame, 'id');
-    const id: JsonRpcId = hasId ? (frame['id'] as JsonRpcId) : null;
-
-    // Bound every forwarded frame. Frames are processed sequentially, so a daemon that
-    // accepts a request and then never completes the response would block this single
-    // await forever — stalling every LATER stdin frame too. That is precisely the "one
-    // bad frame kills a live session" outcome this bridge is built to avoid, so the
-    // timeout covers both the fetch AND the response-body read below.
+  async function forwardFrame(frame: Record<string, unknown>, id: JsonRpcId, hasId: boolean): Promise<void> {
+    // Bound every forwarded frame: a daemon that accepts a request and then never completes
+    // the response would otherwise leave this promise pending forever. The timeout covers
+    // both the fetch AND the response-body read.
     const frameBudgetMs = deps.frameTimeoutMs ?? FRAME_TIMEOUT_MS;
     const frameTimeout = new AbortController();
     const frameTimer = setTimeout(() => frameTimeout.abort(), frameBudgetMs);
@@ -415,7 +412,7 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
         if (hasId) {
           writeProtocol(errorFrame(id, -32603, `The daemon did not respond within ${frameBudgetMs}ms.`) + '\n');
         }
-        continue;
+        return;
       }
       const msg = err instanceof Error ? err.message : String(err);
       stderr(
@@ -433,7 +430,7 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
           ) + '\n',
         );
       }
-      continue;
+      return;
     }
 
     if (!res.ok) {
@@ -443,7 +440,7 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
           errorFrame(id, -32603, `Upstream request failed`, { httpStatus: res.status }) + '\n',
         );
       }
-      continue;
+      return;
     }
 
     // The timer is still armed here on purpose: reading the SSE body is part of the
@@ -461,7 +458,7 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
           timedOut ? `The daemon did not finish the response within ${frameBudgetMs}ms.` : 'Malformed upstream response',
         ) + '\n');
       }
-      continue;
+      return;
     }
     clearTimeout(frameTimer);
 
@@ -471,6 +468,46 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
       writeProtocol(JSON.stringify(payload) + '\n');
     }
   }
+
+  for await (const rawLine of deps.stdin) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      writeProtocol(errorFrame(null, -32700, 'Parse error') + '\n');
+      continue;
+    }
+
+    if (!isJsonRpcObject(parsed)) {
+      writeProtocol(errorFrame(null, -32600, 'Invalid Request') + '\n');
+      continue;
+    }
+
+    const frame = parsed;
+    const hasId = Object.prototype.hasOwnProperty.call(frame, 'id');
+    const id: JsonRpcId = hasId ? (frame['id'] as JsonRpcId) : null;
+
+    // Dispatch without awaiting, so a slow frame never delays the next one. Each forward
+    // already bounds itself and converts its own failures into a JSON-RPC error frame, so
+    // nothing here can reject — the catch is belt-and-braces against a future edit.
+    const task = forwardFrame(frame, id, hasId).catch(() => undefined);
+    inFlight.add(task);
+    void task.finally(() => inFlight.delete(task));
+
+    // Backpressure: past the cap, wait for any one forward to settle before reading more.
+    // Reading stdin unboundedly while upstream stalls is how a fast client turns into
+    // unbounded memory and socket use.
+    if (inFlight.size >= MAX_IN_FLIGHT) {
+      await Promise.race(inFlight);
+    }
+  }
+
+  // stdin closed: let every forward already accepted finish writing its response before the
+  // process exits, or a client that closes the pipe promptly loses answers it is owed.
+  await Promise.allSettled(inFlight);
 
   return 0;
 }

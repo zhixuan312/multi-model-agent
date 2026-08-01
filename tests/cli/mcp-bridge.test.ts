@@ -81,23 +81,30 @@ describe('mma mcp bridge', () => {
       ]),
       stdout: (s) => { out.push(s); return true; }, stderr: (s) => { err.push(s); return true; },
       resolveHost: vi.fn(), readFile: () => 'ignored',
-      fetch: (async (url: string) => {
+      // Keyed by frame ID, not by call order: frames are forwarded concurrently, so a
+      // counter would hand each failure to whichever frame happened to win the race.
+      fetch: (async (url: string, init?: RequestInit) => {
         if (url.endsWith('/health')) return new Response('', { status: 200 });
         post += 1;
-        if (post === 1) return new Response('upstream down', { status: 503 });
-        if (post === 2) return new Response('broken SSE', { status: 200 });
-        if (post === 3) throw new Error('daemon died: SENTINEL_TOKEN');
+        const id = (JSON.parse(String(init?.body)) as { id?: number }).id;
+        if (id === 3) return new Response('upstream down', { status: 503 });
+        if (id === 4) return new Response('broken SSE', { status: 200 });
+        if (id === 5) throw new Error('daemon died: SENTINEL_TOKEN');
         return new Response('event: message\ndata: {"jsonrpc":"2.0","result":{}}\n\n', { status: 200 });
       }) as typeof fetch,
     });
     expect(code).toBe(0);
-    expect(out.map((s) => JSON.parse(s))).toEqual([
-      expect.objectContaining({ id: null, error: expect.objectContaining({ code: -32700 }) }),
-      expect.objectContaining({ id: null, error: expect.objectContaining({ code: -32600 }) }),
-      expect.objectContaining({ id: 3, error: expect.objectContaining({ code: -32603, data: { httpStatus: 503 } }) }),
-      expect.objectContaining({ id: 4, error: expect.objectContaining({ code: -32603 }) }),
-      expect.objectContaining({ id: 5, error: expect.objectContaining({ code: -32603 }) }),
-    ]);
+    // Compared as a SET. JSON-RPC correlates responses by `id`, so the bridge is free to
+    // answer out of order — and now does, deliberately, so a slow frame cannot starve a fast
+    // one. Asserting a fixed sequence here would be over-specifying the protocol.
+    const byId = new Map(out.map((s) => { const f = JSON.parse(s) as { id: number | null }; return [String(f.id ?? `null-${out.indexOf(s)}`), f]; }));
+    expect(out).toHaveLength(5);
+    expect(out.map((s) => (JSON.parse(s) as { id: number | null }).id).sort()).toEqual([3, 4, 5, null, null].sort());
+    expect(byId.get('3')).toMatchObject({ error: { code: -32603, data: { httpStatus: 503 } } });
+    expect(byId.get('4')).toMatchObject({ error: { code: -32603 } });
+    expect(byId.get('5')).toMatchObject({ error: { code: -32603 } });
+    const nullFrames = out.map((s) => JSON.parse(s) as { id: null; error: { code: number } }).filter((f) => f.id === null);
+    expect(nullFrames.map((f) => f.error.code).sort()).toEqual([-32700, -32600].sort());
     expect(err.join('')).toContain('mma serve');
     expect(`${out.join('')}\n${err.join('')}`).not.toContain('SENTINEL_TOKEN');
   });
