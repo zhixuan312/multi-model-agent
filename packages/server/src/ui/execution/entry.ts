@@ -127,59 +127,67 @@ function formatUsd(n: number): string {
   return `$${abs.toFixed(2)}`;
 }
 
-/** Longest result preview the widget will show. See `renderDisplay` for why there is a cap. */
-const SUMMARY_PREVIEW_CHARS = 180;
+/** Compact token count: 2864079 -> "2.9M", 37007 -> "37K". */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
 
-/**
- * Reduce a structured report to one short line of plain text.
- *
- * The full result is ALREADY delivered to the model as the tool result — the widget showing it
- * again is pure duplication, and these results run to thousands of characters, so it turned the
- * monitor into a wall of raw JSON that overflowed the panel. A monitor should say what happened
- * and what it cost; the answer itself belongs in the conversation.
- */
-function summaryPreview(summary: unknown): string | null {
-  let text: string | null = null;
-  if (typeof summary === 'string') text = summary;
-  else if (summary && typeof summary === 'object') {
-    const record = summary as Record<string, unknown>;
-    // Prefer the fields our reports actually carry over a JSON dump of the whole object.
-    for (const key of ['answer', 'summary', 'finding', 'result']) {
-      if (typeof record[key] === 'string') { text = record[key] as string; break; }
-    }
-  }
-  if (text === null) return null;
-  const collapsed = text.replace(/\s+/g, ' ').trim();
-  if (!collapsed) return null;
-  return collapsed.length > SUMMARY_PREVIEW_CHARS
-    ? `${collapsed.slice(0, SUMMARY_PREVIEW_CHARS).trimEnd()}…`
-    : collapsed;
+/** One label/value row. Rows are independently optional, so a missing field leaves no gap. */
+function row(label: string, value: string): string {
+  return `<div class="row"><span class="k">${escapeHtml(label)}</span><span class="v">${escapeHtml(value)}</span></div>`;
 }
 
 function renderDisplay(display: DisplayState): string {
   if (display.mode === 'terminal') {
+    // Stats only — no result text. The conversation already carries the full answer directly
+    // below this panel; a truncated copy is redundant and reframes the monitor as a result
+    // card, which is not what it is for. This answers "was that worth it?".
     const bits = [`<h2>${escapeHtml(display.status)}</h2>`];
+    const rows: string[] = [];
 
-    // One compact meta line rather than a stack of labelled rows.
-    const meta: string[] = [];
+    if (typeof display.totalDurationMs === 'number') {
+      rows.push(row('Duration', formatDuration(display.totalDurationMs)));
+    }
     if (typeof display.totalCostUsd === 'number') {
-      meta.push(`${formatUsd(display.totalCostUsd)} total`);
+      rows.push(row('Cost', formatUsd(display.totalCostUsd)));
     }
     if (typeof display.savedVsMainCostUsd === 'number') {
-      // A negative "saved" is a cost, and printing it as `Saved: $-0.05` makes the reader do
-      // the sign arithmetic. Say which it was.
+      // Shown signed and honestly. A negative "saved" is a run that cost MORE than doing the
+      // work on the main model — the one number that tells you delegation is not paying off,
+      // so hiding it would make this panel marketing rather than instrumentation.
       const v = display.savedVsMainCostUsd;
-      meta.push(v < 0 ? `${formatUsd(v)} over main` : `${formatUsd(v)} saved vs main`);
-    }
-    if (meta.length > 0) {
-      bits.push(`<p class="meta">${escapeHtml(meta.join(' · '))}</p>`);
+      rows.push(row(v < 0 ? 'Over main' : 'Saved vs main', formatUsd(v)));
     }
 
-    const preview = 'summary' in display ? summaryPreview(display.summary) : null;
-    if (preview) {
-      bits.push(`<p class="preview">${escapeHtml(preview)}</p>`);
-      bits.push('<p class="meta">Full result is in the conversation.</p>');
+    const stagePart = (name: string, s: { durationMs?: number; costUsd?: number } | undefined) => {
+      if (!s) return;
+      const parts: string[] = [];
+      if (typeof s.costUsd === 'number') parts.push(formatUsd(s.costUsd));
+      if (typeof s.durationMs === 'number') parts.push(formatDuration(s.durationMs));
+      if (parts.length > 0) rows.push(row(name, parts.join(' · ')));
+    };
+    // The split is the actionable part: a run where the REVIEWER burned most of the budget is
+    // a tuning signal, and a single total hides it completely.
+    stagePart('Implementer', display.implementer);
+    stagePart('Reviewer', display.reviewer);
+
+    if (typeof display.tokensIn === 'number' || typeof display.tokensOut === 'number') {
+      const parts: string[] = [];
+      if (typeof display.tokensIn === 'number') parts.push(`${formatTokens(display.tokensIn)} in`);
+      if (typeof display.tokensOut === 'number') parts.push(`${formatTokens(display.tokensOut)} out`);
+      // Cache is named rather than folded into the input total: on a real run 2.9M of 3.1M
+      // input-side tokens were cache reads, so a combined figure reads as enormous usage when
+      // it is mostly the cheap path.
+      if (typeof display.tokensCached === 'number') parts.push(`${formatTokens(display.tokensCached)} cached`);
+      rows.push(row('Tokens', parts.join(' · ')));
     }
+    if (typeof display.filesChanged === 'number') {
+      rows.push(row('Files changed', String(display.filesChanged)));
+    }
+
+    if (rows.length > 0) bits.push(`<div class="stats">${rows.join('')}</div>`);
     return bits.join('');
   }
 

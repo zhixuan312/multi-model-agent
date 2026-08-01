@@ -187,7 +187,7 @@ describe('contract: execution App bootstrap wiring', () => {
  * the monitor into a wall of raw JSON overflowing its container. These tests pin the terminal
  * view to: what happened, what it cost, and a short preview.
  */
-describe('contract: terminal view stays compact', () => {
+describe('contract: terminal view reports run stats, not results', () => {
   beforeEach(() => { document.body.innerHTML = '<main id="app"></main>'; vi.resetModules(); });
 
   async function renderTerminal(envelope: Record<string, unknown>) {
@@ -199,50 +199,77 @@ describe('contract: terminal view stays compact', () => {
     return document.body.textContent ?? '';
   }
 
-  it('never dumps the full result, however long it is', async () => {
-    const answer = 'X'.repeat(4000);
-    const text = await renderTerminal({
-      task: { taskId: 't1', status: 'done' },
-      metrics: { totalCostUsd: 1.038244, savedVsMainCostUsd: -0.046495574999999995 },
-      output: { summary: { answer } },
-    });
-    expect(text).not.toContain('X'.repeat(400));
-    expect(text.length, 'the whole panel must stay short').toBeLessThan(600);
-    expect(text).toMatch(/…/); // truncated, and visibly so
-    expect(text).toMatch(/Full result is in the conversation/);
+  /** Shaped from a real terminal envelope pulled out of the execution store. */
+  const realish = {
+    task: { taskId: 't1', status: 'done' },
+    metrics: {
+      totalDurationMs: 505782,
+      totalCostUsd: 2.08677645,
+      savedVsMainCostUsd: -0.08452670000000007,
+      implementer: { durationMs: 281986, costUsd: 1.49031 },
+      reviewer: { durationMs: 223758, costUsd: 0.59646645 },
+      totalUsage: { inputTokens: 229045, outputTokens: 37007, cachedReadTokens: 2864079, cachedNonReadTokens: 63405 },
+    },
+    output: { summary: { answer: 'A'.repeat(4000) }, filesChanged: ['a.ts', 'b.ts'] },
+  };
+
+  it('shows no result text at all, however long the answer', async () => {
+    const text = await renderTerminal(realish);
+    // The conversation already carries the full answer directly below this panel. A truncated
+    // copy is redundant AND reframes the monitor as a result card, which is not its job.
+    expect(text).not.toContain('AAAA');
+    expect(text).not.toMatch(/Full result/);
   });
 
-  it('never renders the raw JSON envelope as the summary', async () => {
+  it('reports duration, cost and the per-stage split', async () => {
+    const text = await renderTerminal(realish);
+    expect(text).toContain('8m 25s');       // total duration
+    expect(text).toContain('$2.09');        // total cost
+    expect(text).toContain('Implementer');  // the split is the actionable part: a run where
+    expect(text).toContain('Reviewer');     // the reviewer burns the budget is a tuning signal
+    expect(text).toContain('$1.49');
+    expect(text).toContain('$0.60');
+  });
+
+  it('states honestly when a run cost MORE than doing it on main', async () => {
+    const text = await renderTerminal(realish);
+    // Hiding a negative saving would make this panel marketing rather than instrumentation.
+    expect(text).toContain('Over main');
+    expect(text).toContain('$0.08');
+    expect(text).not.toMatch(/\$-/);
+  });
+
+  it('names cached tokens separately instead of folding them into the input total', async () => {
+    const text = await renderTerminal(realish);
+    // 2.9M of 3.1M input-side tokens were cache reads. A combined figure reads as enormous
+    // usage when it is mostly the cheap path.
+    expect(text).toContain('229K in');
+    expect(text).toContain('37K out');
+    expect(text).toContain('2.9M cached');
+  });
+
+  it('reports files changed when the route wrote any', async () => {
+    expect(await renderTerminal(realish)).toContain('Files changed');
+  });
+
+  it('renders a bare error envelope without empty rows or placeholders', async () => {
     const text = await renderTerminal({
-      task: { taskId: 't1', status: 'done' },
-      output: { summary: { answer: 'The runtime cancels cooperatively.', confidence: 'high' } },
+      task: { taskId: 't1', status: 'failed' },
+      metrics: { totalDurationMs: 0, totalCostUsd: 0, implementer: null, reviewer: null, totalUsage: null, savedVsMainCostUsd: null },
+      output: { summary: null, filesChanged: [] },
     });
-    expect(text).toContain('The runtime cancels cooperatively.');
-    expect(text).not.toContain('{"answer"');
-    expect(text).not.toContain('confidence');
+    expect(text).toContain('failed');
+    expect(text).not.toContain('Implementer');
+    expect(text).not.toContain('Tokens');
+    expect(text).not.toContain('Files changed');
+    expect(text).not.toMatch(/undefined|NaN|—/);
   });
 
   it('formats money for reading, not raw floats', async () => {
     const text = await renderTerminal({
       task: { taskId: 't1', status: 'done' },
-      metrics: { totalCostUsd: 1.038244, savedVsMainCostUsd: -0.046495574999999995 },
-      output: { summary: 'ok' },
-    });
-    expect(text).toContain('$1.04');
-    // A negative "saved" is a cost. Say which, rather than printing a minus sign and making
-    // the reader do the sign arithmetic.
-    expect(text).toContain('over main');
-    expect(text).not.toMatch(/0\.0464955/);
-    expect(text).not.toMatch(/\$-/);
-  });
-
-  it('keeps sub-cent amounts meaningful instead of rounding them to zero', async () => {
-    const text = await renderTerminal({
-      task: { taskId: 't1', status: 'done' },
       metrics: { totalCostUsd: 0.0021 },
-      output: { summary: 'ok' },
     });
-    expect(text).toContain('$0.0021');
-    expect(text).not.toContain('$0.00 ');
+    expect(text).toContain('$0.0021'); // sub-cent amounts stay meaningful
   });
 });

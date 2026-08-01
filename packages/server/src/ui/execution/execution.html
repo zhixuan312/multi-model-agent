@@ -51,7 +51,9 @@
         font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
         font-size: 0.9375rem;
         line-height: 1.5;
-        padding: 0.25rem 0;
+        /* The HOST draws the panel border; the inset is ours to supply. Without horizontal
+           padding the text sits flush against that border, which is what it did. */
+        padding: 0.625rem 0.875rem 0.75rem;
       }
 
       #app h2 {
@@ -70,10 +72,30 @@
        * (a long path, a minified blob) has no spaces to wrap on and would still push the
        * panel wide. The widget must never be the reason the conversation scrolls sideways.
        */
-      #app .preview {
-        margin: 0.5rem 0 0.25rem;
+      /* Label/value rows. `space-between` keeps values aligned to the right edge without a
+         table, and `gap` guarantees the two never touch when a value is long. */
+      #app .stats {
+        margin-top: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+      }
+
+      #app .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        font-size: 0.875rem;
+      }
+
+      #app .row .k {
+        color: var(--color-text-secondary, var(--mma-ink-dim));
+        white-space: nowrap;
+      }
+
+      #app .row .v {
+        text-align: right;
         overflow-wrap: anywhere;
-        color: var(--color-text-primary, var(--mma-ink));
       }
 
       #app .meta {
