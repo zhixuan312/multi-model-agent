@@ -28,12 +28,30 @@ export interface CancellingDisplayState {
   phaseElapsedMs: number;
 }
 
+/**
+ * What a finished run cost. Deliberately NO result text: the conversation already carries the
+ * full answer immediately below this panel, so repeating a truncated copy is both redundant and
+ * misleading about the panel's job — which is to answer "was that worth it?", not "what did it
+ * say?". Every field is independently optional; error envelopes null most of them out.
+ */
 export interface TerminalDisplayState {
   mode: 'terminal';
   status: string;
+  totalDurationMs?: number;
   totalCostUsd?: number;
   savedVsMainCostUsd?: number;
-  summary?: unknown;
+  implementer?: StageStat;
+  reviewer?: StageStat;
+  /** Input-side tokens split so cache reads are never silently folded into a headline total. */
+  tokensIn?: number;
+  tokensCached?: number;
+  tokensOut?: number;
+  filesChanged?: number;
+}
+
+export interface StageStat {
+  durationMs?: number;
+  costUsd?: number;
 }
 
 export type DisplayState = RunningDisplayState | CancellingDisplayState | TerminalDisplayState;
@@ -49,10 +67,24 @@ interface RunningSnapshotLike {
   cancellationRequested?: unknown;
 }
 
+interface StageLike { durationMs?: unknown; costUsd?: unknown }
+
 interface TerminalEnvelopeLike {
   task?: { taskId?: unknown; status?: unknown };
-  metrics?: { totalCostUsd?: unknown; savedVsMainCostUsd?: unknown };
-  output?: { summary?: unknown };
+  metrics?: {
+    totalDurationMs?: unknown;
+    totalCostUsd?: unknown;
+    savedVsMainCostUsd?: unknown;
+    implementer?: StageLike | null;
+    reviewer?: StageLike | null;
+    totalUsage?: {
+      inputTokens?: unknown;
+      outputTokens?: unknown;
+      cachedReadTokens?: unknown;
+      cachedNonReadTokens?: unknown;
+    } | null;
+  };
+  output?: { summary?: unknown; filesChanged?: unknown };
 }
 
 /**
@@ -70,19 +102,47 @@ export function isTerminalPayload(payload: unknown): payload is TerminalEnvelope
   );
 }
 
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function stage(raw: StageLike | null | undefined): StageStat | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const durationMs = num(raw.durationMs);
+  const costUsd = num(raw.costUsd);
+  if (durationMs === undefined && costUsd === undefined) return undefined;
+  return { ...(durationMs !== undefined && { durationMs }), ...(costUsd !== undefined && { costUsd }) };
+}
+
 function deriveTerminal(payload: TerminalEnvelopeLike): TerminalDisplayState {
   const state: TerminalDisplayState = {
     mode: 'terminal',
     status: String(payload.task?.status ?? ''),
   };
-  if (payload.metrics && typeof payload.metrics.totalCostUsd === 'number') {
-    state.totalCostUsd = payload.metrics.totalCostUsd;
+  const m = payload.metrics;
+  if (m) {
+    const assign = <K extends keyof TerminalDisplayState>(key: K, value: TerminalDisplayState[K]) => {
+      if (value !== undefined) state[key] = value;
+    };
+    assign('totalDurationMs', num(m.totalDurationMs));
+    assign('totalCostUsd', num(m.totalCostUsd));
+    assign('savedVsMainCostUsd', num(m.savedVsMainCostUsd));
+    assign('implementer', stage(m.implementer));
+    assign('reviewer', stage(m.reviewer));
+
+    const u = m.totalUsage;
+    if (u) {
+      // Cache reads are reported separately from fresh input on purpose. A single "3.2M
+      // tokens" headline would be dominated by cache — 2.86M of 3.09M on a real run — and
+      // would read as enormous usage when it is mostly the cheap path.
+      assign('tokensIn', num(u.inputTokens));
+      assign('tokensOut', num(u.outputTokens));
+      const cached = (num(u.cachedReadTokens) ?? 0) + (num(u.cachedNonReadTokens) ?? 0);
+      if (cached > 0) state.tokensCached = cached;
+    }
   }
-  if (payload.metrics && typeof payload.metrics.savedVsMainCostUsd === 'number') {
-    state.savedVsMainCostUsd = payload.metrics.savedVsMainCostUsd;
-  }
-  if (payload.output && 'summary' in payload.output) {
-    state.summary = payload.output.summary;
+  if (Array.isArray(payload.output?.filesChanged) && payload.output.filesChanged.length > 0) {
+    state.filesChanged = payload.output.filesChanged.length;
   }
   return state;
 }

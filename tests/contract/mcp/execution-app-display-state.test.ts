@@ -22,8 +22,12 @@ describe('contract: execution App display-state derivation (pure)', () => {
     expect(state.mode).toBe('cancelling');
   });
 
-  it('renders task.status, both cost fields, and output.summary for a terminal envelope', () => {
-    expect(deriveDisplayState(terminal)).toEqual({ mode: 'terminal', status: 'done', totalCostUsd: 1.23, savedVsMainCostUsd: 4.56, summary: { ok: true } });
+  it('derives run STATS from a terminal envelope, and never the result text', () => {
+    // The conversation carries the full answer directly below the panel, so `output.summary`
+    // is deliberately not part of the display state at all.
+    const state = deriveDisplayState(terminal) as Record<string, unknown>;
+    expect(state).toEqual({ mode: 'terminal', status: 'done', totalCostUsd: 1.23, savedVsMainCostUsd: 4.56 });
+    expect(state).not.toHaveProperty('summary');
   });
 });
 /**
