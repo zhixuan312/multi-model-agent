@@ -26,6 +26,19 @@ if (!existsSync(artifactPath)) {
 }
 
 const html = readFileSync(artifactPath, 'utf8');
+
+// Match the runtime loader's own availability rule (`execution-artifact.ts` treats empty
+// content as unavailable). If the guard were more permissive than the loader, an empty
+// artifact — what a truncated or interrupted build leaves behind — would satisfy the guard,
+// publish, and then serve the placeholder anyway: the failure this script exists to prevent,
+// reached by passing it.
+if (html.length === 0) {
+  process.stderr.write(
+    `assert-execution-artifact-built: ${artifactPath} is empty. Run the package build before publishing.\n`
+  );
+  process.exit(1);
+}
+
 if (html.startsWith(PLACEHOLDER_MARKER)) {
   process.stderr.write(
     `assert-execution-artifact-built: ${artifactPath} is still the unbuilt placeholder. Run the package build before publishing.\n`

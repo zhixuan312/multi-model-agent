@@ -40,6 +40,19 @@ describe('contract: publication guard (assert-execution-artifact-built.mjs)', ()
     expect(stderr.toLowerCase()).toContain('placeholder');
   });
 
+  /**
+   * The guard must agree with the RUNTIME LOADER about what "built" means, or it protects
+   * the wrong thing. `execution-artifact.ts` treats empty content as unavailable and serves
+   * the placeholder, so an empty artifact that satisfies the guard would publish and then
+   * silently degrade at runtime — the exact outcome the guard exists to prevent, reached by
+   * passing it. A truncated or interrupted build produces precisely this file.
+   */
+  it('exits non-zero for an empty artifact, matching the loader treating empty as unavailable', () => {
+    const { status, stderr } = runGuardAgainst('');
+    expect(status).not.toBe(0);
+    expect(stderr.toLowerCase()).toMatch(/empty|placeholder|missing/);
+  });
+
   it('exits zero for a real, non-placeholder artifact', () => {
     const { status } = runGuardAgainst('<html><body>real bundle</body></html>');
     expect(status).toBe(0);

@@ -280,13 +280,17 @@ function bootstrap(): void {
 
   function handleIncomingResult(raw: unknown): void {
     if (!initiated) {
-      initiated = true;
       const result = parseSnapshot(raw);
       if (!result) {
+        // Do NOT latch `initiated` here. This branch is the only one that extracts the
+        // taskId and starts the poll loop; latching on a payload we failed to parse would
+        // route every later delivery to the update path, leaving the App connected,
+        // rendering, and polling nothing — inert, with nothing thrown and no visible cause.
         updateFailed = true;
         render();
         return;
       }
+      initiated = true;
       updateFailed = false;
       const { parsed, derived } = result;
       currentView = { kind: 'display', display: derived };

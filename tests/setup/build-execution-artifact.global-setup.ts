@@ -16,8 +16,20 @@ import { execFileSync } from 'node:child_process';
  * without disturbing any other `dist/` content, and is idempotent for a fixed source.
  */
 export default async function setup(): Promise<void> {
-  execFileSync('npx', ['vite', 'build', '--config', 'vite.ui.config.ts'], {
-    cwd: 'packages/server',
-    stdio: 'pipe',
-  });
+  try {
+    execFileSync('npx', ['vite', 'build', '--config', 'vite.ui.config.ts'], {
+      cwd: 'packages/server',
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    // `stdio: 'pipe'` keeps a successful build quiet, but it also swallows the compiler
+    // output on failure — and a globalSetup throw aborts the ENTIRE suite. Without this,
+    // one broken import in the UI bundle presents as every test failing at once with no
+    // stated cause. Re-throw with the build's own stderr attached.
+    const { stdout, stderr } = err as { stdout?: Buffer; stderr?: Buffer };
+    const detail = [stdout?.toString(), stderr?.toString()].filter(Boolean).join('\n').trim();
+    throw new Error(
+      `global setup: building the execution App bundle failed.\n${detail || (err as Error).message}`
+    );
+  }
 }

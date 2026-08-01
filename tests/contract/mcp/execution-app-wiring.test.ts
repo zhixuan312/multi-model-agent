@@ -96,6 +96,31 @@ describe('contract: execution App bootstrap wiring', () => {
     expect(document.body.textContent).toMatch(/cancelling/i);
   });
 
+  /**
+   * A malformed FIRST delivery must not permanently disable the monitor.
+   *
+   * The initiating branch is what extracts the taskId and starts the poll loop; every later
+   * delivery takes the update path, which does neither. So if the "we've been initiated"
+   * latch is set before the payload is known to be good, one unparseable first message leaves
+   * the App alive but inert — connected, rendering, and polling nothing, forever. It is a
+   * silent failure: nothing throws, and the view looks like a task that simply never
+   * progresses.
+   */
+  it('recovers when the FIRST delivery is unparseable and a later one is valid', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+
+    app.ontoolresult?.({ content: [{ type: 'text', text: 'not json at all' }] });
+    await Promise.resolve();
+    expect(callsOf(app)).toHaveLength(0);
+    expect(document.body.textContent).toMatch(/update failed/i);
+
+    app.ontoolresult?.(runningEnvelope);
+    await Promise.resolve();
+    expect(callsOf(app)).toContainEqual({ name: 'mma_task_get', arguments: { taskId: 'task-1' } });
+  });
+
   it('consumes host CSS variables --color-text-primary and --font-sans instead of fixed colours', async () => {
     installMockApp();
 
