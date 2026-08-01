@@ -63,7 +63,10 @@ function mount(): HTMLElement {
   // there, so the text renders initial-black on a dark panel in the default serif face.
   // `CanvasText` (paired with `color-scheme` in the stylesheet) tracks the host's light/dark
   // mode, so the untheme case has real contrast rather than merely being visible.
-  root.style.color = 'var(--color-text-primary, CanvasText)';
+  // `--mma-ink` is defined by the bundle's own stylesheet and flips with
+  // prefers-color-scheme, so this resolves to readable text whether or not the host themes
+  // us. Inline styles beat the stylesheet, so the fallback chain must match it exactly.
+  root.style.color = 'var(--color-text-primary, var(--mma-ink))';
   root.style.fontFamily = 'var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif)';
   return root;
 }

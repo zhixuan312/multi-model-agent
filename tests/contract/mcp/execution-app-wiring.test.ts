@@ -137,12 +137,17 @@ describe('contract: execution App bootstrap wiring', () => {
     expect(style).toMatch(/var\(--color-text-primary,[^)]+\)/);
     expect(style).toMatch(/var\(--font-sans,[^)]+\)/);
 
-    // The stylesheet the bundle ships must do the same, and must set color-scheme so the
-    // system-colour fallback resolves correctly in BOTH light and dark hosts.
+    // The stylesheet must do the same for every HOST-provided property. Our own `--mma-*`
+    // properties are exempt: they are defined in that same file, so a fallback would be dead
+    // code. Only properties we do not control can go undefined at runtime.
     const html = await readFile('packages/server/src/ui/execution/execution.html', 'utf8');
-    expect(html).toMatch(/color-scheme:\s*light dark/);
-    const bareVars = html.match(/var\(--[a-z-]+\)/g) ?? [];
-    expect(bareVars, `custom properties without a fallback: ${bareVars.join(', ')}`).toEqual([]);
+    const hostVars = html.match(/var\(--(?!mma-)[a-z-]+\)/g) ?? [];
+    expect(hostVars, `host properties used without a fallback: ${hostVars.join(', ')}`).toEqual([]);
+
+    // And the readable default must flip with the host's colour scheme, since a single fixed
+    // ink is unreadable against one of the two backgrounds by definition.
+    expect(html).toMatch(/prefers-color-scheme:\s*dark/);
+    expect(html).toMatch(/--mma-ink:/);
   });
 
   it('omits the phase lines entirely when a snapshot carries no phase yet', async () => {

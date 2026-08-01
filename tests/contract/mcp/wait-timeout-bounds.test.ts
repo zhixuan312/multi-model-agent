@@ -29,14 +29,25 @@ describe('contract: mma_task_wait timeout bounds fit inside client request deadl
     expect(WAIT_DEFAULT_MS).toBeLessThanOrEqual(WAIT_CAP_MS);
   });
 
-  it('publishes that same ceiling in the tool schema the model actually reads', () => {
+  /**
+   * The schema must NOT impose the ceiling, only document it.
+   *
+   * Capping in the schema turns an over-large request into a hard `-32602` validation error
+   * before it ever reaches the server's clamp — observed on Claude Desktop, where the model
+   * asked for 300000 and got a Zod `too_big` payload to decode instead of a wait. Asking to
+   * wait "5 minutes" is a reasonable intent; the right answer is a 55s wait and a running
+   * snapshot, not a schema violation.
+   */
+  it('documents the ceiling WITHOUT enforcing it, so large requests clamp instead of failing', () => {
     const wait = MCP_TOOLS.find((t) => t.name === 'mma_task_wait');
     expect(wait).toBeDefined();
     const timeout = (wait!.inputSchema as {
-      properties: { timeoutMs: { maximum: number; description: string } };
+      properties: { timeoutMs: { maximum?: number; minimum?: number; description: string } };
     }).properties.timeoutMs;
-    expect(timeout.maximum).toBe(WAIT_CAP_MS);
+    expect(timeout.maximum, 'a schema maximum rejects instead of clamping').toBeUndefined();
+    expect(timeout.minimum).toBe(1);
     expect(timeout.description).toContain(String(WAIT_CAP_MS));
+    expect(timeout.description).toMatch(/clamp/i);
     expect(timeout.description).not.toContain('240000');
   });
 
@@ -44,5 +55,59 @@ describe('contract: mma_task_wait timeout bounds fit inside client request deadl
     const wait = MCP_TOOLS.find((t) => t.name === 'mma_task_wait')!;
     expect(wait.description).toMatch(/not an error|NOT an error/i);
     expect(wait.description).toMatch(/call again/i);
+  });
+});
+
+/**
+ * Proves the SERVER half: an over-large wait is accepted and clamped, not rejected.
+ *
+ * It deliberately does NOT claim to reproduce the Desktop failure, and cannot. Restoring the
+ * rejecting `maximum` leaves this test green while the schema-shape test above goes red —
+ * which is itself the finding: the `-32602` came from the HOST validating arguments against
+ * the advertised schema before the request was ever sent. Nothing server-side can observe a
+ * call the client refused to make, so the schema assertion above is the real guard here and
+ * this one only shows the clamp behind it is sound.
+ */
+describe('contract: an over-large wait is clamped, not rejected', () => {
+  it('accepts timeoutMs far above the cap and returns a running snapshot', async () => {
+    const { boot } = await import('../fixtures/harness.js');
+    const { mockProvider } = await import('../fixtures/mock-providers.js');
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StreamableHTTPClientTransport } = await import(
+      '@modelcontextprotocol/sdk/client/streamableHttp.js'
+    );
+
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    const client = new Client({ name: 'wait-clamp', version: '0.0.0' });
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
+          requestInit: { headers: { Authorization: `Bearer ${h.token}` } },
+        })
+      );
+      const started = await client.callTool({
+        name: 'mma_run',
+        arguments: { cwd: process.cwd(), mode: 'handle', request: { type: 'investigate', prompt: 'x' } },
+      });
+      const handle = JSON.parse(
+        ((started.content as Array<{ text: string }>)[0]!).text
+      ) as { taskId?: string };
+      // Assert rather than skip. An early `return` here made this test pass even with the
+      // rejecting schema restored — it never reached the call it exists to make. A missing
+      // taskId from mode:'handle' is itself a failure, not a reason to opt out.
+      expect(handle.taskId, 'mode:handle must return a taskId to wait on').toBeTruthy();
+
+      const waited = await client.callTool({
+        name: 'mma_task_wait',
+        arguments: { taskId: handle.taskId, timeoutMs: 300_000 },
+      });
+      expect(waited.isError, 'an over-large wait must not be an error').toBeFalsy();
+      const payload = JSON.parse(((waited.content as Array<{ text: string }>)[0]!).text) as
+        Record<string, unknown>;
+      expect(payload.taskId ?? (payload.task as { taskId?: string })?.taskId).toBe(handle.taskId);
+    } finally {
+      await client.close();
+      await h.close();
+    }
   });
 });

@@ -181,8 +181,15 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         timeoutMs: {
           type: 'integer',
           minimum: 1,
-          maximum: WAIT_CAP_MS,
-          description: `Max wait in milliseconds (default ${WAIT_DEFAULT_MS}, capped at ${WAIT_CAP_MS}).`,
+          // Deliberately NO `maximum`. The server clamps to WAIT_CAP_MS anyway
+          // (mcp-adapter.ts), so a ceiling here converts a request the server would happily
+          // satisfy into a hard -32602 validation error. Asking to wait "5 minutes" is a
+          // perfectly reasonable intent; the right answer is a 55s wait and a running
+          // snapshot, not a schema violation the model has to decode and retry.
+          description:
+            `Max wait in milliseconds (default ${WAIT_DEFAULT_MS}). Larger values are `
+            + `accepted and clamped to ${WAIT_CAP_MS}, which is the most a single MCP tool `
+            + `call can block before the client's own request deadline fires.`,
         },
       },
       required: ['taskId'],
