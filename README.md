@@ -374,6 +374,20 @@ claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
 
 Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_cancel`. `mma_run` returns short task results inline and a `{ taskId }` handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
 
+**Claude Desktop** speaks stdio rather than HTTP, so it connects through a bridge instead:
+
+```bash
+mma mcp install     # writes Claude Desktop's MCP config (MCP only — no skills), then relaunch Desktop
+```
+
+`mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_task_wait` must not block the monitor's own polls.
+
+#### Execution monitor (MCP Apps)
+
+Hosts that implement [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) render `mma_run` as a live panel: phase, elapsed time, a headline of what the worker is doing, and a Cancel button — polled over the existing MCP channel, so **progress costs no additional model turns**. On completion it reports duration, cost, the vs-main delta, the implementer/reviewer split, token usage (cache counted separately) and files changed; the answer itself stays in the conversation.
+
+The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus one resource, `ui://mma/execution.html` — self-contained, no external origins, and content-addressed so an upgrade is never served from a stale host cache. It is advertised **only when the bundle is actually present**, so a build without it degrades to plain tool responses rather than offering a UI it cannot serve. The App carries no credential: every server call is brokered by the host.
+
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [docs/PLUGIN.md](./docs/PLUGIN.md) — Claude Code plugin: how it's generated, the marketplace, publishing
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -393,14 +407,13 @@ Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task u
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.16
+## What's new in 5.17
 
-- **Published with provenance.** Both packages are now built and published by GitHub Actions via npm trusted publishing, so each tarball carries a signed statement binding it to the commit and workflow that produced it (5.16.1).
-- **MCP endpoint.** `POST /mcp` exposes `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the *same* runtime as the REST API — a task submitted over MCP is pollable over REST and vice versa. `mma_run`'s schema is generated from the existing task-input union, so it can't drift from `POST /task`.
-- **Cancellation.** `DELETE /task/:taskId` — 202 means *requested*; the task reaches terminal `cancelled` once the worker confirms. Claude-tier cancel latency went **48s → 0.1s**.
-- **Restarts no longer lose track of work.** Task IDs and terminal results persist in `~/.mma/state`; executions caught mid-flight come back `interrupted` and retryable, and any worker that outlived the daemon is terminated before its record is retired.
-- **One-install Claude Code plugin.** `/plugin marketplace add zhixuan312/multi-model-agent` then `/plugin install mma@multi-model-agent` — 16 skills, both SDLC commands, and the MCP server. No auth token is stored in the artifact.
-- **A dead tier can no longer look healthy.** An unreachable or auth-rejected tier used to report `done` carrying the reviewer's answer; it now fails terminally before review. `SCHEMA_VERSION` still 6.
+- **Claude Desktop support.** `mma mcp install`, then relaunch Desktop. The new `mma mcp` stdio bridge connects Desktop (which speaks stdio, not HTTP) to your running daemon, resolving the daemon host once and pinning a loopback address so the token cannot be redirected off-box.
+- **A live execution monitor, inline.** On hosts that support MCP Apps, `mma_run` renders a panel that updates itself — phase, elapsed, what the worker is doing, and a Cancel button — **without spending a model turn per update**. When it finishes it reports duration, cost, the vs-main delta, the implementer/reviewer split and token usage. The App holds no credential; every call is brokered by the host.
+- **Progress you can read.** `runningHeadline` now carries a real line (`Running nl -ba packages/core/src/unified/skill-loader.ts`) on both runners, over REST and MCP alike.
+- **Skills prefer MCP when it is there.** A host with both surfaces used to pick arbitrarily, and the HTTP route shows no monitor because the host never learns a task is running.
+- **`mma_task_wait` stopped timing out against the client's own deadline** — the advertised ceiling is 55s and larger requests clamp instead of erroring. `SCHEMA_VERSION` still 6; non-App MCP clients get byte-identical responses.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

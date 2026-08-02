@@ -159,7 +159,7 @@ All task types dispatch through the unified `POST /task` endpoint with a `type` 
 | `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
 | `GET /task/:taskId` | Poll task status and results (terminal results survive daemon restarts) |
 | `DELETE /task/:taskId` | Request cooperative cancellation — 202 requested; terminal `cancelled` unless completion won the race; idempotent |
-| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the same runtime |
+| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the same runtime, plus the `ui://mma/execution.html` App resource when its bundle is present |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
@@ -180,7 +180,23 @@ mma sync-skills [--target=<client>]          # install/update skills
 mma disable [--target=<client>]              # remove skills
 mma enable  [--target=<client>]              # reinstall skills
 mma telemetry status|enable|disable          # manage telemetry consent
+mma mcp                                      # stdio MCP bridge (Claude Desktop spawns this)
+mma mcp install | uninstall                  # add/remove MMA in Claude Desktop's MCP config
 ```
+
+## Claude Desktop and the execution monitor
+
+Claude Desktop speaks stdio rather than HTTP. `mma mcp install` registers the `mma mcp` bridge in
+Desktop's config; the bridge forwards stdio JSON-RPC to the same `POST /mcp`, resolving the daemon
+host once at startup, rejecting any non-loopback answer and pinning the numeric address so a DNS
+rebind cannot send the bearer token off-box.
+
+Hosts implementing [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) render
+`mma_run` as a live panel — phase, elapsed time, a headline of the worker's current activity, and a
+Cancel button — polled over the MCP channel, so progress costs **no additional model turns**. The
+resource is advertised only when its bundle is present, is self-contained (no external origins), and
+is content-addressed so an upgrade is never served from a stale host cache. Non-App clients receive
+byte-identical responses to before.
 
 ## Architecture
 
