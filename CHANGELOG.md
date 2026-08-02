@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.17.0] - 2026-08-02
+
+Claude Desktop support, and a live execution monitor that renders inside it. MMA now speaks stdio
+MCP as well as HTTP, so Desktop can drive it; on hosts that support MCP Apps a running task shows a
+panel that updates itself — phase, elapsed time, what the worker is doing, and a working Cancel —
+**without costing an extra model turn**. `SCHEMA_VERSION` stays at **6**; non-App MCP clients receive
+byte-identical responses, locked by goldens.
+
+### Added
+
+- **`mma mcp` — stdio MCP bridge.** Claude Desktop connects over stdio, not HTTP, so it could not
+  reach the daemon at all. The bridge forwards JSON-RPC frames to the running daemon's `POST /mcp`.
+  It resolves the daemon host **once** at startup, refuses any non-loopback answer, and pins the
+  numeric address, so a DNS rebind between requests cannot redirect the bearer token off-box.
+- **`mma mcp install` / `uninstall`** — adds MMA to Claude Desktop's MCP config (MCP only, no
+  skills). The config is rewritten atomically with a backup, and uninstall only removes entries it
+  owns.
+- **MCP Apps execution monitor.** The daemon serves one UI resource, `ui://mma/execution.html`, and
+  advertises the `io.modelcontextprotocol/ui` extension. App-capable hosts render it inline for
+  `mma_run`. It polls over the existing MCP channel, so progress costs no model turns; a finished
+  run reports duration, cost, the vs-main delta, the implementer/reviewer split, token usage
+  (cache counted separately) and files changed. It holds **no credential** — every server call is
+  brokered by the host through `callServerTool`.
+- **`server/discover`** — stateless capability discovery, per the 2026-07-28 MCP revision.
+- **`runningHeadline` is populated.** The field has been readable on both wires since it was
+  introduced and was written by nothing. It now carries one human-readable line derived from
+  provider activity — `Running nl -ba packages/core/src/unified/skill-loader.ts` — on both the
+  claude and codex runners.
+
+### Changed
+
+- **Skills dispatch through MCP when it is available.** A host running both the skills and the MCP
+  server chose between them non-deterministically, and the curl route renders no monitor because the
+  host never learns a task is running. The skills now prefer `mma_run`, and say plainly when the
+  HTTP route is still correct (a bare terminal, CI, a client without MCP).
+- **`mma_task_wait`'s advertised ceiling is 55s, and over-large values clamp instead of failing.**
+  The old 240s ceiling was four times a typical MCP client's own request deadline, so a model that
+  read `capped at 240000` and asked for it got `-32001 Request timed out` — no snapshot, no sign the
+  task was still running fine. Waiting longer is expressed by calling again.
+- **The UI resource is content-addressed** (`?v=<fingerprint>`). Hosts cache a UI resource by URI, so
+  a fixed URI meant an upgraded install kept serving the old App indefinitely with no signal.
+
+### Fixed
+
+- **The stdio bridge forwards frames concurrently.** It processed stdin one frame at a time, so a
+  single long `mma_task_wait` blocked every later frame — including the monitor's own polls. The
+  monitor displayed "update failed" while the daemon was perfectly healthy: the long-poll starved
+  the very view that exists to show progress during long polls.
+- **SSE payloads are reassembled per spec** — `data:` lines are joined with a newline rather than
+  concatenated, so a payload containing its own newlines (any pretty-printed JSON) survives intact.
+- **`execute_plan` no longer reports unrunnable tests as failed work.** Workers run in a sandbox that
+  denies binding a local port, so any test starting an HTTP server dies with `EPERM` however correct
+  the implementation is. Three runs of correct, complete work were reported as broken. A test that
+  could not RUN is not a test that FAILED.
+- **Publication guard.** `prepublishOnly` now refuses to publish an absent, empty, or placeholder
+  App bundle. The App degrades gracefully at runtime, which is right for a dev checkout and exactly
+  wrong for a published tarball — nothing else would have complained.
+
 ## [5.16.1] - 2026-07-30
 
 Release engineering and test hygiene. Both packages are now published by CI with **npm provenance**,

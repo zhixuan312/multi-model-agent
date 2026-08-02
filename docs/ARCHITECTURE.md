@@ -31,6 +31,17 @@ Stage 1 — INGRESS  (transport boundary — thin adapters only)
                           directory; mma_run's request schema is generated from
                           the task-input Zod union, never hand-written)
 
+  1.5  MCP App resource   server/src/mcp/execution-artifact.ts +
+                          server/src/ui/execution/ (browser bundle, built by Vite
+                          into dist/ui/execution.html and served as
+                          ui://mma/execution.html). This is the ONLY browser-side
+                          code in the repo: it runs inside the host's iframe, holds
+                          no credential, and reaches the daemon solely through the
+                          host's callServerTool broker. It is excluded from the
+                          server tsconfig (DOM libs, bundler resolution) and has its
+                          own tsconfig.ui.json so it stays type-checked and linted.
+                          The capability is advertised only when the bundle exists.
+
 Stage 2 — ADMISSION + PREPROCESSING  (application layer)
   2.1  Zod validation      core/src/unified/task-input-schema.ts (discriminated union,
                            parsed at the adapter boundary)
