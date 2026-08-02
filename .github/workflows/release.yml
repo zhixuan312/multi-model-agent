@@ -313,6 +313,23 @@ jobs:
             npm publish /tmp/pack/zhixuan92-multi-model-agent-${{ inputs.version }}.tgz --access public --provenance
           fi
 
+      # Mirror of the core propagation poll above. Without it, verification runs the instant
+      # `npm publish` returns and can hit a read replica that has not caught up yet — which is
+      # exactly how 5.17.0 failed: both packages published correctly, then `npm view` 404'd on
+      # the server and stranded a good release short of its tag. Core had this poll; server did
+      # not, and the asymmetry was invisible until the replica was slow enough to expose it.
+      - name: Wait for server to be resolvable on the registry
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            V="$(npm view @zhixuan92/multi-model-agent@${{ inputs.version }} version 2>/dev/null || true)"
+            [ "$V" = "${{ inputs.version }}" ] && { echo "server ${{ inputs.version }} is live"; exit 0; }
+            echo "attempt $i: not yet visible, waiting 10s"; sleep 10
+          done
+          echo "::error::server ${{ inputs.version }} never became visible on the registry"
+          exit 1
+
       - name: Verify both packages on the registry
         if: ${{ inputs.dry_run == false }}
         run: |
