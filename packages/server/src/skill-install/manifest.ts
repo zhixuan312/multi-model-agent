@@ -12,45 +12,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
-
-/** Union of all supported AI client targets. */
-export type Client = 'claude-code' | 'gemini' | 'codex' | 'cursor';
-
-/** All known client values — used for --all-targets and target validation. */
-export const ALL_CLIENTS: readonly Client[] = ['claude-code', 'gemini', 'codex', 'cursor'];
-
-/**
- * Detect which AI client directories exist in the home directory.
- * Checks for evidence of each known client:
- * - claude-code: ~/.claude/ directory present (installs skills under ~/.claude/skills/)
- * - gemini:       ~/.gemini/extensions/ directory present
- * - codex:        ~/.codex/ directory present (installs skills under ~/.codex/skills/)
- * - cursor:       ~/.cursor/rules/ directory present
- *
- * The claude-code check deliberately accepts ~/.claude/ as sufficient signal
- * even when ~/.claude/skills/ does not yet exist (fresh install with no skills).
- */
-export function detectClients(homeDir: string): Client[] {
-  const detected: Client[] = [];
-  if (fs.existsSync(path.join(homeDir, '.claude'))) detected.push('claude-code');
-  if (fs.existsSync(path.join(homeDir, '.gemini', 'extensions'))) detected.push('gemini');
-  if (fs.existsSync(path.join(homeDir, '.codex'))) detected.push('codex');
-  if (fs.existsSync(path.join(homeDir, '.cursor', 'rules'))) detected.push('cursor');
-  return detected;
-}
+import { CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
 
 const MANIFEST_NAME = 'install-manifest.json';
 
 // ─── Zod schema ──────────────────────────────────────────────────────────────
 
-/** Zod schema for a single client target value. */
-const clientSchema = z.enum(['claude-code', 'gemini', 'codex', 'cursor']);
+/** Zod schema for a single client target value — the canonical `ClientId`
+ *  vocabulary (`packages/core/src/clients/client-id.ts`), not a
+ *  hand-maintained copy. */
+const clientIdSchema = z.enum(CLIENT_IDS);
 
 const manifestEntrySchema = z.object({
   name: z.string().min(1),
   skillVersion: z.string().min(1),
   installedAt: z.number().int().nonnegative(),
-  targets: z.array(clientSchema),
+  targets: z.array(clientIdSchema),
 });
 
 const installManifestSchema = z.object({
@@ -182,14 +159,14 @@ export function listEntries(homeDir?: string): ManifestEntry[] {
 export function appendEntry(
   skillName: string,
   skillVersion: string,
-  newTargets: Client[],
+  newTargets: ClientId[],
   homeDir?: string,
 ): ManifestEntry {
   const manifest = readManifest(homeDir);
 
   // De-duplicate incoming targets once, preserving order of first occurrence.
-  const seen = new Set<Client>();
-  const dedupedNewTargets: Client[] = newTargets.filter((t) => {
+  const seen = new Set<ClientId>();
+  const dedupedNewTargets: ClientId[] = newTargets.filter((t) => {
     if (seen.has(t)) return false;
     seen.add(t);
     return true;
@@ -225,9 +202,9 @@ export function appendEntry(
  */
 export function removeEntry(
   skillName: string,
-  targets: Client[] = [],
+  targets: ClientId[] = [],
   homeDir?: string,
-): Client[] {
+): ClientId[] {
   const manifest = readManifest(homeDir);
   const idx = manifest.entries.findIndex((e) => e.name === skillName);
   if (idx === -1) return [];
@@ -249,4 +226,43 @@ export function removeEntry(
   }
   writeManifest(manifest, homeDir);
   return removed;
+}
+
+// ─── Missing-skill detection (relocated from the deleted
+// skill-install/skill-installer-common.ts — Task I-8) ──────────────────────
+
+export interface MissingSkill {
+  name: string;
+  targets: ClientId[];
+}
+
+/** Every packaged skill in `supportedSkills` that has NO manifest entry yet,
+ *  paired with the union of targets already recorded for OTHER skills — the
+ *  same clients a fresh skill should be installed to. Returns `[]` when the
+ *  manifest is empty (no client has opted in to anything yet). */
+export function findMissingSkills(
+  manifestEntries: ManifestEntry[],
+  supportedSkills: readonly string[],
+): MissingSkill[] {
+  if (manifestEntries.length === 0) return [];
+  const targets = unionTargets(manifestEntries);
+  if (targets.length === 0) return [];
+  const installedNames = new Set(manifestEntries.map((e) => e.name));
+  return supportedSkills
+    .filter((name) => !installedNames.has(name))
+    .map((name) => ({ name, targets: [...targets] }));
+}
+
+function unionTargets(entries: ManifestEntry[]): ClientId[] {
+  const seen = new Set<ClientId>();
+  const out: ClientId[] = [];
+  for (const e of entries) {
+    for (const t of e.targets) {
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+    }
+  }
+  return out;
 }

@@ -39,7 +39,11 @@ describe('mma mcp nested commands', () => {
   // real config discovery, and invoking main() without cwd/homeDir/env overrides
   // would fall through to the real os.homedir()/process.cwd()/process.env. Task I-2
   // already covers bare `mcp` end-to-end with a deterministic fixture.
-  it.each([['mcp install', 1], ['mcp uninstall', 2]] as const)('dispatches %s through the registry writer and nothing else', async (raw, selected) => {
+  //
+  // `mcp install` now REQUIRES an explicit ClientId (Task I-8 replaced the
+  // former no-argument, Claude-Desktop-only default outright — no alias, no
+  // silent default); `mcp uninstall` keeps its bare, Desktop-only form.
+  it.each([['mcp install claude-desktop', 1], ['mcp uninstall', 2]] as const)('dispatches %s through the registry writer and nothing else', async (raw, selected) => {
     allTargets.forEach((t) => vi.mocked(t).mockClear());
     vi.mocked(startServe).mockClear();
     const argv = raw.split(' ');

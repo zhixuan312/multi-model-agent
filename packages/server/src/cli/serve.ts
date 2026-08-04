@@ -27,10 +27,10 @@ import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
 import { runSyncSkills } from './sync-skills.js';
-import { listEntries, FutureManifestError } from '../skill-install/manifest.js';
+import { listEntries, findMissingSkills, FutureManifestError } from '../skill-install/manifest.js';
 import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
-import { findMissingSkills } from '../skill-install/skill-installer-common.js';
 import { isSkillBehind } from '../skill-install/skill-drift.js';
+import type { DeclaredClientRoster } from '../provisioning/roster.js';
 
 export async function maybeAutoUpdateSkills(
   config: MultiModelConfig,
@@ -71,7 +71,12 @@ export async function maybeAutoUpdateSkills(
   const deadlineMs = 5000;
   try {
     await Promise.race([
-      runSyncSkills({ silent: true, bestEffort: true, ifExists: true }),
+      runSyncSkills({
+        silent: true,
+        bestEffort: true,
+        ifExists: true,
+        declared: (config as unknown as { clients?: DeclaredClientRoster }).clients,
+      }),
       new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
     ]);
     if (behind.length > 0) process.stdout.write(`[mma] auto-synced ${behind.length} updated skill(s)\n`);

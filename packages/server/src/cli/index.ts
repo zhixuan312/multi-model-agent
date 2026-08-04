@@ -43,8 +43,10 @@ import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
 import { runMcpBridge, bufferedLines } from './mcp.js';
-import { removeClientRegistration, writeClientRegistration } from '../provisioning/registration-writer.js';
+import { removeClientRegistration } from '../provisioning/registration-writer.js';
 import { CLIENT_CAPABILITIES } from '../provisioning/capability-registry.js';
+import { runClientsCommand, runMcpInstallCommand, McpInstallCliError } from './clients.js';
+import type { DeclaredClientRoster } from '../provisioning/roster.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -187,13 +189,15 @@ Commands:
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  sync-skills      Install + update + reconcile all shipped skills
+  sync-skills      Install + update + reconcile all shipped skills for the declared clients roster
+  clients          Show declared/detected/skills/MCP status for every canonical client
+  clients --json   Same, as JSON
   mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
-  mcp install      Add MMA to Claude Desktop's MCP config (MCP only — no skills)
+  mcp install <id> Fully provision one client (registration + skills) — see \`mma clients\` for valid IDs
   mcp uninstall    Remove MMA from Claude Desktop's MCP config
   plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
-  disable          Remove MMA skills from clients and pin them off (survives npm upgrades)
-  enable           Restore MMA skills (clears a prior \`disable\`, then re-syncs)
+  disable          Remove MMA from declared clients and pin them off (survives npm upgrades)
+  enable           Declare clients on and (re)provision them (clears a prior \`disable\`)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
   journal reindex  Rebuild .mma/journal/index.db from markdown nodes (--regenerate-catalog to also rewrite index.md)
@@ -353,9 +357,14 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       // sync-skills' own minimist sees `--target=`, `--all-targets`, etc.
       const subCmdIdx = argv.indexOf('sync-skills');
       const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
+      // Best-effort: sync-skills works with NO config at all (an explicit
+      // --target still forces provisioning); a config, when present, supplies
+      // the declared roster --target falls back to.
+      const config = await loadConfig(configArg, deps).catch(() => null);
       const code = await runSyncSkills({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
+        declared: (config as unknown as { clients?: DeclaredClientRoster } | null)?.clients,
         ifExists: opts['if-exists'] === true,
         silent: opts['silent'] === true,
         bestEffort: opts['best-effort'] === true,
@@ -372,16 +381,38 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const subCmdIdx = argv.indexOf(subcommand);
       const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
       const run = subcommand === 'disable' ? runDisable : runEnable;
-      // No `cliVersion`: it existed only to stamp the retired
-      // ~/.mma/skills-disabled.json sentinel, which was deleted with
-      // disabled-state.ts. `info` still reads the version for its own report.
+      // Best-effort, same as sync-skills above: a config supplies the
+      // declared roster --target falls back to, and its resolved path (when
+      // one exists on disk already) is where `clients.<ClientId>` gets
+      // persisted -- never invented from nothing.
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const configPath = resolveConfigPath(
+        configArg,
+        deps.env?.() ?? process.env,
+        deps.cwd?.() ?? process.cwd(),
+        deps.homeDir?.() ?? os.homedir(),
+      );
       const code = await run({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
+        declared: (config as unknown as { clients?: DeclaredClientRoster } | null)?.clients,
+        configPath,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
       exit(code);
+      break;
+    }
+    case 'clients': {
+      const jsonFlag = opts['json'] === true;
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const text = await runClientsCommand({
+        json: jsonFlag,
+        config: (config as unknown as { clients?: DeclaredClientRoster; server?: { stateDir?: string; port?: number } } | null) ?? {},
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+      });
+      stdout(text.endsWith('\n') ? text : `${text}\n`);
+      exit(0);
       break;
     }
     case 'telemetry': {
@@ -424,12 +455,36 @@ export async function main(deps: CliDeps = {}): Promise<void> {
     }
     case 'mcp': {
       const nested = positional[1] ?? '';
-      // `mcp install` / `mcp uninstall` manage Claude Desktop's MCP configuration.
-      // They are handled BEFORE loadConfig on purpose: writing a config file must not
-      // require discovering (or starting) a daemon. They also never touch the skill
-      // installers — Desktop has no skills, so it is deliberately absent from
-      // `Client`/`ALL_CLIENTS` in skill-install/manifest.ts.
-      if (nested === 'install' || nested === 'uninstall') {
+      // `mcp install <ClientId>` runs that ONE client's full provisioning
+      // (registration + skills) through the same service `mma clients` reads.
+      // The former no-argument, Claude-Desktop-only form is REPLACED outright
+      // — no alias, no silent default (Task I-8). Handled BEFORE loadConfig
+      // failing hard: a missing/invalid config must not block validating the
+      // client ID itself.
+      if (nested === 'install') {
+        const clientIdArg = positional[2];
+        const config = await loadConfig(configArg, deps).catch(() => null);
+        try {
+          const result = await runMcpInstallCommand({
+            clientId: clientIdArg,
+            config: (config as unknown as { clients?: DeclaredClientRoster; server?: { stateDir?: string; port?: number } } | null) ?? {},
+            homeDir: deps.homeDir?.() ?? os.homedir(),
+          });
+          stdout(`mma mcp install: '${result.clientId}' -> ${result.status}\n`);
+          exit(0);
+        } catch (err) {
+          const message = err instanceof McpInstallCliError || err instanceof Error ? err.message : String(err);
+          stderr(`mma mcp install: ${message}\n`);
+          exit(1);
+        }
+        break;
+      }
+      // `mcp uninstall` manages Claude Desktop's MCP configuration only —
+      // Desktop has no skills, so it is deliberately absent from the
+      // provisioning-service-backed `mma disable`. Handled BEFORE loadConfig
+      // on purpose: writing a config file must not require discovering (or
+      // starting) a daemon.
+      if (nested === 'uninstall') {
         const desktopCapability = CLIENT_CAPABILITIES.find((candidate) => candidate.id === 'claude-desktop')!;
         const writerInput = {
           capability: desktopCapability,
@@ -441,20 +496,17 @@ export async function main(deps: CliDeps = {}): Promise<void> {
           appData: (deps.env?.() ?? process.env).APPDATA,
         };
         try {
-          const result = nested === 'install'
-            ? await writeClientRegistration(writerInput)
-            : await removeClientRegistration(writerInput);
+          const result = await removeClientRegistration(writerInput);
           if (result.status === 'failed') {
             throw new Error(result.message ?? 'registration failed');
           }
           stdout(
-            `mma mcp ${nested}: ${result.changed === false ? 'no change needed' : 'updated'} ${result.path}\n`
-            + 'Claude Desktop receives MCP configuration only — it has no MMA skills.\n'
-            + (nested === 'install' ? 'Fully quit and relaunch Claude Desktop to pick it up.\n' : ''),
+            `mma mcp uninstall: ${result.changed === false ? 'no change needed' : 'updated'} ${result.path}\n`
+            + 'Claude Desktop receives MCP configuration only — it has no MMA skills.\n',
           );
           exit(0);
         } catch (err) {
-          stderr(`mma mcp ${nested}: ${err instanceof Error ? err.message : String(err)}\n`);
+          stderr(`mma mcp uninstall: ${err instanceof Error ? err.message : String(err)}\n`);
           exit(1);
         }
         break;

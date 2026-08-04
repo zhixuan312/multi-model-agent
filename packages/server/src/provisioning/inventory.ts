@@ -11,13 +11,20 @@
  * packaged skill present with a matching ownership digest for strategies that
  * have skills at all; a non-empty skill root proves nothing by itself.
  */
-import type { ClientId } from '@zhixuan92/multi-model-agent-core';
+import type { ClientId, ClientState } from '@zhixuan92/multi-model-agent-core';
 import { CLIENT_CAPABILITIES, type ClientCapability } from './capability-registry.js';
 import { resolveEffectiveRoster, type DeclaredClientRoster } from './roster.js';
 import { readMarker } from './marker-store.js';
 import type { ClientProvisioningStatus, ProvisioningPort } from './provisioning-port.js';
 
-export type ClientInventoryRecord = ClientProvisioningStatus;
+/** Read-only inventory record. The provisioning status is supplemented with
+ * the roster inputs that determined it so callers can distinguish an explicit
+ * `off` declaration from a merely absent declaration, and a detected client
+ * from an untouched one. */
+export interface ClientInventoryRecord extends ClientProvisioningStatus {
+  declaredState: ClientState | null;
+  detectedPresence: boolean;
+}
 
 export interface InventoryDeps {
   stateDir: string;
@@ -33,19 +40,23 @@ export interface InventoryDeps {
  *  `provision([...])` call). */
 export function computeClientStatus(deps: InventoryDeps, capability: ClientCapability, effectiveState: 'on' | 'off' | 'suggested'): ClientInventoryRecord {
   const clientId = capability.id;
+  const rosterFields = {
+    declaredState: deps.declared?.[clientId] ?? null,
+    detectedPresence: deps.detected.has(clientId),
+  };
   const markerRead = readMarker(deps.stateDir, clientId);
   if (markerRead.status !== 'absent') {
     // An unresolved (or corrupt/unparseable) marker means the last operation
     // never reached a trustworthy terminal state -- report failed regardless
     // of what the files happen to contain until recovery resolves it.
-    return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
+    return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed', ...rosterFields };
   }
 
   if (effectiveState === 'suggested') {
-    return { clientId, status: 'suggested', skillsInstalled: false, mcpRegistrationStatus: 'absent' };
+    return { clientId, status: 'suggested', skillsInstalled: false, mcpRegistrationStatus: 'absent', ...rosterFields };
   }
   if (effectiveState === 'off') {
-    return { clientId, status: 'off', skillsInstalled: false, mcpRegistrationStatus: 'absent' };
+    return { clientId, status: 'off', skillsInstalled: false, mcpRegistrationStatus: 'absent', ...rosterFields };
   }
 
   const registered = deps.port.isRegistrationPresent(clientId, capability);
@@ -63,6 +74,7 @@ export function computeClientStatus(deps: InventoryDeps, capability: ClientCapab
     status: registered && skillsOk ? 'provisioned' : 'failed',
     skillsInstalled,
     mcpRegistrationStatus: registered ? 'registered' : 'absent',
+    ...rosterFields,
   };
 }
 
