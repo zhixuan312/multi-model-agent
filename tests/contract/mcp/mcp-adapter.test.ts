@@ -40,13 +40,14 @@ describe('contract: MCP adapter', () => {
     } finally { await h.close(); }
   });
 
-  it('lists exactly the five tools; mma_run request schema is generated from the task union', async () => {
+  it('lists exactly the seven tools; mma_run request schema is generated from the task union', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
-        'mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
+        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
       ]);
 
       const run = tools.find((t) => t.name === 'mma_run')!;

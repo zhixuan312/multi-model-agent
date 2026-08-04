@@ -46,14 +46,17 @@ describe('contract: non-App-client byte parity', () => {
     expect(withAppJson).toBe(withoutAppJson);
   });
 
-  it('the five tool names and mma_run generated schema are unchanged regardless of capability branch', async () => {
+  it('the seven tool names and mma_run generated schema are unchanged regardless of capability branch', async () => {
     __setExecutionArtifactOverrideForTests({ available: true, html: '<html>real bundle</html>' });
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = new Client({ name: 'schema-parity', version: '0.0.0' });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${h.token}` } } }));
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual(['mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait']);
+      expect(tools.map((t) => t.name).sort()).toEqual([
+        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
+        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+      ]);
       const run = tools.find((t) => t.name === 'mma_run')!;
       expect(run.inputSchema).toMatchObject({ required: ['cwd', 'request'], type: 'object' });
     } finally { await client.close(); await h.close(); }

@@ -238,7 +238,7 @@ edit by hand: re-run the command to regenerate.
 
 - **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
 - **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
-- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`
+- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`, \`mma_task_list\`, \`mma_context_block_create\`, \`mma_context_block_delete\`
 
 ## Requirements
 

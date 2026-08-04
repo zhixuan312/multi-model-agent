@@ -1,4 +1,4 @@
-// MCP tool surface — four tools, no per-type aliases.
+// MCP tool surface — seven tools, no per-type aliases.
 //
 // The `type` enum inside `request` is the discoverability mechanism: one entry
 // point (`mma_run`), twelve documented task types. Per-type tools would make
@@ -231,6 +231,53 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         taskId: { type: 'string', description: 'Handle returned by mma_run.' },
       },
       required: ['taskId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'mma_context_block_create',
+    description:
+      'Register a reusable block of context (e.g. a large file, spec, or transcript) that a '
+      + 'later mma_run can reference by id via request.contextBlockIds, instead of inlining the '
+      + 'content into the prompt. Blocks are project-isolated (scoped to `cwd`) and expire after '
+      + 'ttlMs (default 24h) or the server-configured default when omitted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description: 'Absolute path of the project that will own this block.',
+        },
+        content: {
+          type: 'string',
+          description: 'Block content. Must be non-empty and under the server-configured byte limit.',
+        },
+        ttlMs: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Optional per-block time-to-live in milliseconds; defaults to the server-configured value when omitted.',
+        },
+      },
+      required: ['cwd', 'content'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'mma_context_block_delete',
+    description:
+      'Delete a context block created by mma_context_block_create. Fails with `pinned` if the '
+      + 'block is still referenced by an in-flight batch, and `not_found` for an unknown id or '
+      + 'one owned by a different project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description: 'Absolute path of the project that owns the block.',
+        },
+        blockId: { type: 'string', description: 'Id returned by mma_context_block_create.' },
+      },
+      required: ['cwd', 'blockId'],
       additionalProperties: false,
     },
   },

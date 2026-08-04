@@ -247,7 +247,16 @@ export async function startServer(
           `[mma] event=mcp_capabilities_degraded ts=${new Date().toISOString()} reason=execution_artifact_unavailable\n`,
         );
       }
-      const mcpDeps = { runtime, taskRegistry, store: executionStore, serverVersion: SERVER_VERSION, capabilities };
+      const mcpDeps = {
+        runtime,
+        taskRegistry,
+        store: executionStore,
+        serverVersion: SERVER_VERSION,
+        capabilities,
+        projectRegistry,
+        maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
+        maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
+      };
       router.register('POST', '/mcp', (req, res, _params, ctx) => handleMcpRequest(mcpDeps, req, res, ctx.body));
     } else {
       router.register('POST', '/task', (_req, res) => {

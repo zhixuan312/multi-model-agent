@@ -26,8 +26,10 @@ import {
 import { taskInputSchema, type TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
+import type { ProjectRegistry } from '../application/project-registry.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
+import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
 import {
   MCP_TOOLS,
   MCP_PROTOCOL_VERSION,
@@ -63,6 +65,12 @@ export interface McpAdapterDeps {
   /** Resolved ONCE at daemon start (see `http/server.ts`); read here for both the
    *  `Server` constructor and the `server/discover` handler so they cannot disagree. */
   capabilities: McpCapabilities;
+  /** Shared with the REST control handlers (`handlers/control/context-blocks.ts`) — the
+   *  `mma_context_block_*` tools call the SAME `createContextBlock` / `deleteContextBlock`
+   *  operations those handlers wrap, against this same registry. */
+  projectRegistry: ProjectRegistry;
+  maxContextBlockBytes: number;
+  maxContextBlocksPerProject: number;
 }
 
 interface ToolResult {
@@ -219,6 +227,45 @@ function handleList(deps: McpAdapterDeps, args: Record<string, unknown>): ToolRe
   return jsonResult({ tasks, count: tasks.length });
 }
 
+/**
+ * mma_context_block_create — validates `cwd` exactly like `handleRun` does (MCP
+ * requests carry no cwd of their own), then delegates to the SAME
+ * `createContextBlock` operation the REST `POST /context-blocks` handler wraps
+ * (`handlers/control/context-blocks.ts`). No body validation, byte-limit, or
+ * cap logic lives here — only argument shuffling and error-shape translation
+ * from the operation's discriminated result to an MCP tool error.
+ */
+function handleContextBlockCreate(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  const cwdRaw = args.cwd;
+  if (typeof cwdRaw !== 'string') return errorResult('invalid_request', 'cwd (string) is required');
+  const cwdCheck = validateCwd(cwdRaw);
+  if (!cwdCheck.ok) return errorResult(cwdCheck.error, cwdCheck.message);
+  const result = createContextBlock(
+    { projectRegistry: deps.projectRegistry, maxContextBlockBytes: deps.maxContextBlockBytes, maxContextBlocksPerProject: deps.maxContextBlocksPerProject },
+    { cwd: cwdCheck.canonicalCwd, content: args.content, ttlMs: args.ttlMs },
+  );
+  if (!result.ok) return errorResult(result.code, result.message, result.extra);
+  return jsonResult({ id: result.id });
+}
+
+/**
+ * mma_context_block_delete — same cwd-validation convention as
+ * `handleContextBlockCreate` above, then delegates to the SAME
+ * `deleteContextBlock` operation the REST `DELETE /context-blocks/:blockId`
+ * handler wraps.
+ */
+function handleContextBlockDelete(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  const cwdRaw = args.cwd;
+  if (typeof cwdRaw !== 'string') return errorResult('invalid_request', 'cwd (string) is required');
+  const cwdCheck = validateCwd(cwdRaw);
+  if (!cwdCheck.ok) return errorResult(cwdCheck.error, cwdCheck.message);
+  const blockId = args.blockId;
+  if (typeof blockId !== 'string') return errorResult('invalid_request', 'blockId (string) is required');
+  const result = deleteContextBlock({ projectRegistry: deps.projectRegistry }, { cwd: cwdCheck.canonicalCwd, blockId });
+  if (!result.ok) return errorResult(result.code, result.message, result.extra);
+  return jsonResult({ ok: true });
+}
+
 /** Build a fresh SDK server wired to the shared runtime. One per request —
  *  the protocol core is stateless; all durable state lives in the runtime. */
 export function buildMcpServer(deps: McpAdapterDeps): Server {
@@ -315,6 +362,10 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
         return handleList(deps, args);
       case 'mma_task_cancel':
         return handleCancel(deps, args);
+      case 'mma_context_block_create':
+        return handleContextBlockCreate(deps, args);
+      case 'mma_context_block_delete':
+        return handleContextBlockDelete(deps, args);
       default:
         return errorResult('unknown_tool', `Unknown tool: ${request.params.name}`);
     }
