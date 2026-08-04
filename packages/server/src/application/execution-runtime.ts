@@ -63,6 +63,23 @@ export type CancelResult =
   | { outcome: 'terminal'; entry: TaskEntry }
   | { outcome: 'requested'; entry: TaskEntry };
 
+/**
+ * The `subtype` a task input carries, or `null`.
+ *
+ * Only `audit` declares one, and the input schema is strict, so no other type can
+ * smuggle one in. A single reader looks like ceremony against that — until you
+ * notice this field was being extracted in three places under three different
+ * rules: an unchecked cast on the way into skill loading, a typeof check on the
+ * way into the task registry, and a truthiness check gated on `type === 'audit'`
+ * on the way into the terminal envelope. They agree today by coincidence. One
+ * reader is what makes a running audit and a finished audit describe themselves
+ * identically by construction, on the day a second type gains a subtype.
+ */
+function subtypeOf(input: TaskInput): string | null {
+  const value = (input as Record<string, unknown>).subtype;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 export class ExecutionRuntime {
   /** Live abort channels, keyed by taskId. An entry exists from admission until
    *  the execution's finally block — cancel() fires the scope's signal, the
@@ -136,8 +153,7 @@ export class ExecutionRuntime {
 
     let skills: SkillPair;
     try {
-      const subtype = (input as Record<string, unknown>).subtype as string | undefined;
-      skills = await loadSkill(input.type, SKILLS_DIR, subtype);
+      skills = await loadSkill(input.type, SKILLS_DIR, subtypeOf(input) ?? undefined);
     } catch (err) {
       return { ok: false, error: { kind: 'skill_load_failed', message: err instanceof Error ? err.message : 'Skill load failed' } };
     }
@@ -155,12 +171,7 @@ export class ExecutionRuntime {
     // scope (the live abort channel) is created here too, so a cancel that
     // lands before the async executor starts still aborts the execution.
     const taskId = randomUUID();
-    // Same subtype extraction the terminal envelope performs below — a running audit
-    // and a finished audit describe themselves identically.
-    const subtype = typeof (input as Record<string, unknown>).subtype === 'string'
-      ? (input as Record<string, unknown>).subtype as string
-      : null;
-    deps.taskRegistry.register(taskId, cwd, input.type, subtype);
+    deps.taskRegistry.register(taskId, cwd, input.type, subtypeOf(input));
     deps.store.admit(taskId, input.type, cwd, process.pid);
     const scope = new ExecutionScope(taskId);
     this.liveScopes.set(taskId, scope);
@@ -370,9 +381,10 @@ export class ExecutionRuntime {
         task: {
           taskId,
           type: input.type,
-          ...(input.type === 'audit' && (input as Record<string, unknown>).subtype
-            ? { subtype: (input as Record<string, unknown>).subtype }
-            : {}),
+          // No `type === 'audit'` gate: only audit can carry a subtype at all, so
+          // the gate restated the schema while giving the terminal envelope a
+          // second rule the running snapshot did not share.
+          ...(subtypeOf(input) !== null ? { subtype: subtypeOf(input) } : {}),
           status: wasCancelled ? ('cancelled' as const) : result.status,
         },
         output: {
