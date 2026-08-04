@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { CallerClient } from './middleware/caller-identity.js';
+import type { CallerClient } from '@zhixuan92/multi-model-agent-core';
 
 export interface RequestContext {
   url: URL;

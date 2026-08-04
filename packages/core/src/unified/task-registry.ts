@@ -57,7 +57,7 @@ export class TaskRegistry {
     }
   }
 
-  register(taskId: string, cwd: string, tool: string, subtype: string | null = null): void {
+  register(taskId: string, cwd: string, tool: string, subtype: string | null): void {
     this.evictExpired(Date.now());
     this.entries.set(taskId, {
       taskId, cwd, tool, subtype,

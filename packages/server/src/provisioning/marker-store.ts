@@ -98,7 +98,7 @@ function markersDir(stateDir: string): string {
   return join(stateDir, 'provisioning');
 }
 
-export function markerPath(stateDir: string, clientId: ClientId): string {
+function markerPath(stateDir: string, clientId: ClientId): string {
   return join(markersDir(stateDir), `${clientId}.json`);
 }
 

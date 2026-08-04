@@ -7,7 +7,7 @@ import type { RawHandler } from '../../types.js';
 /** One unit of drift GET /health reports. `client` is a loose string (not
  *  `ClientId`) so a caller-injected `manifestSync` (tests) is never forced to
  *  import the canonical client vocabulary just to shape a fixture. */
-export interface DriftEntry {
+interface DriftEntry {
   skill: string;
   client: string;
   issue: 'missing' | 'outdated' | 'orphan' | 'failed';
@@ -21,7 +21,7 @@ export interface SkillManifestSync {
   driftReport(): DriftEntry[] | Promise<DriftEntry[]>;
 }
 
-export type HealthResponse =
+type HealthResponse =
   | { status: 'ok' }
   | { status: 'drift'; drift: DriftEntry[] };
 

@@ -8,7 +8,6 @@ import { CLIENT_IDS, type CallerClient } from '@zhixuan92/multi-model-agent-core
 // sending `other` resolves to `other` with or without it.
 const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge']);
 
-export type { CallerClient };
 
 export interface CallerIdentity {
   callerClient: CallerClient;
