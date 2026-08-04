@@ -10,12 +10,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { computeSkillDigest, inspectSkillOwnership } from '../../../packages/server/src/provisioning/owned-files.js';
+import type { AtomicFsDeps } from '../../../packages/server/src/provisioning/atomic-write.js';
 import {
   RegistrationConflictError,
   isOwnedMcpEntry,
   removeOwnedRegistration,
   writeOwnedRegistration,
-  type RegistrationFsDeps,
 } from '../../../packages/server/src/provisioning/registration-writer.js';
 
 async function tempDir(): Promise<string> {
@@ -93,7 +93,7 @@ describe('contract: ownership-safe provisioning assets — additional refusal pa
     const first = JSON.stringify({ mcpServers: {} });
     const concurrentSave = JSON.stringify({ mcpServers: {}, userPreference: 'added-while-we-were-writing' });
     let reads = 0;
-    const fs: RegistrationFsDeps = {
+    const fs: AtomicFsDeps = {
       readConfig: () => Buffer.from(++reads === 1 ? first : concurrentSave),
       createTemp: (path) => `${path}.tmp-test`,
       write: () => {},

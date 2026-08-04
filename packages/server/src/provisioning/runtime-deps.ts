@@ -48,6 +48,7 @@ export function buildProvisioningService(config: ServerConfig): ProvisioningServ
     daemonPort: config.server.port,
     cliEntrypoint: resolveCliEntrypoint(),
     release: readServerVersion(),
+    stateDir,
   });
   const deps: ProvisioningServiceDeps = {
     stateDir,

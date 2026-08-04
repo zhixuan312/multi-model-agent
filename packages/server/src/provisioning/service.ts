@@ -26,10 +26,11 @@ import {
   writeMarker,
   type ProvisioningMarker,
   type ProvisioningPhase,
+  type RegistrationFingerprint,
   type RegistrationSnapshot,
 } from './marker-store.js';
 import { computeClientStatus, getClientInventory, type ClientInventoryRecord } from './inventory.js';
-import type { ClientProvisioningStatus, ProvisioningPort } from './provisioning-port.js';
+import type { ClientProvisioningStatus, ProvisioningPort, RegistrationMutationResult } from './provisioning-port.js';
 
 export type { ClientInventoryRecord } from './inventory.js';
 export type { ClientProvisioningStatus, ProvisioningPort, PortActionResult, SkillBackupResult } from './provisioning-port.js';
@@ -101,6 +102,33 @@ function emitPhase(deps: ProvisioningServiceDeps, clientId: ClientId, phase: Pro
 }
 
 /**
+ * The last phase an operation writes before clearing its marker.
+ *
+ * A marker recording THIS phase did not fail: every mutation the operation
+ * intended succeeded, and only the marker-clear step was lost. Recovery must
+ * finish that step rather than undo the work -- see {@link resolvePending}.
+ */
+function terminalPhaseOf(capability: ClientCapability): ProvisioningPhase {
+  return capability.skillPathStrategy === 'none' ? 'registered' : 'skills-written';
+}
+
+/**
+ * Clear a client's marker and, only if that succeeded, drop the skill backup the
+ * marker referenced.
+ *
+ * The order is the point. The marker is the only thing that knows where the
+ * backup is; while it is still on disk, recovery may yet need to restore from
+ * that backup. Deleting the backup first and then failing to clear the marker
+ * would leave a marker pointing at nothing. Discarding is best-effort by design:
+ * a backup left behind is disk to reclaim, never a failed operation.
+ */
+function clearMarkerAndBackup(deps: ProvisioningServiceDeps, clientId: ClientId, backupPath: string | null): boolean {
+  if (!clearMarker(deps.stateDir, clientId)) return false;
+  if (backupPath) deps.port.discardSkillBackup(backupPath);
+  return true;
+}
+
+/**
  * Restore a client to the state recorded by `marker`, gated by the
  * reachability predicate for each phase the marker's operation actually
  * reached. Shared by both inline rollback (a failure mid-`runOn`/`runOff`) and
@@ -114,8 +142,12 @@ async function restoreFromMarker(
   const clientId = capability.id;
 
   if (marker.priorRegistration) {
-    if (!deps.port.isRegistrationReachable(clientId, capability, marker.priorRegistration)) {
-      return { ok: false, reason: 'registration path is not writable, or its content no longer matches the recorded precondition' };
+    if (!deps.port.isRegistrationReachable(clientId, capability, marker.priorRegistration, marker.postRegistration)) {
+      return {
+        ok: false,
+        reason: 'registration path is not writable, or its content is no longer what this operation left there '
+          + '(restoring the snapshot over it would discard whatever changed it)',
+      };
     }
   }
   const touchedSkills = capability.skillPathStrategy !== 'none' && (marker.phase === 'registered' || marker.phase === 'skills-written');
@@ -155,9 +187,20 @@ async function resolvePending(deps: ProvisioningServiceDeps, capability: ClientC
     return { clientId, resolved: false, reason: 'marker is unparseable/corrupt' };
   }
 
+  if (read.marker.phase === terminalPhaseOf(capability)) {
+    // The operation succeeded end to end and only failed to clear its own
+    // marker. Rolling back here would revert a client that is correctly
+    // provisioned right now -- an unresolved marker is not evidence of a failed
+    // mutation, only of an unfinished bookkeeping step. Finish that step.
+    if (!clearMarkerAndBackup(deps, clientId, read.marker.priorSkillBackup)) {
+      return { clientId, resolved: false, reason: "the completed operation's marker could not be cleared" };
+    }
+    return { clientId, resolved: true };
+  }
+
   const outcome = await restoreFromMarker(deps, capability, read.marker);
   if (!outcome.ok) return { clientId, resolved: false, reason: outcome.reason };
-  if (!clearMarker(deps.stateDir, clientId)) {
+  if (!clearMarkerAndBackup(deps, clientId, read.marker.priorSkillBackup)) {
     return { clientId, resolved: false, reason: 'recovery restored prior state but could not clear its marker' };
   }
   return { clientId, resolved: true };
@@ -199,6 +242,7 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     intendedState: 'on',
     phase: 'started',
     priorRegistration: start.priorRegistration,
+    postRegistration: null,
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
     startedAt: (deps.now ?? Date.now)(),
@@ -211,11 +255,15 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     // Nothing besides the registration write was attempted, and an
     // ownership-safe writer never partially mutates on failure -- the file is
     // already exactly its prior state, so there is nothing to roll back.
-    clearMarker(deps.stateDir, clientId);
+    clearMarkerAndBackup(deps, clientId, start.priorSkillBackup);
     return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
   }
 
-  const registeredMarker: ProvisioningMarker = { ...baseMarker, phase: 'registered' };
+  const registeredMarker: ProvisioningMarker = {
+    ...baseMarker,
+    phase: 'registered',
+    postRegistration: registered.fingerprint ?? null,
+  };
   writeMarker(deps.stateDir, registeredMarker);
   emitPhase(deps, clientId, 'registered');
 
@@ -223,7 +271,7 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     // Registration alone is a complete, successful install for a 'none'
     // client -- never left permanently marked waiting for a skills phase
     // that will never come.
-    if (!clearMarker(deps.stateDir, clientId)) {
+    if (!clearMarkerAndBackup(deps, clientId, start.priorSkillBackup)) {
       return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
     }
     return { clientId, status: 'provisioned', skillsInstalled: false, mcpRegistrationStatus: 'registered' };
@@ -233,7 +281,7 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
   if (!skills.ok) {
     const rollback = await restoreFromMarker(deps, capability, registeredMarker);
     if (rollback.ok) {
-      clearMarker(deps.stateDir, clientId);
+      clearMarkerAndBackup(deps, clientId, start.priorSkillBackup);
       // The registration this attempt would have confirmed was rolled back
       // along with the skills that failed -- this attempt achieved neither,
       // even though the file on disk was restored to its (possibly still
@@ -245,11 +293,14 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
   }
 
-  const skillsWrittenMarker: ProvisioningMarker = { ...baseMarker, phase: 'skills-written' };
+  // Built from registeredMarker, not baseMarker: the registration fingerprint
+  // recorded one phase ago must survive into the terminal phase, or a recovery
+  // reading this marker would have no drift check to gate a restore on.
+  const skillsWrittenMarker: ProvisioningMarker = { ...registeredMarker, phase: 'skills-written' };
   writeMarker(deps.stateDir, skillsWrittenMarker);
   emitPhase(deps, clientId, 'skills-written');
 
-  if (!clearMarker(deps.stateDir, clientId)) {
+  if (!clearMarkerAndBackup(deps, clientId, start.priorSkillBackup)) {
     return { clientId, status: 'failed', skillsInstalled: true, mcpRegistrationStatus: 'failed' };
   }
   return { clientId, status: 'provisioned', skillsInstalled: true, mcpRegistrationStatus: 'registered' };
@@ -265,6 +316,7 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
     intendedState: 'off',
     phase: 'started',
     priorRegistration: start.priorRegistration,
+    postRegistration: null,
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
     startedAt: (deps.now ?? Date.now)(),
@@ -282,12 +334,16 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
   // touch the skill root and therefore that both assets need restoring after
   // an interruption.  Without this transition a crash after skill removal
   // would leave a `started` marker that restored only the registration.
-  const registrationRemovedMarker: ProvisioningMarker = { ...marker, phase: 'registered' };
+  const registrationRemovedMarker: ProvisioningMarker = {
+    ...marker,
+    phase: 'registered',
+    postRegistration: removedRegistration.fingerprint ?? null,
+  };
   writeMarker(deps.stateDir, registrationRemovedMarker);
   emitPhase(deps, clientId, 'registered');
 
   if (capability.skillPathStrategy === 'none') {
-    if (!clearMarker(deps.stateDir, clientId)) {
+    if (!clearMarkerAndBackup(deps, clientId, start.priorSkillBackup)) {
       return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
     }
     return { clientId, status: 'removed', skillsInstalled: false, mcpRegistrationStatus: 'absent' };
@@ -303,15 +359,17 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
     if (!rollback.ok) {
       return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
     }
-    clearMarker(deps.stateDir, clientId);
+    clearMarkerAndBackup(deps, clientId, start.priorSkillBackup);
     return { clientId, status: 'failed', skillsInstalled: true, mcpRegistrationStatus: 'registered' };
   }
 
-  const skillsRemovedMarker: ProvisioningMarker = { ...marker, phase: 'skills-written' };
+  // Built from registrationRemovedMarker so the post-removal fingerprint carries
+  // into the terminal phase -- same reason as runOn's skills-written marker.
+  const skillsRemovedMarker: ProvisioningMarker = { ...registrationRemovedMarker, phase: 'skills-written' };
   writeMarker(deps.stateDir, skillsRemovedMarker);
   emitPhase(deps, clientId, 'skills-written');
 
-  if (!clearMarker(deps.stateDir, clientId)) {
+  if (!clearMarkerAndBackup(deps, clientId, start.priorSkillBackup)) {
     return { clientId, status: 'failed', skillsInstalled: false, mcpRegistrationStatus: 'failed' };
   }
   return { clientId, status: 'removed', skillsInstalled: false, mcpRegistrationStatus: 'absent' };
@@ -385,7 +443,8 @@ export const createProvisioningService = buildService as CreateProvisioningServi
 // file. Production behaviour lives entirely above this line; nothing here is
 // reachable from non-test code.
 
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeSkillDigest } from './owned-files.js';
@@ -416,6 +475,14 @@ export interface ProvisioningTestFixture {
   makeSkillsUnwritable(clientId: ClientId): void;
   tamperRegistration(clientId: ClientId): void;
   tamperSkills(clientId: ClientId): void;
+  /** Replaces the client's registration bytes as a third party would -- the user
+   *  saving their own MCP config while a marker is still pending. */
+  editRegistrationOutsideMma(clientId: ClientId, entry: Record<string, unknown>): void;
+  /** Deletes the skill backup the client's current marker points at, simulating
+   *  a backup that did not survive as long as the marker referencing it. */
+  deleteSkillBackup(clientId: ClientId): void;
+  /** Every skill-backup directory currently on disk for this fixture. */
+  skillBackupDirs(): string[];
   /** Changes the DECLARED roster after construction -- e.g. to simulate a
    *  config edit turning a shared-root client 'off' while a sibling stays
    *  'on', for shared-root reference-counting cases. */
@@ -431,11 +498,19 @@ class FakeProvisioningPort implements ProvisioningPort {
   private readonly tamperedRegistrationFor = new Set<ClientId>();
   private readonly tamperedSkillsFor = new Set<ClientId>();
   private readonly restoreFailFor = new Set<ClientId>();
+  private readonly stateDir: string;
   readonly failRegistrationFor: Set<ClientId>;
   readonly failSkillsFor = new Set<ClientId>();
 
-  constructor(failRegistrationFor: Set<ClientId>) {
+  constructor(failRegistrationFor: Set<ClientId>, stateDir: string) {
     this.failRegistrationFor = failRegistrationFor;
+    this.stateDir = stateDir;
+  }
+
+  /** Same location the real port uses, so a test asserting "no backup was left
+   *  behind" is asserting the production layout rather than a fixture-only one. */
+  private backupsRoot(): string {
+    return join(this.stateDir, 'provisioning', 'skill-backups');
   }
 
   private path(clientId: ClientId): string {
@@ -458,10 +533,15 @@ class FakeProvisioningPort implements ProvisioningPort {
     return { path: this.path(clientId), existed: bytes !== null, bytes };
   }
 
-  async writeRegistration(clientId: ClientId): Promise<{ ok: boolean; error?: string }> {
+  private fingerprint(clientId: ClientId): RegistrationFingerprint {
+    const bytes = this.registrations.get(clientId) ?? null;
+    return bytes === null ? { existed: false, sha256: null } : { existed: true, sha256: createHash('sha256').update(bytes).digest('hex') };
+  }
+
+  async writeRegistration(clientId: ClientId): Promise<RegistrationMutationResult> {
     if (this.failRegistrationFor.has(clientId)) return { ok: false, error: 'simulated registration failure' };
     this.registrations.set(clientId, Buffer.from(JSON.stringify({ mma: { client: clientId, url: 'http://127.0.0.1/mcp' } })));
-    return { ok: true };
+    return { ok: true, fingerprint: this.fingerprint(clientId) };
   }
 
   async restoreRegistration(clientId: ClientId, _capability: ClientCapability, snapshot: RegistrationSnapshot): Promise<{ ok: boolean; error?: string }> {
@@ -470,14 +550,25 @@ class FakeProvisioningPort implements ProvisioningPort {
     return { ok: true };
   }
 
-  async removeRegistration(clientId: ClientId): Promise<{ ok: boolean; error?: string }> {
+  async removeRegistration(clientId: ClientId): Promise<RegistrationMutationResult> {
     this.registrations.set(clientId, null);
-    return { ok: true };
+    return { ok: true, fingerprint: this.fingerprint(clientId) };
   }
 
-  isRegistrationReachable(clientId: ClientId, _capability: ClientCapability, _snapshot: RegistrationSnapshot): boolean {
+  isRegistrationReachable(
+    clientId: ClientId,
+    _capability: ClientCapability,
+    _snapshot: RegistrationSnapshot,
+    postMutation: RegistrationFingerprint | null,
+  ): boolean {
     if (this.unwritableRegistrationFor.has(clientId)) return false;
     if (this.tamperedRegistrationFor.has(clientId)) return false;
+    // Same drift rule the real port applies: the file must still be exactly
+    // what this operation left there for a whole-file restore to be safe.
+    if (postMutation !== null) {
+      const current = this.fingerprint(clientId);
+      if (current.existed !== postMutation.existed || current.sha256 !== postMutation.sha256) return false;
+    }
     return true;
   }
 
@@ -493,7 +584,8 @@ class FakeProvisioningPort implements ProvisioningPort {
     if (capability.skillPathStrategy === 'none') return { backupPath: null, digest: null };
     const root = this.rootMap(capability);
     if (root.size === 0) return { backupPath: null, digest: null };
-    const backupDir = mkdtempSync(join(tmpdir(), `mma-fake-skill-backup-${clientId}-`));
+    mkdirSync(this.backupsRoot(), { recursive: true });
+    const backupDir = mkdtempSync(join(this.backupsRoot(), `${clientId}-`));
     for (const [name, bytes] of root) {
       const dir = join(backupDir, name);
       mkdirSync(dir, { recursive: true });
@@ -517,13 +609,23 @@ class FakeProvisioningPort implements ProvisioningPort {
     if (capability.skillPathStrategy === 'none') return { ok: true };
     if (this.restoreFailFor.has(clientId)) return { ok: false, error: 'simulated restore failure' };
     const root = this.rootMap(capability);
-    root.clear();
+    // Read the backup FIRST, exactly as the real port does: a backup that has
+    // gone missing must leave the live content alone rather than clear it and
+    // then discover there is nothing to put back.
+    let restored: Array<[string, Buffer]> = [];
     if (backupPath) {
-      for (const name of readdirSync(backupPath)) {
-        root.set(name, readFileSync(join(backupPath, name, 'SKILL.md')));
+      if (!existsSync(backupPath)) {
+        return { ok: false, error: `the skill backup recorded at ${backupPath} no longer exists, so the current content is kept` };
       }
+      restored = readdirSync(backupPath).map((name) => [name, readFileSync(join(backupPath, name, 'SKILL.md'))] as [string, Buffer]);
     }
+    root.clear();
+    for (const [name, bytes] of restored) root.set(name, bytes);
     return { ok: true };
+  }
+
+  discardSkillBackup(backupPath: string): void {
+    rmSync(backupPath, { recursive: true, force: true });
   }
 
   async removeSkills(clientId: ClientId, capability: ClientCapability, enabledPeers: ReadonlySet<ClientId>): Promise<{ ok: boolean; error?: string }> {
@@ -550,6 +652,11 @@ class FakeProvisioningPort implements ProvisioningPort {
 
   // ── Test-only controls ────────────────────────────────────────────────
   makeUnrestorable(clientId: ClientId): void { this.restoreFailFor.add(clientId); }
+  /** Simulates the user saving their own MCP config after MMA wrote to it --
+   *  the case a whole-file restore would silently discard. */
+  editRegistrationOutsideMma(clientId: ClientId, entry: Record<string, unknown>): void {
+    this.registrations.set(clientId, Buffer.from(JSON.stringify(entry)));
+  }
   makeRegistrationUnwritable(clientId: ClientId): void { this.unwritableRegistrationFor.add(clientId); }
   makeSkillsUnwritable(clientId: ClientId): void { this.unwritableSkillsFor.add(clientId); }
   tamperRegistration(clientId: ClientId): void { this.tamperedRegistrationFor.add(clientId); }
@@ -562,7 +669,7 @@ class FakeProvisioningPort implements ProvisioningPort {
 
 function buildTestFixture(options: TestFixtureOptions): ProvisioningTestFixture {
   const stateDir = mkdtempSync(join(tmpdir(), 'mma-provisioning-fixture-'));
-  const port = new FakeProvisioningPort(options.failRegistrationFor ?? new Set());
+  const port = new FakeProvisioningPort(options.failRegistrationFor ?? new Set(), stateDir);
   const declared: DeclaredClientRoster = { ...options.clients };
   const detected = options.detected ?? new Set<ClientId>();
   const capabilities = options.capabilities ?? CLIENT_CAPABILITIES;
@@ -614,6 +721,20 @@ function buildTestFixture(options: TestFixtureOptions): ProvisioningTestFixture 
     makeSkillsUnwritable: (clientId) => port.makeSkillsUnwritable(clientId),
     tamperRegistration: (clientId) => port.tamperRegistration(clientId),
     tamperSkills: (clientId) => port.tamperSkills(clientId),
+    editRegistrationOutsideMma: (clientId, entry) => port.editRegistrationOutsideMma(clientId, entry),
+    deleteSkillBackup: (clientId) => {
+      const read = readMarker(stateDir, clientId);
+      const backupPath = read.status === 'ok' ? read.marker.priorSkillBackup : null;
+      if (backupPath) rmSync(backupPath, { recursive: true, force: true });
+    },
+    skillBackupDirs: () => {
+      const root = join(stateDir, 'provisioning', 'skill-backups');
+      try {
+        return readdirSync(root);
+      } catch {
+        return [];
+      }
+    },
     setClientState: (clientId, state) => { declared[clientId] = state; },
     stateDir,
   };

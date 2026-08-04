@@ -18,16 +18,15 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, sep } from 'node:path';
-import { tmpdir } from 'node:os';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import type { ClientCapability } from './capability-registry.js';
-import type { RegistrationSnapshot } from './marker-store.js';
-import type { PortActionResult, ProvisioningPort, SkillBackupResult } from './provisioning-port.js';
+import type { RegistrationFingerprint, RegistrationSnapshot } from './marker-store.js';
+import type { PortActionResult, ProvisioningPort, RegistrationMutationResult, SkillBackupResult } from './provisioning-port.js';
+import { atomicWriteBytes, realFsDeps } from './atomic-write.js';
 import {
-  atomicWriteBytes,
   isOwnedMcpEntry,
-  realFsDeps,
   removeClientRegistration,
   writeClientRegistration,
   type WriteClientRegistrationInput,
@@ -39,7 +38,14 @@ import { antigravityRegistrationPath } from './writers/antigravity.js';
 import { cursorRegistrationPath } from './writers/cursor.js';
 import { opencodeRegistrationPath } from './writers/opencode.js';
 import { windsurfRegistrationPath } from './writers/windsurf.js';
-import { computeSkillDigest, inspectSkillOwnership, readInstalledRegularFiles, SKILL_OWNERSHIP_MARKER_FILE, type RenderedFiles } from './owned-files.js';
+import {
+  computeSkillDigest,
+  inspectSkillOwnership,
+  readInstalledRegularFiles,
+  SKILL_OWNERSHIP_MARKER_FILE,
+  UnprovableSkillEntryError,
+  type RenderedFiles,
+} from './owned-files.js';
 import { getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from '../skill-install/discover.js';
 import { inlineIncludes } from '../skill-install/include-utils.js';
 import { expandHome } from '../expand-home.js';
@@ -54,6 +60,12 @@ export interface RealPortContext {
   /** Release identifier recorded into each skill's ownership marker -- the
    *  running server's own version. */
   release: string;
+  /** The same state directory the markers live under. Skill backups are stored
+   *  beside them rather than in the OS temp directory: a marker can outlive a
+   *  reboot (that is the whole point of a durable marker), and many platforms
+   *  clear `/tmp` on boot -- so a temp-dir backup could vanish before the
+   *  recovery that needs it ever runs. */
+  stateDir: string;
   /** Override for tests; defaults to the packaged skills directory. */
   skillsRoot?: string;
 }
@@ -133,11 +145,33 @@ function readInstalledRegularFilesSync(root: string, current = root): Map<string
       for (const [relativePath, bytes] of readInstalledRegularFilesSync(root, absolutePath)) files.set(relativePath, bytes);
       continue;
     }
-    if (!metadata.isFile()) continue;
+    // Same rule as the async walk: a non-regular entry makes ownership
+    // unprovable rather than merely absent from the digest. Both read-only
+    // callers below already treat a throw as "not ownership-proven".
+    if (!metadata.isFile()) throw new UnprovableSkillEntryError(absolutePath);
     const relativePath = relative(root, absolutePath).split(sep).join('/');
     if (relativePath !== SKILL_OWNERSHIP_MARKER_FILE) files.set(relativePath, readFileSync(absolutePath));
   }
   return files;
+}
+
+function sha256Of(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * Write one skill file, never through a symlink.
+ *
+ * `writeFileSync` follows a symlink at the target path and truncates whatever it
+ * points at -- which for a path inside a user-writable skill directory means a
+ * write can land anywhere on disk. Unlinking first makes the write create a fresh
+ * regular file instead. Ownership inspection already refuses a directory
+ * containing a symlink, so this is the second of two independent guards rather
+ * than the only one; keeping both means neither has to be perfect alone.
+ */
+function writeSkillFile(filePath: string, bytes: Buffer | Uint8Array): void {
+  rmSync(filePath, { force: true });
+  writeFileSync(filePath, bytes);
 }
 
 /** Builds the production `ProvisioningPort` against a real home directory. */
@@ -147,6 +181,24 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
   function skillRootFor(capability: ClientCapability): string {
     if (!capability.skillRoot) throw new Error(`client '${capability.id}' has no skill root (strategy 'none')`);
     return expandHome(capability.skillRoot, ctx.homeDir);
+  }
+
+  /** What the registration file at `capability`'s path currently is. */
+  function fingerprintRegistration(capability: ClientCapability): RegistrationFingerprint {
+    const path = registrationPathFor(capability, ctx);
+    if (!path) return { existed: false, sha256: null };
+    try {
+      return { existed: true, sha256: sha256Of(readFileSync(path)) };
+    } catch {
+      return { existed: false, sha256: null };
+    }
+  }
+
+  /** Every skill backup for this installation lives under one directory beside
+   *  the markers that reference it, so a single well-known path holds them all
+   *  and an orphan is visible rather than scattered through the OS temp root. */
+  function backupsRoot(): string {
+    return join(ctx.stateDir, 'provisioning', 'skill-backups');
   }
 
   return {
@@ -161,9 +213,12 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       }
     },
 
-    async writeRegistration(_clientId: ClientId, capability: ClientCapability): Promise<PortActionResult> {
+    async writeRegistration(_clientId: ClientId, capability: ClientCapability): Promise<RegistrationMutationResult> {
       const result = await writeClientRegistration(buildWriteInput(capability, ctx));
-      return result.status === 'registered' ? { ok: true } : { ok: false, error: result.message ?? `registration write failed for '${capability.id}'` };
+      if (result.status !== 'registered') {
+        return { ok: false, error: result.message ?? `registration write failed for '${capability.id}'` };
+      }
+      return { ok: true, fingerprint: fingerprintRegistration(capability) };
     },
 
     async restoreRegistration(_clientId: ClientId, _capability: ClientCapability, snapshot: RegistrationSnapshot): Promise<PortActionResult> {
@@ -180,19 +235,39 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       }
     },
 
-    async removeRegistration(_clientId: ClientId, capability: ClientCapability): Promise<PortActionResult> {
+    async removeRegistration(_clientId: ClientId, capability: ClientCapability): Promise<RegistrationMutationResult> {
       const result = await removeClientRegistration(buildWriteInput(capability, ctx));
-      return result.status === 'absent' ? { ok: true } : { ok: false, error: result.message ?? `registration removal failed for '${capability.id}'` };
+      if (result.status !== 'absent') {
+        return { ok: false, error: result.message ?? `registration removal failed for '${capability.id}'` };
+      }
+      return { ok: true, fingerprint: fingerprintRegistration(capability) };
     },
 
-    isRegistrationReachable(_clientId: ClientId, capability: ClientCapability, snapshot: RegistrationSnapshot): boolean {
+    isRegistrationReachable(
+      _clientId: ClientId,
+      capability: ClientCapability,
+      snapshot: RegistrationSnapshot,
+      postMutation: RegistrationFingerprint | null,
+    ): boolean {
       if (!isPathWritable(snapshot.path)) return false;
       let currentBytes: Buffer | undefined;
       try {
         currentBytes = readFileSync(snapshot.path);
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return true;
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          // Absent now. Only consistent with a mutation that left it absent (or
+          // with no registration mutation having happened yet at all).
+          return postMutation === null || !postMutation.existed;
+        }
         return false;
+      }
+      if (postMutation !== null) {
+        // The restore about to happen writes the WHOLE prior file back. That is
+        // only correct while the file is still exactly what this operation left
+        // there -- any other content includes somebody else's edit, and putting
+        // the snapshot back would silently discard it. Refuse instead; the
+        // marker survives and the state is reported, never quietly overwritten.
+        if (!postMutation.existed || postMutation.sha256 !== sha256Of(currentBytes)) return false;
       }
       if (capability.mcpConfigFormat === 'toml') {
         return isCodexTableOwnedOrAbsent(currentBytes.toString('utf8'));
@@ -237,7 +312,7 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       return [...SUPPORTED_SKILLS];
     },
 
-    async backupSkills(_clientId: ClientId, capability: ClientCapability): Promise<SkillBackupResult> {
+    async backupSkills(clientId: ClientId, capability: ClientCapability): Promise<SkillBackupResult> {
       if (capability.skillPathStrategy === 'none') return { backupPath: null, digest: null };
       const root = skillRootFor(capability);
       if (!existsSync(root)) return { backupPath: null, digest: null };
@@ -252,7 +327,10 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
           throw new Error(inspection.reason ?? `refusing to back up skill content whose MMA ownership cannot be proven at ${dir}`);
         }
         if (inspection.state === 'unowned') continue;
-        if (!backupDir) backupDir = mkdtempSync(join(tmpdir(), 'mma-skill-backup-'));
+        if (!backupDir) {
+          mkdirSync(backupsRoot(), { recursive: true });
+          backupDir = mkdtempSync(join(backupsRoot(), `${clientId}-`));
+        }
         cpSync(dir, join(backupDir, name), { recursive: true });
         for (const [relativePath, bytes] of await readInstalledRegularFiles(dir)) {
           backedUpFiles.set(`${name}/${relativePath}`, bytes);
@@ -261,6 +339,17 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       return backupDir
         ? { backupPath: backupDir, digest: computeSkillDigest(backedUpFiles) }
         : { backupPath: null, digest: null };
+    },
+
+    discardSkillBackup(backupPath: string): void {
+      // Only ever a path this port itself created -- anchored under the state
+      // directory, so a stale/foreign value can never reach an unrelated tree.
+      if (!backupPath.startsWith(backupsRoot() + sep)) return;
+      try {
+        rmSync(backupPath, { recursive: true, force: true });
+      } catch {
+        /* leaked disk under a well-known path, not a failed operation */
+      }
     },
 
     async installSkills(_clientId: ClientId, capability: ClientCapability): Promise<PortActionResult> {
@@ -278,9 +367,9 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
           for (const [relPath, bytes] of rendered) {
             const filePath = join(dir, relPath);
             mkdirSync(dirname(filePath), { recursive: true });
-            writeFileSync(filePath, bytes);
+            writeSkillFile(filePath, bytes);
           }
-          writeFileSync(join(dir, SKILL_OWNERSHIP_MARKER_FILE), JSON.stringify({ release: ctx.release, sha256: inspection.digest }));
+          writeSkillFile(join(dir, SKILL_OWNERSHIP_MARKER_FILE), Buffer.from(JSON.stringify({ release: ctx.release, sha256: inspection.digest })));
         }
         return { ok: true };
       } catch (err) {
@@ -288,16 +377,41 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       }
     },
 
+    /**
+     * Put back exactly what `backupSkills` captured.
+     *
+     * The ordering matters more than it looks: the backup is READ FIRST, in
+     * full, and only then is anything live removed. Removing first and
+     * discovering afterwards that the backup is gone would leave neither copy --
+     * turning a recoverable interrupted install into permanent data loss.
+     *
+     * A `null` backup is not a missing backup: it means the root held no
+     * MMA-owned content when this operation began, so removing what this
+     * operation wrote IS the restore. That also makes the shared-root case safe
+     * without a peer check -- if a sibling client's skills had been installed at
+     * this shared root, the backup would have captured them and would not be
+     * null.
+     */
     async restoreSkills(_clientId: ClientId, capability: ClientCapability, backupPath: string | null): Promise<PortActionResult> {
       if (capability.skillPathStrategy === 'none') return { ok: true };
       const root = skillRootFor(capability);
       try {
+        let backedUp: string[] = [];
+        if (backupPath) {
+          if (!existsSync(backupPath)) {
+            return {
+              ok: false,
+              error: `the skill backup recorded at ${backupPath} no longer exists, so the current content is kept rather than removed with nothing to put back`,
+            };
+          }
+          backedUp = readdirSync(backupPath);
+        }
         for (const name of SUPPORTED_SKILLS) {
           rmSync(join(root, name), { recursive: true, force: true });
         }
         if (backupPath) {
           mkdirSync(root, { recursive: true });
-          for (const name of readdirSync(backupPath)) {
+          for (const name of backedUp) {
             cpSync(join(backupPath, name), join(root, name), { recursive: true });
           }
         }

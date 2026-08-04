@@ -12,19 +12,26 @@
  *      or a digest that no longer matches what the CURRENT render would produce
  *      means the directory was touched by something other than MMA (by hand, by a
  *      different tool, by disk corruption) — refuse rather than clobber it.
- *   2. **A stale release is not a conflict.** If the marker's `release` differs from
- *      the release currently being installed, the directory is still MMA-owned —
- *      just from an earlier install — and safe to replace. There is no way (or need)
- *      to re-render an old release's content just to re-verify its digest; the
- *      marker's own record is trusted for that superseded release.
+ *   2. **A stale release is still verified, just against a different yardstick.**
+ *      If the marker's `release` differs from the release currently being installed,
+ *      the old release's bytes cannot be re-rendered here — but the marker recorded
+ *      THEIR digest, so the directory can still be correlated against its own
+ *      record. Content matching that record is MMA-owned from an earlier install and
+ *      safe to replace; content that does not is a conflict exactly like any other.
+ *      The marker sits in a directory the user can also write, so "the marker says
+ *      so" is never a proof on its own.
+ *   3. **Every entry must be a regular file or a directory.** A symlink (or socket,
+ *      or device) at a path the render expects to be a file cannot be proven owned,
+ *      and following it would let a write escape the skill directory entirely —
+ *      so its presence is a conflict, never something quietly skipped.
  *
  * The digest itself is defined byte-exactly so two independent renders of the same
  * release always agree: SHA-256 over the directory's REGULAR FILES ONLY, sorted by
  * POSIX-relative path under byte-wise ordering, each contributing its
  * length-prefixed UTF-8 relative path followed by its length-prefixed raw bytes.
- * Symlinks and directories never enter the map this operates on in the first place,
- * so they never affect the digest. `.mma-install.json` itself is always excluded —
- * it cannot contain a hash of itself.
+ * Directories contribute nothing themselves (only the files beneath them), and a
+ * non-regular entry aborts the walk rather than being excluded from it.
+ * `.mma-install.json` itself is always excluded — it cannot contain a hash of itself.
  */
 import { createHash, type Hash } from 'node:crypto';
 import { lstat, readdir, readFile } from 'node:fs/promises';
@@ -32,6 +39,31 @@ import { join, relative, sep } from 'node:path';
 
 /** The marker file every MMA-installed skill directory carries. */
 export const SKILL_OWNERSHIP_MARKER_FILE = '.mma-install.json';
+
+/**
+ * Thrown when a skill directory holds an entry that is neither a regular file nor
+ * a directory — a symlink above all.
+ *
+ * Skipping such an entry (the obvious alternative) is precisely what makes it
+ * dangerous: an excluded entry contributes nothing to the digest, so a directory
+ * whose only file was swapped for a symlink still hashes to whatever the marker
+ * records, passes as owned, and is then written through — truncating the symlink's
+ * target somewhere else on disk entirely. Ownership must be unprovable here, not
+ * merely unaffected.
+ */
+export class UnprovableSkillEntryError extends Error {
+  readonly code = 'unprovable_skill_entry' as const;
+  readonly path: string;
+
+  constructor(path: string) {
+    super(
+      `${path} is not a regular file or directory (it may be a symlink) — MMA cannot prove it owns this content, `
+      + 'so the directory is left untouched.',
+    );
+    this.name = 'UnprovableSkillEntryError';
+    this.path = path;
+  }
+}
 
 /** The parsed shape of `.mma-install.json`. */
 export interface SkillOwnershipMarker {
@@ -46,11 +78,12 @@ export interface SkillOwnershipMarker {
  *  - `owned`: the marker is present, its recorded release matches the release being
  *    installed, and its digest matches the current render. Safe to replace as a
  *    no-op or identity write.
- *  - `owned-stale`: the marker is present and MMA-authored, but records an earlier
- *    release. Safe to replace (upgrade).
+ *  - `owned-stale`: the marker records an earlier release AND the directory's
+ *    contents still match the digest that install recorded. Safe to replace (upgrade).
  *  - `modified-conflict`: the directory exists but ownership cannot be proven — the
- *    marker is missing, unparseable, or its digest does not match the render for its
- *    own recorded release. Never replace or delete; preserve and report.
+ *    marker is missing, unparseable, or its digest does not match the directory's
+ *    actual contents; or the directory holds an entry that is neither a regular file
+ *    nor a directory. Never replace or delete; preserve and report.
  */
 export type SkillOwnershipState = 'unowned' | 'owned' | 'owned-stale' | 'modified-conflict';
 
@@ -141,12 +174,14 @@ async function directoryExists(dir: string): Promise<boolean> {
   }
 }
 
-/** Read only the directory's regular files. `lstat` deliberately excludes
- * symlinks (including links to regular files) and the marker from the ownership
- * proof, exactly as the digest contract requires. Exported so callers that need
- * the SAME regular-file set this module's own ownership proof uses -- e.g. a
- * provisioning backup snapshot's digest -- never re-implement directory
- * walking (and risk disagreeing with it) themselves. */
+/** Read the directory's regular files, throwing {@link UnprovableSkillEntryError}
+ * for any entry that is neither a regular file nor a directory. `lstat` (never
+ * `stat`) is what makes that distinction possible: a symlink must be recognised as
+ * a symlink, not silently resolved to whatever it points at. The marker is excluded
+ * from the returned set because it cannot contain a hash of itself. Exported so
+ * callers that need the SAME regular-file set this module's own ownership proof
+ * uses -- e.g. a provisioning backup snapshot's digest -- never re-implement
+ * directory walking (and risk disagreeing with it) themselves. */
 export async function readInstalledRegularFiles(root: string, current = root): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>();
   for (const name of await readdir(current)) {
@@ -158,7 +193,7 @@ export async function readInstalledRegularFiles(root: string, current = root): P
       }
       continue;
     }
-    if (!metadata.isFile()) continue;
+    if (!metadata.isFile()) throw new UnprovableSkillEntryError(absolutePath);
 
     const relativePath = relative(root, absolutePath).split(sep).join('/');
     if (relativePath !== SKILL_OWNERSHIP_MARKER_FILE) {
@@ -189,6 +224,15 @@ export async function inspectSkillOwnership(
   const markerPath = join(dir, SKILL_OWNERSHIP_MARKER_FILE);
   let markerBytes: Buffer;
   try {
+    // lstat first: a marker that is itself a symlink proves nothing about this
+    // directory, only about wherever it points.
+    if (!(await lstat(markerPath)).isFile()) {
+      return {
+        state: 'modified-conflict',
+        digest,
+        reason: new UnprovableSkillEntryError(markerPath).message,
+      };
+    }
     markerBytes = await readFile(markerPath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
@@ -208,27 +252,49 @@ export async function inspectSkillOwnership(
     };
   }
 
-  if (marker.release !== installedRelease) {
-    // MMA-owned, just from an earlier install. Its own digest cannot be re-verified
-    // here — that would require re-rendering the OLD release, which this function
-    // has no way to do — so the marker's record is trusted for its own release.
-    return { state: 'owned-stale', digest, recordedRelease: marker.release, recordedDigest: marker.sha256 };
+  const isCurrentRelease = marker.release === installedRelease;
+  const conflict = (reason: string): SkillOwnershipInspection => ({
+    state: 'modified-conflict',
+    digest,
+    recordedRelease: marker.release,
+    recordedDigest: marker.sha256,
+    reason,
+  });
+
+  let installedFiles: Map<string, Buffer>;
+  try {
+    installedFiles = await readInstalledRegularFiles(dir);
+  } catch (err) {
+    if (err instanceof UnprovableSkillEntryError) return conflict(err.message);
+    throw err;
   }
 
-  const installedFiles = await readInstalledRegularFiles(dir);
-  const installedDigest = computeSkillDigest(installedFiles);
+  // The yardstick differs by release, but SOMETHING on disk is always checked.
+  // For the current release the render itself is authoritative (and the marker
+  // must agree with it). For a superseded release the render is unavailable, so
+  // the marker's own recorded digest is the yardstick — still a correlation
+  // against real bytes, never a bare "the marker claims this is ours".
+  if (isCurrentRelease && marker.sha256 !== digest) {
+    return conflict(
+      `${dir} carries a marker for release ${marker.release} whose digest does not match what that release renders `
+      + '— it was modified outside MMA, so it is left untouched.',
+    );
+  }
+  const expectedDigest = isCurrentRelease ? digest : marker.sha256;
   // An otherwise empty marker directory is a recoverable interrupted install: it
-  // contains no user regular-file content to preserve, and the matching marker
-  // still proves MMA created it. Any installed regular file must match the render.
-  if (marker.sha256 !== digest || (installedFiles.size > 0 && installedDigest !== digest)) {
-    return {
-      state: 'modified-conflict',
-      digest,
-      recordedRelease: marker.release,
-      recordedDigest: marker.sha256,
-      reason: `${dir} does not match the digest recorded for release ${marker.release} — its contents were modified outside MMA, so it is left untouched.`,
-    };
+  // contains no regular-file content to preserve, and the marker still proves MMA
+  // created it. Non-regular entries can no longer hide here — the walk above
+  // rejects them — so an empty set genuinely means an empty directory.
+  if (installedFiles.size > 0 && computeSkillDigest(installedFiles) !== expectedDigest) {
+    return conflict(
+      `${dir} does not match the digest recorded for release ${marker.release} — its contents were modified outside MMA, so it is left untouched.`,
+    );
   }
 
-  return { state: 'owned', digest, recordedRelease: marker.release, recordedDigest: marker.sha256 };
+  return {
+    state: isCurrentRelease ? 'owned' : 'owned-stale',
+    digest,
+    recordedRelease: marker.release,
+    recordedDigest: marker.sha256,
+  };
 }

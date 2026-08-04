@@ -10,13 +10,21 @@
  */
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import type { ClientCapability } from './capability-registry.js';
-import type { RegistrationSnapshot } from './marker-store.js';
+import type { RegistrationFingerprint, RegistrationSnapshot } from './marker-store.js';
 
 /** Outcome of a single registration/skill mutation the port performed. */
 export interface PortActionResult {
   ok: boolean;
   /** Present when `ok` is false -- surfaced in failure messages/notes. */
   error?: string;
+}
+
+/** A registration mutation additionally reports what it left on disk, so the
+ *  marker can record a fingerprint to detect later third-party edits before any
+ *  restore writes over them. */
+export interface RegistrationMutationResult extends PortActionResult {
+  /** The file as this mutation left it. Absent when the mutation failed. */
+  fingerprint?: RegistrationFingerprint;
 }
 
 /** A snapshot of what a client's skill root held for this client BEFORE the
@@ -38,19 +46,29 @@ export interface ProvisioningPort {
    *  client, plus whatever currently exists there. Read-only. */
   readRegistration(clientId: ClientId, capability: ClientCapability): { path: string; existed: boolean; bytes: Buffer | null };
   /** Idempotently install this client's recognised registration entry. */
-  writeRegistration(clientId: ClientId, capability: ClientCapability): Promise<PortActionResult>;
+  writeRegistration(clientId: ClientId, capability: ClientCapability): Promise<RegistrationMutationResult>;
   /** Overwrite the registration file with the EXACT prior bytes (or delete it
    *  when the snapshot recorded nothing existed) -- a literal restore, not a
-   *  re-run of the normal idempotent installer. */
+   *  re-run of the normal idempotent installer. Only safe once
+   *  `isRegistrationReachable` has proven the file is still exactly what this
+   *  operation left there. */
   restoreRegistration(clientId: ClientId, capability: ClientCapability, snapshot: RegistrationSnapshot): Promise<PortActionResult>;
   /** Remove this client's registration entry entirely (used for an 'off'
    *  operation). Ownership-checked; a foreign entry is left untouched and this
    *  reports failure rather than silently no-op'ing past it. */
-  removeRegistration(clientId: ClientId, capability: ClientCapability): Promise<PortActionResult>;
+  removeRegistration(clientId: ClientId, capability: ClientCapability): Promise<RegistrationMutationResult>;
   /** Whether the path a registration mutation would target is currently
-   *  writable AND its content is still consistent with what a marker recorded
-   *  as the starting point -- the reachability precondition for recovery. */
-  isRegistrationReachable(clientId: ClientId, capability: ClientCapability, snapshot: RegistrationSnapshot): boolean;
+   *  writable, its content is still consistent with what a marker recorded as
+   *  the starting point, AND -- when `postMutation` is recorded -- the file is
+   *  still byte-for-byte what this operation left there. That last check is what
+   *  stops a whole-file restore from discarding an edit the user made to their
+   *  own MCP config after the crash that stranded the marker. */
+  isRegistrationReachable(
+    clientId: ClientId,
+    capability: ClientCapability,
+    snapshot: RegistrationSnapshot,
+    postMutation: RegistrationFingerprint | null,
+  ): boolean;
   /** Whether an ownership-proven MMA registration entry is currently present
    *  for this client -- read-only, used by inventory. Distinct from
    *  `readRegistration`'s raw byte snapshot: this is the ownership-verified
@@ -68,8 +86,16 @@ export interface ProvisioningPort {
   installSkills(clientId: ClientId, capability: ClientCapability): Promise<PortActionResult>;
   /** Restore a client's skill root to exactly the backup taken by
    *  `backupSkills` -- `backupPath: null` means restoring means removing
-   *  whatever this operation partially wrote (nothing existed before). */
+   *  whatever this operation partially wrote (nothing existed before).
+   *  Must verify the backup is intact BEFORE removing anything live: a backup
+   *  that has gone missing is a reason to keep the current content, never a
+   *  reason to end up with neither copy. */
   restoreSkills(clientId: ClientId, capability: ClientCapability, backupPath: string | null): Promise<PortActionResult>;
+  /** Delete a backup taken by `backupSkills` once it can no longer be needed --
+   *  the operation reached its terminal phase, or the restore it existed for has
+   *  already succeeded. Best-effort: a backup that cannot be deleted is leaked
+   *  disk, not a failed operation, so this reports nothing. */
+  discardSkillBackup(backupPath: string): void;
   /** Remove this client's skills, honouring shared-root reference counting:
    *  `enabledPeers` is every OTHER currently-enabled client sharing the same
    *  root; when non-empty for a shared root, this is a no-op (the root is

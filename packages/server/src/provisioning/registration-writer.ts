@@ -23,18 +23,17 @@
  *      renaming a stale merge over newer content. Atomic replacement guarantees no
  *      torn file; it does not by itself guarantee the file is still the one that was
  *      merged.
- *   4. **Write via temp file + fsync + atomic rename.** The temp file is a sibling
- *      of the target (same directory, same filesystem) so the rename is atomic; any
- *      failure leaves the original bytes untouched and removes the temp file.
+ *   4. **Write via temp file + fsync + atomic rename.** Supplied by
+ *      `atomic-write.ts`, which the marker store shares — see that module.
  *   5. **Never persist a static bearer token.** A caller-provided entry containing
  *      an `Authorization: Bearer <token>`-shaped literal is refused outright — the
  *      only credential mechanisms allowed are dynamic ones (env/file interpolation,
  *      a helper script) supplied by the specific writer, never a baked-in secret.
  */
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
+import { atomicWriteBytes, realFsDeps, type AtomicFsDeps } from './atomic-write.js';
 import { CLIENT_CAPABILITIES, type ClientCapability, type McpConfigFormat } from './capability-registry.js';
 
 /** Why a registration write/remove was refused. Surfaced for inventory reporting. */
@@ -59,43 +58,23 @@ export class RegistrationConflictError extends Error {
   }
 }
 
-/** Injected filesystem primitives — narrow and synchronous, mirroring the seam
- *  proven for Claude Desktop, so ordering and failure paths are testable without a
- *  real disk race. Defaults to the real filesystem. */
-export interface RegistrationFsDeps {
-  /** Current bytes at `path`, or `undefined` when it does not exist. */
-  readConfig(path: string): Buffer | undefined;
-  createTemp(path: string): string;
-  write(path: string, bytes: Buffer): void;
-  fsync(path: string): void;
-  rename(from: string, to: string): void;
-  remove(path: string): void;
-}
-
-export function realFsDeps(): RegistrationFsDeps {
-  return {
-    readConfig: (path) => (existsSync(path) ? readFileSync(path) : undefined),
-    createTemp: (path) => `${path}.mma-tmp-${process.pid}-${randomBytes(6).toString('hex')}`,
-    write: (path, bytes) => writeFileSync(path, bytes),
-    fsync: (path) => {
-      const fd = openSync(path, 'r+');
-      try {
-        fsyncSync(fd);
-      } finally {
-        closeSync(fd);
-      }
-    },
-    rename: (from, to) => renameSync(from, to),
-    remove: (path) => rmSync(path, { force: true }),
-  };
-}
-
 /** The single MCP server name every writer targets inside `mcpServers`. */
 const MMA_ENTRY_KEY = 'mma';
 
-/** Matches only a loopback URL pointing at MMA's own MCP endpoint — the exact shape
- *  every HTTP-style writer renders. A user's own local MCP proxy would need to
- *  coincidentally match this precise host+path to be misidentified. */
+/**
+ * Matches only a loopback URL pointing at MMA's own MCP endpoint — the exact shape
+ * every HTTP-style writer renders.
+ *
+ * The port is deliberately unconstrained, and that is a trade-off worth naming.
+ * `server.port` is user-configurable, so pinning ownership to the CURRENT port
+ * would make MMA stop recognising its own entry the moment someone changed that
+ * setting — it would then refuse to update the entry it wrote itself, and the user
+ * would have to delete it by hand. Accepting any port keeps upgrades working
+ * across a port change. The cost is that a hand-written entry which is
+ * simultaneously named `mma`, carries only keys MMA writers emit, and points at a
+ * DIFFERENT loopback `/mcp` service would be misread as ours. That conjunction is
+ * narrow enough to accept; host and path are still pinned exactly.
+ */
 const LOOPBACK_MCP_URL = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/mcp$/;
 
 /** Matches a literal bearer value wherever it appears in a serialized entry. Dynamic
@@ -146,8 +125,12 @@ export function isOwnedMcpEntry(
       if (key !== 'command' && key !== 'args') return false;
     }
     const args = entry.args;
-    if (!Array.isArray(args) || args.length < 2) return false;
-    if (args[args.length - 1] !== 'mcp') return false;
+    // Exactly `[entrypoint, 'mcp']` — no more. A `>= 2` check would accept
+    // `[entrypoint, '--inspect', 'mcp']`, i.e. an entry a user hand-edited to add
+    // their own flag, and treat it as ours to overwrite or delete. Extra
+    // arguments are exactly the evidence that somebody else edited this entry.
+    if (!Array.isArray(args) || args.length !== 2) return false;
+    if (args[1] !== 'mcp') return false;
     const first = args[0];
     return Object.keys(entry).length === 2
       && typeof entry.command === 'string'
@@ -268,7 +251,7 @@ function serializeJsonConfig(root: Record<string, unknown>): Buffer {
 /** Refuse the write when the config changed between the initial read and now. See
  *  the module doc's point 3 — this is what makes atomic replacement safe against a
  *  concurrent save rather than merely torn-file-safe. */
-export function assertBytesUnchanged(fs: RegistrationFsDeps, path: string, expected: Buffer | undefined): void {
+export function assertBytesUnchanged(fs: AtomicFsDeps, path: string, expected: Buffer | undefined): void {
   const current = fs.readConfig(path);
   const unchanged = expected === undefined ? current === undefined : current !== undefined && current.equals(expected);
   if (!unchanged) {
@@ -280,22 +263,6 @@ export function assertBytesUnchanged(fs: RegistrationFsDeps, path: string, expec
   }
 }
 
-export function atomicWriteBytes(fs: RegistrationFsDeps, path: string, bytes: Buffer): void {
-  const tempPath = fs.createTemp(path);
-  try {
-    fs.write(tempPath, bytes);
-    fs.fsync(tempPath);
-    fs.rename(tempPath, path);
-  } catch (err) {
-    try {
-      fs.remove(tempPath);
-    } catch {
-      /* best-effort cleanup only; must not mask the original failure */
-    }
-    throw new Error(`Failed to atomically write ${path}; the original file was left unchanged`, { cause: err });
-  }
-}
-
 export interface WriteOwnedRegistrationInput {
   path: string;
   clientId: ClientId;
@@ -303,7 +270,7 @@ export interface WriteOwnedRegistrationInput {
    *  token here — see the module doc's point 5. */
   entry: Record<string, unknown>;
   /** Test/advanced seam: overrides the real filesystem. */
-  fs?: RegistrationFsDeps;
+  fs?: AtomicFsDeps;
 }
 
 export interface OwnedRegistrationResult {
@@ -360,7 +327,7 @@ export interface RemoveOwnedRegistrationInput {
    *  a stdio entry's only proof is that it launches THIS entrypoint. Omitting it
    *  makes ownership unprovable, so the entry is preserved rather than removed. */
   expectedStdioEntrypoint?: string;
-  fs?: RegistrationFsDeps;
+  fs?: AtomicFsDeps;
 }
 
 /**
@@ -448,7 +415,7 @@ export interface WriteClientRegistrationInput {
   /** Windows APPDATA root for Claude Desktop's user-level configuration. */
   appData?: string;
   /** Test/advanced seam: overrides the real filesystem for every writer this input reaches. */
-  fs?: RegistrationFsDeps;
+  fs?: AtomicFsDeps;
 }
 
 /** Uniform failure mapping: an error from ANY writer (a refused conflict or an
@@ -504,7 +471,7 @@ export async function installJsonClientRegistration(params: {
   capability: ClientCapability;
   path: string;
   entry: Record<string, unknown>;
-  fs?: RegistrationFsDeps;
+  fs?: AtomicFsDeps;
 }): Promise<ClientRegistrationResult> {
   const { capability, path, entry, fs } = params;
   try {
@@ -532,7 +499,7 @@ export async function removeJsonClientRegistration(params: {
   path: string;
   /** Required for `stdio-json` clients — see {@link RemoveOwnedRegistrationInput}. */
   expectedStdioEntrypoint?: string;
-  fs?: RegistrationFsDeps;
+  fs?: AtomicFsDeps;
 }): Promise<ClientRegistrationResult> {
   const { capability, path, fs } = params;
   try {

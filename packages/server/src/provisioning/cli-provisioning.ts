@@ -93,6 +93,7 @@ export function buildCliProvisioningService(
     daemonPort: options.daemonPort ?? config.server?.port ?? DEFAULT_PORT,
     cliEntrypoint: options.cliEntrypoint ?? resolveCliEntrypoint(),
     release: readServerVersion(),
+    stateDir,
   });
   return createProvisioningService({
     stateDir,

@@ -3,9 +3,10 @@
  *
  * Codex's user-level config is TOML (`~/.codex/config.toml`), not JSON, so it
  * cannot go through {@link installJsonClientRegistration}'s JSON merge — but it
- * reuses the SAME underlying safety primitives (`../registration-writer.js`'s
- * `realFsDeps`/`atomicWriteBytes`/`assertBytesUnchanged`/`assertNoStaticCredential`,
- * plus the shared `isOwnedMcpEntry` ownership recogniser) so the discipline
+ * reuses the SAME underlying safety primitives (`../atomic-write.js`'s
+ * `realFsDeps`/`atomicWriteBytes`, plus `../registration-writer.js`'s
+ * `assertBytesUnchanged`/`assertNoStaticCredential` and the shared
+ * `isOwnedMcpEntry` ownership recogniser) so the discipline
  * (refuse-not-clobber, stale-bytes check, atomic rename, no static credential) is
  * identical, just applied to a `[mcp_servers.mma]` TOML table instead of a JSON
  * `mcpServers.mma` member.
@@ -16,17 +17,15 @@
  */
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { atomicWriteBytes, realFsDeps, type AtomicFsDeps } from '../atomic-write.js';
 import {
   assertBytesUnchanged,
   assertInitializable,
   assertNoStaticCredential,
-  atomicWriteBytes,
   failedClientRegistrationResult,
   isOwnedMcpEntry,
-  realFsDeps,
   RegistrationConflictError,
   type ClientRegistrationResult,
-  type RegistrationFsDeps,
   type WriteClientRegistrationInput,
 } from '../registration-writer.js';
 
@@ -79,7 +78,7 @@ function findOwnedTableRange(text: string): { start: number; end: number } | nul
   return { start, end };
 }
 
-async function writeOwnedTomlTable(path: string, entry: Record<string, string>, fs: RegistrationFsDeps): Promise<{ changed: boolean }> {
+async function writeOwnedTomlTable(path: string, entry: Record<string, string>, fs: AtomicFsDeps): Promise<{ changed: boolean }> {
   assertNoStaticCredential(entry);
 
   const originalBytes = fs.readConfig(path);

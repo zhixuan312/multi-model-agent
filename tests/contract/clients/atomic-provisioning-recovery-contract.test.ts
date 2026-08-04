@@ -161,3 +161,100 @@ describe('contract: durable provisioning markers and recovery — the seven guar
       .toEqual(fixture.packagedSkillNames());
   });
 });
+
+/**
+ * A surviving marker says the previous run did not finish CLEANLY. It does not say
+ * the previous run failed. Conflating the two is its own data-loss bug, and it is
+ * the one the cases below pin down — along with the two ways a restore can destroy
+ * more than it repairs.
+ */
+describe('contract: recovery distinguishes an unfinished operation from an unrecorded one', () => {
+  const onFixture = () => createProvisioningService.testFixture({
+    clients: { cursor: 'on', vscode: 'on', codex: 'on', 'claude-desktop': 'on' },
+  });
+
+  /**
+   * Die in the window between the terminal phase being written and the marker
+   * being cleared -- on the client's FIRST provision, so the pre-operation state
+   * (no registration, no skills) is observably different from the post-operation
+   * state. Stranding a RE-provision instead would leave the two states identical,
+   * and a wrongful revert would be invisible to any assertion.
+   */
+  async function strandFirstInstallTerminalMarker(fixture: ReturnType<typeof onFixture>): Promise<void> {
+    fixture.interruptAfter('skills-written', 'cursor');
+    await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
+  }
+
+  it('finishes a completed operation whose marker was never cleared, instead of reverting it', async () => {
+    const fixture = onFixture();
+    await strandFirstInstallTerminalMarker(fixture);
+
+    const marker = fixture.marker('cursor');
+    expect(marker?.phase, "the stranded marker records the operation's terminal phase").toBe('skills-written');
+    expect(marker?.priorRegistration?.existed, 'this install started from nothing').toBe(false);
+    const installedBefore = fixture.installedSkillNames('cursor');
+    const registrationBefore = fixture.registrationEntry('cursor');
+    expect(installedBefore).toEqual(fixture.packagedSkillNames());
+    expect(registrationBefore).not.toBeNull();
+
+    const reports = await fixture.recoverOnStartup();
+
+    expect(reports.find((r) => r.clientId === 'cursor')?.resolved).toBe(true);
+    expect(fixture.marker('cursor'), 'the bookkeeping step is what recovery finishes').toBeNull();
+    // Restoring the recorded starting point here would mean removing both — a
+    // correctly provisioned client silently de-provisioned by its own recovery.
+    expect(fixture.installedSkillNames('cursor'), 'a client that IS provisioned must stay provisioned')
+      .toEqual(installedBefore);
+    expect(fixture.registrationEntry('cursor')).toEqual(registrationBefore);
+  });
+
+  it('discards the skill backup once the marker it belonged to is gone', async () => {
+    const fixture = onFixture();
+    await fixture.provision(['cursor']);   // creates content
+    await fixture.provision(['cursor']);   // backs that content up, then succeeds
+
+    expect(fixture.skillBackupDirs(), 'a completed operation leaves no backup behind').toEqual([]);
+
+    // A re-provision stranded at its terminal phase: this one DOES have a backup,
+    // because there was existing content to capture.
+    fixture.interruptAfter('skills-written', 'cursor');
+    await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
+    expect(fixture.skillBackupDirs().length, 'a pending marker still needs its backup').toBeGreaterThan(0);
+
+    await fixture.recoverOnStartup();
+    expect(fixture.skillBackupDirs(), 'resolved marker, so the backup is reclaimed').toEqual([]);
+  });
+
+  it('refuses to restore over a registration a third party changed after the crash', async () => {
+    const fixture = onFixture();
+    await fixture.provision(['cursor']);
+    fixture.interruptAfter('registered', 'cursor');
+    await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
+
+    // The user opens their MCP config and adds an unrelated server. A whole-file
+    // restore of the pre-operation snapshot would erase that edit without a word.
+    const theirEdit = { mma: { url: 'http://127.0.0.1/mcp' }, 'their-own-server': { url: 'http://127.0.0.1:9999/mcp' } };
+    fixture.editRegistrationOutsideMma('cursor', theirEdit);
+
+    const reports = await fixture.recoverOnStartup();
+
+    expect(reports.find((r) => r.clientId === 'cursor')?.resolved).toBe(false);
+    expect(fixture.registrationEntry('cursor'), 'their edit survives').toEqual(theirEdit);
+    expect(fixture.marker('cursor'), 'unresolved means the marker stays for an operator').not.toBeNull();
+  });
+
+  it('keeps the live skills when the backup it would restore from has vanished', async () => {
+    const fixture = onFixture();
+    await fixture.provision(['cursor']);
+    fixture.interruptAfter('registered', 'cursor');
+    await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
+
+    // A reboot, or a tmp sweep, between the crash and this recovery run.
+    fixture.deleteSkillBackup('cursor');
+    const reports = await fixture.recoverOnStartup();
+
+    expect(reports.find((r) => r.clientId === 'cursor')?.resolved).toBe(false);
+    expect(fixture.installedSkillNames('cursor'), 'no backup is a reason to keep what is there, not to delete it')
+      .toEqual(fixture.packagedSkillNames());
+  });
+});

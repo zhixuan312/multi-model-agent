@@ -7,17 +7,25 @@
  * to either finish or safely undo the operation: the phase it has reached, and a
  * snapshot of whatever existed before it started touching anything.
  *
- * Phase order for an 'on' operation: 'started' -> 'registered' -> 'skills-written'
- * -> (marker cleared). An 'off' operation only ever needs 'started' -> (cleared);
- * it has no skills phase to advance through. A marker that is still present the
- * next time provisioning runs (or at daemon start) means the previous attempt
- * never reached its terminal step — recovery (service.ts) resolves it before
- * anything else touches that client.
+ * Both operations advance through the same phases, because both mutate the same
+ * two assets in the same order: 'started' -> 'registered' -> 'skills-written' ->
+ * (marker cleared). A client whose `skillPathStrategy` is 'none' has no skills to
+ * touch, so 'registered' is its last phase before the marker clears.
+ *
+ * A marker still present the next time provisioning runs (or at daemon start) means
+ * the previous attempt did not finish cleanly — recovery (service.ts) resolves it
+ * before anything else touches that client. Crucially, "did not finish cleanly" is
+ * not the same as "did not finish": the phase says which. A marker recording the
+ * operation's OWN terminal phase means every mutation succeeded and only the
+ * marker-clear step was lost, so recovery finishes the job rather than undoing it.
+ * Any earlier phase means the operation stopped mid-mutation, and recovery restores
+ * the recorded starting point.
  */
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ClientId, ClientState } from '@zhixuan92/multi-model-agent-core';
 import { CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
+import { atomicWriteBytes, realFsDeps } from './atomic-write.js';
 
 export type ProvisioningOperation = 'on' | 'off';
 export type ProvisioningPhase = 'started' | 'registered' | 'skills-written';
@@ -33,6 +41,26 @@ export interface RegistrationSnapshot {
   bytesBase64: string | null;
 }
 
+/**
+ * What a client's registration file looked like immediately AFTER this operation
+ * mutated it -- the fingerprint that makes a later whole-file restore safe.
+ *
+ * The snapshot above says what to put back; this says what the file must still be
+ * for putting it back to be correct. Recovery may run long after the crash that
+ * left the marker, and the user is free to edit their own MCP config in between —
+ * restoring the snapshot over an edited file would silently discard that edit. So
+ * restore is gated on the file still being byte-for-byte what MMA left there,
+ * applying the same stale-read discipline the registration writer already uses for
+ * forward writes (see `registration-writer.ts`'s module doc, point 3).
+ */
+export interface RegistrationFingerprint {
+  /** Whether the file existed at all after the mutation (an 'off' operation may
+   *  have removed it entirely). */
+  existed: boolean;
+  /** SHA-256 of the file's bytes, or `null` when it did not exist. */
+  sha256: string | null;
+}
+
 /** One provisioning marker, exactly the shape recorded on disk. */
 export interface ProvisioningMarker {
   clientId: ClientId;
@@ -43,6 +71,10 @@ export interface ProvisioningMarker {
    *  an 'off' operation (which never writes a registration) or a client whose
    *  operation has not yet reached the point of touching its registration. */
   priorRegistration: RegistrationSnapshot | null;
+  /** Fingerprint of the registration file as this operation left it, or `null`
+   *  before the registration phase has been reached (nothing was written yet, so
+   *  there is nothing to detect drift against). */
+  postRegistration: RegistrationFingerprint | null;
   /** Absolute path to a REAL, restorable backup directory holding the exact prior
    *  skill-directory bytes for this client's shared/bespoke skill root, or `null`
    *  when there was nothing installed there before this operation (fresh install)
@@ -81,21 +113,27 @@ function isRegistrationSnapshot(value: unknown): value is RegistrationSnapshot {
     && (value.bytesBase64 === null || typeof value.bytesBase64 === 'string');
 }
 
+function isRegistrationFingerprint(value: unknown): value is RegistrationFingerprint {
+  if (!isPlainRecord(value)) return false;
+  return typeof value.existed === 'boolean' && (value.sha256 === null || typeof value.sha256 === 'string');
+}
+
 /** Structurally validates a parsed JSON value as a `ProvisioningMarker` -- an
  *  unrecognised shape is treated identically to a parse failure (clause: an
  *  unparseable/corrupt marker must be reported, never silently ignored, but it
  *  also must never be trusted as if it were valid). */
 function validateMarker(clientId: ClientId, value: unknown): ProvisioningMarker | undefined {
   if (!isPlainRecord(value)) return undefined;
-  const { operation, intendedState, phase, priorRegistration, priorSkillBackup, priorSkillDigest, startedAt } = value;
+  const { operation, intendedState, phase, priorRegistration, postRegistration, priorSkillBackup, priorSkillDigest, startedAt } = value;
   if (operation !== 'on' && operation !== 'off') return undefined;
   if (intendedState !== 'on' && intendedState !== 'off') return undefined;
   if (phase !== 'started' && phase !== 'registered' && phase !== 'skills-written') return undefined;
   if (priorRegistration !== null && !isRegistrationSnapshot(priorRegistration)) return undefined;
+  if (postRegistration !== null && !isRegistrationFingerprint(postRegistration)) return undefined;
   if (priorSkillBackup !== null && typeof priorSkillBackup !== 'string') return undefined;
   if (priorSkillDigest !== null && typeof priorSkillDigest !== 'string') return undefined;
   if (typeof startedAt !== 'number') return undefined;
-  return { clientId, operation, intendedState, phase, priorRegistration, priorSkillBackup, priorSkillDigest, startedAt };
+  return { clientId, operation, intendedState, phase, priorRegistration, postRegistration, priorSkillBackup, priorSkillDigest, startedAt };
 }
 
 /** Reads and validates `clientId`'s marker. Distinguishes "no marker" from "a
@@ -119,12 +157,21 @@ export function readMarker(stateDir: string, clientId: ClientId): ReadMarkerResu
   return marker ? { status: 'ok', marker } : { status: 'corrupt', raw };
 }
 
-/** Writes (or overwrites) `clientId`'s marker atomically enough for this use --
- *  a single small JSON file rewritten wholesale on every phase transition. */
+/**
+ * Writes (or overwrites) `clientId`'s marker via the SAME temp-file + fsync +
+ * atomic-rename primitive the registration writers use.
+ *
+ * A plain in-place `writeFileSync` would undercut the very guarantee this module
+ * exists to provide: a crash partway through rewriting the marker would leave a
+ * truncated file, and a corrupt marker is the one state recovery cannot act on —
+ * it can only report it and wait for an operator. An atomic rename means a crash
+ * leaves either the previous phase's marker or the new one, never a torn file
+ * between them.
+ */
 export function writeMarker(stateDir: string, marker: ProvisioningMarker): void {
   mkdirSync(markersDir(stateDir), { recursive: true });
   const { clientId, ...body } = marker;
-  writeFileSync(markerPath(stateDir, clientId), `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+  atomicWriteBytes(realFsDeps(), markerPath(stateDir, clientId), Buffer.from(`${JSON.stringify(body, null, 2)}\n`, 'utf8'));
 }
 
 /** Clears `clientId`'s marker -- the terminal step of both a successful
