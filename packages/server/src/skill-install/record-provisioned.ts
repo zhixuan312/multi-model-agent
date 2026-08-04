@@ -25,7 +25,7 @@ import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import { appendEntry, versionFromContent } from './manifest.js';
 import { readSkillContent, SUPPORTED_SKILLS } from './discover.js';
 
-export interface RecordProvisionedFailure {
+interface RecordProvisionedFailure {
   clientId: ClientId;
   reason: string;
 }

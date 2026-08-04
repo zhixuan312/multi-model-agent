@@ -177,13 +177,13 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   }, null, 2)}\n`);
 
   // ── Skills (auto-matched by intent) ──
-  // NOTE: inlineIncludes' optional `authToken` argument is deliberately NOT
-  // passed. The per-client installers do pass it, substituting the live token
-  // into skill text — fine for a private `~/.claude/skills/` install, but a
-  // plugin is a distributable artifact that may be zipped, published to a
-  // marketplace, or committed. Omitting it leaves the shell-helper form
-  // (`${MMA_AUTH_TOKEN:-$(mma print-token)}`), which resolves at runtime on the
-  // user's own machine. No secret is ever written into this directory.
+  // No secret can reach this directory: `inlineIncludes` used to take an
+  // optional `authToken` that substituted the live token into skill text, and
+  // the per-client installers passed it — tolerable for a private
+  // `~/.claude/skills/` install, but a plugin is a distributable artifact that
+  // may be zipped, published to a marketplace, or committed. That argument no
+  // longer exists at all: skills are MCP-only now, so no shipped instruction
+  // carries a credential to substitute into in the first place.
   const allPackaged = [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS];
   const render = (packagedName: string, raw: string): string => {
     const component = pluginComponentName(packagedName);
