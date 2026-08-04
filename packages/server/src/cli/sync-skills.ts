@@ -54,8 +54,6 @@ import {
   writeCommandToClaudeCode,
   removeCommandFromClaudeCode,
 } from '../skill-install/skill-installer-common.js';
-import { disabledTargets, addDisabledTargets } from '../skill-install/disabled-state.js';
-import { readServerVersion } from '../server-version.js';
 
 export const ExitCode = Object.freeze({
   SUCCESS: 0,
@@ -198,28 +196,6 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     throw err;
   }
 
-  // Honor the disable sentinel: drop any client the user turned off via
-  // `mma disable`. This is what makes disable sticky — the npm postinstall
-  // hook shells out to this command, so without the filter every upgrade would
-  // silently reinstall skills the user deliberately removed. `mma enable`
-  // clears the sentinel before it calls back in here.
-  const disabled = disabledTargets(homeDir);
-  if (disabled.length > 0) {
-    const active = targets.filter((t) => !disabled.includes(t));
-    if (active.length === 0) {
-      if (parsed.json) {
-        stdout(JSON.stringify({ targets: [], outcome: 'skills-disabled', disabled }) + '\n');
-      } else {
-        log(
-          `MMA skills are disabled for ${disabled.join(', ')}. ` +
-          `Run \`mma enable\` to restore. Skipping sync.\n`,
-        );
-      }
-      return ExitCode.SUCCESS;
-    }
-    targets = active;
-  }
-
   if (targets.length === 0) {
     if (parsed.json) {
       stdout(JSON.stringify({ targets: [], outcome: 'no-clients-detected' }) + '\n');
@@ -261,9 +237,6 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       for (const name of [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS]) {
         removeEntry(name, ['claude-code'], homeDir);
       }
-      // Pin claude-code off so the npm postinstall (which shells out to this
-      // command) does not recreate the duplicate on the next upgrade.
-      addDisabledTargets(homeDir, ['claude-code'], readServerVersion());
     }
     targets = targets.filter((t) => t !== 'claude-code');
 

@@ -2,10 +2,18 @@
  * disable / enable CLI tests.
  *
  * Pin the off-switch behavior:
- *   - disable removes every skill, drops manifest entries, writes the sentinel
- *   - sync-skills (i.e. the npm postinstall path) no-ops while disabled
- *   - enable clears the sentinel and reinstalls
+ *   - disable removes every skill and drops manifest entries
+ *   - enable reinstalls
  *   - dry-run, --json, and --target scoping
+ *
+ * The `~/.mma/skills-disabled.json` sticky sentinel (disabled-state.ts) was
+ * retired in Task I-7 -- Task I-8 replaces "stays off across a later sync"
+ * with the declared `clients` roster (`config.clients.<ClientId> = 'off'`).
+ * Until I-8 lands, `mma disable` still removes skills immediately, but a
+ * SUBSEQUENT `mma sync-skills` (e.g. the npm postinstall hook) is no longer
+ * told to skip a client that was previously disabled -- the cases below that
+ * used to pin stickiness are adjusted to that intermediate state rather than
+ * left importing a deleted module.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
@@ -22,10 +30,6 @@ import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
 import { runDisable, runEnable } from '../../packages/server/src/cli/toggle.js';
 import { listEntries } from '../../packages/server/src/skill-install/manifest.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
-import {
-  disabledStatePath,
-  readDisabledState,
-} from '../../packages/server/src/skill-install/disabled-state.js';
 
 function makeFakeHome(): string {
   const home = mkdtempSync(path.join(tmpdir(), 'mma-toggle-home-'));
@@ -101,7 +105,7 @@ describe('disable', () => {
     rmSync(skillsRoot, { recursive: true, force: true });
   });
 
-  it('removes every skill, clears the manifest, and writes the sentinel', async () => {
+  it('removes every skill and clears the manifest', async () => {
     const out = captureOutput();
     const code = await runDisable({
       argv: [],
@@ -115,20 +119,19 @@ describe('disable', () => {
     expect(noSkillsPresent(home)).toBe(true);
     expect(listEntries(home).length).toBe(0);
 
-    const state = readDisabledState(home);
-    expect(state).not.toBeNull();
-    expect(state!.cliVersion).toBe('9.9.9');
-    expect(state!.targets.sort()).toEqual(['claude-code', 'codex']);
-
     expect(out.stdoutLines.join('')).toMatch(/Disabled MMA skills/);
     expect(out.stdoutLines.join('')).toMatch(/mma enable/);
   });
 
-  it('is sticky: a subsequent sync-skills (postinstall) does not reinstall', async () => {
+  it('a subsequent sync-skills (postinstall) reinstalls -- stickiness lands in Task I-8', async () => {
     await runDisable({ argv: [], homeDir: home });
     expect(noSkillsPresent(home)).toBe(true);
 
-    // Simulate `npm install` postinstall: sync-skills --if-exists --silent --best-effort
+    // Simulate `npm install` postinstall: sync-skills --if-exists --silent --best-effort.
+    // Without the retired sentinel there is nothing (yet) telling this sync to
+    // skip a previously-disabled client -- it reinstalls, same as any other
+    // detected client. Task I-8's declared `clients: 'off'` roster is what
+    // restores the "stays off" guarantee this case used to pin.
     const out = captureOutput();
     const code = await runSyncSkills({
       argv: [],
@@ -138,8 +141,7 @@ describe('disable', () => {
       stderr: out.stderr,
     });
     expect(code).toBe(0);
-    expect(noSkillsPresent(home)).toBe(true);
-    expect(out.stdoutLines.join('')).toMatch(/disabled/i);
+    expect(allSkillsPresent(home)).toBe(true);
   });
 
   it('--dry-run touches nothing', async () => {
@@ -147,7 +149,6 @@ describe('disable', () => {
     expect(code).toBe(0);
     expect(allSkillsPresent(home)).toBe(true);
     expect(listEntries(home).length).toBe(SUPPORTED_SKILLS.length);
-    expect(existsSync(disabledStatePath(home))).toBe(false);
   });
 
   it('--json reports the action, targets, and removed count', async () => {
@@ -178,7 +179,7 @@ describe('disable', () => {
     }
   });
 
-  it('--target scopes removal and the sentinel to one client', async () => {
+  it('--target scopes removal to one client', async () => {
     const code = await runDisable({ argv: ['--target=claude-code'], homeDir: home, stdout: () => true });
     expect(code).toBe(0);
 
@@ -186,14 +187,6 @@ describe('disable', () => {
     for (const s of SUPPORTED_SKILLS) {
       expect(existsSync(claudeSkillPath(home, s)), `claude/${s}`).toBe(false);
       expect(existsSync(codexSkillPath(home, s)), `codex/${s}`).toBe(true);
-    }
-    expect(readDisabledState(home)!.targets).toEqual(['claude-code']);
-
-    // A later sync still installs codex but leaves claude-code disabled.
-    await runSyncSkills({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
-    for (const s of SUPPORTED_SKILLS) {
-      expect(existsSync(claudeSkillPath(home, s)), `claude/${s} stays off`).toBe(false);
-      expect(existsSync(codexSkillPath(home, s)), `codex/${s} present`).toBe(true);
     }
   });
 });
@@ -212,11 +205,10 @@ describe('enable', () => {
     rmSync(skillsRoot, { recursive: true, force: true });
   });
 
-  it('clears the sentinel and reinstalls every skill', async () => {
+  it('reinstalls every skill after a disable', async () => {
     await runSyncSkills({ argv: [], homeDir: home, skillsRoot });
     await runDisable({ argv: [], homeDir: home });
     expect(noSkillsPresent(home)).toBe(true);
-    expect(existsSync(disabledStatePath(home))).toBe(true);
 
     const out = captureOutput();
     const code = await runEnable({
@@ -229,10 +221,9 @@ describe('enable', () => {
     expect(code).toBe(0);
 
     expect(allSkillsPresent(home)).toBe(true);
-    expect(existsSync(disabledStatePath(home))).toBe(false);
   });
 
-  it('bare enable restores a client that was scoped-disabled, not just un-pins it', async () => {
+  it('bare enable restores a client that was scoped-disabled', async () => {
     await runSyncSkills({ argv: [], homeDir: home, skillsRoot });
     expect(allSkillsPresent(home)).toBe(true);
 
@@ -242,13 +233,11 @@ describe('enable', () => {
       expect(existsSync(codexSkillPath(home, s)), `codex/${s} off`).toBe(false);
       expect(existsSync(claudeSkillPath(home, s)), `claude/${s} on`).toBe(true);
     }
-    expect(readDisabledState(home)!.targets).toEqual(['codex']);
 
-    // Bare enable must reinstall codex AND clear the sentinel entirely.
+    // Bare enable must reinstall codex.
     const code = await runEnable({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
     expect(code).toBe(0);
     expect(allSkillsPresent(home)).toBe(true);
-    expect(existsSync(disabledStatePath(home))).toBe(false);
   });
 
   it('is a plain sync when nothing was disabled', async () => {

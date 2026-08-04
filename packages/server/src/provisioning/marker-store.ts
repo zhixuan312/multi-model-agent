@@ -1,0 +1,154 @@
+/**
+ * Durable provisioning markers.
+ *
+ * A marker is the ONE piece of state that lets provisioning survive a crash
+ * mid-mutation. Before service.ts touches a client's registration or skills it
+ * writes a marker at `<stateDir>/provisioning/<ClientId>.json` recording enough
+ * to either finish or safely undo the operation: the phase it has reached, and a
+ * snapshot of whatever existed before it started touching anything.
+ *
+ * Phase order for an 'on' operation: 'started' -> 'registered' -> 'skills-written'
+ * -> (marker cleared). An 'off' operation only ever needs 'started' -> (cleared);
+ * it has no skills phase to advance through. A marker that is still present the
+ * next time provisioning runs (or at daemon start) means the previous attempt
+ * never reached its terminal step — recovery (service.ts) resolves it before
+ * anything else touches that client.
+ */
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ClientId, ClientState } from '@zhixuan92/multi-model-agent-core';
+import { CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
+
+export type ProvisioningOperation = 'on' | 'off';
+export type ProvisioningPhase = 'started' | 'registered' | 'skills-written';
+
+/** A byte-exact snapshot of a client's registration file as it stood immediately
+ *  before the current operation touched it -- the restore source on rollback.
+ *  `existed: false` means there was nothing there yet (a fresh install); restoring
+ *  it means removing whatever this operation wrote, not writing empty bytes. */
+export interface RegistrationSnapshot {
+  path: string;
+  existed: boolean;
+  /** Base64 of the exact prior bytes. Always present when `existed` is true. */
+  bytesBase64: string | null;
+}
+
+/** One provisioning marker, exactly the shape recorded on disk. */
+export interface ProvisioningMarker {
+  clientId: ClientId;
+  operation: ProvisioningOperation;
+  intendedState: ClientState;
+  phase: ProvisioningPhase;
+  /** Snapshot of the registration file from before this operation, or `null` for
+   *  an 'off' operation (which never writes a registration) or a client whose
+   *  operation has not yet reached the point of touching its registration. */
+  priorRegistration: RegistrationSnapshot | null;
+  /** Absolute path to a REAL, restorable backup directory holding the exact prior
+   *  skill-directory bytes for this client's shared/bespoke skill root, or `null`
+   *  when there was nothing installed there before this operation (fresh install)
+   *  or the client's strategy is 'none'. Never a placeholder -- if a real backup
+   *  cannot be produced, the operation must fail rather than record this as null
+   *  while claiming the skills phase was reached. */
+  priorSkillBackup: string | null;
+  /** Digest of the prior skill content backed up above -- the fingerprint recovery
+   *  compares against the live root to decide whether skills are still reachable. */
+  priorSkillDigest: string | null;
+  startedAt: number;
+}
+
+/** Directory every client's marker lives directly under, one JSON file each. */
+function markersDir(stateDir: string): string {
+  return join(stateDir, 'provisioning');
+}
+
+export function markerPath(stateDir: string, clientId: ClientId): string {
+  return join(markersDir(stateDir), `${clientId}.json`);
+}
+
+export type ReadMarkerResult =
+  | { status: 'absent' }
+  | { status: 'corrupt'; raw: string }
+  | { status: 'ok'; marker: ProvisioningMarker };
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isRegistrationSnapshot(value: unknown): value is RegistrationSnapshot {
+  if (!isPlainRecord(value)) return false;
+  return typeof value.path === 'string'
+    && typeof value.existed === 'boolean'
+    && (value.bytesBase64 === null || typeof value.bytesBase64 === 'string');
+}
+
+/** Structurally validates a parsed JSON value as a `ProvisioningMarker` -- an
+ *  unrecognised shape is treated identically to a parse failure (clause: an
+ *  unparseable/corrupt marker must be reported, never silently ignored, but it
+ *  also must never be trusted as if it were valid). */
+function validateMarker(clientId: ClientId, value: unknown): ProvisioningMarker | undefined {
+  if (!isPlainRecord(value)) return undefined;
+  const { operation, intendedState, phase, priorRegistration, priorSkillBackup, priorSkillDigest, startedAt } = value;
+  if (operation !== 'on' && operation !== 'off') return undefined;
+  if (intendedState !== 'on' && intendedState !== 'off') return undefined;
+  if (phase !== 'started' && phase !== 'registered' && phase !== 'skills-written') return undefined;
+  if (priorRegistration !== null && !isRegistrationSnapshot(priorRegistration)) return undefined;
+  if (priorSkillBackup !== null && typeof priorSkillBackup !== 'string') return undefined;
+  if (priorSkillDigest !== null && typeof priorSkillDigest !== 'string') return undefined;
+  if (typeof startedAt !== 'number') return undefined;
+  return { clientId, operation, intendedState, phase, priorRegistration, priorSkillBackup, priorSkillDigest, startedAt };
+}
+
+/** Reads and validates `clientId`'s marker. Distinguishes "no marker" from "a
+ *  marker exists but cannot be trusted" -- callers (recovery) must handle the
+ *  latter explicitly rather than treating it as if nothing were pending. */
+export function readMarker(stateDir: string, clientId: ClientId): ReadMarkerResult {
+  let raw: string;
+  try {
+    raw = readFileSync(markerPath(stateDir, clientId), 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { status: 'absent' };
+    throw err;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: 'corrupt', raw };
+  }
+  const marker = validateMarker(clientId, parsed);
+  return marker ? { status: 'ok', marker } : { status: 'corrupt', raw };
+}
+
+/** Writes (or overwrites) `clientId`'s marker atomically enough for this use --
+ *  a single small JSON file rewritten wholesale on every phase transition. */
+export function writeMarker(stateDir: string, marker: ProvisioningMarker): void {
+  mkdirSync(markersDir(stateDir), { recursive: true });
+  const { clientId, ...body } = marker;
+  writeFileSync(markerPath(stateDir, clientId), `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+}
+
+/** Clears `clientId`'s marker -- the terminal step of both a successful
+ *  operation and a successfully recovered one. */
+export function clearMarker(stateDir: string, clientId: ClientId): boolean {
+  try {
+    rmSync(markerPath(stateDir, clientId), { force: true });
+    return true;
+  } catch {
+    // A marker that cannot be removed is still unresolved.  Callers must not
+    // report a completed operation or successful recovery while it remains.
+    return false;
+  }
+}
+
+/** Every ClientId with a marker currently on disk, in CLIENT_IDS order --
+ *  exactly the set recovery must resolve before it is done. */
+export function listMarkedClients(stateDir: string): ClientId[] {
+  let names: string[];
+  try {
+    names = readdirSync(markersDir(stateDir));
+  } catch {
+    return [];
+  }
+  const present = new Set(names.filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -'.json'.length)));
+  return CLIENT_IDS.filter((id) => present.has(id));
+}

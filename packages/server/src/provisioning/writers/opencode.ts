@@ -20,9 +20,14 @@ import {
   type WriteClientRegistrationInput,
 } from '../registration-writer.js';
 
+/** The path this writer targets, without performing any write. */
+export function opencodeRegistrationPath(homeDir: string): string {
+  return join(homeDir, '.config', 'opencode', 'opencode.json');
+}
+
 export async function writeOpencodeRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability, homeDir, daemonPort } = input;
-  const path = join(homeDir, '.config', 'opencode', 'opencode.json');
+  const path = opencodeRegistrationPath(homeDir);
   const entry = {
     type: 'remote',
     url: `http://127.0.0.1:${daemonPort}/mcp`,

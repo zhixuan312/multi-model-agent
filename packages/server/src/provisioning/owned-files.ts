@@ -143,8 +143,11 @@ async function directoryExists(dir: string): Promise<boolean> {
 
 /** Read only the directory's regular files. `lstat` deliberately excludes
  * symlinks (including links to regular files) and the marker from the ownership
- * proof, exactly as the digest contract requires. */
-async function readInstalledRegularFiles(root: string, current = root): Promise<Map<string, Buffer>> {
+ * proof, exactly as the digest contract requires. Exported so callers that need
+ * the SAME regular-file set this module's own ownership proof uses -- e.g. a
+ * provisioning backup snapshot's digest -- never re-implement directory
+ * walking (and risk disagreeing with it) themselves. */
+export async function readInstalledRegularFiles(root: string, current = root): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>();
   for (const name of await readdir(current)) {
     const absolutePath = join(current, name);

@@ -561,13 +561,13 @@ export async function removeJsonClientRegistration(params: {
 // TO dispatch by capability — a standard, safe ESM cycle since nothing here is
 // evaluated at either module's top level, only inside function bodies called
 // after the whole graph has finished loading.
-import { writeClaudeCodeRegistration } from './writers/claude-code.js';
+import { claudeCodeRegistrationPath, writeClaudeCodeRegistration } from './writers/claude-code.js';
 import { removeClaudeDesktopRegistration, writeClaudeDesktopRegistration } from './writers/claude-desktop.js';
-import { writeCodexRegistration } from './writers/codex.js';
-import { writeAntigravityRegistration } from './writers/antigravity.js';
-import { writeCursorRegistration } from './writers/cursor.js';
-import { writeOpencodeRegistration } from './writers/opencode.js';
-import { writeWindsurfRegistration } from './writers/windsurf.js';
+import { codexRegistrationPath, removeCodexRegistration, writeCodexRegistration } from './writers/codex.js';
+import { antigravityRegistrationPath, writeAntigravityRegistration } from './writers/antigravity.js';
+import { cursorRegistrationPath, writeCursorRegistration } from './writers/cursor.js';
+import { opencodeRegistrationPath, writeOpencodeRegistration } from './writers/opencode.js';
+import { windsurfRegistrationPath, writeWindsurfRegistration } from './writers/windsurf.js';
 
 const UNBLOCKED_WRITERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
   'claude-code': writeClaudeCodeRegistration,
@@ -579,8 +579,21 @@ const UNBLOCKED_WRITERS: Partial<Record<ClientId, (input: WriteClientRegistratio
   windsurf: writeWindsurfRegistration,
 };
 
+/** Every non-stdio writer's remove path is the same shared JSON removal
+ *  machinery, just pointed at that writer's own resolved path -- no
+ *  per-client removal logic beyond "where is the file". */
+function jsonRemover(resolvePath: (homeDir: string) => string): (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult> {
+  return (input) => removeJsonClientRegistration({ capability: input.capability, path: resolvePath(input.homeDir), fs: input.fs });
+}
+
 const UNBLOCKED_REMOVERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
+  'claude-code': jsonRemover(claudeCodeRegistrationPath),
   'claude-desktop': removeClaudeDesktopRegistration,
+  codex: removeCodexRegistration,
+  antigravity: jsonRemover(antigravityRegistrationPath),
+  cursor: jsonRemover(cursorRegistrationPath),
+  opencode: jsonRemover(opencodeRegistrationPath),
+  windsurf: jsonRemover(windsurfRegistrationPath),
 };
 
 /**

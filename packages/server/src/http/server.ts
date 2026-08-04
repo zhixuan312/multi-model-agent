@@ -14,7 +14,8 @@ import { normalizeModel } from '@zhixuan92/multi-model-agent-core';
 import { decide as decideConsent } from '../telemetry/consent.js';
 import type { RawHandler } from './types.js';
 import type { HandlerDeps } from './handler-deps.js';
-import type { SkillManifestSync } from '../skill-install/skill-manifest-sync.js';
+import type { SkillManifestSync } from './handlers/introspection/health.js';
+import type { ProvisioningService } from '../provisioning/service.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import { expandHome } from '../expand-home.js';
@@ -132,6 +133,31 @@ export async function startServer(
     }
   }
 
+  // Resolve any client provisioning marker left behind by a crashed prior
+  // daemon BEFORE anything (including GET /health below) reads the
+  // inventory — an unresolved marker must never be mistaken for "healthy".
+  // Same dev-watch guard as boot reconciliation above: under `tsx watch`
+  // every save restarts the process, and recovering there would race a
+  // provisioning call the developer just triggered by hand.
+  let provisioningService: ProvisioningService | undefined;
+  if (process.env.MMA_DEV_NO_RECONCILE !== '1') {
+    try {
+      const { buildProvisioningService } = await import('../provisioning/runtime-deps.js');
+      provisioningService = buildProvisioningService(config);
+      const reports = await provisioningService.recoverOnStartup();
+      const unresolved = reports.filter((report) => !report.resolved);
+      if (unresolved.length > 0) {
+        process.stderr.write(
+          `[mma] event=boot_provisioning_recovery ts=${new Date().toISOString()} unresolved=${unresolved.map((r) => r.clientId).join(',')}\n`,
+        );
+      }
+    } catch {
+      // Best-effort: provisioning recovery must never block the daemon from
+      // starting -- an unresolved marker still shows up as 'failed' in the
+      // inventory GET /health reads below.
+    }
+  }
+
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
     // A project with active tasks must never be evicted to make room at cap.
@@ -141,20 +167,24 @@ export async function startServer(
   // Capture serverStartedAt before health registration so /health can expose it.
   const serverStartedAt = Date.now();
 
-  // GET /health — unauthenticated liveness + skill manifest drift check
+  // GET /health — unauthenticated liveness + client provisioning drift check.
+  // Reads the SAME inventory boot recovery (above) resolved every marker
+  // against -- an unresolved marker reports 'failed' here, never silently 'ok'.
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
   let skillManifestSync: SkillManifestSync;
   if (injectedManifestSync) {
     skillManifestSync = injectedManifestSync;
   } else {
-    try {
-      const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
-      const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-      const { disabledTargets } = await import('../skill-install/disabled-state.js');
-      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
-    } catch {
-      skillManifestSync = { driftReport: () => [] };
-    }
+    const service = provisioningService;
+    skillManifestSync = {
+      async driftReport() {
+        if (!service) return [];
+        const records = await service.inventory();
+        return records
+          .filter((record) => record.status === 'failed')
+          .map((record) => ({ skill: 'provisioning', client: record.clientId, issue: 'failed' as const }));
+      },
+    };
   }
   router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 

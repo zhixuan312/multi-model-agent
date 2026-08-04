@@ -3,11 +3,9 @@
  *
  * disable: remove every shipped skill (plus the Claude-Code-only SDLC commands)
  *   from the resolved clients, drop their
- *   manifest entries, and record a sticky sentinel so a later `npm install`
- *   postinstall (which shells out to `sync-skills`) does not silently
- *   reinstall them. This is the only "off switch" that survives an upgrade.
- * enable: clear the sentinel for the resolved clients, then run the normal
- *   sync-skills upsert to reinstall the skills.
+ *   manifest entries.  The durable declared-client off state is introduced in
+ *   Task I-8; this intermediate command deliberately has no hidden sentinel.
+ * enable: run the normal sync-skills upsert to reinstall the skills.
  *
  * Both reuse sync-skills' target resolution so `--target` / `--all-targets`
  * behave identically across all three commands.
@@ -29,11 +27,6 @@ import {
   removeCommandFromClaudeCode,
   UnknownTargetError,
 } from '../skill-install/skill-installer-common.js';
-import {
-  addDisabledTargets,
-  clearDisabledTargets,
-  disabledTargets,
-} from '../skill-install/disabled-state.js';
 import { resolveTargets, runSyncSkills, parseArgs } from './sync-skills.js';
 import { findEnabledMmaPlugin, enableDespitePluginWarning } from '../skill-install/plugin-conflict.js';
 
@@ -48,8 +41,6 @@ export interface ToggleDeps {
   homeDir?: string;
   /** Override skills root — threaded into runSyncSkills for `enable` in tests. */
   skillsRoot?: string;
-  /** Recorded in the sentinel for diagnostics; defaults to 'unknown'. */
-  cliVersion?: string;
   stdout?: (s: string) => boolean;
   stderr?: (s: string) => boolean;
 }
@@ -57,14 +48,13 @@ export interface ToggleDeps {
 
 /**
  * `mma disable` — remove all MMA skills from the resolved clients and
- * record the sticky sentinel.
+ * remove the corresponding manifest entries.
  */
 export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
   const argv = deps.argv ?? process.argv.slice(2);
   const homeDir = deps.homeDir ?? os.homedir();
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
-  const cliVersion = deps.cliVersion ?? 'unknown';
   const parsed = parseArgs(argv);
 
   let targets: Client[];
@@ -133,7 +123,6 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
     }
     for (const skill of SUPPORTED_SKILLS) removeEntry(skill, targets, homeDir);
     for (const command of SUPPORTED_COMMANDS) removeEntry(command, targets, homeDir);
-    addDisabledTargets(homeDir, targets, cliVersion);
   }
 
   if (parsed.json) {
@@ -158,8 +147,8 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
 }
 
 /**
- * `mma enable` — clear the sentinel for the resolved clients, then
- * delegate to sync-skills' idempotent upsert to reinstall the skills.
+ * `mma enable` — delegate to sync-skills' idempotent upsert to reinstall the
+ * requested skills.
  */
 export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
   const argv = deps.argv ?? process.argv.slice(2);
@@ -179,7 +168,6 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
     throw err;
   }
 
-  const wasDisabled = disabledTargets(homeDir);
   const bare = parsed.targets === null && !parsed.allTargets;
 
   // `enable` is the one path that can legitimately recreate the duplicate the
@@ -192,33 +180,8 @@ export async function runEnable(deps: ToggleDeps = {}): Promise<number> {
     if (plugin) stderr(enableDespitePluginWarning(plugin));
   }
 
-  // Clear the sentinel BEFORE syncing — otherwise sync-skills would see the
-  // targets as still-disabled and skip them. On --dry-run, leave it intact.
-  if (!parsed.dryRun) {
-    // No explicit --target means "re-enable everything", so clear the whole set.
-    const toClear = bare ? [...ALL_CLIENTS] : targets;
-    clearDisabledTargets(homeDir, toClear);
-  }
-
-  if (wasDisabled.length === 0) {
-    stdout('MMA skills were not disabled; syncing to ensure they are installed.\n');
-  }
-
-  // Reinstall via the canonical upsert. For a bare `enable`, sync-skills would
-  // otherwise touch only auto-detected clients (claude-code / codex) and skip
-  // a previously `disable --target=cursor` — un-pinning it without restoring
-  // it. So when no explicit target is given, sync the union of detected
-  // clients and whatever was pinned off, making `enable` actually restore what
-  // `disable` removed. Explicit --target / --all-targets pass straight through.
-  let syncArgv = argv;
-  if (bare && wasDisabled.length > 0) {
-    const detected = resolveTargets(null, false, homeDir);
-    const union = ALL_CLIENTS.filter((c) => detected.includes(c) || wasDisabled.includes(c));
-    syncArgv = [...argv, ...union.map((c) => `--target=${c}`)];
-  }
-
   return runSyncSkills({
-    argv: syncArgv,
+    argv,
     homeDir,
     skillsRoot: deps.skillsRoot,
     stdout: deps.stdout,

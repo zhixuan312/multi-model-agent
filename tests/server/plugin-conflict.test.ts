@@ -19,8 +19,12 @@ import {
   enableDespitePluginWarning,
 } from '../../packages/server/src/skill-install/plugin-conflict.js';
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
-import { disabledTargets } from '../../packages/server/src/skill-install/disabled-state.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
+
+// The `~/.mma/skills-disabled.json` sentinel (disabled-state.ts) is retired
+// (Task I-7) -- Task I-8 replaces "pin off" persistence with the declared
+// `clients` roster. `sync-skills` no longer has anything to report here.
+const disabledTargets = (_home?: string): string[] => [];
 
 const homes: string[] = [];
 function homeWith(settings: unknown | null): string {
@@ -90,7 +94,7 @@ describe('sync-skills: plugin supersedes standalone', () => {
   const run = (home: string, argv: string[]) =>
     runSyncSkills({ argv, homeDir: home, silent: true, stdout: () => true, stderr: () => true });
 
-  it('retires the standalone install and pins claude-code off when the plugin is present', async () => {
+  it('retires the standalone install when the plugin is present', async () => {
     const home = homeWithStandalone(true);
     await run(home, ['--target=claude-code']);
 
@@ -101,8 +105,10 @@ describe('sync-skills: plugin supersedes standalone', () => {
     for (const c of SUPPORTED_COMMANDS) {
       expect(existsSync(join(home, '.claude', 'commands', `${c}.md`)), `${c} survived`).toBe(false);
     }
-    // Pinned off so the npm postinstall cannot recreate the duplicate.
-    expect(disabledTargets(home)).toContain('claude-code');
+    // "Pin off so the npm postinstall cannot recreate the duplicate" used to be
+    // asserted here via the retired disabled-sentinel file (disabled-state.ts,
+    // Task I-7). Persisting that pin now belongs to the declared `clients`
+    // roster (Task I-8); this test only pins the retirement itself.
   });
 
   it('NEVER touches the plugin — only MMA-owned files', async () => {

@@ -1,10 +1,8 @@
 // Skill discovery — locates packaged SKILL.md files on disk and reads them.
 // Extracted from cli/install-skill.ts as part of Ch 7 Task 39.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Client } from './manifest.js';
 
 export const SUPPORTED_SKILLS = [
   'multi-model-agent',
@@ -106,16 +104,3 @@ export function readCommandContent(commandName: string, skillsRoot?: string): st
   }
 }
 
-/**
- * Return the per-client install directories where skills are written as
- * subdirectories. Only includes clients that use the per-skill directory
- * model (claude-code and codex). Gemini and Cursor bundle skills into a
- * single file/extension and are not included.
- */
-export function discoverPerClientInstallDirs(homeDir?: string): Partial<Record<Client, string>> {
-  const h = homeDir ?? os.homedir();
-  return {
-    'claude-code': path.join(h, '.claude', 'skills'),
-    'codex': path.join(h, '.codex', 'skills'),
-  };
-}

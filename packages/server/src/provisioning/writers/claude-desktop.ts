@@ -34,7 +34,8 @@ export function resolveClaudeDesktopConfigPath(homeDir: string, platform: string
   return join(homeDir, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
 }
 
-function resolvePath(input: WriteClientRegistrationInput): string | undefined {
+/** The path this writer/remover targets, without performing any write. */
+export function resolveClaudeDesktopPath(input: WriteClientRegistrationInput): string | undefined {
   const platform = input.platform ?? process.platform;
   const appData = input.appData ?? process.env.APPDATA ?? '';
   if (platform === 'win32' && appData === '') return undefined;
@@ -52,7 +53,7 @@ function buildEntry(input: WriteClientRegistrationInput): { command: string; arg
 
 export async function writeClaudeDesktopRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability } = input;
-  const path = resolvePath(input);
+  const path = resolveClaudeDesktopPath(input);
   if (!path) {
     return failedClientRegistrationResult(
       capability.id,
@@ -66,7 +67,7 @@ export async function writeClaudeDesktopRegistration(input: WriteClientRegistrat
 
 export async function removeClaudeDesktopRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability } = input;
-  const path = resolvePath(input);
+  const path = resolveClaudeDesktopPath(input);
   if (!path) {
     return failedClientRegistrationResult(
       capability.id,

@@ -18,9 +18,14 @@ import {
   type WriteClientRegistrationInput,
 } from '../registration-writer.js';
 
+/** The path this writer targets, without performing any write. */
+export function windsurfRegistrationPath(homeDir: string): string {
+  return join(homeDir, '.codeium', 'windsurf', 'mcp_config.json');
+}
+
 export async function writeWindsurfRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability, homeDir, daemonPort } = input;
-  const path = join(homeDir, '.codeium', 'windsurf', 'mcp_config.json');
+  const path = windsurfRegistrationPath(homeDir);
   const entry = {
     serverUrl: `http://127.0.0.1:${daemonPort}/mcp`,
     headers: { Authorization: 'Bearer ${file:~/.mma/auth-token}' },

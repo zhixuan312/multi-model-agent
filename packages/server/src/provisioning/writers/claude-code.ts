@@ -29,11 +29,18 @@ import {
  *  installed from. Matches `plugin/build-plugin.ts`'s own `.mcp.json` entry. */
 const HEADERS_HELPER_REFERENCE = '"${CLAUDE_PLUGIN_ROOT}"/scripts/mma-mcp-headers.sh';
 
+/** The path this writer targets, without performing any write -- shared with
+ *  `real-port.ts`'s read-only registration inspection so it never re-derives
+ *  (and risks drifting from) this writer's own resolution. */
+export function claudeCodeRegistrationPath(homeDir: string): string {
+  return join(homeDir, '.mma', 'plugin', '.mcp.json');
+}
+
 export async function writeClaudeCodeRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability, homeDir, daemonPort } = input;
   const pluginDir = join(homeDir, '.mma', 'plugin');
   const scriptsDir = join(pluginDir, 'scripts');
-  const path = join(pluginDir, '.mcp.json');
+  const path = claudeCodeRegistrationPath(homeDir);
   const entry = {
     type: 'http',
     url: `http://127.0.0.1:${daemonPort}/mcp`,

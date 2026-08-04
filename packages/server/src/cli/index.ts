@@ -372,10 +372,12 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const subCmdIdx = argv.indexOf(subcommand);
       const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
       const run = subcommand === 'disable' ? runDisable : runEnable;
+      // No `cliVersion`: it existed only to stamp the retired
+      // ~/.mma/skills-disabled.json sentinel, which was deleted with
+      // disabled-state.ts. `info` still reads the version for its own report.
       const code = await run({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
-        cliVersion: readServerVersion(),
         stdout: deps.stdout,
         stderr: deps.stderr,
       });

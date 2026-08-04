@@ -19,7 +19,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
@@ -135,16 +135,18 @@ export async function startServe(
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);
 
-  // Drift check — warn if installed skills don't match the canonical manifest.
+  // Drift check — warn if any declared client's provisioning is unhealthy.
+  // Reads the SAME inventory GET /health does (provisioning/inventory.ts);
+  // startServer() itself resolves any pending marker at boot before this
+  // (and /health) would ever read it.
   try {
-    const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
-    const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-    const { disabledTargets } = await import('../skill-install/disabled-state.js');
-    const sync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
-    const drift = sync.driftReport();
+    const { buildProvisioningService } = await import('../provisioning/runtime-deps.js');
+    const service = buildProvisioningService(config as unknown as ServerConfig);
+    const records = await service.inventory();
+    const drift = records.filter((record) => record.status === 'failed');
     if (drift.length > 0) {
-      const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
-      stderr(`[mma] WARN: skill manifest drift detected: ${summary}. Re-run 'mma sync-skills' to reconcile.\n`);
+      const summary = drift.map((record) => `${record.clientId}=failed`).join(', ');
+      stderr(`[mma] WARN: client provisioning drift detected: ${summary}. Re-run 'mma mcp install <client>' to reconcile.\n`);
     }
   } catch {
     // best-effort — never let drift check block serve

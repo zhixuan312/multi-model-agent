@@ -12,9 +12,14 @@ import {
   type WriteClientRegistrationInput,
 } from '../registration-writer.js';
 
+/** The path this writer targets, without performing any write. */
+export function cursorRegistrationPath(homeDir: string): string {
+  return join(homeDir, '.cursor', 'mcp.json');
+}
+
 export async function writeCursorRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability, homeDir, daemonPort } = input;
-  const path = join(homeDir, '.cursor', 'mcp.json');
+  const path = cursorRegistrationPath(homeDir);
   const entry = {
     url: `http://127.0.0.1:${daemonPort}/mcp`,
     headers: { Authorization: 'Bearer ${env:MMA_AUTH_TOKEN}' },

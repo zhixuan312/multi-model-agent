@@ -113,9 +113,35 @@ async function writeOwnedTomlTable(path: string, entry: Record<string, string>, 
   return { changed: true };
 }
 
+/** The path this writer targets, without performing any write. */
+export function codexRegistrationPath(homeDir: string): string {
+  return join(homeDir, '.codex', 'config.toml');
+}
+
+/** Whether the `[mcp_servers.mma]` table in `text` (the file's full current
+ *  content) is either absent or recognisably MMA's own -- the reachability
+ *  precondition recovery gates a restore/remove on, reusing the exact same
+ *  ownership recogniser the write/remove paths themselves apply. */
+export function isCodexTableOwnedOrAbsent(text: string): boolean {
+  const range = findOwnedTableRange(text);
+  if (!range) return true;
+  return isCodexTableOwned(text);
+}
+
+/** Whether `text` currently contains an `[mcp_servers.mma]` table AND it is
+ *  recognisably MMA's own -- `false` both when absent and when present but
+ *  foreign/unrecognised. Read-only, used for inventory presence checks. */
+export function isCodexTableOwned(text: string): boolean {
+  const range = findOwnedTableRange(text);
+  if (!range) return false;
+  const existingContent = text.slice(range.start, range.end).replace(TABLE_HEADER_LINE_RE, '');
+  const parsed = parseSimpleTomlTable(existingContent);
+  return parsed !== null && isOwnedMcpEntry(parsed, 'toml');
+}
+
 export async function writeCodexRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const { capability, homeDir, daemonPort } = input;
-  const path = join(homeDir, '.codex', 'config.toml');
+  const path = codexRegistrationPath(homeDir);
   const entry = {
     url: `http://127.0.0.1:${daemonPort}/mcp`,
     bearer_token_env_var: 'MMA_AUTH_TOKEN',
@@ -135,6 +161,50 @@ export async function writeCodexRegistration(input: WriteClientRegistrationInput
         assertInitializable(entry, capability.mcpConfigFormat);
         return { ok: true };
       },
+    };
+  } catch (err) {
+    return failedClientRegistrationResult(capability.id, path, err);
+  }
+}
+
+/** Remove the `[mcp_servers.mma]` table and nothing else -- symmetric with
+ *  {@link writeCodexRegistration}, applying the SAME ownership recogniser so it
+ *  can never delete a hand-written table a write would have refused to
+ *  overwrite. */
+export async function removeCodexRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
+  const { capability, homeDir } = input;
+  const path = codexRegistrationPath(homeDir);
+  const fs = input.fs ?? realFsDeps();
+
+  try {
+    const originalBytes = fs.readConfig(path);
+    if (originalBytes === undefined) {
+      return { status: 'absent', path, clientId: capability.id, changed: false, async initializeOnce() { throw new Error(`'${capability.id}' has no registration to initialize after removal.`); } };
+    }
+    const originalText = originalBytes.toString('utf8');
+    const range = findOwnedTableRange(originalText);
+    if (!range) {
+      return { status: 'absent', path, clientId: capability.id, changed: false, async initializeOnce() { throw new Error(`'${capability.id}' has no registration to initialize after removal.`); } };
+    }
+    const existingContent = originalText.slice(range.start, range.end).replace(TABLE_HEADER_LINE_RE, '');
+    const parsed = parseSimpleTomlTable(existingContent);
+    if (parsed === null || !isOwnedMcpEntry(parsed, 'toml')) {
+      throw new RegistrationConflictError(
+        'unrecognised_entry',
+        `Refusing to modify ${path}: "${TABLE_HEADER}" was not written by MMA. `
+        + 'Remove or rename that table yourself if you want MMA to manage it.',
+      );
+    }
+    const nextText = `${originalText.slice(0, range.start)}${originalText.slice(range.end)}`;
+    const nextBytes = Buffer.from(nextText, 'utf8');
+    assertBytesUnchanged(fs, path, originalBytes);
+    atomicWriteBytes(fs, path, nextBytes);
+    return {
+      status: 'absent',
+      path,
+      clientId: capability.id,
+      changed: true,
+      async initializeOnce() { throw new Error(`'${capability.id}' has no registration to initialize after removal.`); },
     };
   } catch (err) {
     return failedClientRegistrationResult(capability.id, path, err);
