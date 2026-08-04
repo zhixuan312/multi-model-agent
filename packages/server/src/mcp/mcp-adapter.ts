@@ -23,10 +23,11 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { taskInputSchema, type TaskRegistry, type TaskEntry } from '@zhixuan92/multi-model-agent-core';
+import { taskInputSchema, type TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import { validateCwd } from '../application/cwd-validator.js';
+import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
 import {
   MCP_TOOLS,
   MCP_PROTOCOL_VERSION,
@@ -104,37 +105,17 @@ function errorResult(code: string, message: string, extra?: Record<string, unkno
   };
 }
 
-/** Same running-progress shape the REST poll returns (one contract, two wires). */
-function runningSnapshot(entry: TaskEntry): Record<string, unknown> {
-  const now = Date.now();
-  const snapshot: Record<string, unknown> = {
-    taskId: entry.taskId,
-    status: 'running',
-    phase: entry.phase ?? 'implementing',
-    elapsedMs: now - entry.startedAt,
-    // Same fallback as the REST handler: without a phase start, phase elapsed IS task
-    // elapsed. Added here to close a pre-existing drift — REST already returned this
-    // field and MCP omitted it, so "one contract, two wires" was untrue in practice.
-    phaseElapsedMs: entry.phaseStartedAt ? now - entry.phaseStartedAt : now - entry.startedAt,
-    startedAt: new Date(entry.startedAt).toISOString(),
-  };
-  if (entry.cancellationRequestedAt !== null) snapshot.cancellationRequested = true;
-  if (entry.tool === 'execute_plan' && entry.totalTasks != null) snapshot.totalTasks = entry.totalTasks;
-  // The human-readable headline was written by TaskRegistry.setHeadline but read by
-  // nothing — dead state. Present only when non-null, identically on both wires.
-  if (entry.runningHeadline !== null) snapshot.runningHeadline = entry.runningHeadline;
-  return snapshot;
-}
-
 /** Resolve a task's current payload: terminal envelope, running snapshot, or
  *  durable-store fallback (terminal results survive restarts). */
 function lookupTask(deps: McpAdapterDeps, taskId: string): ToolResult {
   const entry = deps.taskRegistry.get(taskId);
   if (entry) {
     if (deps.taskRegistry.isTerminal(taskId)) {
-      return jsonResult(entry.result ?? { taskId, status: entry.state, error: null });
+      // The result envelope already names itself via `task.type`; the bare fallback
+      // (a terminal entry with no stored result) has to be told who it is.
+      return jsonResult(entry.result ?? { ...taskIdentity(entry), status: entry.state, error: null });
     }
-    return jsonResult(runningSnapshot(entry));
+    return jsonResult(buildRunningSnapshot(entry));
   }
   const record = deps.store.get(taskId);
   if (record?.resultJson != null) return jsonResult(JSON.parse(record.resultJson));
@@ -186,10 +167,16 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
     await waitForTerminal(deps, taskId, INLINE_WAIT_CAP_MS);
     if (deps.taskRegistry.isTerminal(taskId)) return lookupTask(deps, taskId);
   }
+  // The handle names the work it stands for. A bare `{ taskId }` forces the caller to
+  // remember which of several in-flight dispatches a UUID belongs to — and an agent
+  // re-reading its own transcript has only this line to go on.
+  const entry = deps.taskRegistry.get(taskId);
   return jsonResult({
-    taskId,
+    ...(entry ? taskIdentity(entry) : { taskId, type: parsed.data.type }),
     status: 'running',
-    poll: { tool: 'mma_task_get', taskId },
+    // `mcpTool`, not `tool`: `tool` is what the registry calls the TASK type, and two
+    // different meanings under one key is exactly the confusion this change removes.
+    poll: { mcpTool: 'mma_task_get', taskId },
     ...(wantInline ? { note: 'task outlived the inline wait budget; poll for the result' } : {}),
   });
 }
@@ -200,9 +187,36 @@ function handleCancel(deps: McpAdapterDeps, args: Record<string, unknown>): Tool
   const result = deps.runtime.cancel(taskId);
   if (result.outcome === 'not_found') return errorResult('not_found', `Task ${taskId} not found`);
   if (result.outcome === 'terminal') {
-    return jsonResult({ taskId, status: result.entry.state, alreadyTerminal: true });
+    return jsonResult({ ...taskIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
   }
-  return jsonResult({ taskId, status: 'running', cancellationRequested: true });
+  return jsonResult({ ...taskIdentity(result.entry), status: 'running', cancellationRequested: true });
+}
+
+/**
+ * Every task currently in flight, newest last.
+ *
+ * REST has always been able to answer this — `GET /status` returns the same entries — but
+ * over MCP the only question askable was "what is THIS id doing?", which presumes the
+ * caller still has the id. A caller that lost track of a handle, or that wants to know
+ * what else is competing for the same project, had no way to ask.
+ *
+ * Optionally narrowed to one project: on a multi-repo workspace the useful question is
+ * "what is running in THIS repo", not "what is running anywhere on the machine".
+ */
+function handleList(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  const cwdRaw = args.cwd;
+  let filter: string | null = null;
+  if (typeof cwdRaw === 'string') {
+    const check = validateCwd(cwdRaw);
+    if (!check.ok) return errorResult(check.error, check.message);
+    filter = check.canonicalCwd;
+  }
+  const now = Date.now();
+  const tasks = deps.taskRegistry.allInFlight()
+    .filter((entry) => filter === null || entry.cwd === filter)
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map((entry) => buildRunningSnapshot(entry, now));
+  return jsonResult({ tasks, count: tasks.length });
 }
 
 /** Build a fresh SDK server wired to the shared runtime. One per request —
@@ -297,6 +311,8 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
         await waitForTerminal(deps, taskId, timeoutMs);
         return lookupTask(deps, taskId);
       }
+      case 'mma_task_list':
+        return handleList(deps, args);
       case 'mma_task_cancel':
         return handleCancel(deps, args);
       default:

@@ -122,8 +122,8 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       'Run an MMA task (audit, investigate, delegate, execute_plan, review, debug, research, '
       + 'journal_recall, journal_record, orchestrate, spec, plan) on a cost-optimized worker '
       + 'with cross-model review. Returns either the final result (short tasks) or a task '
-      + 'handle { taskId } to poll with mma_task_get / mma_task_wait and cancel with '
-      + 'mma_task_cancel. The runtime decides delivery unless `mode` forces it.',
+      + 'handle { taskId, type, cwd } to poll with mma_task_get / mma_task_wait and cancel '
+      + 'with mma_task_cancel. The runtime decides delivery unless `mode` forces it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -155,15 +155,37 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'mma_task_get',
     description:
-      'Get the current state of an MMA task. Running tasks return progress '
-      + '(phase, elapsed, cancellationRequested); terminal tasks return the full result '
-      + 'envelope. Terminal results survive daemon restarts.',
+      'Get the current state of an MMA task. Running tasks return identity (type, subtype, '
+      + 'cwd) plus progress (phase, elapsed, runningHeadline, cancellationRequested); terminal '
+      + 'tasks return the full result envelope. Terminal results survive daemon restarts.',
     inputSchema: {
       type: 'object',
       properties: {
         taskId: { type: 'string', description: 'Handle returned by mma_run.' },
       },
       required: ['taskId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'mma_task_list',
+    description:
+      'List every MMA task currently in flight, oldest first — each with its type '
+      + '(spec, review, investigate, …), cwd, phase, elapsed time and current activity. Use '
+      + 'this to see what is running when you no longer hold a taskId, or to check what else '
+      + 'is competing for a project before dispatching. Finished tasks are not listed; fetch '
+      + 'those by id with mma_task_get.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description:
+            'Absolute path. When given, lists only tasks running against that project; '
+            + 'omit to list every in-flight task on this daemon.',
+        },
+      },
+      required: [],
       additionalProperties: false,
     },
   },

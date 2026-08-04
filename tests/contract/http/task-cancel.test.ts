@@ -83,7 +83,12 @@ describe('contract: DELETE /task/:taskId', () => {
       const res = await fetch(`${h.baseUrl}/task/${taskId}`, { method: 'DELETE', headers: HEADERS(h.token) });
       expect(res.status).toBe(202);
       const body = (await res.json()) as { taskId: string; status: string; cancellationRequested: boolean };
-      expect(body).toEqual({ taskId, status: 'running', cancellationRequested: true });
+      // Identity rides along on the cancel acknowledgement too — the same fields the MCP
+      // wire returns, since both call taskIdentity().
+      expect(body).toEqual({
+        taskId, type: 'investigate', cwd: expect.any(String),
+        status: 'running', cancellationRequested: true,
+      });
 
       // The runner tears down and the task reaches terminal `cancelled` —
       // full wire lifecycle: 202 running → DELETE 202 → 200 cancelled.

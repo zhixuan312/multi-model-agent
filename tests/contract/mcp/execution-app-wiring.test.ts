@@ -164,6 +164,34 @@ describe('contract: execution App bootstrap wiring', () => {
     expect(document.body.textContent).toMatch(/Running/);
   });
 
+  /**
+   * `Running` was the heading for a spec, a review and an investigation alike, so the
+   * panel's most prominent line said nothing about which task it was showing. With two
+   * panels on screen only an 8-char hex ref told them apart.
+   */
+  it('leads the heading with the task type, qualified by subtype', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
+      taskId: 'task-1', type: 'audit', subtype: 'plan', status: 'running',
+      phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
+    }) }] });
+    await Promise.resolve();
+    expect(document.querySelector('h2')?.textContent).toBe('audit (plan) · Running');
+  });
+
+  it('falls back to the bare state when a payload carries no type', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
+      taskId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
+    }) }] });
+    await Promise.resolve();
+    expect(document.querySelector('h2')?.textContent).toBe('Running');
+  });
+
   it('formats elapsed time for humans rather than raw milliseconds', async () => {
     const { app } = installMockApp();
     await import('../../../packages/server/src/ui/execution/entry.js');

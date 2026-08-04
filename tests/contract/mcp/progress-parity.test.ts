@@ -41,4 +41,23 @@ describe('contract: running progress parity', () => {
       expect(new Set(Object.keys(x.mcp))).toEqual(new Set(Object.keys(x.rest)));
     } finally { await x.client.close(); await x.h.close(); }
   });
+
+  /**
+   * A running task used to identify itself only by UUID: `phase` is `implementing` for a
+   * spec, a review and an investigation alike, so nothing on the wire said which one was
+   * running. The type was in the registry the whole time and read only to gate
+   * `totalTasks`.
+   */
+  it('names the task type and project on the running payload, on both wires', async () => {
+    const x = await runningPayload(null);
+    try {
+      expect(x.rest.type).toBe('investigate');
+      expect(x.mcp.type).toBe('investigate');
+      expect(x.rest.cwd).toBe(x.mcp.cwd);
+      expect(typeof x.mcp.cwd).toBe('string');
+      // No subtype on a non-audit type — absent, not null.
+      expect(x.rest).not.toHaveProperty('subtype');
+      expect(x.mcp).not.toHaveProperty('subtype');
+    } finally { await x.client.close(); await x.h.close(); }
+  });
 });

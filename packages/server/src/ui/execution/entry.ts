@@ -139,12 +139,25 @@ function row(label: string, value: string): string {
   return `<div class="row"><span class="k">${escapeHtml(label)}</span><span class="v">${escapeHtml(value)}</span></div>`;
 }
 
+/**
+ * The panel heading answers "what is this?" before "how is it going?".
+ *
+ * `Running` alone was the same heading for a spec, a review and an investigation, so the
+ * heading carried no information the user did not already have. Type first, state second:
+ * `spec · Running`, `audit (plan) · done`. When the payload carries no type — an older
+ * daemon, or a bare terminal fallback — the heading degrades to exactly what it was.
+ */
+function heading(taskType: string | undefined, state: string): string {
+  const text = taskType ? `${taskType} · ${state}` : state;
+  return `<h2>${escapeHtml(text)}</h2>`;
+}
+
 function renderDisplay(display: DisplayState): string {
   if (display.mode === 'terminal') {
     // Stats only — no result text. The conversation already carries the full answer directly
     // below this panel; a truncated copy is redundant and reframes the monitor as a result
     // card, which is not what it is for. This answers "was that worth it?".
-    const bits = [`<h2>${escapeHtml(display.status)}</h2>`];
+    const bits = [heading(display.taskType, display.status)];
     const rows: string[] = [];
 
     if (typeof display.totalDurationMs === 'number') {
@@ -188,11 +201,13 @@ function renderDisplay(display: DisplayState): string {
     }
 
     if (rows.length > 0) bits.push(`<div class="stats">${rows.join('')}</div>`);
+    // Same correlation handle the running panel shows, kept after completion — a finished
+    // panel is exactly when you go looking for the run in the daemon log.
+    if (display.taskRef) bits.push(`<p class="meta">task ${escapeHtml(display.taskRef)}</p>`);
     return bits.join('');
   }
 
-  const label = display.mode === 'cancelling' ? 'Cancelling' : 'Running';
-  const bits = [`<h2>${label}</h2>`];
+  const bits = [heading(display.taskType, display.mode === 'cancelling' ? 'Cancelling' : 'Running')];
   // Omit the phase lines entirely when there is no phase yet, rather than printing a bare
   // "Phase:" with nothing after it. The very first snapshot of a run has no phase, so the
   // dangling label is what a user sees FIRST — and a label with no value reads as a failure

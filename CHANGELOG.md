@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A task says what it is, everywhere it is referenced.** `mma_run` handed back a bare
+  `{ taskId }`, and every poll answered with a phase name — `implementing` | `reviewing` — that
+  reads identically for a spec, a review and an investigation. The type was known from the moment
+  of admission (`TaskEntry.tool`, set at registration) and was read on the way out *only* to decide
+  whether to attach `totalTasks`: identity was in hand and thrown away. Handles, polls and cancel
+  acknowledgements now all carry `type`, `cwd`, and `subtype` for an `audit` — on **both** wires,
+  built by one shared `taskIdentity()`/`buildRunningSnapshot()` rather than the two hand-maintained
+  copies they replace (which had already drifted once over `phaseElapsedMs`).
+- **`mma_task_list` — what is running right now.** REST could always answer this via `GET /status`;
+  over MCP the only askable question was "what is *this* id doing?", which presumes the caller still
+  has the id. Lists every in-flight task with its type, project, phase, elapsed time and current
+  activity, oldest first, optionally narrowed to one `cwd`.
+- **The execution monitor names the task it is monitoring.** The panel heading was `Running` for all
+  twelve task types; it is now `spec · Running`, `audit (plan) · done`. The terminal envelope has
+  always carried `task.type` and the panel ignored it. The short task ref now also survives into the
+  terminal view — a finished panel is exactly when you go looking for the run in the daemon log.
+
+### Changed
+
+- **`poll.tool` is now `poll.mcpTool` on the `mma_run` handle.** `tool` is what the registry calls
+  the *task* type; two meanings under one key is the confusion this change exists to remove.
+
 ## [5.17.0] - 2026-08-02
 
 Claude Desktop support, and a live execution monitor that renders inside it. MMA now speaks stdio

@@ -372,7 +372,9 @@ claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
   --header "Authorization: Bearer $(mma print-token)"
 ```
 
-Four tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_cancel`. `mma_run` returns short task results inline and a `{ taskId }` handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
+Five tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_list`, `mma_task_cancel`. `mma_run` returns short task results inline and a handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
+
+Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_task_list` answers "what is running right now?" — the question you cannot ask when you no longer hold a taskId — optionally narrowed to one project.
 
 **Claude Desktop** speaks stdio rather than HTTP, so it connects through a bridge instead:
 

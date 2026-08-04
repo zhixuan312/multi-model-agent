@@ -10,6 +10,7 @@ import type { HandlerDeps } from '../handler-deps.js';
 import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
 import { sendJson, sendError } from '../errors.js';
 import type { SubmitError } from '../../application/execution-runtime.js';
+import { taskIdentity, buildRunningSnapshot } from '../../application/task-identity.js';
 
 /** Map an application-layer submit error onto the REST status/code contract. */
 function submitErrorToHttp(error: SubmitError): { status: number; code: string; message: string } {
@@ -51,7 +52,11 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
-    sendJson(res, 202, { taskId: outcome.taskId, statusUrl: `/task/${outcome.taskId}` });
+    const admitted = deps.taskRegistry.get(outcome.taskId);
+    sendJson(res, 202, {
+      ...(admitted ? taskIdentity(admitted) : { taskId: outcome.taskId, type: parsed.data.type }),
+      statusUrl: `/task/${outcome.taskId}`,
+    });
   };
 }
 
@@ -80,30 +85,11 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
     }
 
     if (deps.taskRegistry.isTerminal(taskId)) {
-      sendJson(res, 200, entry.result ?? { taskId, status: entry.state, error: null });
+      sendJson(res, 200, entry.result ?? { ...taskIdentity(entry), status: entry.state, error: null });
     } else {
-      const now = Date.now();
-      const polling: Record<string, unknown> = {
-        taskId,
-        status: 'running',
-        phase: entry.phase ?? 'implementing',
-        elapsedMs: now - entry.startedAt,
-        phaseElapsedMs: entry.phaseStartedAt ? now - entry.phaseStartedAt : now - entry.startedAt,
-        startedAt: new Date(entry.startedAt).toISOString(),
-      };
-      if (entry.cancellationRequestedAt !== null) {
-        polling.cancellationRequested = true;
-      }
-      if (entry.tool === 'execute_plan' && entry.totalTasks != null) {
-        polling.totalTasks = entry.totalTasks;
-      }
-      // The human-readable headline was written by TaskRegistry.setHeadline but read by
-      // nothing — dead state. Present only when non-null, identically to the MCP
-      // running snapshot (one contract, two wires).
-      if (entry.runningHeadline !== null) {
-        polling.runningHeadline = entry.runningHeadline;
-      }
-      sendJson(res, 202, polling);
+      // Built by the SAME function the MCP adapter calls, not a second copy of the shape.
+      // The two hand-maintained copies this replaces had already drifted once.
+      sendJson(res, 202, buildRunningSnapshot(entry));
     }
   };
 }
@@ -129,9 +115,9 @@ export function buildTaskCancelHandler(deps: HandlerDeps): RawHandler {
       return;
     }
     if (result.outcome === 'terminal') {
-      sendJson(res, 200, { taskId, status: result.entry.state, alreadyTerminal: true });
+      sendJson(res, 200, { ...taskIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
       return;
     }
-    sendJson(res, 202, { taskId, status: 'running', cancellationRequested: true });
+    sendJson(res, 202, { ...taskIdentity(result.entry), status: 'running', cancellationRequested: true });
   };
 }

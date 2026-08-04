@@ -155,7 +155,12 @@ export class ExecutionRuntime {
     // scope (the live abort channel) is created here too, so a cancel that
     // lands before the async executor starts still aborts the execution.
     const taskId = randomUUID();
-    deps.taskRegistry.register(taskId, cwd, input.type);
+    // Same subtype extraction the terminal envelope performs below — a running audit
+    // and a finished audit describe themselves identically.
+    const subtype = typeof (input as Record<string, unknown>).subtype === 'string'
+      ? (input as Record<string, unknown>).subtype as string
+      : null;
+    deps.taskRegistry.register(taskId, cwd, input.type, subtype);
     deps.store.admit(taskId, input.type, cwd, process.pid);
     const scope = new ExecutionScope(taskId);
     this.liveScopes.set(taskId, scope);
