@@ -12,7 +12,6 @@ dist/
 # can live elsewhere under docs/ and will be tracked normally.
 docs/superpowers/
 .superpowers/
-# Internal authoring reference for mma-* skills — not for public.
 coverage/
 .vscode/
 .idea/

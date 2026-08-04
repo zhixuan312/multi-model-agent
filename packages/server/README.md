@@ -49,7 +49,7 @@ is reported `suggested` by `mma clients` and left untouched. Make a declaration 
 | Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
 | Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
 | Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
-| VS Code | `~/.agents/skills/` | user-level MCP config |
+| VS Code | `~/.agents/skills/` | — MMA writes none; VS Code publishes no stable user-level path (add it via *MCP: Open User Configuration*) |
 | opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |
 | Windsurf | — (MCP only) | `~/.codeium/windsurf/mcp_config.json` |
 

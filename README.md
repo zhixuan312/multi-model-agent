@@ -64,13 +64,22 @@ your config — see [Declaring your clients](#declaring-your-clients) below.
 | Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
 | Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
 | Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
-| VS Code | `~/.agents/skills/` | user-level MCP config |
+| VS Code | `~/.agents/skills/` | — (see below) |
 | opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |
 | Windsurf | — (MCP only) | `~/.codeium/windsurf/mcp_config.json` |
 
 Every registration entry resolves its bearer token **at connect time** — via a headers helper
 script, a client's own `${env:VAR}`/`{env:VAR}` interpolation, or a `${file:...}` reference into
 `~/.mma/auth-token` — never a static token written to disk.
+
+**VS Code gets skills but not an MCP registration.** Microsoft documents the workspace-level path
+(`.vscode/mcp.json`) but reaches the user-level file only through the *MCP: Open User Configuration*
+command, and VS Code profiles are relocatable — so there is no stable home-level path for MMA to
+write. Rather than guess one, MMA writes nothing: `mma mcp install vscode` refuses, and `mma clients`
+reports `mcp=absent`. Add the server yourself through that command, pointing it at
+`http://127.0.0.1:7337/mcp`. Every other client's path is verified against its vendor's own
+documentation in
+[`docs/verification/mcp-client-registration-profiles.md`](docs/verification/mcp-client-registration-profiles.md).
 
 #### Client support at a glance
 
@@ -81,7 +90,7 @@ script, a client's own `${env:VAR}`/`{env:VAR}` interpolation, or a `${file:...}
 | Codex | ✅ | — | ✅ |
 | Antigravity | ✅ | — | ✅ |
 | Cursor | ✅ | — | ✅ |
-| VS Code | ✅ | — | ✅ |
+| VS Code | ✅ | — | — (see below) |
 | opencode | ✅ | — | ✅ |
 | Windsurf | — | — | ✅ |
 
