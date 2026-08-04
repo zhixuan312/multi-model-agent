@@ -19,6 +19,8 @@ import { buildCliProvisioningService, type CliProvisioningConfig } from '../prov
 import type { DeclaredClientRoster } from '../provisioning/roster.js';
 import type { ClientInventoryRecord } from '../provisioning/inventory.js';
 import type { ClientProvisioningStatus } from '../provisioning/provisioning-port.js';
+import { recordProvisionedSkills } from '../skill-install/record-provisioned.js';
+import { getSkillsRoot } from '../skill-install/discover.js';
 
 interface ClientsCommandDeps {
   json: boolean;
@@ -104,5 +106,11 @@ export async function runMcpInstallCommand(deps: McpInstallDeps): Promise<McpIns
       `Provisioning '${clientId}' failed` + (status ? ` (mcpRegistrationStatus=${status.mcpRegistrationStatus}, skillsInstalled=${status.skillsInstalled}).` : '.'),
     );
   }
+  // The same record `mma sync-skills` leaves. Provisioning skills without
+  // recording them would hide them from the boot check entirely — an empty
+  // manifest makes `findMissingSkills` return nothing at all — so a user who
+  // only ever runs `mma mcp install` would never be told their skills are
+  // behind on a later upgrade.
+  if (status.skillsInstalled) recordProvisionedSkills([clientId], getSkillsRoot(), homeDir);
   return { clientId, status: status.status };
 }

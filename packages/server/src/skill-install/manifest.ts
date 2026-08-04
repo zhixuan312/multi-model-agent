@@ -12,7 +12,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
+import matter from 'gray-matter';
 import { CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
+
+/** The `version` a packaged SKILL.md declares in its frontmatter — the value
+ *  recorded against every manifest entry, and the one the boot check compares
+ *  an installed copy against. `'unknown'` for anything unparseable, so a
+ *  malformed skill is recorded as present-but-unversioned rather than dropped. */
+export function versionFromContent(content: string): string {
+  try {
+    const v = matter(content).data['version'];
+    return typeof v === 'string' && v.length > 0 ? v : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 const MANIFEST_NAME = 'install-manifest.json';
 

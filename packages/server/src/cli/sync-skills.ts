@@ -31,9 +31,10 @@ import * as path from 'node:path';
 import minimist from 'minimist';
 import matter from 'gray-matter';
 import { CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
+import { recordProvisionedSkills } from '../skill-install/record-provisioned.js';
 import {
   listEntries,
-  appendEntry,
+  versionFromContent,
   removeEntry,
   manifestPath,
   FutureManifestError,
@@ -156,16 +157,6 @@ function resolveSuggested(declared: DeclaredClientRoster | undefined, detected: 
   return resolveEffectiveRoster(declared, detected)
     .filter((entry) => entry.effectiveState === 'suggested')
     .map((entry) => entry.clientId);
-}
-
-function versionFromContent(content: string): string {
-  try {
-    const parsed = matter(content);
-    const v = parsed.data['version'];
-    return typeof v === 'string' && v.length > 0 ? v : 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 function manifestPresent(homeDir: string): boolean {
@@ -335,23 +326,10 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     }
   }
 
-  // Manifest bookkeeping (client-agnostic install-manifest.json — unaffected
-  // by this release; still read by cli/serve.ts's drift warning and
-  // skill-drift.ts) reflects clients that were ACTUALLY provisioned this run.
-  for (const skillName of SUPPORTED_SKILLS) {
-    const content = readSkillContent(skillName, skillsRoot);
-    if (content === null) {
-      outcome.errors.push({
-        clientId: targets[0]!,
-        reason: `Bundled SKILL.md not found for '${skillName}' at ${path.join(skillsRoot, skillName, 'SKILL.md')}`,
-      });
-      continue;
-    }
-    const canonicalVersion = versionFromContent(content);
-    for (const clientId of outcome.provisioned) {
-      appendEntry(skillName, canonicalVersion, [clientId], homeDir);
-    }
-  }
+  // Manifest bookkeeping reflects clients that were ACTUALLY provisioned this
+  // run. Shared with `mma mcp install` so both provisioning entry points leave
+  // the same record — see `skill-install/record-provisioned.ts`.
+  outcome.errors.push(...recordProvisionedSkills(outcome.provisioned, skillsRoot, homeDir));
 
   // Orphan manifest cleanup: entries for skills the bundle no longer ships.
   for (const entry of manifestEntries) {
