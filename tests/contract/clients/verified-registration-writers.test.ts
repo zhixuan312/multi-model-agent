@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CLIENT_CAPABILITIES } from '../../../packages/server/src/provisioning/capability-registry.js';
-import { writeClientRegistration, writerForClient } from '../../../packages/server/src/provisioning/registration-writer.js';
+import { writeClientRegistration, writerForClient } from '../../../packages/server/src/provisioning/writers/registry.js';
 import { CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
 
 /**

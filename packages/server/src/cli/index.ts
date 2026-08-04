@@ -43,7 +43,7 @@ import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
 import { runMcpBridge, bufferedLines } from './mcp.js';
-import { removeClientRegistration } from '../provisioning/registration-writer.js';
+import { removeClientRegistration } from '../provisioning/writers/registry.js';
 import { CLIENT_CAPABILITIES } from '../provisioning/capability-registry.js';
 import { runClientsCommand, runMcpInstallCommand, McpInstallCliError } from './clients.js';
 import type { DeclaredClientRoster } from '../provisioning/roster.js';

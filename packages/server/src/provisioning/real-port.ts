@@ -26,12 +26,8 @@ import type { ClientCapability } from './capability-registry.js';
 import type { RegistrationFingerprint, RegistrationSnapshot } from './marker-store.js';
 import type { PortActionResult, ProvisioningPort, RegistrationMutationResult, SkillBackupResult } from './provisioning-port.js';
 import { atomicWriteBytes, realFsDeps } from './atomic-write.js';
-import {
-  isOwnedMcpEntry,
-  removeClientRegistration,
-  writeClientRegistration,
-  type WriteClientRegistrationInput,
-} from './registration-writer.js';
+import { isOwnedMcpEntry, type WriteClientRegistrationInput } from './registration-writer.js';
+import { removeClientRegistration, writeClientRegistration } from './writers/registry.js';
 import { claudeCodeRegistrationPath } from './writers/claude-code.js';
 import { resolveClaudeDesktopPath } from './writers/claude-desktop.js';
 import { codexRegistrationPath, isCodexTableOwned, isCodexTableOwnedOrAbsent } from './writers/codex.js';

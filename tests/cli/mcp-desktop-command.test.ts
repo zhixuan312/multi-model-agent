@@ -3,14 +3,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../../packages/server/src/cli/index.js';
 import { runMcpBridge } from '../../packages/server/src/cli/mcp.js';
-import { removeClientRegistration, writeClientRegistration } from '../../packages/server/src/provisioning/registration-writer.js';
+import { removeClientRegistration, writeClientRegistration } from '../../packages/server/src/provisioning/writers/registry.js';
 
 import { startServe } from '../../packages/server/src/cli/serve.js';
 
 vi.mock('../../packages/server/src/cli/mcp.js', () => ({ runMcpBridge: vi.fn(async () => 0) }));
-vi.mock('../../packages/server/src/provisioning/registration-writer.js', () => ({
+// The dispatch table moved out of registration-writer.ts into writers/registry.ts
+// to break the writer<->machinery import cycle; mocking the machinery would no
+// longer intercept the call the CLI actually makes.
+vi.mock('../../packages/server/src/provisioning/writers/registry.js', () => ({
   writeClientRegistration: vi.fn(async () => ({ status: 'registered', changed: true, path: 'desktop-config.json', clientId: 'claude-desktop', initializeOnce: async () => ({ ok: true }) })),
   removeClientRegistration: vi.fn(async () => ({ status: 'absent', changed: true, path: 'desktop-config.json', clientId: 'claude-desktop', initializeOnce: async () => { throw new Error('absent'); } })),
+  writerForClient: vi.fn(() => undefined),
 }));
 // Mocked so "no verb starts a daemon" is assertable. Without this mock the symbol
 // is not controllable and the assertion below cannot compile.

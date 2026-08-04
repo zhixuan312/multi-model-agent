@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { CLIENT_CAPABILITIES } from '../../../packages/server/src/provisioning/capability-registry.js';
-import { writerForClient } from '../../../packages/server/src/provisioning/registration-writer.js';
+import { writerForClient } from '../../../packages/server/src/provisioning/writers/registry.js';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 
 /**
