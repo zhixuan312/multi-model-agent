@@ -161,14 +161,12 @@ async function restoreFromMarker(
 ): Promise<{ ok: boolean; reason?: string }> {
   const clientId = capability.id;
 
-  if (marker.priorRegistration) {
-    if (!deps.port.isRegistrationReachable(clientId, capability, marker.priorRegistration, marker.postRegistration)) {
-      return {
-        ok: false,
-        reason: 'registration path is not writable, or its content is no longer what this operation left there '
-          + '(restoring the snapshot over it would discard whatever changed it)',
-      };
-    }
+  if (!deps.port.isRegistrationReachable(clientId, capability, marker.priorRegistration, marker.postRegistration)) {
+    return {
+      ok: false,
+      reason: 'registration path is not this client\'s, is not writable, or its content is no longer what this '
+        + 'operation left there (restoring the snapshot over it would discard whatever changed it)',
+    };
   }
   const touchedSkills = capability.skillPathStrategy !== 'none' && (marker.phase === 'registered' || marker.phase === 'skills-written');
   if (touchedSkills) {
@@ -177,13 +175,12 @@ async function restoreFromMarker(
     }
   }
 
-  if (marker.priorRegistration) {
-    const result = await deps.port.restoreRegistration(clientId, capability, marker.priorRegistration);
-    if (!result.ok) return { ok: false, reason: result.error ?? 'registration restore failed' };
-  } else if (marker.operation === 'off') {
-    const result = await deps.port.removeRegistration(clientId, capability);
-    if (!result.ok) return { ok: false, reason: result.error ?? 'registration removal failed' };
-  }
+  // One branch, not two. A snapshot is always captured before either operation
+  // mutates anything, and "there was no file" is `existed: false` inside it --
+  // which restoreRegistration handles by removing what this operation wrote. The
+  // separate 'off' removal path this replaced could never be reached.
+  const result = await deps.port.restoreRegistration(clientId, capability, marker.priorRegistration);
+  if (!result.ok) return { ok: false, reason: result.error ?? 'registration restore failed' };
   if (touchedSkills) {
     const result = await deps.port.restoreSkills(clientId, capability, marker.priorSkillBackup, marker.priorSkillDigest);
     if (!result.ok) return { ok: false, reason: result.error ?? 'skills restore failed' };

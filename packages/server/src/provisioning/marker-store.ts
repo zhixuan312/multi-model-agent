@@ -67,10 +67,12 @@ export interface ProvisioningMarker {
   operation: ProvisioningOperation;
   intendedState: ClientState;
   phase: ProvisioningPhase;
-  /** Snapshot of the registration file from before this operation, or `null` for
-   *  an 'off' operation (which never writes a registration) or a client whose
-   *  operation has not yet reached the point of touching its registration. */
-  priorRegistration: RegistrationSnapshot | null;
+  /** Snapshot of the registration file from before this operation. Always present:
+   *  it is captured before either operation mutates anything, and `existed: false`
+   *  — not a null snapshot — is how "there was no file yet" is expressed. Keeping
+   *  it non-nullable is what lets the restore path be a single branch rather than
+   *  two, one of which nothing could ever reach. */
+  priorRegistration: RegistrationSnapshot;
   /** Fingerprint of the registration file as this operation left it, or `null`
    *  before the registration phase has been reached (nothing was written yet, so
    *  there is nothing to detect drift against). */
@@ -82,8 +84,11 @@ export interface ProvisioningMarker {
    *  cannot be produced, the operation must fail rather than record this as null
    *  while claiming the skills phase was reached. */
   priorSkillBackup: string | null;
-  /** Digest of the prior skill content backed up above -- the fingerprint recovery
-   *  compares against the live root to decide whether skills are still reachable. */
+  /** Digest of the backup above, as it was taken -- the proof that the backup is
+   *  still INTACT, checked before any live content is removed. Deliberately not a
+   *  check against the live root: a crash mid-install legitimately changes the
+   *  live root, which is the situation recovery exists for. The live root is
+   *  proven separately, by ownership (see `isSkillsReachable`). */
   priorSkillDigest: string | null;
   startedAt: number;
 }
@@ -128,7 +133,7 @@ function validateMarker(clientId: ClientId, value: unknown): ProvisioningMarker 
   if (operation !== 'on' && operation !== 'off') return undefined;
   if (intendedState !== 'on' && intendedState !== 'off') return undefined;
   if (phase !== 'started' && phase !== 'registered' && phase !== 'skills-written') return undefined;
-  if (priorRegistration !== null && !isRegistrationSnapshot(priorRegistration)) return undefined;
+  if (!isRegistrationSnapshot(priorRegistration)) return undefined;
   if (postRegistration !== null && !isRegistrationFingerprint(postRegistration)) return undefined;
   if (priorSkillBackup !== null && typeof priorSkillBackup !== 'string') return undefined;
   if (priorSkillDigest !== null && typeof priorSkillDigest !== 'string') return undefined;

@@ -228,7 +228,18 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       return { ok: true, fingerprint: fingerprintRegistration(capability) };
     },
 
-    async restoreRegistration(_clientId: ClientId, _capability: ClientCapability, snapshot: RegistrationSnapshot): Promise<PortActionResult> {
+    async restoreRegistration(_clientId: ClientId, capability: ClientCapability, snapshot: RegistrationSnapshot): Promise<PortActionResult> {
+      // `snapshot.path` came out of a marker file the running user can edit, and
+      // it is about to be written to or deleted. The capability registry -- not
+      // the marker -- decides where this client's registration lives, so any
+      // disagreement means the marker is not describing this client's file.
+      const expected = registrationPathFor(capability, ctx);
+      if (!expected || resolve(snapshot.path) !== resolve(expected)) {
+        return {
+          ok: false,
+          error: `the marker names ${snapshot.path} as '${capability.id}''s registration, but this installation writes ${expected ?? '(no path)'} -- refusing to restore over a file that is not this client's`,
+        };
+      }
       try {
         if (snapshot.existed && snapshot.bytesBase64 !== null) {
           mkdirSync(dirname(snapshot.path), { recursive: true });
@@ -256,6 +267,10 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       snapshot: RegistrationSnapshot,
       postMutation: RegistrationFingerprint | null,
     ): boolean {
+      // Same rule as restoreRegistration: a marker naming some other file is not
+      // describing this client, and the restore it gates must never be reachable.
+      const expected = registrationPathFor(capability, ctx);
+      if (!expected || resolve(snapshot.path) !== resolve(expected)) return false;
       if (!isPathWritable(snapshot.path)) return false;
       let currentBytes: Buffer | undefined;
       try {
@@ -424,6 +439,15 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
     ): Promise<PortActionResult> {
       if (capability.skillPathStrategy === 'none') return { ok: true };
       const root = skillRootFor(capability);
+      // The containment rule discardSkillBackup applies has to apply here too, and
+      // for a stronger reason: this path is not merely deleted, it is COPIED FROM
+      // into the client's skill root. Verifying the digest does not help — the
+      // digest comes out of the same marker as the path, so a forged pair is
+      // self-consistent by construction. Only the path's location distinguishes a
+      // backup this port took from a directory someone else chose.
+      if (backupPath && !isInsideBackupsRoot(backupsRoot(), backupPath)) {
+        return { ok: false, error: `the marker names a skill backup at ${backupPath}, which is not inside this installation's backup directory` };
+      }
       try {
         let backedUp: string[] = [];
         if (backupPath) {

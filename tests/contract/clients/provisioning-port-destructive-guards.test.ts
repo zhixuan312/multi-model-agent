@@ -93,6 +93,121 @@ describe('contract: the real port refuses destructive work it cannot justify', (
       .toEqual(installedBefore);
   });
 
+  it('will not restore a registration onto a path the marker merely claims is this client\'s', async () => {
+    const { stateDir, port } = harness();
+    // The registry decides where cursor's registration lives. A marker is a file
+    // the running user can edit, so its `path` is a claim, not an address — and it
+    // feeds both a whole-file write and an unlink.
+    const theirFile = join(stateDir, 'unrelated.json');
+    writeFileSync(theirFile, JSON.stringify({ theirs: true }));
+    const forged = {
+      path: theirFile,
+      existed: true,
+      bytesBase64: Buffer.from('{"attacker":"bytes"}').toString('base64'),
+    };
+
+    // No post-mutation fingerprint, so the drift check cannot be what stops this.
+    expect(port.isRegistrationReachable('cursor', cursor, forged, null)).toBe(false);
+    const result = await port.restoreRegistration('cursor', cursor, forged);
+
+    expect(result.ok).toBe(false);
+    expect(readFileSync(theirFile, 'utf8'), 'the unrelated file is untouched')
+      .toBe(JSON.stringify({ theirs: true }));
+  });
+
+  it('will not restore skills from a backup directory outside its backups root', async () => {
+    const { port } = harness();
+    await port.installSkills('cursor', cursor);
+    const installedBefore = port.installedSkillNames('cursor', cursor);
+
+    // A directory the attacker controls, with a digest computed over its OWN
+    // contents — so the pair is self-consistent and the digest check passes.
+    // Verifying the digest cannot help here: the digest and the path come out of
+    // the same marker. Only the path's location tells them apart.
+    const planted = mkdtempSync(join(tmpdir(), 'mma-port-planted-'));
+    mkdirSync(join(planted, 'mma-audit'), { recursive: true });
+    writeFileSync(join(planted, 'mma-audit', 'SKILL.md'), 'attacker content');
+    const { computeSkillDigest } = await import('../../../packages/server/src/provisioning/owned-files.js');
+    const plantedDigest = computeSkillDigest(new Map([['mma-audit/SKILL.md', Buffer.from('attacker content')]]));
+
+    const result = await port.restoreSkills('cursor', cursor, planted, plantedDigest);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/backup directory/);
+    expect(port.installedSkillNames('cursor', cursor), 'the live skills are untouched')
+      .toEqual(installedBefore);
+  });
+
+  it('still installs into a skill ROOT that is a symlink', async () => {
+    // The counterweight to rejecting a symlinked skill directory. Pointing
+    // `~/.agents/skills` at a managed dotfiles checkout is an ordinary setup, and
+    // it stays legitimate: the link is a path a skill directory lives UNDER, not a
+    // path standing in for one. A guard that failed to tell those apart would
+    // break a real workflow while claiming to be a safety improvement.
+    const { symlinkSync } = await import('node:fs');
+    const { home, port } = harness();
+    const managed = mkdtempSync(join(tmpdir(), 'mma-port-dotfiles-'));
+    mkdirSync(join(home, '.agents'), { recursive: true });
+    symlinkSync(managed, join(home, '.agents', 'skills'));
+
+    const result = await port.installSkills('cursor', cursor);
+
+    expect(result.ok).toBe(true);
+    expect(readdirSync(managed).length, 'the skills land inside the link target').toBeGreaterThan(0);
+    expect(port.installedSkillNames('cursor', cursor).length).toBeGreaterThan(0);
+    expect(port.isSkillsReachable('cursor', cursor)).toBe(true);
+  });
+
+  it('round-trips a backup: the digest taken equals the digest verified', async () => {
+    // These are computed by two different walks — the live skill directory when
+    // taking the backup, the copied directory when restoring it — keyed the same
+    // way and each excluding a marker relative to its OWN walk root. If they could
+    // ever disagree, restore would reject a perfectly good backup and recovery
+    // would wedge itself: a denial of restore entirely of our own making.
+    const { port } = harness();
+    await port.installSkills('cursor', cursor);
+    const backup = await port.backupSkills('cursor', cursor);
+
+    const result = await port.restoreSkills('cursor', cursor, backup.backupPath, backup.digest);
+
+    expect(result.ok, result.error ?? '').toBe(true);
+  });
+
+  it('round-trips nested content, where the two walks could most easily disagree', async () => {
+    // Packaged skills render flat today, so the round-trip above only ever
+    // exercises one file per directory. The two walks differ in their ROOT, and
+    // both exclude `.mma-install.json` relative to their own root — a distinction
+    // that is invisible until content is nested. Proving it now means a skill that
+    // grows a subdirectory later cannot silently make restore reject its own
+    // intact backup.
+    const { computeSkillDigest, readInstalledRegularFiles } = await import('../../../packages/server/src/provisioning/owned-files.js');
+    const { cpSync } = await import('node:fs');
+
+    const live = mkdtempSync(join(tmpdir(), 'mma-nested-live-'));
+    const skill = join(live, 'mma-audit');
+    mkdirSync(join(skill, 'reference', 'deeper'), { recursive: true });
+    writeFileSync(join(skill, 'SKILL.md'), 'top level');
+    writeFileSync(join(skill, 'reference', 'a.md'), 'nested');
+    writeFileSync(join(skill, 'reference', 'deeper', 'b.md'), 'deeper still');
+    // A file NAMED like the marker but not at the walk root: it must be counted,
+    // since the exclusion is root-relative, not name-based.
+    writeFileSync(join(skill, 'reference', '.mma-install.json'), 'not the marker');
+    writeFileSync(join(skill, '.mma-install.json'), JSON.stringify({ release: RELEASE, sha256: 'x' }));
+
+    const taken = new Map<string, Buffer>();
+    for (const [rel, bytes] of await readInstalledRegularFiles(skill)) taken.set(`mma-audit/${rel}`, bytes);
+
+    const copy = mkdtempSync(join(tmpdir(), 'mma-nested-copy-'));
+    cpSync(skill, join(copy, 'mma-audit'), { recursive: true });
+    const verified = new Map<string, Buffer>();
+    for (const [rel, bytes] of await readInstalledRegularFiles(join(copy, 'mma-audit'))) verified.set(`mma-audit/${rel}`, bytes);
+
+    expect([...verified.keys()].sort()).toEqual([...taken.keys()].sort());
+    expect([...taken.keys()]).toContain('mma-audit/reference/.mma-install.json');
+    expect([...taken.keys()]).not.toContain('mma-audit/.mma-install.json');
+    expect(computeSkillDigest(verified)).toBe(computeSkillDigest(taken));
+  });
+
   it('restores from an intact backup', async () => {
     const { port } = harness();
     await port.installSkills('cursor', cursor);
