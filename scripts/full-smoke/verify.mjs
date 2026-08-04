@@ -505,15 +505,24 @@ export function verify(rec) {
   if (rec.admission && r?.task?.taskId) {
     const a = rec.admission;
     const p = rec.polling202;
-    const agree = (field) => {
-      const values = [a[field], p ? p[field] : undefined, r.task[field]].filter((v) => v !== undefined);
-      return values.every((v) => v === values[0]);
+    // `taskId` and `type` must be PRESENT on admission and on the terminal
+    // envelope, not merely non-contradictory: an absent field agrees with
+    // everything, which is exactly how a surface that silently stopped
+    // reporting identity would slip through a pure equality check.
+    const agree = (field, required) => {
+      const surfaces = [['admit', a[field]], ['final', r.task[field]]];
+      if (p) surfaces.push(['poll', p[field]]);
+      const present = surfaces.filter(([, v]) => v !== undefined);
+      if (required && present.length !== surfaces.length) return false;
+      return present.every(([, v]) => v === present[0][1]);
     };
-    const mismatched = ['taskId', 'type', 'subtype'].filter((f) => !agree(f));
+    const mismatched = [['taskId', true], ['type', true], ['subtype', false]]
+      .filter(([f, required]) => !agree(f, required))
+      .map(([f]) => f);
     out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
       mismatched.length === 0
-        ? `taskId/type${e.subtype ? '/subtype' : ''} agree across admission, poll, terminal`
-        : `disagree on: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
+        ? `taskId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
+        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
   }
 
   // ⑬ Audit findings: weight field + evidence section prefix
