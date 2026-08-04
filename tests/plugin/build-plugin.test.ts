@@ -141,17 +141,15 @@ describe('buildPlugin', () => {
     expect(JSON.parse(none)).toEqual({});
   });
 
-  it('inlines @include directives and leaks no live auth token', () => {
+  it('inlines @include directives', () => {
     build();
     for (const s of SKILL_COMPONENTS) {
       const body = readFileSync(join(out, 'skills', s, 'SKILL.md'), 'utf8');
       expect(body, `${s} has an unresolved @include`).not.toMatch(/^@include /m);
     }
-    // The per-client installers substitute the live token into skill text; the
-    // plugin is a distributable artifact and must keep the runtime form.
+    // response-shape.md is the surviving shared fragment; confirm it inlines correctly.
     const delegate = readFileSync(join(out, 'skills', 'delegate', 'SKILL.md'), 'utf8');
-    expect(delegate).toContain('${MMA_AUTH_TOKEN:-$(mma print-token)}');
-    expect(delegate).toContain('Authentication & identity headers'); // _shared/auth.md inlined
+    expect(delegate).toContain('mma_task_get / mma_task_wait — poll'); // _shared/response-shape.md inlined
   });
 
   it('rebuild replaces generated trees so a removed skill cannot linger', () => {

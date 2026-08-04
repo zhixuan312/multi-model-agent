@@ -45,12 +45,13 @@ The flow is: braindump → a user-checked parallel fan-out → a synthesised `ex
 - The idea is already grounded and you want to grill it into a spec → `mma:brainstorm`.
 - A spec already exists on disk → `mma:plan`.
 
-## This is NOT an endpoint
+## This is NOT a dispatchable task type
 
-`mma:explore` is a main-agent orchestration skill — there is no `POST /task { type: "explore" }`.
-Behind the scenes you dispatch the three delegated tools yourself: `mma:investigate`
-(`POST /task` with `type: "investigate"`), `mma:research` (`type: "research"`), and
-`mma:journal-recall` (`type: "journal_recall"`).
+`mma:explore` is a main-agent orchestration skill — there is no `explore` request type to send to
+`mma_run`. Behind the scenes you dispatch the three delegated tools yourself via `mma_run`:
+`mma:investigate` (`request.type: "investigate"`), `mma:research` (`request.type: "research"`),
+and `mma:journal-recall` (`request.type: "journal_recall"`). If the `mma_run` MCP tool is not
+available in this session, run `mma clients`.
 
 ## The workflow (4 phases)
 

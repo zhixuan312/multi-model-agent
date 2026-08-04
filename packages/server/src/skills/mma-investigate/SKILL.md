@@ -46,13 +46,10 @@ digraph when_to_use {
 - You need to MODIFY code based on the finding → `mma-delegate` (research + edit)
 - You want to consider multiple distinct directions, not converge on one answer → `mma-explore` (divergent ideation, codebase + web)
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -82,18 +79,11 @@ digraph when_to_use {
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"investigate","prompt":"How does the auth middleware handle token refresh?"}' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "investigate", "prompt": "How does the auth middleware handle token refresh?" } }
+```
 
 @include _shared/response-shape.md
 
@@ -135,5 +125,3 @@ The block is registered server-side at task completion; no caller action is need
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** An investigation that finds nothing is a success — it answers "I found no evidence for that in the codebase." Check `output.summary.findings.length === 0`. The `output.summary.answer` field contains the narrative answer.
-
-@include _shared/error-handling.md

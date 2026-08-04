@@ -105,9 +105,8 @@ export function writeCommandToClaudeCode(
   content: string,
   homeDir: string,
   skillsRoot: string,
-  authToken?: string,
 ): void {
-  const inlinedContent = inlineIncludes('Claude Code command writer', content, skillsRoot, authToken);
+  const inlinedContent = inlineIncludes('Claude Code command writer', content, skillsRoot);
 
   const commandsDir = path.join(homeDir, '.claude', 'commands');
   fs.mkdirSync(commandsDir, { recursive: true });

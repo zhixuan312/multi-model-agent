@@ -26,64 +26,43 @@ Store large documents once; reference them by ID in subsequent `mma-*` calls via
 - The doc changes between calls → context blocks are immutable; register a new one
 - Single task that doesn't reference any large shared content → no benefit
 
-## Endpoints
+## Dispatch
 
-### Register a context block
+Two MCP tools, both scoped to `cwd`. If neither is available in this session, run `mma clients`.
 
-`POST /context-blocks?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
-
-#### Request body
+### Register a context block — `mma_context_block_create`
 
 ```json
-{
-  "content": "# Project spec\n...",
-  "ttlMs": 3600000
-}
+{ "cwd": "/project", "content": "# Project spec\n...", "ttlMs": 3600000 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `cwd` | string | yes | Absolute path of the project that will own this block |
 | `content` | string | yes | Document content (min 1 char, max 50 MiB) |
 | `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active task for 24 h is eligible for eviction. |
 
-#### Response (201)
+Returns `{ "id": "cb_abc123" }`. Use this `id` as a `contextBlockIds` entry in any `mma-*` skill
+that supports it.
+
+### Delete a context block — `mma_context_block_delete`
 
 ```json
-{ "id": "cb_abc123" }
+{ "cwd": "/project", "blockId": "cb_abc123" }
 ```
 
-Use this `id` as a `contextBlockIds` entry in any `mma-*` skill that supports it.
-
-### Delete a context block
-
-`DELETE /context-blocks/:id?cwd=<abs-path>`
-
-Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held by one or more active tasks — wait for those tasks to complete before deleting.
+Succeeds silently, or fails with `pinned` if the block is held by one or more active tasks (wait
+for those tasks to complete before deleting) or `not_found` for an unknown id.
 
 ## Full example
 
-```bash
-# Register spec document once
-ID=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"content\":$(jq -Rs . < /project/.mma/specs/2026-07-11-feature-design.md)}" \
-  "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
+```json
+// Register the spec document once
+mma_context_block_create({ "cwd": "/project", "content": "<contents of /project/.mma/specs/2026-07-11-feature-design.md>" })
+// -> { "id": "cb_abc123" }
 
-# Reference from a delegate call
-curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"type\":\"delegate\",\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]}" \
-  "http://localhost:$PORT/task?cwd=/project"
+// Reference it from a delegate call
+mma_run({ "cwd": "/project", "request": { "type": "delegate", "prompt": "Implement section 3 per spec", "contextBlockIds": ["cb_abc123"] } })
 ```
 
 ## Best practices
@@ -104,12 +83,10 @@ Inlining a 50KB spec into every delegate call's prompt.
 N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each call.
 
 ❌ **Forgetting to delete unused blocks**
-Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent tasks finish — or let idle expiry (24 h) evict them.
+Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly call `mma_context_block_delete` after the dependent tasks finish — or let idle expiry (24 h) evict them.
 
 ❌ **Trying to update a block's content**
 Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.
 
 ❌ **Deleting a block while a task still references it**
-Returns `409 pinned`. **Fix:** poll the dependent tasks to terminal first, then delete.
-
-@include _shared/error-handling.md
+Fails with `pinned`. **Fix:** poll the dependent tasks to terminal first, then delete.

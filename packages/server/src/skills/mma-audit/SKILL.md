@@ -31,13 +31,10 @@ If you want to bias workers toward a narrow lens (security only, performance onl
 
 **Don't use mma-audit when:** the thing being audited is source code (→ `mma-review`); a 30-second `Read` would answer it; or you want to verify a plan that hasn't been written yet (write the plan first).
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -90,54 +87,35 @@ When `subtype: 'plan'`:
 
 ### Default audit (general prose)
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"default","target":{"paths":["/project/.mma/specs/2026-07-11-api-design.md"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
+Call `mma_run` with:
+
+```json
+{ "cwd": "/project", "request": { "type": "audit", "subtype": "default", "target": { "paths": ["/project/.mma/specs/2026-07-11-api-design.md"] } } }
 ```
 
 ### Spec audit (requirement prose)
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"spec","target":{"paths":["/project/.mma/specs/2026-05-12-feature-design.md"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
+Call `mma_run` with:
+
+```json
+{ "cwd": "/project", "request": { "type": "audit", "subtype": "spec", "target": { "paths": ["/project/.mma/specs/2026-05-12-feature-design.md"] } } }
 ```
 
 ### Skill audit (SKILL.md)
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"skill","target":{"paths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
+Call `mma_run` with:
+
+```json
+{ "cwd": "/project", "request": { "type": "audit", "subtype": "skill", "target": { "paths": ["/project/packages/server/src/skills/mma-audit/SKILL.md"] } } }
 ```
 
 ### Plan audit (verify a code-execution plan against the codebase)
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"audit","subtype":"plan","target":{"paths":["/project/.mma/plans/2026-05-10-feature.md"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "audit", "subtype": "plan", "target": { "paths": ["/project/.mma/plans/2026-05-10-feature.md"] } } }
+```
 
 @include _shared/response-shape.md
 
@@ -213,5 +191,3 @@ The block is registered server-side at task completion; no caller action is need
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** An audit with zero findings is a success — it means the document passed all criteria. Check `output.summary.findings.length === 0`.
-
-@include _shared/error-handling.md

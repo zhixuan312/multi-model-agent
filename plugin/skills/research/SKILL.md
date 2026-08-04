@@ -33,83 +33,10 @@ mean and which directions to pursue.
   directions with synthesis) → `mma:explore` (orchestrates mma:investigate + mma:research + mma:journal-recall → writes `exploration.md`)
 - A single web fetch is all you need → `WebFetch` inline
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-## Prefer the MCP tools when they are available
-
-**Before using the HTTP/curl route below, check whether the `mma_run` MCP tool is available in
-this session. If it is, USE IT INSTEAD.** The curl route documented here is the fallback for
-sessions with no MCP connection.
-
-```
-mma_run({ cwd: "<abs-path>", mode: "handle", request: { type: "<task type>", ... } })
-```
-
-The request body is identical — the same `type`, `prompt`, `target`, and options described
-below ride inside `request`. Poll with `mma_task_get`, block with `mma_task_wait`, stop with
-`mma_task_cancel`, instead of the curl polling loop.
-
-Why this matters, so the choice is not arbitrary:
-
-- **Hosts that support MCP Apps render a live execution monitor** for `mma_run` — phase and
-  elapsed time update in place, with a working Cancel button, and none of it costs an extra
-  model turn. The curl route cannot produce that: the host has no idea a task is running, so
-  progress can only be surfaced by the agent polling and re-reporting, which costs a turn each
-  time. Going through curl on such a host silently gives up the better experience.
-- **No token handling.** The MCP route is already authenticated; the curl route needs
-  `mma print-token` and a bearer header, which is one more place a credential can leak into a
-  transcript or a shell history.
-- **Errors arrive structured** rather than as an HTTP body to parse.
-
-Use the curl route when `mma_run` is genuinely absent — a bare terminal, a CI job, or a client
-with no MCP support. Do not use it merely because this document spells the HTTP call out in
-more detail.
-
-
-## Authentication & identity headers
-
-Every request to the multi-model-agent server requires:
-
-| Header | Required for | Purpose |
-|---|---|---|
-| `Authorization: Bearer <token>` | All routes (except `/health`) | Auth — token from `mma print-token` |
-| `X-MMA-Client: <client>` | All tool routes | Identifies your client. One of `claude-code`, `cursor`, `codex-cli`, `gemini-cli`. **Server returns `400 client_required` if missing.** |
-| `X-MMA-Main-Model: <model-id>` | All tool routes | Calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`). Used as `mainModel` in wire telemetry so cost-delta-vs-main and family attribution can be computed. **Server returns `400 main_model_required` if missing.** Auto-detection is intentionally not attempted — the calling client is the only reliable source. |
-
-### Obtain the token
-
-**From environment variable** (preferred):
-```
-MMA_AUTH_TOKEN=<token>
-```
-
-**From CLI**:
-```bash
-mma print-token
-```
-
-### Shell helper
-
-```bash
-TOKEN="${MMA_AUTH_TOKEN:-$(mma print-token)}"
-MMA_CLIENT="${MMA_CLIENT:-claude-code}"
-MMA_MAIN_MODEL="${MMA_MAIN_MODEL:-claude-opus-4-7}"
-
-curl \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  ...
-```
-
-### Errors
-
-- `401 unauthorized` — verify the token matches `~/.mma/auth-token`. The token persists across restarts; it only changes if the file is manually deleted.
-- `400 client_required` — `X-MMA-Client` header is missing on a tool route. Set it to one of: `claude-code`, `cursor`, `codex-cli`, `gemini-cli`.
-- `400 main_model_required` — `X-MMA-Main-Model` header is missing on a tool route. Set it to the calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`).
-
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Configuration prerequisites
 
@@ -152,109 +79,11 @@ The research criteria target primary-source preference, practitioner consensus, 
 
 ## Full example
 
-```bash
-RESULT=$(curl -f -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "research",
-    "prompt": "State-of-the-art SIMD JSON parsers under 100KB? We use a single-pass push parser; want SIMD alternatives."
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
+Call `mma_run` with:
+
+```json
+{ "cwd": "/project", "request": { "type": "research", "prompt": "State-of-the-art SIMD JSON parsers under 100KB? We use a single-pass push parser; want SIMD alternatives." } }
 ```
-
-## Polling for task completion
-
-After a tool call returns a `taskId`, poll `GET /task/:taskId` until the task
-reaches a terminal state.
-
-### HTTP response shapes
-
-| Status | Content-Type | Meaning |
-|---|---|---|
-| `202` | `application/json` | Still working — body is structured progress: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
-| `200` | `application/json` | Terminal — body is the uniform 6-field envelope (see `response-shape.md`) |
-| `404` / `401` / other | — | Error — stop polling |
-
-### Terminal envelope states
-
-Every terminal envelope has the same six fields; inspect `error` to tell
-which terminal state you're in:
-
-| Shape | Meaning |
-|---|---|
-| `error` is a real object | Task failed — read `error.code` + `error.message` |
-| `error` is `null` | Task succeeded — read `output.summary` |
-
-### Poll loop (POSIX sh)
-
-```bash
-DELAY=1
-START=$(date +%s)
-TIMEOUT_S=${MMA_POLL_TIMEOUT_S:-1800}
-BODY_FILE=$(mktemp -t mma-poll.XXXXXX)
-trap 'rm -f "$BODY_FILE"' EXIT
-
-while true; do
-  NOW=$(date +%s)
-  if [ $((NOW - START)) -ge "$TIMEOUT_S" ]; then
-    echo "mma: poll timed out after ${TIMEOUT_S}s" >&2
-    exit 124
-  fi
-
-  STATUS=$(curl -f --show-error -o "$BODY_FILE" -w "%{http_code}" -s \
-    -H "Authorization: Bearer $TOKEN" \
-    "http://127.0.0.1:$PORT/task/$TASK_ID" || true)
-
-  case "$STATUS" in
-    202)
-      cat "$BODY_FILE"; echo
-      sleep "$DELAY"
-      DELAY=$(( DELAY < 30 ? DELAY * 2 : 30 ))
-      ;;
-    200)
-      cat "$BODY_FILE"
-      exit 0
-      ;;
-    "")
-      echo "mma: unreachable (curl failed)" >&2; exit 1 ;;
-    *)
-      echo "mma: HTTP $STATUS"; cat "$BODY_FILE" >&2; exit 1 ;;
-  esac
-done
-```
-
-Start at 1 s, double each iteration, cap at 30 s. The 1800-second client-side
-timeout is a safety cap; most tasks complete in under 60 s. Discover `$PORT`
-at runtime with `mma info --json | jq -r .port` (default: 7337).
-
-### Caller-side tool-timeout note
-
-The poll helper's internal `TIMEOUT_S` default is 1800s (30 minutes). If your
-agent's shell tool (e.g. Claude Code's Bash) caps command wall-clock at
-10 minutes by default, the helper will be killed at 10m regardless of
-`TIMEOUT_S` — long-running delegations then appear to "fail" before terminal.
-
-When invoking this poll loop, pick one:
-
-- **Preferred — pass a 30-minute tool timeout explicitly** (e.g. Claude Code
-  Bash accepts `timeout: 1800000`, up to 600000ms/10 min by default; pass the
-  max the tool allows, or bump the tool's allowed ceiling via harness
-  settings).
-- **Alternative — cap the helper to match the tool's limit** by exporting
-  `MMA_POLL_TIMEOUT_S=600` before running the loop. The helper will then
-  exit 124 cleanly at 10 minutes and the caller can decide whether to
-  re-poll or surface the timeout.
-
-Never let the helper run longer than the caller's tool cap — the process
-gets killed mid-poll, the caller sees a generic failure, and diagnostics
-from the `TIMEOUT_S` exit path are lost.
-
-Windows/PowerShell equivalent is planned for a later release.
-
 
 ## Response shapes
 
@@ -413,36 +242,3 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** Research that finds nothing is a success — "I searched widely and found nothing." The `output.summary.answer` field contains the narrative; `output.summary.findings` contains individual sources with `url` and `source` fields for citation.
-
-## Error handling
-
-### HTTP status decision table
-
-| Status | Code | Action |
-|---|---|---|
-| `400` | `invalid_request` | Fix the request body or query params |
-| `401` | `unauthorized` | Verify token matches `~/.mma/auth-token` |
-| `403` | `forbidden` | `cwd` query param missing or out of scope |
-| `404` | `not_found` | Wrong `taskId` or resource does not exist |
-| `409` | `invalid_task_state` / `pinned` | Task in wrong state; check current state first |
-| `413` | `payload_too_large` | Reduce content size (context block or body) |
-| `429` | `rate_limited` | Wait `Retry-After` seconds, then retry |
-| `503` | `project_cap_exceeded` | Too many concurrent projects; wait and retry |
-| `5xx` | server error | Retry once after 2 s; escalate if it persists |
-
-### Network failures
-
-Retry up to 3 times with exponential backoff (1 s → 2 s → 4 s).
-If the server is unreachable, check that `mma serve` is running:
-```bash
-curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — see spec C13)
-```
-
-### Auth errors (401)
-
-```bash
-export MMA_AUTH_TOKEN=$(mma print-token)
-```
-
-The token persists across restarts at `~/.mma/auth-token`. It only changes if the file is manually deleted.
-

@@ -57,12 +57,13 @@ writing).
 - The task is small enough for `mma-delegate` (no spec/plan needed).
 - It's a codebase question → `mma-investigate`.
 
-## This is NOT an endpoint
+## This is NOT a dispatchable task type
 
 `mma-brainstorm` is a main-agent orchestration skill — it teaches the main agent a workflow that
-dispatches other MMA task types. There is no `POST /task { type: "brainstorm" }`. The mechanical
-sub-questions it resolves ARE dispatched (to `investigate` / `research` / `journal_recall`), and its
-terminal step dispatches `mma-spec`.
+dispatches other MMA task types via the `mma_run` MCP tool. There is no `brainstorm` request type.
+The mechanical sub-questions it resolves ARE dispatched (to `investigate` / `research` /
+`journal_recall`), and its terminal step dispatches `mma-spec`. If the `mma_run` MCP tool is not
+available in this session, run `mma clients`.
 
 ## Inputs
 
@@ -109,14 +110,14 @@ spec components below. Mark each:
 
 Work the queue. For each open item:
 
-**Mechanical questions — resolve yourself via workers (HTTP `POST /task`), never inline Agent dispatches:**
-- Never use inline Agent dispatches for these — always use HTTP `POST /task` to the MMA server.
+**Mechanical questions — resolve yourself via `mma_run`, never inline Agent dispatches:**
+- Never use inline Agent dispatches for these — always dispatch through the `mma_run` MCP tool.
   Workers cost ~10× less and don't pollute main context.
-- If the braindump says "use the existing interface" — dispatch `POST /task` with
-  `{ "type": "investigate" }` to fill in the name, signature, file path. Don't ask the user.
-- If you need the tech stack, test framework, or import style — dispatch `{ "type": "investigate" }`.
-- If you need prior art or external approaches — dispatch `{ "type": "research" }`.
-- If you need what the project already decided — dispatch `{ "type": "journal_recall" }`.
+- If the braindump says "use the existing interface" — dispatch `mma_run` with
+  `request: { "type": "investigate" }` to fill in the name, signature, file path. Don't ask the user.
+- If you need the tech stack, test framework, or import style — dispatch `request: { "type": "investigate" }`.
+- If you need prior art or external approaches — dispatch `request: { "type": "research" }`.
+- If you need what the project already decided — dispatch `request: { "type": "journal_recall" }`.
 
 **Decision questions — ask the user, one at a time:**
 - One question per message. Never dump the whole queue.

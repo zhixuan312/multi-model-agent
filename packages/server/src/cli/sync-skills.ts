@@ -199,14 +199,6 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
 
   if (deps.ifExists && !manifestPresent(homeDir)) return ExitCode.SUCCESS;
 
-  let authToken: string | undefined;
-  try {
-    const tokenPath = path.join(homeDir, '.mma', 'auth-token');
-    if (fs.existsSync(tokenPath)) {
-      authToken = fs.readFileSync(tokenPath, 'utf-8').trim();
-    }
-  } catch { /* best-effort — skills work without embedded token */ }
-
   let parsed: ParsedArgs;
   try {
     parsed = parseArgs(argv);
@@ -382,7 +374,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
         continue;
       }
       try {
-        writeCommandToClaudeCode(commandName, content, homeDir, skillsRoot, authToken);
+        writeCommandToClaudeCode(commandName, content, homeDir, skillsRoot);
         outcome.commands.installed.push(commandName);
       } catch (err) {
         outcome.errors.push({ clientId: 'claude-code' as ClientId, reason: err instanceof Error ? err.message : String(err) });

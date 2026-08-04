@@ -14,22 +14,17 @@ describe('mma-research SKILL.md', () => {
     expect(data.version).toBeTruthy();
   });
 
-  it('documents the route and request body', () => {
-    expect(content).toContain('POST /task');
+  it('documents the mma_run dispatch and request body', () => {
+    expect(content).toContain('mma_run');
     expect(content).toContain('prompt');
   });
 
-  it('documents auth + identity headers', () => {
-    expect(content).toContain('Authorization: Bearer');
-    expect(content).toContain('X-MMA-Client');
+  it('documents the mma clients fallback instead of client-specific auth headers', () => {
+    expect(content).toContain('mma clients');
   });
 
-  it('includes the shared polling guide', () => {
-    expect(content).toMatch(/@include _shared\/polling|while true|GET \/batch/);
-  });
-
-  it('documents auth via @include _shared/auth (project convention)', () => {
-    expect(content).toMatch(/@include _shared\/auth|Authorization: Bearer/);
+  it('includes the shared response-shape guide (poll with mma_task_get / mma_task_wait)', () => {
+    expect(content).toMatch(/@include _shared\/response-shape|mma_task_get|mma_task_wait/);
   });
 
   it('is route-level (not an orchestration playbook)', () => {

@@ -13,7 +13,6 @@ dist/
 docs/superpowers/
 .superpowers/
 # Internal authoring reference for mma-* skills — not for public.
-docs/SKILL_WRITING_GUIDELINES.md
 coverage/
 .vscode/
 .idea/
