@@ -8,7 +8,7 @@ import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from '../application/cwd-validator.js';
-import { shouldRejectNonLoopback, isAllowedHostHeader } from '@zhixuan92/multi-model-agent-core';
+import { shouldRejectNonLoopback, isAllowedHostHeader, CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext, RawHandler } from './types.js';
 
@@ -163,7 +163,7 @@ export async function handleRequest(
         res,
         400,
         'client_required',
-        'X-MMA-Client header is required on tool routes. Set it to one of: claude-code, cursor, codex-cli, gemini-cli.',
+        `X-MMA-Client header is required on tool routes. Set it to one of: ${CLIENT_IDS.join(', ')}.`,
       );
       return;
     }
