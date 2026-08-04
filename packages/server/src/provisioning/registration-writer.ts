@@ -4,9 +4,9 @@
  * A client's MCP config file (`~/.cursor/mcp.json`, `claude_desktop_config.json`,
  * `~/.codex/config.toml`, ...) belongs to the USER: alongside whatever MMA writes,
  * it can hold entries for other MCP servers the user configured by hand. This
- * module generalises the discipline already proven for Claude Desktop
- * (`skill-install/skill-installers/claude-desktop.ts`) into one seam every writer
- * can share, rather than each writer re-inventing it:
+ * module generalises the discipline originally proven for Claude Desktop's legacy
+ * writer (retired by Task I-5 in favour of `provisioning/writers/claude-desktop.ts`)
+ * into one seam every writer can share, rather than each writer re-inventing it:
  *
  *   1. **Recognise ONLY an entry MMA owns.** A key-shape check alone cannot prove
  *      ownership — a hand-written entry can happen to look similar. {@link
@@ -31,10 +31,11 @@
  *      only credential mechanisms allowed are dynamic ones (env/file interpolation,
  *      a helper script) supplied by the specific writer, never a baked-in secret.
  */
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { dirname } from 'node:path';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
-import { CLIENT_CAPABILITIES, type McpConfigFormat } from './capability-registry.js';
+import { CLIENT_CAPABILITIES, type ClientCapability, type McpConfigFormat } from './capability-registry.js';
 
 /** Why a registration write/remove was refused. Surfaced for inventory reporting. */
 export type RegistrationConflictReason =
@@ -71,7 +72,7 @@ export interface RegistrationFsDeps {
   remove(path: string): void;
 }
 
-function realFsDeps(): RegistrationFsDeps {
+export function realFsDeps(): RegistrationFsDeps {
   return {
     readConfig: (path) => (existsSync(path) ? readFileSync(path) : undefined),
     createTemp: (path) => `${path}.mma-tmp-${process.pid}-${randomBytes(6).toString('hex')}`,
@@ -97,11 +98,6 @@ const MMA_ENTRY_KEY = 'mma';
  *  coincidentally match this precise host+path to be misidentified. */
 const LOOPBACK_MCP_URL = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/mcp$/;
 
-/** The distribution entrypoint every MMA stdio bridge launches. Matching this
- * suffix prevents an arbitrary absolute command with an `mcp` argument from
- * being mistaken for an MMA-owned entry. */
-const MMA_STDIO_ENTRYPOINT_SUFFIX = 'dist/cli/index.js';
-
 /** Matches a literal bearer value wherever it appears in a serialized entry. Dynamic
  *  `${VAR}` and `{env:VAR}` / `{file:path}` substitutions remain allowed because
  *  the client resolves them at connection time rather than serializing a secret. */
@@ -111,22 +107,41 @@ function isAbsolutePathLike(candidate: string): boolean {
   return candidate.startsWith('/') || /^[A-Za-z]:[\\/]/.test(candidate) || candidate.startsWith('\\\\');
 }
 
+/** The CLI entrypoint a stdio entry launches — `args[0]` of `{command, args:[entrypoint,'mcp']}`.
+ *  Returns undefined for any other shape, which makes ownership unprovable. */
+function stdioEntrypointOf(entry: Record<string, unknown>): string | undefined {
+  const args = entry.args;
+  if (!Array.isArray(args)) return undefined;
+  const first = args[0];
+  return typeof first === 'string' ? first : undefined;
+}
+
 /**
  * Is this `mcpServers.mma` (or equivalent) value an entry MMA itself wrote?
  *
  * Dispatches on the client's `mcpConfigFormat`:
- *  - `stdio-json` (the Claude Desktop bridge shape): key set ⊆ `{command, args}`,
- *    `args` ends with `"mcp"`, and `args[0]` is an absolute MMA distribution
- *    entrypoint ending in `dist/cli/index.js`.
+ *  - `stdio-json` (the Claude Desktop bridge shape): exactly `{command, args}`;
+ *    `args` ends with `"mcp"`, and both the Node command and resolved CLI
+ *    entrypoint are absolute paths.
  *  - every other supported format (`json`, `plugin-json`): key set ⊆
  *    `{url, serverUrl, headers, env}` and the URL is exactly MMA's own loopback
  *    `/mcp` endpoint.
  */
-export function isOwnedMcpEntry(value: unknown, format: McpConfigFormat): boolean {
+export function isOwnedMcpEntry(
+  value: unknown,
+  format: McpConfigFormat,
+  expectedStdioEntrypoint?: string,
+): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const entry = value as Record<string, unknown>;
 
   if (format === 'stdio-json') {
+    // A stdio entry carries no URL, so the loopback check below cannot serve as its
+    // ownership proof. Its equivalent is the entrypoint: the entry is MMA's only if
+    // it launches THIS installation's CLI. Without an expected entrypoint to compare
+    // against, ownership is unprovable and we fail closed — shape alone would let
+    // any `node /some/other-tool.js mcp` entry be mistaken for ours and overwritten.
+    if (expectedStdioEntrypoint === undefined) return false;
     for (const key of Object.keys(entry)) {
       if (key !== 'command' && key !== 'args') return false;
     }
@@ -134,12 +149,21 @@ export function isOwnedMcpEntry(value: unknown, format: McpConfigFormat): boolea
     if (!Array.isArray(args) || args.length < 2) return false;
     if (args[args.length - 1] !== 'mcp') return false;
     const first = args[0];
-    return typeof first === 'string'
+    return Object.keys(entry).length === 2
+      && typeof entry.command === 'string'
+      && isAbsolutePathLike(entry.command)
+      && typeof first === 'string'
       && isAbsolutePathLike(first)
-      && first.replace(/\\/g, '/').endsWith(MMA_STDIO_ENTRYPOINT_SUFFIX);
+      && first === expectedStdioEntrypoint
+      ;
   }
 
-  const allowedKeys = new Set(['url', 'serverUrl', 'headers', 'env']);
+  // Superset across every non-stdio writer's own shape: claude-code's plugin entry
+  // additionally carries `type`/`headersHelper`, codex's TOML entry carries
+  // `bearer_token_env_var`. The loopback URL check below remains the authoritative
+  // proof of ownership; this set only guards against an entry carrying an
+  // unexpected key no MMA writer would ever emit.
+  const allowedKeys = new Set(['url', 'serverUrl', 'headers', 'env', 'type', 'headersHelper', 'bearer_token_env_var']);
   for (const key of Object.keys(entry)) {
     if (!allowedKeys.has(key)) return false;
   }
@@ -164,7 +188,7 @@ function assertSupportedFormat(clientId: ClientId, format: McpConfigFormat): voi
   }
 }
 
-function assertNoStaticCredential(entry: unknown): void {
+export function assertNoStaticCredential(entry: unknown): void {
   if (STATIC_BEARER_TOKEN_PATTERN.test(JSON.stringify(entry) ?? '')) {
     throw new RegistrationConflictError(
       'static_credential',
@@ -226,7 +250,7 @@ function serializeJsonConfig(root: Record<string, unknown>): Buffer {
 /** Refuse the write when the config changed between the initial read and now. See
  *  the module doc's point 3 — this is what makes atomic replacement safe against a
  *  concurrent save rather than merely torn-file-safe. */
-function assertBytesUnchanged(fs: RegistrationFsDeps, path: string, expected: Buffer | undefined): void {
+export function assertBytesUnchanged(fs: RegistrationFsDeps, path: string, expected: Buffer | undefined): void {
   const current = fs.readConfig(path);
   const unchanged = expected === undefined ? current === undefined : current !== undefined && current.equals(expected);
   if (!unchanged) {
@@ -238,7 +262,7 @@ function assertBytesUnchanged(fs: RegistrationFsDeps, path: string, expected: Bu
   }
 }
 
-function atomicWriteBytes(fs: RegistrationFsDeps, path: string, bytes: Buffer): void {
+export function atomicWriteBytes(fs: RegistrationFsDeps, path: string, bytes: Buffer): void {
   const tempPath = fs.createTemp(path);
   try {
     fs.write(tempPath, bytes);
@@ -286,7 +310,11 @@ export async function writeOwnedRegistration(input: WriteOwnedRegistrationInput)
   const originalBytes = fs.readConfig(path);
   const { root, mcpServers } = parseJsonConfig(path, originalBytes);
 
-  if (MMA_ENTRY_KEY in mcpServers && !isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format)) {
+  // For stdio, the entry MMA is about to write IS the ownership yardstick: an
+  // existing entry is ours only if it launches the same entrypoint.
+  const expectedStdioEntrypoint = stdioEntrypointOf(entry);
+
+  if (MMA_ENTRY_KEY in mcpServers && !isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format, expectedStdioEntrypoint)) {
     throw new RegistrationConflictError(
       'unrecognised_entry',
       `Refusing to modify ${path}: "mcpServers.${MMA_ENTRY_KEY}" was not written by MMA. `
@@ -308,6 +336,11 @@ export async function writeOwnedRegistration(input: WriteOwnedRegistrationInput)
 export interface RemoveOwnedRegistrationInput {
   path: string;
   clientId: ClientId;
+  /** Required for `stdio-json` clients: the CLI entrypoint this installation
+   *  launches. Removal must prove ownership just as strictly as writing does, and
+   *  a stdio entry's only proof is that it launches THIS entrypoint. Omitting it
+   *  makes ownership unprovable, so the entry is preserved rather than removed. */
+  expectedStdioEntrypoint?: string;
   fs?: RegistrationFsDeps;
 }
 
@@ -329,7 +362,7 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
   if (originalBytes === undefined || !(MMA_ENTRY_KEY in mcpServers)) {
     return { path, changed: false };
   }
-  if (!isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format)) {
+  if (!isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format, input.expectedStdioEntrypoint)) {
     throw new RegistrationConflictError(
       'unrecognised_entry',
       `Refusing to modify ${path}: "mcpServers.${MMA_ENTRY_KEY}" was not written by MMA. `
@@ -344,4 +377,215 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
   assertBytesUnchanged(fs, path, originalBytes);
   atomicWriteBytes(fs, path, nextBytes);
   return { path, changed: true };
+}
+
+/**
+ * Per-client registration writers (Task I-5/I-6).
+ *
+ * Everything above this point is the shared, format-generic ownership/stale/
+ * atomic-rename/no-static-credential machinery. Everything below dispatches to
+ * the client-specific writer that renders each client's own recognised entry
+ * shape and installs it through that machinery — selected by the capability
+ * registry, never a hand-maintained target switch.
+ */
+
+/** The result every per-client writer (install or remove) returns — one shape
+ *  shared across `packages/server/src/provisioning/writers/*`. */
+export type ClientRegistrationStatus = 'registered' | 'absent' | 'failed';
+
+export interface ClientRegistrationResult {
+  status: ClientRegistrationStatus;
+  path: string;
+  clientId: ClientId;
+  /** Whether this call actually changed the file on disk (`false` for an
+   *  already-correct idempotent write, or a remove that found nothing to remove). */
+  changed: boolean;
+  conflictReason?: RegistrationConflictReason;
+  message?: string;
+  /**
+   * Structural self-check that the just-written (or already-registered) entry is
+   * complete enough for a FRESH adapter to connect without retry. This is
+   * deliberately NOT a live network/process handshake — the daemon may not even be
+   * running yet at provisioning time — only a proof that the rendered entry itself
+   * is internally consistent (see {@link assertInitializable}).
+   */
+  initializeOnce(): Promise<{ ok: true }>;
+}
+
+export interface WriteClientRegistrationInput {
+  capability: ClientCapability;
+  /** Absolute home directory every writer resolves its user-level config path from. */
+  homeDir: string;
+  /** Daemon port for HTTP-style writers. Ignored by the stdio bridge (Claude Desktop). */
+  daemonPort: number;
+  /** Absolute path of the CLI entrypoint the stdio bridge launches (Claude Desktop only). */
+  cliEntrypoint: string;
+  /** Absolute path of the Node binary that launches the stdio bridge. Defaults to
+   *  `process.execPath`. */
+  execPath?: string;
+  /** `process.platform`, overridable for Claude Desktop's macOS/Windows path split. */
+  platform?: string;
+  /** Windows APPDATA root for Claude Desktop's user-level configuration. */
+  appData?: string;
+  /** Test/advanced seam: overrides the real filesystem for every writer this input reaches. */
+  fs?: RegistrationFsDeps;
+}
+
+/** Uniform failure mapping: an error from ANY writer (a refused conflict or an
+ *  unexpected I/O failure alike) becomes a `failed` result rather than a thrown
+ *  exception — matching the Contract's "returns failed without clobbering user
+ *  content" rather than raising past the caller. */
+export function failedClientRegistrationResult(clientId: ClientId, path: string, err: unknown): ClientRegistrationResult {
+  const message = err instanceof Error ? err.message : String(err);
+  const conflictReason = err instanceof RegistrationConflictError ? err.reason : undefined;
+  return {
+    status: 'failed',
+    path,
+    clientId,
+    changed: false,
+    conflictReason,
+    message,
+    async initializeOnce() {
+      throw err instanceof Error ? err : new Error(message);
+    },
+  };
+}
+
+/**
+ * Structural completeness check every writer's `initializeOnce()` delegates to.
+ * Proves the rendered entry has whatever a fresh client adapter needs to connect —
+ * an absolute stdio command + args for the bridge shape, or a non-empty loopback
+ * URL for every HTTP-style shape (including codex's TOML, whose entry is a plain
+ * `{url, ...}` record by the time it reaches this check).
+ */
+export function assertInitializable(entry: Record<string, unknown>, format: McpConfigFormat): void {
+  if (format === 'stdio-json') {
+    if (typeof entry.command !== 'string' || entry.command === '') {
+      throw new Error('Claude Desktop entry is missing a usable "command".');
+    }
+    if (!Array.isArray(entry.args) || entry.args.length < 2 || entry.args[entry.args.length - 1] !== 'mcp') {
+      throw new Error('Claude Desktop entry is missing a usable "args" ending in "mcp".');
+    }
+    return;
+  }
+  const url = entry.url ?? entry.serverUrl;
+  if (typeof url !== 'string' || url === '') {
+    throw new Error(`Registration entry is missing a usable url/serverUrl for format '${format}'.`);
+  }
+}
+
+/**
+ * Shared install path for every writer whose format merges as JSON (`json`,
+ * `plugin-json`, `stdio-json`) through {@link writeOwnedRegistration}. Codex's
+ * `toml` format cannot go through this — see `writers/codex.ts`, which reuses the
+ * same atomic-rename/stale-check/no-static-credential primitives directly.
+ */
+export async function installJsonClientRegistration(params: {
+  capability: ClientCapability;
+  path: string;
+  entry: Record<string, unknown>;
+  fs?: RegistrationFsDeps;
+}): Promise<ClientRegistrationResult> {
+  const { capability, path, entry, fs } = params;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    const written = await writeOwnedRegistration({ path, clientId: capability.id, entry, fs });
+    assertInitializable(entry, capability.mcpConfigFormat);
+    return {
+      status: 'registered',
+      path,
+      clientId: capability.id,
+      changed: written.changed,
+      async initializeOnce() {
+        assertInitializable(entry, capability.mcpConfigFormat);
+        return { ok: true };
+      },
+    };
+  } catch (err) {
+    return failedClientRegistrationResult(capability.id, path, err);
+  }
+}
+
+/** Shared remove path, symmetric with {@link installJsonClientRegistration}. */
+export async function removeJsonClientRegistration(params: {
+  capability: ClientCapability;
+  path: string;
+  /** Required for `stdio-json` clients — see {@link RemoveOwnedRegistrationInput}. */
+  expectedStdioEntrypoint?: string;
+  fs?: RegistrationFsDeps;
+}): Promise<ClientRegistrationResult> {
+  const { capability, path, fs } = params;
+  try {
+    const removed = await removeOwnedRegistration({
+      path,
+      clientId: capability.id,
+      ...(params.expectedStdioEntrypoint !== undefined && { expectedStdioEntrypoint: params.expectedStdioEntrypoint }),
+      fs,
+    });
+    return {
+      status: 'absent',
+      path,
+      clientId: capability.id,
+      changed: removed.changed,
+      async initializeOnce() {
+        throw new Error(`'${capability.id}' has no registration to initialize after removal.`);
+      },
+    };
+  } catch (err) {
+    return failedClientRegistrationResult(capability.id, path, err);
+  }
+}
+
+// Deferred import: each writer below imports primitives FROM this module (the
+// shared ownership-safe machinery), and this module imports the writer function
+// TO dispatch by capability — a standard, safe ESM cycle since nothing here is
+// evaluated at either module's top level, only inside function bodies called
+// after the whole graph has finished loading.
+import { writeClaudeCodeRegistration } from './writers/claude-code.js';
+import { removeClaudeDesktopRegistration, writeClaudeDesktopRegistration } from './writers/claude-desktop.js';
+import { writeCodexRegistration } from './writers/codex.js';
+import { writeAntigravityRegistration } from './writers/antigravity.js';
+import { writeCursorRegistration } from './writers/cursor.js';
+
+const UNBLOCKED_WRITERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
+  'claude-code': writeClaudeCodeRegistration,
+  'claude-desktop': writeClaudeDesktopRegistration,
+  codex: writeCodexRegistration,
+  antigravity: writeAntigravityRegistration,
+  cursor: writeCursorRegistration,
+};
+
+const UNBLOCKED_REMOVERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
+  'claude-desktop': removeClaudeDesktopRegistration,
+};
+
+/**
+ * Install `capability`'s recognised home-level MMA MCP entry by dispatching to its
+ * registered writer — the registry (`UNBLOCKED_WRITERS`), not a target switch,
+ * selects which one runs. A client with no writer yet (Task I-6's VS Code,
+ * opencode, Windsurf) returns `failed` rather than throwing.
+ */
+export async function writeClientRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
+  const writer = UNBLOCKED_WRITERS[input.capability.id];
+  if (!writer) {
+    return failedClientRegistrationResult(
+      input.capability.id,
+      '',
+      new Error(`No registration writer is available yet for client '${input.capability.id}'.`),
+    );
+  }
+  return writer(input);
+}
+
+/** Remove the capability-selected registration when that writer supports removal. */
+export async function removeClientRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
+  const remover = UNBLOCKED_REMOVERS[input.capability.id];
+  if (!remover) {
+    return failedClientRegistrationResult(
+      input.capability.id,
+      '',
+      new Error(`No registration remover is available yet for client '${input.capability.id}'.`),
+    );
+  }
+  return remover(input);
 }

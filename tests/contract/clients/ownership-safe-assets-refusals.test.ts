@@ -163,7 +163,31 @@ describe('contract: ownership-safe provisioning assets — additional refusal pa
   });
 
   it('does not mistake an arbitrary stdio launcher for MMA ownership', () => {
-    expect(isOwnedMcpEntry({ args: ['/opt/other-tool.js', 'mcp'] }, 'stdio-json')).toBe(false);
-    expect(isOwnedMcpEntry({ args: ['/opt/mma/dist/cli/index.js', 'mcp'] }, 'stdio-json')).toBe(true);
+    // The real Desktop entry is { command: <node>, args: [<entrypoint>, 'mcp'] }.
+    // Ownership recognition gates whether MMA may OVERWRITE what it finds, so it
+    // must recognise that exact shape and nothing looser: every near-miss below
+    // is preserved rather than clobbered.
+    const entrypoint = '/opt/mma/dist/cli/index.js';
+    const owned = (entry: Record<string, unknown>) => isOwnedMcpEntry(entry, 'stdio-json', entrypoint);
+
+    // Recognised — MMA's own entry, so re-registration can update it in place.
+    expect(owned({ command: '/usr/bin/node', args: [entrypoint, 'mcp'] })).toBe(true);
+
+    // A DIFFERENT tool's stdio MCP server. Shape-identical to ours, so nothing but
+    // the entrypoint distinguishes it — this is the case that makes the entrypoint
+    // check load-bearing rather than decorative.
+    expect(owned({ command: '/usr/bin/node', args: ['/opt/other-tool.js', 'mcp'] })).toBe(false);
+    // No `command` at all: not a usable stdio entry, so ownership is unprovable.
+    expect(owned({ args: [entrypoint, 'mcp'] })).toBe(false);
+    // Right shape, but carrying a key no MMA writer emits — someone else edited it.
+    expect(owned({ command: '/usr/bin/node', args: [entrypoint, 'mcp'], env: {} })).toBe(false);
+    // Not launching the bridge subcommand.
+    expect(owned({ command: '/usr/bin/node', args: [entrypoint, 'serve'] })).toBe(false);
+    // Relative paths are never MMA's — it always writes absolute ones.
+    expect(owned({ command: 'node', args: ['cli/index.js', 'mcp'] })).toBe(false);
+
+    // Fail closed: with no expected entrypoint supplied, ownership cannot be proven
+    // even for a byte-perfect MMA entry, so the caller preserves rather than clobbers.
+    expect(isOwnedMcpEntry({ command: '/usr/bin/node', args: [entrypoint, 'mcp'] }, 'stdio-json')).toBe(false);
   });
 });

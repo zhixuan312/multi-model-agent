@@ -43,11 +43,8 @@ import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
 import { runPlugin } from './plugin.js';
 import { runMcpBridge, bufferedLines } from './mcp.js';
-import {
-  installClaudeDesktop,
-  uninstallClaudeDesktop,
-} from '../skill-install/skill-installers/claude-desktop.js';
-import { atomicWriteClaudeDesktopConfig } from '../skill-install/claude-desktop-file.js';
+import { removeClientRegistration, writeClientRegistration } from '../provisioning/registration-writer.js';
+import { CLIENT_CAPABILITIES } from '../provisioning/capability-registry.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -431,24 +428,25 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       // installers — Desktop has no skills, so it is deliberately absent from
       // `Client`/`ALL_CLIENTS` in skill-install/manifest.ts.
       if (nested === 'install' || nested === 'uninstall') {
-        const desktopDeps = {
-          platform: process.platform as string,
+        const desktopCapability = CLIENT_CAPABILITIES.find((candidate) => candidate.id === 'claude-desktop')!;
+        const writerInput = {
+          capability: desktopCapability,
           homeDir: deps.homeDir?.() ?? os.homedir(),
-          appData: (deps.env?.() ?? process.env).APPDATA ?? '',
-          localAppData: (deps.env?.() ?? process.env).LOCALAPPDATA ?? '',
+          daemonPort: 0, // unused by the stdio bridge entry — Desktop has no URL
+          cliEntrypoint: resolveCliEntrypoint(),
           execPath: process.execPath,
-          resolveEntrypoint: resolveCliEntrypoint,
-          exists: (p: string) => fs.existsSync(p),
-          atomicWriteClaudeDesktopConfig,
+          platform: process.platform as string,
+          appData: (deps.env?.() ?? process.env).APPDATA,
         };
         try {
           const result = nested === 'install'
-            ? await installClaudeDesktop(desktopDeps)
-            : await uninstallClaudeDesktop(desktopDeps);
-          const where = (result as { configPath?: string }).configPath ?? 'the Claude Desktop config';
-          const changed = (result as { changed?: boolean }).changed;
+            ? await writeClientRegistration(writerInput)
+            : await removeClientRegistration(writerInput);
+          if (result.status === 'failed') {
+            throw new Error(result.message ?? 'registration failed');
+          }
           stdout(
-            `mma mcp ${nested}: ${changed === false ? 'no change needed' : 'updated'} ${where}\n`
+            `mma mcp ${nested}: ${result.changed === false ? 'no change needed' : 'updated'} ${result.path}\n`
             + 'Claude Desktop receives MCP configuration only — it has no MMA skills.\n'
             + (nested === 'install' ? 'Fully quit and relaunch Claude Desktop to pick it up.\n' : ''),
           );
