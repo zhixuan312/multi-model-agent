@@ -59,6 +59,48 @@ describe('contract: skill ownership cannot be faked', () => {
     expect(await readFile(victim, 'utf8')).toBe('content MMA has no business touching');
   });
 
+  it('refuses a skill directory that is itself a symlink, rather than calling it unowned', async () => {
+    // The subtler half of the same vector. Rejecting a symlinked ENTRY inside the
+    // directory does nothing if the directory is the link: `lstat` never reports a
+    // symlink as a directory, so a boolean "does it exist" reads it as absent,
+    // ownership comes back `unowned` — safe to create fresh — and installation
+    // writes every rendered file straight into the link's target.
+    const root = await tempDir();
+    const theirDir = join(root, 'someone-elses-directory');
+    await mkdir(theirDir, { recursive: true });
+    await writeFile(join(theirDir, 'SKILL.md'), 'their file');
+    await symlink(theirDir, join(root, 'mma-audit'));
+
+    const inspection = await inspectSkillOwnership(join(root, 'mma-audit'), RENDERED, RELEASE);
+
+    expect(inspection.state, 'a symlinked directory is unprovable, not absent').toBe('modified-conflict');
+    // The reason must name the link. Rejecting it because the target happens to
+    // lack a marker would be the right answer for the wrong reason — and would
+    // silently stop being the right answer the moment the target has one.
+    expect(inspection.reason).toMatch(/symlink/);
+    expect(await readFile(join(theirDir, 'SKILL.md'), 'utf8')).toBe('their file');
+  });
+
+  it('refuses a directory standing where the render expects a file', async () => {
+    // Contributes no regular files, so the "empty apart from its marker" carve-out
+    // would otherwise wave it through with no digest check at all.
+    const root = await tempDir();
+    const dir = join(root, 'mma-audit');
+    await mkdir(join(dir, 'SKILL.md'), { recursive: true });
+    await writeFile(join(dir, '.mma-install.json'), JSON.stringify({ release: RELEASE, sha256: RENDERED_DIGEST }));
+
+    expect((await inspectSkillOwnership(dir, RENDERED, RELEASE)).state).toBe('modified-conflict');
+  });
+
+  it('still treats a directory holding only its marker as a recoverable interrupted install', async () => {
+    const root = await tempDir();
+    const dir = join(root, 'mma-audit');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, '.mma-install.json'), JSON.stringify({ release: RELEASE, sha256: RENDERED_DIGEST }));
+
+    expect((await inspectSkillOwnership(dir, RENDERED, RELEASE)).state).toBe('owned');
+  });
+
   it('refuses a marker that is itself a symlink', async () => {
     const root = await tempDir();
     const elsewhere = join(root, 'planted-marker.json');

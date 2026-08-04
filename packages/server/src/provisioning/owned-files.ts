@@ -165,11 +165,22 @@ function parseSkillOwnershipMarker(bytes: Buffer): SkillOwnershipMarker | undefi
   return { release, sha256 };
 }
 
-async function directoryExists(dir: string): Promise<boolean> {
+/**
+ * What is at `dir` right now: nothing, a real directory, or something else.
+ *
+ * The three-way answer is the point. Collapsing "something else" into "nothing"
+ * is how a symlinked skill DIRECTORY became indistinguishable from a fresh
+ * install: `lstat` on a symlink never reports `isDirectory()` even when it points
+ * at one, so a boolean check reads it as absent, ownership comes back `unowned`,
+ * and installation happily creates files "fresh" — inside whatever directory the
+ * link points at. Nothing here is a directory-component-aware write; the guard has
+ * to be the classification itself.
+ */
+async function classifyDirEntry(dir: string): Promise<'absent' | 'directory' | 'other'> {
   try {
-    return (await lstat(dir)).isDirectory();
+    return (await lstat(dir)).isDirectory() ? 'directory' : 'other';
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'absent';
     throw err;
   }
 }
@@ -217,8 +228,10 @@ export async function inspectSkillOwnership(
 ): Promise<SkillOwnershipInspection> {
   const digest = computeSkillDigest(rendered);
 
-  if (!(await directoryExists(dir))) {
-    return { state: 'unowned', digest };
+  const entry = await classifyDirEntry(dir);
+  if (entry === 'absent') return { state: 'unowned', digest };
+  if (entry === 'other') {
+    return { state: 'modified-conflict', digest, reason: new UnprovableSkillEntryError(dir).message };
   }
 
   const markerPath = join(dir, SKILL_OWNERSHIP_MARKER_FILE);
@@ -282,10 +295,15 @@ export async function inspectSkillOwnership(
   }
   const expectedDigest = isCurrentRelease ? digest : marker.sha256;
   // An otherwise empty marker directory is a recoverable interrupted install: it
-  // contains no regular-file content to preserve, and the marker still proves MMA
-  // created it. Non-regular entries can no longer hide here — the walk above
-  // rejects them — so an empty set genuinely means an empty directory.
-  if (installedFiles.size > 0 && computeSkillDigest(installedFiles) !== expectedDigest) {
+  // holds nothing to preserve, and the marker still proves MMA created it. But
+  // "no regular FILES" is not the same as "nothing there" — a directory standing
+  // where the render expects a file contributes no files either, and would slip
+  // through this carve-out with no digest check at all. So the carve-out is
+  // conditioned on the directory being empty apart from its marker, not merely on
+  // the walked file set being empty.
+  const isEmptyApartFromMarker = installedFiles.size === 0
+    && (await readdir(dir)).every((name) => name === SKILL_OWNERSHIP_MARKER_FILE);
+  if (!isEmptyApartFromMarker && computeSkillDigest(installedFiles) !== expectedDigest) {
     return conflict(
       `${dir} does not match the digest recorded for release ${marker.release} — its contents were modified outside MMA, so it is left untouched.`,
     );

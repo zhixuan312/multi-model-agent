@@ -87,10 +87,16 @@ export interface ProvisioningPort {
   /** Restore a client's skill root to exactly the backup taken by
    *  `backupSkills` -- `backupPath: null` means restoring means removing
    *  whatever this operation partially wrote (nothing existed before).
-   *  Must verify the backup is intact BEFORE removing anything live: a backup
-   *  that has gone missing is a reason to keep the current content, never a
-   *  reason to end up with neither copy. */
-  restoreSkills(clientId: ClientId, capability: ClientCapability, backupPath: string | null): Promise<PortActionResult>;
+   *  Must prove the backup still hashes to `expectedDigest` BEFORE removing
+   *  anything live: a backup that has gone missing, or been emptied, or lost an
+   *  entry is a reason to keep the current content, never a reason to end up
+   *  with neither copy. */
+  restoreSkills(
+    clientId: ClientId,
+    capability: ClientCapability,
+    backupPath: string | null,
+    expectedDigest: string | null,
+  ): Promise<PortActionResult>;
   /** Delete a backup taken by `backupSkills` once it can no longer be needed --
    *  the operation reached its terminal phase, or the restore it existed for has
    *  already succeeded. Best-effort: a backup that cannot be deleted is leaked
@@ -104,10 +110,19 @@ export interface ProvisioningPort {
   /** Names of packaged skills currently installed (ownership-proven) for this
    *  client. Read-only. */
   installedSkillNames(clientId: ClientId, capability: ClientCapability): string[];
-  /** Whether the skill root a mutation would target is currently writable AND
-   *  its observed ownership state matches what a marker recorded as the
-   *  starting point -- the reachability precondition for recovery. */
-  isSkillsReachable(clientId: ClientId, capability: ClientCapability, priorDigest: string | null): boolean;
+  /**
+   * Whether the skill root a mutation would target is currently writable and
+   * everything installed under it is still ownership-provable -- the
+   * reachability precondition for recovery.
+   *
+   * Deliberately NOT a digest comparison against the marker's recorded starting
+   * point. A crash during `installSkills` leaves the root legitimately different
+   * from that starting point (that is the situation recovery exists for), so
+   * gating on the digest would refuse precisely when restoring matters most. The
+   * ownership proof is what makes the restore safe; the recorded digest earns its
+   * keep verifying the BACKUP instead, in `restoreSkills`.
+   */
+  isSkillsReachable(clientId: ClientId, capability: ClientCapability): boolean;
 }
 
 /** The per-client status shape shared by a provisioning outcome (what THIS

@@ -243,6 +243,27 @@ describe('contract: recovery distinguishes an unfinished operation from an unrec
     expect(fixture.marker('cursor'), 'unresolved means the marker stays for an operator').not.toBeNull();
   });
 
+  it('refuses at the started phase too, where no post-mutation fingerprint was ever recorded', async () => {
+    // The window between the registration write landing and the phase transition
+    // being persisted. A marker stuck at `started` has no post-mutation
+    // fingerprint, so a drift check gated on one would simply not run — and the
+    // whole-file restore would proceed over whatever is there now. Recording the
+    // PRE-mutation fingerprint instead makes the check apply uniformly.
+    const fixture = onFixture();
+    await fixture.provision(['cursor']);
+    fixture.interruptAfter('started', 'cursor');
+    await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
+    expect(fixture.marker('cursor')?.phase).toBe('started');
+
+    const theirEdit = { mma: { url: 'http://127.0.0.1/mcp' }, 'their-own-server': { url: 'http://127.0.0.1:9999/mcp' } };
+    fixture.editRegistrationOutsideMma('cursor', theirEdit);
+
+    const reports = await fixture.recoverOnStartup();
+
+    expect(reports.find((r) => r.clientId === 'cursor')?.resolved).toBe(false);
+    expect(fixture.registrationEntry('cursor'), 'their edit survives').toEqual(theirEdit);
+  });
+
   it('keeps the live skills when the backup it would restore from has vanished', async () => {
     const fixture = onFixture();
     await fixture.provision(['cursor']);

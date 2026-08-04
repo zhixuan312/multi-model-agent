@@ -16,6 +16,7 @@
  */
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { dirname } from 'node:path';
 
 /** Injected filesystem primitives — narrow and synchronous, so ordering and
  *  failure paths are testable without a real disk race. */
@@ -25,6 +26,11 @@ export interface AtomicFsDeps {
   createTemp(path: string): string;
   write(path: string, bytes: Buffer): void;
   fsync(path: string): void;
+  /** Flush the directory ENTRY created by a rename, not the file's contents.
+   *  Syncing the file only guarantees its bytes survive; on several filesystems
+   *  the rename that gives those bytes their name is a separate metadata update
+   *  that a power loss can still lose. */
+  fsyncDir(path: string): void;
   rename(from: string, to: string): void;
   remove(path: string): void;
 }
@@ -42,6 +48,26 @@ export function realFsDeps(): AtomicFsDeps {
         closeSync(fd);
       }
     },
+    fsyncDir: (path) => {
+      // Opening a directory for fsync is POSIX-only; Windows rejects it. There is
+      // no portable equivalent, so the durability this buys is best-effort by
+      // nature — and a rename that has already succeeded is still atomic either
+      // way. Failing the whole write over it would trade a correctness guarantee
+      // we have for a durability guarantee we cannot get.
+      let fd: number;
+      try {
+        fd = openSync(path, 'r');
+      } catch {
+        return;
+      }
+      try {
+        fsyncSync(fd);
+      } catch {
+        /* platform does not support syncing a directory handle */
+      } finally {
+        closeSync(fd);
+      }
+    },
     rename: (from, to) => renameSync(from, to),
     remove: (path) => rmSync(path, { force: true }),
   };
@@ -55,6 +81,7 @@ export function atomicWriteBytes(fs: AtomicFsDeps, path: string, bytes: Buffer):
     fs.write(tempPath, bytes);
     fs.fsync(tempPath);
     fs.rename(tempPath, path);
+    fs.fsyncDir(dirname(path));
   } catch (err) {
     try {
       fs.remove(tempPath);

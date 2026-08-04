@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import type { ClientCapability } from './capability-registry.js';
 import type { RegistrationFingerprint, RegistrationSnapshot } from './marker-store.js';
@@ -174,6 +174,13 @@ function writeSkillFile(filePath: string, bytes: Buffer | Uint8Array): void {
   writeFileSync(filePath, bytes);
 }
 
+/** Whether `candidate` resolves to something strictly inside `root`. Used before
+ *  any recursive delete of a path that came from a user-editable marker. */
+function isInsideBackupsRoot(root: string, candidate: string): boolean {
+  const rel = relative(resolve(root), resolve(candidate));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
 /** Builds the production `ProvisioningPort` against a real home directory. */
 export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPort {
   const skillsRoot = ctx.skillsRoot ?? getSkillsRoot();
@@ -318,23 +325,37 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       if (!existsSync(root)) return { backupPath: null, digest: null };
       let backupDir: string | null = null;
       const backedUpFiles = new Map<string, Buffer>();
-      for (const name of SUPPORTED_SKILLS) {
-        const dir = join(root, name);
-        if (!existsSync(dir)) continue;
-        const rendered = renderSkill(name, skillsRoot);
-        const inspection = await inspectSkillOwnership(dir, rendered, ctx.release);
-        if (inspection.state === 'modified-conflict') {
-          throw new Error(inspection.reason ?? `refusing to back up skill content whose MMA ownership cannot be proven at ${dir}`);
+      try {
+        for (const name of SUPPORTED_SKILLS) {
+          const dir = join(root, name);
+          if (!existsSync(dir)) continue;
+          const rendered = renderSkill(name, skillsRoot);
+          const inspection = await inspectSkillOwnership(dir, rendered, ctx.release);
+          if (inspection.state === 'modified-conflict') {
+            throw new Error(inspection.reason ?? `refusing to back up skill content whose MMA ownership cannot be proven at ${dir}`);
+          }
+          if (inspection.state === 'unowned') continue;
+          if (!backupDir) {
+            mkdirSync(backupsRoot(), { recursive: true });
+            backupDir = mkdtempSync(join(backupsRoot(), `${clientId}-`));
+          }
+          cpSync(dir, join(backupDir, name), { recursive: true });
+          for (const [relativePath, bytes] of await readInstalledRegularFiles(dir)) {
+            backedUpFiles.set(`${name}/${relativePath}`, bytes);
+          }
         }
-        if (inspection.state === 'unowned') continue;
-        if (!backupDir) {
-          mkdirSync(backupsRoot(), { recursive: true });
-          backupDir = mkdtempSync(join(backupsRoot(), `${clientId}-`));
+      } catch (err) {
+        // A partial backup is referenced by nothing: this call never returned, so
+        // no marker records the path. Left in place it would accumulate silently
+        // under stateDir on every retry of a conflict that keeps failing. The
+        // cleanup is itself guarded -- a failure to delete must never replace the
+        // ownership-conflict error the caller actually needs to see.
+        try {
+          if (backupDir) rmSync(backupDir, { recursive: true, force: true });
+        } catch {
+          /* leaked disk under a well-known path, not a reason to mask `err` */
         }
-        cpSync(dir, join(backupDir, name), { recursive: true });
-        for (const [relativePath, bytes] of await readInstalledRegularFiles(dir)) {
-          backedUpFiles.set(`${name}/${relativePath}`, bytes);
-        }
+        throw err;
       }
       return backupDir
         ? { backupPath: backupDir, digest: computeSkillDigest(backedUpFiles) }
@@ -342,9 +363,12 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
     },
 
     discardSkillBackup(backupPath: string): void {
-      // Only ever a path this port itself created -- anchored under the state
-      // directory, so a stale/foreign value can never reach an unrelated tree.
-      if (!backupPath.startsWith(backupsRoot() + sep)) return;
+      // This path arrives from a marker file the running user can edit, and it
+      // feeds a recursive delete -- so containment must be checked on the RESOLVED
+      // path. A textual prefix test passes `<backupsRoot>/../../../anything`,
+      // which is the whole trick; resolving first makes traversal impossible to
+      // express rather than merely unlikely.
+      if (!isInsideBackupsRoot(backupsRoot(), backupPath)) return;
       try {
         rmSync(backupPath, { recursive: true, force: true });
       } catch {
@@ -392,7 +416,12 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
      * this shared root, the backup would have captured them and would not be
      * null.
      */
-    async restoreSkills(_clientId: ClientId, capability: ClientCapability, backupPath: string | null): Promise<PortActionResult> {
+    async restoreSkills(
+      _clientId: ClientId,
+      capability: ClientCapability,
+      backupPath: string | null,
+      expectedDigest: string | null,
+    ): Promise<PortActionResult> {
       if (capability.skillPathStrategy === 'none') return { ok: true };
       const root = skillRootFor(capability);
       try {
@@ -405,6 +434,23 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
             };
           }
           backedUp = readdirSync(backupPath);
+          // Existing is not the same as intact. Read the backup in full and hash
+          // it against what `backupSkills` recorded: an emptied or partially
+          // deleted backup would otherwise pass the existence check, the live
+          // content would be wiped, and only the surviving entries copied back.
+          const backedUpFiles = new Map<string, Buffer>();
+          for (const name of backedUp) {
+            for (const [relativePath, bytes] of await readInstalledRegularFiles(join(backupPath, name))) {
+              backedUpFiles.set(`${name}/${relativePath}`, bytes);
+            }
+          }
+          if (computeSkillDigest(backedUpFiles) !== expectedDigest) {
+            return {
+              ok: false,
+              error: `the skill backup at ${backupPath} no longer matches the digest recorded when it was taken, `
+                + 'so the current content is kept rather than replaced from an incomplete copy',
+            };
+          }
         }
         for (const name of SUPPORTED_SKILLS) {
           rmSync(join(root, name), { recursive: true, force: true });
@@ -467,11 +513,10 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       return names;
     },
 
-    isSkillsReachable(_clientId: ClientId, capability: ClientCapability, priorDigest: string | null): boolean {
+    isSkillsReachable(_clientId: ClientId, capability: ClientCapability): boolean {
       if (capability.skillPathStrategy === 'none') return true;
       const root = skillRootFor(capability);
       if (!isPathWritable(root)) return false;
-      const observedFiles = new Map<string, Buffer>();
       for (const name of SUPPORTED_SKILLS) {
         const dir = join(root, name);
         if (!existsSync(dir)) continue;
@@ -487,20 +532,21 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
           if (marker.release === ctx.release) {
             const renderedDigest = computeSkillDigest(renderSkill(name, skillsRoot));
             if (marker.sha256 !== renderedDigest || computeSkillDigest(files) !== renderedDigest) return false;
+          } else if (computeSkillDigest(files) !== marker.sha256) {
+            // A superseded release cannot be re-rendered, but its marker recorded
+            // its own digest -- the same stale-release rule inspectSkillOwnership
+            // applies, so recovery cannot be laxer than installation here.
+            return false;
           }
-          // An old release is still MMA-owned under the ownership primitive's
-          // stale-release rule; it is safe to restore from the captured backup
-          // even though this running release cannot re-render its old bytes.
-          for (const [relativePath, bytes] of files) observedFiles.set(`${name}/${relativePath}`, bytes);
         } catch {
           return false;
         }
       }
-      // Before the skill mutation begins, this exact digest is the marker's
-      // recorded precondition.  A later phase may legitimately differ because
-      // this operation wrote (or partly wrote) MMA-owned skills; the ownership
-      // checks above are then the safe proof that recovery may restore them.
-      if (priorDigest !== null && computeSkillDigest(observedFiles) === priorDigest) return true;
+      // Every directory present is ownership-proven and the root is writable:
+      // restoring over it destroys nothing of the user's. That is the whole
+      // predicate -- see the port interface for why comparing against the
+      // marker's recorded starting digest would be wrong here rather than
+      // merely redundant.
       return true;
     },
   };

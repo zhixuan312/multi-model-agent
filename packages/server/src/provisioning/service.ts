@@ -16,6 +16,7 @@
  * port, so markers/rollback/reference-counting/recovery can be exercised
  * without touching a real disk or a real client's config file.
  */
+import { createHash } from 'node:crypto';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import { CLIENT_CAPABILITIES, type ClientCapability } from './capability-registry.js';
 import { resolveEffectiveRoster, type DeclaredClientRoster } from './roster.js';
@@ -97,6 +98,25 @@ function toSnapshot(read: { path: string; existed: boolean; bytes: Buffer | null
   return { path: read.path, existed: read.existed, bytesBase64: read.bytes ? read.bytes.toString('base64') : null };
 }
 
+/**
+ * The fingerprint of a snapshot -- i.e. what the registration file was before this
+ * operation touched anything.
+ *
+ * A marker at phase 'started' needs this, not `null`. `null` means "no drift check
+ * available", and reachability then falls back to an ownership-shape test that
+ * inspects only the `mma` entry — so a user edit elsewhere in the file gets
+ * silently discarded by the whole-file restore. Recording the pre-mutation
+ * fingerprint closes that: at 'started' the file must still be untouched for a
+ * restore to be provably safe. If it is not — including the narrow case where the
+ * registration write landed but the phase transition did not — the marker is
+ * unresolved and reported, which is the honest answer, because at that point
+ * nothing on disk distinguishes our own write from somebody else's edit.
+ */
+function fingerprintOfSnapshot(snapshot: RegistrationSnapshot): RegistrationFingerprint {
+  if (!snapshot.existed || snapshot.bytesBase64 === null) return { existed: false, sha256: null };
+  return { existed: true, sha256: createHash('sha256').update(Buffer.from(snapshot.bytesBase64, 'base64')).digest('hex') };
+}
+
 function emitPhase(deps: ProvisioningServiceDeps, clientId: ClientId, phase: ProvisioningPhase): void {
   deps.onPhaseWritten?.(clientId, phase);
 }
@@ -152,8 +172,8 @@ async function restoreFromMarker(
   }
   const touchedSkills = capability.skillPathStrategy !== 'none' && (marker.phase === 'registered' || marker.phase === 'skills-written');
   if (touchedSkills) {
-    if (!deps.port.isSkillsReachable(clientId, capability, marker.priorSkillDigest)) {
-      return { ok: false, reason: 'skill root is not writable, or its ownership no longer matches the recorded precondition' };
+    if (!deps.port.isSkillsReachable(clientId, capability)) {
+      return { ok: false, reason: 'skill root is not writable, or something under it is no longer ownership-provable' };
     }
   }
 
@@ -165,7 +185,7 @@ async function restoreFromMarker(
     if (!result.ok) return { ok: false, reason: result.error ?? 'registration removal failed' };
   }
   if (touchedSkills) {
-    const result = await deps.port.restoreSkills(clientId, capability, marker.priorSkillBackup);
+    const result = await deps.port.restoreSkills(clientId, capability, marker.priorSkillBackup, marker.priorSkillDigest);
     if (!result.ok) return { ok: false, reason: result.error ?? 'skills restore failed' };
   }
   return { ok: true };
@@ -242,7 +262,7 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     intendedState: 'on',
     phase: 'started',
     priorRegistration: start.priorRegistration,
-    postRegistration: null,
+    postRegistration: fingerprintOfSnapshot(start.priorRegistration),
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
     startedAt: (deps.now ?? Date.now)(),
@@ -316,7 +336,7 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
     intendedState: 'off',
     phase: 'started',
     priorRegistration: start.priorRegistration,
-    postRegistration: null,
+    postRegistration: fingerprintOfSnapshot(start.priorRegistration),
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
     startedAt: (deps.now ?? Date.now)(),
@@ -444,7 +464,6 @@ export const createProvisioningService = buildService as CreateProvisioningServi
 // reachable from non-test code.
 
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeSkillDigest } from './owned-files.js';
@@ -605,19 +624,28 @@ class FakeProvisioningPort implements ProvisioningPort {
     return { ok: true };
   }
 
-  async restoreSkills(clientId: ClientId, capability: ClientCapability, backupPath: string | null): Promise<{ ok: boolean; error?: string }> {
+  async restoreSkills(
+    clientId: ClientId,
+    capability: ClientCapability,
+    backupPath: string | null,
+    expectedDigest: string | null,
+  ): Promise<{ ok: boolean; error?: string }> {
     if (capability.skillPathStrategy === 'none') return { ok: true };
     if (this.restoreFailFor.has(clientId)) return { ok: false, error: 'simulated restore failure' };
     const root = this.rootMap(capability);
-    // Read the backup FIRST, exactly as the real port does: a backup that has
-    // gone missing must leave the live content alone rather than clear it and
-    // then discover there is nothing to put back.
+    // Read and verify the backup FIRST, exactly as the real port does: a backup
+    // that has gone missing -- or been emptied -- must leave the live content
+    // alone rather than clear it and then discover there is nothing to put back.
     let restored: Array<[string, Buffer]> = [];
     if (backupPath) {
       if (!existsSync(backupPath)) {
         return { ok: false, error: `the skill backup recorded at ${backupPath} no longer exists, so the current content is kept` };
       }
       restored = readdirSync(backupPath).map((name) => [name, readFileSync(join(backupPath, name, 'SKILL.md'))] as [string, Buffer]);
+      const digest = computeSkillDigest(new Map(restored.map(([name, bytes]) => [`${name}/SKILL.md`, bytes] as const)));
+      if (digest !== expectedDigest) {
+        return { ok: false, error: `the skill backup at ${backupPath} no longer matches the digest recorded when it was taken` };
+      }
     }
     root.clear();
     for (const [name, bytes] of restored) root.set(name, bytes);
@@ -644,7 +672,7 @@ class FakeProvisioningPort implements ProvisioningPort {
     return this.packagedSkillNames().filter((name) => root.has(name));
   }
 
-  isSkillsReachable(clientId: ClientId, _capability: ClientCapability, _priorDigest: string | null): boolean {
+  isSkillsReachable(clientId: ClientId, _capability: ClientCapability): boolean {
     if (this.unwritableSkillsFor.has(clientId)) return false;
     if (this.tamperedSkillsFor.has(clientId)) return false;
     return true;
