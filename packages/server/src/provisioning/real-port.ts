@@ -45,6 +45,7 @@ import {
   readInstalledRegularFiles,
   SKILL_OWNERSHIP_MARKER_FILE,
   UnprovableSkillEntryError,
+  inspectRetiredSkillOwnership,
   type RenderedFiles,
 } from './owned-files.js';
 import { getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from '../skill-install/discover.js';
@@ -207,6 +208,40 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
    *  and an orphan is visible rather than scattered through the OS temp root. */
   function backupsRoot(): string {
     return join(ctx.stateDir, 'provisioning', 'skill-backups');
+  }
+
+  /**
+   * Delete skill directories MMA installed for skills this release no longer
+   * ships.
+   *
+   * Without this a retired skill lives in the user's root forever: installation
+   * only ever walks the CURRENT packaged set, so a dropped skill is never
+   * revisited — and a stale skill is not inert, because the client still
+   * auto-matches it by intent and follows instructions that may name routes and
+   * flags that no longer exist.
+   *
+   * Only ownership-proven directories are removed. For a retired skill there is
+   * no render left to compare against, so the proof is the marker's own recorded
+   * digest -- see `inspectRetiredSkillOwnership`. Anything else, including a
+   * directory the user created themselves in a shared root, is left alone.
+   */
+  async function pruneRetiredSkills(root: string): Promise<string[]> {
+    let entries: string[];
+    try {
+      entries = readdirSync(root);
+    } catch {
+      return [];
+    }
+    const packaged = new Set<string>(SUPPORTED_SKILLS);
+    const removed: string[] = [];
+    for (const name of entries) {
+      if (packaged.has(name)) continue;
+      const dir = join(root, name);
+      if ((await inspectRetiredSkillOwnership(dir)).state !== 'owned-stale') continue;
+      rmSync(dir, { recursive: true, force: true });
+      removed.push(name);
+    }
+    return removed;
   }
 
   return {
@@ -411,6 +446,7 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
           }
           writeSkillFile(join(dir, SKILL_OWNERSHIP_MARKER_FILE), Buffer.from(JSON.stringify({ release: ctx.release, sha256: inspection.digest })));
         }
+        await pruneRetiredSkills(root);
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -507,6 +543,7 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
           }
           rmSync(dir, { recursive: true, force: true });
         }
+        await pruneRetiredSkills(root);
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };

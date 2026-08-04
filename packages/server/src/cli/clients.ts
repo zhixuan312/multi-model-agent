@@ -1,9 +1,10 @@
 /**
  * clients.ts — `mma clients` and `mma mcp install <ClientId>`.
  *
- * `mma clients` prints the SAME eight-record inventory `inventory.ts` already
- * computes (`provisioning/inventory.ts`, via the provisioning service) — this
- * module adds NO new inventory logic, only a human/JSON rendering of it.
+ * `mma clients` prints the SAME eight-record inventory
+ * `provisioning/inventory.ts` already computes, reached through the
+ * provisioning service — this module adds NO inventory logic of its own, only
+ * a human/JSON rendering of it.
  *
  * `mma mcp install <ClientId>` runs that ONE client's full provisioning
  * (registration + skills) through the same service. It is an explicit,
@@ -26,7 +27,8 @@ interface ClientsCommandDeps {
 }
 
 /** Render one line per client: declared/effective status, skills, MCP
- *  registration — straight from `ClientProvisioningStatus`, no new fields. */
+ *  registration — every field straight off the inventory record, none derived
+ *  or renamed here. */
 function formatRecord(record: ClientInventoryRecord): string {
   return `${record.clientId}\tdeclared=${record.declaredState ?? 'undeclared'}\tdetected=${record.detectedPresence}\tstatus=${record.status}\tskills=${record.skillsInstalled}\tmcp=${record.mcpRegistrationStatus}`;
 }

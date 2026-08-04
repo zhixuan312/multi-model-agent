@@ -138,6 +138,46 @@ describe('contract: the real port refuses destructive work it cannot justify', (
       .toEqual(installedBefore);
   });
 
+  it('removes a skill this release no longer ships, and only if it can prove it installed it', async () => {
+    // Installation only ever walks the CURRENT packaged set, so without an
+    // explicit prune a retired skill lives in the user's root forever — and it is
+    // not inert: the client still auto-matches it by intent and follows
+    // instructions naming routes that no longer exist. The previous
+    // manifest-driven installer deleted these; the provisioning path has to too.
+    const { home, port } = harness();
+    await port.installSkills('cursor', cursor);
+    const root = join(home, '.agents', 'skills');
+
+    // (a) a retired skill MMA installed: real marker, contents matching it.
+    const retired = join(root, 'mma-retired');
+    mkdirSync(retired, { recursive: true });
+    writeFileSync(join(retired, 'SKILL.md'), 'body from an older release');
+    const { computeSkillDigest } = await import('../../../packages/server/src/provisioning/owned-files.js');
+    writeFileSync(join(retired, '.mma-install.json'), JSON.stringify({
+      release: '5.0.0',
+      sha256: computeSkillDigest(new Map([['SKILL.md', Buffer.from('body from an older release')]])),
+    }));
+
+    // (b) somebody else's directory in the same shared root — no marker at all.
+    const theirs = join(root, 'their-own-skill');
+    mkdirSync(theirs, { recursive: true });
+    writeFileSync(join(theirs, 'SKILL.md'), 'not MMA\'s');
+
+    // (c) a directory carrying a marker whose digest does not match its contents:
+    //     MMA cannot prove it installed this, so it must survive too.
+    const tampered = join(root, 'mma-tampered');
+    mkdirSync(tampered, { recursive: true });
+    writeFileSync(join(tampered, 'SKILL.md'), 'edited after install');
+    writeFileSync(join(tampered, '.mma-install.json'), JSON.stringify({ release: '5.0.0', sha256: 'stale-digest' }));
+
+    await port.installSkills('cursor', cursor);
+
+    expect(existsSync(retired), 'a provably MMA-installed retired skill is removed').toBe(false);
+    expect(existsSync(theirs), 'an unmarked directory is not MMA\'s to delete').toBe(true);
+    expect(existsSync(tampered), 'an unprovable directory is preserved, not pruned').toBe(true);
+    expect(port.installedSkillNames('cursor', cursor).length, 'the packaged set is untouched').toBeGreaterThan(0);
+  });
+
   it('still installs into a skill ROOT that is a symlink', async () => {
     // The counterweight to rejecting a symlinked skill directory. Pointing
     // `~/.agents/skills` at a managed dotfiles checkout is an ordinary setup, and

@@ -226,7 +226,40 @@ export async function inspectSkillOwnership(
   rendered: RenderedFiles,
   installedRelease: string,
 ): Promise<SkillOwnershipInspection> {
-  const digest = computeSkillDigest(rendered);
+  return inspect(dir, computeSkillDigest(rendered), installedRelease);
+}
+
+/**
+ * Inspect a directory whose skill this release no longer ships at all — a skill
+ * retired between versions, still sitting in the user's skill root.
+ *
+ * There is no render to compare against, and there never will be again, so the
+ * ONLY available proof is the one the marker already carries: an install recorded
+ * its own digest, and content still matching that record was put there by MMA and
+ * has not been touched since. That is exactly the rule {@link
+ * inspectSkillOwnership} already applies to a superseded release, so this is the
+ * same check with the render step removed rather than a second ownership notion.
+ *
+ * Returns `owned-stale` when the directory is provably MMA's and therefore safe to
+ * remove; `modified-conflict` when it is not, in which case it must be left alone.
+ */
+export async function inspectRetiredSkillOwnership(dir: string): Promise<SkillOwnershipInspection> {
+  // Passing a release no marker can hold forces the stale branch, where the
+  // marker's own recorded digest is the yardstick.
+  return inspect(dir, null, RETIRED_SKILL_SENTINEL_RELEASE);
+}
+
+/** Never a real release string, so `marker.release` can never equal it. */
+const RETIRED_SKILL_SENTINEL_RELEASE = ' retired';
+
+async function inspect(
+  dir: string,
+  renderedDigest: string | null,
+  installedRelease: string,
+): Promise<SkillOwnershipInspection> {
+  // A retired skill has no render, and the digest of no files is a real digest —
+  // so this field never carries anything that is not one.
+  const digest = renderedDigest ?? computeSkillDigest(new Map());
 
   const entry = await classifyDirEntry(dir);
   if (entry === 'absent') return { state: 'unowned', digest };

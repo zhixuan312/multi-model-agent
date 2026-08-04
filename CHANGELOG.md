@@ -34,6 +34,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   header, or names a retired `--target=gemini-cli|codex-cli` value; the unavailable-tool guidance is
   uniformly `mma clients`. REST remains fully supported and documented — for Forge and other
   programmatic callers, never as agent-facing instruction (see `packages/server/README.md#rest-api`).
+- **Provisioning proves ownership before it replaces or deletes anything.** MMA now writes into
+  files and directories you also own — your clients' MCP configs, your skill roots — so nothing is
+  touched that MMA cannot prove it put there. An installed skill directory carries
+  `.mma-install.json` recording the release and a byte-exact digest of its contents; a directory
+  whose contents no longer match that record, or that contains a symlink (at any depth, including
+  standing in for the directory itself), is preserved untouched and reported as a conflict rather
+  than replaced. An MCP entry is recognised as MMA's only when its connection details are exactly
+  what MMA itself writes, so a hand-written `mma` entry is refused rather than overwritten, and
+  every config write goes through a temp file, an fsync and an atomic rename after re-reading the
+  bytes it merged against.
+
+  Turning a client on or off is **atomic**: registration and skills both land, or neither does. A
+  durable marker under `server.stateDir` makes that survive a crash — on the next run, or at daemon
+  start, the interrupted operation is either finished or rolled back to a verified backup, and a
+  client with an unresolved marker reports `failed` from `mma clients` until it is. Shared skill
+  roots are reference-counted: `~/.agents/skills` serves cursor, vscode and opencode, and turning
+  one of them off does not strip a root the others still consume.
 - **New MCP tools: `mma_context_block_create` / `mma_context_block_delete`.** The MCP surface is now
   seven tools — the five already documented (`mma_run`, `mma_task_get`, `mma_task_wait`,
   `mma_task_list`, `mma_task_cancel`) plus context-block registration, so an MCP-only client can do
