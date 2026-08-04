@@ -5,7 +5,7 @@
  * `~/.codex/config.toml`, ...) belongs to the USER: alongside whatever MMA writes,
  * it can hold entries for other MCP servers the user configured by hand. This
  * module generalises the discipline originally proven for Claude Desktop's legacy
- * writer (retired by Task I-5 in favour of `provisioning/writers/claude-desktop.ts`)
+ * writer (retired in favour of `provisioning/writers/claude-desktop.ts`)
  * into one seam every writer can share, rather than each writer re-inventing it:
  *
  *   1. **Recognise ONLY an entry MMA owns.** A key-shape check alone cannot prove
@@ -37,7 +37,7 @@ import { atomicWriteBytes, realFsDeps, type AtomicFsDeps } from './atomic-write.
 import { CLIENT_CAPABILITIES, type ClientCapability, type McpConfigFormat } from './capability-registry.js';
 
 /** Why a registration write/remove was refused. Surfaced for inventory reporting. */
-export type RegistrationConflictReason =
+type RegistrationConflictReason =
   | 'unrecognised_entry'
   | 'invalid_config'
   | 'stale_bytes'
@@ -263,7 +263,7 @@ export function assertBytesUnchanged(fs: AtomicFsDeps, path: string, expected: B
   }
 }
 
-export interface WriteOwnedRegistrationInput {
+interface WriteOwnedRegistrationInput {
   path: string;
   clientId: ClientId;
   /** The MMA entry to merge in at `mcpServers.mma`. Never include a static bearer
@@ -273,7 +273,7 @@ export interface WriteOwnedRegistrationInput {
   fs?: AtomicFsDeps;
 }
 
-export interface OwnedRegistrationResult {
+interface OwnedRegistrationResult {
   path: string;
   changed: boolean;
 }
@@ -319,7 +319,7 @@ export async function writeOwnedRegistration(input: WriteOwnedRegistrationInput)
   return { path, changed: true };
 }
 
-export interface RemoveOwnedRegistrationInput {
+interface RemoveOwnedRegistrationInput {
   path: string;
   clientId: ClientId;
   /** Required for `stdio-json` clients: the CLI entrypoint this installation
@@ -367,7 +367,7 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
 }
 
 /**
- * Per-client registration writers (Task I-5/I-6).
+ * Per-client registration writers.
  *
  * Everything above this point is the shared, format-generic ownership/stale/
  * atomic-rename/no-static-credential machinery. Everything below dispatches to
@@ -378,7 +378,7 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
 
 /** The result every per-client writer (install or remove) returns — one shape
  *  shared across `packages/server/src/provisioning/writers/*`. */
-export type ClientRegistrationStatus = 'registered' | 'absent' | 'failed';
+type ClientRegistrationStatus = 'registered' | 'absent' | 'failed';
 
 export interface ClientRegistrationResult {
   status: ClientRegistrationStatus;
@@ -566,8 +566,9 @@ const UNBLOCKED_REMOVERS: Partial<Record<ClientId, (input: WriteClientRegistrati
 /**
  * Install `capability`'s recognised home-level MMA MCP entry by dispatching to its
  * registered writer — the registry (`UNBLOCKED_WRITERS`), not a target switch,
- * selects which one runs. A client with no writer yet (Task I-6's VS Code,
- * opencode, Windsurf) returns `failed` rather than throwing.
+ * selects which one runs. A client with no writer yet (currently only VS Code,
+ * whose user-level path its vendor does not publish) returns `failed` rather
+ * than throwing.
  */
 export async function writeClientRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const writer = UNBLOCKED_WRITERS[input.capability.id];
@@ -583,7 +584,7 @@ export async function writeClientRegistration(input: WriteClientRegistrationInpu
 
 /**
  * The registered writer function for `clientId`, or `undefined` when none exists
- * yet — the checkable signal Task I-6's evidence gate relies on. A client stays
+ * yet — the checkable signal the evidence gate relies on. A client stays
  * writer-less until its profile in `docs/verification/
  * mcp-client-registration-profiles.md` is VERIFIED; `vscode` remains undefined
  * here because its profile is still BLOCKED (see the capability registry's

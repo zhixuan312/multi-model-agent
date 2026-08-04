@@ -66,7 +66,7 @@ export class UnprovableSkillEntryError extends Error {
 }
 
 /** The parsed shape of `.mma-install.json`. */
-export interface SkillOwnershipMarker {
+interface SkillOwnershipMarker {
   release: string;
   sha256: string;
 }
@@ -85,9 +85,9 @@ export interface SkillOwnershipMarker {
  *    actual contents; or the directory holds an entry that is neither a regular file
  *    nor a directory. Never replace or delete; preserve and report.
  */
-export type SkillOwnershipState = 'unowned' | 'owned' | 'owned-stale' | 'modified-conflict';
+type SkillOwnershipState = 'unowned' | 'owned' | 'owned-stale' | 'modified-conflict';
 
-export interface SkillOwnershipInspection {
+interface SkillOwnershipInspection {
   state: SkillOwnershipState;
   /** The digest computed from the `rendered` files passed in — i.e. what the
    *  CURRENT release would write. Present regardless of state so callers can record

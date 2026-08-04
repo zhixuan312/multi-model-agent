@@ -1,12 +1,12 @@
 /**
  * sync-skills.ts — `mma sync-skills` subcommand.
  *
- * Roster-driven (Task I-8): provisions every DECLARED-'on' client
- * (`config.clients`, Task I-2/I-3) through the shared `ProvisioningService`
- * (Task I-7) — registration AND skills together, atomically, per client —
+ * Roster-driven: provisions every DECLARED-'on' client
+ * (`config.clients`) through the shared `ProvisioningService` — registration
+ * AND skills together, atomically, per client —
  * plus the Claude-Code-only SDLC commands (`mma-flow`, `mma-breakout`) that
  * live outside the provisioning service's skill-root model (relocated to
- * `provisioning/claude-code-commands.ts`, Task I-8).
+ * `provisioning/claude-code-commands.ts`).
  *
  * An explicit `--target=<ClientId>` (repeatable) or `--all-targets` FORCES
  * those clients regardless of declared state — the same one-off-override
@@ -301,7 +301,7 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
   const outcome: SyncOutcome = { provisioned: [], suggested, errors: [], commands: { installed: [], removed: [] } };
 
   // Full registration + skills provisioning per client, via the shared
-  // ProvisioningService (Task I-7). Forcing `targets` to 'on' for the scope
+  // ProvisioningService. Forcing `targets` to 'on' for the scope
   // of THIS call mirrors `mma mcp install <ClientId>` — an explicit --target
   // always wins, never persisted. Each client runs independently (never
   // batched into one provision() call) so one client's failure — including a

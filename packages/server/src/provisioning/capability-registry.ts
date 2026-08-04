@@ -10,18 +10,27 @@ import { CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
 /** How a client's skills are laid out on disk. 'none' means the client has
  *  no Agent Skills mechanism at all -- registration alone is a complete,
  *  successful install for it (FR-8). */
-export type SkillPathStrategy = 'standard' | 'bespoke' | 'none';
+type SkillPathStrategy = 'standard' | 'bespoke' | 'none';
 
 /** The shape and location of a client's MCP registration entry. */
 export type McpConfigFormat = 'json' | 'toml' | 'plugin-json' | 'stdio-json';
 
-/** The primary-source evidence backing a GATED client's writer (Task I-6). Only
- *  present for a client whose profile in `docs/verification/
- *  mcp-client-registration-profiles.md` is marked VERIFIED; absent for a client
- *  that remains BLOCKED (currently only `vscode`) -- absence is itself the
- *  uniform "no writer may exist yet" signal, mirroring how an empty
- *  `mcpConfigPaths` already signals "unverified" above. */
-export interface RegistrationProfile {
+/**
+ * The primary-source evidence backing a client's writer.
+ *
+ * Present for exactly the clients `docs/verification/
+ * mcp-client-registration-profiles.md` covers and marks ready. The five writers
+ * that predate that artifact (claude-code, claude-desktop, codex, antigravity,
+ * cursor) carry no profile -- their absence records that they were not verified
+ * through this gate, and pretending otherwise by back-filling a profile nobody
+ * researched would make the gate a decoration.
+ *
+ * The rule is enforced from the artifact rather than from a list in code: see
+ * `tests/contract/clients/gated-registration-writers.test.ts`, which reads that
+ * document and requires the capability row and the writer registry to agree with
+ * every client it covers.
+ */
+interface RegistrationProfile {
   /** The exact vendor-owned source URL this profile was verified against.
    *  Must appear verbatim in the evidence artifact. */
   verifiedBy: string;
@@ -61,8 +70,9 @@ export interface ClientCapability {
    *  instead. Read by `registration-writer.ts` so a differently-keyed client
    *  never needs a second, forked install path. */
   mcpTopLevelKey?: string;
-  /** Present only for a client whose writer is evidence-gated (Task I-6) AND
-   *  unblocked. `vscode` stays without one -- it remains BLOCKED. */
+  /** Present for exactly the clients the evidence artifact covers and marks
+   *  ready. `vscode` stays without one -- it remains BLOCKED. See the
+   *  {@link RegistrationProfile} doc for why the older writers carry none. */
   registrationProfile?: RegistrationProfile;
 }
 
@@ -112,8 +122,11 @@ export const CLIENT_CAPABILITIES: readonly ClientCapability[] = [
     id: 'vscode',
     skillPathStrategy: 'standard',
     skillRoot: '~/.agents/skills',
-    // Blocked: user-level registration path pending Task I-1 primary-source
-    // verification. Writer implementation is gated in Task I-6.
+    // Blocked, and not pending: the search concluded. Microsoft documents the
+    // workspace path but reaches the user-level file only through the "MCP: Open
+    // User Configuration" command, and profiles are relocatable, so no stable
+    // home-level path exists to derive. Empty here is the whole signal -- no
+    // writer may target this client while it stays empty.
     mcpConfigPaths: [],
     mcpConfigFormat: 'json',
   },

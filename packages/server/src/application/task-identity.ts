@@ -23,7 +23,7 @@ import type { TaskEntry } from '@zhixuan92/multi-model-agent-core';
  * `cwd` earns its place on a multi-repo workspace, where four sibling checkouts run the
  * same task types and the path is the only thing distinguishing them.
  */
-export interface TaskIdentity {
+interface TaskIdentity {
   taskId: string;
   type: string;
   /** Present only for `audit`, matching the terminal envelope's `task.subtype`. */

@@ -33,13 +33,10 @@ import {
 import { computeClientStatus, getClientInventory, type ClientInventoryRecord } from './inventory.js';
 import type { ClientProvisioningStatus, ProvisioningPort, RegistrationMutationResult } from './provisioning-port.js';
 
-export type { ClientInventoryRecord } from './inventory.js';
-export type { ClientProvisioningStatus, ProvisioningPort, PortActionResult, SkillBackupResult } from './provisioning-port.js';
-
 /** Thrown when a test's `interruptAfter` hook fires -- simulates the process
  *  dying immediately after a marker phase was durably written. The marker on
  *  disk is left exactly as written; nothing further runs for this client. */
-export class InterruptedProvisioningError extends Error {
+class InterruptedProvisioningError extends Error {
   readonly code = 'interrupted' as const;
   readonly clientId: ClientId;
   readonly phase: ProvisioningPhase;
@@ -63,13 +60,13 @@ export interface ProvisioningServiceDeps {
   onPhaseWritten?: (clientId: ClientId, phase: ProvisioningPhase) => void;
 }
 
-export interface RecoveryReport {
+interface RecoveryReport {
   clientId: ClientId;
   resolved: boolean;
   reason?: string;
 }
 
-export interface ProvisionRunResult {
+interface ProvisionRunResult {
   byClient: Partial<Record<ClientId, ClientProvisioningStatus>>;
 }
 
@@ -225,7 +222,7 @@ async function resolvePending(deps: ProvisioningServiceDeps, capability: ClientC
 
 /** Resolves every marker currently on disk -- run at daemon start (before any
  *  inventory read is considered healthy) and available for on-demand use. */
-export async function recoverAll(deps: ProvisioningServiceDeps): Promise<RecoveryReport[]> {
+async function recoverAll(deps: ProvisioningServiceDeps): Promise<RecoveryReport[]> {
   const reports: RecoveryReport[] = [];
   for (const clientId of listMarkedClients(deps.stateDir)) {
     reports.push(await resolvePending(deps, capabilityFor(deps, clientId)));
@@ -442,14 +439,14 @@ function buildService(deps: ProvisioningServiceDeps): ProvisioningService {
   };
 }
 
-export interface CreateProvisioningService {
+interface CreateProvisioningService {
   (deps: ProvisioningServiceDeps): ProvisioningService;
   testFixture(options: TestFixtureOptions): ProvisioningTestFixture;
 }
 
 /** Production entry point. `real-port.ts` supplies the filesystem-backed
  *  `ProvisioningPort`; callers (the daemon boot sequence, the `mma clients` /
- *  `mma mcp install` CLI surface added in Task I-8) provide the rest. */
+ *  `mma mcp install` CLI surface) provide the rest. */
 export const createProvisioningService = buildService as CreateProvisioningService;
 
 // ── Test fixture ────────────────────────────────────────────────────────────
@@ -466,14 +463,14 @@ import { join } from 'node:path';
 import { computeSkillDigest } from './owned-files.js';
 import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
 
-export interface TestFixtureOptions {
+interface TestFixtureOptions {
   clients?: Partial<Record<ClientId, 'on' | 'off'>>;
   failRegistrationFor?: Set<ClientId>;
   detected?: ReadonlySet<ClientId>;
   capabilities?: readonly ClientCapability[];
 }
 
-export interface ProvisioningTestFixture {
+interface ProvisioningTestFixture {
   provision(ids: ClientId[]): Promise<ProvisionRunResult>;
   provisionAll(): Promise<ProvisionRunResult>;
   recoverOnStartup(): Promise<RecoveryReport[]>;

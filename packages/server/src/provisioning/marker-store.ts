@@ -27,7 +27,7 @@ import type { ClientId, ClientState } from '@zhixuan92/multi-model-agent-core';
 import { CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
 import { atomicWriteBytes, realFsDeps } from './atomic-write.js';
 
-export type ProvisioningOperation = 'on' | 'off';
+type ProvisioningOperation = 'on' | 'off';
 export type ProvisioningPhase = 'started' | 'registered' | 'skills-written';
 
 /** A byte-exact snapshot of a client's registration file as it stood immediately
@@ -102,7 +102,7 @@ export function markerPath(stateDir: string, clientId: ClientId): string {
   return join(markersDir(stateDir), `${clientId}.json`);
 }
 
-export type ReadMarkerResult =
+type ReadMarkerResult =
   | { status: 'absent' }
   | { status: 'corrupt'; raw: string }
   | { status: 'ok'; marker: ProvisioningMarker };

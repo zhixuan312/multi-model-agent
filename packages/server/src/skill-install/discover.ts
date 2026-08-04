@@ -37,7 +37,7 @@ export const SUPPORTED_COMMANDS = [
 // `packages/server/dist/skills/` at build time, shipped on the npm package).
 // Probe candidates for monorepo dev layouts and both npm-installed layouts
 // (hoisted siblings, or core nested under server).
-export function skillsRootCandidates(here: string): string[] {
+function skillsRootCandidates(here: string): string[] {
   return [
     // Same-package sibling: covers BOTH dev source (packages/server/src/skill-install
     // -> src/skills) and dev built (packages/server/dist/skill-install -> dist/skills),
@@ -54,7 +54,7 @@ export function skillsRootCandidates(here: string): string[] {
   ];
 }
 
-export function pickSkillsRoot(
+function pickSkillsRoot(
   here: string,
   exists: (p: string) => boolean = fs.existsSync,
 ): string {

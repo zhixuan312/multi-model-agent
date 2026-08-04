@@ -1,7 +1,7 @@
 /**
  * clients.ts — `mma clients` and `mma mcp install <ClientId>`.
  *
- * `mma clients` prints the SAME eight-record inventory Task I-7 already
+ * `mma clients` prints the SAME eight-record inventory `inventory.ts` already
  * computes (`provisioning/inventory.ts`, via the provisioning service) — this
  * module adds NO new inventory logic, only a human/JSON rendering of it.
  *
@@ -19,7 +19,7 @@ import type { DeclaredClientRoster } from '../provisioning/roster.js';
 import type { ClientInventoryRecord } from '../provisioning/inventory.js';
 import type { ClientProvisioningStatus } from '../provisioning/provisioning-port.js';
 
-export interface ClientsCommandDeps {
+interface ClientsCommandDeps {
   json: boolean;
   config: CliProvisioningConfig;
   homeDir?: string;
@@ -40,7 +40,7 @@ export async function runClientsCommand(deps: ClientsCommandDeps): Promise<strin
   return records.map(formatRecord).join('\n') + '\n';
 }
 
-export type McpInstallErrorCode = 'client_id_required' | 'unknown_client' | 'client_declared_off' | 'provisioning_failed';
+type McpInstallErrorCode = 'client_id_required' | 'unknown_client' | 'client_declared_off' | 'provisioning_failed';
 
 /** Thrown by `runMcpInstallCommand` for every refusal — `code` is the
  *  checkable signal callers (the CLI's exit-code mapping, tests) key off. */
@@ -53,13 +53,13 @@ export class McpInstallCliError extends Error {
   }
 }
 
-export interface McpInstallDeps {
+interface McpInstallDeps {
   clientId: string | undefined;
   config: CliProvisioningConfig;
   homeDir?: string;
 }
 
-export interface McpInstallResult {
+interface McpInstallResult {
   clientId: ClientId;
   status: ClientProvisioningStatus['status'];
 }

@@ -68,7 +68,7 @@ function resolveCliEntrypoint(): string {
   return fromModule;
 }
 
-export interface BuildCliProvisioningServiceOptions {
+interface BuildCliProvisioningServiceOptions {
   /** Overrides `config.clients` for this one call — used by `mma mcp install
    *  <ClientId>` to force ONE client 'on' for the scope of a single
    *  invocation without persisting anything, and by `sync-skills`/`toggle`

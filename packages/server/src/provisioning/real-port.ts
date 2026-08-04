@@ -1,7 +1,8 @@
 /**
  * The production `ProvisioningPort` -- wires `service.ts`'s orchestration to
- * the real filesystem via the ownership-safe registration writers (Task I-5/
- * I-6) and skill-directory primitives (Task I-4), and to the packaged skills
+ * the real filesystem via the ownership-safe registration writers
+ * (`registration-writer.ts`, `writers/*.ts`) and skill-directory primitives
+ * (`owned-files.ts`), and to the packaged skills
  * shipped under `skills/` (rendered the same way the legacy installer did:
  * `SKILL.md` + `@include` resolution).
  */
@@ -50,7 +51,7 @@ import { getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from '../skill-inst
 import { inlineIncludes } from '../skill-install/include-utils.js';
 import { expandHome } from '../expand-home.js';
 
-export interface RealPortContext {
+interface RealPortContext {
   homeDir: string;
   daemonPort: number;
   cliEntrypoint: string;
@@ -107,7 +108,7 @@ function registrationPathFor(capability: ClientCapability, ctx: RealPortContext)
     case 'cursor': return cursorRegistrationPath(ctx.homeDir);
     case 'opencode': return opencodeRegistrationPath(ctx.homeDir);
     case 'windsurf': return windsurfRegistrationPath(ctx.homeDir);
-    case 'vscode': return undefined; // BLOCKED -- no verified writer (Task I-6)
+    case 'vscode': return undefined; // BLOCKED -- no verified user-level path, so no writer
     default: return undefined;
   }
 }

@@ -58,7 +58,7 @@ export class ManifestSchemaValidationError extends Error {
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
 /** The directory where the manifest file lives. */
-export function manifestDir(homeDir?: string): string {
+function manifestDir(homeDir?: string): string {
   return path.join(homeDir ?? os.homedir(), '.mma');
 }
 
@@ -229,9 +229,9 @@ export function removeEntry(
 }
 
 // ─── Missing-skill detection (relocated from the deleted
-// skill-install/skill-installer-common.ts — Task I-8) ──────────────────────
+// skill-install/skill-installer-common.ts) ─────────────────────────────────
 
-export interface MissingSkill {
+interface MissingSkill {
   name: string;
   targets: ClientId[];
 }

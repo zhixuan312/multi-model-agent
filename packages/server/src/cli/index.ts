@@ -458,7 +458,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       // `mcp install <ClientId>` runs that ONE client's full provisioning
       // (registration + skills) through the same service `mma clients` reads.
       // The former no-argument, Claude-Desktop-only form is REPLACED outright
-      // — no alias, no silent default (Task I-8). Handled BEFORE loadConfig
+      // — no alias, no silent default. Handled BEFORE loadConfig
       // failing hard: a missing/invalid config must not block validating the
       // client ID itself.
       if (nested === 'install') {

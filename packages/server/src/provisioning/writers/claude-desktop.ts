@@ -25,9 +25,9 @@ function winJoin(...parts: string[]): string {
   return parts.join('\\').replace(/\\+/g, '\\');
 }
 
-/** Test-visible so the CLI's platform/appData context threading can be exercised
- *  directly if ever needed; the writers below are the only real callers. */
-export function resolveClaudeDesktopConfigPath(homeDir: string, platform: string, appData: string): string {
+/** The macOS/Windows path split, separated from {@link resolveClaudeDesktopPath}
+ *  only so that function stays a thin defaulting layer over it. */
+function resolveClaudeDesktopConfigPath(homeDir: string, platform: string, appData: string): string {
   if (platform === 'win32') {
     return winJoin(appData, 'Claude', 'claude_desktop_config.json');
   }

@@ -1,12 +1,12 @@
 /**
  * toggle.ts — `mma disable` / `mma enable` subcommands.
  *
- * Roster-driven (Task I-8): both commands DECLARE `clients.<ClientId>` as
+ * Roster-driven: both commands DECLARE `clients.<ClientId>` as
  * `'off'`/`'on'` — persisted to the resolved config file, so a
  * LATER, independent `mma sync-skills` (e.g. the npm postinstall hook) keeps
  * respecting the declaration — and then invoke the same `ProvisioningService`
- * Task I-7 built, replacing the retired `~/.mma/skills-disabled.json`
- * sentinel (`disabled-state.ts`, deleted in Task I-7) as the durable
+ * the provisioning service applies, replacing the retired
+ * `~/.mma/skills-disabled.json` sentinel (`disabled-state.ts`) as the durable
  * off-switch.
  *
  * `disable`: removes the named clients' registration + skills (ownership-safe
@@ -80,7 +80,7 @@ function persistDeclaredState(configPath: string, targets: ClientId[], state: 'o
 
 /**
  * `mma disable` — declare the resolved clients 'off', then remove their
- * registration + skills (ownership-safe removal, Task I-7's service) and the
+ * registration + skills (ownership-safe removal via the provisioning service) and the
  * Claude-Code-only SDLC commands.
  */
 export async function runDisable(deps: ToggleDeps = {}): Promise<number> {

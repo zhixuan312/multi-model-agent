@@ -4,7 +4,7 @@
 // left untouched (FR-7a).
 import { CLIENT_IDS, type ClientId, type ClientState } from '@zhixuan92/multi-model-agent-core';
 
-export interface EffectiveClientRosterEntry {
+interface EffectiveClientRosterEntry {
   clientId: ClientId;
   declaredState: ClientState | null;
   detectedPresence: boolean;

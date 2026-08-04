@@ -6,10 +6,10 @@
  * `/<name>` (never auto-matched by intent), and — unlike everything else
  * this release moved onto the ownership-safe provisioning port — are not
  * part of any `ClientCapability`'s skill root. This module is their sole
- * remaining home after the legacy `skill-install/skill-installer-common.ts`
- * and `skill-install/skill-installers/claude-code.ts` (Task I-8 retired
- * both) — relocated verbatim rather than dropped, per this task's mandate
- * to keep the capability, not the module.
+ * remaining home: the legacy `skill-install/skill-installer-common.ts` and
+ * `skill-install/skill-installers/claude-code.ts` that used to own them were
+ * retired with the rest of the per-client installers, and this capability was
+ * moved here rather than dropped along with them.
  *
  * Deliberately raw filesystem writes (mirroring the pre-I-8 behaviour) —
  * NOT the ownership-safe skill primitives in `owned-files.ts`: a command

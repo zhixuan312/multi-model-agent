@@ -1,8 +1,7 @@
 /**
  * Client inventory -- the truthful, read-only "what is actually provisioned
  * right now" answer, one record per canonical client in `CLIENT_IDS` order.
- * Consumed by `GET /health`, `cli/serve.ts`'s boot drift warning, and (once I-8
- * lands) `mma clients`.
+ * Consumed by `GET /health`, `cli/serve.ts`'s boot drift warning, and `mma clients`.
  *
  * A client with an unresolved marker ALWAYS reports `failed` here, regardless
  * of what its files happen to contain -- an interrupted operation proves
@@ -26,7 +25,7 @@ export interface ClientInventoryRecord extends ClientProvisioningStatus {
   detectedPresence: boolean;
 }
 
-export interface InventoryDeps {
+interface InventoryDeps {
   stateDir: string;
   port: ProvisioningPort;
   declared: DeclaredClientRoster | undefined;

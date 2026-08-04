@@ -87,8 +87,8 @@ export interface PipelineInput {
    *  against. Stable ids, not prose, are what decide contract satisfaction. */
   dispatchedContractTasks?: DispatchedContractTask[];
   /** For execute_plan: the immutable parsed-and-validated frozen Contract Task
-   *  snapshot selected at dispatch time. Type-only here — Task I-3 adds the
-   *  behavior that materializes/re-materializes its acceptance tests. */
+   *  snapshot selected at dispatch time. Type-only here — the behavior that
+   *  materializes/re-materializes its acceptance tests lives downstream. */
   acceptanceTestSnapshot?: ContractPlanSnapshot;
   /** Injectable acceptance-command runner (execute_plan scoring). Tests substitute a
    *  fake; production uses the no-shell execFile default. */

@@ -10,7 +10,7 @@ import { deriveDisplayState, type DisplayState } from './display-state.js';
  * vanilla `App` from `@modelcontextprotocol/ext-apps`'s `'.'` export — is the real path a
  * real host exercises.
  *
- * State machine summary (see the plan's Task I-7 contract for the full spec):
+ * State machine summary:
  * - `app.connect()` must resolve before anything else happens; a rejection renders
  *   `connection-error` and starts no polling.
  * - The initiating `mma_run` result arrives via `app.ontoolresult`. If it is ALREADY
