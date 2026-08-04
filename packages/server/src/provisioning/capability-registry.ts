@@ -15,6 +15,26 @@ export type SkillPathStrategy = 'standard' | 'bespoke' | 'none';
 /** The shape and location of a client's MCP registration entry. */
 export type McpConfigFormat = 'json' | 'toml' | 'plugin-json' | 'stdio-json';
 
+/** The primary-source evidence backing a GATED client's writer (Task I-6). Only
+ *  present for a client whose profile in `docs/verification/
+ *  mcp-client-registration-profiles.md` is marked VERIFIED; absent for a client
+ *  that remains BLOCKED (currently only `vscode`) -- absence is itself the
+ *  uniform "no writer may exist yet" signal, mirroring how an empty
+ *  `mcpConfigPaths` already signals "unverified" above. */
+export interface RegistrationProfile {
+  /** The exact vendor-owned source URL this profile was verified against.
+   *  Must appear verbatim in the evidence artifact. */
+  verifiedBy: string;
+  /** The verified user-level registration path, human-readable (writers resolve
+   *  their own actual path; this is the evidence record, not executable). */
+  path: string;
+  /** How MMA recognises its own previously-written entry in this client's file. */
+  ownershipRecognizer: string;
+  /** The client's own connect-time credential substitution mechanism. Never a
+   *  static token. */
+  dynamicCredentialMechanism: string;
+}
+
 export interface ClientCapability {
   id: ClientId;
   skillPathStrategy: SkillPathStrategy;
@@ -35,6 +55,15 @@ export interface ClientCapability {
    *  docs/verification/mcp-client-registration-profiles.md. */
   mcpConfigPaths: readonly string[];
   mcpConfigFormat: McpConfigFormat;
+  /** The top-level key a client's registration file nests its MCP servers under.
+   *  Defaults to `mcpServers` when omitted -- every client but opencode uses that
+   *  default; opencode verified its own servers live under a top-level `mcp` key
+   *  instead. Read by `registration-writer.ts` so a differently-keyed client
+   *  never needs a second, forked install path. */
+  mcpTopLevelKey?: string;
+  /** Present only for a client whose writer is evidence-gated (Task I-6) AND
+   *  unblocked. `vscode` stays without one -- it remains BLOCKED. */
+  registrationProfile?: RegistrationProfile;
 }
 
 /** The frozen capability registry -- exactly one row per ClientId, in
@@ -98,6 +127,13 @@ export const CLIENT_CAPABILITIES: readonly ClientCapability[] = [
     // the brace form {env:VAR} -- NOT ${env:VAR}.
     mcpConfigPaths: ['~/.config/opencode/opencode.json'],
     mcpConfigFormat: 'json',
+    mcpTopLevelKey: 'mcp',
+    registrationProfile: {
+      verifiedBy: 'https://opencode.ai/docs/mcp-servers/',
+      path: '~/.config/opencode/opencode.json',
+      ownershipRecognizer: 'The top-level `mcp` map is keyed by server name; MMA owns and mutates only its own `mma` key, leaving every sibling entry untouched.',
+      dynamicCredentialMechanism: 'Header substitution with the brace-only form {env:VAR_NAME} (documented on the Context7 example) -- NOT the ${env:VAR} form other clients use.',
+    },
   },
   {
     id: 'windsurf',
@@ -111,6 +147,12 @@ export const CLIENT_CAPABILITIES: readonly ClientCapability[] = [
     // token is read at connect time with no static secret and no helper script.
     mcpConfigPaths: ['~/.codeium/windsurf/mcp_config.json'],
     mcpConfigFormat: 'json',
+    registrationProfile: {
+      verifiedBy: 'https://docs.devin.ai/desktop/cascade/mcp',
+      path: '~/.codeium/windsurf/mcp_config.json',
+      ownershipRecognizer: 'The `mcpServers` map is keyed by server name; MMA owns and mutates only its own `mma` key, leaving every sibling entry untouched.',
+      dynamicCredentialMechanism: '${file:~/.mma/auth-token} resolved at connect time from the token file MMA already owns -- preferred over ${env:VAR}, which would require the user to export a variable before launching Windsurf.',
+    },
   },
 ] as const;
 

@@ -160,10 +160,11 @@ export function isOwnedMcpEntry(
 
   // Superset across every non-stdio writer's own shape: claude-code's plugin entry
   // additionally carries `type`/`headersHelper`, codex's TOML entry carries
-  // `bearer_token_env_var`. The loopback URL check below remains the authoritative
-  // proof of ownership; this set only guards against an entry carrying an
-  // unexpected key no MMA writer would ever emit.
-  const allowedKeys = new Set(['url', 'serverUrl', 'headers', 'env', 'type', 'headersHelper', 'bearer_token_env_var']);
+  // `bearer_token_env_var`, opencode's remote entry carries `type`/`enabled`. The
+  // loopback URL check below remains the authoritative proof of ownership; this
+  // set only guards against an entry carrying an unexpected key no MMA writer
+  // would ever emit.
+  const allowedKeys = new Set(['url', 'serverUrl', 'headers', 'env', 'type', 'headersHelper', 'bearer_token_env_var', 'enabled']);
   for (const key of Object.keys(entry)) {
     if (!allowedKeys.has(key)) return false;
   }
@@ -171,12 +172,26 @@ export function isOwnedMcpEntry(
   return typeof url === 'string' && LOOPBACK_MCP_URL.test(url);
 }
 
-function resolveFormat(clientId: ClientId): McpConfigFormat {
+function resolveCapability(clientId: ClientId): ClientCapability {
   const capability = CLIENT_CAPABILITIES.find((candidate) => candidate.id === clientId);
   if (!capability) {
     throw new RegistrationConflictError('unsupported_format', `No capability registry row for client '${clientId}'.`);
   }
-  return capability.mcpConfigFormat;
+  return capability;
+}
+
+function resolveFormat(clientId: ClientId): McpConfigFormat {
+  return resolveCapability(clientId).mcpConfigFormat;
+}
+
+/** The key a client's registration file nests its MCP servers under. Defaults to
+ *  `mcpServers` -- every writer but opencode uses that default; opencode verified
+ *  its own servers live under a top-level `mcp` key instead (see the capability
+ *  registry's `mcpTopLevelKey`). Resolving this from the registry, rather than
+ *  hardcoding `mcpServers` here, is what lets opencode share this ONE install
+ *  path instead of forking a second one. */
+function resolveTopLevelKey(clientId: ClientId): string {
+  return resolveCapability(clientId).mcpTopLevelKey ?? 'mcpServers';
 }
 
 function assertSupportedFormat(clientId: ClientId, format: McpConfigFormat): void {
@@ -211,8 +226,11 @@ interface ParsedJsonConfig {
 /** Parses config bytes, refusing every shape that cannot be merged safely — the same
  *  discipline as Claude Desktop's `loadConfig`, generalised: a syntax error reports
  *  the parser's offset (there is no field path for it), and a wrong-shaped
- *  `mcpServers` reports its own type rather than being silently replaced. */
-function parseJsonConfig(path: string, bytes: Buffer | undefined): ParsedJsonConfig {
+ *  servers map reports its own type rather than being silently replaced.
+ *  `topLevelKey` is the client-specific nesting key resolved by {@link
+ *  resolveTopLevelKey} — `mcpServers` for every writer but opencode, which
+ *  verified its servers live under `mcp` instead. */
+function parseJsonConfig(path: string, bytes: Buffer | undefined, topLevelKey: string): ParsedJsonConfig {
   if (bytes === undefined) return { root: {}, mcpServers: {} };
 
   let parsed: unknown;
@@ -231,10 +249,10 @@ function parseJsonConfig(path: string, bytes: Buffer | undefined): ParsedJsonCon
   const root = parsed as Record<string, unknown>;
 
   let mcpServers: Record<string, unknown> = {};
-  if ('mcpServers' in root) {
-    const raw = root.mcpServers;
+  if (topLevelKey in root) {
+    const raw = root[topLevelKey];
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      throw new RegistrationConflictError('invalid_config', `Refusing to modify ${path}: "mcpServers" is ${describeJsonType(raw)}, expected an object.`);
+      throw new RegistrationConflictError('invalid_config', `Refusing to modify ${path}: "${topLevelKey}" is ${describeJsonType(raw)}, expected an object.`);
     }
     mcpServers = raw as Record<string, unknown>;
   }
@@ -306,9 +324,10 @@ export async function writeOwnedRegistration(input: WriteOwnedRegistrationInput)
 
   const format = resolveFormat(clientId);
   assertSupportedFormat(clientId, format);
+  const topLevelKey = resolveTopLevelKey(clientId);
 
   const originalBytes = fs.readConfig(path);
-  const { root, mcpServers } = parseJsonConfig(path, originalBytes);
+  const { root, mcpServers } = parseJsonConfig(path, originalBytes, topLevelKey);
 
   // For stdio, the entry MMA is about to write IS the ownership yardstick: an
   // existing entry is ours only if it launches the same entrypoint.
@@ -317,12 +336,12 @@ export async function writeOwnedRegistration(input: WriteOwnedRegistrationInput)
   if (MMA_ENTRY_KEY in mcpServers && !isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format, expectedStdioEntrypoint)) {
     throw new RegistrationConflictError(
       'unrecognised_entry',
-      `Refusing to modify ${path}: "mcpServers.${MMA_ENTRY_KEY}" was not written by MMA. `
+      `Refusing to modify ${path}: "${topLevelKey}.${MMA_ENTRY_KEY}" was not written by MMA. `
       + 'Remove or rename that entry yourself if you want MMA to manage it.',
     );
   }
 
-  const nextRoot: Record<string, unknown> = { ...root, mcpServers: { ...mcpServers, [MMA_ENTRY_KEY]: entry } };
+  const nextRoot: Record<string, unknown> = { ...root, [topLevelKey]: { ...mcpServers, [MMA_ENTRY_KEY]: entry } };
   const nextBytes = serializeJsonConfig(nextRoot);
   if (originalBytes !== undefined && originalBytes.equals(nextBytes)) {
     return { path, changed: false };
@@ -355,9 +374,10 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
 
   const format = resolveFormat(clientId);
   assertSupportedFormat(clientId, format);
+  const topLevelKey = resolveTopLevelKey(clientId);
 
   const originalBytes = fs.readConfig(path);
-  const { root, mcpServers } = parseJsonConfig(path, originalBytes);
+  const { root, mcpServers } = parseJsonConfig(path, originalBytes, topLevelKey);
 
   if (originalBytes === undefined || !(MMA_ENTRY_KEY in mcpServers)) {
     return { path, changed: false };
@@ -365,14 +385,14 @@ export async function removeOwnedRegistration(input: RemoveOwnedRegistrationInpu
   if (!isOwnedMcpEntry(mcpServers[MMA_ENTRY_KEY], format, input.expectedStdioEntrypoint)) {
     throw new RegistrationConflictError(
       'unrecognised_entry',
-      `Refusing to modify ${path}: "mcpServers.${MMA_ENTRY_KEY}" was not written by MMA. `
+      `Refusing to modify ${path}: "${topLevelKey}.${MMA_ENTRY_KEY}" was not written by MMA. `
       + 'Remove or rename that entry yourself if you want MMA to manage it.',
     );
   }
 
   const remaining = { ...mcpServers };
   delete remaining[MMA_ENTRY_KEY];
-  const nextBytes = serializeJsonConfig({ ...root, mcpServers: remaining });
+  const nextBytes = serializeJsonConfig({ ...root, [topLevelKey]: remaining });
 
   assertBytesUnchanged(fs, path, originalBytes);
   atomicWriteBytes(fs, path, nextBytes);
@@ -546,6 +566,8 @@ import { removeClaudeDesktopRegistration, writeClaudeDesktopRegistration } from 
 import { writeCodexRegistration } from './writers/codex.js';
 import { writeAntigravityRegistration } from './writers/antigravity.js';
 import { writeCursorRegistration } from './writers/cursor.js';
+import { writeOpencodeRegistration } from './writers/opencode.js';
+import { writeWindsurfRegistration } from './writers/windsurf.js';
 
 const UNBLOCKED_WRITERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
   'claude-code': writeClaudeCodeRegistration,
@@ -553,6 +575,8 @@ const UNBLOCKED_WRITERS: Partial<Record<ClientId, (input: WriteClientRegistratio
   codex: writeCodexRegistration,
   antigravity: writeAntigravityRegistration,
   cursor: writeCursorRegistration,
+  opencode: writeOpencodeRegistration,
+  windsurf: writeWindsurfRegistration,
 };
 
 const UNBLOCKED_REMOVERS: Partial<Record<ClientId, (input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>>> = {
@@ -575,6 +599,20 @@ export async function writeClientRegistration(input: WriteClientRegistrationInpu
     );
   }
   return writer(input);
+}
+
+/**
+ * The registered writer function for `clientId`, or `undefined` when none exists
+ * yet — the checkable signal Task I-6's evidence gate relies on. A client stays
+ * writer-less until its profile in `docs/verification/
+ * mcp-client-registration-profiles.md` is VERIFIED; `vscode` remains undefined
+ * here because its profile is still BLOCKED (see the capability registry's
+ * `mcpConfigPaths: []` for the same signal from the other direction).
+ */
+export function writerForClient(
+  clientId: ClientId,
+): ((input: WriteClientRegistrationInput) => Promise<ClientRegistrationResult>) | undefined {
+  return UNBLOCKED_WRITERS[clientId];
 }
 
 /** Remove the capability-selected registration when that writer supports removal. */
