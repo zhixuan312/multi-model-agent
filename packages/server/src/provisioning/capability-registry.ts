@@ -24,11 +24,15 @@ export interface ClientCapability {
   /** Plural on purpose: a client may have OS-specific registration locations
    *  (Claude Desktop's macOS vs Windows paths). Unrelated to skill roots.
    *
-   *  EMPTY means "gated": the path is not yet confirmed against the vendor's
-   *  own documentation, so no writer may target this client. That currently
-   *  covers vscode, opencode, and windsurf, whose writers are blocked in
-   *  Task I-6 behind the primary-source artifact from Task I-1. Emptiness is
-   *  the uniform, checkable signal -- never leave a half-trusted path here. */
+   *  EMPTY means "unverified": the path is not confirmed against the vendor's
+   *  own documentation, so no writer may target this client. Emptiness is the
+   *  uniform, checkable signal -- never leave a half-trusted path here.
+   *
+   *  Only `vscode` is still empty. Microsoft documents the workspace path
+   *  (.vscode/mcp.json) but reaches the user-level file solely through the
+   *  "MCP: Open User Configuration" command, and VS Code profiles are
+   *  relocatable, so no stable home-level path exists to derive. See
+   *  docs/verification/mcp-client-registration-profiles.md. */
   mcpConfigPaths: readonly string[];
   mcpConfigFormat: McpConfigFormat;
 }
@@ -88,23 +92,24 @@ export const CLIENT_CAPABILITIES: readonly ClientCapability[] = [
     id: 'opencode',
     skillPathStrategy: 'standard',
     skillRoot: '~/.agents/skills',
-    // Blocked: registration path pending Task I-1 primary-source
-    // verification. Writer implementation is gated in Task I-6.
-    mcpConfigPaths: [],
+    // Verified against opencode.ai's own docs (see docs/verification/
+    // mcp-client-registration-profiles.md). Servers live under the `mcp` key as
+    // { type: 'remote', url, headers, enabled }; headers substitute secrets with
+    // the brace form {env:VAR} -- NOT ${env:VAR}.
+    mcpConfigPaths: ['~/.config/opencode/opencode.json'],
     mcpConfigFormat: 'json',
   },
   {
     id: 'windsurf',
     skillPathStrategy: 'none',
     skillRoot: null,
-    // Blocked, exactly like vscode and opencode. The likely path is
-    // ~/.codeium/windsurf/mcp_config.json, but that rests on secondary sources
-    // only and never on Windsurf's own documentation, so it is NOT recorded
-    // here: an empty mcpConfigPaths is the single, uniform signal that a row
-    // awaits Task I-1 verification. Populating it would make this row look
-    // ready to a writer while resting on exactly the evidence Task I-6's
-    // dispatch precondition exists to reject.
-    mcpConfigPaths: [],
+    // Verified against the vendor's own docs, which docs.windsurf.com now
+    // 307-redirects to (Cognition acquired Windsurf). Servers live under
+    // `mcpServers`; a remote entry uses `serverUrl` (not `url`) plus `headers`.
+    // Its ${file:/path} substitution is the cleanest credential mechanism of any
+    // client here -- the entry can point straight at ~/.mma/auth-token, so the
+    // token is read at connect time with no static secret and no helper script.
+    mcpConfigPaths: ['~/.codeium/windsurf/mcp_config.json'],
     mcpConfigFormat: 'json',
   },
 ] as const;
