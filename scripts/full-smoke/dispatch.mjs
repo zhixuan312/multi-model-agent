@@ -236,7 +236,7 @@ export async function runDispatch(spec, ctx) {
     return { blockId: json.id };
   }
   if (status >= 400 || !json.taskId) throw new Error(`dispatch ${spec.id} (${type}) failed: HTTP ${status} ${JSON.stringify(json)}`);
-  return { taskId: json.taskId };
+  return { taskId: json.taskId, admission: json };
 }
 
 export async function pollTask(token, taskId) {

@@ -484,6 +484,36 @@ export function verify(rec) {
     const hasFields = p.taskId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
     out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
       `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
+
+    // ⑫b A running task must say WHAT it is, not just how far along it is. A poll
+    //     used to answer with a phase name that reads identically for a spec, a
+    //     review and an investigation, while the type had been known since
+    //     admission. `phaseElapsedMs` is asserted here too because it is the field
+    //     that silently went missing on one wire when the two running-snapshot
+    //     shapes were maintained by hand.
+    const identity = p.taskId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
+    out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
+      `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
+  }
+
+  // ⑫c Identity is the SAME across admission, every poll, and the terminal
+  //     envelope. Three surfaces, one answer — an agent reading back through a
+  //     transcript finds the handle where it was returned, not where the task was
+  //     submitted, so a disagreement between them is a real defect rather than a
+  //     cosmetic one. Only the live daemon can prove this; a unit test asserts a
+  //     shared helper, not that both wires actually call it.
+  if (rec.admission && r?.task?.taskId) {
+    const a = rec.admission;
+    const p = rec.polling202;
+    const agree = (field) => {
+      const values = [a[field], p ? p[field] : undefined, r.task[field]].filter((v) => v !== undefined);
+      return values.every((v) => v === values[0]);
+    };
+    const mismatched = ['taskId', 'type', 'subtype'].filter((f) => !agree(f));
+    out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
+      mismatched.length === 0
+        ? `taskId/type${e.subtype ? '/subtype' : ''} agree across admission, poll, terminal`
+        : `disagree on: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
   }
 
   // ⑬ Audit findings: weight field + evidence section prefix

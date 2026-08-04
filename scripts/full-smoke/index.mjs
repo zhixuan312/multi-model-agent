@@ -142,6 +142,7 @@ async function runScenario(spec, ctx, log) {
       queue, backend: null,
     });
     if (polling202) rec.polling202 = polling202;
+    if (res.admission) rec.admission = res.admission;
     if (spec.sessionReuse && ctx.sessionFromScenario2) {
       rec.resumeSessionId = ctx.sessionFromScenario2;
     }
