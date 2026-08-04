@@ -10,7 +10,7 @@ produced, how the marketplace works, and how to publish it.
 |---|---|---|
 | Skills | 16 | `/mma:audit`, `/mma:delegate`, `/mma:router`, … (also auto-matched by intent) |
 | Commands | 2 | `/mma:flow`, `/mma:breakout` (explicit only) |
-| MCP server | 1 (`mma:daemon`) | tools `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel` |
+| MCP server | 1 (`mma:daemon`) | tools `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_list`, `mma_task_cancel`, `mma_context_block_create`, `mma_context_block_delete` |
 
 ```
 plugin/
@@ -106,11 +106,13 @@ token at **connection time** from `$MMA_AUTH_TOKEN` → `$MMA_TOKEN_FILE` →
 - With no token available the helper prints `{}` rather than failing, so the
   user sees an actionable auth error instead of a crash.
 
-**This is why the generator does not pass `authToken` to `inlineIncludes`.** The
-per-client installers *do* — they substitute the live token into skill text,
-which is fine for a private `~/.claude/skills/` install but would leak a secret
-into a distributable plugin. Plugin skills keep the runtime form
-`${MMA_AUTH_TOKEN:-$(mma print-token)}`.
+**This is why the generator does not pass `authToken` to `inlineIncludes`.** Skills
+render identically everywhere — `real-port.ts` never substitutes a token into skill
+text either, so a plugin skill and an installed skill are byte-identical on this
+axis. Only the Claude Code SDLC-command writer (`provisioning/claude-code-commands.ts`,
+`/mma-flow` and `/mma-breakout`) accepts an optional live token, which is fine for a
+private `~/.claude/commands/` install but would leak a secret into a distributable
+plugin — so the generator omits it there too.
 
 `${CLAUDE_PLUGIN_ROOT}` is quoted because the install path is version-scoped
 (`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`) and may contain

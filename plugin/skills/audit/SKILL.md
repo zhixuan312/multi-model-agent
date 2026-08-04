@@ -299,17 +299,22 @@ Windows/PowerShell equivalent is planned for a later release.
 
 ## Response shapes
 
-### POST /task?cwd=<abs> — dispatch response (202)
+### mma_run — dispatch
+
+Short tasks return the terminal envelope (below) inline, in the tool result. Longer-running
+tasks return a handle instead:
 
 ```json
-{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
+{ "taskId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `taskId` to poll. `statusUrl` is a convenience pointer.
+Use `taskId` to poll with `mma_task_get` / `mma_task_wait`.
 
-### GET /task/:taskId — terminal response (200)
+### mma_task_get / mma_task_wait — poll
 
-The terminal JSON envelope has these 6 top-level fields:
+A still-running task returns identity plus progress (`status: "running"`, `phase`, `elapsedMs`,
+`runningHeadline`, …) — not the shape below. A terminal task returns the full envelope — these
+6 top-level fields:
 
 ```json
 {
@@ -406,17 +411,19 @@ implementer output, still usable. Never discard the task on `reviewerNote` alone
 
 ❌ **Ignoring `error: null` check** — a `status: "done_with_concerns"` task has `error: null` and is a success (advisory concerns only). Only `error !== null` is a failure. In particular, when a reviewer emits non-JSON, the task is `done_with_concerns` with `error: null`, `output.summary` holds the implementer answer, and `output.reviewerNote` explains the degrade — do NOT treat this as a failure.
 
-### Error response (4xx / 5xx)
+### Tool call error
+
+A malformed or unresolvable call (bad `cwd`, unknown `taskId`, failed admission) surfaces as an
+MCP tool error rather than a terminal envelope — the tool result carries `isError: true` and this
+payload:
 
 ```json
-{
-  "error": "<code>",
-  "message": "<human-readable>",
-  "details": { /* optional structured context, e.g. fieldErrors for 400 */ }
-}
+{ "error": { "code": "<code>", "message": "<human-readable>" } }
 ```
 
-`details` is optional and present only when the server has structured additional context.
+This is a different signal than Step 1 above: it means the call itself could not be admitted or
+resolved, not that a dispatched task ran and failed. A dispatched task's failure always shows up
+in the terminal envelope's `error` field instead.
 
 
 ## Reading the findings

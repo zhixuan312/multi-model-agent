@@ -13,7 +13,7 @@
 
 Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for **up to 97% less per task**.
 
-A local HTTP daemon for Claude Code, Codex CLI, Gemini CLI, and Cursor. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
+A local daemon for Claude Code, Claude Desktop, Codex, Cursor, VS Code, opencode, Windsurf, and Antigravity — reached over MCP. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
 *(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md).)*
 
@@ -45,30 +45,83 @@ Four steps, in order.
 
 ```bash
 pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
-mma sync-skills                         # auto-detect all clients (idempotent install + update)
-# or pin a specific target:
-mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
+mma sync-skills --target=claude-code        # provision the client(s) you use, by id — repeatable
+                                             # claude-code | claude-desktop | codex | antigravity
+                                             # | cursor | vscode | opencode | windsurf
 ```
 
-Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
+MMA provisions **eight canonical clients**, each with its own MCP registration and (where the
+client supports Agent Skills) its own skill install. Which clients get touched is **declared, not
+just detected** — a client that is merely detected but never declared is reported `suggested` and
+left untouched, so a bare `mma sync-skills` with nothing declared yet provisions nothing. Use
+`--target=<ClientId>` (repeatable) the first time, then make it durable by declaring `clients` in
+your config — see [Declaring your clients](#declaring-your-clients) below.
 
-| Client | Install location | Loaded |
+| Client | Skills | MCP registration |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` | next session |
-| Gemini CLI | Gemini CLI skill directory | next session (requires version with external-skill support) |
-| Codex CLI | `~/.codex/skills/` | next session |
-| Cursor | Cursor extension manifest | restart Cursor |
+| Claude Code | `~/.claude/skills/` | `${CLAUDE_PLUGIN_ROOT}/.mcp.json` (plugin) or `~/.mma/plugin/.mcp.json` (standalone `mma mcp install`) |
+| Claude Desktop | — (MCP only) | `claude_desktop_config.json`, via the `mma mcp` stdio bridge |
+| Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
+| Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
+| Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
+| VS Code | `~/.agents/skills/` | user-level MCP config |
+| opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |
+| Windsurf | — (MCP only) | `~/.codeium/windsurf/mcp_config.json` |
+
+Every registration entry resolves its bearer token **at connect time** — via a headers helper
+script, a client's own `${env:VAR}`/`{env:VAR}` interpolation, or a `${file:...}` reference into
+`~/.mma/auth-token` — never a static token written to disk.
 
 #### Client support at a glance
 
-| Client | Skills | SDLC commands | MCP server | How |
-|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | one plugin install (below) — or `sync-skills` |
-| Codex CLI | ✅ | — | ✅ any MCP client may connect to `/mcp` | `mma sync-skills --target=codex-cli` |
-| Cursor | ✅ | — | ✅ | `mma sync-skills --target=cursor` |
-| Gemini CLI | ✅ | — | ✅ | `mma sync-skills --target=gemini-cli` |
+| Client | Skills | SDLC commands | MCP server |
+|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ |
+| Claude Desktop | — | — | ✅ (via `mma mcp` stdio bridge) |
+| Codex | ✅ | — | ✅ |
+| Antigravity | ✅ | — | ✅ |
+| Cursor | ✅ | — | ✅ |
+| VS Code | ✅ | — | ✅ |
+| opencode | ✅ | — | ✅ |
+| Windsurf | — | — | ✅ |
 
-Claude Code is the optimized path — it is the only client that can install skills, the SDLC commands, and the MCP server as **one** unit. Every other client gets the full skill set through `mma sync-skills`, and the daemon's `POST /mcp` endpoint is client-agnostic, so any MCP-capable client can connect to it directly. The engine itself treats all clients equally: the same `POST /task` API, the same task types, the same worker tiers.
+Claude Code is the optimized path — it is the only client that can install skills, the SDLC
+commands, and the MCP server as **one** unit (the plugin, below). Every declared client gets its
+registration and applicable skills atomically through `mma sync-skills` / `mma mcp install
+<ClientId>`. The engine itself treats all clients equally underneath: the same runtime, the same
+task types, the same worker tiers — REST also exists behind the same runtime, for Forge and other
+programmatic callers (see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api)).
+
+#### Declaring your clients
+
+Detection alone never provisions anything. Declare a client's on/off state in
+`~/.mma/config.json`:
+
+```json
+{
+  "agents": { "...": "..." },
+  "clients": {
+    "claude-code": "on",
+    "cursor": "on",
+    "codex": "off"
+  }
+}
+```
+
+`mma clients [--json]` shows the full eight-client picture — declared state, detection, and actual
+provisioning status:
+
+```bash
+mma clients
+# claude-code   declared=on         detected=true   status=provisioned  skills=true  mcp=registered
+# cursor        declared=on         detected=true   status=provisioned  skills=true  mcp=registered
+# codex         declared=off        detected=true   status=off          skills=false mcp=absent
+# vscode        declared=undeclared detected=true   status=suggested    skills=false mcp=absent
+```
+
+A `suggested` row is MMA telling you it *could* provision that client — run `mma mcp install
+<ClientId>` for a one-off install without touching config, or add `clients.<ClientId>: "on"` and
+re-run `mma sync-skills` to make it durable.
 
 #### Claude Code: one-step plugin install (alternative)
 
@@ -95,12 +148,16 @@ Your **main model** is **the model you'd use without mma** — the cost baseline
 - ChatGPT-led workflow → `gpt-5.6`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (server returns `400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers writes JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return the *worker's* model as the calling agent's "main" model. The calling client is the only reliable source. Export both once if you're calling the API directly:
+Over MCP, client identity is attributed automatically from the connecting client's own protocol
+metadata — there is nothing to configure. `mainModel` is an optional `mma_run` parameter: pass it
+and the per-task headline reports the savings delta above; omit it and MMA still runs, just without
+that comparison. Auto-detection of the main model is deliberately **not** attempted — the
+claude-agent-sdk used by claude-tier workers writes JSONL files into the same
+`~/.claude/projects/<slug>/` a detector would read, so it could return the *worker's* model as the
+calling agent's "main" model, rather than yours.
 
-```bash
-export MMA_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
-export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
-```
+(Programmatic/REST callers — Forge, custom integrations — set the equivalent `X-MMA-Main-Model`
+header per-request; see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).)
 
 ### 3. Write the config
 
@@ -125,13 +182,13 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.mainModel`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
+That's the whole minimum-viable file. All other knobs (`server.*`, `clients.*`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
 ### 4. Start the daemon + verify
 
 Two ways — pick one:
 
-**Option A — let your AI client auto-spawn it.** Just open your client (Claude Code / Codex CLI / etc.) and call any mma-* skill; the skill's preflight check spawns `mma serve` on `127.0.0.1:7337` and reuses it for every subsequent call. Nothing else to do.
+**Option A — let your AI client auto-spawn it.** Just open your client (Claude Code / Codex / etc.) and call any mma-* skill; the skill's preflight check spawns `mma serve` on `127.0.0.1:7337` and reuses it for every subsequent call. Nothing else to do.
 
 **Option B — start it manually.** Useful when you want the daemon up before opening a client (e.g. to inspect the queue, run `curl /health`, or attach to logs):
 
@@ -158,13 +215,13 @@ A drift warning prints on `mma serve` if installed skills are older than the dae
 To turn MMA off without uninstalling the package — e.g. for a sensitive repo you don't want delegated to external models, or to compare behaviour with and without it:
 
 ```bash
-mma disable        # removes the skills from every detected client; your AI stops routing to MMA
-mma enable         # restores them
+mma disable --target=claude-code        # removes registration + skills; your AI stops routing to MMA
+mma enable  --target=claude-code        # restores them
 ```
 
-`disable` is **sticky**: it records a sentinel at `~/.mma/skills-disabled.json` that `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. Scope it per client with `--target=<client>`, or preview with `--dry-run`. `enable` clears the sentinel and runs the normal `sync-skills` upsert; a bare `enable` restores every client that was turned off, including any scoped with `--target`.
+`disable` is **sticky**: it declares `clients.<ClientId>: "off"` in `~/.mma/config.json`, which `sync-skills` (including the `npm install` postinstall hook) honours, so an upgrade won't silently reinstall the skills. `enable` declares `"on"` and runs the normal `sync-skills` upsert to (re)install the client.
 
-A bare `mma disable` covers the auto-detected clients (claude-code, codex). Cursor and Gemini are only touched when named explicitly (`--target=cursor` / `--all-targets`). **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off-pin is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
+**Always name the client you're flipping:** `mma disable --target=<ClientId>` / `mma enable --target=<ClientId>` (repeatable, or `--all-targets`). A bare `mma disable` / `mma enable` with no `--target` only re-syncs clients **already** declared into that state — it does not discover which clients to flip, so it is not how you turn a specific client off or back on. Preview either with `--dry-run`. **Cursor skills are project-local**: `disable --target=cursor` removes them from the current working directory only, but the off declaration is global, so future `sync-skills` runs stay blocked for cursor everywhere until you `enable`. Re-run `enable --target=cursor` from each cursor project to reinstall its skills there.
 
 ## Skills
 
@@ -295,11 +352,10 @@ Levels a model can't do are clamped by the runtime itself — claude downgrades 
 
 ### Tuning
 
-Every `defaults` knob has a sane built-in. Override only when you have a reason.
+Most knobs have a sane built-in. Override only when you have a reason.
 
 | Field | Default | What it does |
 |---|---|---|
-| `defaults.mainModel` | *(unset)* | Lowest-priority fallback for the main-model resolver chain (headers + per-client auto-detection take precedence). |
 | `agents.<tier>.effort` | `high` | Reasoning level for that tier — see [Reasoning effort](#reasoning-effort). |
 
 ### Auth token
@@ -349,9 +405,11 @@ mma info  [--json]                           # cliVersion, bind/port, token fing
 mma status [--json]                          # health + stats from a running daemon
 mma logs  [--follow] [--task=<id>]           # tail today's diagnostic log
 mma print-token                              # print the current auth token
-mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
-mma disable [--target=<client>] [--all-targets] [--dry-run] [--json]       # remove skills + pin off (survives upgrades)
-mma enable  [--target=<client>] [--all-targets] [--dry-run] [--json]       # clear the pin + reinstall skills
+mma clients [--json]                         # declared vs. detected vs. actual status, per client
+mma mcp install <ClientId>                   # provision one client's MCP registration + skills now
+mma sync-skills [--target=<ClientId>] [--all-targets] [--dry-run] [--json]   # provision every declared-'on' client
+mma disable [--target=<ClientId>] [--all-targets] [--dry-run] [--json]       # declare 'off' + remove (survives upgrades)
+mma enable  [--target=<ClientId>] [--all-targets] [--dry-run] [--json]       # declare 'on' + (re)install
 mma telemetry status                         # show consent state + source (env / config / default)
 mma telemetry enable                         # opt in (writes ~/.mma/config.json)
 mma telemetry disable                       # opt out + delete local queue
@@ -361,25 +419,50 @@ mma telemetry dump-queue                    # print the locally-queued events as
 
 ## Architecture
 
-`mma` (or `mma serve`) runs a loopback HTTP server with a unified `POST /task` endpoint. All 12 task types (`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`, `journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer produces the answer on one tier, a refiner verifies and improves it on the other (both output the same JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a session-persistent orchestrator (no refiner, no commit, cwd-only sandbox — can write files) for multi-phase frontend workflows. Write types (`delegate`, `execute_plan`) edit the caller's checkout IN PLACE on whatever branch it already has checked out and the engine commits there — it never creates a branch or a worktree, because callers already do; read types use a read-only sandbox. Task dispatch is async — returns `202 { taskId, statusUrl }` immediately, poll `GET /task/:id` for the terminal envelope; `DELETE /task/:id` requests cooperative cancellation (terminal `cancelled` unless completion won the race). Task IDs and terminal results survive daemon restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back `interrupted` with a retryable error — resubmit, nothing resumes.
+`mma` (or `mma serve`) runs a loopback daemon. Every declared client reaches it over **MCP** — skills
+are thin prompts that route to MCP tools, never to a hand-built HTTP call. All 12 task types
+(`delegate`, `execute_plan`, `audit`, `review`, `debug`, `investigate`, `research`, `journal_record`,
+`journal_recall`, `orchestrate`, `spec`, `plan`) go through the same two-phase pipeline: an implementer
+produces the answer on one tier, a refiner verifies and improves it on the other (both output the same
+JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from
+structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task
+a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a
+session-persistent orchestrator (no refiner, no commit, cwd-only sandbox — can write files) for
+multi-phase frontend workflows. Write types (`delegate`, `execute_plan`) edit the caller's checkout IN
+PLACE on whatever branch it already has checked out and the engine commits there — it never creates a
+branch or a worktree, because callers already do; read types use a read-only sandbox. Task dispatch is
+async — a handle comes back immediately, poll for the terminal envelope; cancellation is cooperative
+(terminal `cancelled` unless completion won the race). Task IDs and terminal results survive daemon
+restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back
+`interrupted` with a retryable error — resubmit, nothing resumes.
+
+The same runtime is also reachable over REST (`POST /task`, `GET /task/:id`, …) for Forge and other
+programmatic callers — see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).
+It is not part of the agent-facing surface: no packaged skill, command, or plugin instructs an agent to
+construct an HTTP request.
 
 ### MCP endpoint
 
-The same daemon exposes the same runtime over MCP at `POST /mcp` (streamable HTTP, stateless), for MCP clients that prefer tools over skills:
+The daemon exposes the runtime over MCP at `POST /mcp` (streamable HTTP, stateless) — this is what
+every declared client's skills and registration actually point at. Registration is per client, never
+a manual header construction:
 
 ```bash
-claude mcp add --transport http mma http://127.0.0.1:7337/mcp \
-  --header "Authorization: Bearer $(mma print-token)"
+mma mcp install claude-code     # or any other ClientId — see the client table above
 ```
 
-Five tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`, `mma_task_list`, `mma_task_cancel`. `mma_run` returns short task results inline and a handle for long ones; a task submitted over MCP is pollable over REST and vice versa — one runtime, two transports.
+Seven tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema
+the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`,
+`mma_task_list`, `mma_task_cancel`, `mma_context_block_create`, `mma_context_block_delete`. `mma_run`
+returns short task results inline and a handle for long ones; a task submitted over MCP is pollable
+over REST and vice versa — one runtime, two transports.
 
 Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_task_list` answers "what is running right now?" — the question you cannot ask when you no longer hold a taskId — optionally narrowed to one project.
 
 **Claude Desktop** speaks stdio rather than HTTP, so it connects through a bridge instead:
 
 ```bash
-mma mcp install     # writes Claude Desktop's MCP config (MCP only — no skills), then relaunch Desktop
+mma mcp install claude-desktop     # writes Claude Desktop's MCP config (MCP only — no skills), then relaunch Desktop
 ```
 
 `mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_task_wait` must not block the monitor's own polls.
@@ -404,14 +487,14 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
 | Daemon stale after upgrade | `pkill -f "mma serve"`; the skill preflight respawns it on next client session |
 | Skill version mismatch | `mma sync-skills` and restart your client |
-| `401 unauthorized` from a skill | `export MMA_AUTH_TOKEN=$(mma print-token)` |
+| A client fails to auth against the daemon | `export MMA_AUTH_TOKEN=$(mma print-token)` before launching the client, or `mma mcp install <ClientId>` again to rewrite its registration |
 | `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mma-info>` directly |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
 ## What's new in 5.17
 
-- **Claude Desktop support.** `mma mcp install`, then relaunch Desktop. The new `mma mcp` stdio bridge connects Desktop (which speaks stdio, not HTTP) to your running daemon, resolving the daemon host once and pinning a loopback address so the token cannot be redirected off-box.
+- **Claude Desktop support.** `mma mcp install claude-desktop`, then relaunch Desktop. The new `mma mcp` stdio bridge connects Desktop (which speaks stdio, not HTTP) to your running daemon, resolving the daemon host once and pinning a loopback address so the token cannot be redirected off-box.
 - **A live execution monitor, inline.** On hosts that support MCP Apps, `mma_run` renders a panel that updates itself — phase, elapsed, what the worker is doing, and a Cancel button — **without spending a model turn per update**. When it finishes it reports duration, cost, the vs-main delta, the implementer/reviewer split and token usage. The App holds no credential; every call is brokered by the host.
 - **Progress you can read.** `runningHeadline` now carries a real line (`Running nl -ba packages/core/src/unified/skill-loader.ts`) on both runners, over REST and MCP alike.
 - **Skills prefer MCP when it is there.** A host with both surfaces used to pick arbitrarily, and the HTTP route shows no monitor because the host never learns a task is running.
