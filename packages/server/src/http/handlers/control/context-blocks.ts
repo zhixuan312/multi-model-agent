@@ -47,9 +47,9 @@ const createBodySchema = z.object({
  *  + `extra` directly as a tool error result. `ReserveError` covers the (rare)
  *  case where the project registry itself rejects the reservation (e.g. the
  *  server hit its project cap between validation and reservation). */
-export type ContextBlockOpErrorCode = 'invalid_request' | 'payload_too_large' | 'cap_exhausted' | 'not_found' | 'pinned' | ReserveError;
+type ContextBlockOpErrorCode = 'invalid_request' | 'payload_too_large' | 'cap_exhausted' | 'not_found' | 'pinned' | ReserveError;
 
-export interface ContextBlockOpError {
+interface ContextBlockOpError {
   ok: false;
   httpStatus: number;
   code: ContextBlockOpErrorCode;
@@ -57,18 +57,18 @@ export interface ContextBlockOpError {
   extra?: Record<string, unknown>;
 }
 
-export type CreateContextBlockInput = {
+type CreateContextBlockInput = {
   /** Already-canonical absolute project path — see the module-level note above. */
   cwd: string;
   content: unknown;
   ttlMs?: unknown;
 };
 
-export type CreateContextBlockResult = { ok: true; id: string } | ContextBlockOpError;
+type CreateContextBlockResult = { ok: true; id: string } | ContextBlockOpError;
 
-export type DeleteContextBlockInput = { cwd: string; blockId: string };
+type DeleteContextBlockInput = { cwd: string; blockId: string };
 
-export type DeleteContextBlockResult = { ok: true } | ContextBlockOpError;
+type DeleteContextBlockResult = { ok: true } | ContextBlockOpError;
 
 /**
  * Validate the body, reserve the project, cap-check, and register a context

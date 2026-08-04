@@ -18,7 +18,7 @@
  * including terminal, where the envelope has always carried `task.type` and the panel
  * has always ignored it.
  */
-export interface TaskLabel {
+interface TaskLabel {
   taskType?: string;
   /** Short task id, surfaced so a panel can be correlated with the daemon log and store. */
   taskRef?: string;
