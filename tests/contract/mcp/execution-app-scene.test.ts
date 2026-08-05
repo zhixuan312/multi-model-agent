@@ -157,6 +157,29 @@ describe('contract: anatomy — nothing detaches', () => {
     expect(Number(hold![1])).toBeGreaterThan(Number(strike![1]));
   });
 
+  it('lets the activity strip span the full rail, whatever the history length', () => {
+    // A `max-width` on the bar caps the STRIP, not just the bar: 34 bars at 10px plus gaps is
+    // 406px, so a 700px rail could only ever be 58% covered while the baseline ran on to the
+    // right edge. It shipped in 6.0.0 and reads as a strip that failed to draw. jsdom performs
+    // no layout, so this is asserted at the stylesheet level — the only place it is visible.
+    const barRule = /#app \.strip \.bar \{[^}]*\}/.exec(CSS)?.[0] ?? '';
+    expect(barRule, 'no .strip .bar rule found').not.toBe('');
+    expect(barRule, `a width cap re-creates the under-fill: ${barRule}`).not.toMatch(/max-width/);
+    expect(barRule).toMatch(/flex:\s*1/);
+  });
+
+  it('sizes result cells to their content instead of equal columns', () => {
+    // `$1.55` and `111K in · 34K out · 2.9M cached` are 5 and 31 characters. Equal columns give
+    // both the same share, so the long value is ellipsised while the short one sits in
+    // whitespace — that is how the cached token count disappeared in 6.0.0. A stat row should
+    // WRAP when it runs out of width, never truncate a number.
+    const tblRule = /#app \.tbl \{[^}]*\}/.exec(CSS)?.[0] ?? '';
+    expect(tblRule, 'no .tbl rule found').not.toBe('');
+    expect(tblRule, `equal columns truncate the longest value: ${tblRule}`)
+      .not.toMatch(/grid-template-columns:\s*repeat\(\s*\d+\s*,\s*1fr/);
+    expect(tblRule, 'the row must be able to wrap rather than clip').toMatch(/flex-wrap:\s*wrap/);
+  });
+
   it('rotates the shoulder and elbow IN PHASE for the probe sweep', () => {
     // Counter-phasing them cancels their travel almost exactly, which reads as a frozen panel.
     const ua = /@keyframes mma-ua-probe \{ 0%, 100% \{ transform: rotate\((-?[\d.]+)deg\); \} 50% \{ transform: rotate\((-?[\d.]+)deg\); \} \}/.exec(CSS);

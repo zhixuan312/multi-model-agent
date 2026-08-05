@@ -16,6 +16,19 @@ export interface TaskEntry {
   subtype: string | null;
   result: unknown;
   runningHeadline: string | null;
+  /**
+   * When each unit of provider activity landed, and which phase was live at the time.
+   *
+   * The execution monitor draws a run's shape from this. It has to come from the ENGINE, not
+   * from the viewer: the panel used to accumulate its own history from the polls it personally
+   * saw, so a re-mounted panel started blank, a second viewer disagreed with the first, and a
+   * panel opened on an already-finished task had no history at all. The run's activity is a
+   * fact about the run.
+   *
+   * Timestamps rather than pre-bucketed counts, so a reader can bucket at whatever resolution
+   * it renders. Bounded — a long run must not grow this without limit.
+   */
+  activity: Array<{ at: number; phase: 1 | 2 }>;
   startedAt: number;
   terminalAt: number | null;
   phase: 'implementing' | 'reviewing' | null;
@@ -36,6 +49,15 @@ function isTerminal(state: TaskState): boolean {
  *  DEFAULT_SERVER_LIMITS.batchTtlMs. Long enough that any caller has retrieved
  *  the result via GET /task/:id well before eviction. */
 const DEFAULT_TASK_TTL_MS = 3_600_000;
+
+/**
+ * Upper bound on retained activity samples.
+ *
+ * A busy multi-hour run emits far more provider events than a strip can show, and the oldest
+ * are the least interesting. Well above the ~34 buckets any panel renders, so bucketing still
+ * has plenty to average over.
+ */
+const MAX_ACTIVITY_SAMPLES = 600;
 
 export class TaskRegistry {
   private entries = new Map<string, TaskEntry>();
@@ -64,6 +86,7 @@ export class TaskRegistry {
       state: 'pending',
       result: null,
       runningHeadline: null,
+      activity: [],
       startedAt: Date.now(),
       terminalAt: null,
       phase: null,
@@ -125,6 +148,21 @@ export class TaskRegistry {
   setHeadline(taskId: string, headline: string): void {
     const e = this.entries.get(taskId);
     if (e && !isTerminal(e.state)) e.runningHeadline = headline;
+  }
+
+  /**
+   * Note that the worker did something. Cheap and lossy on purpose: this runs on every
+   * provider event of every concurrent task, and it feeds a strip a few hundred pixels wide.
+   *
+   * The phase is stamped at record time and never revised, so the history is monotonic by
+   * construction — an Act I sample can never appear after an Act II one, which is a sequence
+   * the engine cannot actually produce.
+   */
+  recordActivity(taskId: string, at: number = Date.now()): void {
+    const e = this.entries.get(taskId);
+    if (!e || isTerminal(e.state)) return;
+    e.activity.push({ at, phase: e.phase === 'reviewing' ? 2 : 1 });
+    if (e.activity.length > MAX_ACTIVITY_SAMPLES) e.activity.shift();
   }
 
   countActive(cwd: string): number {

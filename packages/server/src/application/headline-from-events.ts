@@ -139,6 +139,9 @@ function taskIdOfEvent(entry: PlainLogEntry): string | null {
 
 interface HeadlineSink {
   setHeadline(taskId: string, headline: string): void;
+  /** Called for EVERY provider event, not only the ones that make a readable headline —
+   *  a `grep` that produces no printable line is still the worker doing something. */
+  recordActivity(taskId: string): void;
 }
 
 /**
@@ -158,6 +161,7 @@ export function attachHeadlineProducer(bus: EnvelopeBus, sink: HeadlineSink): ()
       const taskId = taskIdOfEvent(entry);
       if (!taskId) return;
       try {
+        sink.recordActivity(taskId);
         const headline = headlineForEvent(entry.fields);
         if (headline) sink.setHeadline(taskId, headline);
       } catch {

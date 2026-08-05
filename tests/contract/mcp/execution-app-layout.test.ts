@@ -54,7 +54,11 @@ const deliver = (
 
 const running = (over: Record<string, unknown> = {}) => ({
   taskId: 'task-1', type: 'spec', status: 'running', phase: 'implementing',
-  elapsedMs: 4000, phaseElapsedMs: 1000, ...over,
+  elapsedMs: 4000, phaseElapsedMs: 1000,
+  // The activity series is supplied by the ENGINE — the panel renders it and accumulates
+  // nothing of its own, so a fixture without it is a task that has done nothing yet.
+  activity: [2, 0, 3, 1], activityPhases: [1, 1, 1, 1],
+  ...over,
 });
 
 describe('contract: panel layout is rows, and the stage never resizes', () => {
@@ -113,28 +117,86 @@ describe('contract: panel layout is rows, and the stage never resizes', () => {
   });
 });
 
-describe('contract: activity strip phase order is monotonic', () => {
+/**
+ * The heading is `<type> · <state>`, and both halves are the engine's own vocabulary.
+ *
+ * They came from different places — the type is the raw wire value, the running words were
+ * hardcoded in the renderer, the terminal words come from the envelope untouched — so the
+ * panel read `spec · Running` while a finished run read `investigate · done`. The same
+ * heading, disagreeing with itself in two directions.
+ */
+describe('contract: heading casing is consistent across every state', () => {
   beforeEach(() => { document.body.innerHTML = '<main id="app"></main>'; vi.resetModules(); });
 
-  it('never draws an Act I bar after an Act II bar', async () => {
-    // History shifts out from the left as it fills, so without a clamp the older act-II bars
-    // drift leftward while new act-I bars append on the right — showing review BEFORE
-    // implement, a sequence that cannot happen in the engine.
-    const app = await boot();
-    deliver(app, running({ runningHeadline: 'a' }));
-    await flush();
-    deliver(app, running({ phase: 'reviewing', runningHeadline: 'b' }));
-    await flush();
-    // A late snapshot claiming implementing again must NOT roll the strip back.
-    deliver(app, running({ phase: 'implementing', runningHeadline: 'c' }));
-    await flush();
+  const heading = () => document.querySelector('h2')?.textContent ?? '';
 
-    const acts = [...document.querySelectorAll('.strip .bar')].map((b) =>
-      b.classList.contains('p2') ? 2 : b.classList.contains('p1') ? 1 : 0);
-    const withAct = acts.filter((a) => a > 0);
-    for (let i = 1; i < withAct.length; i += 1) {
-      expect(withAct[i], `bar ${i} regressed: ${withAct.join(',')}`).toBeGreaterThanOrEqual(withAct[i - 1]);
+  it('never mixes a lowercase type with a capitalised state', async () => {
+    const app = await boot();
+    for (const payload of [
+      running(),
+      running({ phase: 'reviewing' }),
+      running({ cancellationRequested: true }),
+    ]) {
+      deliver(app, payload);
+      await flush();
+      expect(heading(), `heading was "${heading()}"`).toBe(heading().toLowerCase());
     }
-    expect(withAct).toContain(2);
+    for (const status of ['done', 'done_with_concerns', 'failed', 'cancelled', 'interrupted']) {
+      deliver(app, { task: { taskId: 't1', type: 'spec', status }, metrics: {}, output: {} });
+      await flush();
+      expect(heading(), `heading was "${heading()}"`).toBe(heading().toLowerCase());
+    }
+  });
+
+  it('reads an underscored status as English without inventing new words', async () => {
+    const app = await boot();
+    deliver(app, {
+      task: { taskId: 't1', type: 'audit', subtype: 'plan', status: 'done_with_concerns' },
+      metrics: {}, output: {},
+    });
+    await flush();
+    // Recognisably the status it came from — not title-cased into prose, not left as a slug.
+    expect(heading()).toBe('audit (plan) · done with concerns');
+  });
+});
+
+describe('contract: the strip is drawn from the engine, never accumulated locally', () => {
+  beforeEach(() => { document.body.innerHTML = '<main id="app"></main>'; vi.resetModules(); });
+
+  it('renders exactly the series the engine sent, on the very first snapshot', async () => {
+    // The panel used to build history from polls it personally observed, so a re-mounted
+    // widget started blank and a panel opened on a finished run had nothing at all. One
+    // snapshot must now be enough to draw the whole run.
+    const app = await boot();
+    deliver(app, running({ activity: [1, 0, 2, 5, 3], activityPhases: [1, 1, 2, 2, 2] }));
+    await flush();
+    const bars = [...document.querySelectorAll('.strip .bar')];
+    expect(bars).toHaveLength(5);
+    expect(bars.map((b) => (b.classList.contains('q') ? 0 : b.classList.contains('p2') ? 2 : 1)))
+      .toEqual([1, 0, 2, 2, 2]);
+    // The act change is marked once, where it actually happened.
+    expect(document.querySelectorAll('.strip .seam')).toHaveLength(1);
+  });
+
+  it('draws NO strip element at all when the run has no activity yet', async () => {
+    // An empty strip still carries the baseline border, and a lone horizontal rule reads as a
+    // strip that failed to draw rather than a run that has not done anything.
+    const app = await boot();
+    const { activity: _a, activityPhases: _p, ...bare } = running();
+    deliver(app, bare);
+    await flush();
+    expect(document.querySelector('.strip')).toBeNull();
+    expect(document.querySelector('.rail')).not.toBeNull();
+  });
+
+  it('carries the series through to the terminal envelope', async () => {
+    const app = await boot();
+    deliver(app, {
+      task: { taskId: 't1', type: 'spec', status: 'done' },
+      execution: { activity: [1, 2, 0, 4], activityPhases: [1, 1, 2, 2] },
+      metrics: { totalDurationMs: 1000 }, output: {},
+    });
+    await flush();
+    expect(document.querySelectorAll('.strip .bar')).toHaveLength(4);
   });
 });

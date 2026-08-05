@@ -161,7 +161,7 @@ describe('contract: execution App bootstrap wiring', () => {
     // A dangling "Phase:" with nothing after it is the FIRST thing a user sees on a new run,
     // and it reads as a failure to load rather than as "not started yet".
     expect(document.body.textContent).not.toMatch(/Phase:\s*(?:$|Elapsed)/m);
-    expect(document.body.textContent).toMatch(/Running/);
+    expect(document.body.textContent).toMatch(/running/);
   });
 
   /**
@@ -178,7 +178,7 @@ describe('contract: execution App bootstrap wiring', () => {
       phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
     }) }] });
     await Promise.resolve();
-    expect(document.querySelector('h2')?.textContent).toBe('audit (plan) · Running');
+    expect(document.querySelector('h2')?.textContent).toBe('audit (plan) · running');
   });
 
   it('falls back to the bare state when a payload carries no type', async () => {
@@ -189,7 +189,7 @@ describe('contract: execution App bootstrap wiring', () => {
       taskId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
     }) }] });
     await Promise.resolve();
-    expect(document.querySelector('h2')?.textContent).toBe('Running');
+    expect(document.querySelector('h2')?.textContent).toBe('running');
   });
 
   it('formats elapsed time for humans rather than raw milliseconds', async () => {

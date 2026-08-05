@@ -102,7 +102,14 @@ describe('running headline: bus wiring', () => {
 
   function sink() {
     const calls: Array<[string, string]> = [];
-    return { calls, setHeadline: (id: string, h: string) => { calls.push([id, h]); } };
+    const activity: string[] = [];
+    return {
+      calls,
+      activity,
+      setHeadline: (id: string, h: string) => { calls.push([id, h]); },
+      // Every provider event counts as activity, including ones with no printable headline.
+      recordActivity: (id: string) => { activity.push(id); },
+    };
   }
 
   it('sets the headline for the task the event belongs to', () => {

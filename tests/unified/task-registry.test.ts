@@ -144,3 +144,40 @@ describe('TaskRegistry', () => {
     expect(reg.get('t1')!.phase).toBeNull();
   });
 });
+
+/**
+ * Activity history belongs to the ENGINE.
+ *
+ * The execution monitor used to accumulate this itself from the polls one widget happened to
+ * observe, so a re-mounted panel started blank, two viewers of the same task disagreed, and a
+ * panel opened on a finished run showed nothing. A run's shape is a fact about the run.
+ */
+describe('TaskRegistry activity history', () => {
+  it('stamps the phase at record time, so history can never go backwards', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/repo', 'spec', null);
+    reg.recordActivity('t1', 1000);
+    reg.setPhase('t1', 'reviewing');
+    reg.recordActivity('t1', 2000);
+    // A phase is stamped when the sample lands and never revised, so an Act I sample cannot
+    // appear after an Act II one — a sequence the engine cannot actually produce.
+    expect(reg.get('t1')!.activity.map((a) => a.phase)).toEqual([1, 2]);
+  });
+
+  it('is bounded, so a long run cannot grow it without limit', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/repo', 'spec', null);
+    for (let i = 0; i < 900; i += 1) reg.recordActivity('t1', i);
+    expect(reg.get('t1')!.activity.length).toBeLessThanOrEqual(600);
+    // The OLDEST samples are dropped — the recent shape is the interesting one.
+    expect(reg.get('t1')!.activity.at(-1)!.at).toBe(899);
+  });
+
+  it('ignores activity on a task that has already finished', () => {
+    const reg = new TaskRegistry();
+    reg.register('t1', '/repo', 'spec', null);
+    reg.complete('t1', {});
+    reg.recordActivity('t1');
+    expect(reg.get('t1')!.activity).toHaveLength(0);
+  });
+});
