@@ -501,13 +501,26 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 5.17
+## What's new in 6.0
 
-- **Claude Desktop support.** `mma mcp install claude-desktop`, then relaunch Desktop. The new `mma mcp` stdio bridge connects Desktop (which speaks stdio, not HTTP) to your running daemon, resolving the daemon host once and pinning a loopback address so the token cannot be redirected off-box.
-- **A live execution monitor, inline.** On hosts that support MCP Apps, `mma_run` renders a panel that updates itself — phase, elapsed, what the worker is doing, and a Cancel button — **without spending a model turn per update**. When it finishes it reports duration, cost, the vs-main delta, the implementer/reviewer split and token usage. The App holds no credential; every call is brokered by the host.
-- **Progress you can read.** `runningHeadline` now carries a real line (`Running nl -ba packages/core/src/unified/skill-loader.ts`) on both runners, over REST and MCP alike.
-- **Skills prefer MCP when it is there.** A host with both surfaces used to pick arbitrarily, and the HTTP route shows no monitor because the host never learns a task is running.
-- **`mma_task_wait` stopped timing out against the client's own deadline** — the advertised ceiling is 55s and larger requests clamp instead of erroring. `SCHEMA_VERSION` still 6; non-App MCP clients get byte-identical responses.
+**Breaking — read before upgrading.** Provisioning is now **declared, not detected**: a client MMA
+merely finds on disk is reported `suggested` and left alone. Declare what you use
+(`clients.<ClientId>: "on"` in `~/.mma/config.json`) or pass `--target=<ClientId>`, or your next
+`mma sync-skills` provisions nothing. The client roster is canonical — `codex-cli` is now `codex`,
+`gemini-cli` is gone — `mma mcp install` requires a client id, and `~/.mma/skills-disabled.json` is
+replaced by `clients.<ClientId>: "off"`.
+
+- **Provisioning proves ownership before it replaces or deletes anything.** Installed skill
+  directories carry a digest record; a directory that no longer matches, or that contains a symlink
+  at any depth, is preserved and reported as a conflict rather than overwritten. Turning a client on
+  or off is atomic and survives a crash, and shared skill roots are reference-counted.
+- **A task says what it is, everywhere.** Handles, polls and cancel acknowledgements carry `type`,
+  `cwd` and an `audit`'s `subtype` — on both wires, from one shared builder.
+- **`mma_task_list`** answers "what is running right now?", the question you cannot ask once you no
+  longer hold a taskId. The MCP surface is now seven tools, including context-block registration.
+- **The execution monitor plays a three-act scene** — the worker at the bench, the reviewer joining
+  to check the same piece, then one of four endings. The motion is derived from the type registry,
+  so a hammer on screen means the route writes your files and a lens means it cannot.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

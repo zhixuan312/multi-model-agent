@@ -21,7 +21,7 @@ Emitted at the end of every delegate, audit, review, debug, execute-plan, invest
 | `eventId` | UUIDv4 string | At-most-once dedup within the 90-day retention window |
 | `route` | enum: `delegate`, `audit`, `review`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `journal-record`, `journal-recall`, `register-context-block`, `orchestrate` | Route distribution + per-route quality metrics |
 | `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
-| `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking. The calling client's own name (`claude-code`, `codex-cli`, `cursor`, `gemini-cli`), or `mcp:<client>` when the task arrived over the MCP endpoint. Before 5.16.0 this was hardcoded `claude-code` regardless of caller. |
+| `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking. The calling client's own name, drawn from the canonical roster (`claude-code`, `claude-desktop`, `codex`, `antigravity`, `cursor`, `vscode`, `opencode`, `windsurf`), or `mcp:<client>` when the task arrived over the MCP endpoint. Before 5.16.0 this was hardcoded `claude-code` regardless of caller. |
 
 #### Configuration (4 fields)
 
@@ -38,7 +38,7 @@ Emitted at the end of every delegate, audit, review, debug, execute-plan, invest
 |-------|------|-----------------|
 | `implementerModel` | string (1–120 chars) | Model usage distribution across the fleet |
 | `implementerTier` | enum: `standard`, `complex`, `main` | Tier classification used as the reviewer-separation gate (the user's model choice is sovereign; tier is the mechanism). Cost accounting still keys off `implementerModel`. |
-| `mainModel` | string (1–120 chars) or null | The flagship model the task was delegated FROM (e.g. `claude-opus-4-7`). Added in 3.12.2 alongside `mainModelFamily` so retrospective cost analysis doesn't have to assume the main agent identity. Null for clients without a main agent context (codex-cli, cursor). |
+| `mainModel` | string (1–120 chars) or null | The flagship model the task was delegated FROM (e.g. `claude-opus-4-7`). Added in 3.12.2 alongside `mainModelFamily` so retrospective cost analysis doesn't have to assume the main agent identity. Null for clients without a main agent context (for example `codex`, `cursor`). |
 
 #### Outcome (4 fields)
 
