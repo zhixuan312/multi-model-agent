@@ -1,6 +1,7 @@
 {
   "folders": [
     "bounded-execution",
+    "clients",
     "config",
     "events",
     "identity",

@@ -21,16 +21,7 @@ import { execFileSync } from 'node:child_process';
 import type { ExecutionStore } from './execution-store.js';
 import { buildErrorEnvelope } from './result-shape.js';
 import type { TaskType } from '@zhixuan92/multi-model-agent-core';
-
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM = exists but not ours → alive. ESRCH = gone.
-    return (err as { code?: string }).code === 'EPERM';
-  }
-}
+import { pidAlive } from '../pid-alive.js';
 
 /** True iff `pid` currently belongs to a codex worker. Guards against pid
  *  reuse: a recycled pid pointing at an unrelated process is never signalled. */
@@ -62,7 +53,7 @@ function killStaleWorkerGroup(workerPid: number): boolean {
   }
 }
 
-export interface ReconcileOutcome {
+interface ReconcileOutcome {
   interrupted: number;
   fencedWorkers: number;
   prunedExpired: number;

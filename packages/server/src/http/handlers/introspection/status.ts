@@ -9,7 +9,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { resolveConfiguredAuthMode } from '@zhixuan92/multi-model-agent-core';
 import { deriveSkillManifestInfo } from '../../../skill-install/skill-drift.js';
 
-export interface StatusHandlerDeps {
+interface StatusHandlerDeps {
   taskRegistry: TaskRegistry;
   projectRegistry: ProjectRegistry;
   serverStartedAt: number;

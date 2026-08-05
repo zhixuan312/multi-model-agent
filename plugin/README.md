@@ -7,7 +7,7 @@ edit by hand: re-run the command to regenerate.
 
 - **16 skills** — auto-matched by intent (`/mma:audit`, `/mma:delegate`, …)
 - **2 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)
-- **1 MCP server** (`mma:daemon`) — `http://127.0.0.1:7337/mcp`, exposing `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel`
+- **1 MCP server** (`mma:daemon`) — `http://127.0.0.1:7337/mcp`, exposing `mma_run`, `mma_task_get`, `mma_task_wait`, `mma_task_cancel`, `mma_task_list`, `mma_context_block_create`, `mma_context_block_delete`
 
 ## Requirements
 

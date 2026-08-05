@@ -44,7 +44,6 @@ export function inlineIncludes(
   skillContext: string,
   content: string,
   skillsRoot: string,
-  authToken?: string,
 ): string {
   const lines = content.split('\n');
   const result: string[] = [];
@@ -105,22 +104,5 @@ export function inlineIncludes(
     }
   }
 
-  let output = result.join('\n');
-
-  if (authToken) {
-    output = output.replace(
-      /TOKEN="\$\{MMA_AUTH_TOKEN:-\$\(mma print-token\)\}"/g,
-      `TOKEN="${authToken}"`,
-    );
-    output = output.replace(
-      /MMA_AUTH_TOKEN=\$\(mma print-token\)/g,
-      `MMA_AUTH_TOKEN="${authToken}"`,
-    );
-    output = output.replace(
-      /MMA_AUTH_TOKEN=<token>/g,
-      `MMA_AUTH_TOKEN=${authToken}`,
-    );
-  }
-
-  return output;
+  return result.join('\n');
 }

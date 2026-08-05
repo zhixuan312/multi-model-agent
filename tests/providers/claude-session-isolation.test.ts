@@ -67,13 +67,19 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
   it('no baseUrl — key goes out as x-api-key only (Bearer is reserved for OAuth)', async () => {
     const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
     mockSdk.__capturedQueries.length = 0;
+    // Both are set here on purpose: asserting they are absent only proves scrubbing
+    // if something was there to scrub. Left unset, this passes on a clean machine
+    // and silently stops testing anything the moment an operator exports either.
     process.env.ANTHROPIC_AUTH_TOKEN = 'INHERITED-TOKEN';
+    process.env.ANTHROPIC_BASE_URL = 'https://inherited.example';
 
     await new ClaudeSession({ model: 'm', opts: sessionOpts('direct'), apiKey: 'KEY' }).send('hi');
 
     const env = mockSdk.__capturedQueries[0].env;
     expect(env.ANTHROPIC_API_KEY).toBe('KEY');
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    // An inherited base URL would send the configured key to a host this session
+    // never chose, with no Bearer header, so the turn hangs instead of erroring.
     expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
   });
 

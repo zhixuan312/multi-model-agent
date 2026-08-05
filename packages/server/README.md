@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=npm)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 
-Local HTTP daemon that delegates tool-using work to sub-agents on different LLM providers. One process serves Claude Code, Codex CLI, Gemini CLI, and Cursor via installable skills.
+Local daemon that delegates tool-using work to sub-agents on different LLM providers. One process serves eight canonical clients — Claude Code, Claude Desktop, Codex, Antigravity, Cursor, VS Code, opencode, Windsurf — over MCP, via installable skills and per-client MCP registration.
 
 ## Why
 
@@ -29,28 +29,38 @@ Four steps, in order.
 
 ```bash
 pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
-mma sync-skills                         # auto-detect all clients (idempotent install + update)
-# or pin a specific target:
-mma sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
+mma sync-skills --target=claude-code        # provision the client(s) you use, by id — repeatable
+                                             # claude-code | claude-desktop | codex | antigravity
+                                             # | cursor | vscode | opencode | windsurf
 ```
 
-| Client | Install location | Loaded |
+Which clients get touched is **declared, not just detected** — a merely-detected, undeclared client
+is reported `suggested` by `mma clients` and left untouched. Make a declaration durable in
+`~/.mma/config.json`:
+
+```json
+{ "agents": { "...": "..." }, "clients": { "claude-code": "on", "cursor": "on" } }
+```
+
+| Client | Skills | MCP registration |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` | next session |
-| Gemini CLI | Gemini CLI skill directory | next session (requires version with external-skill support) |
-| Codex CLI | `~/.codex/skills/` | next session |
-| Cursor | Cursor extension manifest | restart Cursor |
+| Claude Code | `~/.claude/skills/` | plugin `.mcp.json`, or `~/.mma/plugin/.mcp.json` via `mma mcp install` |
+| Claude Desktop | — (MCP only) | `claude_desktop_config.json`, via the `mma mcp` stdio bridge |
+| Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
+| Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
+| Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
+| VS Code | `~/.agents/skills/` | — MMA writes none; VS Code publishes no stable user-level path (add it via *MCP: Open User Configuration*) |
+| opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |
+| Windsurf | — (MCP only) | `~/.codeium/windsurf/mcp_config.json` |
 
 ### 2. Choose your main model — intentionally
 
 Your **main model** is **the model you'd use without mma** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
-Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing).
-
-```bash
-export MMA_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
-export MMA_MAIN_MODEL=claude-opus-4-8      # whatever your calling agent runs on
-```
+Client identity is attributed automatically from MCP protocol metadata — nothing to set. `mainModel`
+is an optional `mma_run` parameter (installed skills pass it); omit it and MMA still runs, just
+without the savings comparison. (Programmatic/REST callers set the equivalent `X-MMA-Main-Model`
+header — see [REST API](#rest-api).)
 
 ### 3. Write the config
 
@@ -93,7 +103,7 @@ mma sync-skills                 # reconcile installed skills with the new bundle
 
 ## Skills
 
-Skills are the surface your AI client sees. `mma sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the unified `POST /task` endpoint.
+Skills are the surface your AI client sees. `mma sync-skills` writes them to the client's skill directory. You describe the work, the client routes it to the matching skill, the skill calls the MCP tool `mma_run` with the matching `type`.
 
 ### Design & planning skills
 
@@ -120,9 +130,9 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 
 ### Plumbing skills
 
-| Skill | Endpoint | Use when |
+| Skill | MCP tools | Use when |
 |---|---|---|
-| `mma-context-blocks` | `POST/DELETE /context-blocks` | Reuse a large doc across multiple calls |
+| `mma-context-blocks` | `mma_context_block_create` / `mma_context_block_delete` | Reuse a large doc across multiple calls |
 
 ### Commands (Claude Code only)
 
@@ -152,14 +162,17 @@ Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUT
 
 ## REST API
 
-All task types dispatch through the unified `POST /task` endpoint with a `type` discriminator.
+The daemon's agent-facing surface is MCP (below) — no packaged skill, command, or plugin instructs
+an agent to build an HTTP request. REST is fully supported behind the same runtime, for **Forge and
+other programmatic callers**: all task types dispatch through the unified `POST /task` endpoint with
+a `type` discriminator.
 
 | Endpoint | Purpose |
 |---|---|
 | `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
 | `GET /task/:taskId` | Poll task status and results (terminal results survive daemon restarts) |
 | `DELETE /task/:taskId` | Request cooperative cancellation — 202 requested; terminal `cancelled` unless completion won the race; idempotent |
-| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_cancel` over the same runtime, plus the `ui://mma/execution.html` App resource when its bundle is present |
+| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_list` / `mma_task_cancel` / `mma_context_block_create` / `mma_context_block_delete` over the same runtime, plus the `ui://mma/execution.html` App resource when its bundle is present |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
@@ -176,20 +189,22 @@ mma info  [--json]                           # version, bind/port, token fingerp
 mma status [--json]                          # health + stats from a running daemon
 mma logs  [--follow]                         # tail diagnostic log
 mma print-token                              # print the current auth token
-mma sync-skills [--target=<client>]          # install/update skills
-mma disable [--target=<client>]              # remove skills
-mma enable  [--target=<client>]              # reinstall skills
+mma clients [--json]                         # declared vs. detected vs. actual status, per client
+mma mcp install <ClientId>                   # provision one client's MCP registration + skills now
+mma sync-skills [--target=<ClientId>]        # provision every declared-'on' client
+mma disable [--target=<ClientId>]            # declare 'off' + remove registration/skills
+mma enable  [--target=<ClientId>]            # declare 'on' + (re)install
 mma telemetry status|enable|disable          # manage telemetry consent
 mma mcp                                      # stdio MCP bridge (Claude Desktop spawns this)
-mma mcp install | uninstall                  # add/remove MMA in Claude Desktop's MCP config
+mma mcp uninstall                            # remove MMA from Claude Desktop's MCP config
 ```
 
 ## Claude Desktop and the execution monitor
 
-Claude Desktop speaks stdio rather than HTTP. `mma mcp install` registers the `mma mcp` bridge in
-Desktop's config; the bridge forwards stdio JSON-RPC to the same `POST /mcp`, resolving the daemon
-host once at startup, rejecting any non-loopback answer and pinning the numeric address so a DNS
-rebind cannot send the bearer token off-box.
+Claude Desktop speaks stdio rather than HTTP. `mma mcp install claude-desktop` registers the `mma
+mcp` bridge in Desktop's config; the bridge forwards stdio JSON-RPC to the same `POST /mcp`,
+resolving the daemon host once at startup, rejecting any non-loopback answer and pinning the numeric
+address so a DNS rebind cannot send the bearer token off-box.
 
 Hosts implementing [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) render
 `mma_run` as a live panel — phase, elapsed time, a headline of the worker's current activity, and a

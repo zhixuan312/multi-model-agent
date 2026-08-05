@@ -26,134 +26,43 @@ Store large documents once; reference them by ID in subsequent `mma:*` calls via
 - The doc changes between calls → context blocks are immutable; register a new one
 - Single task that doesn't reference any large shared content → no benefit
 
-## Endpoints
+## Dispatch
 
-### Register a context block
+Two MCP tools, both scoped to `cwd`. If neither is available in this session, run `mma clients`.
 
-`POST /context-blocks?cwd=<abs-path>`
-
-## Prefer the MCP tools when they are available
-
-**Before using the HTTP/curl route below, check whether the `mma_run` MCP tool is available in
-this session. If it is, USE IT INSTEAD.** The curl route documented here is the fallback for
-sessions with no MCP connection.
-
-```
-mma_run({ cwd: "<abs-path>", mode: "handle", request: { type: "<task type>", ... } })
-```
-
-The request body is identical — the same `type`, `prompt`, `target`, and options described
-below ride inside `request`. Poll with `mma_task_get`, block with `mma_task_wait`, stop with
-`mma_task_cancel`, instead of the curl polling loop.
-
-Why this matters, so the choice is not arbitrary:
-
-- **Hosts that support MCP Apps render a live execution monitor** for `mma_run` — phase and
-  elapsed time update in place, with a working Cancel button, and none of it costs an extra
-  model turn. The curl route cannot produce that: the host has no idea a task is running, so
-  progress can only be surfaced by the agent polling and re-reporting, which costs a turn each
-  time. Going through curl on such a host silently gives up the better experience.
-- **No token handling.** The MCP route is already authenticated; the curl route needs
-  `mma print-token` and a bearer header, which is one more place a credential can leak into a
-  transcript or a shell history.
-- **Errors arrive structured** rather than as an HTTP body to parse.
-
-Use the curl route when `mma_run` is genuinely absent — a bare terminal, a CI job, or a client
-with no MCP support. Do not use it merely because this document spells the HTTP call out in
-more detail.
-
-
-## Authentication & identity headers
-
-Every request to the multi-model-agent server requires:
-
-| Header | Required for | Purpose |
-|---|---|---|
-| `Authorization: Bearer <token>` | All routes (except `/health`) | Auth — token from `mma print-token` |
-| `X-MMA-Client: <client>` | All tool routes | Identifies your client. One of `claude-code`, `cursor`, `codex-cli`, `gemini-cli`. **Server returns `400 client_required` if missing.** |
-| `X-MMA-Main-Model: <model-id>` | All tool routes | Calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`). Used as `mainModel` in wire telemetry so cost-delta-vs-main and family attribution can be computed. **Server returns `400 main_model_required` if missing.** Auto-detection is intentionally not attempted — the calling client is the only reliable source. |
-
-### Obtain the token
-
-**From environment variable** (preferred):
-```
-MMA_AUTH_TOKEN=<token>
-```
-
-**From CLI**:
-```bash
-mma print-token
-```
-
-### Shell helper
-
-```bash
-TOKEN="${MMA_AUTH_TOKEN:-$(mma print-token)}"
-MMA_CLIENT="${MMA_CLIENT:-claude-code}"
-MMA_MAIN_MODEL="${MMA_MAIN_MODEL:-claude-opus-4-7}"
-
-curl \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  ...
-```
-
-### Errors
-
-- `401 unauthorized` — verify the token matches `~/.mma/auth-token`. The token persists across restarts; it only changes if the file is manually deleted.
-- `400 client_required` — `X-MMA-Client` header is missing on a tool route. Set it to one of: `claude-code`, `cursor`, `codex-cli`, `gemini-cli`.
-- `400 main_model_required` — `X-MMA-Main-Model` header is missing on a tool route. Set it to the calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`).
-
-
-#### Request body
+### Register a context block — `mma_context_block_create`
 
 ```json
-{
-  "content": "# Project spec\n...",
-  "ttlMs": 3600000
-}
+{ "cwd": "/project", "content": "# Project spec\n...", "ttlMs": 3600000 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `cwd` | string | yes | Absolute path of the project that will own this block |
 | `content` | string | yes | Document content (min 1 char, max 50 MiB) |
 | `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active task for 24 h is eligible for eviction. |
 
-#### Response (201)
+Returns `{ "id": "cb_abc123" }`. Use this `id` as a `contextBlockIds` entry in any `mma:*` skill
+that supports it.
+
+### Delete a context block — `mma_context_block_delete`
 
 ```json
-{ "id": "cb_abc123" }
+{ "cwd": "/project", "blockId": "cb_abc123" }
 ```
 
-Use this `id` as a `contextBlockIds` entry in any `mma:*` skill that supports it.
-
-### Delete a context block
-
-`DELETE /context-blocks/:id?cwd=<abs-path>`
-
-Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held by one or more active tasks — wait for those tasks to complete before deleting.
+Succeeds silently, or fails with `pinned` if the block is held by one or more active tasks (wait
+for those tasks to complete before deleting) or `not_found` for an unknown id.
 
 ## Full example
 
-```bash
-# Register spec document once
-ID=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"content\":$(jq -Rs . < /project/.mma/specs/2026-07-11-feature-design.md)}" \
-  "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
+```json
+// Register the spec document once
+mma_context_block_create({ "cwd": "/project", "content": "<contents of /project/.mma/specs/2026-07-11-feature-design.md>" })
+// -> { "id": "cb_abc123" }
 
-# Reference from a delegate call
-curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"type\":\"delegate\",\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]}" \
-  "http://localhost:$PORT/task?cwd=/project"
+// Reference it from a delegate call
+mma_run({ "cwd": "/project", "request": { "type": "delegate", "prompt": "Implement section 3 per spec", "contextBlockIds": ["cb_abc123"] } })
 ```
 
 ## Best practices
@@ -174,43 +83,10 @@ Inlining a 50KB spec into every delegate call's prompt.
 N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each call.
 
 ❌ **Forgetting to delete unused blocks**
-Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent tasks finish — or let idle expiry (24 h) evict them.
+Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly call `mma_context_block_delete` after the dependent tasks finish — or let idle expiry (24 h) evict them.
 
 ❌ **Trying to update a block's content**
 Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.
 
 ❌ **Deleting a block while a task still references it**
-Returns `409 pinned`. **Fix:** poll the dependent tasks to terminal first, then delete.
-
-## Error handling
-
-### HTTP status decision table
-
-| Status | Code | Action |
-|---|---|---|
-| `400` | `invalid_request` | Fix the request body or query params |
-| `401` | `unauthorized` | Verify token matches `~/.mma/auth-token` |
-| `403` | `forbidden` | `cwd` query param missing or out of scope |
-| `404` | `not_found` | Wrong `taskId` or resource does not exist |
-| `409` | `invalid_task_state` / `pinned` | Task in wrong state; check current state first |
-| `413` | `payload_too_large` | Reduce content size (context block or body) |
-| `429` | `rate_limited` | Wait `Retry-After` seconds, then retry |
-| `503` | `project_cap_exceeded` | Too many concurrent projects; wait and retry |
-| `5xx` | server error | Retry once after 2 s; escalate if it persists |
-
-### Network failures
-
-Retry up to 3 times with exponential backoff (1 s → 2 s → 4 s).
-If the server is unreachable, check that `mma serve` is running:
-```bash
-curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — see spec C13)
-```
-
-### Auth errors (401)
-
-```bash
-export MMA_AUTH_TOKEN=$(mma print-token)
-```
-
-The token persists across restarts at `~/.mma/auth-token`. It only changes if the file is manually deleted.
-
+Fails with `pinned`. **Fix:** poll the dependent tasks to terminal first, then delete.

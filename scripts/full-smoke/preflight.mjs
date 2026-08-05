@@ -156,8 +156,8 @@ function pluginSurfaceGate() {
   }
 
   // Hard secret gate: the live daemon token must appear NOWHERE in the artifact.
-  // The per-client installers legitimately substitute it into skill text; the
-  // plugin must not, because it is published.
+  // Nothing substitutes a token into skill text any more — skills are MCP-only —
+  // so this is a backstop against a future regression, not a live risk.
   const token = (() => { try { return readToken(); } catch { return null; } })();
   if (token && token.length > 8) {
     const offenders = [];
@@ -173,9 +173,126 @@ function pluginSurfaceGate() {
     walk(pluginDir);
     if (offenders.length > 0) {
       throw new AbortError('plugin-secret', `live auth token found in ${offenders.length} plugin file(s): ${offenders[0]}`,
-        'the plugin is distributable — never pass authToken to inlineIncludes when generating it');
+        'the plugin is distributable — no generated file may contain the live token');
     }
   }
+}
+
+/**
+ * MCP-only surface release gate.
+ *
+ * The central promise of the client-roster release: no shipped agent instruction
+ * teaches an agent to reach MMA over HTTP. REST is fully supported and
+ * documented — for Forge and other programmatic callers — but a skill that
+ * constructs a `curl` or a `POST /task` gives an agent a second, unreviewed way
+ * in, and one that carries a bearer token through prose.
+ *
+ * Asserted against files rather than a dispatch, like the other surface gates,
+ * and against BOTH trees: `packages/server/src/skills` is what the daemon
+ * installs, `plugin/` is what the marketplace publishes. A regression that only
+ * reached the generated artifact would pass a source-only check.
+ */
+function mcpOnlySurfaceGate() {
+  const PLUGIN_SKILLS = join(REPO_ROOT, 'plugin');
+  const TREES = [
+    ['packaged skills', SKILLS_ROOT],
+    ['generated plugin', PLUGIN_SKILLS],
+  ];
+  // Each pattern is a way an instruction could hand an agent the HTTP route.
+  const FORBIDDEN = [
+    [/\bcurl\s+-/, 'a curl invocation'],
+    [/POST\s+\/task\b/, 'a POST /task instruction'],
+    [/Authorization:\s*Bearer/i, 'an Authorization: Bearer header'],
+    [/127\.0\.0\.1:\d+\/task\b/, 'a direct /task URL'],
+    [/localhost:\d+\/task\b/, 'a direct /task URL'],
+    [/--target=(gemini-cli|codex-cli)\b/, 'a retired client id'],
+  ];
+
+  for (const [label, root] of TREES) {
+    if (!existsSync(root)) continue;
+    const offenders = [];
+    const walk = (dir) => {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, ent.name);
+        if (ent.isDirectory()) { walk(p); continue; }
+        if (!ent.name.endsWith('.md')) continue;
+        const body = readFileSync(p, 'utf8');
+        for (const [re, what] of FORBIDDEN) {
+          if (re.test(body)) offenders.push(`${p} (${what})`);
+        }
+      }
+    };
+    walk(root);
+    if (offenders.length > 0) {
+      throw new AbortError('mcp-only-surface', `${label}: ${offenders.length} file(s) carry HTTP dispatch — ${offenders[0]}`,
+        'shipped skills and commands are MCP-only; the unavailable-tool guidance is `mma clients`, never a curl or a REST route');
+    }
+  }
+
+  // The other half of the promise: when MCP is unavailable, every skill emits the
+  // SAME single actionable command. A skill that silently falls back, or names a
+  // client-specific command, breaks the shared-root contract (one physical copy
+  // in ~/.agents/skills is read by cursor, vscode AND opencode, so no
+  // client-specific text can be correct for all of them).
+  const skillDirs = readdirSync(SKILLS_ROOT, { withFileTypes: true })
+    .filter((e) => e.isDirectory()).map((e) => e.name);
+  const silent = skillDirs.filter((name) => {
+    const p = join(SKILLS_ROOT, name, 'SKILL.md');
+    return existsSync(p) && !readFileSync(p, 'utf8').includes('mma clients');
+  });
+  if (silent.length > 0) {
+    throw new AbortError('mcp-only-surface', `skills without the unavailable-MCP message: ${silent.join(', ')}`,
+      'every packaged skill must emit exactly `mma clients` when mma_run is unavailable');
+  }
+}
+
+/**
+ * Canonical client roster release gate.
+ *
+ * The roster in `packages/core/src/clients/client-id.ts` is the single source of
+ * truth every allowlist, config schema and capability row derives from. This
+ * gate proves the LIVE daemon agrees with it — `mma clients` is the user-facing
+ * answer, and it must report one record per canonical id, never a retired one.
+ */
+async function clientRosterGate(token) {
+  const expected = ['claude-code', 'claude-desktop', 'codex', 'antigravity', 'cursor', 'vscode', 'opencode', 'windsurf'];
+
+  const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
+  if (!existsSync(cliPath)) {
+    throw new AbortError('client-roster', `no built CLI at ${cliPath}`, 'run `npm run build` before the smoke');
+  }
+  let records;
+  try {
+    records = JSON.parse(execFileSync('node', [cliPath, 'clients', '--json'], { encoding: 'utf8' }));
+  } catch (e) {
+    throw new AbortError('client-roster', `\`mma clients --json\` failed: ${String(e.stderr || e.message || e)}`,
+      'the clients inventory must be readable without a running daemon');
+  }
+  const ids = records.map((r) => r.clientId);
+  if (JSON.stringify(ids) !== JSON.stringify(expected)) {
+    throw new AbortError('client-roster', `mma clients reported [${ids.join(', ')}]`,
+      `expected exactly the canonical roster in CLIENT_IDS order: [${expected.join(', ')}]`);
+  }
+  for (const record of records) {
+    for (const field of ['status', 'skillsInstalled', 'mcpRegistrationStatus', 'declaredState', 'detectedPresence']) {
+      if (!(field in record)) {
+        throw new AbortError('client-roster', `${record.clientId} inventory record is missing '${field}'`,
+          'every inventory record carries the provisioning status plus the roster inputs that decided it');
+      }
+    }
+  }
+
+  // The live daemon's own view must not disagree: GET /health reports drift for
+  // any declared client whose provisioning is unresolved.
+  const health = await fetch(`${BASE_URL}/health`).then((r) => r.json()).catch(() => null);
+  if (!health || !('status' in health)) {
+    throw new AbortError('client-roster', `GET /health returned ${JSON.stringify(health)}`,
+      'health must report ok|drift derived from the client inventory');
+  }
+  if (health.status !== 'ok' && health.status !== 'drift') {
+    throw new AbortError('client-roster', `GET /health status=${health.status}`, 'expected ok or drift');
+  }
+  void token;
 }
 
 export class AbortError extends Error {
@@ -259,6 +376,13 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   // Plugin-surface release gate: the committed marketplace artifact is fresh,
   // correctly namespaced, and carries no secret.
   pluginSurfaceGate();
+
+  // MCP-only release gate: no shipped instruction teaches the HTTP route, and
+  // every skill emits the one actionable unavailable-MCP command.
+  mcpOnlySurfaceGate();
+
+  // Canonical client roster: the live inventory matches CLIENT_IDS exactly.
+  await clientRosterGate(token);
 
   const ctx = { token, serverVersion, bootId, serverBranch, installId,
                 runStartTs: new Date().toISOString(), databaseUrl: null,

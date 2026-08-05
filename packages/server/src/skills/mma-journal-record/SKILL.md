@@ -31,13 +31,10 @@ Record team knowledge to the persistent journal via a fire-and-forget mma worker
 - You want to retrieve past entries → `mma-journal-recall`
 - You're mid-task and want to pause → that's what `blockedBy` is for; journal is for conclusions, not temporary blockers
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -84,22 +81,11 @@ Pass `reviewPolicy: "reviewed"` to force a full LLM review pass (e.g. to sanity-
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "journal_record",
-    "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged.",
-    "topic": "grouped-dispatch"
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "journal_record", "records": [ { "prompt": "Tried worker self-report for grouped-dispatch cancellation; dropped it. Lesson: use getRealFilesChanged.", "topic": "grouped-dispatch" } ] } }
+```
 
 @include _shared/response-shape.md
 
@@ -141,5 +127,3 @@ Write-route tasks (delegate / execute-plan / journal) do **not** register termin
 In a parent-aware multi-repo flow, records go to the **parent** workspace **journal** (one product-level
 store, reached with `cwd = parent workspace`). Pass `topic = <repo-slug>` (normalized **lowercase-kebab**,
 e.g. `multi-model-agent`) to scope a learning to the repo it came from. Single-project mode is unchanged.
-
-@include _shared/error-handling.md

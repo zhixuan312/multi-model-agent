@@ -39,13 +39,10 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 - No plan file → `mma-delegate` (pass the prompt directly)
 - The "plan" is in conversation only, not on disk → write it to disk first, or use `mma-delegate`
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -77,50 +74,20 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"execute_plan","tasks":["3. Migrate database schema"],"target":{"paths":["/project/.mma/plans/2026-07-11-feature.md"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "execute_plan", "tasks": ["3. Migrate database schema"], "target": { "paths": ["/project/.mma/plans/2026-07-11-feature.md"] } } }
+```
 
 ## Response shapes
 
-### POST /task?cwd=<abs> — dispatch response (202)
+`mma_run` returns either the terminal envelope inline (short tasks) or a `{ taskId, type, cwd }`
+handle for longer ones — poll with `mma_task_get`, block with `mma_task_wait`, cancel with
+`mma_task_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the tool
+call error shape.
 
-```json
-{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
-```
-
-Use `taskId` to poll. `statusUrl` is a convenience pointer.
-
-### GET /task/:taskId — polling response
-
-The HTTP status is the state discriminator:
-
-| Status | Meaning |
-|---|---|
-| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
-| `200 application/json` | Terminal — body is the task envelope below |
-| `404` / `401` / `5xx` | Error — see Error response below; stop polling |
-
-### Error response (4xx / 5xx)
-
-```json
-{
-  "error": "<code>",
-  "message": "<human-readable>",
-  "details": { /* optional structured context, e.g. fieldErrors for 400 */ }
-}
-```
-
-`details` is optional and present only when the server has structured additional context.
+@include _shared/response-shape.md
 
 ## Natural next step
 
@@ -162,5 +129,3 @@ you submit, on whatever branch that checkout already has. **You own the branch**
 your task branch BEFORE dispatching; the engine never creates a branch or a worktree, it commits your
 work on yours. A **non-git** target is edited in-place too, just with no commit. No new execution task type
 is introduced, and git is never forced.
-
-@include _shared/error-handling.md

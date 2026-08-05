@@ -1,3 +1,7 @@
+// Client identity
+export { CLIENT_IDS } from './clients/client-id.js';
+export type { ClientId, ClientState, CallerClient } from './clients/client-id.js';
+
 // Config
 export { loadConfigFromFile, loadAuthToken } from './config/load.js';
 export { collectInlineApiKeyOffenders } from './config/config-resolver.js';

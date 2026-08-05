@@ -19,9 +19,9 @@ import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-export type StoredExecutionState = 'pending' | 'complete' | 'failed' | 'cancelled' | 'interrupted';
+type StoredExecutionState = 'pending' | 'complete' | 'failed' | 'cancelled' | 'interrupted';
 
-export interface ExecutionRecord {
+interface ExecutionRecord {
   id: string;
   type: string;
   cwd: string;

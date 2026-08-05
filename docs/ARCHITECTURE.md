@@ -25,9 +25,11 @@ Stage 1 — INGRESS  (transport boundary — thin adapters only)
                           Builds a CallerContext (application/caller-context.ts)
                           from the request; owns no task logic.
   1.4  MCP adapter        server/src/mcp/{mcp-adapter,tool-surface}.ts
-                          (POST /mcp, streamable HTTP, stateless; tools mma_run /
-                          mma_task_get / mma_task_wait / mma_task_cancel over the
-                          SAME ExecutionRuntime — MCP wire types never leave this
+                          (POST /mcp, streamable HTTP, stateless; seven tools —
+                          mma_run / mma_task_get / mma_task_wait / mma_task_list /
+                          mma_task_cancel / mma_context_block_create /
+                          mma_context_block_delete — over the SAME
+                          ExecutionRuntime — MCP wire types never leave this
                           directory; mma_run's request schema is generated from
                           the task-input Zod union, never hand-written)
 
@@ -103,8 +105,9 @@ Layer L.3  Skill prompts    core/src/skills/<type>/implement.md + review.md  (wo
 Layer L.4  Pipeline         core/src/unified/two-phase-pipeline.ts      (unified two-phase pipeline)
 Layer L.5  Refiner schema   core/src/unified/refiner-schemas.ts          (per-type output Zod validation)
 Layer L.6  Skill markdown   server/src/skills/mma-<type>/SKILL.md        (caller-facing prompt)
-Layer L.7  Installer hook   server/src/skill-install/skill-installers/{claude-code,
-                            cursor,codex-cli,gemini-cli}.ts via manifest.ts  (per-client writer)
+Layer L.7  Installer hook   server/src/provisioning/writers/{claude-code,claude-desktop,
+                            codex,antigravity,cursor,opencode,windsurf}.ts via
+                            provisioning/service.ts  (per-client, ownership-safe writer)
 Layer L.8  Contract goldens tests/contract/goldens/endpoints/<type>-<stage>.json +
                             routes.json + observability/event-manifest.json
 ```
@@ -169,10 +172,13 @@ C.6  State stores                core/src/unified/task-registry.ts (in-memory),
                                 then mark executions interrupted/retryable),
                                 core/src/stores/{context-block-tool,
                                 project-context-registry}.ts
-C.7  Distribution                server/src/skill-install/skill-installers/{claude-code,
-                                cursor,codex-cli,gemini-cli}.ts +
+C.7  Distribution                server/src/provisioning/{capability-registry,roster,
+                                owned-files,registration-writer,marker-store,
+                                service,inventory,real-port}.ts +
+                                server/src/provisioning/writers/{claude-code,
+                                claude-desktop,codex,antigravity,cursor,opencode,
+                                windsurf}.ts +
                                 server/src/skill-install/{discover,manifest,
-                                skill-manifest-sync,disabled-state,
                                 include-utils}.ts +
                                 server/src/skills/mma-*/SKILL.md
 ```
@@ -228,6 +234,7 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `packages/core/src/types.ts` (654 LOC dumping ground) | Cross-cutting only; domain types in `types/` (task-spec, run-result, config, enums) |
 | `packages/mcp/` | Deleted. All MCP-layer concerns now live under `packages/server/` (HTTP service) + `packages/server/src/skills/` (distributed skill markdown) |
 | `packages/server/src/install/` | Renamed to `packages/server/src/skill-install/` |
+| `packages/server/src/skill-install/skill-installers/{claude-code,cursor,codex-cli,gemini-cli}.ts` + `manifest.ts`-driven per-client writer dispatch, `skill-manifest-sync.ts`, `disabled-state.ts` (`~/.mma/skills-disabled.json`) | Deleted. Replaced by `packages/server/src/provisioning/` — a capability registry (`capability-registry.ts`) over the canonical `ClientId` roster (`packages/core/src/clients/client-id.ts`), a declared-over-detected roster resolver (`roster.ts`), ownership-safe registration/skill writers (`registration-writer.ts`, `owned-files.ts`, `writers/*.ts`), durable provisioning markers (`marker-store.ts`), and one atomic orchestrator (`service.ts`). The `codex-cli` / `gemini-cli` client ids are gone — the canonical roster is `claude-code`, `claude-desktop`, `codex`, `antigravity`, `cursor`, `vscode`, `opencode`, `windsurf`. The sticky off-switch is now `clients.<ClientId>: 'off'` in `~/.mma/config.json`, not a sentinel file |
 | Clarification flow (clarification-store, force-clarification, confirm route, `mma-clarifications` skill) | Deleted in v4.0. Routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |
 | `core/src/intake/` directory (pipeline, classify, resolve, field-inferer, brief-compiler classes) | Removed. Skills are plain markdown per type at `core/src/skills/<type>/` |
 | 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 6 |

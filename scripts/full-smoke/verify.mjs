@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { SCHEMA_VERSION } from './config.mjs';
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
@@ -215,10 +216,35 @@ export function verify(rec) {
     out.push(C('mcp-initialize', serverInfo?.name === 'multi-model-agent' ? 'PASS' : 'FAIL',
       `serverInfo=${JSON.stringify(serverInfo)}`));
 
+    // A deliberate golden, not a derived list: growing or shrinking the MCP tool
+    // surface is a wire-contract change every consumer feels, so it should require
+    // editing this line. (It went stale once — `mma_task_list` and the two
+    // context-block tools shipped while this still expected the original four.)
     const toolNames = (m.tools?.json?.result?.tools ?? []).map((t) => t.name).sort();
-    const expected = ['mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_wait'];
+    const expected = [
+      'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
+      'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+    ];
     out.push(C('mcp-tools', JSON.stringify(toolNames) === JSON.stringify(expected) ? 'PASS' : 'FAIL',
       `tools=${toolNames.join(',')}`));
+
+    // And what the published plugin TELLS users it exposes must be the same set.
+    // The README is generated from a hand-written sentence in build-plugin.ts, so
+    // it is exactly the kind of thing that drifts silently from the live surface —
+    // a user reads it, asks for a tool that no longer exists, and the failure looks
+    // like their mistake.
+    try {
+      const readme = readFileSync(new URL('../../plugin/README.md', import.meta.url), 'utf8');
+      const advertised = [...readme.matchAll(/`(mma_[a-z_]+)`/g)].map((x) => x[1]);
+      const missing = toolNames.filter((t) => !advertised.includes(t));
+      const phantom = [...new Set(advertised)].filter((t) => !toolNames.includes(t));
+      out.push(C('mcp-tools-documented', missing.length === 0 && phantom.length === 0 ? 'PASS' : 'FAIL',
+        missing.length === 0 && phantom.length === 0
+          ? `plugin README advertises exactly the ${toolNames.length} live tools`
+          : `undocumented=[${missing.join(',')}] advertised-but-absent=[${phantom.join(',')}]`));
+    } catch (err) {
+      out.push(C('mcp-tools-documented', 'FAIL', `could not read plugin/README.md: ${err.message}`));
+    }
 
     // mma_run's request schema is GENERATED from the task-input Zod union — one
     // variant per task type. A hand-written schema would drift; this catches it.
@@ -484,6 +510,45 @@ export function verify(rec) {
     const hasFields = p.taskId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
     out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
       `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
+
+    // ⑫b A running task must say WHAT it is, not just how far along it is. A poll
+    //     used to answer with a phase name that reads identically for a spec, a
+    //     review and an investigation, while the type had been known since
+    //     admission. `phaseElapsedMs` is asserted here too because it is the field
+    //     that silently went missing on one wire when the two running-snapshot
+    //     shapes were maintained by hand.
+    const identity = p.taskId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
+    out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
+      `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
+  }
+
+  // ⑫c Identity is the SAME across admission, every poll, and the terminal
+  //     envelope. Three surfaces, one answer — an agent reading back through a
+  //     transcript finds the handle where it was returned, not where the task was
+  //     submitted, so a disagreement between them is a real defect rather than a
+  //     cosmetic one. Only the live daemon can prove this; a unit test asserts a
+  //     shared helper, not that both wires actually call it.
+  if (rec.admission && r?.task?.taskId) {
+    const a = rec.admission;
+    const p = rec.polling202;
+    // `taskId` and `type` must be PRESENT on admission and on the terminal
+    // envelope, not merely non-contradictory: an absent field agrees with
+    // everything, which is exactly how a surface that silently stopped
+    // reporting identity would slip through a pure equality check.
+    const agree = (field, required) => {
+      const surfaces = [['admit', a[field]], ['final', r.task[field]]];
+      if (p) surfaces.push(['poll', p[field]]);
+      const present = surfaces.filter(([, v]) => v !== undefined);
+      if (required && present.length !== surfaces.length) return false;
+      return present.every(([, v]) => v === present[0][1]);
+    };
+    const mismatched = [['taskId', true], ['type', true], ['subtype', false]]
+      .filter(([f, required]) => !agree(f, required))
+      .map(([f]) => f);
+    out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
+      mismatched.length === 0
+        ? `taskId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
+        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
   }
 
   // ⑬ Audit findings: weight field + evidence section prefix

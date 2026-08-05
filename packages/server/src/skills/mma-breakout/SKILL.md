@@ -83,8 +83,9 @@ When the user signals that the breakout is complete:
    - `type` from `decision | design | behavior | process | knowledge | style`
 3. Show that distilled list to the user before any recording occurs.
 4. Let the user review, remove, reorder, edit, or approve items.
-5. After approval, dispatch exactly one `journal_record` task with the full confirmed
-   batch and one shared `topic` value.
+5. After approval, dispatch exactly one `journal_record` task (via the `mma_run` MCP tool; if it
+   is not available in this session, run `mma clients`) with the full confirmed batch and one
+   shared `topic` value.
 6. After the `journal_record` dispatch completes, dismiss the teammate with
    `TaskStop`.
 

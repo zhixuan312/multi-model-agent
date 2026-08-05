@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import minimist from 'minimist';
 import { buildPlugin, PLUGIN_NAME } from '../plugin/build-plugin.js';
 
-export interface PluginCliDeps {
+interface PluginCliDeps {
   argv: string[];
   version: string;
   /** Daemon port from the loaded config (falls back to the default). */
@@ -89,6 +89,6 @@ export function runPlugin(deps: PluginCliDeps): number {
 }
 
 /** Default home dir helper so index.ts stays terse. */
-export function defaultHomeDir(): string {
+function defaultHomeDir(): string {
   return os.homedir();
 }

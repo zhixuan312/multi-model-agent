@@ -31,8 +31,9 @@ Everything else — how explore fans out, what a journal entry should capture, h
 audit weighs findings — lives in that skill, not here. mma-flow carries only the
 stage order, the wiring, and the flow-level policy (the **Common** blocks).
 
-Every worker dispatch is `POST /task?cwd=<repo-root>`; poll `GET /task/:taskId` to a
-terminal `200`. "Main agent" = you, in-session; "worker" = a delegated MMA task.
+Every worker dispatch calls the `mma_run` MCP tool with `cwd=<repo-root>`; poll with
+`mma_task_get` / `mma_task_wait` to a terminal result. If `mma_run` is not available in this
+session, run `mma clients`. "Main agent" = you, in-session; "worker" = a delegated MMA task.
 
 ## Stages
 

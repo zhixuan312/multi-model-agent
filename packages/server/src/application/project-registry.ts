@@ -3,11 +3,11 @@ import { validateCwd } from './cwd-validator.js';
 
 export type ReserveError = 'project_cap' | 'invalid_cwd' | 'missing_cwd' | 'cwd_not_dir' | 'forbidden_cwd';
 
-export type ReserveResult =
+type ReserveResult =
   | { ok: true; projectContext: ProjectContext; created: boolean }
   | { ok: false; error: ReserveError; message: string };
 
-export interface ProjectRegistryOptions {
+interface ProjectRegistryOptions {
   cap: number;
   onProjectCreated?: (cwd: string) => void;
   /** Returns true when the project at this canonical cwd has in-flight work and

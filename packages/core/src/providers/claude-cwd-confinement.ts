@@ -110,7 +110,7 @@ function isUrlFragment(p: string): boolean {
   return p.startsWith('//') || /^\/[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}\//.test(p);
 }
 
-export type HookResult = {
+type HookResult = {
   hookSpecificOutput?: {
     hookEventName: 'PreToolUse';
     permissionDecision: 'deny';

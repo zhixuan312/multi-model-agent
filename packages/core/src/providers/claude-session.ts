@@ -142,10 +142,16 @@ export class ClaudeSession implements Session {
     // auth headers rather than picking one). No baseUrl means api.anthropic.com,
     // where Bearer is reserved for OAuth — key stays on x-api-key alone.
     const proxied = Boolean(this.args.baseUrl);
-    const env: Record<string, string | undefined> = {
-      ...process.env,
-      ...(this.args.baseUrl && { ANTHROPIC_BASE_URL: this.args.baseUrl }),
-    };
+    const env: Record<string, string | undefined> = { ...process.env };
+    // The destination is config's to decide, never the ambient environment's, so
+    // an unset baseUrl must DELETE the inherited value rather than merely decline
+    // to override it. Inheriting it breaks two things at once: the configured key
+    // goes to a host this session never chose, and `proxied` — derived from config
+    // — stays false, so the Bearer header that host would need never goes out. The
+    // result is a leaked key and a hung turn, which is precisely the failure the
+    // paragraph above exists to prevent.
+    if (this.args.baseUrl) env.ANTHROPIC_BASE_URL = this.args.baseUrl;
+    else delete env.ANTHROPIC_BASE_URL;
     // Cleared unconditionally when proxied: an inherited Anthropic key must
     // never outrank the configured one, nor leak to a third-party endpoint.
     if (proxied || this.args.apiKey) {

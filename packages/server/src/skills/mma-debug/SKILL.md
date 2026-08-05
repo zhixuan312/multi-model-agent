@@ -26,13 +26,10 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 - You don't know what's broken yet → use `mma-investigate` first to map the area
 - You already know the fix → skip debug, dispatch `mma-delegate` with the fix
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -60,18 +57,11 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"debug","prompt":"Tests fail on CI only","target":{"paths":["/project/src/config.ts"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "debug", "prompt": "Tests fail on CI only", "target": { "paths": ["/project/src/config.ts"] } } }
+```
 
 @include _shared/response-shape.md
 
@@ -141,5 +131,3 @@ The block is registered server-side at task completion; no caller action is need
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** A debug session with zero findings is a success — it means "I looked hard and found nothing." Check `output.summary.findings.length === 0`.
-
-@include _shared/error-handling.md

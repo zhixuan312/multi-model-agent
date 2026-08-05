@@ -17,7 +17,7 @@ const execFileAsync = promisify(execFile);
  * only ever edits files.
  */
 
-export interface RepoBaseline {
+interface RepoBaseline {
   /** HEAD before the worker ran. `null` for a non-git target. */
   readonly head: string | null;
   /** The branch the CALLER checked out. Committing anywhere else would be a silent mis-delivery. */

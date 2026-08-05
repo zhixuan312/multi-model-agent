@@ -26,13 +26,10 @@ Dispatch structured design decisions to a complex worker that writes a formal sp
 - You already have a spec and need a plan → `mma-plan`
 - You need to audit an existing spec → `mma-audit subtype:spec`
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -80,22 +77,11 @@ If the `components` field is provided, only those components need to be present 
 
 ## Full example
 
-```bash
-RESULT=$(curl -f -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "spec",
-    "prompt": "Database-free claims demo — file-backed default with parity proof",
-    "target": { "inline": "## Context\n### Background\nThe team maintains a self-service claims demo...\n## Problem\nThe demo cannot run without first standing up a database...\n## Goals & Requirements\n### Goals\n1. Instant start — no database needed\n## Alternatives\n### Option A: Repo seam + file hydration (recommended)\n### Option B: Embedded store\n## Technical Design\n### Proposed\nClaimsRepository interface + FileClaimsRepository\n## Testing Plan\nUnit + integration + parity\n## User Stories & Tasks\n- [ ] AC-1: Runs without database" }
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "spec", "prompt": "Database-free claims demo — file-backed default with parity proof", "target": { "inline": "## Context\n### Background\nThe team maintains a self-service claims demo...\n## Problem\nThe demo cannot run without first standing up a database...\n## Goals & Requirements\n### Goals\n1. Instant start — no database needed\n## Alternatives\n### Option A: Repo seam + file hydration (recommended)\n### Option B: Embedded store\n## Technical Design\n### Proposed\nClaimsRepository interface + FileClaimsRepository\n## Testing Plan\nUnit + integration + parity\n## User Stories & Tasks\n- [ ] AC-1: Runs without database" } } }
+```
 
 @include _shared/response-shape.md
 
@@ -149,5 +135,3 @@ In multi-repo mode the **parent workspace owns the spec output in multi-repo mod
 shared artifact under the parent `.mma/specs/`, never forked per repo.
 **One shared spec feeds per-repo plans** (mma-plan then fans out one plan per involved repo).
 Single-project mode is unchanged.
-
-@include _shared/error-handling.md

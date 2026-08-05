@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Breaking Changes
+
+- **Canonical client roster replaces the old `codex-cli` / `gemini-cli` identity.** `X-MMA-Client` and
+  every internal client vocabulary now use `codex` (not `codex-cli`); `gemini-cli` is gone entirely —
+  Gemini CLI stopped serving individual tiers on 2026-06-18, so it can no longer be provisioned as its
+  own client. The canonical eight-client roster is `claude-code`, `claude-desktop`, `codex`,
+  `antigravity`, `cursor`, `vscode`, `opencode`, `windsurf` (`packages/core/src/clients/client-id.ts`).
+  The `gemini` install target is dropped along with it.
+- **Detection alone no longer provisions anything.** Provisioning is now declared-over-detected: a
+  client that MMA merely detects on disk but that is not declared in config is reported `suggested`
+  by `mma clients` and left untouched — nothing is installed, nothing is removed. Declare the clients
+  you use via `clients.<ClientId>: "on" | "off"` in `~/.mma/config.json`, or force a one-off with
+  `mma sync-skills --target=<ClientId>` / `mma mcp install <ClientId>`. **Migration:** if you relied on
+  `mma sync-skills`'s old auto-detect-everything default, add an explicit `clients` block (or pass
+  `--target=<ClientId>` / `--all-targets`) or your next `sync-skills` run will provision nothing.
+- **`mma mcp install` now requires a `ClientId` argument.** It previously installed Claude Desktop's
+  registration unconditionally; it now fully provisions (MCP registration + skills where applicable)
+  exactly the one named client — any of the eight canonical ids. `mma mcp uninstall` (no argument)
+  still manages Claude Desktop's config specifically.
+- **`~/.mma/skills-disabled.json` is deleted.** The sticky off-switch is now `clients.<ClientId>: "off"`
+  persisted directly to `~/.mma/config.json` by `mma disable` — one durable declaration instead of a
+  separate sentinel file `sync-skills` had to cross-check.
+- **Every packaged skill, command, and the generated Claude Code plugin are MCP-only.** No shipped
+  agent instruction constructs a `curl` call, a `POST /task` request, or an `Authorization: Bearer`
+  header, or names a retired `--target=gemini-cli|codex-cli` value; the unavailable-tool guidance is
+  uniformly `mma clients`. REST remains fully supported and documented — for Forge and other
+  programmatic callers, never as agent-facing instruction (see `packages/server/README.md#rest-api`).
+- **Provisioning proves ownership before it replaces or deletes anything.** MMA now writes into
+  files and directories you also own — your clients' MCP configs, your skill roots — so nothing is
+  touched that MMA cannot prove it put there. An installed skill directory carries
+  `.mma-install.json` recording the release and a byte-exact digest of its contents; a directory
+  whose contents no longer match that record, or that contains a symlink (at any depth, including
+  standing in for the directory itself), is preserved untouched and reported as a conflict rather
+  than replaced. An MCP entry is recognised as MMA's only when its connection details are exactly
+  what MMA itself writes, so a hand-written `mma` entry is refused rather than overwritten, and
+  every config write goes through a temp file, an fsync and an atomic rename after re-reading the
+  bytes it merged against.
+
+  Turning a client on or off is **atomic**: registration and skills both land, or neither does. A
+  durable marker under `server.stateDir` makes that survive a crash — on the next run, or at daemon
+  start, the interrupted operation is either finished or rolled back to a verified backup, and a
+  client with an unresolved marker reports `failed` from `mma clients` until it is. Shared skill
+  roots are reference-counted: `~/.agents/skills` serves cursor, vscode and opencode, and turning
+  one of them off does not strip a root the others still consume.
+- **New MCP tools: `mma_context_block_create` / `mma_context_block_delete`.** The MCP surface is now
+  seven tools — the five already documented (`mma_run`, `mma_task_get`, `mma_task_wait`,
+  `mma_task_list`, `mma_task_cancel`) plus context-block registration, so an MCP-only client can do
+  everything the REST `/context-blocks` endpoints do without falling back to HTTP.
+
+### Added
+
+- **A task says what it is, everywhere it is referenced.** `mma_run` handed back a bare
+  `{ taskId }`, and every poll answered with a phase name — `implementing` | `reviewing` — that
+  reads identically for a spec, a review and an investigation. The type was known from the moment
+  of admission (`TaskEntry.tool`, set at registration) and was read on the way out *only* to decide
+  whether to attach `totalTasks`: identity was in hand and thrown away. Handles, polls and cancel
+  acknowledgements now all carry `type`, `cwd`, and `subtype` for an `audit` — on **both** wires,
+  built by one shared `taskIdentity()`/`buildRunningSnapshot()` rather than the two hand-maintained
+  copies they replace (which had already drifted once over `phaseElapsedMs`).
+- **`mma_task_list` — what is running right now.** REST could always answer this via `GET /status`;
+  over MCP the only askable question was "what is *this* id doing?", which presumes the caller still
+  has the id. Lists every in-flight task with its type, project, phase, elapsed time and current
+  activity, oldest first, optionally narrowed to one `cwd`.
+- **The execution monitor names the task it is monitoring.** The panel heading was `Running` for all
+  twelve task types; it is now `spec · Running`, `audit (plan) · done`. The terminal envelope has
+  always carried `task.type` and the panel ignored it. The short task ref now also survives into the
+  terminal view — a finished panel is exactly when you go looking for the run in the daemon log.
+
+### Changed
+
+- **`poll.tool` is now `poll.mcpTool` on the `mma_run` handle.** `tool` is what the registry calls
+  the *task* type; two meanings under one key is the confusion this change exists to remove.
+
 ## [5.17.0] - 2026-08-02
 
 Claude Desktop support, and a live execution monitor that renders inside it. MMA now speaks stdio

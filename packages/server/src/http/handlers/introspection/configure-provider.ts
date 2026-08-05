@@ -35,15 +35,15 @@ const configureProviderSchema = z.object({
   dryRun: z.boolean().default(true),
 });
 
-export type ConfigureProviderRequest = z.infer<typeof configureProviderSchema>;
+type ConfigureProviderRequest = z.infer<typeof configureProviderSchema>;
 
-export interface ProbeResult {
+interface ProbeResult {
   reachable: boolean;
   modelListed: boolean | null;
   detail: string;
 }
 
-export interface ConfigureProviderResponse {
+interface ConfigureProviderResponse {
   verified: boolean;
   reason: string;
   applied: boolean;

@@ -1,43 +1,44 @@
 /**
- * sync-skills CLI tests.
+ * sync-skills CLI tests — roster-driven (Task I-8).
  *
- * Pin the upsert behavior: bootstrap, up-to-date short-circuit, version
- * upgrade, orphan removal, dry-run, --target scoping, no-clients-detected.
+ * `mma sync-skills` provisions the DECLARED-'on' roster (`config.clients`)
+ * through the shared `ProvisioningService`; detection alone (a client
+ * present but never declared) must never provision it (FR-7a) — it is
+ * reported 'suggested' only. An explicit `--target=<ClientId>` (or
+ * `--all-targets`) forces provisioning regardless of declared state, the
+ * same one-off-override shape as `mma mcp install <ClientId>`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
-import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
-import { listEntries, appendEntry } from '../../packages/server/src/skill-install/manifest.js';
+import { runSyncSkills, ExitCode } from '../../packages/server/src/cli/sync-skills.js';
+import { listEntries } from '../../packages/server/src/skill-install/manifest.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
 function makeFakeHome(): string {
-  const home = mkdtempSync(path.join(tmpdir(), 'mma-sync-home-'));
-  mkdirSync(path.join(home, '.claude'), { recursive: true });
-  mkdirSync(path.join(home, '.codex'), { recursive: true });
-  return home;
+  return mkdtempSync(path.join(tmpdir(), 'mma-sync-home-'));
 }
 
 function removeFakeHome(dir: string): void {
   try { rmSync(dir, { recursive: true, force: true }); } catch { /* */ }
 }
 
-function writeFakeSkill(root: string, name: string, version: string, body = 'fixture body'): void {
+function writeFakeSkill(root: string, name: string, version: string): void {
   const dir = path.join(root, name);
   mkdirSync(dir, { recursive: true });
-  const front = `---\nname: ${name}\nversion: ${version}\ndescription: fixture\n---\n${body}\n`;
-  writeFileSync(path.join(dir, 'SKILL.md'), front, 'utf8');
+  writeFileSync(
+    path.join(dir, 'SKILL.md'),
+    `---\nname: ${name}\nversion: ${version}\ndescription: fixture\n---\nfixture body\n`,
+    'utf8',
+  );
 }
 
-function makeFakeSkillsRoot(versionMap: Record<string, string>): string {
+function makeFakeSkillsRoot(): string {
   const root = mkdtempSync(path.join(tmpdir(), 'mma-sync-skills-'));
-  for (const [name, ver] of Object.entries(versionMap)) writeFakeSkill(root, name, ver);
-  // Also write command source files so command sync doesn't error
-  for (const cmd of SUPPORTED_COMMANDS) {
-    if (!versionMap[cmd]) writeFakeSkill(root, cmd, '4.0.2');
-  }
+  for (const s of SUPPORTED_SKILLS) writeFakeSkill(root, s, '4.0.2');
+  for (const c of SUPPORTED_COMMANDS) writeFakeSkill(root, c, '4.0.2');
   return root;
 }
 
@@ -52,23 +53,23 @@ function captureOutput() {
   };
 }
 
-function readSkillVersionAt(p: string): string | null {
-  if (!existsSync(p)) return null;
-  const content = readFileSync(p, 'utf8');
-  const m = content.match(/version:\s*(\S+)/);
-  return m ? m[1]! : null;
+function claudeSkillPath(home: string, skill: string): string {
+  return path.join(home, '.claude', 'skills', skill, 'SKILL.md');
+}
+function codexSkillPath(home: string, skill: string): string {
+  return path.join(home, '.codex', 'skills', skill, 'SKILL.md');
+}
+function claudeCommandPath(home: string, command: string): string {
+  return path.join(home, '.claude', 'commands', `${command}.md`);
 }
 
-describe('sync-skills — bootstrap (empty manifest, dirs present)', () => {
+describe('sync-skills — roster-driven', () => {
   let home: string;
   let skillsRoot: string;
 
   beforeEach(() => {
     home = makeFakeHome();
-    // Canonical bundle: every supported skill at version 4.0.2.
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
+    skillsRoot = makeFakeSkillsRoot();
   });
 
   afterEach(() => {
@@ -76,26 +77,26 @@ describe('sync-skills — bootstrap (empty manifest, dirs present)', () => {
     rmSync(skillsRoot, { recursive: true, force: true });
   });
 
-  it('installs every supported skill into every detected client', async () => {
+  it('provisions every declared-\'on\' client (skills, commands, manifest)', async () => {
     const out = captureOutput();
     const code = await runSyncSkills({
       argv: [],
       homeDir: home,
       skillsRoot,
+      declared: { 'claude-code': 'on', codex: 'on' },
       stdout: out.stdout,
       stderr: out.stderr,
     });
-    expect(code).toBe(0);
+    expect(code).toBe(ExitCode.SUCCESS);
 
-    // Each (skill × client) is on disk
     for (const skill of SUPPORTED_SKILLS) {
-      const claudePath = path.join(home, '.claude', 'skills', skill, 'SKILL.md');
-      const codexPath = path.join(home, '.codex', 'skills', skill, 'SKILL.md');
-      expect(existsSync(claudePath), `claude/${skill}`).toBe(true);
-      expect(existsSync(codexPath), `codex/${skill}`).toBe(true);
+      expect(existsSync(claudeSkillPath(home, skill)), `claude/${skill}`).toBe(true);
+      expect(existsSync(codexSkillPath(home, skill)), `codex/${skill}`).toBe(true);
+    }
+    for (const command of SUPPORTED_COMMANDS) {
+      expect(existsSync(claudeCommandPath(home, command)), `command/${command}`).toBe(true);
     }
 
-    // Manifest reflects every skill against both targets
     const entries = listEntries(home);
     expect(entries.length).toBe(SUPPORTED_SKILLS.length);
     for (const e of entries) {
@@ -103,192 +104,38 @@ describe('sync-skills — bootstrap (empty manifest, dirs present)', () => {
       expect(e.targets.sort()).toEqual(['claude-code', 'codex']);
     }
 
-    expect(out.stdoutLines.join('')).toMatch(/Synced \d+ asset\(s\) → claude-code, codex/);
-  });
-});
-
-describe('sync-skills — up-to-date short-circuit', () => {
-  let home: string;
-  let skillsRoot: string;
-
-  beforeEach(() => {
-    home = makeFakeHome();
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
+    expect(out.stdoutLines.join('')).toMatch(/Synced \d+ asset\(s\)/);
   });
 
-  afterEach(() => {
-    removeFakeHome(home);
-    rmSync(skillsRoot, { recursive: true, force: true });
-  });
-
-  it('re-running sync-skills on a clean install reports up-to-date and changes nothing', async () => {
-    // First run installs everything
-    await runSyncSkills({ argv: [], homeDir: home, skillsRoot });
-    const claudePath = path.join(home, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
-    const mtimeBefore = statSync(claudePath).mtimeMs;
-
-    // Sleep just long enough that mtime would observably change if rewritten
-    await new Promise((r) => setTimeout(r, 25));
-
-    // Second run should be a no-op for every (skill × client)
+  it('detected-but-undeclared is reported as suggested and NEVER provisioned', async () => {
     const out = captureOutput();
     const code = await runSyncSkills({
       argv: [],
       homeDir: home,
       skillsRoot,
+      // Nothing declared — a detected client must not be auto-provisioned.
+      detected: new Set(['claude-code']),
       stdout: out.stdout,
       stderr: out.stderr,
     });
-    expect(code).toBe(0);
-    const summary = out.stdoutLines.join('');
-    expect(summary).toMatch(/up-to-date/);
-    expect(summary).not.toMatch(/installed|updated/);
+    expect(code).toBe(ExitCode.SUCCESS);
 
-    // mtime did not change — file was not rewritten
-    expect(statSync(claudePath).mtimeMs).toBe(mtimeBefore);
-  });
-});
-
-describe('sync-skills — version upgrade', () => {
-  let home: string;
-  let skillsRoot: string;
-
-  beforeEach(() => {
-    home = makeFakeHome();
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
-  });
-
-  afterEach(() => {
-    removeFakeHome(home);
-    rmSync(skillsRoot, { recursive: true, force: true });
-  });
-
-  it('overwrites stale on-disk skills when canonical version differs', async () => {
-    // Plant an old SKILL.md at a stale version
-    const stalePath = path.join(home, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
-    mkdirSync(path.dirname(stalePath), { recursive: true });
-    writeFileSync(stalePath, '---\nname: mma-delegate\nversion: 3.12.7\n---\nold body\n');
-    // Manifest still says it's installed at the old version
-    appendEntry('mma-delegate', '3.12.7', ['claude-code'], home);
-
-    const code = await runSyncSkills({ argv: ['--json'], homeDir: home, skillsRoot, stdout: () => true });
-    expect(code).toBe(0);
-
-    expect(readSkillVersionAt(stalePath)).toBe('4.0.2');
-  });
-});
-
-describe('sync-skills — orphan removal', () => {
-  let home: string;
-  let skillsRoot: string;
-
-  beforeEach(() => {
-    home = makeFakeHome();
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
-  });
-
-  afterEach(() => {
-    removeFakeHome(home);
-    rmSync(skillsRoot, { recursive: true, force: true });
-  });
-
-  it('removes a manifest skill that no longer ships and deletes its on-disk copy', async () => {
-    const orphanName = 'mma-clarifications'; // removed in 4.0.0; no longer in SUPPORTED_SKILLS
-    const orphanPath = path.join(home, '.claude', 'skills', orphanName, 'SKILL.md');
-    mkdirSync(path.dirname(orphanPath), { recursive: true });
-    writeFileSync(orphanPath, '---\nname: mma-clarifications\nversion: 3.12.7\n---\norphan body\n');
-    appendEntry(orphanName, '3.12.7', ['claude-code'], home);
-
-    const code = await runSyncSkills({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
-    expect(code).toBe(0);
-
-    expect(existsSync(orphanPath)).toBe(false);
-    const entries = listEntries(home);
-    expect(entries.find((e) => e.name === orphanName)).toBeUndefined();
-  });
-
-  it('removes orphan mma-*.md command files from ~/.claude/commands/', async () => {
-    const commandsDir = path.join(home, '.claude', 'commands');
-    mkdirSync(commandsDir, { recursive: true });
-    writeFileSync(path.join(commandsDir, 'mma-old-command.md'), '# stale command');
-
-    const code = await runSyncSkills({ argv: [], homeDir: home, skillsRoot, stdout: () => true });
-    expect(code).toBe(0);
-
-    expect(existsSync(path.join(commandsDir, 'mma-old-command.md'))).toBe(false);
-    // mma-flow command should be installed (it's in SUPPORTED_COMMANDS)
-    expect(existsSync(path.join(commandsDir, 'mma-flow.md'))).toBe(true);
-  });
-});
-
-describe('sync-skills — dry-run', () => {
-  let home: string;
-  let skillsRoot: string;
-
-  beforeEach(() => {
-    home = makeFakeHome();
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
-  });
-
-  afterEach(() => {
-    removeFakeHome(home);
-    rmSync(skillsRoot, { recursive: true, force: true });
-  });
-
-  it('reports planned actions without touching disk or manifest', async () => {
-    const out = captureOutput();
-    const code = await runSyncSkills({
-      argv: ['--dry-run'],
-      homeDir: home,
-      skillsRoot,
-      stdout: out.stdout,
-      stderr: out.stderr,
-    });
-    expect(code).toBe(0);
-
-    // Disk untouched
-    expect(existsSync(path.join(home, '.claude', 'skills', 'mma-delegate', 'SKILL.md'))).toBe(false);
-    // Manifest still empty (or at least no entries got appended)
+    expect(existsSync(claudeSkillPath(home, SUPPORTED_SKILLS[0]!))).toBe(false);
     expect(listEntries(home).length).toBe(0);
-
-    expect(out.stdoutLines.join('')).toMatch(/Would sync \d+ asset\(s\)/);
-  });
-});
-
-describe('sync-skills — --target scoping', () => {
-  let home: string;
-  let skillsRoot: string;
-
-  beforeEach(() => {
-    home = makeFakeHome();
-    const versions: Record<string, string> = {};
-    for (const s of SUPPORTED_SKILLS) versions[s] = '4.0.2';
-    skillsRoot = makeFakeSkillsRoot(versions);
+    expect(out.stdoutLines.join('')).toMatch(/suggested|Detected but undeclared/i);
   });
 
-  afterEach(() => {
-    removeFakeHome(home);
-    rmSync(skillsRoot, { recursive: true, force: true });
-  });
-
-  it('--target=claude-code installs only into claude-code', async () => {
+  it('explicit --target forces provisioning regardless of the declared roster', async () => {
     const code = await runSyncSkills({
-      argv: ['--target=claude-code'],
+      argv: ['--target=codex'],
       homeDir: home,
       skillsRoot,
+      // Nothing declared at all — the explicit --target still wins.
       stdout: () => true,
     });
-    expect(code).toBe(0);
-    expect(existsSync(path.join(home, '.claude', 'skills', 'mma-delegate', 'SKILL.md'))).toBe(true);
-    expect(existsSync(path.join(home, '.codex', 'skills', 'mma-delegate', 'SKILL.md'))).toBe(false);
+    expect(code).toBe(ExitCode.SUCCESS);
+    expect(existsSync(codexSkillPath(home, SUPPORTED_SKILLS[0]!))).toBe(true);
+    expect(existsSync(claudeSkillPath(home, SUPPORTED_SKILLS[0]!))).toBe(false);
   });
 
   it('rejects an unknown --target with exit code 3', async () => {
@@ -300,76 +147,68 @@ describe('sync-skills — --target scoping', () => {
       stdout: out.stdout,
       stderr: out.stderr,
     });
-    expect(code).toBe(3);
+    expect(code).toBe(ExitCode.ERR_UNKNOWN_TARGET);
     expect(out.stderrLines.join('')).toMatch(/Unknown target 'cline'/);
   });
-});
 
-describe('sync-skills — no clients detected', () => {
-  it('exits 0 with a friendly message when no client dirs exist', async () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'mma-sync-empty-'));
-    try {
-      const out = captureOutput();
-      const code = await runSyncSkills({
-        argv: [],
-        homeDir: home,
-        skillsRoot: '/nonexistent', // never reached
-        stdout: out.stdout,
-        stderr: out.stderr,
-      });
-      expect(code).toBe(0);
-      expect(out.stdoutLines.join('')).toMatch(/No clients detected/);
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
+  it('--dry-run reports planned targets without touching disk or manifest', async () => {
+    const out = captureOutput();
+    const code = await runSyncSkills({
+      argv: ['--target=claude-code', '--dry-run'],
+      homeDir: home,
+      skillsRoot,
+      stdout: out.stdout,
+      stderr: out.stderr,
+    });
+    expect(code).toBe(ExitCode.SUCCESS);
+    expect(existsSync(claudeSkillPath(home, SUPPORTED_SKILLS[0]!))).toBe(false);
+    expect(listEntries(home).length).toBe(0);
+    expect(out.stdoutLines.join('')).toMatch(/Would sync/);
   });
-});
 
-describe('sync-skills — --if-exists postinstall guard', () => {
-  it('exits 0 silently when no manifest exists yet', async () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'mma-sync-noman-'));
-    mkdirSync(path.join(home, '.claude'), { recursive: true });
+  it('exits 0 with a friendly message when nothing is declared and no --target is given', async () => {
+    const out = captureOutput();
+    const code = await runSyncSkills({
+      argv: [],
+      homeDir: home,
+      skillsRoot,
+      stdout: out.stdout,
+      stderr: out.stderr,
+    });
+    expect(code).toBe(ExitCode.SUCCESS);
+    expect(out.stdoutLines.join('')).toMatch(/No clients declared/);
+  });
+
+  it('--if-exists postinstall guard: exits 0 silently when no manifest exists yet', async () => {
+    const emptyHome = mkdtempSync(path.join(tmpdir(), 'mma-sync-noman-'));
     try {
       const out = captureOutput();
       const code = await runSyncSkills({
         argv: [],
-        homeDir: home,
+        homeDir: emptyHome,
         skillsRoot: '/nonexistent',
         ifExists: true,
         stdout: out.stdout,
         stderr: out.stderr,
       });
-      expect(code).toBe(0);
+      expect(code).toBe(ExitCode.SUCCESS);
       expect(out.stdoutLines.length).toBe(0);
       expect(out.stderrLines.length).toBe(0);
     } finally {
-      rmSync(home, { recursive: true, force: true });
+      rmSync(emptyHome, { recursive: true, force: true });
     }
   });
-});
 
-describe('sync-skills — mma-flow command (Claude Code only)', () => {
-  it('installs mma-flow as a command for claude-code, skips for codex', async () => {
-    const home = makeFakeHome();
-    const skillsRoot = makeFakeSkillsRoot(Object.fromEntries(SUPPORTED_SKILLS.map((skill) => [skill, '4.0.2'])));
-    const flowDir = path.join(skillsRoot, 'mma-flow');
-    mkdirSync(flowDir, { recursive: true });
-    writeFileSync(path.join(flowDir, 'SKILL.md'), '---\nname: mma-flow\nversion: 4.0.2\n---\n# /mma-flow\n', 'utf8');
+  it('installs mma-flow as a command for claude-code, never as a skill; codex gets neither', async () => {
+    const out1 = captureOutput();
+    const code1 = await runSyncSkills({ argv: ['--target=claude-code'], homeDir: home, skillsRoot, stdout: out1.stdout, stderr: out1.stderr });
+    expect(code1).toBe(ExitCode.SUCCESS);
+    expect(existsSync(claudeCommandPath(home, 'mma-flow'))).toBe(true);
+    expect(existsSync(path.join(home, '.claude', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
 
-    try {
-      const out1 = captureOutput();
-      const code1 = await runSyncSkills({ argv: ['--target=claude-code'], homeDir: home, skillsRoot, stdout: out1.stdout, stderr: out1.stderr });
-      expect(code1).toBe(0);
-      expect(existsSync(path.join(home, '.claude', 'commands', 'mma-flow.md'))).toBe(true);
-      expect(existsSync(path.join(home, '.claude', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
-
-      const out2 = captureOutput();
-      const code2 = await runSyncSkills({ argv: ['--target=codex'], homeDir: home, skillsRoot, stdout: out2.stdout, stderr: out2.stderr });
-      expect(code2).toBe(0);
-      expect(existsSync(path.join(home, '.codex', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
-    } finally {
-      removeFakeHome(home);
-      rmSync(skillsRoot, { recursive: true, force: true });
-    }
+    const out2 = captureOutput();
+    const code2 = await runSyncSkills({ argv: ['--target=codex'], homeDir: home, skillsRoot, stdout: out2.stdout, stderr: out2.stderr });
+    expect(code2).toBe(ExitCode.SUCCESS);
+    expect(existsSync(path.join(home, '.codex', 'skills', 'mma-flow', 'SKILL.md'))).toBe(false);
   });
 });

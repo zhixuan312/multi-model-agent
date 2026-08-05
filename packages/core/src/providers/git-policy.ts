@@ -40,7 +40,7 @@ const ALLOWED_GIT_VALUE_FLAGS = new Set(['-n', '--max-count', '--format', '--pre
 /** Global options that select the repository but do not alter execution behaviour. */
 const ALLOWED_GLOBAL_VALUE_OPTS = new Set(['-C']);
 
-export type GitDecision =
+type GitDecision =
   | { allowed: true }
   | { allowed: false; reason: string };
 

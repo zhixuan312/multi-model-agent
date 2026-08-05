@@ -1,10 +1,15 @@
 import type { IncomingMessage } from 'node:http';
+import { CLIENT_IDS, type CallerClient } from '@zhixuan92/multi-model-agent-core';
 
-const CLIENT_ALLOWLIST = new Set(['claude-code', 'cursor', 'codex-cli', 'gemini-cli']);
+// Derived, not hand-maintained: the canonical client roster plus `forge`, which
+// is a real caller (MMA's own SDLC harness, the sole HTTP consumer) but not a
+// provisioned client. `other` is deliberately absent — it is the fallback below
+// for anything unrecognised, so listing it here would be unreachable: a caller
+// sending `other` resolves to `other` with or without it.
+const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge']);
 
-export type CallerClient = 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli' | 'other';
 
-export interface CallerIdentity {
+interface CallerIdentity {
   callerClient: CallerClient;
   /** Calling agent's model id (e.g., claude-opus-4-7). Sourced from the
    *  required X-MMA-Main-Model header on tool routes. Used as `mainModel`

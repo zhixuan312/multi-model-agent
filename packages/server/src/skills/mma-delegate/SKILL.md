@@ -26,13 +26,10 @@ Dispatch a single ad-hoc task to a worker. The request is flat — prompt, targe
 - Two sequential tasks that share files → dispatch one after the other (each is a separate request)
 - The work needs to read across many files for synthesis only → `mma-investigate` is cheaper (read-only)
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -60,50 +57,20 @@ Dispatch a single ad-hoc task to a worker. The request is flat — prompt, targe
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"delegate","prompt":"Refactor utils.ts to remove dead code","target":{"paths":["/project/src/utils.ts"]}}' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "delegate", "prompt": "Refactor utils.ts to remove dead code", "target": { "paths": ["/project/src/utils.ts"] } } }
+```
 
 ## Response shapes
 
-### POST /task?cwd=<abs> — dispatch response (202)
+`mma_run` returns either the terminal envelope inline (short tasks) or a `{ taskId, type, cwd }`
+handle for longer ones — poll with `mma_task_get`, block with `mma_task_wait`, cancel with
+`mma_task_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the tool
+call error shape.
 
-```json
-{ "taskId": "<uuid>", "statusUrl": "/task/<uuid>" }
-```
-
-Use `taskId` to poll. `statusUrl` is a convenience pointer.
-
-### GET /task/:taskId — polling response
-
-The HTTP status is the state discriminator:
-
-| Status | Meaning |
-|---|---|
-| `202 application/json` | Still pending — body is structured progress JSON: `{ taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt }` |
-| `200 application/json` | Terminal — body is the task envelope below |
-| `404` / `401` / `5xx` | Error — see Error response below; stop polling |
-
-### Error response (4xx / 5xx)
-
-```json
-{
-  "error": "<code>",
-  "message": "<human-readable>",
-  "details": { /* optional structured context, e.g. fieldErrors for 400 */ }
-}
-```
-
-`details` is optional and present only when the server has structured additional context.
+@include _shared/response-shape.md
 
 ## Best practices
 
@@ -144,5 +111,3 @@ PR. Git is never forced.
 
 Workers may not run git themselves (only `status` / `log` / `diff` / `show` are permitted) — the
 engine owns the commit, from outside the worker sandbox.
-
-@include _shared/error-handling.md

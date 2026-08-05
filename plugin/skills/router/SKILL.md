@@ -13,13 +13,12 @@ Local HTTP service that fans out tool-using work to workers on different LLM pro
 
 **Core principle:** Pick the most specific `mma:*` skill that fits the task. Specificity reduces input — specialized skills know their route, schema, and defaults so you write less.
 
-**Transport: if the `mma_run` MCP tool is available in this session, dispatch through it rather
-than the curl calls these skills document.** The skills describe the HTTP route because it always
-works; MCP is better wherever it exists. On hosts that support MCP Apps (Claude Desktop) `mma_run`
-renders a live execution monitor — phase and elapsed time updating in place, with a Cancel button,
-at no extra model turn — which the curl route cannot produce, since the host never learns a task is
-running. It also avoids handling the bearer token in a shell. Same task types, same request body:
-it rides inside `request`. Fall back to curl only where MCP is genuinely absent.
+**Transport: dispatch every `mma:*` skill through the `mma_run` MCP tool.** Pass `cwd` and the
+skill's request body (same task types, same fields) inside `request`. On hosts that support MCP
+Apps (Claude Desktop) `mma_run` renders a live execution monitor — phase and elapsed time updating
+in place, with a Cancel button, at no extra model turn. Poll with `mma_task_get`, block with
+`mma_task_wait`, cancel with `mma_task_cancel`. If the `mma_run` MCP tool is not available in this
+session, run `mma clients` to see how to connect it.
 
 ## Skill map
 
@@ -141,28 +140,12 @@ When the user wants the packaged full SDLC route rather than one isolated worker
 
 When the user needs a bounded interactive expert-persona breakout without polluting the main thread, suggest `/mma:breakout` (a Claude Code command installed to `~/.claude/commands/mma:breakout.md`). It spawns a named breakout teammate, keeps the deep dialogue in direct `@name` conversation isolated from the main context, then closes with one confirmed journal batch instead of adding a backend task type. `/mma:breakout` is Claude Code only.
 
-## Preflight: auto-start the daemon if it is not running
+## Daemon and auth
 
-```bash
-PORT=7337
-if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-  mma serve >/dev/null 2>&1 & disown
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 0.5
-    curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
-  done
-fi
-```
-
-Idempotent: already-running daemon → curl succeeds → no-op. Background `mma serve` (with `& disown`) — never run it foreground (it would block the rest of the script).
-
-## Auth token
-
-```bash
-export MMA_AUTH_TOKEN=$(mma print-token)
-```
-
-Every request requires `Authorization: Bearer $MMA_AUTH_TOKEN`. The token is generated once on first `mma serve` and persists at `~/.mma/auth-token`. It only changes if the file is manually deleted.
+The installed MCP connection (or packaged plugin) owns starting/reaching the daemon and supplying
+credentials at connect time — no per-call preflight or token handling belongs in a skill dispatch.
+If `mma_run` is unavailable in this session (the connection is not registered, or the client has no
+MCP support), run `mma clients` to see how to connect it.
 
 ## Worker tier: `agentTier`
 
@@ -209,8 +192,9 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## General flow
 
-1. Call the matching `mma:*` skill → receive `{ taskId, statusUrl }`.
-2. Poll `GET /task/:taskId`: `202 application/json` while pending (body is structured progress JSON), `200 application/json` on terminal.
+1. Call the matching `mma:*` skill's `mma_run` dispatch → receive either the terminal envelope
+   inline (short tasks) or a `{ taskId, type, cwd }` handle.
+2. For a handle, poll with `mma_task_get` (or block with `mma_task_wait`) until terminal.
 3. Read `output` / `error` from the layered terminal envelope.
 
 ## Common pitfalls

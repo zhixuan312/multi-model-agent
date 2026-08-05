@@ -36,7 +36,7 @@ import * as net from 'node:net';
 import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
 
 /** A single resolved DNS answer — the subset of `dns.lookup(host, {all:true})` we need. */
-export interface ResolvedAddress {
+interface ResolvedAddress {
   address: string;
 }
 
@@ -45,7 +45,7 @@ export interface ResolvedAddress {
  * injected so tests are fully deterministic (no real network, no real DNS,
  * no real filesystem).
  */
-export interface McpBridgeDeps {
+interface McpBridgeDeps {
   /** The daemon base URL (already resolved via buildServerUrl + loadConfig). */
   daemonUrl: string;
   /** Environment variables (for MMA_AUTH_TOKEN / MMA_TOKEN_FILE lookup). */

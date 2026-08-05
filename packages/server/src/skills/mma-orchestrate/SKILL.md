@@ -27,15 +27,19 @@ The orchestrate endpoint provides a session-persistent, high-quality LLM agent f
 - You need document auditing → use `mma-audit`
 - A single API call suffices — orchestrate is for when you need tool use + reasoning
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
+Call the `mma_run` MCP tool with `cwd` and this `request` body. If the `mma_run` MCP tool is not
+available in this session, run `mma clients`.
 
 ```json
 {
-  "type": "orchestrate",
-  "prompt": "Synthesize the exploration results into a requirements specification...",
-  "outputFormat": "json"
+  "cwd": "/project",
+  "request": {
+    "type": "orchestrate",
+    "prompt": "Synthesize the exploration results into a requirements specification...",
+    "outputFormat": "json"
+  }
 }
 ```
 
@@ -53,17 +57,13 @@ The orchestrate endpoint provides a session-persistent, high-quality LLM agent f
 
 To maintain context across workflow phases, capture the session ID from the first response and pass it back:
 
-```bash
-# Phase 1: Exploration
-RESULT=$(curl ... -d '{"type":"orchestrate","prompt":"Explore the codebase for auth patterns..."}' ...)
-SESSION_ID=$(echo "$RESULT" | jq -r '.sessions.implementer.sessionId')
+```json
+// Phase 1: Exploration
+{ "cwd": "/project", "request": { "type": "orchestrate", "prompt": "Explore the codebase for auth patterns..." } }
+// -> read execution.sessions.implementer from the terminal envelope as sessionId
 
-# Phase 2: Specification (reuse session)
-RESULT=$(curl ... -d '{"type":"orchestrate","prompt":"Based on your exploration, write a spec...","sessionIds":{"implementer":"'"$SESSION_ID"'"}}' ...)
+// Phase 2: Specification (reuse session)
+{ "cwd": "/project", "request": { "type": "orchestrate", "prompt": "Based on your exploration, write a spec...", "sessionIds": { "implementer": "<sessionId from phase 1>" } } }
 ```
 
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
-@include _shared/polling.md
 @include _shared/response-shape.md

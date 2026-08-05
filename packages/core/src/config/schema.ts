@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CLIENT_IDS } from '../clients/client-id.js';
 
 // === Shared field schemas ===
 
@@ -170,6 +171,11 @@ export const multiModelConfigSchema = z.object({
     enabled: z.boolean(),
   }).optional(),
   research: ResearchConfigSchema,
+  // Optional strict declaration of which canonical clients are provisioned.
+  // partialRecord (not record): a record with an enum key requires EVERY
+  // key present, so a config declaring only `{ cursor: 'off' }` would be
+  // rejected outright. Unknown keys and states are rejected either way.
+  clients: z.partialRecord(z.enum(CLIENT_IDS), z.enum(['on', 'off'])).optional(),
 }).strict();
 
 /** Canonical config types — inferred from the Zod schemas above so the

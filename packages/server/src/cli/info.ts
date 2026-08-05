@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { notApplicable, type NotApplicable } from '@zhixuan92/multi-model-agent-core';
 
-export interface InfoDeps {
+interface InfoDeps {
   /** CLI package version (read from the server package.json at startup). */
   cliVersion: string;
   /** Config bind address (e.g. '127.0.0.1'). */

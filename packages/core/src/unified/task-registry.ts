@@ -8,6 +8,12 @@ export interface TaskEntry {
   cwd: string;
   state: TaskState;
   tool: string;
+  /** `audit`'s criteria set (`plan` | `spec` | `skill` | `default`), null for every
+   *  other type. Carried so a running audit is as self-describing on the wire as it
+   *  is in the terminal envelope, which has always split `task.type` from
+   *  `task.subtype` — "audit" alone does not say whether a plan or a spec is under
+   *  review. */
+  subtype: string | null;
   result: unknown;
   runningHeadline: string | null;
   startedAt: number;
@@ -51,10 +57,10 @@ export class TaskRegistry {
     }
   }
 
-  register(taskId: string, cwd: string, tool: string): void {
+  register(taskId: string, cwd: string, tool: string, subtype: string | null): void {
     this.evictExpired(Date.now());
     this.entries.set(taskId, {
-      taskId, cwd, tool,
+      taskId, cwd, tool, subtype,
       state: 'pending',
       result: null,
       runningHeadline: null,

@@ -4,6 +4,7 @@
 // internals. The cross-surface test is the Phase-2 exit criterion: an
 // execution submitted over MCP is observable over REST with the same result.
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
@@ -39,13 +40,14 @@ describe('contract: MCP adapter', () => {
     } finally { await h.close(); }
   });
 
-  it('lists exactly the four tools; mma_run request schema is generated from the task union', async () => {
+  it('lists exactly the seven tools; mma_run request schema is generated from the task union', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
-        'mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_wait',
+        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
+        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
       ]);
 
       const run = tools.find((t) => t.name === 'mma_run')!;
@@ -135,7 +137,12 @@ describe('contract: MCP adapter', () => {
       await new Promise((r) => setTimeout(r, 50));
 
       const cancel = parseText(await client.callTool({ name: 'mma_task_cancel', arguments: { taskId } }));
-      expect(cancel).toEqual({ taskId, status: 'running', cancellationRequested: true });
+      // Identity travels with every reference to the task, cancel included — otherwise
+      // "which one did I just cancel?" is unanswerable from the transcript.
+      expect(cancel).toEqual({
+        taskId, type: 'investigate', cwd: expect.any(String),
+        status: 'running', cancellationRequested: true,
+      });
 
       const terminal = parseText(await client.callTool({
         name: 'mma_task_wait',
@@ -146,7 +153,42 @@ describe('contract: MCP adapter', () => {
 
       // Idempotent: repeat cancel reports the terminal state.
       const again = parseText(await client.callTool({ name: 'mma_task_cancel', arguments: { taskId } }));
-      expect(again).toEqual({ taskId, status: 'cancelled', alreadyTerminal: true });
+      expect(again).toEqual({
+        taskId, type: 'investigate', cwd: expect.any(String),
+        status: 'cancelled', alreadyTerminal: true,
+      });
+    } finally { await client.close(); await h.close(); }
+  });
+
+  /**
+   * REST could always answer "what is running?" via GET /status. Over MCP the only
+   * askable question was "what is THIS id doing?", which presumes the caller still has
+   * the id — so a caller that lost track of a handle had no way back to it.
+   */
+  it('mma_task_list names every in-flight task by type, and filters by project', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
+    const client = await mcpClient(h);
+    try {
+      const run = parseText(await client.callTool({
+        name: 'mma_run',
+        arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'hangs forever' } },
+      }));
+
+      const listed = parseText(await client.callTool({ name: 'mma_task_list', arguments: {} }));
+      expect(listed.count).toBe(1);
+      const [task] = listed.tasks as Array<Record<string, unknown>>;
+      expect(task).toMatchObject({
+        taskId: run.taskId, type: 'investigate', status: 'running', cwd: expect.any(String),
+      });
+      expect(task!.elapsedMs).toEqual(expect.any(Number));
+
+      // Filtered to a real directory with nothing running: an empty list, not an error.
+      const elsewhere = parseText(await client.callTool({
+        name: 'mma_task_list', arguments: { cwd: join(process.cwd(), 'packages') },
+      }));
+      expect(elsewhere).toEqual({ tasks: [], count: 0 });
+
+      await client.callTool({ name: 'mma_task_cancel', arguments: { taskId: run.taskId } });
     } finally { await client.close(); await h.close(); }
   });
 

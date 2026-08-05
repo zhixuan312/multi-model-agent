@@ -32,7 +32,7 @@ export const PROVIDER_EVENT_NAMES = [
   'codex_thread_started','codex_turn_started','codex_command_started','codex_command_completed',
   'codex_turn_completed','codex_turn_failed','codex_error','codex_agent_message','codex_file_change',
 ] as const;
-export type ProviderEventName = (typeof PROVIDER_EVENT_NAMES)[number];
+type ProviderEventName = (typeof PROVIDER_EVENT_NAMES)[number];
 
 /** Per-event field shapes are NOT pre-declared — `mapProviderEventToPlainEntry`
  *  passes through all primitive fields from the raw event payload (object-valued

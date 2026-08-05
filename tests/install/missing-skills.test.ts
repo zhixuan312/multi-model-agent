@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findMissingSkills } from '../../packages/server/src/skill-install/skill-installer-common.js';
+import { findMissingSkills } from '../../packages/server/src/skill-install/manifest.js';
 
 describe('findMissingSkills', () => {
   it('returns empty list when all SUPPORTED_SKILLS are in the manifest', () => {
@@ -14,11 +14,11 @@ describe('findMissingSkills', () => {
   it('returns skills present in SUPPORTED but not in manifest, with target union from existing entries', () => {
     const manifest = [
       { name: 'mma-delegate', skillVersion: '1', targets: ['claude-code'] },
-      { name: 'mma-audit',    skillVersion: '1', targets: ['codex-cli'] },
+      { name: 'mma-audit',    skillVersion: '1', targets: ['codex'] },
     ];
     const supported = ['mma-delegate', 'mma-audit', 'mma-investigate'];
     expect(findMissingSkills(manifest, supported)).toEqual([
-      { name: 'mma-investigate', targets: ['claude-code', 'codex-cli'] },
+      { name: 'mma-investigate', targets: ['claude-code', 'codex'] },
     ]);
   });
 

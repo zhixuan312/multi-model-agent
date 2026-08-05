@@ -1,11 +1,11 @@
 import * as path from 'node:path';
 
-export type SpecOrPlanType = 'spec' | 'plan';
+type SpecOrPlanType = 'spec' | 'plan';
 
 /** A dated artifact basename opens with a `YYYY-MM-DD-` stem prefix. */
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}-/;
 
-export interface DeriveDefaultOutputPathArgs {
+interface DeriveDefaultOutputPathArgs {
   /** The task type — only 'spec' and 'plan' derive a default output path. */
   type: SpecOrPlanType;
   /** The task prompt (used to slugify the spec filename when self-naming). */

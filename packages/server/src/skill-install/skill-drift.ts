@@ -28,7 +28,7 @@ export function isSkillBehind(entryName: string, entrySkillVersion: string): boo
   }
 }
 
-export interface SkillManifestInfo {
+interface SkillManifestInfo {
   /** The installed skill version (uniform across entries at install time), or null. */
   skillVersion: string | null;
   /** Null when nothing is installed; else true iff no installed skill is behind the bundle. */

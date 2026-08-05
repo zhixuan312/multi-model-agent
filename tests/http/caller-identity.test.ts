@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
+import { CLIENT_IDS } from '../../packages/core/src/clients/client-id.js';
 import { resolveCallerIdentity, DEFAULT_IDENTITY } from '../../packages/server/src/http/middleware/caller-identity.js';
 
 function fakeReq(headers: Record<string, string>): IncomingMessage {
@@ -58,10 +59,22 @@ describe('resolveCallerIdentity', () => {
     expect(resolveCallerIdentity(req).mainModel).toBeNull();
   });
 
-  it('accepts all known clients', () => {
-    for (const client of ['claude-code', 'cursor', 'codex-cli', 'gemini-cli']) {
+  it('accepts all canonical clients', () => {
+    for (const client of CLIENT_IDS) {
       const req = fakeReq({ 'x-mma-client': client });
       expect(resolveCallerIdentity(req).callerClient).toBe(client);
     }
+  });
+
+  it('maps retired non-canonical client ids to "other"', () => {
+    for (const client of ['codex-cli', 'gemini-cli']) {
+      const req = fakeReq({ 'x-mma-client': client });
+      expect(resolveCallerIdentity(req).callerClient).toBe('other');
+    }
+  });
+
+  it('accepts the explicit other attribution', () => {
+    const req = fakeReq({ 'x-mma-client': 'other' });
+    expect(resolveCallerIdentity(req).callerClient).toBe('other');
   });
 });

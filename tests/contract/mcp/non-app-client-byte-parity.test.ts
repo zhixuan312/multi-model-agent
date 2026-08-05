@@ -16,11 +16,11 @@ async function runOnce(h: HarnessHandle): Promise<string> {
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     expect(content).toHaveLength(1);
     // Normalize EVERY per-call-varying field. The handle payload at HEAD is
-    // { taskId, status, poll: { tool, taskId }, note? } — verified against
+    // { taskId, type, cwd, status, poll: { mcpTool, taskId }, note? } — verified against
     // mcp-adapter.ts — so the SAME fresh id appears twice. Deleting only the
     // top-level one leaves poll.taskId differing between the two calls and the
     // assertion fails on correct, unchanged behaviour. Everything else (including
-    // poll.tool) must survive, or this stops proving parity.
+    // the identity fields and poll.mcpTool) must survive, or this stops proving parity.
     const parsed = JSON.parse(content[0]!.text) as Record<string, unknown>;
     const normalized = structuredClone(parsed) as Record<string, unknown> & { poll?: Record<string, unknown> };
     delete normalized.taskId;
@@ -46,14 +46,17 @@ describe('contract: non-App-client byte parity', () => {
     expect(withAppJson).toBe(withoutAppJson);
   });
 
-  it('the four tool names and mma_run generated schema are unchanged regardless of capability branch', async () => {
+  it('the seven tool names and mma_run generated schema are unchanged regardless of capability branch', async () => {
     __setExecutionArtifactOverrideForTests({ available: true, html: '<html>real bundle</html>' });
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = new Client({ name: 'schema-parity', version: '0.0.0' });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${h.token}` } } }));
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual(['mma_run', 'mma_task_cancel', 'mma_task_get', 'mma_task_wait']);
+      expect(tools.map((t) => t.name).sort()).toEqual([
+        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
+        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+      ]);
       const run = tools.find((t) => t.name === 'mma_run')!;
       expect(run.inputSchema).toMatchObject({ required: ['cwd', 'request'], type: 'object' });
     } finally { await client.close(); await h.close(); }

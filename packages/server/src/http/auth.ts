@@ -22,11 +22,32 @@ export function loadToken(tokenPath: string): string {
     // Use core's loadAuthToken so the MMA_AUTH_TOKEN env override is respected.
     return coreLoadAuthToken({ tokenFile: resolved });
   }
-  const dir = path.dirname(resolved);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return createOrAdoptToken(resolved);
+}
+
+/**
+ * Mint a token for `resolved`, or adopt the one already there.
+ *
+ * Exclusive create, not a plain write. `loadToken`'s `existsSync` above is a
+ * CHECK, and a check followed by a write is a race: two daemons starting
+ * together on a fresh install both see "absent", both mint a token, and the
+ * loser keeps a value that is no longer in the file — so every client reading
+ * the file gets 401s from it. `wx` makes exactly one process the author;
+ * whoever loses reads the winner's token instead of overwriting it.
+ *
+ * Separated from `loadToken` so the losing branch is reachable in a test
+ * without needing two real processes to collide on the same millisecond.
+ */
+export function createOrAdoptToken(resolved: string): string {
+  fs.mkdirSync(path.dirname(resolved), { recursive: true, mode: 0o700 });
   const token = randomBytes(32).toString('base64url');
-  fs.writeFileSync(resolved, token + '\n', { mode: 0o600 });
-  return token;
+  try {
+    fs.writeFileSync(resolved, token + '\n', { mode: 0o600, flag: 'wx' });
+    return token;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    return coreLoadAuthToken({ tokenFile: resolved });
+  }
 }
 
 /**

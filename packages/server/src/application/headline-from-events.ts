@@ -132,12 +132,12 @@ export function headlineForEvent(fields: Record<string, string | number | boolea
  * field was present. Both spellings are accepted so a future formatter change cannot
  * reintroduce it.
  */
-export function taskIdOfEvent(entry: PlainLogEntry): string | null {
+function taskIdOfEvent(entry: PlainLogEntry): string | null {
   const value = entry.fields['taskId'] ?? entry.fields['task_id'];
   return typeof value === 'string' && value ? value : null;
 }
 
-export interface HeadlineSink {
+interface HeadlineSink {
   setHeadline(taskId: string, headline: string): void;
 }
 

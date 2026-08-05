@@ -19,7 +19,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
@@ -27,12 +27,12 @@ import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
 import { runSyncSkills } from './sync-skills.js';
-import { listEntries, FutureManifestError } from '../skill-install/manifest.js';
+import { listEntries, findMissingSkills, FutureManifestError } from '../skill-install/manifest.js';
 import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
-import { findMissingSkills } from '../skill-install/skill-installer-common.js';
 import { isSkillBehind } from '../skill-install/skill-drift.js';
+import type { DeclaredClientRoster } from '../provisioning/roster.js';
 
-export async function maybeAutoUpdateSkills(
+async function maybeAutoUpdateSkills(
   config: MultiModelConfig,
   stderr: (s: string) => boolean,
 ): Promise<void> {
@@ -71,7 +71,12 @@ export async function maybeAutoUpdateSkills(
   const deadlineMs = 5000;
   try {
     await Promise.race([
-      runSyncSkills({ silent: true, bestEffort: true, ifExists: true }),
+      runSyncSkills({
+        silent: true,
+        bestEffort: true,
+        ifExists: true,
+        declared: (config as unknown as { clients?: DeclaredClientRoster }).clients,
+      }),
       new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
     ]);
     if (behind.length > 0) process.stdout.write(`[mma] auto-synced ${behind.length} updated skill(s)\n`);
@@ -87,7 +92,7 @@ function envVarHint(agentName: string): string {
 }
 
 /** A running server handle returned by startServe(). */
-export interface ServeHandle {
+interface ServeHandle {
   /** The port the server is listening on (useful when port=0 for ephemeral). */
   port: number;
   /**
@@ -113,11 +118,49 @@ let onUncaughtRef: ((err: unknown) => void) | undefined;
 let onUnhandledRejectionRef: ((reason: unknown) => void) | undefined;
 
 /**
+ * Wait for in-flight tasks to finish, bounded by `server.limits.shutdownDrainMs`.
+ *
+ * Shutdown already refuses new dispatches before this runs, so the set can only
+ * shrink. Polling is the right shape here rather than a completion hook: the
+ * registry is the single source of truth for what is running, and a hook would
+ * be a second bookkeeping path that could disagree with it.
+ *
+ * Returns after the set empties or the budget expires — never rejects, because a
+ * drain that fails must not turn a graceful shutdown into a crash. What remains
+ * is reported, so an operator can see the work that did not get to finish.
+ */
+export async function drainInFlightTasks(
+  registry: { allInFlight?: () => unknown[] } | undefined,
+  budgetMs: number,
+  stderr: (s: string) => boolean,
+): Promise<void> {
+  const remaining = () => registry?.allInFlight?.()?.length ?? 0;
+  const atStart = remaining();
+  if (atStart === 0) return;
+  if (budgetMs <= 0) {
+    stderr(`[mma] ${atStart} task(s) still in flight; no drain budget configured, exiting now\n`);
+    return;
+  }
+  stderr(`[mma] draining ${atStart} in-flight task(s), up to ${Math.round(budgetMs / 1000)}s\n`);
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (remaining() === 0) {
+      stderr('[mma] all in-flight tasks finished\n');
+      return;
+    }
+    await new Promise((r) => setTimeout(r, Math.min(200, Math.max(1, deadline - Date.now()))));
+  }
+  const left = remaining();
+  if (left > 0) stderr(`[mma] drain budget elapsed with ${left} task(s) still running; exiting anyway\n`);
+}
+
+/**
  * Start the HTTP server with the given config.
  *
  * Registers SIGTERM and SIGINT handlers that drain in-flight requests and
- * exit the process cleanly. If config includes `server.limits.shutdownDrainMs`,
- * the server will wait up to that duration for in-flight requests to finish.
+ * exit the process cleanly: new dispatches are refused immediately, then the
+ * server waits up to `server.limits.shutdownDrainMs` for what is already
+ * running to finish. A second signal skips the remaining wait.
  *
  * @param config  Full MultiModelConfig (includes agents.*, defaults, diagnostics,
  *                and server block).  startServer() inspects the agents.* field
@@ -135,16 +178,18 @@ export async function startServe(
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);
 
-  // Drift check — warn if installed skills don't match the canonical manifest.
+  // Drift check — warn if any declared client's provisioning is unhealthy.
+  // Reads the SAME inventory GET /health does (provisioning/inventory.ts);
+  // startServer() itself resolves any pending marker at boot before this
+  // (and /health) would ever read it.
   try {
-    const { makeSkillManifestSync } = await import('../skill-install/skill-manifest-sync.js');
-    const { discoverPerClientInstallDirs } = await import('../skill-install/discover.js');
-    const { disabledTargets } = await import('../skill-install/disabled-state.js');
-    const sync = makeSkillManifestSync(discoverPerClientInstallDirs(), disabledTargets());
-    const drift = sync.driftReport();
+    const { buildProvisioningService } = await import('../provisioning/runtime-deps.js');
+    const service = buildProvisioningService(config as unknown as ServerConfig);
+    const records = await service.inventory();
+    const drift = records.filter((record) => record.status === 'failed');
     if (drift.length > 0) {
-      const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
-      stderr(`[mma] WARN: skill manifest drift detected: ${summary}. Re-run 'mma sync-skills' to reconcile.\n`);
+      const summary = drift.map((record) => `${record.clientId}=failed`).join(', ');
+      stderr(`[mma] WARN: client provisioning drift detected: ${summary}. Re-run 'mma mcp install <client>' to reconcile.\n`);
     }
   } catch {
     // best-effort — never let drift check block serve
@@ -259,18 +304,27 @@ export async function startServe(
   }
 
   const cleanupSignal = (sig: 'SIGTERM' | 'SIGINT') => {
-    if (stopInFlight) return;
+    if (stopInFlight) {
+      // A second signal means the operator is done waiting. Honour that rather
+      // than making them sit out the remaining drain window.
+      stderr(`[mma] received ${sig} again, exiting immediately\n`);
+      exit(1);
+      return;
+    }
     stopInFlight = true;
     stderr(`[mma] received ${sig}, shutting down gracefully\u2026\n`);
     // 1) Refuse new dispatches immediately so they don't compound the drain.
     setDraining(true);
-    // 2) TaskRegistry tracks in-flight tasks (no execution contexts).
-    //    Log what's still running for operators, then proceed to shutdown.
-    const inflight = running.taskRegistry?.allInFlight?.() ?? [];
-    if (inflight.length > 0) {
-      stderr(`[mma] draining ${inflight.length} in-flight task(s)\n`);
-    }
-    const drainSessions = Promise.resolve();
+    // 2) Wait for in-flight tasks, bounded by server.limits.shutdownDrainMs.
+    //    This used to be `Promise.resolve()` \u2014 the limit was declared in the
+    //    config schema, defaulted to 30s, documented in this function's own
+    //    docstring, and never read, so every shutdown killed in-flight work
+    //    immediately while claiming to drain it.
+    const drainSessions = drainInFlightTasks(
+      running.taskRegistry,
+      config.server.limits?.shutdownDrainMs ?? 0,
+      stderr,
+    );
 
     const drainTelemetry = flusher ? flusher.drain() : Promise.resolve();
     drainSessions

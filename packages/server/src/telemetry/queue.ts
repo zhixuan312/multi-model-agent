@@ -30,7 +30,7 @@ export interface QueueRecord {
   events: Record<string, unknown>[];
 }
 
-export interface RecordMeta {
+interface RecordMeta {
   byteOffset: number;
   byteLength: number;
   sha256: string;

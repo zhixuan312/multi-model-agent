@@ -18,7 +18,7 @@ import {
   JOURNAL_INDEX_DB_FILENAME,
 } from '@zhixuan92/multi-model-agent-core';
 
-export interface JournalReindexOptions {
+interface JournalReindexOptions {
   /** Working directory whose `.mma/journal` is reindexed. */
   cwd: string;
   /** When true, also regenerate the committed `index.md` catalog from node state. */

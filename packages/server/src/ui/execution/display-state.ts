@@ -9,10 +9,23 @@
  * (`connecting`, `connection-error`, `stopped`).
  */
 
-export interface RunningDisplayState {
-  mode: 'running';
+/**
+ * Which task this panel is showing — `spec`, `review`, `investigate`, `audit (plan)`.
+ *
+ * The panel used to open with `Running / Phase: implementing`, which is the same two
+ * words for every one of the twelve task types. With several panels on screen the only
+ * thing telling them apart was an 8-char hex ref. `taskType` is present on every mode,
+ * including terminal, where the envelope has always carried `task.type` and the panel
+ * has always ignored it.
+ */
+interface TaskLabel {
+  taskType?: string;
   /** Short task id, surfaced so a panel can be correlated with the daemon log and store. */
   taskRef?: string;
+}
+
+interface RunningDisplayState extends TaskLabel {
+  mode: 'running';
   phase: string;
   elapsedMs: number;
   phaseElapsedMs: number;
@@ -20,9 +33,8 @@ export interface RunningDisplayState {
   totalTasks?: number;
 }
 
-export interface CancellingDisplayState {
+interface CancellingDisplayState extends TaskLabel {
   mode: 'cancelling';
-  taskRef?: string;
   phase: string;
   elapsedMs: number;
   phaseElapsedMs: number;
@@ -34,7 +46,7 @@ export interface CancellingDisplayState {
  * misleading about the panel's job — which is to answer "was that worth it?", not "what did it
  * say?". Every field is independently optional; error envelopes null most of them out.
  */
-export interface TerminalDisplayState {
+interface TerminalDisplayState extends TaskLabel {
   mode: 'terminal';
   status: string;
   totalDurationMs?: number;
@@ -49,7 +61,7 @@ export interface TerminalDisplayState {
   filesChanged?: number;
 }
 
-export interface StageStat {
+interface StageStat {
   durationMs?: number;
   costUsd?: number;
 }
@@ -58,6 +70,8 @@ export type DisplayState = RunningDisplayState | CancellingDisplayState | Termin
 
 interface RunningSnapshotLike {
   taskId?: unknown;
+  type?: unknown;
+  subtype?: unknown;
   status?: unknown;
   phase?: unknown;
   elapsedMs?: unknown;
@@ -70,7 +84,7 @@ interface RunningSnapshotLike {
 interface StageLike { durationMs?: unknown; costUsd?: unknown }
 
 interface TerminalEnvelopeLike {
-  task?: { taskId?: unknown; status?: unknown };
+  task?: { taskId?: unknown; type?: unknown; subtype?: unknown; status?: unknown };
   metrics?: {
     totalDurationMs?: unknown;
     totalCostUsd?: unknown;
@@ -92,7 +106,7 @@ interface TerminalEnvelopeLike {
  * as opposed to a running/cancelling snapshot which carries a top-level `status` alongside
  * `taskId`/`phase`.
  */
-export function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
+function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
   return (
     typeof payload === 'object' &&
     payload !== null &&
@@ -106,6 +120,20 @@ function num(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * `audit` is rendered as `audit (plan)` — the criteria set is the difference between
+ * auditing a plan and auditing a spec, and both are dispatched constantly. Every other
+ * type has no subtype and renders as itself.
+ */
+function label(type: unknown, subtype: unknown): string | undefined {
+  if (typeof type !== 'string' || !type) return undefined;
+  return typeof subtype === 'string' && subtype ? `${type} (${subtype})` : type;
+}
+
+function shortRef(taskId: unknown): string | undefined {
+  return typeof taskId === 'string' ? taskId.slice(0, 8) : undefined;
+}
+
 function stage(raw: StageLike | null | undefined): StageStat | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const durationMs = num(raw.durationMs);
@@ -115,9 +143,13 @@ function stage(raw: StageLike | null | undefined): StageStat | undefined {
 }
 
 function deriveTerminal(payload: TerminalEnvelopeLike): TerminalDisplayState {
+  const taskType = label(payload.task?.type, payload.task?.subtype);
+  const taskRef = shortRef(payload.task?.taskId);
   const state: TerminalDisplayState = {
     mode: 'terminal',
     status: String(payload.task?.status ?? ''),
+    ...(taskType ? { taskType } : {}),
+    ...(taskRef ? { taskRef } : {}),
   };
   const m = payload.metrics;
   if (m) {
@@ -154,13 +186,19 @@ function deriveRunningOrCancelling(
   const elapsedMs = typeof payload.elapsedMs === 'number' ? payload.elapsedMs : 0;
   const phaseElapsedMs = typeof payload.phaseElapsedMs === 'number' ? payload.phaseElapsedMs : 0;
 
-  const taskRef = typeof payload.taskId === 'string' ? payload.taskId.slice(0, 8) : undefined;
+  const taskRef = shortRef(payload.taskId);
+  const taskType = label(payload.type, payload.subtype);
 
   if (payload.cancellationRequested === true) {
-    return { mode: 'cancelling', phase, elapsedMs, phaseElapsedMs, ...(taskRef ? { taskRef } : {}) };
+    return {
+      mode: 'cancelling', phase, elapsedMs, phaseElapsedMs,
+      ...(taskType ? { taskType } : {}),
+      ...(taskRef ? { taskRef } : {}),
+    };
   }
 
   const state: RunningDisplayState = { mode: 'running', phase, elapsedMs, phaseElapsedMs };
+  if (taskType) state.taskType = taskType;
   if (taskRef) state.taskRef = taskRef;
   if (typeof payload.runningHeadline === 'string') {
     state.runningHeadline = payload.runningHeadline;

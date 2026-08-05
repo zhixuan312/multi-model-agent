@@ -126,7 +126,7 @@ escaped=\$(printf '%s' "\$token" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g')
 printf '{"Authorization":"Bearer %s"}\\n' "\$escaped"
 `;
 
-export interface BuildPluginOptions {
+interface BuildPluginOptions {
   /** Directory to write the plugin into. Created if missing; skills/, commands/
    *  and scripts/ inside it are replaced wholesale so stale entries can't survive. */
   outDir: string;
@@ -138,7 +138,7 @@ export interface BuildPluginOptions {
   skillsRoot?: string;
 }
 
-export interface BuildPluginResult {
+interface BuildPluginResult {
   outDir: string;
   skills: string[];
   commands: string[];
@@ -177,13 +177,13 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   }, null, 2)}\n`);
 
   // ── Skills (auto-matched by intent) ──
-  // NOTE: inlineIncludes' optional `authToken` argument is deliberately NOT
-  // passed. The per-client installers do pass it, substituting the live token
-  // into skill text — fine for a private `~/.claude/skills/` install, but a
-  // plugin is a distributable artifact that may be zipped, published to a
-  // marketplace, or committed. Omitting it leaves the shell-helper form
-  // (`${MMA_AUTH_TOKEN:-$(mma print-token)}`), which resolves at runtime on the
-  // user's own machine. No secret is ever written into this directory.
+  // No secret can reach this directory: `inlineIncludes` used to take an
+  // optional `authToken` that substituted the live token into skill text, and
+  // the per-client installers passed it — tolerable for a private
+  // `~/.claude/skills/` install, but a plugin is a distributable artifact that
+  // may be zipped, published to a marketplace, or committed. That argument no
+  // longer exists at all: skills are MCP-only now, so no shipped instruction
+  // carries a credential to substitute into in the first place.
   const allPackaged = [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS];
   const render = (packagedName: string, raw: string): string => {
     const component = pluginComponentName(packagedName);
@@ -238,7 +238,7 @@ edit by hand: re-run the command to regenerate.
 
 - **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
 - **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
-- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`
+- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`, \`mma_task_list\`, \`mma_context_block_create\`, \`mma_context_block_delete\`
 
 ## Requirements
 

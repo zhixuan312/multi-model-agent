@@ -5,7 +5,7 @@
 // committed copy has not drifted from what the generator produces today.
 import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { buildPlugin, PLUGIN_NAME, MCP_SERVER_KEY, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
@@ -141,17 +141,15 @@ describe('buildPlugin', () => {
     expect(JSON.parse(none)).toEqual({});
   });
 
-  it('inlines @include directives and leaks no live auth token', () => {
+  it('inlines @include directives', () => {
     build();
     for (const s of SKILL_COMPONENTS) {
       const body = readFileSync(join(out, 'skills', s, 'SKILL.md'), 'utf8');
       expect(body, `${s} has an unresolved @include`).not.toMatch(/^@include /m);
     }
-    // The per-client installers substitute the live token into skill text; the
-    // plugin is a distributable artifact and must keep the runtime form.
+    // response-shape.md is the surviving shared fragment; confirm it inlines correctly.
     const delegate = readFileSync(join(out, 'skills', 'delegate', 'SKILL.md'), 'utf8');
-    expect(delegate).toContain('${MMA_AUTH_TOKEN:-$(mma print-token)}');
-    expect(delegate).toContain('Authentication & identity headers'); // _shared/auth.md inlined
+    expect(delegate).toContain('mma_task_get / mma_task_wait — poll'); // _shared/response-shape.md inlined
   });
 
   it('rebuild replaces generated trees so a removed skill cannot linger', () => {
@@ -208,6 +206,36 @@ describe('marketplace catalog', () => {
       }
       expect(readFileSync(join(committed, '.mcp.json'), 'utf8'))
         .toBe(readFileSync(join(fresh, '.mcp.json'), 'utf8'));
+
+      // The generator emits three more files, and every one of them was
+      // previously unguarded. The helper script matters most: it is the plugin's
+      // entire credential mechanism, and this release added a SECOND writer of it
+      // (provisioning/writers/claude-code.ts) from the same HEADERS_HELPER_SH
+      // constant — so a stale committed copy would be the one place the constant
+      // is not the source of truth.
+      expect(
+        readFileSync(join(committed, 'scripts', 'mma-mcp-headers.sh'), 'utf8'),
+        'plugin/scripts/mma-mcp-headers.sh is stale — run `npm run build:plugin`',
+      ).toBe(readFileSync(join(fresh, 'scripts', 'mma-mcp-headers.sh'), 'utf8'));
+
+      // Version is seeded from the committed manifest above, so this compares
+      // every OTHER field (name, description, author, homepage, repository,
+      // license). The version itself is held in lockstep by the release workflow.
+      expect(
+        readFileSync(join(committed, '.claude-plugin', 'plugin.json'), 'utf8'),
+        'plugin/.claude-plugin/plugin.json is stale — run `npm run build:plugin`',
+      ).toBe(readFileSync(join(fresh, '.claude-plugin', 'plugin.json'), 'utf8'));
+
+      // The README embeds its own output directory in the `claude --plugin-dir`
+      // line — as a path RELATIVE to cwd, which is the one thing that
+      // legitimately differs between a build into `plugin/` and a build into a
+      // temp dir. Normalising just that leaves the skill/command counts, the MCP
+      // URL, the tool list, and the version line all compared.
+      const freshRelative = relative(process.cwd(), fresh) || '.';
+      expect(
+        readFileSync(join(committed, 'README.md'), 'utf8'),
+        'plugin/README.md is stale — run `npm run build:plugin`',
+      ).toBe(readFileSync(join(fresh, 'README.md'), 'utf8').split(freshRelative).join('plugin'));
     } finally {
       rmSync(fresh, { recursive: true, force: true });
     }

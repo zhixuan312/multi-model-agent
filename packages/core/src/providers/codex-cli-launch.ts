@@ -23,7 +23,7 @@ export interface CodexCliConfig {
   apiKey?: string;
 }
 
-export interface BuildLaunchInput {
+interface BuildLaunchInput {
   cfg: CodexCliConfig;
   opts: Pick<SessionOpts, 'cwd' | 'sandboxPolicy'>;
   outputFile: string;
@@ -34,7 +34,7 @@ export interface BuildLaunchInput {
   codexHome?: string;
 }
 
-export interface CodexCliLaunch {
+interface CodexCliLaunch {
   command: string;
   args: string[];
   env: Record<string, string>;

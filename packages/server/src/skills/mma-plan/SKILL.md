@@ -26,13 +26,10 @@ Dispatch a spec file to a complex worker that writes a **contract-first** implem
 - You want to execute a plan → `mma-execute-plan`
 - The task is simple enough for `mma-delegate` (no plan needed)
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -81,22 +78,11 @@ Inline mode — `outputPath` is required because no basename can be derived:
 
 ## Full example
 
-```bash
-RESULT=$(curl -f -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "plan",
-    "prompt": "Write a TDD implementation plan for the database-free claims demo spec",
-    "target": { "paths": ["/project/.mma/specs/2026-07-06-claims-demo.md"] }
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "plan", "prompt": "Write a TDD implementation plan for the database-free claims demo spec", "target": { "paths": ["/project/.mma/specs/2026-07-06-claims-demo.md"] } } }
+```
 
 @include _shared/response-shape.md
 
@@ -168,5 +154,3 @@ In multi-repo mode, `/mma-flow` fans out **one** `mma-plan` dispatch per involve
 `outputPath`), and writes `.mma/plans/<stem>--<repo-slug>.md` under the parent workspace. Planning **one
 repo** at a time keeps each plan a clean single-file `execute_plan` input. Single-project mode writes the
 usual `<stem>.md`.
-
-@include _shared/error-handling.md

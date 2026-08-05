@@ -15,8 +15,8 @@ const FORGE_COMPONENTS = [
 describe('mma-brainstorm SKILL.md: dispatch method and component alignment', () => {
   const skillMd = readFileSync('packages/server/src/skills/mma-brainstorm/SKILL.md', 'utf8');
 
-  it('instructs HTTP POST /task for mechanical-question workers, not Agent dispatch', () => {
-    expect(skillMd).toContain('POST /task');
+  it('instructs the mma_run MCP tool for mechanical-question workers, not Agent dispatch', () => {
+    expect(skillMd).toContain('mma_run');
     expect(skillMd).toContain('"type": "investigate"');
     expect(skillMd).toContain('"type": "research"');
     expect(skillMd).toContain('"type": "journal_recall"');

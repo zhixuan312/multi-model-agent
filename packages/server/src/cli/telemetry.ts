@@ -15,7 +15,7 @@ import { deleteInstallId } from '../telemetry/install-id.js';
 import { bumpGeneration } from '../telemetry/generation.js';
 import { Queue } from '../telemetry/queue.js';
 
-export interface TelemetryDeps {
+interface TelemetryDeps {
   subcommand: 'status' | 'enable' | 'disable' | 'reset-id' | 'dump-queue';
   homeDir: string;
   /** Write to stdout. */

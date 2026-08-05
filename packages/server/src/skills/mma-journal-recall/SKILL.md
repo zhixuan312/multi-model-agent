@@ -27,13 +27,10 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 - You're researching external docs/web → `mma-research`
 - The journal is empty or not yet initialized
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Request body
 
@@ -63,22 +60,11 @@ Recall relevant project learnings from the journal via a read-only mma worker. T
 
 ## Full example
 
-```bash
-RESULT=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type":"journal_recall",
-    "prompt":"what have we learned about dispatch cancellation reliability?",
-    "topic":"grouped-dispatch"
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "journal_recall", "prompt": "what have we learned about dispatch cancellation reliability?", "topic": "grouped-dispatch" } }
+```
 
 @include _shared/response-shape.md
 
@@ -126,5 +112,3 @@ The block is registered server-side at task completion; no caller action is need
 In a parent-aware multi-repo flow, recall searches the **parent** workspace **journal**. Pass
 `topic = <repo-slug>` (**lowercase-kebab**) to narrow recall to one repo's learnings; recall still falls
 back across topics so a repo filter never starves retrieval. Single-project mode is unchanged.
-
-@include _shared/error-handling.md

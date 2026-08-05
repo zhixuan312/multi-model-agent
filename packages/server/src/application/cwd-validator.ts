@@ -4,9 +4,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-export type CwdValidationError = 'missing_cwd' | 'invalid_cwd' | 'cwd_not_dir' | 'forbidden_cwd';
+type CwdValidationError = 'missing_cwd' | 'invalid_cwd' | 'cwd_not_dir' | 'forbidden_cwd';
 
-export type CwdValidationResult =
+type CwdValidationResult =
   | { ok: true; canonicalCwd: string }
   | { ok: false; error: CwdValidationError; message: string };
 

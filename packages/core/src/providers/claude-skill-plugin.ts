@@ -7,7 +7,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export interface ClaudeSkillOptions {
+interface ClaudeSkillOptions {
   plugins: Array<{ type: 'local'; path: string }>;
   skills: string[];
   settingSources: [];

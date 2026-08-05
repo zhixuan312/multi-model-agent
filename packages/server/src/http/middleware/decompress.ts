@@ -1,10 +1,10 @@
 import { createGunzip } from 'node:zlib';
 
-export interface DecompressOpts {
+interface DecompressOpts {
   maxDecompressedBytes: number;
 }
 
-export type DecompressResult =
+type DecompressResult =
   | { ok: true; body: Buffer }
   | { ok: false; reason: 'too_large' | 'unsupported_encoding' | 'decompress_error'; statusCode: number; message: string };
 

@@ -33,13 +33,10 @@ mean and which directions to pursue.
   directions with synthesis) → `mma-explore` (orchestrates mma-investigate + mma-research + mma-journal-recall → writes `exploration.md`)
 - A single web fetch is all you need → `WebFetch` inline
 
-## Endpoint
+## Dispatch
 
-`POST /task?cwd=<abs-path>`
-
-@include _shared/prefer-mcp.md
-
-@include _shared/auth.md
+Call the `mma_run` MCP tool with `cwd` and a `request` body (below). If the `mma_run` MCP tool
+is not available in this session, run `mma clients`.
 
 ## Configuration prerequisites
 
@@ -82,21 +79,11 @@ The research criteria target primary-source preference, practitioner consensus, 
 
 ## Full example
 
-```bash
-RESULT=$(curl -f -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Client: $MMA_CLIENT" \
-  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "research",
-    "prompt": "State-of-the-art SIMD JSON parsers under 100KB? We use a single-pass push parser; want SIMD alternatives."
-  }' \
-  "http://localhost:$PORT/task?cwd=/project")
-TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
-```
+Call `mma_run` with:
 
-@include _shared/polling.md
+```json
+{ "cwd": "/project", "request": { "type": "research", "prompt": "State-of-the-art SIMD JSON parsers under 100KB? We use a single-pass push parser; want SIMD alternatives." } }
+```
 
 @include _shared/response-shape.md
 
@@ -128,5 +115,3 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** Research that finds nothing is a success — "I searched widely and found nothing." The `output.summary.answer` field contains the narrative; `output.summary.findings` contains individual sources with `url` and `source` fields for citation.
-
-@include _shared/error-handling.md

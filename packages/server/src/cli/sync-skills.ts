@@ -1,41 +1,43 @@
 /**
  * sync-skills.ts — `mma sync-skills` subcommand.
  *
- * Single command for skill management: idempotent upsert of every shipped
- * skill into every detected (or specified) client. Compares canonical
- * SUPPORTED_SKILLS against on-disk SKILL.md and the install manifest, and:
- *   - installs skills not present on disk
- *   - overwrites skills whose installed version differs from canonical
- *   - removes skills no longer in SUPPORTED_SKILLS (orphan cleanup)
- *   - rewrites the install manifest to reflect post-sync state
+ * Roster-driven: provisions every DECLARED-'on' client
+ * (`config.clients`) through the shared `ProvisioningService` — registration
+ * AND skills together, atomically, per client —
+ * plus the Claude-Code-only SDLC commands (`mma-flow`, `mma-breakout`) that
+ * live outside the provisioning service's skill-root model (relocated to
+ * `provisioning/claude-code-commands.ts`).
  *
- * Replaces install-skill + update-skills as of 4.0.2.
+ * An explicit `--target=<ClientId>` (repeatable) or `--all-targets` FORCES
+ * those clients regardless of declared state — the same one-off-override
+ * shape as `mma mcp install <ClientId>`. With neither flag, only the
+ * declared-'on' roster is touched: a detected-but-undeclared client is
+ * reported 'suggested' and NEVER mutated (FR-7a) — detection alone must
+ * never provision.
  *
  * Usage:
- *   mma sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]
- *                       [--keep-standalone]
- *                       [--silent] [--best-effort] [--if-exists]
+ *   mma sync-skills [--target=<ClientId>]... [--all-targets] [--dry-run] [--json]
+ *                    [--keep-standalone] [--silent] [--best-effort] [--if-exists]
  *
  * Exit codes:
- *   0 — success (or no clients detected)
- *   1 — one or more skills failed to write/remove
+ *   0 — success (or nothing declared/targeted)
+ *   1 — one or more clients/commands failed to provision
  *   2 — manifest was written by a newer mma (FutureManifestError)
- *   3 — explicit --target was not a known client
+ *   3 — explicit --target named an unknown ClientId
  */
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import minimist from 'minimist';
 import matter from 'gray-matter';
+import { CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
+import { recordProvisionedSkills } from '../skill-install/record-provisioned.js';
 import {
-  ALL_CLIENTS,
-  detectClients,
   listEntries,
-  appendEntry,
+  versionFromContent,
   removeEntry,
   manifestPath,
   FutureManifestError,
-  type Client,
   type ManifestEntry,
 } from '../skill-install/manifest.js';
 import { findEnabledMmaPlugin, pluginSupersedesMessage } from '../skill-install/plugin-conflict.js';
@@ -47,15 +49,12 @@ import {
   getSkillsRoot,
 } from '../skill-install/discover.js';
 import {
-  writeSkillToClient,
-  removeSkillFromClient,
-  resolveClientInstallDir,
-  UnknownTargetError,
   writeCommandToClaudeCode,
   removeCommandFromClaudeCode,
-} from '../skill-install/skill-installer-common.js';
-import { disabledTargets, addDisabledTargets } from '../skill-install/disabled-state.js';
-import { readServerVersion } from '../server-version.js';
+  removeStandaloneClaudeCodeSkill,
+} from '../provisioning/claude-code-commands.js';
+import { buildCliProvisioningService, detectCliClients } from '../provisioning/cli-provisioning.js';
+import { resolveEffectiveRoster, type DeclaredClientRoster } from '../provisioning/roster.js';
 
 export const ExitCode = Object.freeze({
   SUCCESS: 0,
@@ -64,7 +63,14 @@ export const ExitCode = Object.freeze({
   ERR_UNKNOWN_TARGET: 3,
 });
 
-export interface SyncSkillsDeps {
+export class UnknownTargetError extends Error {
+  readonly code = 'unknown_target' as const;
+  constructor(target: string, valid: readonly string[]) {
+    super(`Unknown target '${target}'. Valid: ${valid.join(', ')}`);
+  }
+}
+
+interface SyncSkillsDeps {
   argv?: string[];
   homeDir?: string;
   /** Override skills root for testing. */
@@ -77,10 +83,23 @@ export interface SyncSkillsDeps {
   bestEffort?: boolean;
   stdout?: (s: string) => boolean;
   stderr?: (s: string) => boolean;
+  /** Declared client roster (`config.clients`). Threaded in by cli/index.ts /
+   *  cli/serve.ts from the loaded config; omitted means nothing is
+   *  declared, so ONLY explicit --target(s)/--all-targets get provisioned. */
+  declared?: DeclaredClientRoster;
+  /** Test-only: detected-but-undeclared clients, reported as 'suggested' and
+   *  NEVER provisioned (FR-7a). Defaults to empty — matches every other
+   *  production provisioning call site in this release (`runtime-deps.ts`,
+   *  `cli-provisioning.ts`); real host detection is not yet implemented. */
+  detected?: ReadonlySet<ClientId>;
+  /** Test/advanced overrides for the provisioning port's context. */
+  daemonPort?: number;
+  cliEntrypoint?: string;
+  stateDir?: string;
 }
 
 interface ParsedArgs {
-  targets: Client[] | null;
+  targets: ClientId[] | null;
   allTargets: boolean;
   dryRun: boolean;
   json: boolean;
@@ -94,10 +113,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
     boolean: ['dry-run', 'json', 'all-targets', 'keep-standalone'],
     alias: { t: 'target', j: 'json' },
   });
-  let targets: Client[] | null = null;
+  let targets: ClientId[] | null = null;
   if (args.target) {
     const t = Array.isArray(args.target) ? args.target : [args.target];
-    targets = (t as string[]).map((s) => s as Client);
+    for (const candidate of t as string[]) {
+      if (!(CLIENT_IDS as readonly string[]).includes(candidate)) {
+        throw new UnknownTargetError(candidate, CLIENT_IDS);
+      }
+    }
+    targets = t as ClientId[];
   }
   return {
     targets,
@@ -108,39 +132,38 @@ export function parseArgs(argv: string[]): ParsedArgs {
   };
 }
 
+/**
+ * Resolves which clients this run should provision.
+ *
+ * An explicit `--target`/`--all-targets` is a FORCED override — exactly like
+ * `mma mcp install <ClientId>` — regardless of the declared roster. With
+ * neither, only the declared-'on' roster is returned; a detected-but-
+ * undeclared client is never included here (see `resolveSuggested`).
+ */
 export function resolveTargets(
-  explicit: Client[] | null,
+  explicit: ClientId[] | null,
   allTargets: boolean,
-  homeDir: string,
-): Client[] {
-  if (allTargets) return [...ALL_CLIENTS];
-  if (explicit !== null) {
-    for (const t of explicit) {
-      if (!ALL_CLIENTS.includes(t)) throw new UnknownTargetError(t, ALL_CLIENTS);
-    }
-    return Array.from(new Set(explicit));
-  }
-  return detectClients(homeDir);
+  declared: DeclaredClientRoster | undefined,
+  detected: ReadonlySet<ClientId> = new Set(),
+): ClientId[] {
+  if (allTargets) return [...CLIENT_IDS];
+  if (explicit !== null) return Array.from(new Set(explicit));
+  const roster = resolveEffectiveRoster(declared, detected);
+  return roster.filter((entry) => entry.effectiveState === 'on').map((entry) => entry.clientId);
 }
 
-function versionFromContent(content: string): string {
-  try {
-    const parsed = matter(content);
-    const v = parsed.data['version'];
-    return typeof v === 'string' && v.length > 0 ? v : 'unknown';
-  } catch {
-    return 'unknown';
-  }
+/** Detected-but-undeclared clients — reported only, never provisioned. */
+function resolveSuggested(declared: DeclaredClientRoster | undefined, detected: ReadonlySet<ClientId>): ClientId[] {
+  return resolveEffectiveRoster(declared, detected)
+    .filter((entry) => entry.effectiveState === 'suggested')
+    .map((entry) => entry.clientId);
 }
 
 function manifestPresent(homeDir: string): boolean {
   return fs.existsSync(manifestPath(homeDir));
 }
 
-function readInstalledVersion(skillName: string, target: Client, homeDir: string): string | null {
-  const dir = resolveClientInstallDir(target, homeDir);
-  if (!dir) return null;
-  const skillFile = path.join(dir, skillName, 'SKILL.md');
+function readInstalledVersionAt(skillFile: string): string | null {
   try {
     return versionFromContent(fs.readFileSync(skillFile, 'utf8'));
   } catch {
@@ -148,21 +171,11 @@ function readInstalledVersion(skillName: string, target: Client, homeDir: string
   }
 }
 
-function readInstalledCommandVersion(commandName: string, homeDir: string): string | null {
-  const commandFile = path.join(homeDir, '.claude', 'commands', `${commandName}.md`);
-  try {
-    return versionFromContent(fs.readFileSync(commandFile, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-export interface SyncOutcome {
-  installed: Array<{ skill: string; target: Client; version: string }>;
-  updated: Array<{ skill: string; target: Client; from: string; to: string }>;
-  removed: Array<{ skill: string; target: Client }>;
-  upToDate: Array<{ skill: string; target: Client }>;
-  errors: Array<{ skill: string; target: Client; reason: string }>;
+interface SyncOutcome {
+  provisioned: ClientId[];
+  suggested: ClientId[];
+  errors: Array<{ clientId: ClientId; reason: string }>;
+  commands: { installed: string[]; removed: string[] };
 }
 
 export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> {
@@ -177,19 +190,9 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
 
   if (deps.ifExists && !manifestPresent(homeDir)) return ExitCode.SUCCESS;
 
-  let authToken: string | undefined;
+  let parsed: ParsedArgs;
   try {
-    const tokenPath = path.join(homeDir, '.mma', 'auth-token');
-    if (fs.existsSync(tokenPath)) {
-      authToken = fs.readFileSync(tokenPath, 'utf-8').trim();
-    }
-  } catch { /* best-effort — skills work without embedded token */ }
-
-  const parsed = parseArgs(argv);
-
-  let targets: Client[];
-  try {
-    targets = resolveTargets(parsed.targets, parsed.allTargets, homeDir);
+    parsed = parseArgs(argv);
   } catch (err) {
     if (err instanceof UnknownTargetError) {
       stderr(`mma sync-skills: ${err.message}\n`);
@@ -198,33 +201,16 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     throw err;
   }
 
-  // Honor the disable sentinel: drop any client the user turned off via
-  // `mma disable`. This is what makes disable sticky — the npm postinstall
-  // hook shells out to this command, so without the filter every upgrade would
-  // silently reinstall skills the user deliberately removed. `mma enable`
-  // clears the sentinel before it calls back in here.
-  const disabled = disabledTargets(homeDir);
-  if (disabled.length > 0) {
-    const active = targets.filter((t) => !disabled.includes(t));
-    if (active.length === 0) {
-      if (parsed.json) {
-        stdout(JSON.stringify({ targets: [], outcome: 'skills-disabled', disabled }) + '\n');
-      } else {
-        log(
-          `MMA skills are disabled for ${disabled.join(', ')}. ` +
-          `Run \`mma enable\` to restore. Skipping sync.\n`,
-        );
-      }
-      return ExitCode.SUCCESS;
-    }
-    targets = active;
-  }
+  const detected = deps.detected ?? detectCliClients(homeDir);
+  const suggested = resolveSuggested(deps.declared, detected);
+  let targets = resolveTargets(parsed.targets, parsed.allTargets, deps.declared, detected);
 
   if (targets.length === 0) {
     if (parsed.json) {
-      stdout(JSON.stringify({ targets: [], outcome: 'no-clients-detected' }) + '\n');
+      stdout(JSON.stringify({ targets: [], suggested, outcome: 'no-clients-declared' }) + '\n');
     } else {
-      log('No clients detected. Use --target=<client> or --all-targets.\n');
+      log('No clients declared \'on\'. Use --target=<ClientId>, --all-targets, or set clients.<id>="on" in config.\n');
+      if (suggested.length > 0) log(`Detected but undeclared (reported only, not installed): ${suggested.join(', ')}\n`);
     }
     return ExitCode.SUCCESS;
   }
@@ -234,36 +220,35 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
   // ones, so having both means two copies of every skill with near-identical
   // descriptions and arbitrary intent-matching. The plugin is a strict superset
   // (skills + commands + MCP), so when it is present the standalone install is
-  // retired: remove MMA's own ~/.claude entries and pin claude-code off so the
-  // npm postinstall does not recreate them.
+  // retired: remove MMA's own ~/.claude entries so this run does not recreate
+  // the duplicate.
   //
   // Strictly one-directional — see pluginSupersedesMessage for why this must
-  // never uninstall the plugin instead.
-  const supersedingPlugin = targets.includes('claude-code') && !parsed.keepStandalone
+  // never uninstall the plugin instead. This retirement predates — and is
+  // orthogonal to — the ownership-marker system the provisioning service uses
+  // for everything else, so it removes raw files directly rather than routing
+  // through the ownership-safe port (a pre-I-4 standalone install never had a
+  // marker to prove ownership with).
+  const supersedingPlugin = targets.includes('claude-code' as ClientId) && !parsed.keepStandalone
     ? findEnabledMmaPlugin(homeDir)
     : null;
   if (supersedingPlugin) {
-    // Count what was actually present — the remove helpers return void, so
-    // probing first is the only honest way to report how much was retired.
     const presentSkills = SUPPORTED_SKILLS
-      .filter((skill) => readInstalledVersion(skill, 'claude-code', homeDir) !== null);
+      .filter((skill) => readInstalledVersionAt(path.join(homeDir, '.claude', 'skills', skill, 'SKILL.md')) !== null);
     const presentCommands = SUPPORTED_COMMANDS
-      .filter((command) => readInstalledCommandVersion(command, homeDir) !== null);
+      .filter((command) => readInstalledVersionAt(path.join(homeDir, '.claude', 'commands', `${command}.md`)) !== null);
     const retired = presentSkills.length + presentCommands.length;
 
     if (!parsed.dryRun) {
       for (const skill of presentSkills) {
-        try { removeSkillFromClient(skill, 'claude-code', homeDir); } catch { /* best-effort */ }
+        try { removeStandaloneClaudeCodeSkill(skill, homeDir); } catch { /* best-effort */ }
       }
       for (const command of presentCommands) {
         try { removeCommandFromClaudeCode(command, homeDir); } catch { /* best-effort */ }
       }
       for (const name of [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS]) {
-        removeEntry(name, ['claude-code'], homeDir);
+        removeEntry(name, ['claude-code' as ClientId], homeDir);
       }
-      // Pin claude-code off so the npm postinstall (which shells out to this
-      // command) does not recreate the duplicate on the next upgrade.
-      addDisabledTargets(homeDir, ['claude-code'], readServerVersion());
     }
     targets = targets.filter((t) => t !== 'claude-code');
 
@@ -281,6 +266,17 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     if (targets.length === 0) return ExitCode.SUCCESS;
   }
 
+  if (parsed.dryRun) {
+    if (parsed.json) {
+      stdout(JSON.stringify({ dryRun: true, targets, suggested }) + '\n');
+    } else {
+      const commandCount = targets.includes('claude-code' as ClientId) ? SUPPORTED_COMMANDS.length : 0;
+      log(`Would sync ${targets.length + commandCount} asset(s) → ${targets.join(', ')}.\n`);
+      if (suggested.length > 0) log(`Detected but undeclared (reported only, not installed): ${suggested.join(', ')}\n`);
+    }
+    return ExitCode.SUCCESS;
+  }
+
   let manifestEntries: ManifestEntry[];
   try {
     manifestEntries = listEntries(homeDir);
@@ -293,176 +289,105 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     throw err;
   }
 
-  const outcome: SyncOutcome = {
-    installed: [],
-    updated: [],
-    removed: [],
-    upToDate: [],
-    errors: [],
-  };
+  const outcome: SyncOutcome = { provisioned: [], suggested, errors: [], commands: { installed: [], removed: [] } };
 
-  // Pass 1: orphan removal — drop skills that disappeared from the bundle.
+  // Full registration + skills provisioning per client, via the shared
+  // ProvisioningService. Forcing `targets` to 'on' for the scope
+  // of THIS call mirrors `mma mcp install <ClientId>` — an explicit --target
+  // always wins, never persisted. Each client runs independently (never
+  // batched into one provision() call) so one client's failure — including a
+  // thrown ownership-conflict error, which the port raises rather than
+  // returns for pre-existing unmarked content — can never stop or corrupt a
+  // sibling's outcome.
+  const forcedDeclared: DeclaredClientRoster = { ...deps.declared };
+  for (const id of targets) forcedDeclared[id] = 'on';
+  const service = buildCliProvisioningService(
+    { clients: forcedDeclared },
+    homeDir,
+    {
+      declared: forcedDeclared,
+      ...(deps.stateDir !== undefined && { stateDir: deps.stateDir }),
+      ...(deps.daemonPort !== undefined && { daemonPort: deps.daemonPort }),
+      ...(deps.cliEntrypoint !== undefined && { cliEntrypoint: deps.cliEntrypoint }),
+    },
+  );
+
+  for (const clientId of targets) {
+    try {
+      const result = await service.provision([clientId]);
+      const status = result.byClient[clientId];
+      if (status && status.status !== 'failed') {
+        outcome.provisioned.push(clientId);
+      } else {
+        outcome.errors.push({ clientId, reason: `provisioning reported status=${status?.status ?? 'unknown'}` });
+      }
+    } catch (err) {
+      outcome.errors.push({ clientId, reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  // Manifest bookkeeping reflects clients that were ACTUALLY provisioned this
+  // run. Shared with `mma mcp install` so both provisioning entry points leave
+  // the same record — see `skill-install/record-provisioned.ts`.
+  outcome.errors.push(...recordProvisionedSkills(outcome.provisioned, skillsRoot, homeDir));
+
+  // Orphan manifest cleanup: entries for skills the bundle no longer ships.
   for (const entry of manifestEntries) {
     if ((SUPPORTED_SKILLS as readonly string[]).includes(entry.name)) continue;
-    for (const target of entry.targets) {
-      if (parsed.dryRun) {
-        outcome.removed.push({ skill: entry.name, target });
-        continue;
-      }
-      try {
-        removeSkillFromClient(entry.name, target, homeDir);
-        outcome.removed.push({ skill: entry.name, target });
-      } catch (err) {
-        outcome.errors.push({
-          skill: entry.name,
-          target,
-          reason: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-    if (!parsed.dryRun) removeEntry(entry.name, [], homeDir);
+    removeEntry(entry.name, [], homeDir);
   }
 
-  // Pass 2: upsert canonical skills × resolved targets.
-  for (const skillName of SUPPORTED_SKILLS) {
-    const content = readSkillContent(skillName, skillsRoot);
-    if (content === null) {
-      outcome.errors.push({
-        skill: skillName,
-        target: targets[0]!,
-        reason: `Bundled SKILL.md not found at ${path.join(skillsRoot, skillName, 'SKILL.md')}`,
-      });
-      continue;
-    }
-    const canonicalVersion = versionFromContent(content);
-
-    for (const target of targets) {
-      const installedVersion = readInstalledVersion(skillName, target, homeDir);
-      const action: 'install' | 'update' | 'up-to-date' =
-        installedVersion === null
-          ? 'install'
-          : installedVersion !== canonicalVersion
-            ? 'update'
-            : 'up-to-date';
-
-      if (action === 'up-to-date') {
-        outcome.upToDate.push({ skill: skillName, target });
-        continue;
-      }
-
-      if (parsed.dryRun) {
-        if (action === 'install') {
-          outcome.installed.push({ skill: skillName, target, version: canonicalVersion });
-        } else {
-          outcome.updated.push({ skill: skillName, target, from: installedVersion!, to: canonicalVersion });
-        }
-        continue;
-      }
-
-      try {
-        writeSkillToClient(skillName, content, target, homeDir, skillsRoot, canonicalVersion, process.cwd(), false, authToken);
-        appendEntry(skillName, canonicalVersion, [target], homeDir);
-        if (action === 'install') {
-          outcome.installed.push({ skill: skillName, target, version: canonicalVersion });
-        } else {
-          outcome.updated.push({ skill: skillName, target, from: installedVersion!, to: canonicalVersion });
-        }
-      } catch (err) {
-        outcome.errors.push({
-          skill: skillName,
-          target,
-          reason: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-  }
-
-  // Pass 3: commands — Claude Code only. Commands are installed to
-  // ~/.claude/commands/<name>.md and invoked via /<name>.
-  const claudeCodeActive = targets.includes('claude-code' as Client);
-  if (claudeCodeActive) {
+  // Claude Code SDLC commands — only when claude-code was ACTUALLY
+  // provisioned this run (never when superseded by the plugin above, and
+  // never when it merely failed).
+  const claudeCodeProvisioned = outcome.provisioned.includes('claude-code' as ClientId);
+  if (claudeCodeProvisioned) {
     for (const commandName of SUPPORTED_COMMANDS) {
       const content = readCommandContent(commandName, skillsRoot);
       if (content === null) {
         outcome.errors.push({
-          skill: commandName,
-          target: 'claude-code' as Client,
-          reason: `Bundled command SKILL.md not found at ${path.join(skillsRoot, commandName, 'SKILL.md')}`,
+          clientId: 'claude-code' as ClientId,
+          reason: `Bundled command SKILL.md not found for '${commandName}' at ${path.join(skillsRoot, commandName, 'SKILL.md')}`,
         });
         continue;
       }
-      const canonicalVersion = versionFromContent(content);
-      const installedVersion = readInstalledCommandVersion(commandName, homeDir);
-      const action: 'install' | 'update' | 'up-to-date' =
-        installedVersion === null
-          ? 'install'
-          : installedVersion !== canonicalVersion
-            ? 'update'
-            : 'up-to-date';
-
-      if (action === 'up-to-date') {
-        outcome.upToDate.push({ skill: commandName, target: 'claude-code' as Client });
-        continue;
-      }
-
-      if (parsed.dryRun) {
-        if (action === 'install') {
-          outcome.installed.push({ skill: commandName, target: 'claude-code' as Client, version: canonicalVersion });
-        } else {
-          outcome.updated.push({ skill: commandName, target: 'claude-code' as Client, from: installedVersion!, to: canonicalVersion });
-        }
-        continue;
-      }
-
       try {
-        writeCommandToClaudeCode(commandName, content, homeDir, skillsRoot, authToken);
-        if (action === 'install') {
-          outcome.installed.push({ skill: commandName, target: 'claude-code' as Client, version: canonicalVersion });
-        } else {
-          outcome.updated.push({ skill: commandName, target: 'claude-code' as Client, from: installedVersion!, to: canonicalVersion });
-        }
+        writeCommandToClaudeCode(commandName, content, homeDir, skillsRoot);
+        outcome.commands.installed.push(commandName);
       } catch (err) {
-        outcome.errors.push({
-          skill: commandName,
-          target: 'claude-code' as Client,
-          reason: err instanceof Error ? err.message : String(err),
-        });
+        outcome.errors.push({ clientId: 'claude-code' as ClientId, reason: err instanceof Error ? err.message : String(err) });
       }
     }
-  }
 
-  // Pass 4: orphan command cleanup — remove commands that are no longer in
-  // SUPPORTED_COMMANDS but were previously installed.
-  if (claudeCodeActive && !parsed.dryRun) {
+    // Orphan command cleanup — remove commands no longer in SUPPORTED_COMMANDS
+    // but previously installed.
     const commandsDir = path.join(homeDir, '.claude', 'commands');
     try {
-      const files = fs.readdirSync(commandsDir);
-      for (const file of files) {
+      for (const file of fs.readdirSync(commandsDir)) {
         if (!file.startsWith('mma-') || !file.endsWith('.md')) continue;
         const name = file.replace(/\.md$/, '');
         if (!(SUPPORTED_COMMANDS as readonly string[]).includes(name)) {
           removeCommandFromClaudeCode(name, homeDir);
-          outcome.removed.push({ skill: name, target: 'claude-code' as Client });
+          outcome.commands.removed.push(name);
         }
       }
     } catch { /* commands dir may not exist yet */ }
   }
 
-  const totalAssets = SUPPORTED_SKILLS.length + (claudeCodeActive ? SUPPORTED_COMMANDS.length : 0);
+  const totalAssets = outcome.provisioned.length + outcome.commands.installed.length;
 
   if (parsed.json) {
-    stdout(JSON.stringify({ dryRun: parsed.dryRun, targets, outcome }) + '\n');
+    stdout(JSON.stringify({ targets, suggested, outcome }) + '\n');
   } else {
-    const verb = parsed.dryRun ? 'Would sync' : 'Synced';
     const parts: string[] = [];
-    if (outcome.installed.length > 0) parts.push(`${outcome.installed.length} installed`);
-    if (outcome.updated.length > 0) parts.push(`${outcome.updated.length} updated`);
-    if (outcome.removed.length > 0) parts.push(`${outcome.removed.length} orphan removed`);
-    if (outcome.upToDate.length > 0) parts.push(`${outcome.upToDate.length} up-to-date`);
+    if (outcome.provisioned.length > 0) parts.push(`${outcome.provisioned.length} client(s) provisioned`);
+    if (outcome.commands.installed.length > 0) parts.push(`${outcome.commands.installed.length} command(s) installed`);
+    if (outcome.commands.removed.length > 0) parts.push(`${outcome.commands.removed.length} command(s) removed`);
     if (outcome.errors.length > 0) parts.push(`${outcome.errors.length} errors`);
     const summary = parts.length > 0 ? parts.join(', ') : 'nothing to do';
-    log(`${verb} ${totalAssets} asset(s) → ${targets.join(', ')} (${summary}).\n`);
-    for (const e of outcome.errors) stderr(`error: ${e.skill} → ${e.target}: ${e.reason}\n`);
+    log(`Synced ${totalAssets} asset(s) → ${targets.join(', ')} (${summary}).\n`);
+    if (suggested.length > 0) log(`Detected but undeclared (reported only, not installed): ${suggested.join(', ')}\n`);
+    for (const e of outcome.errors) stderr(`error: ${e.clientId}: ${e.reason}\n`);
   }
 
   if (outcome.errors.length > 0) return bestEffort ? 0 : ExitCode.ERR_PARTIAL;
