@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-08-05
+
+The execution monitor's activity history moves into the daemon. `SCHEMA_VERSION` stays at **6** —
+nothing on the telemetry wire changed.
+
+### Added
+
+- **The running snapshot carries an `activity` series.** `GET /task/:id` (202) and the MCP polling
+  response now include a fixed-length bucketed history of the worker's provider events, plus which
+  act was live in each bucket. Additive and optional: a consumer that does not read it is unaffected.
+
+### Fixed
+
+- **The execution monitor's history no longer dies with the panel.** The panel used to accumulate its
+  activity strip from whatever polls it happened to observe, so opening the monitor late showed a run
+  that appeared to have just started, re-opening it after a run showed nothing, and two viewers of the
+  same task saw different shapes. The daemon now buckets the run's recorded timestamps at read time,
+  so every viewer sees the same picture regardless of when they opened the panel — it is derived from
+  what happened, not from what one client watched happen. Phase is monotonic across buckets, matching
+  the engine: a quiet bucket after the review began belongs to the review, and a zero count means the
+  worker was quiet rather than that data is missing.
+
 ## [6.0.0] - 2026-08-05
 
 Provisioning becomes declared-over-detected, and it proves ownership before it touches anything you

@@ -520,7 +520,9 @@ replaced by `clients.<ClientId>: "off"`.
   longer hold a taskId. The MCP surface is now seven tools, including context-block registration.
 - **The execution monitor plays a three-act scene** — the worker at the bench, the reviewer joining
   to check the same piece, then one of four endings. The motion is derived from the type registry,
-  so a hammer on screen means the route writes your files and a lens means it cannot.
+  so a hammer on screen means the route writes your files and a lens means it cannot. Its activity
+  history is computed by the daemon from what actually happened, so opening the panel late — or
+  re-opening it after the run — shows the same shape as watching from the start.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 
