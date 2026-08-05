@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 
-export type BodyReadResult =
+type BodyReadResult =
   | { ok: true; body: Buffer }
   | { ok: false; reason: 'too_large' };
 

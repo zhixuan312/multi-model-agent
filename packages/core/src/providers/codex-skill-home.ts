@@ -9,9 +9,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { symlink } from 'node:fs/promises';
 
-export type CodexAuthMode = 'oauth' | 'env-key';
+type CodexAuthMode = 'oauth' | 'env-key';
 
-export interface PrepareCodexSkillHomeInput {
+interface PrepareCodexSkillHomeInput {
   stagedRoot: string;
   authMode: CodexAuthMode;
   /** Defaults to $CODEX_HOME or ~/.codex. */

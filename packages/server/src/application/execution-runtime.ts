@@ -35,7 +35,7 @@ import { buildErrorEnvelope, tryParseJson } from './result-shape.js';
 import { buildEnvelopeSnapshot } from './telemetry-snapshot.js';
 import { PREPROCESSORS, PreprocessFailure, type PreprocessResult } from './preprocessors/index.js';
 
-export interface ExecutionRuntimeDeps {
+interface ExecutionRuntimeDeps {
   config: MultiModelConfig;
   bus: EnvelopeBus;
   taskRegistry: TaskRegistry;
@@ -54,11 +54,11 @@ export type SubmitError =
   | { kind: 'skill_load_failed'; message: string }
   | { kind: 'project_reservation'; code: string; message: string };
 
-export type SubmitResult =
+type SubmitResult =
   | { ok: true; taskId: string }
   | { ok: false; error: SubmitError };
 
-export type CancelResult =
+type CancelResult =
   | { outcome: 'not_found' }
   | { outcome: 'terminal'; entry: TaskEntry }
   | { outcome: 'requested'; entry: TaskEntry };

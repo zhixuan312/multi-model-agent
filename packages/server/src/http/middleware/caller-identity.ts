@@ -9,7 +9,7 @@ import { CLIENT_IDS, type CallerClient } from '@zhixuan92/multi-model-agent-core
 const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge']);
 
 
-export interface CallerIdentity {
+interface CallerIdentity {
   callerClient: CallerClient;
   /** Calling agent's model id (e.g., claude-opus-4-7). Sourced from the
    *  required X-MMA-Main-Model header on tool routes. Used as `mainModel`

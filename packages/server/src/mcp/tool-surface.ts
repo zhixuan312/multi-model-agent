@@ -106,7 +106,7 @@ export const WAIT_CAP_MS = 55_000;
 const requestJsonSchema = z.toJSONSchema(taskInputSchema) as Record<string, unknown>;
 delete requestJsonSchema.$schema; // rides inside a tool inputSchema — no standalone dialect header
 
-export interface McpToolDefinition {
+interface McpToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;

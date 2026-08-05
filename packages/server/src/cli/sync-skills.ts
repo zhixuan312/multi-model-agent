@@ -70,7 +70,7 @@ export class UnknownTargetError extends Error {
   }
 }
 
-export interface SyncSkillsDeps {
+interface SyncSkillsDeps {
   argv?: string[];
   homeDir?: string;
   /** Override skills root for testing. */
@@ -171,7 +171,7 @@ function readInstalledVersionAt(skillFile: string): string | null {
   }
 }
 
-export interface SyncOutcome {
+interface SyncOutcome {
   provisioned: ClientId[];
   suggested: ClientId[];
   errors: Array<{ clientId: ClientId; reason: string }>;

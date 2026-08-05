@@ -49,7 +49,7 @@ const installManifestSchema = z.object({
   entries: z.array(manifestEntrySchema),
 });
 
-export type InstallManifest = z.infer<typeof installManifestSchema>;
+type InstallManifest = z.infer<typeof installManifestSchema>;
 export type ManifestEntry = z.infer<typeof manifestEntrySchema>;
 
 /** Thrown when the manifest declares a version newer than this mma supports. */
@@ -61,7 +61,7 @@ export class FutureManifestError extends Error {
 }
 
 /** Thrown when the manifest JSON parses but fails Zod structural validation. */
-export class ManifestSchemaValidationError extends Error {
+class ManifestSchemaValidationError extends Error {
   constructor(manifestPath: string, issues: z.ZodError) {
     super(
       `Manifest file has invalid structure (${manifestPath}): ${issues.message}`,

@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { expandHome } from '../expand-home.js';
 
-export interface PrintTokenDeps {
+interface PrintTokenDeps {
   /** Home directory (defaults to os.homedir()). */
   homeDir?: string;
   /** Token file path (already expanded). Overrides config discovery. */

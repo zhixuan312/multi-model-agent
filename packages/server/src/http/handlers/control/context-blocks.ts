@@ -27,13 +27,13 @@ import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
 import type { ProjectRegistry, ReserveError } from '../../../application/project-registry.js';
 
-export interface ContextBlockHandlerDeps {
+interface ContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;
   maxContextBlockBytes: number;
   maxContextBlocksPerProject: number;
 }
 
-export interface DeleteContextBlockHandlerDeps {
+interface DeleteContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;
 }
 

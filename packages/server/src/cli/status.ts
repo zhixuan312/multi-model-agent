@@ -26,7 +26,7 @@ interface StatusResponse {
   skillCompatible?: boolean | null;
 }
 
-export interface StatusDeps {
+interface StatusDeps {
   /** Server URL (e.g. 'http://127.0.0.1:7337'). */
   serverUrl: string;
   /** Bearer auth token. */
@@ -146,7 +146,7 @@ export function buildServerUrl(bind: string, port: number): string {
   return `http://${authority}:${port}`;
 }
 
-export interface RunStatusDeps {
+interface RunStatusDeps {
   /** Config with server.bind + server.port. */
   serverUrl: string;
   /** Token file path (already resolved). */

@@ -126,7 +126,7 @@ escaped=\$(printf '%s' "\$token" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g')
 printf '{"Authorization":"Bearer %s"}\\n' "\$escaped"
 `;
 
-export interface BuildPluginOptions {
+interface BuildPluginOptions {
   /** Directory to write the plugin into. Created if missing; skills/, commands/
    *  and scripts/ inside it are replaced wholesale so stale entries can't survive. */
   outDir: string;
@@ -138,7 +138,7 @@ export interface BuildPluginOptions {
   skillsRoot?: string;
 }
 
-export interface BuildPluginResult {
+interface BuildPluginResult {
   outDir: string;
   skills: string[];
   commands: string[];

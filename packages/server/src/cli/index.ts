@@ -52,7 +52,7 @@ import type { DeclaredClientRoster } from '../provisioning/roster.js';
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
  * override process.argv / process.exit.
  */
-export interface CliDeps {
+interface CliDeps {
   /**
    * argv[0..] (not including node path or script path) passed to minimist.
    * Defaults to process.argv.slice(2).
@@ -129,7 +129,7 @@ function buildCandidatePaths(
  * Returns the first path that exists, or undefined if none exist.
  * Does NOT validate or parse the file — caller uses loadConfigFromFile().
  */
-export function resolveConfigPath(
+function resolveConfigPath(
   explicit: string | undefined,
   env: Record<string, string | undefined>,
   cwd: string,

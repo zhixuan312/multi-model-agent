@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
-export interface LogsDeps {
+interface LogsDeps {
   config: MultiModelConfig;
   homeDir?: string;
   follow?: boolean;

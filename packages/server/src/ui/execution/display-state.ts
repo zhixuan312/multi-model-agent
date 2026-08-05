@@ -24,7 +24,7 @@ interface TaskLabel {
   taskRef?: string;
 }
 
-export interface RunningDisplayState extends TaskLabel {
+interface RunningDisplayState extends TaskLabel {
   mode: 'running';
   phase: string;
   elapsedMs: number;
@@ -33,7 +33,7 @@ export interface RunningDisplayState extends TaskLabel {
   totalTasks?: number;
 }
 
-export interface CancellingDisplayState extends TaskLabel {
+interface CancellingDisplayState extends TaskLabel {
   mode: 'cancelling';
   phase: string;
   elapsedMs: number;
@@ -46,7 +46,7 @@ export interface CancellingDisplayState extends TaskLabel {
  * misleading about the panel's job — which is to answer "was that worth it?", not "what did it
  * say?". Every field is independently optional; error envelopes null most of them out.
  */
-export interface TerminalDisplayState extends TaskLabel {
+interface TerminalDisplayState extends TaskLabel {
   mode: 'terminal';
   status: string;
   totalDurationMs?: number;
@@ -61,7 +61,7 @@ export interface TerminalDisplayState extends TaskLabel {
   filesChanged?: number;
 }
 
-export interface StageStat {
+interface StageStat {
   durationMs?: number;
   costUsd?: number;
 }
@@ -106,7 +106,7 @@ interface TerminalEnvelopeLike {
  * as opposed to a running/cancelling snapshot which carries a top-level `status` alongside
  * `taskId`/`phase`.
  */
-export function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
+function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
   return (
     typeof payload === 'object' &&
     payload !== null &&

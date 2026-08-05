@@ -5,7 +5,7 @@ import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
 // SCHEMA_VERSION import removed — flusher now accepts v5+ records (see filter below).
 
-export interface FlusherOptions {
+interface FlusherOptions {
   queue: Queue;
   dir: string;
   endpoint: string;

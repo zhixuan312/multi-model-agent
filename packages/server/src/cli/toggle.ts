@@ -45,7 +45,7 @@ export const ToggleExitCode = Object.freeze({
   ERR_UNKNOWN_TARGET: 3,
 });
 
-export interface ToggleDeps {
+interface ToggleDeps {
   argv?: string[];
   homeDir?: string;
   /** Override skills root — threaded into runSyncSkills for `enable` in tests. */

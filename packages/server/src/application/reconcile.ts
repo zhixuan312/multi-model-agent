@@ -62,7 +62,7 @@ function killStaleWorkerGroup(workerPid: number): boolean {
   }
 }
 
-export interface ReconcileOutcome {
+interface ReconcileOutcome {
   interrupted: number;
   fencedWorkers: number;
   prunedExpired: number;

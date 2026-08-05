@@ -24,7 +24,7 @@ export const RESOURCE_NOT_FOUND = -32002;
 
 const UNBUILT_PLACEHOLDER = '<!-- mma: execution app not built — run `npm run build` -->';
 
-export interface ExecutionArtifact {
+interface ExecutionArtifact {
   html: string;
   available: boolean;
 }
@@ -46,7 +46,7 @@ export interface ExecutionArtifact {
  * `dist/ui/execution.html`, never to the unbundled `src/ui/execution/
  * execution.html`.
  */
-export function resolveExecutionArtifactPath(moduleUrl: string): string {
+function resolveExecutionArtifactPath(moduleUrl: string): string {
   const modulePath = fileURLToPath(moduleUrl);
   const marker = `${sep}packages${sep}server${sep}`;
   const markerIndex = modulePath.indexOf(marker);
