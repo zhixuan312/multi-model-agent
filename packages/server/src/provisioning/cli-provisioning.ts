@@ -14,7 +14,7 @@
  * close an import cycle. Same small `resolveCliEntrypoint` duplication
  * `runtime-deps.ts` already carries, for the same reason.
  */
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,6 +80,29 @@ interface BuildCliProvisioningServiceOptions {
   /** Override host detection in tests; production defaults to the read-only
    * evidence above. */
   detected?: ReadonlySet<ClientId>;
+  /** Absolute path of the config file the declared roster lives in. Supplying it
+   *  lets the service RE-READ `clients` at the moment it decides whether a
+   *  shared skill root still has consumers, rather than trusting the snapshot
+   *  taken when this process started. That matters precisely when another
+   *  process changed the declaration while this one waited on the provisioning
+   *  lock. Without it the snapshot is used, which is what every caller did
+   *  before the lock existed. */
+  configPath?: string;
+}
+
+/** Re-read `clients` from the config file, ignoring anything unreadable or
+ *  malformed: a roster we cannot parse is not evidence that a peer went away,
+ *  and treating it as such would remove a shared root somebody still uses. */
+function declaredFromConfigFile(configPath: string, fallback: DeclaredClientRoster | undefined): DeclaredClientRoster | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(configPath, 'utf8'));
+    if (typeof parsed !== 'object' || parsed === null) return fallback;
+    const clients = (parsed as { clients?: unknown }).clients;
+    if (typeof clients !== 'object' || clients === null) return fallback;
+    return clients as DeclaredClientRoster;
+  } catch {
+    return fallback;
+  }
 }
 
 export function buildCliProvisioningService(
@@ -95,10 +118,18 @@ export function buildCliProvisioningService(
     release: readServerVersion(),
     stateDir,
   });
+  const declared = options.declared ?? config.clients;
+  const configPath = options.configPath;
   return createProvisioningService({
     stateDir,
     port,
-    declared: options.declared ?? config.clients,
+    declared,
     detected: options.detected ?? detectCliClients(homeDir),
+    // `options.declared` is an explicit per-invocation override (`--target`
+    // forcing one client 'on'); re-reading the file would discard it. Only a
+    // roster that came FROM the file is re-read from it.
+    ...(configPath && !options.declared
+      ? { readDeclared: () => declaredFromConfigFile(configPath, declared) }
+      : {}),
   });
 }

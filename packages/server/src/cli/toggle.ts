@@ -135,7 +135,15 @@ export async function runDisable(deps: ToggleDeps = {}): Promise<number> {
 
   const forcedDeclared: DeclaredClientRoster = { ...deps.declared };
   for (const id of targets) forcedDeclared[id] = 'off';
-  const service = buildCliProvisioningService({ clients: forcedDeclared }, homeDir, { declared: forcedDeclared });
+  // `configPath` rather than a pre-merged `declared`: the declaration was just
+  // persisted above, so the FILE is now the freshest statement of the roster —
+  // including any change another process made while this one waited for the
+  // provisioning lock. Peer counting for shared skill roots reads it there.
+  const service = buildCliProvisioningService(
+    { clients: forcedDeclared },
+    homeDir,
+    { configPath: deps.configPath },
+  );
 
   const removed: ClientId[] = [];
   const errors: Array<{ clientId: ClientId; reason: string }> = [];

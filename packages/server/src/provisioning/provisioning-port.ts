@@ -102,10 +102,11 @@ export interface ProvisioningPort {
    *  already succeeded. Best-effort: a backup that cannot be deleted is leaked
    *  disk, not a failed operation, so this reports nothing. */
   discardSkillBackup(backupPath: string): void;
-  /** Remove this client's skills, honouring shared-root reference counting:
-   *  `enabledPeers` is every OTHER currently-enabled client sharing the same
-   *  root; when non-empty for a shared root, this is a no-op (the root is
-   *  still needed) rather than a removal. */
+  /** Remove this client's skills, honouring shared-root reference counting.
+   *  `enabledPeers` is every OTHER enabled client that reads THIS client's skill
+   *  root — not merely every enabled client, which would let any unrelated
+   *  client block this one's removal. Non-empty means the root is still needed,
+   *  so removal is a no-op rather than a deletion. */
   removeSkills(clientId: ClientId, capability: ClientCapability, enabledPeers: ReadonlySet<ClientId>): Promise<PortActionResult>;
   /** Names of packaged skills currently installed (ownership-proven) for this
    *  client. Read-only. */

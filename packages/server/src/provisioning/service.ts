@@ -31,6 +31,7 @@ import {
   type RegistrationSnapshot,
 } from './marker-store.js';
 import { computeClientStatus, getClientInventory, type ClientInventoryRecord } from './inventory.js';
+import { withProvisioningLock, type AcquireLockOptions } from './provisioning-lock.js';
 import type { ClientProvisioningStatus, ProvisioningPort, RegistrationMutationResult } from './provisioning-port.js';
 
 /** Thrown when a test's `interruptAfter` hook fires -- simulates the process
@@ -54,6 +55,15 @@ export interface ProvisioningServiceDeps {
   declared: DeclaredClientRoster | undefined;
   detected: ReadonlySet<ClientId>;
   capabilities?: readonly ClientCapability[];
+  /** Re-read the declared roster from its durable source. `declared` is a
+   *  snapshot taken when this process started; another process may have changed
+   *  the declaration since, and after waiting on the provisioning lock that is
+   *  not a hypothetical — waiting is exactly when it happens. Defaults to the
+   *  snapshot for callers with no durable source to re-read (tests, and any
+   *  entry point invoked without a config file). */
+  readDeclared?: () => DeclaredClientRoster | undefined;
+  /** Test seam for the cross-process lock's timing. */
+  lockOptions?: AcquireLockOptions;
   now?: () => number;
   /** Test-only: called immediately after each marker phase is durably
    *  written. Throwing simulates a crash at exactly that point. */
@@ -84,11 +94,35 @@ function inventoryDeps(deps: ProvisioningServiceDeps) {
   return { stateDir: deps.stateDir, port: deps.port, declared: deps.declared, detected: deps.detected, capabilities: deps.capabilities };
 }
 
-/** Every client currently effectively 'on' -- used for shared-root reference
- *  counting when removing skills for an 'off' transition. */
-function enabledClientIds(deps: ProvisioningServiceDeps): Set<ClientId> {
-  const roster = resolveEffectiveRoster(deps.declared, deps.detected);
-  return new Set(roster.filter((entry) => entry.effectiveState === 'on').map((entry) => entry.clientId));
+/**
+ * Clients that are effectively 'on' AND read the SAME skill root as
+ * `capability` -- the reference count that decides whether removing this
+ * client's skills would strip a root somebody else still consumes.
+ *
+ * The root comparison is the whole point. Counting every enabled client instead
+ * means `mma disable --target=claude-code` silently leaves `~/.claude/skills` in
+ * place whenever, say, codex happens to be enabled — two clients with entirely
+ * separate roots, one blocking the other's removal. Only cursor, vscode and
+ * opencode actually share a root (`~/.agents/skills`); for everyone else this
+ * set is always empty and removal proceeds.
+ *
+ * The roster is re-read rather than taken from `deps.declared`. Getting it wrong
+ * in the stale direction is destructive, not conservative: believing a sibling is
+ * 'off' when another process just turned it 'on' removes the root that sibling
+ * now needs. The opposite staleness merely leaves skills in place.
+ */
+function enabledRootSharers(deps: ProvisioningServiceDeps, capability: ClientCapability): Set<ClientId> {
+  if (!capability.skillRoot) return new Set();
+  const declared = deps.readDeclared ? deps.readDeclared() : deps.declared;
+  const roster = resolveEffectiveRoster(declared, deps.detected);
+  const byId = new Map(capabilitiesOf(deps).map((c) => [c.id, c] as const));
+  return new Set(
+    roster
+      .filter((entry) => entry.effectiveState === 'on'
+        && entry.clientId !== capability.id
+        && byId.get(entry.clientId)?.skillRoot === capability.skillRoot)
+      .map((entry) => entry.clientId),
+  );
 }
 
 function toSnapshot(read: { path: string; existed: boolean; bytes: Buffer | null }): RegistrationSnapshot {
@@ -363,9 +397,7 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
     return { clientId, status: 'removed', skillsInstalled: false, mcpRegistrationStatus: 'absent' };
   }
 
-  const peers = enabledClientIds(deps);
-  peers.delete(clientId);
-  const removedSkills = await deps.port.removeSkills(clientId, capability, peers);
+  const removedSkills = await deps.port.removeSkills(clientId, capability, enabledRootSharers(deps, capability));
   if (!removedSkills.ok) {
     // Registration is already gone but skills could not be removed --
     // restore the registration rather than leave the client half-off.
@@ -431,10 +463,16 @@ export interface ProvisioningService {
 }
 
 function buildService(deps: ProvisioningServiceDeps): ProvisioningService {
+  // Every MUTATING entry point runs under the cross-process lock; `inventory`
+  // does not, because a read that blocks on somebody else's write would make
+  // `mma clients` hang behind an npm postinstall for no benefit — it reports a
+  // moment in time either way.
+  const locked = <T>(fn: () => Promise<T>): Promise<T> =>
+    withProvisioningLock(deps.stateDir, fn, deps.lockOptions);
   return {
-    provision: (ids) => provisionMany(deps, ids),
-    provisionAll: () => provisionMany(deps, capabilitiesOf(deps).map((c) => c.id)),
-    recoverOnStartup: () => recoverAll(deps),
+    provision: (ids) => locked(() => provisionMany(deps, ids)),
+    provisionAll: () => locked(() => provisionMany(deps, capabilitiesOf(deps).map((c) => c.id))),
+    recoverOnStartup: () => locked(() => recoverAll(deps)),
     inventory: () => getClientInventory(inventoryDeps(deps)),
   };
 }
@@ -465,6 +503,9 @@ import { SUPPORTED_SKILLS } from '../skill-install/discover.js';
 
 interface TestFixtureOptions {
   clients?: Partial<Record<ClientId, 'on' | 'off'>>;
+  /** Shorten the cross-process lock's patience so a contention test does not
+   *  have to wait out the production 30s timeout. */
+  lockOptions?: AcquireLockOptions;
   failRegistrationFor?: Set<ClientId>;
   detected?: ReadonlySet<ClientId>;
   capabilities?: readonly ClientCapability[];
@@ -705,6 +746,7 @@ function buildTestFixture(options: TestFixtureOptions): ProvisioningTestFixture 
     declared,
     detected,
     capabilities,
+    ...(options.lockOptions ? { lockOptions: options.lockOptions } : {}),
     onPhaseWritten: (clientId, phase) => {
       const history = phaseHistory.get(clientId) ?? [];
       history.push(phase);
