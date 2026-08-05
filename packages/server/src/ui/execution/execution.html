@@ -118,6 +118,245 @@
         opacity: 0.5;
         cursor: default;
       }
+
+      /* ===================== three-act stage ===================== */
+      /*
+       * Scene palette. These are OUR properties, defined right here, so they are referenced
+       * without a fallback on purpose — the rule about fallbacks applies to host-provided
+       * properties the App does not control.
+       */
+      :root {
+        --mma-fig: #57606a;
+        --mma-mat: #8c959f;
+        --mma-edge: rgba(127, 127, 127, 0.55);
+        --mma-paper: #ffffff;
+        --mma-hot: #bc4c00;
+        --mma-cool: #0969da;
+        --mma-ok: #1a7f37;
+        --mma-bad: #cf222e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --mma-fig: #9198a1;
+          --mma-mat: #6e7681;
+          --mma-paper: rgba(127, 127, 127, 0.14);
+          --mma-hot: #f0883e;
+          --mma-cool: #6cb6ff;
+          --mma-ok: #3fb950;
+          --mma-bad: #f85149;
+        }
+      }
+
+      /* header: identity, clock, and the stop control at the far corner */
+      #app .hd { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
+      #app .hd h2 { margin: 0; flex: 0 1 auto; min-width: 0; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap; }
+      #app .clk { flex: none; margin-left: auto; font-variant-numeric: tabular-nums;
+        font-size: 0.75rem; white-space: nowrap;
+        color: var(--color-text-secondary, var(--mma-ink-dim)); }
+      #app .clk s { text-decoration: none; opacity: 0.75; }
+      #app .hd button { margin-top: 0; flex: none; font-size: 0.6875rem; padding: 0.125rem 0.5rem; }
+
+      /* row 1: stage + rail. The stage is a FIXED size in every act. */
+      #app .bd { display: flex; gap: 0.6875rem; margin-top: 0.5rem; align-items: center; }
+      #app .stage { flex: none; width: 120px; height: 58px; border-radius: 0.4375rem;
+        overflow: hidden; background: var(--color-bg-secondary, rgba(127, 127, 127, 0.08));
+        border: 1px solid var(--color-border, var(--mma-line)); }
+      #app .stage svg { display: block; width: 100%; height: 100%; }
+      #app .rail { flex: 1; min-width: 0; display: flex; flex-direction: column;
+        gap: 0.5rem; justify-content: center; }
+
+      /* activity strip: one bar per poll, gaps read as quiet */
+      #app .strip { height: 32px; display: flex; align-items: flex-end; gap: 2px;
+        position: relative; border-bottom: 1px solid var(--color-border, var(--mma-line)); }
+      #app .strip .bar { flex: 1; min-width: 2px; max-width: 10px; border-radius: 2px 2px 0 0;
+        background: var(--mma-hot); opacity: 0.9; }
+      #app .strip .bar.p2 { background: var(--mma-cool); }
+      #app .strip .bar.q { background: var(--mma-edge); opacity: 0.45; }
+      #app .strip .seam { position: absolute; top: 0; bottom: 0; width: 1px;
+        background: var(--mma-cool); opacity: 0.55; }
+      #app .now { display: flex; align-items: center; gap: 0.375rem; margin: 0; height: 1.125rem;
+        font-size: 0.71875rem; overflow: hidden; }
+      #app .now span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #app .now .dot { flex: none; width: 5px; height: 5px; border-radius: 50%;
+        background: var(--mma-hot); animation: mma-blink 1.6s ease-in-out infinite; }
+      @keyframes mma-blink { 50% { opacity: 0.25; } }
+
+      /* row 2: results table, full width — labels over values */
+      #app .tbl { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 1rem;
+        row-gap: 0.4375rem; margin-top: 0.5625rem; padding-top: 0.5625rem;
+        border-top: 1px solid var(--color-border, var(--mma-line)); }
+      #app .cel { min-width: 0; }
+      #app .cel .k { display: block; font-size: 0.59375rem; letter-spacing: 0.07em;
+        text-transform: uppercase; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; color: var(--color-text-secondary, var(--mma-ink-dim)); }
+      #app .cel .v { display: block; font-variant-numeric: tabular-nums; font-size: 0.75rem;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #app .cel .v.good { color: var(--mma-ok); }
+      #app .cel .v.bad { color: var(--mma-bad); }
+      @media (max-width: 760px) { #app .tbl { grid-template-columns: repeat(3, 1fr); } }
+      @media (max-width: 430px) { #app .tbl { grid-template-columns: repeat(2, 1fr); } }
+
+      /* row 3: meta, anchored to both edges */
+      #app .sub { display: flex; align-items: baseline; gap: 0.75rem; margin-top: 0.5625rem; }
+      #app .sub .l { flex: 1; min-width: 0; }
+      #app .sub .r { flex: none; }
+      #app .sub .meta { margin: 0; }
+
+      /* ---------- scene colours ---------- */
+      #app .sc .s-fig { fill: var(--mma-fig); }
+      #app .sc .s-fig-s { stroke: var(--mma-fig); }
+      #app .sc .s-mat { fill: var(--mma-mat); }
+      #app .sc .s-mat-s { stroke: var(--mma-mat); }
+      #app .sc .s-mat-f { fill: var(--mma-mat); }
+      #app .sc .s-edge { fill: var(--mma-edge); }
+      #app .sc .s-line { fill: var(--mma-mat); }
+      #app .sc .s-line-s { stroke: var(--mma-mat); }
+      #app .sc .s-paper { fill: var(--mma-paper); }
+      #app .sc .s-bad-s { stroke: var(--mma-bad); }
+      #app .sc .s-ok-s { stroke: var(--mma-ok); }
+      #app .sc .s-cool-f { fill: var(--mma-cool); }
+      #app .sc .s-cool-s { stroke: var(--mma-cool); }
+      /* the accent follows the ACT, not the type: amber while working, blue under review,
+         and the outcome colour once the run has ended */
+      #app .sc .s-acc-f { fill: var(--mma-hot); }
+      #app .sc .s-acc-s { stroke: var(--mma-hot); }
+      #app .sc.act-review .s-acc-f { fill: var(--mma-cool); }
+      #app .sc.act-review .s-acc-s { stroke: var(--mma-cool); }
+      #app .sc.end-done .s-acc-f, #app .sc.end-concerns .s-acc-f { fill: var(--mma-ok); }
+      #app .sc.end-done .s-acc-s, #app .sc.end-concerns .s-acc-s { stroke: var(--mma-ok); }
+      #app .sc.end-failed .s-acc-f { fill: var(--mma-bad); }
+      #app .sc.end-failed .s-acc-s { stroke: var(--mma-bad); }
+      #app .sc.end-cancelled .s-acc-f { fill: var(--mma-mat); }
+      #app .sc.end-cancelled .s-acc-s { stroke: var(--mma-mat); }
+      #app .sc .dull { opacity: 0.4; }
+
+      /* ---------- joints ----------
+       * ANATOMY RULE: every one of these transforms is a ROTATION about a joint. A translate
+       * on a body or limb group slides the shoulder out of the torso — a hand leaving the
+       * body — because the legs sit outside the leaning group by design. */
+      #app .sc .ua { transform-box: view-box; transform-origin: 38.4px 17.4px; }
+      #app .sc .fa { transform-box: view-box; transform-origin: 34.2px 17.4px; }
+      #app .sc .iua { transform-box: view-box; transform-origin: 7px 17.4px; }
+      #app .sc .ifa { transform-box: view-box; transform-origin: 11px 17.4px; }
+      #app .sc .lean { transform-box: view-box; transform-origin: 40.6px 22.4px; }
+      #app .sc .ilean { transform-box: view-box; transform-origin: 4.9px 22.4px; }
+
+      /* strike: winds up at +42, lands at -3 ON the billet. Going further drives the head
+         through the bench at y 23. */
+      #app .sc.v-strike .ua { animation: mma-ua-strike 1.2s cubic-bezier(.35,0,.55,1) infinite; }
+      @keyframes mma-ua-strike { 0% { transform: rotate(42deg); } 30% { transform: rotate(-3deg); }
+        38% { transform: rotate(2deg); } 100% { transform: rotate(42deg); } }
+      #app .sc.v-strike .fa { animation: mma-fa-strike 1.2s cubic-bezier(.35,0,.55,1) infinite; }
+      @keyframes mma-fa-strike { 0% { transform: rotate(26deg); } 30% { transform: rotate(-3deg); }
+        38% { transform: rotate(1deg); } 100% { transform: rotate(26deg); } }
+      #app .sc.v-strike .lean { animation: mma-lean-strike 1.2s cubic-bezier(.35,0,.55,1) infinite; }
+      @keyframes mma-lean-strike { 0% { transform: rotate(5deg); } 30% { transform: rotate(-6deg); }
+        100% { transform: rotate(5deg); } }
+      /* probe: shoulder and elbow rotate IN PHASE so their travel adds. Counter-phasing them
+         cancels almost exactly, which reads as a frozen panel. */
+      #app .sc.v-probe .ua { animation: mma-ua-probe 2.4s ease-in-out infinite; }
+      @keyframes mma-ua-probe { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(18deg); } }
+      #app .sc.v-probe .fa { animation: mma-fa-probe 2.4s ease-in-out infinite; }
+      @keyframes mma-fa-probe { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(15deg); } }
+      #app .sc.v-draft .ua { animation: mma-ua-draft 1.3s cubic-bezier(.4,0,.5,1) infinite; }
+      @keyframes mma-ua-draft { 0%, 100% { transform: rotate(-3deg); } 45% { transform: rotate(13deg); } }
+      #app .sc.v-draft .fa { animation: mma-fa-draft 1.3s cubic-bezier(.4,0,.5,1) infinite; }
+      @keyframes mma-fa-draft { 0%, 100% { transform: rotate(-4deg); } 45% { transform: rotate(22deg); } }
+      /* three tools hang low in the hand; a range safe for a lens scrapes the bench with these */
+      #app .sc.t-rod .ua { animation: mma-ua-rod 1.2s cubic-bezier(.4,0,.5,1) infinite; }
+      @keyframes mma-ua-rod { 0%, 100% { transform: rotate(-3deg); } 45% { transform: rotate(10deg); } }
+      #app .sc.t-rod .fa { animation: mma-fa-rod 1.2s cubic-bezier(.4,0,.5,1) infinite; }
+      @keyframes mma-fa-rod { 0%, 100% { transform: rotate(-4deg); } 45% { transform: rotate(12deg); } }
+      #app .sc.t-compass .ua { animation: mma-ua-comp 1.9s ease-in-out infinite; }
+      @keyframes mma-ua-comp { 0%, 100% { transform: rotate(2deg); } 50% { transform: rotate(18deg); } }
+      #app .sc.t-compass .fa { animation: mma-fa-comp 1.9s ease-in-out infinite; }
+      @keyframes mma-fa-comp { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(12deg); } }
+      #app .sc.t-sheaf .ua { animation: mma-ua-sheaf 2.4s ease-in-out infinite; }
+      @keyframes mma-ua-sheaf { 0%, 100% { transform: rotate(2deg); } 50% { transform: rotate(20deg); } }
+      #app .sc.t-sheaf .fa { animation: mma-fa-sheaf 2.4s ease-in-out infinite; }
+      @keyframes mma-fa-sheaf { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(15deg); } }
+      #app .sc.t-lever .ua { animation: mma-ua-lever 1.8s ease-in-out infinite; }
+      @keyframes mma-ua-lever { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(6deg); } }
+      #app .sc.t-lever .fa { animation: mma-fa-lever 1.8s ease-in-out infinite; }
+      @keyframes mma-fa-lever { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(6deg); } }
+      /* the reviewer's lens sweeps just as far; its arm extends right, so the signs mirror */
+      #app .sc.act-review .iua { animation: mma-iua 2.5s ease-in-out infinite; }
+      @keyframes mma-iua { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(-18deg); } }
+      #app .sc.act-review .ifa { animation: mma-ifa 2.5s ease-in-out infinite; }
+      @keyframes mma-ifa { 0%, 100% { transform: rotate(3deg); } 50% { transform: rotate(-14deg); } }
+      /* a breath, so a figure between tool strokes is never completely still */
+      #app .sc.v-probe .lean, #app .sc.v-draft .lean { animation: mma-breath 3.1s ease-in-out infinite; }
+      @keyframes mma-breath { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+      #app .sc.act-review .ilean { animation: mma-breath2 3.1s ease-in-out infinite; }
+      @keyframes mma-breath2 { 0%, 100% { transform: rotate(2deg); } 50% { transform: rotate(-2deg); } }
+      #app .sc.act-review .lean { animation: mma-breath 3.8s ease-in-out infinite; }
+
+      /* ---------- Act III ----------
+       * The raised pose is a STATIC rule, not an inline attribute, so a CSS animation can vary
+       * around it and reduced-motion falls back to it instead of dropping the arms flat and
+       * leaving the piece floating unheld. */
+      #app .sc.end-done .ua, #app .sc.end-concerns .ua { transform: rotate(38deg); }
+      #app .sc.end-done .fa, #app .sc.end-concerns .fa { transform: rotate(16deg); }
+      #app .sc.end-done .iua, #app .sc.end-concerns .iua { transform: rotate(-40deg); }
+      #app .sc.end-done .ifa, #app .sc.end-concerns .ifa { transform: rotate(-18deg); }
+      #app .sc.end-done .ua, #app .sc.end-concerns .ua { animation: mma-hold-ua 3.4s ease-in-out infinite; }
+      @keyframes mma-hold-ua { 0%, 100% { transform: rotate(38deg); } 50% { transform: rotate(43deg); } }
+      #app .sc.end-done .fa, #app .sc.end-concerns .fa { animation: mma-hold-fa 3.4s ease-in-out infinite; }
+      @keyframes mma-hold-fa { 0%, 100% { transform: rotate(16deg); } 50% { transform: rotate(20deg); } }
+      #app .sc.end-done .iua, #app .sc.end-concerns .iua { animation: mma-hold-iua 3.4s ease-in-out infinite; }
+      @keyframes mma-hold-iua { 0%, 100% { transform: rotate(-40deg); } 50% { transform: rotate(-45deg); } }
+      #app .sc.end-done .ifa, #app .sc.end-concerns .ifa { animation: mma-hold-ifa 3.4s ease-in-out infinite; }
+      @keyframes mma-hold-ifa { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(-22deg); } }
+      /* feet stay planted: the sway is a hip rotation, and the piece rises only by as much as
+         the flexing arms actually lift it */
+      #app .sc.end-done .lean, #app .sc.end-concerns .lean { animation: mma-sway 3.4s ease-in-out infinite; }
+      @keyframes mma-sway { 0%, 100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
+      #app .sc.end-done .ilean, #app .sc.end-concerns .ilean { animation: mma-sway2 3.4s ease-in-out infinite; }
+      @keyframes mma-sway2 { 0%, 100% { transform: rotate(1.2deg); } 50% { transform: rotate(-1.2deg); } }
+      #app .sc .held { transform-box: view-box; }
+      #app .sc.end-done .held, #app .sc.end-concerns .held { animation: mma-rise 3.4s ease-in-out infinite; }
+      @keyframes mma-rise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.3px); } }
+      #app .sc.end-done .glint, #app .sc.end-concerns .glint { animation: mma-glint 3.4s ease-in-out infinite; }
+      @keyframes mma-glint { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.95; } }
+      #app .sc.end-failed .lean { animation: mma-sigh 3.2s ease-in-out infinite; }
+      @keyframes mma-sigh { 0%, 100% { transform: rotate(0deg); } 55% { transform: rotate(5deg); } }
+      #app .sc.end-failed .spk { animation: mma-fault 2s ease-in-out infinite; }
+      @keyframes mma-fault { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.9; } }
+      #app .sc.end-cancelled .lean { animation: mma-sway 4.2s ease-in-out infinite; }
+      #app .sc.end-cancelled .ilean { animation: mma-sway2 4.2s ease-in-out infinite; }
+
+      /* secondary motion, live acts only — the endings must settle, not keep performing */
+      #app .sc.live .hitk { opacity: 0; animation: mma-hit 1.2s linear infinite; }
+      @keyframes mma-hit { 0%, 26% { opacity: 0; } 30% { opacity: 1; } 46%, 100% { opacity: 0; } }
+      #app .sc.live .ink { animation: mma-ink 2.4s linear infinite; }
+      @keyframes mma-ink { 0%, 8% { opacity: 0; } 18%, 72% { opacity: 1; } 82%, 100% { opacity: 0; } }
+      #app .sc.live .ink2 { animation-delay: 0.55s; }
+      #app .sc.live .ink3 { animation-delay: 1.1s; }
+      #app .sc.live .tick { animation: mma-tick 2.7s linear infinite; }
+      @keyframes mma-tick { 0%, 10% { opacity: 0; } 20%, 74% { opacity: 1; } 84%, 100% { opacity: 0; } }
+      #app .sc.live .tick2 { animation-delay: 0.7s; }
+      #app .sc.live .tick3 { animation-delay: 1.4s; }
+      #app .sc.live .spk { animation: mma-spark 0.7s steps(2) infinite; }
+      @keyframes mma-spark { 50% { opacity: 0.12; } }
+      #app .sc.live .arr { animation: mma-arrive 2.4s ease-in-out infinite; }
+      @keyframes mma-arrive { 0% { transform: translateX(-14px); opacity: 0; }
+        32%, 70% { transform: none; opacity: 1; } 92%, 100% { transform: translateX(4px); opacity: 0; } }
+      #app .sc.live .arr2 { animation-delay: 1.2s; }
+      #app .sc.live .heat { animation: mma-heat 1.3s ease-in-out infinite; }
+      @keyframes mma-heat { 0%, 100% { transform: translateY(0); opacity: 0.6; }
+        50% { transform: translateY(-2.2px); opacity: 0.12; } }
+      #app .sc.live .ndl { transform-box: view-box; transform-origin: 21px 18px;
+        animation: mma-needle 1.7s ease-in-out infinite; }
+      @keyframes mma-needle { 0%, 100% { transform: rotate(-42deg); } 50% { transform: rotate(40deg); } }
+
+      /*
+       * Motion sensitivity is a first-class layout here, not a degraded one: the static poses
+       * above still apply, so Act III still shows two figures holding the finished piece.
+       */
+      @media (prefers-reduced-motion: reduce) {
+        #app .sc *, #app .now .dot { animation: none !important; }
+      }
     </style>
   </head>
   <body>

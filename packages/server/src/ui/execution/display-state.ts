@@ -20,8 +20,29 @@
  */
 interface TaskLabel {
   taskType?: string;
+  /** RAW type, unformatted — the key the stage's prop table is looked up by. Distinct from
+   *  `taskType`, which is the human label and may carry the subtype in parentheses. */
+  type?: string;
   /** Short task id, surfaced so a panel can be correlated with the daemon log and store. */
   taskRef?: string;
+}
+
+/** Which of the four Act III tableaux the stage resolves to. */
+export type Ending = 'done' | 'concerns' | 'failed' | 'cancelled';
+
+/**
+ * Map a terminal status onto an ending.
+ *
+ * `done_with_concerns` gets its own tableau and NOT the failure one: concerns are advisory,
+ * the run succeeded, and a panel that rendered them as damage would misreport the outcome.
+ * `interrupted` joins `failed` because both mean no usable result.
+ */
+export function endingForStatus(status: string): Ending {
+  const s = status.toLowerCase();
+  if (s.includes('cancel')) return 'cancelled';
+  if (s.includes('concern')) return 'concerns';
+  if (s.includes('fail') || s.includes('interrupt') || s.includes('error')) return 'failed';
+  return 'done';
 }
 
 interface RunningDisplayState extends TaskLabel {
@@ -49,6 +70,9 @@ interface CancellingDisplayState extends TaskLabel {
 interface TerminalDisplayState extends TaskLabel {
   mode: 'terminal';
   status: string;
+  /** Which Act III tableau the stage plays. Always present so the stage never has to
+   *  re-derive it from a status string it would have to parse a second time. */
+  ending: Ending;
   totalDurationMs?: number;
   totalCostUsd?: number;
   savedVsMainCostUsd?: number;
@@ -145,10 +169,14 @@ function stage(raw: StageLike | null | undefined): StageStat | undefined {
 function deriveTerminal(payload: TerminalEnvelopeLike): TerminalDisplayState {
   const taskType = label(payload.task?.type, payload.task?.subtype);
   const taskRef = shortRef(payload.task?.taskId);
+  const rawType = typeof payload.task?.type === 'string' ? payload.task.type : undefined;
+  const status = String(payload.task?.status ?? '');
   const state: TerminalDisplayState = {
     mode: 'terminal',
-    status: String(payload.task?.status ?? ''),
+    status,
+    ending: endingForStatus(status),
     ...(taskType ? { taskType } : {}),
+    ...(rawType ? { type: rawType } : {}),
     ...(taskRef ? { taskRef } : {}),
   };
   const m = payload.metrics;
@@ -188,17 +216,20 @@ function deriveRunningOrCancelling(
 
   const taskRef = shortRef(payload.taskId);
   const taskType = label(payload.type, payload.subtype);
+  const rawType = typeof payload.type === 'string' ? payload.type : undefined;
 
   if (payload.cancellationRequested === true) {
     return {
       mode: 'cancelling', phase, elapsedMs, phaseElapsedMs,
       ...(taskType ? { taskType } : {}),
+      ...(rawType ? { type: rawType } : {}),
       ...(taskRef ? { taskRef } : {}),
     };
   }
 
   const state: RunningDisplayState = { mode: 'running', phase, elapsedMs, phaseElapsedMs };
   if (taskType) state.taskType = taskType;
+  if (rawType) state.type = rawType;
   if (taskRef) state.taskRef = taskRef;
   if (typeof payload.runningHeadline === 'string') {
     state.runningHeadline = payload.runningHeadline;

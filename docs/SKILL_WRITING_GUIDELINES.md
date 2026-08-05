@@ -4,7 +4,7 @@ How we write `mma-*` skills (and the `multi-model-agent` router skill) under `pa
 
 ## Audience
 
-Future Claude sessions invoking `mma-*` skills via Claude Code, Gemini CLI, Codex CLI, or Cursor. Each skill must answer two questions for the model loading it:
+Future Claude sessions invoking `mma-*` skills via any provisioned client — Claude Code, Claude Desktop, Codex, Antigravity, Cursor, VS Code, opencode or Windsurf. Each skill must answer two questions for the model loading it:
 
 1. **Should I use this skill right now?** (answered by the `description` frontmatter)
 2. **How do I use it correctly?** (answered by the body)

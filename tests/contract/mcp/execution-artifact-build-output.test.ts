@@ -37,6 +37,24 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
     expect(html).not.toMatch(/<link[^>]+\bhref=["']https?:\/\//i);
   });
 
+  it('stays within its size budget', () => {
+    // Everything is inlined into one file the host must fetch and parse, so the stage's art
+    // has to earn its bytes. The ceiling is deliberately close to the current figure: it is a
+    // ratchet, meant to make an accidental dependency import or an inlined raster obvious
+    // immediately rather than after the bundle has quietly doubled.
+    const bytes = readFileSync(artifactPath).length;
+    expect(bytes, `execution.html is ${(bytes / 1024).toFixed(0)} KB`).toBeLessThan(420 * 1024);
+  });
+
+  it('ships the three-act stage, not just the old text panel', () => {
+    // The scene is generated at runtime, but its stylesheet is part of the bundle — if the
+    // stage CSS is missing the panel silently degrades to unstyled markup.
+    const html = readFileSync(artifactPath, 'utf8');
+    expect(html).toMatch(/mma-ua-strike/);
+    expect(html).toMatch(/mma-ua-probe/);
+    expect(html).toMatch(/prefers-reduced-motion/);
+  });
+
   it('resources/read serves these exact bytes byte-for-byte (AC-1.6)', async () => {
     __setExecutionArtifactOverrideForTests(null); // use the REAL disk-loaded artifact
     const builtHtml = readFileSync(artifactPath, 'utf8');

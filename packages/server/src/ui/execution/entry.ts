@@ -1,5 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { deriveDisplayState, type DisplayState } from './display-state.js';
+import { sceneSvg, sceneClass, type Act } from './scene.js';
 
 /**
  * Bootstrap + full polling/cancel state machine for the execution-monitor MCP App.
@@ -134,105 +135,118 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-/** One label/value row. Rows are independently optional, so a missing field leaves no gap. */
-function row(label: string, value: string): string {
-  return `<div class="row"><span class="k">${escapeHtml(label)}</span><span class="v">${escapeHtml(value)}</span></div>`;
-}
+/** One bar of the activity strip: how many tool calls landed in a poll window, and the act. */
+export interface ActivityBar { n: number; act: 1 | 2 }
+
+/** Longest run of history the strip keeps. Client-side only — it does not survive a reload. */
+const STRIP_LEN = 34;
 
 /**
- * The panel heading answers "what is this?" before "how is it going?".
+ * The act the stage should play.
  *
- * `Running` alone was the same heading for a spec, a review and an investigation, so the
- * heading carried no information the user did not already have. Type first, state second:
- * `spec · Running`, `audit (plan) · done`. When the payload carries no type — an older
- * daemon, or a bare terminal fallback — the heading degrades to exactly what it was.
+ * Terminal is Act III regardless of the phase it stopped in; otherwise the engine's own
+ * two-phase pipeline supplies the act directly.
  */
-function heading(taskType: string | undefined, state: string): string {
-  const text = taskType ? `${taskType} · ${state}` : state;
-  return `<h2>${escapeHtml(text)}</h2>`;
+function actOf(display: DisplayState): Act {
+  if (display.mode === 'terminal') return 'end';
+  return display.phase === 'reviewing' ? 'review' : 'work';
 }
 
-function renderDisplay(display: DisplayState): string {
+/** Heading text. Kept as `<type> · <state>` so a panel names itself before it describes itself. */
+function headingText(display: DisplayState): string {
+  const state = display.mode === 'terminal'
+    ? display.status
+    : display.mode === 'cancelling' ? 'Cancelling' : 'Running';
+  return display.taskType ? `${display.taskType} · ${state}` : state;
+}
+
+function renderStrip(bars: ActivityBar[]): string {
+  if (bars.length === 0) return '<div class="strip"></div>';
+  const max = Math.max(3, ...bars.map((b) => b.n));
+  const cells = bars.map((b, i) => {
+    const h = b.n === 0 ? 9 : 16 + (b.n / max) * 84;
+    const seam = i > 0 && bars[i - 1].act === 1 && b.act === 2
+      ? `<i class="seam" style="left:${((i / bars.length) * 100).toFixed(2)}%"></i>` : '';
+    return `${seam}<span class="bar ${b.n === 0 ? 'q' : `p${b.act}`}" style="height:${h.toFixed(1)}%"></span>`;
+  }).join('');
+  return `<div class="strip">${cells}</div>`;
+}
+
+function renderDisplay(display: DisplayState, bars: ActivityBar[] = []): string {
+  const act = actOf(display);
+  const bits: string[] = [];
+
+  // ── row 0: header. `<h2>` carries the type and state together. ──────────────
+  bits.push('<div class="hd">');
+  bits.push(`<h2>${escapeHtml(headingText(display))}</h2>`);
+  if (display.mode !== 'terminal') {
+    const clock = display.phase
+      ? `${formatDuration(display.elapsedMs)} <s>/ ${formatDuration(display.phaseElapsedMs)} in act</s>`
+      : formatDuration(display.elapsedMs);
+    bits.push(`<span class="clk">${clock}</span>`);
+  } else if (typeof display.totalDurationMs === 'number') {
+    bits.push(`<span class="clk">${formatDuration(display.totalDurationMs)}</span>`);
+  }
+  bits.push('</div>');
+
+  // ── row 1: the stage, plus the live rail. Identical shape in all three acts, and the
+  //    stage box is a FIXED size — a scene stretched to match a taller neighbour is a
+  //    distorted frame, which is what made the terminal card read as overlong. ──────────
+  const ending = display.mode === 'terminal' ? display.ending : undefined;
+  const scene = { ...(display.type ? { type: display.type } : {}), act, ...(ending ? { ending } : {}) };
+  bits.push('<div class="bd">');
+  bits.push(
+    `<div class="stage"><svg class="${sceneClass(scene)}" viewBox="0 0 52 30" `
+    + `preserveAspectRatio="xMidYMax meet" fill="none" aria-hidden="true">${sceneSvg(scene)}</svg></div>`,
+  );
+  bits.push('<div class="rail">');
+  bits.push(renderStrip(bars));
+  if (display.mode !== 'terminal') {
+    const headline = display.mode === 'running' ? display.runningHeadline : 'recalling the worker…';
+    bits.push(`<p class="now"><i class="dot"></i><span>${escapeHtml(headline ?? 'working…')}</span></p>`);
+    if (display.mode === 'running' && typeof display.totalTasks === 'number') {
+      bits.push(`<p class="now"><span>Tasks: ${display.totalTasks}</span></p>`);
+    }
+  }
+  bits.push('</div></div>');
+
+  // ── row 2: the results table, full width. Only in Act III. ──────────────────
   if (display.mode === 'terminal') {
-    // Stats only — no result text. The conversation already carries the full answer directly
-    // below this panel; a truncated copy is redundant and reframes the monitor as a result
-    // card, which is not what it is for. This answers "was that worth it?".
-    const bits = [heading(display.taskType, display.status)];
-    const rows: string[] = [];
+    const cells: string[] = [];
+    const cell = (k: string, v: string, cls = '') =>
+      cells.push(`<div class="cel"><span class="k">${escapeHtml(k)}</span><span class="v ${cls}">${escapeHtml(v)}</span></div>`);
 
-    if (typeof display.totalDurationMs === 'number') {
-      rows.push(row('Duration', formatDuration(display.totalDurationMs)));
-    }
-    if (typeof display.totalCostUsd === 'number') {
-      rows.push(row('Cost', formatUsd(display.totalCostUsd)));
-    }
+    if (typeof display.totalDurationMs === 'number') cell('Duration', formatDuration(display.totalDurationMs));
+    if (typeof display.totalCostUsd === 'number') cell('Cost', formatUsd(display.totalCostUsd));
     if (typeof display.savedVsMainCostUsd === 'number') {
-      // Shown signed and honestly. A negative "saved" is a run that cost MORE than doing the
-      // work on the main model — the one number that tells you delegation is not paying off,
-      // so hiding it would make this panel marketing rather than instrumentation.
+      // Shown signed and honestly. A negative saving is the one number that says delegation
+      // is not paying off here, so hiding it would make the panel marketing.
       const v = display.savedVsMainCostUsd;
-      rows.push(row(v < 0 ? 'Over main' : 'Saved vs main', formatUsd(v)));
+      cell(v < 0 ? 'Over main' : 'Saved vs main', formatUsd(v), v < 0 ? 'bad' : 'good');
     }
-
     const stagePart = (name: string, s: { durationMs?: number; costUsd?: number } | undefined) => {
       if (!s) return;
       const parts: string[] = [];
       if (typeof s.costUsd === 'number') parts.push(formatUsd(s.costUsd));
       if (typeof s.durationMs === 'number') parts.push(formatDuration(s.durationMs));
-      if (parts.length > 0) rows.push(row(name, parts.join(' · ')));
+      if (parts.length > 0) cell(name, parts.join(' · '));
     };
-    // The split is the actionable part: a run where the REVIEWER burned most of the budget is
-    // a tuning signal, and a single total hides it completely.
     stagePart('Implementer', display.implementer);
     stagePart('Reviewer', display.reviewer);
-
     if (typeof display.tokensIn === 'number' || typeof display.tokensOut === 'number') {
       const parts: string[] = [];
       if (typeof display.tokensIn === 'number') parts.push(`${formatTokens(display.tokensIn)} in`);
       if (typeof display.tokensOut === 'number') parts.push(`${formatTokens(display.tokensOut)} out`);
-      // Cache is named rather than folded into the input total: on a real run 2.9M of 3.1M
-      // input-side tokens were cache reads, so a combined figure reads as enormous usage when
-      // it is mostly the cheap path.
       if (typeof display.tokensCached === 'number') parts.push(`${formatTokens(display.tokensCached)} cached`);
-      rows.push(row('Tokens', parts.join(' · ')));
+      cell('Tokens', parts.join(' · '));
     }
-    if (typeof display.filesChanged === 'number') {
-      rows.push(row('Files changed', String(display.filesChanged)));
-    }
-
-    if (rows.length > 0) bits.push(`<div class="stats">${rows.join('')}</div>`);
-    // Same correlation handle the running panel shows, kept after completion — a finished
-    // panel is exactly when you go looking for the run in the daemon log.
-    if (display.taskRef) bits.push(`<p class="meta">task ${escapeHtml(display.taskRef)}</p>`);
-    return bits.join('');
+    if (typeof display.filesChanged === 'number') cell('Files changed', String(display.filesChanged));
+    if (cells.length > 0) bits.push(`<div class="tbl">${cells.join('')}</div>`);
   }
 
-  const bits = [heading(display.taskType, display.mode === 'cancelling' ? 'Cancelling' : 'Running')];
-  // Omit the phase lines entirely when there is no phase yet, rather than printing a bare
-  // "Phase:" with nothing after it. The very first snapshot of a run has no phase, so the
-  // dangling label is what a user sees FIRST — and a label with no value reads as a failure
-  // to load, not as "not started yet". Same rule already applied to runningHeadline.
-  if (display.phase) {
-    bits.push(`<p>Phase: ${escapeHtml(display.phase)}</p>`);
-  }
-  bits.push(`<p>Elapsed: ${formatDuration(display.elapsedMs)}</p>`);
-  if (display.phase) {
-    bits.push(`<p>Phase elapsed: ${formatDuration(display.phaseElapsedMs)}</p>`);
-  }
-  if (display.mode === 'running') {
-    if (display.runningHeadline) {
-      bits.push(`<p>${escapeHtml(display.runningHeadline)}</p>`);
-    }
-    if (typeof display.totalTasks === 'number') {
-      bits.push(`<p>Tasks: ${display.totalTasks}</p>`);
-    }
-  }
-  // The task reference makes a panel correlatable with the daemon log and the execution
-  // store. It also disambiguates two panels on screen: same ref means one task the host
-  // rendered twice, different refs mean two dispatches — a distinction that otherwise costs
-  // a database query to settle.
+  // ── row 3: meta. Anchored right so the task ref lines up with the table's right edge. ──
   if (display.taskRef) {
-    bits.push(`<p class="meta">task ${escapeHtml(display.taskRef)}</p>`);
+    bits.push(`<div class="sub"><span class="l"></span><span class="r meta">task ${escapeHtml(display.taskRef)}</span></div>`);
   }
   return bits.join('');
 }
@@ -247,6 +261,29 @@ function bootstrap(): void {
   let initiated = false;
   let stopped = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Activity history for the strip.
+   *
+   * Phase is MONOTONIC: once the run reaches reviewing, no later bar may claim to be Act I.
+   * Without that clamp the oldest bars shift out from the left while new Act I bars append on
+   * the right, and the strip ends up showing review before implement — a sequence that cannot
+   * happen. History is client-side only and resets when the panel reloads.
+   */
+  const bars: ActivityBar[] = [];
+  let lastHeadline: string | null = null;
+  let seenAct: 1 | 2 = 1;
+
+  function recordActivity(display: DisplayState): void {
+    if (display.mode === 'terminal') return;
+    const act: 1 | 2 = display.phase === 'reviewing' ? 2 : 1;
+    if (act > seenAct) seenAct = act;
+    const headline = display.mode === 'running' ? (display.runningHeadline ?? null) : null;
+    const changed = headline !== null && headline !== lastHeadline;
+    lastHeadline = headline;
+    bars.push({ n: changed ? 1 : 0, act: seenAct });
+    if (bars.length > STRIP_LEN) bars.shift();
+  }
 
   function render(): void {
     const parts: string[] = [];
@@ -264,7 +301,7 @@ function bootstrap(): void {
         parts.push(`<p>Polling stopped — last error: ${escapeHtml(currentView.lastError ?? 'unknown error')}</p>`);
         break;
       case 'display':
-        parts.push(renderDisplay(currentView.display));
+        parts.push(renderDisplay(currentView.display, bars));
         break;
     }
     root.innerHTML = parts.join('');
@@ -275,7 +312,9 @@ function bootstrap(): void {
       button.textContent = 'Cancel';
       button.disabled = cancelClickLock;
       button.addEventListener('click', onCancelClick);
-      root.appendChild(button);
+      // The stop control belongs beside the run's identity and clock, not buried under the
+      // live data it would stop. Falls back to the root when the header is absent.
+      (root.querySelector('.hd') ?? root).appendChild(button);
     }
   }
 
@@ -318,6 +357,7 @@ function bootstrap(): void {
     }
     updateFailed = false;
     const { parsed, derived } = result;
+    recordActivity(derived);
     currentView = { kind: 'display', display: derived };
     render();
 

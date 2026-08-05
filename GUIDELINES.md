@@ -10,7 +10,7 @@
 The engine is the underlying **labor layer** and the **individual adoption mode**.
 It ships as the public npm package `@zhixuan92/multi-model-agent`, runs as a local
 HTTP daemon on loopback, and exposes installable skills to any agent client
-(Claude Code, Codex CLI, Cursor, Gemini CLI). Forge is built on top of it over
+(Claude Code, Claude Desktop, Codex, Antigravity, Cursor, VS Code, opencode, Windsurf). Forge is built on top of it over
 HTTP; telemetry reports on it. The global north star is `DIRECTION.md`; this
 document carries the engine's product-specific direction — the parts of the old
 engine-scoped DIRECTION that are engine *mechanism*, not whole-product bet.

@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [6.0.0] - 2026-08-05
+
+Provisioning becomes declared-over-detected, and it proves ownership before it touches anything you
+also own. The client roster is canonicalised, `mma mcp install` names its target, and the sticky
+off-switch moves into config. Alongside that: a task now says what it is on every surface that
+references it, `mma_task_list` answers "what is running right now", and the execution monitor became
+a scene instead of a countdown. `SCHEMA_VERSION` stays at **6** — nothing on the telemetry wire
+changed.
+
+**Upgrading from 5.x**: if you relied on `mma sync-skills` auto-detecting your clients, declare them
+(`clients.<ClientId>: "on"` in `~/.mma/config.json`) or pass `--target=<ClientId>` / `--all-targets`,
+or your next run will provision nothing. Replace `codex-cli` with `codex` in any `X-MMA-Client`
+header, drop `gemini-cli` entirely, and give `mma mcp install` an explicit client id.
 
 ### Breaking Changes
 
@@ -74,6 +86,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   twelve task types; it is now `spec · Running`, `audit (plan) · done`. The terminal envelope has
   always carried `task.type` and the panel ignored it. The short task ref now also survives into the
   terminal view — a finished panel is exactly when you go looking for the run in the daemon log.
+- **The execution monitor plays a three-act scene.** It opened with `Running / Phase: implementing` —
+  the same two words for every task type — above a stat list, using neither its width nor your
+  attention. Now: Act I is the worker at a bench with that route's own subject and tool; Act II is
+  the reviewer arriving to work the same piece while the worker stays; Act III resolves into one of
+  four tableaux with the results in a full-width table beneath a row that is identical in all three
+  acts. The motion is **derived from `TYPE_REGISTRY`, not decoration** — only `delegate` and
+  `execute_plan` swing a hammer, because only they write your files and commit; the four
+  document-authoring routes draft; the six read-only routes probe and cannot alter what they
+  examine. An unknown task type falls back to the read-only prop set, so extending `TASK_TYPES` can
+  never break the panel. Reduced motion is a first-class layout, not a degraded one.
 
 ### Changed
 
