@@ -6,12 +6,12 @@ const terminal = { task: { taskId: 't1', type: 'spec', status: 'done' }, metrics
 
 describe('contract: execution App display-state derivation (pure)', () => {
   it('renders phase/elapsed/phaseElapsed for a running snapshot with no optional fields present', () => {
-    expect(deriveDisplayState(running)).toEqual({ mode: 'running', taskType: 'spec', taskRef: 't1', phase: 'execute', elapsedMs: 4000, phaseElapsedMs: 1000 });
+    expect(deriveDisplayState(running)).toEqual({ mode: 'running', taskType: 'spec', type: 'spec', taskRef: 't1', phase: 'execute', elapsedMs: 4000, phaseElapsedMs: 1000 });
   });
 
   it('renders runningHeadline and totalTasks only when present, never a placeholder when absent', () => {
     const withExtras = { ...running, runningHeadline: 'writing tests', totalTasks: 5 };
-    expect(deriveDisplayState(withExtras)).toEqual({ mode: 'running', taskType: 'spec', taskRef: 't1', phase: 'execute', elapsedMs: 4000, phaseElapsedMs: 1000, runningHeadline: 'writing tests', totalTasks: 5 });
+    expect(deriveDisplayState(withExtras)).toEqual({ mode: 'running', taskType: 'spec', type: 'spec', taskRef: 't1', phase: 'execute', elapsedMs: 4000, phaseElapsedMs: 1000, runningHeadline: 'writing tests', totalTasks: 5 });
     const state = deriveDisplayState(running) as Record<string, unknown>;
     expect(state).not.toHaveProperty('runningHeadline');
     expect(state).not.toHaveProperty('totalTasks');
@@ -26,7 +26,7 @@ describe('contract: execution App display-state derivation (pure)', () => {
     // The conversation carries the full answer directly below the panel, so `output.summary`
     // is deliberately not part of the display state at all.
     const state = deriveDisplayState(terminal) as Record<string, unknown>;
-    expect(state).toEqual({ mode: 'terminal', taskType: 'spec', taskRef: 't1', status: 'done', totalCostUsd: 1.23, savedVsMainCostUsd: 4.56 });
+    expect(state).toEqual({ mode: 'terminal', taskType: 'spec', type: 'spec', taskRef: 't1', status: 'done', ending: 'done', totalCostUsd: 1.23, savedVsMainCostUsd: 4.56 });
     expect(state).not.toHaveProperty('summary');
   });
 });
