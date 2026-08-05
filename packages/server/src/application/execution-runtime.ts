@@ -7,6 +7,7 @@
 // touches a transport request object.
 
 import { randomUUID } from 'node:crypto';
+import { bucketActivity } from './task-identity.js';
 import {
   getTypeConfig,
   oppositeAgent,
@@ -411,6 +412,13 @@ export class ExecutionRuntime {
             implementer: result.sessions.implementer.sessionId,
             reviewer: result.sessions.reviewer?.sessionId ?? null,
           },
+          // The run's activity shape, frozen at terminal. Carried in the envelope rather than
+          // read live from the registry so a panel opened after the entry is evicted — or
+          // after a daemon restart, from the durable store — still shows what the run did.
+          ...(() => {
+            const a = bucketActivity(deps.taskRegistry.get(taskId));
+            return a ? { activity: a.counts, activityPhases: a.phases } : {};
+          })(),
           // Permanently null: the engine no longer owns worktrees. Kept as a structural
           // response key so existing typed consumers stay compatible.
           worktree: null,

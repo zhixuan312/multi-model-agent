@@ -48,6 +48,50 @@ export function taskIdentity(entry: TaskEntry): TaskIdentity {
  * monitor renders a label only when its field is present, and a `null` would print an
  * empty row that reads as a failure to load.
  */
+/**
+ * How many buckets a reader gets. Matches the strip the execution monitor draws; a caller that
+ * wants finer resolution would need the raw samples, which stay in the registry.
+ */
+const ACTIVITY_BUCKETS = 34;
+
+/**
+ * Bucket a task's recorded activity into a fixed-length series the monitor can draw directly.
+ *
+ * Computed at READ time from timestamps, so every viewer of the same task sees the same shape
+ * — including one that opened the panel late, or re-opened it after the run finished. The
+ * panel used to accumulate this itself from the polls it happened to observe, which meant the
+ * history died with the panel.
+ *
+ * `counts[i]` is how many provider events landed in bucket i; `phases[i]` is which act was
+ * live. A zero count is real information — it is the worker being quiet, not missing data.
+ */
+export function bucketActivity(
+  entry: TaskEntry | undefined,
+  now = Date.now(),
+): { counts: number[]; phases: Array<1 | 2> } | null {
+  // An evicted or unknown entry simply has no shape to draw — that is a normal outcome for a
+  // task whose registry record has aged out, not an error worth casting around.
+  if (!entry || entry.activity.length === 0) return null;
+  const end = entry.terminalAt ?? now;
+  const span = Math.max(1, end - entry.startedAt);
+  const counts = new Array<number>(ACTIVITY_BUCKETS).fill(0);
+  const phases = new Array<1 | 2>(ACTIVITY_BUCKETS).fill(1);
+  for (const sample of entry.activity) {
+    const ratio = (sample.at - entry.startedAt) / span;
+    const i = Math.min(ACTIVITY_BUCKETS - 1, Math.max(0, Math.floor(ratio * ACTIVITY_BUCKETS)));
+    counts[i] += 1;
+    if (sample.phase === 2) phases[i] = 2;
+  }
+  // Phase is monotonic in the engine, so make it monotonic here too: a bucket with no samples
+  // sitting after the review began still belongs to the review.
+  let seen: 1 | 2 = 1;
+  for (let i = 0; i < ACTIVITY_BUCKETS; i += 1) {
+    if (phases[i] === 2) seen = 2;
+    phases[i] = seen;
+  }
+  return { counts, phases };
+}
+
 export function buildRunningSnapshot(entry: TaskEntry, now = Date.now()): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {
     ...taskIdentity(entry),
@@ -64,5 +108,10 @@ export function buildRunningSnapshot(entry: TaskEntry, now = Date.now()): Record
   // type rather than replacing it: `type` is which route you launched, the headline is
   // which file it is reading this second.
   if (entry.runningHeadline !== null) snapshot.runningHeadline = entry.runningHeadline;
+  const activity = bucketActivity(entry, now);
+  if (activity) {
+    snapshot.activity = activity.counts;
+    snapshot.activityPhases = activity.phases;
+  }
   return snapshot;
 }

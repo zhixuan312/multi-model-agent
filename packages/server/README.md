@@ -207,8 +207,10 @@ resolving the daemon host once at startup, rejecting any non-loopback answer and
 address so a DNS rebind cannot send the bearer token off-box.
 
 Hosts implementing [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) render
-`mma_run` as a live panel — phase, elapsed time, a headline of the worker's current activity, and a
-Cancel button — polled over the MCP channel, so progress costs **no additional model turns**. The
+`mma_run` as a live panel — phase, elapsed time, a headline of the worker's current activity, an
+activity history the daemon derives from the run itself (so a panel opened late shows the same shape
+as one open from the start), and a Cancel button — polled over the MCP channel, so progress costs
+**no additional model turns**. The
 resource is advertised only when its bundle is present, is self-contained (no external origins), and
 is content-addressed so an upgrade is never served from a stale host cache. Non-App clients receive
 byte-identical responses to before.

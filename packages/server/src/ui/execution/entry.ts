@@ -135,12 +135,6 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-/** One bar of the activity strip: how many tool calls landed in a poll window, and the act. */
-export interface ActivityBar { n: number; act: 1 | 2 }
-
-/** Longest run of history the strip keeps. Client-side only — it does not survive a reload. */
-const STRIP_LEN = 34;
-
 /**
  * The act the stage should play.
  *
@@ -152,27 +146,54 @@ function actOf(display: DisplayState): Act {
   return display.phase === 'reviewing' ? 'review' : 'work';
 }
 
-/** Heading text. Kept as `<type> · <state>` so a panel names itself before it describes itself. */
+/**
+ * Heading text — `<type> · <state>`, so a panel names itself before it describes itself.
+ *
+ * BOTH HALVES ARE LOWERCASE, deliberately. They are the engine's own vocabulary: `spec` is
+ * literally the string you pass as `type`, and `done` / `failed` are literally the envelope's
+ * `task.status`. Capitalising one side produced `spec · Running` while a finished run read
+ * `investigate · done` — the same heading disagreeing with itself in two directions, because
+ * the running words were hardcoded here and the terminal ones came from the wire untouched.
+ * Title-casing instead would misrepresent them as prose and mangle `done_with_concerns`.
+ *
+ * Underscores become spaces, and nothing else is transformed: `done with concerns` reads as
+ * English while staying recognisably the status it came from.
+ */
 function headingText(display: DisplayState): string {
   const state = display.mode === 'terminal'
-    ? display.status
-    : display.mode === 'cancelling' ? 'Cancelling' : 'Running';
+    ? display.status.replace(/_/g, ' ')
+    : display.mode === 'cancelling' ? 'cancelling' : 'running';
   return display.taskType ? `${display.taskType} · ${state}` : state;
 }
 
-function renderStrip(bars: ActivityBar[]): string {
-  if (bars.length === 0) return '<div class="strip"></div>';
-  const max = Math.max(3, ...bars.map((b) => b.n));
-  const cells = bars.map((b, i) => {
-    const h = b.n === 0 ? 9 : 16 + (b.n / max) * 84;
-    const seam = i > 0 && bars[i - 1].act === 1 && b.act === 2
-      ? `<i class="seam" style="left:${((i / bars.length) * 100).toFixed(2)}%"></i>` : '';
-    return `${seam}<span class="bar ${b.n === 0 ? 'q' : `p${b.act}`}" style="height:${h.toFixed(1)}%"></span>`;
+/**
+ * Draw the run's activity from the series the ENGINE supplied.
+ *
+ * Nothing is accumulated here. The panel used to build this from the polls it personally
+ * observed, so a re-mounted panel started blank, two viewers of the same task disagreed, and a
+ * panel opened on an already-finished run had no history at all — the run's shape died with
+ * the widget. It is a fact about the run, so the engine owns it.
+ *
+ * Renders NOTHING when there is no series. An empty strip element still carries the baseline
+ * border, and a lone horizontal rule reads as a strip that failed to draw rather than a run
+ * that has not done anything yet.
+ */
+function renderStrip(display: DisplayState): string {
+  const counts = display.activity;
+  if (!counts || counts.length === 0) return '';
+  const phases = display.activityPhases ?? [];
+  const max = Math.max(3, ...counts);
+  const cells = counts.map((n, i) => {
+    const act = phases[i] === 2 ? 2 : 1;
+    const h = n === 0 ? 9 : 16 + (n / max) * 84;
+    const seam = i > 0 && phases[i - 1] === 1 && act === 2
+      ? `<i class="seam" style="left:${((i / counts.length) * 100).toFixed(2)}%"></i>` : '';
+    return `${seam}<span class="bar ${n === 0 ? 'q' : `p${act}`}" style="height:${h.toFixed(1)}%"></span>`;
   }).join('');
   return `<div class="strip">${cells}</div>`;
 }
 
-function renderDisplay(display: DisplayState, bars: ActivityBar[] = []): string {
+function renderDisplay(display: DisplayState): string {
   const act = actOf(display);
   const bits: string[] = [];
 
@@ -200,7 +221,7 @@ function renderDisplay(display: DisplayState, bars: ActivityBar[] = []): string 
     + `preserveAspectRatio="xMidYMax meet" fill="none" aria-hidden="true">${sceneSvg(scene)}</svg></div>`,
   );
   bits.push('<div class="rail">');
-  bits.push(renderStrip(bars));
+  bits.push(renderStrip(display));
   if (display.mode !== 'terminal') {
     const headline = display.mode === 'running' ? display.runningHeadline : 'recalling the worker…';
     bits.push(`<p class="now"><i class="dot"></i><span>${escapeHtml(headline ?? 'working…')}</span></p>`);
@@ -262,29 +283,6 @@ function bootstrap(): void {
   let stopped = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /**
-   * Activity history for the strip.
-   *
-   * Phase is MONOTONIC: once the run reaches reviewing, no later bar may claim to be Act I.
-   * Without that clamp the oldest bars shift out from the left while new Act I bars append on
-   * the right, and the strip ends up showing review before implement — a sequence that cannot
-   * happen. History is client-side only and resets when the panel reloads.
-   */
-  const bars: ActivityBar[] = [];
-  let lastHeadline: string | null = null;
-  let seenAct: 1 | 2 = 1;
-
-  function recordActivity(display: DisplayState): void {
-    if (display.mode === 'terminal') return;
-    const act: 1 | 2 = display.phase === 'reviewing' ? 2 : 1;
-    if (act > seenAct) seenAct = act;
-    const headline = display.mode === 'running' ? (display.runningHeadline ?? null) : null;
-    const changed = headline !== null && headline !== lastHeadline;
-    lastHeadline = headline;
-    bars.push({ n: changed ? 1 : 0, act: seenAct });
-    if (bars.length > STRIP_LEN) bars.shift();
-  }
-
   function render(): void {
     const parts: string[] = [];
     if (updateFailed) {
@@ -301,7 +299,7 @@ function bootstrap(): void {
         parts.push(`<p>Polling stopped — last error: ${escapeHtml(currentView.lastError ?? 'unknown error')}</p>`);
         break;
       case 'display':
-        parts.push(renderDisplay(currentView.display, bars));
+        parts.push(renderDisplay(currentView.display));
         break;
     }
     root.innerHTML = parts.join('');
@@ -357,7 +355,6 @@ function bootstrap(): void {
     }
     updateFailed = false;
     const { parsed, derived } = result;
-    recordActivity(derived);
     currentView = { kind: 'display', display: derived };
     render();
 

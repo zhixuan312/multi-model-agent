@@ -19,6 +19,10 @@
  * has always ignored it.
  */
 interface TaskLabel {
+  /** The run's activity shape, bucketed by the ENGINE. Every viewer of a task sees the same
+   *  series, including one that opened the panel late or re-opened it after the run ended. */
+  activity?: number[];
+  activityPhases?: Array<1 | 2>;
   taskType?: string;
   /** RAW type, unformatted — the key the stage's prop table is looked up by. Distinct from
    *  `taskType`, which is the human label and may carry the subtype in parentheses. */
@@ -93,6 +97,8 @@ interface StageStat {
 export type DisplayState = RunningDisplayState | CancellingDisplayState | TerminalDisplayState;
 
 interface RunningSnapshotLike {
+  activity?: unknown;
+  activityPhases?: unknown;
   taskId?: unknown;
   type?: unknown;
   subtype?: unknown;
@@ -109,6 +115,7 @@ interface StageLike { durationMs?: unknown; costUsd?: unknown }
 
 interface TerminalEnvelopeLike {
   task?: { taskId?: unknown; type?: unknown; subtype?: unknown; status?: unknown };
+  execution?: { activity?: unknown; activityPhases?: unknown };
   metrics?: {
     totalDurationMs?: unknown;
     totalCostUsd?: unknown;
@@ -138,6 +145,20 @@ function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
     typeof (payload as TerminalEnvelopeLike).task === 'object' &&
     (payload as TerminalEnvelopeLike).task !== null
   );
+}
+
+
+/** Accept an activity series only when it is actually a numeric series. */
+function series(value: unknown): number[] | undefined {
+  return Array.isArray(value) && value.every((n) => typeof n === 'number')
+    ? value as number[]
+    : undefined;
+}
+
+function phaseSeries(value: unknown): Array<1 | 2> | undefined {
+  return Array.isArray(value) && value.every((n) => n === 1 || n === 2)
+    ? value as Array<1 | 2>
+    : undefined;
 }
 
 function num(value: unknown): number | undefined {
@@ -179,6 +200,10 @@ function deriveTerminal(payload: TerminalEnvelopeLike): TerminalDisplayState {
     ...(rawType ? { type: rawType } : {}),
     ...(taskRef ? { taskRef } : {}),
   };
+  const act = series(payload.execution?.activity);
+  if (act) state.activity = act;
+  const actPhases = phaseSeries(payload.execution?.activityPhases);
+  if (actPhases) state.activityPhases = actPhases;
   const m = payload.metrics;
   if (m) {
     const assign = <K extends keyof TerminalDisplayState>(key: K, value: TerminalDisplayState[K]) => {
@@ -237,6 +262,10 @@ function deriveRunningOrCancelling(
   if (typeof payload.totalTasks === 'number') {
     state.totalTasks = payload.totalTasks;
   }
+  const act = series(payload.activity);
+  if (act) state.activity = act;
+  const actPhases = phaseSeries(payload.activityPhases);
+  if (actPhases) state.activityPhases = actPhases;
   return state;
 }
 

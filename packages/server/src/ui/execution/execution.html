@@ -169,7 +169,16 @@
       /* activity strip: one bar per poll, gaps read as quiet */
       #app .strip { height: 32px; display: flex; align-items: flex-end; gap: 2px;
         position: relative; border-bottom: 1px solid var(--color-border, var(--mma-line)); }
-      #app .strip .bar { flex: 1; min-width: 2px; max-width: 10px; border-radius: 2px 2px 0 0;
+      /*
+       * NO max-width. A cap here bounds the whole strip: 34 bars at 10px plus their gaps is
+       * 406px, so on a 700px rail the strip could only ever reach 58% and the baseline ran on
+       * alone to the right edge — which reads as a strip that failed to draw rather than one
+       * that is capped. `flex: 1` with no ceiling divides whatever width there is among the
+       * bars present, so the strip always spans edge to edge and the bars simply narrow as
+       * history accumulates. Do not reintroduce a cap: any value re-creates the gap for every
+       * bar count below rail-width / cap.
+       */
+      #app .strip .bar { flex: 1 1 0; min-width: 2px; border-radius: 2px 2px 0 0;
         background: var(--mma-hot); opacity: 0.9; }
       #app .strip .bar.p2 { background: var(--mma-cool); }
       #app .strip .bar.q { background: var(--mma-edge); opacity: 0.45; }
@@ -182,11 +191,19 @@
         background: var(--mma-hot); animation: mma-blink 1.6s ease-in-out infinite; }
       @keyframes mma-blink { 50% { opacity: 0.25; } }
 
-      /* row 2: results table, full width — labels over values */
-      #app .tbl { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 1rem;
+      /*
+       * row 2: results table, full width — labels over values.
+       *
+       * Cells size to their CONTENT and wrap; they are NOT equal columns. `$1.55` and
+       * `111K in · 34K out · 2.9M cached` are 5 and 31 characters, so six 1fr columns give the
+       * long one the same share as the short one and it gets ellipsised while `Cost` sits in
+       * whitespace — which is exactly how the token counts lost their cached figure. Wrapping
+       * to a second line is the right failure mode for a stat row; truncating a number is not.
+       */
+      #app .tbl { display: flex; flex-wrap: wrap; column-gap: 1.5rem;
         row-gap: 0.4375rem; margin-top: 0.5625rem; padding-top: 0.5625rem;
         border-top: 1px solid var(--color-border, var(--mma-line)); }
-      #app .cel { min-width: 0; }
+      #app .cel { min-width: 0; flex: 0 1 auto; }
       #app .cel .k { display: block; font-size: 0.59375rem; letter-spacing: 0.07em;
         text-transform: uppercase; white-space: nowrap; overflow: hidden;
         text-overflow: ellipsis; color: var(--color-text-secondary, var(--mma-ink-dim)); }
@@ -194,8 +211,6 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #app .cel .v.good { color: var(--mma-ok); }
       #app .cel .v.bad { color: var(--mma-bad); }
-      @media (max-width: 760px) { #app .tbl { grid-template-columns: repeat(3, 1fr); } }
-      @media (max-width: 430px) { #app .tbl { grid-template-columns: repeat(2, 1fr); } }
 
       /* row 3: meta, anchored to both edges */
       #app .sub { display: flex; align-items: baseline; gap: 0.75rem; margin-top: 0.5625rem; }
