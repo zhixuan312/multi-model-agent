@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 import { findModelProfile, getClaudeOAuth } from '@zhixuan92/multi-model-agent-core';
@@ -27,7 +27,7 @@ const apiKeyAuthSchema = z.object({
   }
 });
 
-const configureProviderSchema = z.object({
+export const configureProviderSchema = z.object({
   tier: z.enum(['standard', 'complex', 'main']),
   provider: z.enum(['claude', 'codex']),
   model: z.string().min(1),
@@ -35,9 +35,9 @@ const configureProviderSchema = z.object({
   dryRun: z.boolean().default(true),
 });
 
-type ConfigureProviderRequest = z.infer<typeof configureProviderSchema>;
+export type ConfigureProviderRequest = z.infer<typeof configureProviderSchema>;
 
-interface ProbeResult {
+export interface ProbeResult {
   reachable: boolean;
   modelListed: boolean | null;
   detail: string;
@@ -120,7 +120,7 @@ function validate(input: ConfigureProviderRequest): { verified: boolean; reason:
   return { verified: true, reason: `${input.model} is available on ${input.provider} provider via API key` };
 }
 
-async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
+export async function probeApi(input: ConfigureProviderRequest): Promise<ProbeResult> {
   const baseUrl = input.auth.mode === 'api-key' && input.auth.baseUrl
     ? input.auth.baseUrl
     : input.provider === 'claude'
@@ -219,7 +219,11 @@ function resolveSubmittedApiKey(input: ConfigureProviderRequest): string | undef
   return input.auth.apiKey;
 }
 
-function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {
+export function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {
+  // A config being written for the first time has no agents at all — `mma setup`
+  // creates the block as it fills the first tier. Before tiers were optional this
+  // could not happen, so the cast below assumed an object was always there.
+  if (!config.agents) (config as { agents?: unknown }).agents = {};
   // The tier entry is replaced wholesale, so a per-tier reasoning level the
   // user set by hand has to be carried across — otherwise swapping a model
   // from the Models page silently resets that tier to DEFAULT_EFFORT.
@@ -244,8 +248,12 @@ function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest
   (config.agents as Record<string, unknown>)[input.tier] = agentConfig;
 }
 
-function persistConfig(configPath: string, config: MultiModelConfig): { ok: boolean; error?: string } {
+export function persistConfig(configPath: string, config: MultiModelConfig): { ok: boolean; error?: string } {
   try {
+    // The directory may not exist yet: `mma setup` on a fresh machine writes the
+    // very first ~/.mma/config.json. Every prior caller reached here with a
+    // config already on disk, so this was never exercised.
+    mkdirSync(dirname(configPath), { recursive: true });
     const existing = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
     const merged = { ...existing, agents: config.agents };
     writeFileSync(configPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');

@@ -37,6 +37,7 @@ import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { runInfo } from './info.js';
 import { runSyncSkills } from './sync-skills.js';
+import { runSetup, ttyPrompts, isInteractive } from './setup.js';
 import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
@@ -185,11 +186,12 @@ Usage:
   mma [command] [options]
 
 Commands:
+  setup            Configure agents + clients interactively (start here; re-run to change anything)
   serve            Start the HTTP server (default — just \`mma\` with no command)
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  sync-skills      Install + update + reconcile all shipped skills for the declared clients roster
+  sync-skills      Reconcile shipped skills for the declared roster (scripting; mma setup does this for you)
   clients          Show declared/detected/skills/MCP status for every canonical client
   clients --json   Same, as JSON
   mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
@@ -348,6 +350,26 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         batchId: typeof opts['batch'] === 'string' ? opts['batch'] : undefined,
         stdout: deps.stdout,
         stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'setup': {
+      const homeDir = deps.homeDir?.() ?? os.homedir();
+      if (!isInteractive()) {
+        // `deps.stderr` is undefined for the real binary — falling back matters,
+        // or a piped `mma setup` exits 1 having printed nothing at all.
+        const err = deps.stderr ?? process.stderr.write.bind(process.stderr);
+        err('mma setup needs an interactive terminal. For scripts use `mma enable --target=<ClientId>`.\n');
+        exit(1);
+        break;
+      }
+      const code = await runSetup({
+        homeDir,
+        ...(configArg !== undefined && { configPath: configArg }),
+        ...(deps.stdout !== undefined && { stdout: deps.stdout }),
+        ...(deps.stderr !== undefined && { stderr: deps.stderr }),
+        ...ttyPrompts(),
       });
       exit(code);
       break;
