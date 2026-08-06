@@ -8,7 +8,10 @@ import type { MultiModelConfig } from '../types.js';
  */
 export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[] {
   const offenders: string[] = [];
-  for (const [name, agent] of Object.entries(config.agents)) {
+  // No tiers configured is a valid state now (a machine that has provisioned
+  // clients but not chosen models yet) — and a config with no agents trivially
+  // has no inline keys to report.
+  for (const [name, agent] of Object.entries(config.agents ?? {})) {
     if (typeof (agent as { apiKey?: unknown }).apiKey === 'string') {
       offenders.push(name);
     }

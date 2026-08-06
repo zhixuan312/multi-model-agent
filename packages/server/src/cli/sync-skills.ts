@@ -208,9 +208,18 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
   if (targets.length === 0) {
     if (parsed.json) {
       stdout(JSON.stringify({ targets: [], suggested, outcome: 'no-clients-declared' }) + '\n');
+    } else if (suggested.length > 0) {
+      // The entire first-run experience for anyone who installs and reads their
+      // terminal. Say what to run — a dead-end "nothing declared" is what sent
+      // every user hunting through docs for a config key.
+      //
+      // Deliberately NOT a prompt here: `mma setup` owns every interactive
+      // path. Two commands that both ask questions is two flows to keep in
+      // step, and this one runs unattended from the npm postinstall.
+      log(`Detected but not yet declared: ${suggested.join(', ')}\n`);
+      log('Run `mma setup` to configure agents and provision these clients.\n');
     } else {
-      log('No clients declared \'on\'. Use --target=<ClientId>, --all-targets, or set clients.<id>="on" in config.\n');
-      if (suggested.length > 0) log(`Detected but undeclared (reported only, not installed): ${suggested.join(', ')}\n`);
+      log('No clients declared \'on\'. Run `mma setup`, or use --target=<ClientId> / --all-targets.\n');
     }
     return ExitCode.SUCCESS;
   }

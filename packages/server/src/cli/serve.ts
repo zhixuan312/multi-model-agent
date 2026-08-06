@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
-import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
+import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { createRecorder } from '../telemetry/recorder.js';
@@ -174,6 +174,17 @@ export async function startServe(
   configPath?: string,
 ): Promise<ServeHandle> {
   const stderr = process.stderr.write.bind(process.stderr);
+
+  // Tiers are optional in the config SCHEMA so a machine can record a client
+  // roster before it has chosen models — but a daemon without them can serve
+  // nothing, so prove them here, once, before binding a port. Everything below
+  // (and the ExecutionRuntime) then works with a config that provably has them.
+  try {
+    assertRunnable(config, configPath);
+  } catch (err) {
+    stderr(`[mma] ${err instanceof Error ? err.message : String(err)}\n`);
+    return exit(1) as never;
+  }
 
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);

@@ -5,8 +5,8 @@ export type { ClientId, ClientState, CallerClient } from './clients/client-id.js
 // Config
 export { loadConfigFromFile, loadAuthToken } from './config/load.js';
 export { collectInlineApiKeyOffenders } from './config/config-resolver.js';
-export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
-export type { ServerConfig } from './config/schema.js';
+export { parseConfig, multiModelConfigSchema, serverConfigSchema, assertRunnable } from './config/schema.js';
+export type { ServerConfig, RunnableConfig } from './config/schema.js';
 
 // Types (re-export all)
 export type {
