@@ -30,6 +30,7 @@ import type { ProjectRegistry } from '../application/project-registry.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
 import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
+import { resolveCallerIdentity } from '../http/middleware/caller-identity.js';
 import {
   MCP_TOOLS,
   MCP_PROTOCOL_VERSION,
@@ -92,16 +93,30 @@ function jsonResult(payload: unknown): ToolResult {
  * 2026-07-28 protocol carries `io.modelcontextprotocol/clientInfo` in every
  * request's `_meta`, so use it when present. Older clients (Claude Code
  * currently negotiates 2025-06-18, which sends clientInfo only at initialize,
- * and this adapter is stateless per request) fall back to `mcp`.
+ * and this adapter is stateless per request) fall back to what the install
+ * declared in `X-MMA-Client`, and only then to `mcp`.
  *
  * The value rides into the wire record's `client` column, which accepts any
  * STRICT_ID_REGEX string — no allowlist to extend.
  */
-export function callerClientFromMeta(meta: Record<string, unknown> | undefined): string {
+export function callerClientFromMeta(
+  meta: Record<string, unknown> | undefined,
+  declaredClient?: string,
+): string {
   const info = meta?.['io.modelcontextprotocol/clientInfo'] as { name?: unknown } | undefined;
   const name = typeof info?.name === 'string' ? info.name.trim().toLowerCase() : '';
-  if (!name) return 'mcp';
-  // Normalize to the same shape the REST X-MMA-Client header uses.
+  if (!name) {
+    // No clientInfo. Before falling back to the anonymous `mcp`, honour what the
+    // install DECLARED in `X-MMA-Client` — the stdio bridge sends it when started
+    // with `--client`, which is the only signal that an Agent Plugins package (or
+    // Claude Desktop) is what reached us. Bare `mcp` answers no question at all,
+    // and "is the standard carrying traffic yet?" is exactly the question that
+    // decides whether a bespoke registration writer can be retired.
+    return declaredClient && declaredClient.length > 0 ? declaredClient : 'mcp';
+  }
+  // clientInfo wins when present: `mcp:cursor` is strictly more informative than
+  // the packaging the install came from, and newer protocol revisions send it on
+  // every request.
   const slug = name.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return slug.length > 0 ? `mcp:${slug}` : 'mcp';
 }
@@ -268,7 +283,7 @@ function handleContextBlockDelete(deps: McpAdapterDeps, args: Record<string, unk
 
 /** Build a fresh SDK server wired to the shared runtime. One per request —
  *  the protocol core is stateless; all durable state lives in the runtime. */
-export function buildMcpServer(deps: McpAdapterDeps): Server {
+export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): Server {
   const serverInfo = { name: 'multi-model-agent', version: deps.serverVersion };
   const server = new Server(serverInfo, { capabilities: deps.capabilities });
 
@@ -341,7 +356,7 @@ export function buildMcpServer(deps: McpAdapterDeps): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-    const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined);
+    const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined, declaredClient);
     switch (request.params.name) {
       case 'mma_run':
         return handleRun(deps, args, clientName);
@@ -385,7 +400,13 @@ export async function handleMcpRequest(
   res: ServerResponse,
   body: unknown,
 ): Promise<void> {
-  const server = buildMcpServer(deps);
+  // Resolved here, not inside the tool handler: this adapter is stateless per
+  // request, so the header is the only place the declaration survives. Validated
+  // against the same allowlist REST uses, so an arbitrary header value cannot
+  // invent a client id — an unrecognised one resolves to `other`, and `other` is
+  // no better than the `mcp` default, so it is dropped rather than propagated.
+  const declared = resolveCallerIdentity(req).callerClient;
+  const server = buildMcpServer(deps, declared === 'other' ? undefined : declared);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {
     void transport.close();

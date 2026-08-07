@@ -37,4 +37,22 @@ describe('MCP caller attribution', () => {
     }
     expect(STRICT_ID_REGEX.test(callerClientFromMeta(undefined))).toBe(true);
   });
+  // The declared fallback. An Agent Plugins install reaches the daemon over MCP,
+  // so `X-MMA-Client` — not clientInfo — is the only signal that the STANDARD is
+  // what carried the traffic. Without this the AP package attributes as a bare
+  // `mcp`, and "can this bespoke writer be retired?" stays unanswerable.
+  it('falls back to the declared X-MMA-Client before the bare transport', () => {
+    expect(callerClientFromMeta(undefined, 'agent-plugin')).toBe('agent-plugin');
+    expect(callerClientFromMeta({}, 'claude-desktop')).toBe('claude-desktop');
+    expect(callerClientFromMeta({ [CLIENT_INFO]: { name: '' } }, 'agent-plugin')).toBe('agent-plugin');
+    // An empty/absent declaration must not produce an empty client id.
+    expect(callerClientFromMeta(undefined, '')).toBe('mcp');
+    expect(callerClientFromMeta(undefined, undefined)).toBe('mcp');
+  });
+
+  it('prefers clientInfo over the declaration — the more specific answer wins', () => {
+    // An AP package installed in Cursor should read as Cursor, not as the
+    // packaging it arrived in: `mcp:cursor` strictly dominates `agent-plugin`.
+    expect(callerClientFromMeta({ [CLIENT_INFO]: { name: 'cursor' } }, 'agent-plugin')).toBe('mcp:cursor');
+  });
 });
