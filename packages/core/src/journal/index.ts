@@ -29,6 +29,7 @@ export {
 } from './adapters/journal-adapter.js';
 export type {
   IndexedDocument,
+  IndexedDocumentMeta,
   IndexedLink,
   IndexHealth,
   LexicalHit,
@@ -41,6 +42,7 @@ export type {
   CorpusAdapter,
   CorpusRecord,
   StoredRecord,
+  StoredRecordMeta,
   SymbolCorpusAdapter,
   SymbolInput,
   SymbolRecord,

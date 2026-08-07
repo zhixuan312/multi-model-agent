@@ -34,6 +34,16 @@ export interface StoredRecord extends CorpusRecord {
   contentHash: string;
 }
 
+/**
+ * A {@link StoredRecord} projection WITHOUT `body`. Ranking (lexical fusion,
+ * tag overlap, graph-neighbour expansion) needs only a record's id and
+ * metadata, never its body text — `body` is needed only once ranking has
+ * narrowed the corpus down to the records that will actually be returned.
+ * Fetching this shape instead of {@link StoredRecord} for the whole corpus is
+ * what lets a query avoid materializing every record's body on every call.
+ */
+export type StoredRecordMeta = Omit<StoredRecord, 'body'>;
+
 /** Result of a lexical FTS5 probe: record ids ordered best-first (lowest bm25). */
 export interface LexicalHit {
   id: string;
@@ -75,11 +85,13 @@ export interface CorpusAdapter {
    * Supply zero or more extra ranked signal lists (best-first record ids) to
    * fuse alongside the engine's own lexical (FTS5/BM25) ranking. Receives the
    * query tokens and the current candidate pool (already resolved to
-   * records) the engine is ranking.
+   * records) the engine is ranking. `pool` carries metadata only — no
+   * `body` — since a signal (tag overlap, graph neighbours, ...) is computed
+   * from an adapter's own metadata, never from record text.
    */
   signals(
     tokens: string[],
-    pool: StoredRecord[],
+    pool: StoredRecordMeta[],
     lexicalOrder?: string[],
   ): RankedList[] | Promise<RankedList[]>;
 }

@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, StatementSync } from 'node:sqlite';
 import { isUnderIgnoredDir } from '../adapters/ignored-dirs.js';
 import { detectGitChanges } from './freshness.js';
 import type { FreshnessDecision } from './freshness.js';
@@ -15,6 +15,7 @@ import type {
   IndexHealth,
   LexicalHit,
   StoredRecord,
+  StoredRecordMeta,
   SymbolCorpusAdapter,
   SymbolInput,
   SymbolRecord,
@@ -197,6 +198,22 @@ export class CorpusIndex {
 
   private db!: DatabaseSync;
   private freshnessDecision: FreshnessDecision | null = null;
+
+  /**
+   * Cached prepared statements for the `records`/`records_fts` read path
+   * (the `CorpusAdapter` storage mode's hot per-query operations), so a
+   * query prepares each of these exactly once per store rather than once per
+   * call. Cleared by {@link invalidateRecordStatements} whenever
+   * `records`/`records_fts` is dropped and recreated — a statement prepared
+   * against the OLD table object must not be reused once the table has been
+   * dropped, even though the replacement carries the same name.
+   */
+  private allRecordsStmt?: StatementSync;
+  private allRecordsMetaStmt?: StatementSync;
+  private lexicalSearchStmt?: StatementSync;
+  private recordCountStmt?: StatementSync;
+  /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
+  private readonly recordsByIdsStmts = new Map<number, StatementSync>();
 
   private constructor(
     private readonly root: string,
@@ -417,7 +434,10 @@ export class CorpusIndex {
    * than the read it protects.
    */
   recordCount(): number {
-    const row = this.db.prepare('SELECT count(*) AS n FROM records').get() as Record<string, unknown> | undefined;
+    if (!this.recordCountStmt) {
+      this.recordCountStmt = this.db.prepare('SELECT count(*) AS n FROM records');
+    }
+    const row = this.recordCountStmt.get() as Record<string, unknown> | undefined;
     return asNumber(row?.n);
   }
 
@@ -707,7 +727,22 @@ export class CorpusIndex {
     `);
   }
 
+  /**
+   * Drop every cached prepared statement bound to `records`/`records_fts`.
+   * Must run before those tables are dropped: a statement prepared against
+   * the table object being dropped must be re-`prepare()`d against its
+   * replacement, not reused.
+   */
+  private invalidateRecordStatements(): void {
+    this.allRecordsStmt = undefined;
+    this.allRecordsMetaStmt = undefined;
+    this.lexicalSearchStmt = undefined;
+    this.recordCountStmt = undefined;
+    this.recordsByIdsStmts.clear();
+  }
+
   private dropAndRecreateSchema(): void {
+    this.invalidateRecordStatements();
     this.db.exec(`
       DROP TABLE IF EXISTS records;
       DROP TABLE IF EXISTS records_fts;
@@ -717,6 +752,7 @@ export class CorpusIndex {
   }
 
   private dropAndRecreateFileSymbolTables(): void {
+    this.invalidateRecordStatements();
     this.db.exec(`
       DROP TABLE IF EXISTS symbols;
       DROP TABLE IF EXISTS files;
@@ -1194,9 +1230,68 @@ export class CorpusIndex {
 
   /** Every derived-index row, decoded back into structured form. */
   allRecords(): StoredRecord[] {
-    const rows = this.db
-      .prepare('SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records')
-      .all() as Array<Record<string, unknown>>;
+    if (!this.allRecordsStmt) {
+      this.allRecordsStmt = this.db.prepare(
+        'SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records',
+      );
+    }
+    const rows = this.allRecordsStmt.all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      path: asString(row.path),
+      title: asString(row.title),
+      body: asString(row.body),
+      mtimeMs: asNumber(row.mtime_ms),
+      contentHash: asString(row.content_hash),
+      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
+    }));
+  }
+
+  /**
+   * Every derived-index row's metadata ONLY — id/path/title/mtime/hash/
+   * adapter-meta, never `body`. Ranking (lexical fusion, tag overlap,
+   * graph-neighbour expansion) needs none of a record's body text; only a
+   * caller that will actually return a record's text should pay to project
+   * it (see {@link recordsByIds}). Same row set as {@link allRecords}, just a
+   * cheaper column list.
+   */
+  allRecordsMeta(): StoredRecordMeta[] {
+    if (!this.allRecordsMetaStmt) {
+      this.allRecordsMetaStmt = this.db.prepare(
+        'SELECT id, path, title, mtime_ms, content_hash, adapter_meta FROM records',
+      );
+    }
+    const rows = this.allRecordsMetaStmt.all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      path: asString(row.path),
+      title: asString(row.title),
+      mtimeMs: asNumber(row.mtime_ms),
+      contentHash: asString(row.content_hash),
+      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
+    }));
+  }
+
+  /**
+   * Full records (including `body`) for exactly the given ids — the targeted
+   * lookup a caller runs once to materialize text for the records it has
+   * already decided, via {@link allRecordsMeta} + ranking, that it will
+   * actually return. Unmatched ids are silently omitted. Empty `ids`
+   * short-circuits without touching the database. Not cached as a prepared
+   * statement: the `IN (...)` placeholder count varies per call, and this
+   * runs once against a small, already-narrowed id set — not per corpus row.
+   */
+  recordsByIds(ids: string[]): StoredRecord[] {
+    if (ids.length === 0) return [];
+    let stmt = this.recordsByIdsStmts.get(ids.length);
+    if (!stmt) {
+      const placeholders = ids.map(() => '?').join(', ');
+      stmt = this.db.prepare(
+        `SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records WHERE id IN (${placeholders})`,
+      );
+      this.recordsByIdsStmts.set(ids.length, stmt);
+    }
+    const rows = stmt.all(...ids) as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       id: asString(row.id),
       path: asString(row.path),
@@ -1219,12 +1314,13 @@ export class CorpusIndex {
       .filter((token) => token.length > 0);
     if (clean.length === 0) return [];
     const match = clean.map((token) => `"${token}"`).join(' OR ');
-    const rows = this.db
-      .prepare(
+    if (!this.lexicalSearchStmt) {
+      this.lexicalSearchStmt = this.db.prepare(
         `SELECT id, bm25(records_fts) AS bm25 FROM records_fts
          WHERE records_fts MATCH ? ORDER BY bm25`,
-      )
-      .all(match) as Array<Record<string, unknown>>;
+      );
+    }
+    const rows = this.lexicalSearchStmt.all(match) as Array<Record<string, unknown>>;
     return rows.map((row) => ({ id: asString(row.id), bm25: asNumber(row.bm25) }));
   }
 

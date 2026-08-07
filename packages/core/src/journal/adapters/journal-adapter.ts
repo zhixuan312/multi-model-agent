@@ -1,7 +1,7 @@
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CorpusIndex, CORPUS_INDEX_DB_FILENAME, CORPUS_INDEX_SCHEMA_VERSION } from '../engine/index-store.js';
-import type { CorpusAdapter, CorpusRecord, IndexHealth, RankedList, StoredRecord } from '../engine/types.js';
+import type { CorpusAdapter, CorpusRecord, IndexHealth, RankedList, StoredRecordMeta } from '../engine/types.js';
 import { parseJournalNodeDocument } from '../node-codec.js';
 
 /**
@@ -98,8 +98,10 @@ export class JournalCorpusAdapter implements CorpusAdapter {
    * with lexical order. Passing lexical order in lets the adapter preserve the
    * historical seed rule: lexical hits first, then tag hits, capped at ten.
    * `pool` records already carry their own `adapterMeta` — no separate lookup.
+   * `pool` is metadata-only (no `body`): every signal here reads only `id`
+   * and `adapterMeta`, never record text.
    */
-  signals(tokens: string[], pool: StoredRecord[], lexicalOrder: string[] = []): RankedList[] {
+  signals(tokens: string[], pool: StoredRecordMeta[], lexicalOrder: string[] = []): RankedList[] {
     const poolIds = new Set(pool.map((record) => record.id));
     const metaById = new Map(pool.map((record) => [record.id, parseAdapterMeta(record.adapterMeta)]));
     const tokenSet = new Set(tokens);
@@ -156,6 +158,14 @@ export interface IndexedDocument {
    */
   body: string;
 }
+
+/**
+ * An {@link IndexedDocument} projection WITHOUT `body` — everything ranking
+ * (topic prefilter, tag overlap, graph-neighbour expansion, RRF fusion)
+ * needs, and nothing more. `body` is fetched separately, only for the
+ * records that survive ranking (see {@link JournalIndexStore.documentsBodyByIds}).
+ */
+export type IndexedDocumentMeta = Omit<IndexedDocument, 'body'>;
 
 /** Result of a lexical FTS5 probe: node ids ordered best-first (lowest bm25). */
 export interface LexicalHit {
@@ -227,6 +237,32 @@ export class JournalIndexStore {
   }
 
   /**
+   * Every derived-index row's metadata ONLY — same fields as
+   * {@link allDocuments} minus `body`. This is the shape ranking (topic
+   * prefilter, tag overlap, graph-neighbour expansion, RRF fusion) actually
+   * needs; it never touches a record's body text. Use this on the query path
+   * instead of {@link allDocuments}, whose `body` projection exists for
+   * callers that need node text (e.g. {@link documentsBodyByIds}, or a
+   * direct caller like the reindex CLI's node count).
+   */
+  allDocumentsMeta(): IndexedDocumentMeta[] {
+    const records = this.index.allRecordsMeta();
+    return records.map((record) => {
+      const meta = parseAdapterMeta(record.adapterMeta);
+      return {
+        nodeId: record.id,
+        nodePath: record.path,
+        title: record.title,
+        topic: meta?.topic ?? '',
+        status: meta?.status ?? 'adopted',
+        tags: meta?.tags ?? [],
+        links: meta?.links ?? [],
+        description: meta?.description ?? '',
+      };
+    });
+  }
+
+  /**
    * FTS5/BM25 lexical probe. Returns node ids best-first (lowest bm25). Empty
    * tokens → empty result.
    */
@@ -234,20 +270,44 @@ export class JournalIndexStore {
     return this.index.lexicalSearch(queryTokens).map((hit) => ({ nodeId: hit.id, bm25: hit.bm25 }));
   }
 
-  /** Run the engine's RRF against a journal-filtered candidate pool. */
-  async search(pool: IndexedDocument[], tokens: string[]): Promise<IndexedDocument[]> {
-    const ranked = await this.index.search(tokens, { pool: pool.map((doc) => doc.nodeId) });
-    const byId = new Map(this.allDocuments().map((doc) => [doc.nodeId, doc]));
-    return ranked.flatMap((record) => {
-      const doc = byId.get(record.id);
-      return doc ? [doc] : [];
-    });
+  /**
+   * Body text for exactly the given node ids — the ONE targeted lookup a
+   * query runs, once ranking has already narrowed the corpus down to the
+   * ids it will actually return. Never call this with more ids than a query
+   * is about to return; that would recreate the whole-corpus body read this
+   * method exists to avoid.
+   */
+  documentsBodyByIds(nodeIds: string[]): Map<string, string> {
+    const records = this.index.recordsByIds([...new Set(nodeIds)]);
+    return new Map(records.map((record) => [record.id, record.body]));
   }
 
-  /** The same journal-owned ranked signals supplied to the engine's RRF. */
-  rankedSignals(tokens: string[], pool: IndexedDocument[], lexicalOrder: string[]): RankedList[] {
-    const poolIds = new Set(pool.map((doc) => doc.nodeId));
-    const records = this.index.allRecords().filter((record) => poolIds.has(record.id));
+  /**
+   * The same journal-owned ranked signals supplied to the engine's RRF,
+   * built directly from the already-in-memory metadata `pool` — no index
+   * read. `pool` already carries each document's decoded topic/status/tags/
+   * links, so those are simply re-serialized into the opaque `adapterMeta`
+   * string shape {@link JournalCorpusAdapter.signals} expects, rather than
+   * re-fetched from the database.
+   */
+  rankedSignals(tokens: string[], pool: IndexedDocumentMeta[], lexicalOrder: string[]): RankedList[] {
+    const records: StoredRecordMeta[] = pool.map((doc) => {
+      const meta: JournalAdapterMeta = {
+        topic: doc.topic,
+        status: doc.status,
+        tags: doc.tags,
+        links: doc.links,
+        description: doc.description,
+      };
+      return {
+        id: doc.nodeId,
+        path: doc.nodePath,
+        title: doc.title,
+        mtimeMs: 0,
+        contentHash: '',
+        adapterMeta: JSON.stringify(meta),
+      };
+    });
     return this.adapter.signals(tokens, records, lexicalOrder);
   }
 
@@ -296,13 +356,23 @@ export interface JournalCandidate {
 const SNIPPET_MAX = 240;
 
 /**
- * Derive a short citation snippet from the node body. The stored body is
+ * A {@link JournalCandidate} before its body-derived `snippet` is attached —
+ * every candidate field ranking can produce from metadata alone. `search()`
+ * builds this list first, then fetches `body` for exactly these surviving
+ * ids ({@link JournalIndexStore.documentsBodyByIds}) and appends `snippet`
+ * in one final pass, rather than carrying every visible document's body
+ * through ranking.
+ */
+type JournalCandidateMeta = Omit<JournalCandidate, 'snippet'>;
+
+/**
+ * Derive a short citation snippet from a node's body. The stored body is
  * `title\ndescription\ncontext\nconsequences`; strip the redundant title +
  * description prefix so the excerpt is the actual context/consequences prose.
  */
-function makeSnippet(doc: IndexedDocument): string {
-  let rest = doc.body;
-  const prefix = `${doc.title}\n${doc.description}\n`;
+function makeSnippet(title: string, description: string, body: string): string {
+  let rest = body;
+  const prefix = `${title}\n${description}\n`;
   if (rest.startsWith(prefix)) rest = rest.slice(prefix.length);
   const collapsed = rest.replace(/\s+/g, ' ').trim();
   return collapsed.length > SNIPPET_MAX ? `${collapsed.slice(0, SNIPPET_MAX)}…` : collapsed;
@@ -341,14 +411,19 @@ interface JournalRankedList {
  *   2. tag      — prompt-token / tag overlap count, descending
  *   3. neighbor — graph neighbours of the top lexical+tag seeds, over
  *                 refines / depends-on / parent / supersession edges
+ *
+ * `pool` is metadata-only — this never reads or ranks a record's body text.
+ * This is the SOLE ranking pass for a pool: it is the fused RRF score itself
+ * (not a second call into the engine's own RRF) that determines final order
+ * in {@link toCandidateMetas}, so a pool's lexical/tag/neighbor signals are
+ * computed exactly once.
  */
-async function rankPool(
+function rankPool(
   store: JournalIndexStore,
-  pool: IndexedDocument[],
+  pool: IndexedDocumentMeta[],
   tokens: string[],
-): Promise<{ fused: Map<string, { score: number; via: Set<string> }>; engineOrder: Map<string, number> }> {
+): Map<string, { score: number; via: Set<string> }> {
   const poolIds = new Set(pool.map((doc) => doc.nodeId));
-  const byId = new Map(pool.map((doc) => [doc.nodeId, doc]));
 
   // Signal 1: lexical (FTS5/BM25). Filter global hits down to the pool.
   const lexicalOrder = store
@@ -370,17 +445,21 @@ async function rankPool(
       fused.set(id, entry);
     });
   }
-  const engineOrder = new Map((await store.search(pool, tokens)).map((doc, index) => [doc.nodeId, index]));
-  return { fused, engineOrder };
+  return fused;
 }
 
-function toCandidates(
-  ranking: { fused: Map<string, { score: number; via: Set<string> }>; engineOrder: Map<string, number> },
-  byId: Map<string, IndexedDocument>,
+/**
+ * Resolve a pool's fused RRF scores into candidates, best-first (score
+ * descending, node id ascending as a stable tie-break) — no body/snippet
+ * yet, see {@link JournalCandidateMeta}.
+ */
+function toCandidateMetas(
+  fused: Map<string, { score: number; via: Set<string> }>,
+  byId: Map<string, IndexedDocumentMeta>,
   fallback: boolean,
-): JournalCandidate[] {
-  const out: JournalCandidate[] = [];
-  for (const [id, entry] of ranking.fused) {
+): JournalCandidateMeta[] {
+  const out: JournalCandidateMeta[] = [];
+  for (const [id, entry] of fused) {
     const doc = byId.get(id);
     if (!doc) continue;
     out.push({
@@ -391,18 +470,12 @@ function toCandidates(
       status: doc.status,
       tags: doc.tags,
       description: doc.description,
-      snippet: makeSnippet(doc),
       score: entry.score,
       fallback,
       matchedVia: [...entry.via],
     });
   }
-  return out.sort(
-    (a, b) =>
-      (ranking.engineOrder.get(a.nodeId) ?? Number.MAX_SAFE_INTEGER) -
-        (ranking.engineOrder.get(b.nodeId) ?? Number.MAX_SAFE_INTEGER) ||
-      a.nodeId.localeCompare(b.nodeId),
-  );
+  return out.sort((a, b) => b.score - a.score || a.nodeId.localeCompare(b.nodeId));
 }
 
 async function search(
@@ -411,28 +484,36 @@ async function search(
 ): Promise<JournalCandidate[]> {
   const tokens = tokenize(input.prompt);
   const visible = store
-    .allDocuments()
+    .allDocumentsMeta()
     .filter((doc) => input.includeHistory || doc.status !== 'superseded');
   const byId = new Map(visible.map((doc) => [doc.nodeId, doc]));
 
+  let metas: JournalCandidateMeta[];
   if (!input.topic) {
-    const ranking = await rankPool(store, visible, tokens);
-    return toCandidates(ranking, byId, false);
+    metas = toCandidateMetas(rankPool(store, visible, tokens), byId, false);
+  } else {
+    const inTopic = visible.filter((doc) => doc.topic === input.topic);
+    const results = toCandidateMetas(rankPool(store, inTopic, tokens), byId, false);
+
+    // Cross-topic fallback ONLY when the in-topic pass is thin (< MIN_IN_TOPIC).
+    if (results.length >= MIN_IN_TOPIC) {
+      metas = results;
+    } else {
+      const present = new Set(results.map((candidate) => candidate.nodeId));
+      const crossResults = toCandidateMetas(rankPool(store, visible, tokens), byId, true).filter(
+        (candidate) => !present.has(candidate.nodeId),
+      );
+      metas = [...results, ...crossResults];
+    }
   }
 
-  const inTopic = visible.filter((doc) => doc.topic === input.topic);
-  const inTopicRanking = await rankPool(store, inTopic, tokens);
-  const results = toCandidates(inTopicRanking, byId, false);
-
-  // Cross-topic fallback ONLY when the in-topic pass is thin (< MIN_IN_TOPIC).
-  if (results.length >= MIN_IN_TOPIC) return results;
-
-  const present = new Set(results.map((candidate) => candidate.nodeId));
-  const crossRanking = await rankPool(store, visible, tokens);
-  const crossResults = toCandidates(crossRanking, byId, true).filter(
-    (candidate) => !present.has(candidate.nodeId),
-  );
-  return [...results, ...crossResults];
+  // Body is fetched ONCE, only for the ids that survived ranking — never for
+  // the whole visible pool.
+  const bodyById = store.documentsBodyByIds(metas.map((meta) => meta.nodeId));
+  return metas.map((meta) => ({
+    ...meta,
+    snippet: makeSnippet(meta.title, meta.description, bodyById.get(meta.nodeId) ?? ''),
+  }));
 }
 
 export async function searchCandidatesForRecall(
