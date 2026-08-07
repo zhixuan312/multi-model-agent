@@ -122,7 +122,13 @@ describe('sync-skills — roster-driven', () => {
 
     expect(existsSync(claudeSkillPath(home, SUPPORTED_SKILLS[0]!))).toBe(false);
     expect(listEntries(home).length).toBe(0);
-    expect(out.stdoutLines.join('')).toMatch(/suggested|Detected but undeclared/i);
+    // Reporting it is half the contract; the other half is saying what to DO.
+    // A bare "nothing declared" is what sent every new user hunting through
+    // docs for a config key, so the message must name the command.
+    const said = out.stdoutLines.join('');
+    expect(said).toMatch(/detected but not yet declared/i);
+    expect(said).toMatch(/claude-code/);
+    expect(said, 'the message must be actionable, not a dead end').toMatch(/mma setup/);
   });
 
   it('explicit --target forces provisioning regardless of the declared roster', async () => {

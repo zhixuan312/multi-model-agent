@@ -30,6 +30,8 @@ import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
 import {
   loadConfigFromFile,
+  MCP_BRIDGE_CLIENT_IDS,
+  type CallerClient,
   type MultiModelConfig,
 } from '@zhixuan92/multi-model-agent-core';
 import { startServe } from './serve.js';
@@ -37,6 +39,7 @@ import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { runInfo } from './info.js';
 import { runSyncSkills } from './sync-skills.js';
+import { runSetup, ttyPrompts, isInteractive } from './setup.js';
 import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
@@ -83,7 +86,7 @@ interface CliDeps {
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config', 'batch'],
+    string: ['config', 'batch', 'client'],
     boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log', 'regenerate-catalog'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
@@ -185,17 +188,18 @@ Usage:
   mma [command] [options]
 
 Commands:
+  setup            Configure agents + clients interactively (start here; re-run to change anything)
   serve            Start the HTTP server (default — just \`mma\` with no command)
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  sync-skills      Install + update + reconcile all shipped skills for the declared clients roster
+  sync-skills      Reconcile shipped skills for the declared roster (scripting; mma setup does this for you)
   clients          Show declared/detected/skills/MCP status for every canonical client
   clients --json   Same, as JSON
   mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
   mcp install <id> Fully provision one client (registration + skills) — see \`mma clients\` for valid IDs
   mcp uninstall    Remove MMA from Claude Desktop's MCP config
-  plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
+  plugin build     Generate a plugin package — --target=claude-code (default) or agent-plugin
   disable          Remove MMA from declared clients and pin them off (survives npm upgrades)
   enable           Declare clients on and (re)provision them (clears a prior \`disable\`)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
@@ -348,6 +352,26 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         batchId: typeof opts['batch'] === 'string' ? opts['batch'] : undefined,
         stdout: deps.stdout,
         stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'setup': {
+      const homeDir = deps.homeDir?.() ?? os.homedir();
+      if (!isInteractive()) {
+        // `deps.stderr` is undefined for the real binary — falling back matters,
+        // or a piped `mma setup` exits 1 having printed nothing at all.
+        const err = deps.stderr ?? process.stderr.write.bind(process.stderr);
+        err('mma setup needs an interactive terminal. For scripts use `mma enable --target=<ClientId>`.\n');
+        exit(1);
+        break;
+      }
+      const code = await runSetup({
+        homeDir,
+        ...(configArg !== undefined && { configPath: configArg }),
+        ...(deps.stdout !== undefined && { stdout: deps.stdout }),
+        ...(deps.stderr !== undefined && { stderr: deps.stderr }),
+        ...ttyPrompts(),
       });
       exit(code);
       break;
@@ -516,6 +540,16 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         exit(1);
         break;
       }
+      // `--client=<ClientId>` is validated BEFORE the config load: a typo must
+      // report itself as a typo, not as whatever the config discovery happens
+      // to fail with first. Omitting it stays valid — the daemon attributes
+      // such a bridge as `other`, exactly as every pre-flag registration did.
+      const clientArg = typeof opts['client'] === 'string' ? opts['client'] : undefined;
+      if (clientArg !== undefined && !(MCP_BRIDGE_CLIENT_IDS as readonly string[]).includes(clientArg)) {
+        stderr(`mma mcp: unknown --client "${clientArg}". Valid IDs: ${MCP_BRIDGE_CLIENT_IDS.join(', ')}\n`);
+        exit(1);
+        break;
+      }
       const config = await loadConfig(configArg, deps);
       const daemonUrl = buildServerUrl(config.server.bind, config.server.port);
       const homeDir = deps.homeDir?.() ?? os.homedir();
@@ -537,6 +571,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
           fetch,
           resolveHost: (hostname: string) => dnsLookup(hostname, { all: true }),
           readFile: (p: string) => fs.readFileSync(p, 'utf-8'),
+          ...(clientArg !== undefined && { callerClient: clientArg as CallerClient }),
         });
       } finally {
         rl.close();

@@ -31,7 +31,6 @@ import { removeClientRegistration, writeClientRegistration } from './writers/reg
 import { claudeCodeRegistrationPath } from './writers/claude-code.js';
 import { resolveClaudeDesktopPath } from './writers/claude-desktop.js';
 import { codexRegistrationPath, isCodexTableOwned, isCodexTableOwnedOrAbsent } from './writers/codex.js';
-import { antigravityRegistrationPath } from './writers/antigravity.js';
 import { cursorRegistrationPath } from './writers/cursor.js';
 import { opencodeRegistrationPath } from './writers/opencode.js';
 import { windsurfRegistrationPath } from './writers/windsurf.js';
@@ -101,11 +100,13 @@ function registrationPathFor(capability: ClientCapability, ctx: RealPortContext)
         execPath: ctx.execPath, platform: ctx.platform, appData: ctx.appData,
       });
     case 'codex': return codexRegistrationPath(ctx.homeDir);
-    case 'antigravity': return antigravityRegistrationPath(ctx.homeDir);
     case 'cursor': return cursorRegistrationPath(ctx.homeDir);
     case 'opencode': return opencodeRegistrationPath(ctx.homeDir);
     case 'windsurf': return windsurfRegistrationPath(ctx.homeDir);
-    case 'vscode': return undefined; // BLOCKED -- no verified user-level path, so no writer
+    // BLOCKED -- no verified path, so no writer. Both carry `mcpConfigPaths: []`;
+    // see docs/verification/mcp-client-registration-profiles.md.
+    case 'vscode': return undefined;
+    case 'antigravity': return undefined;
     default: return undefined;
   }
 }

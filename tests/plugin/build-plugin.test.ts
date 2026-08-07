@@ -241,3 +241,112 @@ describe('marketplace catalog', () => {
     }
   });
 });
+
+// ── Agent Plugins 1.0 target ─────────────────────────────────────────────────
+//
+// A second PACKAGING of the same payload, not a second emitter. The assertions
+// that matter are therefore (a) the layout is what an AP client actually reads,
+// (b) it still ships no secret, and (c) the skill bytes are identical to the
+// Claude Code target — the moment those diverge, there are two sources of truth
+// for skill content and the shared-payload design has silently been abandoned.
+describe('buildPlugin — agent-plugin target', () => {
+  const CLAUDE_NS = 'com.anthropic.claude-code';
+  // Verbatim from https://agent-plugins.org/schemas/1.0.0/plugin.schema.json.
+  // Inlined rather than fetched: a network-gated assertion is one that silently
+  // stops running, and this is a published constant, not a moving target.
+  const AP_NAME_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+
+  let out: string;
+  beforeEach(() => { out = mkdtempSync(join(tmpdir(), 'mma-ap-')); });
+  afterEach(() => { rmSync(out, { recursive: true, force: true }); });
+
+  function buildAp() {
+    return buildPlugin({ outDir: out, version: '9.9.9', port: 7337, target: 'agent-plugin' });
+  }
+
+  it('defaults to the claude-code target when none is given', () => {
+    // The invariant behind every existing caller: `mma plugin build` with no
+    // --target, the release script, and the committed plugin/ tree all rely on
+    // the untargeted call producing exactly the Claude Code layout.
+    const r = buildPlugin({ outDir: out, version: '9.9.9', port: 7337 });
+    expect(r.target).toBe('claude-code');
+    expect(existsSync(join(out, '.claude-plugin', 'plugin.json'))).toBe(true);
+    expect(existsSync(join(out, 'plugin.json'))).toBe(false);
+  });
+
+  it('puts the manifest at the ROOT with the canonical $schema', () => {
+    const r = buildAp();
+    expect(r.target).toBe('agent-plugin');
+    const manifest = JSON.parse(readFileSync(join(out, 'plugin.json'), 'utf8'));
+    expect(manifest.$schema).toBe('https://agent-plugins.org/schemas/1.0.0/plugin.schema.json');
+    expect(manifest.name).toBe(PLUGIN_NAME);
+    expect(manifest.name).toMatch(AP_NAME_PATTERN);
+    expect(manifest.version).toBe('9.9.9');
+    // Claude Code's manifest location must NOT also exist: a directory carrying
+    // both is ambiguous to any client that auto-detects format by manifest path.
+    expect(existsSync(join(out, '.claude-plugin'))).toBe(false);
+  });
+
+  it('declares the MCP server over stdio, attributed, with no secret anywhere', () => {
+    buildAp();
+    const mcp = JSON.parse(readFileSync(join(out, 'mcp.json'), 'utf8'));
+    expect(mcp.$schema).toBe('https://agent-plugins.org/schemas/1.0.0/mcp.schema.json');
+    const entry = mcp.mcpServers[MCP_SERVER_KEY];
+    expect(entry.type).toBe('stdio');
+    expect(entry.command).toBe('mma');
+    expect(entry.args).toEqual(['mcp', '--client=agent-plugin']);
+    // AP 1.0 permits only ${PLUGIN_ROOT}/${PLUGIN_DATA} interpolation and warns
+    // that `headers` values are visible package data. An http entry here would
+    // therefore have to carry a literal token — so stdio is not a preference,
+    // it is the only transport that can stay secret-free under this spec.
+    expect(entry.headers).toBeUndefined();
+    expect(entry.url).toBeUndefined();
+    // headersHelper is a Claude Code extension with no AP equivalent; emitting
+    // it here would be a silently-ignored key that looks like working auth.
+    expect(entry.headersHelper).toBeUndefined();
+    expect(existsSync(join(out, 'scripts'))).toBe(false);
+  });
+
+  it('files Claude-Code-only commands under the reverse-domain namespace', () => {
+    const r = buildAp();
+    expect(r.commands).toEqual(COMMAND_COMPONENTS);
+    for (const c of COMMAND_COMPONENTS) {
+      expect(existsSync(join(out, CLAUDE_NS, 'commands', `${c}.md`)), `missing command ${c}`).toBe(true);
+    }
+    // AP has no `commands` concept, so a root commands/ dir would be dead weight
+    // that only Claude Code could ever read — and Claude Code reads the other
+    // package, not this one.
+    expect(existsSync(join(out, 'commands'))).toBe(false);
+  });
+
+  it('emits skill bytes IDENTICAL to the claude-code target', () => {
+    buildAp();
+    const claude = mkdtempSync(join(tmpdir(), 'mma-cc-'));
+    try {
+      buildPlugin({ outDir: claude, version: '9.9.9', port: 7337 });
+      for (const s of SKILL_COMPONENTS) {
+        expect(
+          readFileSync(join(out, 'skills', s, 'SKILL.md'), 'utf8'),
+          `skill ${s} differs between targets — the payload has forked`,
+        ).toBe(readFileSync(join(claude, 'skills', s, 'SKILL.md'), 'utf8'));
+      }
+      for (const c of COMMAND_COMPONENTS) {
+        expect(
+          readFileSync(join(out, CLAUDE_NS, 'commands', `${c}.md`), 'utf8'),
+          `command ${c} differs between targets — the payload has forked`,
+        ).toBe(readFileSync(join(claude, 'commands', `${c}.md`), 'utf8'));
+      }
+    } finally {
+      rmSync(claude, { recursive: true, force: true });
+    }
+  });
+
+  it('carries no credential in any emitted file', () => {
+    buildAp();
+    for (const f of ['plugin.json', 'mcp.json', 'README.md']) {
+      const text = readFileSync(join(out, f), 'utf8');
+      expect(text).not.toMatch(/Bearer\s+\S/);
+      expect(text).not.toMatch(/Authorization"\s*:\s*"[^$]/);
+    }
+  });
+});

@@ -1,6 +1,7 @@
-import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { BASE_URL, IDENTITY_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
 import { readToken } from './http.mjs';
@@ -175,6 +176,175 @@ function pluginSurfaceGate() {
       throw new AbortError('plugin-secret', `live auth token found in ${offenders.length} plugin file(s): ${offenders[0]}`,
         'the plugin is distributable — no generated file may contain the live token');
     }
+  }
+}
+
+/**
+ * Agent Plugins 1.0 surface release gate.
+ *
+ * The AP package is NOT committed — unlike `plugin/`, it has no marketplace to be
+ * stale in, because AP 1.0 deliberately defines no install protocol. So this gate
+ * GENERATES it from the built CLI, which is the stronger check anyway: it proves
+ * the artifact a released `mma` produces is correct, not that a checked-in copy
+ * still looks right.
+ *
+ * Three things can silently break a release here, and each has an assertion:
+ *   1. The payload forks. Two targets means two chances for skill content to
+ *      drift; byte-equality between them is the only durable proof it hasn't.
+ *   2. The declared MCP entry stops working. `mcp.json` names `mma mcp --client=…`;
+ *      if the CLI ever drops that flag, every AP install fails at connect time and
+ *      nothing else in this suite would notice. So the entry is not just parsed —
+ *      it is EXECUTED against the live daemon, exactly as an AP client would.
+ *   3. A secret reaches a distributable artifact.
+ */
+function agentPluginSurfaceGate() {
+  const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
+  if (!existsSync(cliPath)) {
+    throw new AbortError('agent-plugin-surface', `no built CLI at ${cliPath}`, 'run `npm run build` before the smoke');
+  }
+
+  const stamp = `${process.pid}-${Date.now()}`;
+  const apDir = join(tmpdir(), `mma-smoke-ap-${stamp}`);
+  const ccDir = join(tmpdir(), `mma-smoke-cc-${stamp}`);
+  const build = (outDir, target) => {
+    try {
+      execFileSync('node', [cliPath, 'plugin', 'build', '--target', target, '--out', outDir], { stdio: 'pipe' });
+    } catch (e) {
+      throw new AbortError('agent-plugin-surface', `\`mma plugin build --target=${target}\` failed: ${String(e.stderr || e.message || e)}`,
+        'the plugin emitter must build both targets from the built CLI');
+    }
+  };
+
+  try {
+    build(apDir, 'agent-plugin');
+    build(ccDir, 'claude-code');
+
+    // Layout. AP reads the manifest at the ROOT under its own $schema; a package
+    // that also carried .claude-plugin/ would be ambiguous to any client that
+    // auto-detects format by manifest path (VS Code does exactly that).
+    const manifestPath = join(apDir, 'plugin.json');
+    if (!existsSync(manifestPath)) {
+      throw new AbortError('agent-plugin-surface', 'agent-plugin package has no root plugin.json',
+        'AP 1.0 requires the manifest at the package root');
+    }
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    if (manifest.$schema !== 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json') {
+      throw new AbortError('agent-plugin-surface', `plugin.json $schema=${manifest.$schema}`,
+        'the manifest must declare the canonical Agent Plugins 1.0 schema, or clients fall back to a vendor format');
+    }
+    // Verbatim from the published schema — a name that fails it is rejected at install.
+    if (!/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(String(manifest.name ?? ''))) {
+      throw new AbortError('agent-plugin-surface', `plugin.json name=${manifest.name}`,
+        'the manifest name must satisfy the Agent Plugins name pattern');
+    }
+    if (existsSync(join(apDir, '.claude-plugin'))) {
+      throw new AbortError('agent-plugin-surface', 'agent-plugin package also carries .claude-plugin/',
+        'one package, one manifest — a dual-manifest tree is ambiguous to format-detecting clients');
+    }
+    for (const required of ['skills', 'mcp.json', join('com.anthropic.claude-code', 'commands')]) {
+      if (!existsSync(join(apDir, required))) {
+        throw new AbortError('agent-plugin-surface', `agent-plugin package is missing ${required}`,
+          'skills/ and mcp.json sit at the root; Claude-Code-only commands live under the reverse-domain namespace');
+      }
+    }
+
+    // (0) The COMMITTED Claude Code tree must equal what the BUILT CLI produces.
+    // A vitest contract test already compares it against the source emitter; this
+    // is the same invariant one layer down, and only this layer can catch a dist
+    // that no longer matches src — which is what actually ships. README is skipped:
+    // it embeds its own out-dir as a cwd-relative path, so it legitimately differs
+    // between a build into plugin/ and one into a temp dir.
+    const committedCc = join(REPO_ROOT, 'plugin');
+    const compare = (rel) => {
+      const a = join(committedCc, rel);
+      const b = join(ccDir, rel);
+      if (!existsSync(a) || readFileSync(a, 'utf8') !== readFileSync(b, 'utf8')) {
+        throw new AbortError('plugin-surface', `committed plugin/${rel} differs from what the built CLI emits`,
+          'run `npm run build && npm run build:plugin` and commit ./plugin — the published artifact is stale');
+      }
+    };
+    compare(join('.claude-plugin', 'plugin.json'));
+    compare('.mcp.json');
+    compare(join('scripts', 'mma-mcp-headers.sh'));
+
+    // (1) The payload must not fork between targets.
+    const apSkills = readdirSync(join(apDir, 'skills'), { withFileTypes: true })
+      .filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    const ccSkills = readdirSync(join(ccDir, 'skills'), { withFileTypes: true })
+      .filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    if (JSON.stringify(apSkills) !== JSON.stringify(ccSkills)) {
+      throw new AbortError('agent-plugin-surface', `skill sets differ: agent-plugin=[${apSkills}] claude-code=[${ccSkills}]`,
+        'both targets package the same skills — a difference means the emitter forked');
+    }
+    for (const name of apSkills) {
+      const a = readFileSync(join(apDir, 'skills', name, 'SKILL.md'), 'utf8');
+      const c = readFileSync(join(ccDir, 'skills', name, 'SKILL.md'), 'utf8');
+      if (a !== c) {
+        throw new AbortError('agent-plugin-surface', `skill ${name} differs between targets`,
+          'skill content has ONE source — targets may differ in layout and MCP entry, never in payload');
+      }
+    }
+
+    // (2) The declared MCP entry must actually answer.
+    const mcp = JSON.parse(readFileSync(join(apDir, 'mcp.json'), 'utf8'));
+    const server = mcp.mcpServers?.daemon;
+    if (!server || server.type !== 'stdio' || !Array.isArray(server.args)) {
+      throw new AbortError('agent-plugin-surface', `agent-plugin mcp.json daemon entry=${JSON.stringify(server)}`,
+        'AP 1.0 has no portable secret mechanism for http headers — the entry must be the stdio bridge');
+    }
+    if (server.headers || server.url) {
+      throw new AbortError('agent-plugin-surface', 'agent-plugin mcp.json declares http fields',
+        'headers are visible package data per the spec — an http entry here would ship a token');
+    }
+    // Run the entry the package declares, substituting only the executable: the
+    // package says bare `mma` (resolved from PATH at the user's install), and the
+    // released binary IS this CLI. The ARGS are taken verbatim, so a flag the CLI
+    // no longer accepts fails right here.
+    let frame;
+    try {
+      const out = execFileSync('node', [cliPath, ...server.args], {
+        input: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n',
+        encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      frame = JSON.parse(out.split('\n').find((l) => l.trim().startsWith('{')) ?? '{}');
+    } catch (e) {
+      throw new AbortError('agent-plugin-surface', `declared MCP entry \`mma ${server.args.join(' ')}\` failed: ${String(e.stderr || e.message || e)}`,
+        'the args in mcp.json must be accepted by the shipped CLI — an AP install has no other way in');
+    }
+    const toolNames = (frame?.result?.tools ?? []).map((t) => t.name);
+    if (!toolNames.includes('mma_run')) {
+      throw new AbortError('agent-plugin-surface', `declared MCP entry returned tools=[${toolNames.join(', ')}]`,
+        'the stdio bridge must reach the running daemon and expose mma_run');
+    }
+    // Attribution is the whole reason the flag exists: without it every AP install
+    // reports as `other` and adoption is unmeasurable.
+    if (!server.args.includes('--client=agent-plugin')) {
+      throw new AbortError('agent-plugin-surface', `agent-plugin mcp.json args=${JSON.stringify(server.args)}`,
+        'the bridge must be launched with --client=agent-plugin so runs are attributed to the standard');
+    }
+
+    // (3) No secret in a distributable artifact.
+    const token = (() => { try { return readToken(); } catch { return null; } })();
+    if (token && token.length > 8) {
+      const offenders = [];
+      const walk = (dir) => {
+        for (const ent of readdirSync(dir, { withFileTypes: true })) {
+          const p = join(dir, ent.name);
+          if (ent.isDirectory()) { walk(p); continue; }
+          let body = '';
+          try { body = readFileSync(p, 'utf8'); } catch { continue; }
+          if (body.includes(token)) offenders.push(p);
+        }
+      };
+      walk(apDir);
+      if (offenders.length > 0) {
+        throw new AbortError('agent-plugin-secret', `live auth token found in ${offenders.length} agent-plugin file(s): ${offenders[0]}`,
+          'the package is distributable — the stdio bridge resolves the token at connect time, so no file may contain it');
+      }
+    }
+  } finally {
+    rmSync(apDir, { recursive: true, force: true });
+    rmSync(ccDir, { recursive: true, force: true });
   }
 }
 
@@ -376,6 +546,11 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   // Plugin-surface release gate: the committed marketplace artifact is fresh,
   // correctly namespaced, and carries no secret.
   pluginSurfaceGate();
+
+  // Agent Plugins release gate: the emitted AP package is spec-shaped, shares one
+  // payload with the Claude Code target, declares a working MCP entry, and ships
+  // no secret.
+  agentPluginSurfaceGate();
 
   // MCP-only release gate: no shipped instruction teaches the HTTP route, and
   // every skill emits the one actionable unavailable-MCP command.

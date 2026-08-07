@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { BASE_URL, TOKEN_FILE } from './config.mjs';
 
+/** The client identity this harness declares on every dispatch. Exported so the
+ *  telemetry verifier asserts the SAME value that was sent, rather than a second
+ *  hardcoded copy that could drift into agreeing with a bug. */
+export const SMOKE_CLIENT = 'claude-code';
+
 const HEADERS = (token) => ({
   'Authorization': `Bearer ${token}`,
-  'X-MMA-Client': 'claude-code',
+  'X-MMA-Client': SMOKE_CLIENT,
   'X-MMA-Main-Model': 'claude-opus-4-7',
   'Content-Type': 'application/json',
 });

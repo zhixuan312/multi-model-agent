@@ -33,7 +33,7 @@
  */
 import * as path from 'node:path';
 import * as net from 'node:net';
-import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
+import { isLoopbackAddress, type CallerClient } from '@zhixuan92/multi-model-agent-core';
 
 /** A single resolved DNS answer — the subset of `dns.lookup(host, {all:true})` we need. */
 interface ResolvedAddress {
@@ -52,6 +52,17 @@ interface McpBridgeDeps {
   env: Record<string, string | undefined>;
   /** Home directory, used for the default `~/.mma/auth-token` fallback. */
   homeDir: string;
+  /**
+   * Which client this bridge is speaking for, forwarded as `X-MMA-Client` so
+   * the daemon attributes the run to a real client instead of `other`.
+   *
+   * Optional on purpose: an existing registration that predates the flag (and
+   * every hand-written `mma mcp` entry) keeps working and simply attributes as
+   * `other`, exactly as it did before. The header is the ONLY way the daemon
+   * can tell an Agent-Plugins client apart from a bespoke one, so every
+   * generated registration sets it.
+   */
+  callerClient?: CallerClient;
   /** Async iterable of raw stdin lines (one JSON-RPC frame per line). */
   stdin: AsyncIterable<string>;
   /** Write a line to stdout. */
@@ -401,6 +412,10 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
           Host: '127.0.0.1',
+          // Absent when the bridge was started without --client: the daemon
+          // then falls back to `other`, which is what every pre-flag
+          // registration already produced.
+          ...(deps.callerClient !== undefined && { 'X-MMA-Client': deps.callerClient }),
         },
         body: JSON.stringify(frame),
         signal: frameTimeout.signal,

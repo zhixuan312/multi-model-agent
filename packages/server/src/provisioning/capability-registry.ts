@@ -107,8 +107,19 @@ export const CLIENT_CAPABILITIES: readonly ClientCapability[] = [
   {
     id: 'antigravity',
     skillPathStrategy: 'bespoke',
-    skillRoot: '~/.gemini/skills',
-    mcpConfigPaths: ['~/.gemini/config/mcp_config.json'],
+    // Corrected, not guessed: Google folded Gemini CLI into Antigravity CLI and
+    // moved the global skills root here. `~/.gemini/skills` — what this row said
+    // before — no longer exists on any install.
+    skillRoot: '~/.gemini/antigravity-cli/skills',
+    // BLOCKED. Empty is this registry's uniform signal for "no verified path, so
+    // no writer may target this client" — the same state VS Code is in, reached
+    // for the opposite reason: VS Code never published a path, Antigravity
+    // retired the one it had. The vendor replaced a home-level config MMA writes
+    // into with a plugin bundle its own CLI installs, so there is no path to
+    // re-point at. Google is an Agent Plugins Core Maintainer, so the expected
+    // resolution is the `agent-plugin` package serving this client with no
+    // writer at all. See docs/verification/mcp-client-registration-profiles.md.
+    mcpConfigPaths: [],
     mcpConfigFormat: 'json',
   },
   {

@@ -39,7 +39,10 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     } = deps;
 
     const now = Date.now();
-    const agents = config
+    // `config.agents` is optional at the schema level so a machine can record a
+    // client roster before choosing models; the daemon refuses to start without
+    // tiers, so this is undefined only for a config-less status read.
+    const agents = config?.agents
       ? {
           standard: {
             type: config.agents.standard.type,

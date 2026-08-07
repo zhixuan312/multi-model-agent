@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { AGENT_PLUGIN_CLIENT } from '@zhixuan92/multi-model-agent-core';
 import { getSkillsRoot, SUPPORTED_SKILLS, SUPPORTED_COMMANDS, readSkillContent } from '../skill-install/discover.js';
 import { inlineIncludes } from '../skill-install/include-utils.js';
 
@@ -34,6 +35,118 @@ export const PLUGIN_NAME = 'mma';
  * `POST /mcp` endpoint to non-plugin clients, where nothing namespaces them.
  */
 export const MCP_SERVER_KEY = 'daemon';
+
+/** The packaging formats this emitter produces. */
+export const PLUGIN_TARGETS = ['claude-code', 'agent-plugin'] as const;
+export type PluginTarget = typeof PLUGIN_TARGETS[number];
+
+/** Reverse-domain namespace for Claude Code's client extensions inside an
+ *  Agent Plugins package. AP assigns no semantics to a namespace's contents,
+ *  which is exactly where a Claude-Code-only concept like `commands/` belongs. */
+const CLAUDE_CODE_NAMESPACE = 'com.anthropic.claude-code';
+
+/**
+ * Per-target layout. Everything ABOVE this table is shared: skill rendering,
+ * reference rewriting, manifest metadata, component naming. A target says only
+ * WHERE its files go and WHAT its MCP entry looks like — adding a third
+ * packaging format is adding a row, never a second emitter.
+ */
+interface TargetLayout {
+  /** Trees replaced wholesale on rebuild so a removed skill cannot linger. */
+  generatedDirs: readonly string[];
+  manifestPath: string;
+  /** Merged BEFORE the shared metadata so `$schema` leads the manifest. */
+  manifestPrefix: Record<string, unknown>;
+  /** Flat command markdown lands here. */
+  commandsDir: string;
+  mcpPath: string;
+  mcpPrefix: Record<string, unknown>;
+  mcpServer: (mcpUrl: string) => Record<string, unknown>;
+  /** Only the http transport needs a header helper; stdio resolves its own token. */
+  emitsHeadersHelper: boolean;
+  /** Human description of how this package reaches the daemon. Plain text —
+   *  the README wraps it in backticks, the CLI prints it bare. */
+  transportSummary: (mcpUrl: string) => string;
+  title: string;
+  /** README "Requirements" prose. Owned per target because the transports differ
+   *  in what the user must have installed, and in where the token comes from. */
+  requirements: string;
+  installSection: (outDir: string) => string;
+}
+
+const TARGET_LAYOUTS: Readonly<Record<PluginTarget, TargetLayout>> = {
+  // Anthropic is not an Agent Plugins participant: Claude Code reads its own
+  // manifest path and its own `headersHelper` key, neither of which exists in
+  // AP 1.0. This target is therefore frozen in the shape Claude Code already
+  // consumes — it is the format that is known to work today.
+  'claude-code': {
+    generatedDirs: ['skills', 'commands', 'scripts', '.claude-plugin'],
+    manifestPath: path.join('.claude-plugin', 'plugin.json'),
+    manifestPrefix: {},
+    commandsDir: 'commands',
+    mcpPath: '.mcp.json',
+    mcpPrefix: {},
+    // headersHelper (not a static `headers` token): the plugin ships no secret.
+    // ${CLAUDE_PLUGIN_ROOT} is quoted because the install path may contain spaces.
+    mcpServer: (mcpUrl) => ({
+      type: 'http',
+      url: mcpUrl,
+      headersHelper: '"${CLAUDE_PLUGIN_ROOT}"/scripts/mma-mcp-headers.sh',
+    }),
+    emitsHeadersHelper: true,
+    transportSummary: (mcpUrl) => mcpUrl,
+    title: 'Claude Code plugin',
+    requirements: `The mma daemon must be running (\`mma serve\`). The plugin contains **no auth
+token**: \`scripts/mma-mcp-headers.sh\` reads it at connection time from
+\`$MMA_AUTH_TOKEN\`, \`$MMA_TOKEN_FILE\`, or \`~/.mma/auth-token\`.`,
+    installSection: (outDir) => `\`\`\`bash
+claude --plugin-dir ${outDir}      # try it for one session
+\`\`\``,
+  },
+  // AP 1.0 permits only ${PLUGIN_ROOT}/${PLUGIN_DATA} interpolation, confined to
+  // path contexts, and warns that `headers` values are "visible package data,
+  // not a portable secret mechanism". So an http entry cannot carry the daemon
+  // token. `mma mcp` — the stdio bridge Claude Desktop already uses — resolves
+  // the token itself at connect time, which makes stdio both the portable
+  // transport AND the one that ships no secret. One file, every AP client.
+  'agent-plugin': {
+    generatedDirs: ['skills', CLAUDE_CODE_NAMESPACE],
+    manifestPath: 'plugin.json',
+    manifestPrefix: { $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json' },
+    commandsDir: path.join(CLAUDE_CODE_NAMESPACE, 'commands'),
+    mcpPath: 'mcp.json',
+    mcpPrefix: { $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json' },
+    // A bare `command` leans on the platform's executable search. AP allows that
+    // ("Clients MUST resolve bare names using the platform's executable search
+    // rules") while telling conformant plugins not to DEPEND on it — the escape
+    // being a bundled, plugin-relative executable. MMA cannot bundle one that is
+    // useful: the bridge must reach an already-running daemon installed outside
+    // the plugin, so `mma` on PATH is not an extra requirement this package adds,
+    // it is the same requirement `mma serve` already imposes. Stating it in the
+    // README is honest; shipping a shim that re-resolves the same binary would be
+    // a second install path to maintain for no gain.
+    mcpServer: () => ({
+      type: 'stdio',
+      command: 'mma',
+      args: ['mcp', `--client=${AGENT_PLUGIN_CLIENT}`],
+    }),
+    emitsHeadersHelper: false,
+    transportSummary: () => `stdio: mma mcp --client=${AGENT_PLUGIN_CLIENT}`,
+    title: 'Agent Plugins package',
+    requirements: `The mma daemon must be running (\`mma serve\`) and the \`mma\` CLI must be on
+PATH — the MCP entry launches it as \`mma mcp\`. The package contains **no auth
+token**: the bridge reads it at connection time from \`$MMA_AUTH_TOKEN\`,
+\`$MMA_TOKEN_FILE\`, or \`~/.mma/auth-token\`.`,
+    installSection: (outDir) => `Install through your client's own plugin mechanism — Agent Plugins 1.0
+defines the package format, not an install protocol:
+
+| Client | How |
+|---|---|
+| VS Code | add \`${outDir}\` to the \`chat.pluginLocations\` setting |
+| Cursor | copy (do **not** symlink) into \`~/.cursor/plugins/local/\`, then restart |
+| Codex | add a local entry to \`~/.agents/plugins/marketplace.json\`, then \`/plugins\` |`,
+  },
+};
 
 /**
  * Packaged skill name -> plugin component name.
@@ -134,15 +247,24 @@ interface BuildPluginOptions {
   version: string;
   /** Daemon port the MCP entry points at. */
   port: number;
+  /** Packaging format. Defaults to `claude-code` — the format that predates
+   *  this option and the one Claude Code is known to consume, so an existing
+   *  caller that never passes a target keeps getting exactly what it got. */
+  target?: PluginTarget;
   /** Override the packaged skills root (tests). */
   skillsRoot?: string;
 }
 
 interface BuildPluginResult {
   outDir: string;
+  target: PluginTarget;
   skills: string[];
   commands: string[];
+  /** The daemon endpoint. Reached directly by the http target and through the
+   *  stdio bridge by the AP target, but the same endpoint either way. */
   mcpUrl: string;
+  /** How this package reaches {@link mcpUrl}, for display. */
+  transport: string;
 }
 
 function writeFile(target: string, content: string, mode?: number): void {
@@ -155,16 +277,19 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   const skillsRoot = getSkillsRoot(opts.skillsRoot);
   const out = path.resolve(opts.outDir);
   const mcpUrl = `http://127.0.0.1:${opts.port}/mcp`;
+  const target = opts.target ?? 'claude-code';
+  const layout = TARGET_LAYOUTS[target];
 
   // Replace generated trees wholesale — a skill removed upstream must not
   // linger in a rebuilt plugin.
-  for (const dir of ['skills', 'commands', 'scripts', '.claude-plugin']) {
+  for (const dir of layout.generatedDirs) {
     fs.rmSync(path.join(out, dir), { recursive: true, force: true });
   }
   fs.mkdirSync(out, { recursive: true });
 
   // ── Manifest ──
-  writeFile(path.join(out, '.claude-plugin', 'plugin.json'), `${JSON.stringify({
+  writeFile(path.join(out, layout.manifestPath), `${JSON.stringify({
+    ...layout.manifestPrefix,
     name: PLUGIN_NAME,
     description: 'Delegate tool-using work to cost-optimized multi-model agents with cross-model review — skills plus the MMA MCP server.',
     version: opts.version,
@@ -210,26 +335,21 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
     const raw = readSkillContent(name, skillsRoot);
     if (raw === null) continue;
     const component = pluginComponentName(name);
-    writeFile(path.join(out, 'commands', `${component}.md`), render(name, raw));
+    writeFile(path.join(out, layout.commandsDir, `${component}.md`), render(name, raw));
     commands.push(component);
   }
 
   // ── MCP server registration ──
-  // headersHelper (not a static `headers` token): the plugin ships no secret.
-  // ${CLAUDE_PLUGIN_ROOT} is quoted because the install path may contain spaces.
-  writeFile(path.join(out, '.mcp.json'), `${JSON.stringify({
-    mcpServers: {
-      [MCP_SERVER_KEY]: {
-        type: 'http',
-        url: mcpUrl,
-        headersHelper: '"${CLAUDE_PLUGIN_ROOT}"/scripts/mma-mcp-headers.sh',
-      },
-    },
+  writeFile(path.join(out, layout.mcpPath), `${JSON.stringify({
+    ...layout.mcpPrefix,
+    mcpServers: { [MCP_SERVER_KEY]: layout.mcpServer(mcpUrl) },
   }, null, 2)}\n`);
 
-  writeFile(path.join(out, 'scripts', 'mma-mcp-headers.sh'), HEADERS_HELPER_SH, 0o755);
+  if (layout.emitsHeadersHelper) {
+    writeFile(path.join(out, 'scripts', 'mma-mcp-headers.sh'), HEADERS_HELPER_SH, 0o755);
+  }
 
-  writeFile(path.join(out, 'README.md'), `# mma — Claude Code plugin
+  writeFile(path.join(out, 'README.md'), `# mma — ${layout.title}
 
 Generated by \`mma plugin build\` from multi-model-agent v${opts.version}. Do not
 edit by hand: re-run the command to regenerate.
@@ -238,19 +358,15 @@ edit by hand: re-run the command to regenerate.
 
 - **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
 - **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
-- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${mcpUrl}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`, \`mma_task_list\`, \`mma_context_block_create\`, \`mma_context_block_delete\`
+- **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${layout.transportSummary(mcpUrl)}\`, exposing \`mma_run\`, \`mma_task_get\`, \`mma_task_wait\`, \`mma_task_cancel\`, \`mma_task_list\`, \`mma_context_block_create\`, \`mma_context_block_delete\`
 
 ## Requirements
 
-The mma daemon must be running (\`mma serve\`). The plugin contains **no auth
-token**: \`scripts/mma-mcp-headers.sh\` reads it at connection time from
-\`$MMA_AUTH_TOKEN\`, \`$MMA_TOKEN_FILE\`, or \`~/.mma/auth-token\`.
+${layout.requirements}
 
 ## Install
 
-\`\`\`bash
-claude --plugin-dir ${path.relative(process.cwd(), out) || '.'}      # try it for one session
-\`\`\`
+${layout.installSection(path.relative(process.cwd(), out) || '.')}
 
 ## Already using \`mma sync-skills\`?
 
@@ -259,5 +375,5 @@ see both \`/mma-audit\` and \`/${PLUGIN_NAME}:audit\`. Run \`mma disable --targe
 to remove the standalone copies before switching to the plugin.
 `);
 
-  return { outDir: out, skills, commands, mcpUrl };
+  return { outDir: out, target, skills, commands, mcpUrl, transport: layout.transportSummary(mcpUrl) };
 }

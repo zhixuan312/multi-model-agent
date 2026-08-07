@@ -31,7 +31,10 @@ Stage 1 — INGRESS  (transport boundary — thin adapters only)
                           mma_context_block_delete — over the SAME
                           ExecutionRuntime — MCP wire types never leave this
                           directory; mma_run's request schema is generated from
-                          the task-input Zod union, never hand-written)
+                          the task-input Zod union, never hand-written; caller
+                          attribution reuses http/middleware/caller-identity —
+                          a sibling within this same stage, so both adapters
+                          resolve X-MMA-Client through one allowlist)
 
   1.5  MCP App resource   server/src/mcp/execution-artifact.ts +
                           server/src/ui/execution/ (browser bundle, built by Vite

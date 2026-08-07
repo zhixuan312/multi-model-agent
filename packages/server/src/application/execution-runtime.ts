@@ -16,7 +16,7 @@ import {
   runTwoPhasePipeline,
   type SkillPair,
   type TaskInput,
-  type MultiModelConfig,
+  type RunnableConfig,
   type AgentType,
   type TaskRegistry,
   type ProjectContext,
@@ -37,7 +37,9 @@ import { buildEnvelopeSnapshot } from './telemetry-snapshot.js';
 import { PREPROCESSORS, PreprocessFailure, type PreprocessResult } from './preprocessors/index.js';
 
 interface ExecutionRuntimeDeps {
-  config: MultiModelConfig;
+  /** Narrowed at daemon start by `assertRunnable`: the runtime cannot
+   *  resolve a tier without one, so it takes a config that provably has them. */
+  config: RunnableConfig;
   bus: EnvelopeBus;
   taskRegistry: TaskRegistry;
   projectRegistry: ProjectRegistry;
@@ -47,7 +49,7 @@ interface ExecutionRuntimeDeps {
   /** Injectable agent resolver — tests substitute mock providers; production
    *  uses the config-driven resolveAgent (same pattern as PipelineInput's
    *  runAcceptanceCommand). */
-  resolveAgentFn?: (tier: AgentType, config: MultiModelConfig) => ResolvedAgent;
+  resolveAgentFn?: (tier: AgentType, config: RunnableConfig) => ResolvedAgent;
 }
 
 export type SubmitError =

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
+import { parseConfig, assertRunnable } from '@zhixuan92/multi-model-agent-core/config/schema';
 
 const minimalAgentConfig = {
   type: 'codex' as const,
@@ -88,8 +88,26 @@ describe('parseConfig', () => {
     })).toThrow();
   });
 
-  it('throws when agents missing', () => {
-    expect(() => parseConfig({})).toThrow();
+  // Tiers are a DAEMON requirement, not a file-shape requirement. A machine can
+  // legitimately record `clients.<id>: "on"` before it has chosen any models —
+  // that is the whole first-run path — and making the schema reject it meant the
+  // only file the roster may live in was a file that could not yet be written.
+  it('accepts a config with no agents, so a roster can be recorded before models are chosen', () => {
+    expect(() => parseConfig({})).not.toThrow();
+    expect(parseConfig({}).agents).toBeUndefined();
+  });
+
+  it('assertRunnable is what refuses a config the daemon cannot serve, naming the tiers', () => {
+    expect(() => assertRunnable(parseConfig({}))).toThrow(/agents\.standard and agents\.complex/);
+    // And it points at the file when it knows which one.
+    expect(() => assertRunnable(parseConfig({}), '/tmp/mma.json')).toThrow(/\/tmp\/mma\.json/);
+    // Provisioning explicitly does not need tiers — say so where it is read.
+    expect(() => assertRunnable(parseConfig({}))).toThrow(/do not need tiers/);
+  });
+
+  it('assertRunnable passes a fully configured config through', () => {
+    const config = parseConfig({ agents: { standard: minimalAgentConfig, complex: minimalAgentConfig } });
+    expect(() => assertRunnable(config)).not.toThrow();
   });
 
   it('throws when agents.standard missing', () => {

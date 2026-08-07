@@ -154,11 +154,25 @@ export const serverConfigSchema = z.object({
 }).strict();
 
 export const multiModelConfigSchema = z.object({
+  /**
+   * Optional at the SCHEMA level, required to actually run a daemon.
+   *
+   * The two are different questions. `mma serve` cannot do anything without
+   * tiers, and refuses to start without them — but provisioning a client does
+   * not involve a model at all, and on a fresh machine `mma sync` needs to
+   * record `clients.<id>: "on"` somewhere durable before any tier has been
+   * chosen. Requiring `agents` here made that impossible: the only file the
+   * roster may live in was a file that could not yet be written.
+   *
+   * So the check moved to where the requirement actually is. `assertRunnable`
+   * below is what the daemon calls, and it reports the missing tiers by name
+   * instead of a Zod path.
+   */
   agents: z.object({
     standard: agentConfigSchema,
     complex: agentConfigSchema,
     main: agentConfigSchema.optional(),
-  }),
+  }).optional(),
   diagnostics: z.object({
     log: z.boolean().default(false),
     logDir: z.string().min(1).optional(),
@@ -194,4 +208,40 @@ export type ServerConfig = z.infer<typeof serverConfigSchema>;
  */
 export function parseConfig(raw: unknown): MultiModelConfig {
   return multiModelConfigSchema.parse(raw);
+}
+
+/**
+ * A config that can actually run a daemon: every required tier is present.
+ *
+ * `MultiModelConfig` describes what may legally sit in the file; this describes
+ * what `mma serve` needs. Separating them is what lets `mma sync` write a roster
+ * to a machine that has not chosen its models yet.
+ */
+export type RunnableConfig = MultiModelConfig & {
+  agents: NonNullable<MultiModelConfig['agents']>;
+};
+
+/**
+ * Narrow a loaded config to one the daemon can serve, or throw naming what is
+ * missing.
+ *
+ * Deliberately a thrown error rather than a Zod refinement: by the time this
+ * runs the user has a real file on disk, and "agents.standard is not
+ * configured — run `mma configure-provider` or add it to <path>" is a better
+ * thing to read than an `invalid_type` at path `["agents"]`.
+ */
+export function assertRunnable(config: MultiModelConfig, configPath?: string): asserts config is RunnableConfig {
+  const missing: string[] = [];
+  if (!config.agents) missing.push('agents.standard', 'agents.complex');
+  else {
+    if (!config.agents.standard) missing.push('agents.standard');
+    if (!config.agents.complex) missing.push('agents.complex');
+  }
+  if (missing.length === 0) return;
+  const where = configPath ? ` in ${configPath}` : '';
+  throw new Error(
+    `multi-model-agent cannot start: ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not configured${where}. `
+    + 'Add the tier(s) to your config, or configure a provider from a running daemon. '
+    + 'Provisioning commands (`mma sync`, `mma clients`) do not need tiers and work without them.',
+  );
 }
