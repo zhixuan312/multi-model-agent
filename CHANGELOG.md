@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.1] - 2026-08-07
+
+The execution monitor has never worked in a released build. `SCHEMA_VERSION` stays at **6**.
+
+### Fixed
+
+- **The MCP App resource was unreachable in every npm-installed copy.** The daemon located its
+  execution-monitor bundle by searching its own module path for a `/packages/server/` segment, and
+  fell back to the module path *itself* when the segment was absent. That segment exists only in
+  this monorepo, so an installed copy built a path with the filename embedded in it —
+  `dist/mcp/execution-artifact.js/dist/ui/execution.html` — which never reads. The bundle ships and
+  is intact; nothing ever looked for it in the right place. Every released daemon therefore reported
+  the App as unavailable, logged `mcp_capabilities_degraded`, and advertised
+  `MCP_CAPABILITIES_TOOLS_ONLY` — dropping the `resources` capability and the
+  `io.modelcontextprotocol/ui` extension. Tools were never affected; hosts that render MCP Apps
+  (Claude Desktop) simply had no UI to render.
+
+  The path is now resolved relative to the module's own directory, with no absolute-path marker at
+  all. This also closes a second hole in the old approach: a consumer whose own repository contains
+  a `packages/server/` directory would have matched the marker against *their* path.
+
+  The bug was invisible to the suite because the resolver — written as a pure function precisely so
+  both layouts could be tested — was never exported, so no test could call it, and both tested
+  layouts happened to contain the marker. `full-smoke` now asserts the advertised MCP capabilities,
+  fetches the resource over `resources/list` + `resources/read`, and gates on the artifact resolving
+  from a real packaged layout.
+
 ## [6.2.0] - 2026-08-07
 
 MMA can now be packaged the way the rest of the ecosystem agreed on: one Agent Plugins 1.0 directory

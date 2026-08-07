@@ -36,6 +36,51 @@ describe('contract: execution-artifact loader', () => {
     mod.__setExecutionArtifactOverrideForTests(null);
   });
 
+  // The three layouts this module is ever imported from. The installed one is
+  // the regression: the resolver used to search for a `/packages/server/`
+  // segment that exists ONLY in this monorepo, and fell back to the module path
+  // itself — filename and all — for every npm-installed copy. The read then
+  // failed, the daemon reported the execution app as unavailable, and every
+  // shipped user silently lost the `resources` capability.
+  describe('path resolution across install layouts', () => {
+    const cases = [
+      {
+        name: 'npm-installed package (dist/mcp → dist/ui)',
+        moduleUrl: 'file:///opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/dist/mcp/execution-artifact.js',
+        expected: '/opt/homebrew/lib/node_modules/@zhixuan92/multi-model-agent/dist/ui/execution.html',
+      },
+      {
+        name: 'monorepo compiled output (packages/server/dist/mcp → dist/ui)',
+        moduleUrl: 'file:///repo/packages/server/dist/mcp/execution-artifact.js',
+        expected: '/repo/packages/server/dist/ui/execution.html',
+      },
+      {
+        // Vitest runs this package straight from src/ via the workspace alias.
+        // src/ui/execution/execution.html is the UNBUNDLED input, so source
+        // mode must still point at the built bundle in the sibling dist/.
+        name: 'source/Vitest execution (src/mcp → the sibling dist/ui)',
+        moduleUrl: 'file:///repo/packages/server/src/mcp/execution-artifact.ts',
+        expected: '/repo/packages/server/dist/ui/execution.html',
+      },
+    ];
+
+    for (const { name, moduleUrl, expected } of cases) {
+      it(`resolves the bundle from ${name}`, async () => {
+        readFileSyncMock.mockReturnValue('<html/>');
+        const mod = await import('../../../packages/server/src/mcp/execution-artifact.js');
+        expect(mod.resolveExecutionArtifactPath(moduleUrl)).toBe(expected);
+      });
+    }
+
+    it('never embeds the module filename in the resolved path', async () => {
+      readFileSyncMock.mockReturnValue('<html/>');
+      const mod = await import('../../../packages/server/src/mcp/execution-artifact.js');
+      for (const { moduleUrl } of cases) {
+        expect(mod.resolveExecutionArtifactPath(moduleUrl)).not.toMatch(/execution-artifact\.(js|ts)/);
+      }
+    });
+  });
+
   it('exports the frozen resource constants used by both tool-surface.ts and mcp-adapter.ts', async () => {
     readFileSyncMock.mockReturnValue('<html/>');
     const mod = await import('../../../packages/server/src/mcp/execution-artifact.js');
