@@ -71,5 +71,9 @@ export interface CorpusAdapter {
    * query tokens and the current candidate pool (already resolved to
    * records) the engine is ranking.
    */
-  signals(tokens: string[], pool: StoredRecord[]): RankedList[] | Promise<RankedList[]>;
+  signals(
+    tokens: string[],
+    pool: StoredRecord[],
+    lexicalOrder?: string[],
+  ): RankedList[] | Promise<RankedList[]>;
 }

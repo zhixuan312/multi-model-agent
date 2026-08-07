@@ -91,7 +91,7 @@ describe('journal search', () => {
     const health = await store.ensureHealthy();
     expect(health.state).toBe('ready');
     const schema = await store.inspectSchema();
-    expect(schema.tables).toEqual(expect.arrayContaining(['documents', 'documents_fts', 'vectors_meta']));
+    expect(schema.tables).toEqual(expect.arrayContaining(['records', 'records_fts']));
   });
 
   it('excludes superseded nodes by default and includes them only in history mode', async () => {

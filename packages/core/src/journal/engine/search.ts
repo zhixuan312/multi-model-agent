@@ -36,7 +36,7 @@ export async function rrfSearch(
     .map((hit) => hit.id)
     .filter((id) => poolIds.has(id));
 
-  const signalLists = await adapter.signals(tokens, scoped);
+  const signalLists = await adapter.signals(tokens, scoped, lexicalOrder);
   const lists: RankedList[] = [{ via: 'lexical', order: lexicalOrder }, ...signalLists];
 
   const fused = new Map<string, number>();
