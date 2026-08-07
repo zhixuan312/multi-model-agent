@@ -98,8 +98,9 @@ export const POLL = {
 //   G. Lifecycle & transports (5.16.0):
 //      #39 cancel  — DELETE /task/:id: 202 requested → still-running poll carries the flag
 //                    → terminal `cancelled` (error.code=aborted, reviewer never ran)
-//      #40 mcp     — POST /mcp: initialize → tools/list → mma_run → mma_task_wait, and the
-//                    SAME execution polled over REST returns an identical envelope
+//      #40 mcp     — POST /mcp: initialize (capabilities) → tools/list → resources/list →
+//                    resources/read → mma_run → mma_task_wait, and the SAME execution polled
+//                    over REST returns an identical envelope
 //
 //   Cross-cutting invariant (verify.mjs check ①b `reviewer-degrade`, not a scenario):
 //      Whenever a live reviewer flakes on output format (emits non-JSON), the task must
@@ -255,6 +256,12 @@ export const SCENARIOS = [
   //    must return a byte-identical envelope, proving one runtime with two transports and
   //    no duplicated state. Emits 1 — an MCP-submitted task seals a wire record like any
   //    other, with client=mcp.
+  //
+  //    It also drives the APP surface (6.2.1): the handshake must advertise `resources` plus
+  //    the io.modelcontextprotocol/ui extension, and resources/list → resources/read must
+  //    hand back the real bundle under a fingerprinted URI. Until 6.2.1 nothing read the
+  //    capabilities at all, and a released daemon degraded to tools-only — it could not
+  //    locate its own bundle outside this monorepo — with the smoke green the whole time.
   { id: 40, type: 'investigate', tier: 'complex', kind: 'mcp', emits: 1 },
 
   // Q. Caller-owned branches (5.17) — the engine commits, but never branches.

@@ -217,6 +217,42 @@ export function verify(rec) {
     out.push(C('mcp-initialize', serverInfo?.name === 'multi-model-agent' ? 'PASS' : 'FAIL',
       `serverInfo=${JSON.stringify(serverInfo)}`));
 
+    // The handshake is a PROMISE about what this daemon can serve, and until 6.2.1
+    // nothing here read it. A released daemon advertised tools-only for ten months
+    // because it could not find its own bundle (see execution-artifact.ts); the
+    // smoke ran green throughout, since the monorepo is the one layout where the
+    // lookup worked. A build that carries the App must SAY it carries the App.
+    const caps = m.init?.json?.result?.capabilities ?? {};
+    const advertisesApp = Object.prototype.hasOwnProperty.call(caps, 'resources')
+      && Object.prototype.hasOwnProperty.call(caps.extensions ?? {}, 'io.modelcontextprotocol/ui');
+    out.push(C('mcp-capabilities', advertisesApp ? 'PASS' : 'FAIL',
+      advertisesApp
+        ? 'resources + io.modelcontextprotocol/ui advertised'
+        : `capabilities=${JSON.stringify(caps)} — the daemon degraded to tools-only, so it could not read dist/ui/execution.html`));
+    out.push(C('mcp-tools-with-app', Object.prototype.hasOwnProperty.call(caps, 'tools') ? 'PASS' : 'FAIL',
+      `tools capability present=${Object.prototype.hasOwnProperty.call(caps, 'tools')} (must hold in BOTH capability sets)`));
+
+    // Advertising it is not serving it. The host lists, then reads; both have to
+    // work, and the bytes have to be the real bundle rather than the placeholder
+    // the loader substitutes when the file is missing.
+    const listed = m.resourceList?.json?.result?.resources ?? [];
+    const appResource = listed.find((x) => String(x?.uri ?? '').startsWith('ui://mma/execution.html'));
+    out.push(C('mcp-resources-list', appResource ? 'PASS' : 'FAIL',
+      `resources=${JSON.stringify(listed.map((x) => x?.uri))}`));
+
+    // Content-addressed URI: hosts cache hard, so a rebuilt bundle MUST arrive
+    // under a new name or an upgraded user keeps running the old App forever.
+    out.push(C('mcp-resource-fingerprinted', /\?v=[0-9a-f]{8}$/.test(appResource?.uri ?? '') ? 'PASS' : 'FAIL',
+      `uri=${appResource?.uri}`));
+
+    const readContent = m.resourceRead?.json?.result?.contents?.[0];
+    const html = readContent?.text ?? '';
+    const realBundle = html.length > 100000 && !html.includes('not built');
+    out.push(C('mcp-resource-read', realBundle ? 'PASS' : 'FAIL',
+      `mimeType=${readContent?.mimeType} bytes=${html.length}${html.includes('not built') ? ' — served the unbuilt placeholder' : ''}`));
+    out.push(C('mcp-resource-mime', readContent?.mimeType === 'text/html;profile=mcp-app' ? 'PASS' : 'FAIL',
+      `mimeType=${readContent?.mimeType} want=text/html;profile=mcp-app`));
+
     // A deliberate golden, not a derived list: growing or shrinking the MCP tool
     // surface is a wire-contract change every consumer feels, so it should require
     // editing this line. (It went stale once — `mma_task_list` and the two
@@ -521,6 +557,36 @@ export function verify(rec) {
     const identity = p.taskId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
     out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
       `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
+  }
+
+  // ⑫d Activity history (6.1.0). The daemon buckets the run's recorded timestamps at
+  //     READ time, so every viewer sees the same shape no matter when they opened the
+  //     panel. Asserted on the LAST running snapshot: the first one frequently lands
+  //     before the worker has emitted anything, and `activity` is correctly omitted
+  //     when there is nothing to draw.
+  //
+  //     `phases` monotonicity is the load-bearing part. It encodes an engine fact —
+  //     a run never returns to implementing once review begins — so a quiet bucket
+  //     after the handover belongs to the review. Derived per-bucket from raw samples
+  //     alone, that invariant would break exactly where the panel is least readable.
+  if (rec.polling202Last) {
+    const p = rec.polling202Last;
+    const counts = p.activity;
+    const phases = p.activityPhases;
+    if (counts === undefined && phases === undefined) {
+      out.push(C('activity-series', 'NA', 'no provider events recorded before the terminal read'));
+    } else {
+      const BUCKETS = 34;
+      const shaped = Array.isArray(counts) && counts.length === BUCKETS
+        && counts.every((n) => Number.isInteger(n) && n >= 0)
+        && Array.isArray(phases) && phases.length === BUCKETS
+        && phases.every((x) => x === 1 || x === 2);
+      const monotonic = shaped && phases.every((x, i) => i === 0 || x >= phases[i - 1]);
+      const observed = shaped && counts.reduce((a, b) => a + b, 0) > 0;
+      out.push(C('activity-series', shaped && monotonic && observed ? 'PASS' : 'FAIL',
+        `counts=${Array.isArray(counts) ? counts.length : typeof counts} phases=${Array.isArray(phases) ? phases.length : typeof phases} `
+        + `samples=${Array.isArray(counts) ? counts.reduce((a, b) => a + b, 0) : 'n/a'} monotonic=${monotonic}`));
+    }
   }
 
   // ⑫c Identity is the SAME across admission, every poll, and the terminal

@@ -1,8 +1,8 @@
-import { readFileSync, existsSync, statSync, readdirSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync, rmSync, cpSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BASE_URL, IDENTITY_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
 import { readToken } from './http.mjs';
 
@@ -197,6 +197,85 @@ function pluginSurfaceGate() {
  *      it is EXECUTED against the live daemon, exactly as an AP client would.
  *   3. A secret reaches a distributable artifact.
  */
+/**
+ * Packaged-layout release gate (6.2.1).
+ *
+ * WHAT IT PROVES. That the daemon can find the files it ships when it is not
+ * running out of this monorepo. Everything else in this suite — every unit test,
+ * every scenario — exercises the repo layout, where the path
+ * `.../packages/server/dist/...` holds. An installed copy lives at
+ * `<prefix>/node_modules/@zhixuan92/multi-model-agent/dist/...`, and any code that
+ * derives a path from an absolute-path landmark instead of from its own module
+ * location behaves DIFFERENTLY there.
+ *
+ * WHY IT EXISTS. That is not hypothetical. The execution-app resolver searched its
+ * module path for a `/packages/server/` segment and fell back to the module path
+ * itself — filename included — when absent. Correct in the monorepo, broken in
+ * every published build, so the App resource was unreachable for every real user
+ * while the entire suite ran green. A whole class of defect was invisible because
+ * no gate had ever loaded this code from a non-repo path.
+ *
+ * WHY A COPY. Node resolves symlinks before setting `import.meta.url`, so a
+ * symlinked layout would report the real repo path and the gate would silently
+ * test nothing. The copy is ~2.7 MB and takes well under a second.
+ */
+function packagedLayoutGate() {
+  const dist = join(REPO_ROOT, 'packages', 'server', 'dist');
+  if (!existsSync(dist)) {
+    throw new AbortError('packaged-layout', `no built output at ${dist}`, 'run `npm run build` before the smoke');
+  }
+
+  const root = join(tmpdir(), `mma-smoke-pkg-${process.pid}-${Date.now()}`);
+  // The real installed shape, and deliberately free of a `packages/server` segment.
+  const pkgDir = join(root, 'node_modules', '@zhixuan92', 'multi-model-agent');
+  try {
+    cpSync(dist, join(pkgDir, 'dist'), { recursive: true });
+
+    const artifactModule = join(pkgDir, 'dist', 'mcp', 'execution-artifact.js');
+    if (!existsSync(artifactModule)) {
+      throw new AbortError('packaged-layout', `copied tree has no ${artifactModule}`,
+        'the build must emit dist/mcp/execution-artifact.js');
+    }
+    if (!existsSync(join(pkgDir, 'dist', 'ui', 'execution.html'))) {
+      throw new AbortError('packaged-layout', 'the built tree carries no dist/ui/execution.html',
+        'run `npm run build` — the vite step emits the execution app');
+    }
+
+    // Loaded in a child process: this module caches its artifact at module scope on
+    // first import, so importing it here would either hit a cache from elsewhere in
+    // the harness or poison one for later.
+    const probe = `
+      import { getExecutionArtifact, resolveExecutionArtifactPath } from ${JSON.stringify(pathToFileURL(artifactModule).href)};
+      const a = getExecutionArtifact();
+      process.stdout.write(JSON.stringify({
+        available: a.available,
+        bytes: a.html.length,
+        resolved: resolveExecutionArtifactPath(${JSON.stringify(pathToFileURL(artifactModule).href)}),
+      }));
+    `;
+    let result;
+    try {
+      result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', probe], { encoding: 'utf8' }));
+    } catch (e) {
+      throw new AbortError('packaged-layout', `could not load the artifact module from a packaged layout: ${String(e.stderr || e.message || e)}`,
+        'dist/mcp/execution-artifact.js must import cleanly outside the monorepo');
+    }
+
+    if (!result.available) {
+      throw new AbortError('packaged-layout',
+        `the execution app reads as UNAVAILABLE from an installed layout (resolved=${result.resolved})`,
+        'resolve bundled assets relative to the module\'s own directory — an absolute-path landmark '
+        + 'like /packages/server/ exists only in this repo, so a published build finds nothing');
+    }
+    if (result.bytes < 100000) {
+      throw new AbortError('packaged-layout', `the packaged artifact is ${result.bytes} bytes — that is the unbuilt placeholder, not the bundle`,
+        'run `npm run build` so the vite singlefile step emits the real execution app');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function agentPluginSurfaceGate() {
   const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
   if (!existsSync(cliPath)) {
@@ -551,6 +630,10 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   // payload with the Claude Code target, declares a working MCP entry, and ships
   // no secret.
   agentPluginSurfaceGate();
+
+  // Packaged-layout release gate: the shipped assets are findable when the code
+  // runs from an installed path rather than from this monorepo.
+  packagedLayoutGate();
 
   // MCP-only release gate: no shipped instruction teaches the HTTP route, and
   // every skill emits the one actionable unavailable-MCP command.
