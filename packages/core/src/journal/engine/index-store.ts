@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { detectGitChanges } from './freshness.js';
+import type { FreshnessDecision } from './freshness.js';
 import { rrfSearch } from './search.js';
 import { isSymbolCorpusAdapter } from './types.js';
 import type {
@@ -13,6 +15,26 @@ import type {
   SymbolInput,
   SymbolRecord,
 } from './types.js';
+
+/** Default throttle for the non-git full stat-sweep fallback: at most once every 5 minutes per open index. */
+const DEFAULT_FALLBACK_SWEEP_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * The engine's own derived-database artifacts live inside the corpus root
+ * (see {@link CorpusIndex.dbPath}). A git worktree that has no `.gitignore`
+ * entry for them (typical for a corpus root that is itself a repository)
+ * reports them as untracked changes via `git status --porcelain` — filter
+ * them out before treating a change as a content change to (re)index.
+ */
+function isEngineArtifactPath(relPath: string): boolean {
+  const name = basename(relPath);
+  return (
+    name === CORPUS_INDEX_DB_FILENAME ||
+    name === `${CORPUS_INDEX_DB_FILENAME}-wal` ||
+    name === `${CORPUS_INDEX_DB_FILENAME}-shm` ||
+    name === `${CORPUS_INDEX_DB_FILENAME}-journal`
+  );
+}
 
 /**
  * Corpus-neutral derived SQLite index.
@@ -47,8 +69,14 @@ export class CorpusIndex {
   static async open(opts: {
     root: string;
     adapter: CorpusAdapter | SymbolCorpusAdapter;
+    /**
+     * Throttle interval, in milliseconds, for the non-git full stat-sweep
+     * freshness fallback (see {@link ensureFresh}). Ignored on the git path,
+     * which never sweeps. Defaults to {@link DEFAULT_FALLBACK_SWEEP_INTERVAL_MS}.
+     */
+    fallbackSweepIntervalMs?: number;
   }): Promise<CorpusIndex> {
-    const index = new CorpusIndex(opts.root, opts.adapter);
+    const index = new CorpusIndex(opts.root, opts.adapter, opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS);
     // First-use bootstrap: `new DatabaseSync(<root>/index.db)` throws
     // ENOENT/SQLITE_CANTOPEN when the parent dir does not exist yet.
     await mkdir(opts.root, { recursive: true });
@@ -57,10 +85,14 @@ export class CorpusIndex {
   }
 
   private db!: DatabaseSync;
+  private freshnessDecision: FreshnessDecision | null = null;
+  private lastFallbackSweepAt: number | null = null;
+  private fallbackSweepCount = 0;
 
   private constructor(
     private readonly root: string,
     private readonly adapter: CorpusAdapter | SymbolCorpusAdapter,
+    private readonly fallbackSweepIntervalMs: number,
   ) {}
 
   private get dbPath(): string {
@@ -222,17 +254,20 @@ export class CorpusIndex {
     return asNumber(row?.n);
   }
 
-  /** Indexed `files` row count — a single cheap `SELECT count(*)`. */
-  private fileCount(): number {
-    const row = this.db.prepare('SELECT count(*) AS n FROM files').get() as Record<string, unknown> | undefined;
-    return asNumber(row?.n);
-  }
-
   /**
-   * Cheap per-query freshness gate. Instead of running the O(N) `fs.stat`
-   * sweep in {@link syncIncremental} on every retrieval, compare the adapter's
-   * current file COUNT to the indexed record (or, in `SymbolCorpusAdapter`
-   * mode, `files`-row) count and only run the full incremental sync when they
+   * Cheap per-query freshness gate.
+   *
+   * `SymbolCorpusAdapter` corpora (the repository file adapter) use the
+   * SUBLINEAR git-metadata path in {@link ensureFreshSymbols} whenever the
+   * corpus root is a git work tree: `git status --porcelain` reports exactly
+   * what changed since the last commit in one subprocess call, so this
+   * process never `fs.stat`s the whole corpus. Only a non-git root falls back
+   * to a full stat sweep, and that fallback is explicitly throttled — see
+   * {@link ensureFreshSymbols} — so it cannot run on every query either.
+   *
+   * `CorpusAdapter` corpora (journal) keep their existing cheap count
+   * comparison unchanged: compare the adapter's current file COUNT to the
+   * indexed record count and only run the full incremental sync when they
    * differ (add/remove drift) or the schema is invalid. Same-count
    * out-of-band content edits are NOT detected here — those are the job of an
    * explicit {@link rebuild} / {@link syncIncremental}.
@@ -243,8 +278,7 @@ export class CorpusIndex {
         await this.rebuild();
         return;
       }
-      const files = await this.adapter.listFiles();
-      if (files.length !== this.fileCount()) await this.syncIncremental();
+      await this.ensureFreshSymbols(this.adapter);
       return;
     }
     if (!this.schemaIsValid()) {
@@ -254,6 +288,134 @@ export class CorpusIndex {
     const files = await this.adapter.listFiles();
     if (files.length !== this.recordCount()) {
       await this.syncIncremental();
+    }
+  }
+
+  /**
+   * The `SymbolCorpusAdapter` (repository) half of {@link ensureFresh}. Never
+   * calls `this.adapter.listFiles()` (a corpus-wide directory walk) on this
+   * path — see the two branches below.
+   */
+  private async ensureFreshSymbols(adapter: SymbolCorpusAdapter): Promise<void> {
+    const gitChanges = await detectGitChanges(this.root);
+    if (gitChanges !== null) {
+      // Git path: `git status --porcelain` already told us exactly what
+      // changed — no corpus-wide `fs.stat` sweep, ever. Exclude the engine's
+      // own derived-database artifacts: they live inside the corpus root but
+      // are never content to (re)index.
+      const changedPaths = gitChanges.changedPaths.filter((path) => !isEngineArtifactPath(path));
+      const deletedPaths = gitChanges.deletedPaths.filter((path) => !isEngineArtifactPath(path));
+      if (changedPaths.length > 0 || deletedPaths.length > 0) {
+        await this.syncSymbolPaths(adapter, changedPaths, deletedPaths);
+      }
+      this.freshnessDecision = {
+        mode: 'git',
+        statSweep: false,
+        trackedPaths: gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path)),
+        changedPaths,
+        deletedPaths,
+      };
+      return;
+    }
+
+    // Non-git fallback: a full stat sweep is the only way to detect drift
+    // without git metadata, so throttle it — it must not run on every query.
+    const now = Date.now();
+    const dueForSweep =
+      this.lastFallbackSweepAt === null || now - this.lastFallbackSweepAt >= this.fallbackSweepIntervalMs;
+    if (dueForSweep) {
+      await this.syncSymbolsIncremental(adapter);
+      this.lastFallbackSweepAt = now;
+      this.fallbackSweepCount += 1;
+    }
+    this.freshnessDecision = { mode: 'stat', statSweep: dueForSweep, sweepCount: this.fallbackSweepCount };
+  }
+
+  /**
+   * The freshness decision {@link ensureFresh} took on its most recent call —
+   * `null` before `ensureFresh()` has ever run. Exposed for diagnostics and
+   * tests; never itself triggers work.
+   */
+  lastFreshnessDecision(): FreshnessDecision | null {
+    return this.freshnessDecision;
+  }
+
+  /**
+   * Targeted symbol-table sync for an EXACT set of changed/deleted paths —
+   * the git path's counterpart to {@link syncSymbolsIncremental}. Unlike that
+   * method, this never enumerates or stats the whole corpus: it reads and
+   * re-parses only the paths git already told us changed, and deletes rows
+   * only for the paths git already told us are gone. Whole-file replace,
+   * same as every other symbol write path: an edit shifts every symbol's
+   * line range below it, so per-symbol change detection is never attempted.
+   */
+  private async syncSymbolPaths(
+    adapter: SymbolCorpusAdapter,
+    changedPaths: string[],
+    deletedPaths: string[],
+  ): Promise<void> {
+    const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
+    const upsertFile = this.db.prepare(
+      `INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)
+       ON CONFLICT(file_path) DO UPDATE SET mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash`,
+    );
+    const insertSymbol = this.db.prepare(
+      `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+
+    this.db.exec('BEGIN');
+    try {
+      for (const relPath of deletedPaths) {
+        deleteSymbolsForFile.run(relPath);
+        deleteFile.run(relPath);
+      }
+      for (const relPath of changedPaths) {
+        const fullPath = join(this.root, relPath);
+        let raw: string;
+        let mtimeMs: number;
+        try {
+          raw = await readFile(fullPath, 'utf8');
+          mtimeMs = (await stat(fullPath)).mtimeMs;
+        } catch (error) {
+          // Vanished between `git status` and this read (race), or otherwise
+          // unreadable — treat exactly like a deleted path rather than fail
+          // the whole sync.
+          console.warn(
+            `[corpus-engine:${adapter.corpusId}] skipping unreadable changed file ${relPath}: ${(error as Error).message}`,
+          );
+          deleteSymbolsForFile.run(relPath);
+          deleteFile.run(relPath);
+          continue;
+        }
+        const contentHash = createHash('sha256').update(raw).digest('hex');
+        let symbols: SymbolInput[];
+        try {
+          symbols = await adapter.extractSymbols(relPath, raw);
+        } catch (error) {
+          console.warn(
+            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+          );
+          continue;
+        }
+        deleteSymbolsForFile.run(relPath);
+        upsertFile.run(relPath, mtimeMs, contentHash);
+        symbols.forEach((symbol, position) => {
+          insertSymbol.run(
+            `${relPath}#${position}`,
+            relPath,
+            symbol.name,
+            symbol.kind,
+            symbol.startLine,
+            symbol.endLine,
+            symbol.body,
+          );
+        });
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
     }
   }
 
