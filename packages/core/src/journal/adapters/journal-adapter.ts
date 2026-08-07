@@ -161,10 +161,16 @@ class JournalMetaStore {
     `);
   }
 
+  /**
+   * Prepared once, reused for every row. Re-preparing per call recompiles the
+   * statement on each of N nodes during a rebuild, which measurably regressed
+   * the record-latency benchmark gate.
+   */
+  private upsertStmt: ReturnType<DatabaseSync['prepare']> | null = null;
+
   upsert(doc: JournalNodeDocument): void {
-    this.db
-      .prepare(
-        `INSERT INTO journal_meta (node_id, node_path, topic, status, tags, links, description)
+    this.upsertStmt ??= this.db.prepare(
+      `INSERT INTO journal_meta (node_id, node_path, topic, status, tags, links, description)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(node_id) DO UPDATE SET
            node_path = excluded.node_path,
@@ -173,8 +179,8 @@ class JournalMetaStore {
            tags = excluded.tags,
            links = excluded.links,
            description = excluded.description`,
-      )
-      .run(
+    );
+    this.upsertStmt.run(
         doc.id,
         doc.sourcePath,
         doc.topic,
@@ -299,9 +305,21 @@ export class JournalIndexStore {
     private readonly meta: JournalMetaStore,
   ) {}
 
+  /**
+   * One transaction for the whole buffer. Without this each upsert runs in its
+   * own implicit transaction, so a rebuild of N nodes pays N commits — that
+   * alone regressed the record-latency benchmark gate below its 2x floor.
+   */
   private flushPendingMeta(): void {
     if (this.pendingMeta.length === 0) return;
-    for (const doc of this.pendingMeta) this.meta.upsert(doc);
+    this.metaDb.exec('BEGIN');
+    try {
+      for (const doc of this.pendingMeta) this.meta.upsert(doc);
+      this.metaDb.exec('COMMIT');
+    } catch (error) {
+      this.metaDb.exec('ROLLBACK');
+      throw error;
+    }
     this.pendingMeta = [];
   }
 
@@ -312,8 +330,13 @@ export class JournalIndexStore {
    * is ever read here, only a directory listing.
    */
   private async reconcileMeta(): Promise<void> {
+    // Compare COUNTS first, with two cheap `SELECT count(*)` queries. Loading
+    // every record here to take its `.length` made this O(corpus) on EVERY
+    // record and recall operation, which regressed the record-latency gate.
+    // Journal learning 0084: the freshness check must cost less than the read
+    // it protects. Only a mismatch pays for the full record list.
+    if (this.meta.count() === this.index.recordCount()) return;
     const records = this.index.allRecords();
-    if (this.meta.count() === records.length) return;
     this.meta.pruneNotMatching(new Map(records.map((record) => [record.id, record.path])));
   }
 

@@ -183,8 +183,14 @@ export class CorpusIndex {
     return { state: 'rebuilt' };
   }
 
-  /** Indexed record count — a single cheap `SELECT count(*)`. */
-  private recordCount(): number {
+  /**
+   * Indexed record count — a single cheap `SELECT count(*)`.
+   *
+   * Public because adapters need a freshness comparison that does NOT load the
+   * corpus. Journal learning 0084: a derived index loses its value when the
+   * freshness check costs more than the read it protects.
+   */
+  recordCount(): number {
     const row = this.db.prepare('SELECT count(*) AS n FROM records').get() as Record<string, unknown> | undefined;
     return asNumber(row?.n);
   }
