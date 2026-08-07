@@ -14,12 +14,21 @@ import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
 import type { Provider, SessionOpts, Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
 
-const TEST_CONFIG = {
-  agents: {
-    standard: { type: 'codex', model: 'mock-standard', baseUrl: 'http://mock.local' },
-    complex: { type: 'codex', model: 'mock-complex', baseUrl: 'http://mock.local' },
-  },
-} as unknown as MultiModelConfig;
+function baseAgentsConfig(stateDir: string): MultiModelConfig {
+  return {
+    agents: {
+      standard: { type: 'codex', model: 'mock-standard', baseUrl: 'http://mock.local' },
+      complex: { type: 'codex', model: 'mock-complex', baseUrl: 'http://mock.local' },
+    },
+    // The `investigate` preprocessor resolves its own derived code-corpus
+    // index under `server.stateDir` (see investigate.ts's `corpusIndexDbPath`)
+    // — every test here dispatches `type: 'investigate'`, so this must be
+    // present. Reuses the SAME per-test `stateDir` the `ExecutionStore` in
+    // `beforeEach` is already keyed off, mirroring real server wiring where
+    // both live under one `server.stateDir`.
+    server: { stateDir },
+  } as unknown as MultiModelConfig;
+}
 
 function okTurn(output: string): TurnResult {
   return {
@@ -78,6 +87,7 @@ describe('ExecutionRuntime', () => {
   let projectRegistry: ProjectRegistry;
   let store: ExecutionStore;
   let bus: EnvelopeBus;
+  let TEST_CONFIG: MultiModelConfig;
 
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'mma-exec-runtime-'));
@@ -86,6 +96,7 @@ describe('ExecutionRuntime', () => {
     projectRegistry = new ProjectRegistry({ cap: 10 });
     store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 3_600_000 });
     bus = new EnvelopeBus();
+    TEST_CONFIG = baseAgentsConfig(stateDir);
   });
   afterEach(() => {
     store.close();

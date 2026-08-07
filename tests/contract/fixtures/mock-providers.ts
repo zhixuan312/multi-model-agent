@@ -286,9 +286,16 @@ export function mockProvider(opts: MockProviderOptions): Provider {
           getSessionId(): string | null { return null; },
           async send(): Promise<TurnResult> {
             return new Promise<TurnResult>((_, reject) => {
-              if (sessionOpts?.abortSignal) {
-                sessionOpts.abortSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-              }
+              const signal = sessionOpts?.abortSignal;
+              if (!signal) return;
+              // `AbortSignal`'s `abort` event fires (at most) once. Cancellation
+              // may already have been requested — and the signal already fired —
+              // BEFORE this session's `send()` is reached (e.g. while a
+              // preceding preprocessor step was still running): registering a
+              // ONE-SHOT listener at that point would never see the past event
+              // and would hang forever. Check the already-aborted case first.
+              if (signal.aborted) { reject(new Error('aborted')); return; }
+              signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
             });
           },
           async close(): Promise<void> { /* no-op */ },
