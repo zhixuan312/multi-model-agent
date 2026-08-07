@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { SCHEMA_VERSION } from './config.mjs';
+import { SMOKE_CLIENT } from './http.mjs';
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
 
@@ -646,6 +647,20 @@ export function verify(rec) {
   if (inQueue) {
     const sv = q.records[0].schemaVersion ?? q.records[0].schema_version;
     out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
+    // Caller attribution must survive the whole path: header -> resolveCallerIdentity
+    // -> wire event. It is how "which clients still use the bespoke writers?" gets
+    // answered, so a silent collapse to `other` would quietly make that
+    // unanswerable — and `other` is exactly what a broken allowlist produces.
+    // A queue line is an ENVELOPE ({installId, schemaVersion, events: [...]}); the
+    // attribution lives on each event, not the envelope. Reading it off the wrong
+    // level yields undefined everywhere, which would report NA forever — a check
+    // that never runs looks exactly like a check that always passes.
+    const clients = [...new Set(
+      q.records.flatMap((r) => (Array.isArray(r.events) ? r.events : [])).map((e) => e.client).filter(Boolean),
+    )];
+    const attributed = clients.length > 0 && clients.every((c) => c === SMOKE_CLIENT);
+    out.push(C('client-attribution', clients.length === 0 ? 'NA' : (attributed ? 'PASS' : 'FAIL'),
+      `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
   }
   return out;
 }

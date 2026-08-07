@@ -1,6 +1,6 @@
 import { dispatch, getTask, cancelTask, mcpCall } from './http.mjs';
 import { POLL, BASE_URL } from './config.mjs';
-import { readToken } from './http.mjs';
+import { readToken, SMOKE_CLIENT } from './http.mjs';
 
 /** A prompt long enough that the task is still running when the cancel lands —
  *  cancelling an already-finished task would assert nothing. */
@@ -214,7 +214,7 @@ export async function runDispatch(spec, ctx) {
     const token = ctx.token;
     const headers = {
       'Authorization': `Bearer ${token}`,
-      'X-MMA-Client': 'claude-code',
+      'X-MMA-Client': SMOKE_CLIENT,
       'X-MMA-Main-Model': 'claude-opus-4-7',
       'Content-Type': 'application/json',
     };
