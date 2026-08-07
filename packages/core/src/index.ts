@@ -138,6 +138,7 @@ export type {
   SymbolRecord,
   SymbolInput,
   SymbolCorpusAdapter,
+  FallbackSweepState,
 } from './journal/index.js';
 export { TaskRegistry } from './unified/task-registry.js';
 export type { TaskEntry, TaskState } from './unified/task-registry.js';

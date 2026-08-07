@@ -28,56 +28,84 @@ export interface GitChangeSet {
   deletedPaths: string[];
 }
 
-function normalizeGitPath(raw: string): string {
-  // git quotes paths containing unusual characters in double quotes.
-  const trimmed = raw.trim();
-  const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed;
-  return unquoted;
+/**
+ * Split raw NUL-delimited git output (the `-z` flag) into path tokens. `-z`
+ * disables git's C-style quoting/octal-escaping of filenames entirely — the
+ * reason {@link detectGitChanges} uses it instead of newline-delimited output
+ * plus manual quote/escape decoding, which historically left Unicode or
+ * control-character filenames indexed under their escaped text (or missed
+ * entirely). Only the trailing empty token after the final NUL needs dropping.
+ */
+function splitNulDelimited(raw: string): string[] {
+  return raw.split('\0').filter((token) => token.length > 0);
 }
 
 /**
- * Detect changed/deleted files via `git status --porcelain`, without ever
+ * Detect changed/deleted files via `git status --porcelain -z`, without ever
  * `fs.stat`-ing the whole corpus from this process. Returns `null` when
  * `root` is not inside a git work tree, or the git invocation otherwise
  * fails — callers treat `null` as "use the throttled non-git fallback",
  * never as a hard error (a missing/broken git binary must not fail search).
+ *
+ * `opts.includeTracked` also runs `git ls-files -z` to populate
+ * {@link GitChangeSet.trackedPaths} — needed only to seed a genuinely EMPTY
+ * index (see `CorpusIndex.ensureFreshSymbols`), where `git status` alone (which
+ * reports only what changed since the last commit) would leave an
+ * already-committed repository's first-time index empty forever. Every other
+ * call is steady state and must cost exactly ONE subprocess call: defaults to
+ * `false`, running `git status` alone.
  */
-export async function detectGitChanges(root: string): Promise<GitChangeSet | null> {
-  let trackedStdout: string;
+export async function detectGitChanges(
+  root: string,
+  opts?: { includeTracked?: boolean },
+): Promise<GitChangeSet | null> {
+  const includeTracked = opts?.includeTracked ?? false;
+  let trackedStdout = '';
   let statusStdout: string;
   try {
-    const [tracked, status] = await Promise.all([
-      execFileAsync('git', ['-C', root, 'ls-files'], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }),
-      execFileAsync(
+    if (includeTracked) {
+      const [tracked, status] = await Promise.all([
+        execFileAsync('git', ['-C', root, 'ls-files', '-z'], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }),
+        execFileAsync(
+          'git',
+          ['-C', root, 'status', '--porcelain', '-z', '--untracked-files=all'],
+          { maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+        ),
+      ]);
+      trackedStdout = tracked.stdout;
+      statusStdout = status.stdout;
+    } else {
+      const status = await execFileAsync(
         'git',
-        ['-C', root, 'status', '--porcelain', '--untracked-files=all'],
+        ['-C', root, 'status', '--porcelain', '-z', '--untracked-files=all'],
         { maxBuffer: 64 * 1024 * 1024, windowsHide: true },
-      ),
-    ]);
-    trackedStdout = tracked.stdout;
-    statusStdout = status.stdout;
+      );
+      statusStdout = status.stdout;
+    }
   } catch {
     return null;
   }
 
-  const trackedPaths = trackedStdout
-    .split('\n')
-    .map((line) => normalizeGitPath(line))
-    .filter((line) => line.length > 0);
+  const trackedPaths = splitNulDelimited(trackedStdout);
   const changedPaths: string[] = [];
   const deletedPaths: string[] = [];
-  for (const line of statusStdout.split('\n')) {
-    if (line.length < 4) continue;
-    const status = line.slice(0, 2);
-    const rest = line.slice(3);
+  const tokens = splitNulDelimited(statusStdout);
+  for (let i = 0; i < tokens.length; i++) {
+    const entry = tokens[i];
+    if (entry.length < 4) continue;
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3);
     if (status[0] === 'R' || status[1] === 'R') {
-      // Rename: "R  old -> new" (or "RM"/"RD" etc.) — old path is gone, new path needs (re)indexing.
-      const [oldPath, newPath] = rest.split(' -> ');
-      if (oldPath) deletedPaths.push(normalizeGitPath(oldPath));
-      if (newPath) changedPaths.push(normalizeGitPath(newPath));
+      // Rename: with `-z`, git prints the OLD (pre-rename) path as a SEPARATE
+      // NUL-terminated token immediately following this entry — unlike the
+      // newline-delimited format's single "R  old -> new" line — so consume
+      // one extra token here. Old path is gone, new path needs (re)indexing.
+      const oldPath = tokens[i + 1];
+      i += 1;
+      if (oldPath) deletedPaths.push(oldPath);
+      changedPaths.push(path);
       continue;
     }
-    const path = normalizeGitPath(rest);
     if (status[0] === 'D' || status[1] === 'D') {
       deletedPaths.push(path);
     } else {
@@ -96,14 +124,11 @@ export async function detectGitChanges(root: string): Promise<GitChangeSet | nul
  */
 export async function listGitTrackedFiles(root: string): Promise<string[] | null> {
   try {
-    const { stdout } = await execFileAsync('git', ['-C', root, 'ls-files'], {
+    const { stdout } = await execFileAsync('git', ['-C', root, 'ls-files', '-z'], {
       maxBuffer: 64 * 1024 * 1024,
       windowsHide: true,
     });
-    return stdout
-      .split('\n')
-      .map((line) => normalizeGitPath(line))
-      .filter((line) => line.length > 0);
+    return splitNulDelimited(stdout);
   } catch {
     return null;
   }

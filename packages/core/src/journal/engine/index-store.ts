@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, stat } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { isUnderIgnoredDir } from '../adapters/ignored-dirs.js';
 import { detectGitChanges } from './freshness.js';
 import type { FreshnessDecision } from './freshness.js';
 import { rrfSearch } from './search.js';
@@ -75,6 +76,59 @@ function asNumber(value: unknown): number {
   return typeof value === 'number' ? value : Number(value ?? 0);
 }
 
+/**
+ * Safety gate for the git fast path (see {@link CorpusIndex.syncSymbolPaths}).
+ * `FileCorpusAdapter.walk` never follows symlinks — a directory entry's own
+ * `Dirent.isFile()` is false for a symlink, so the walk skips it without ever
+ * resolving where it points. The git fast path instead receives bare path
+ * strings from `git ls-files` / `git status` and previously fed them straight
+ * to `readFile`, which DOES dereference symlinks: a tracked symlink pointing
+ * outside the corpus root would read and index the TARGET file's content —
+ * potentially leaking host file contents into worker prompts. `lstat` (never
+ * `stat`, which would itself follow the link) each git-reported path first:
+ * reject anything that is not a regular file, and separately reject any path
+ * that resolves outside the corpus root (a defense against a path-traversal
+ * `relPath`, independent of the symlink check).
+ */
+async function isSafeGitReportedFile(root: string, relPath: string): Promise<boolean> {
+  const resolvedRoot = resolvePath(root);
+  const candidate = resolvePath(root, relPath);
+  const rel = relative(resolvedRoot, candidate);
+  if (rel.startsWith('..') || isAbsolute(rel)) return false;
+  let st;
+  try {
+    st = await lstat(candidate);
+  } catch {
+    return false;
+  }
+  if (!st.isFile()) return false;
+
+  // `resolve()` is lexical: it cannot see a symlinked corpus root or an
+  // ancestor directory symlink. Compare canonical filesystem paths as well,
+  // so the file we are about to read is truly contained by the corpus root.
+  try {
+    const [canonicalRoot, canonicalCandidate] = await Promise.all([realpath(root), realpath(candidate)]);
+    const canonicalRel = relative(canonicalRoot, canonicalCandidate);
+    return !canonicalRel.startsWith('..') && !isAbsolute(canonicalRel);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Process-wide, root-keyed non-git fallback-sweep throttle state (see
+ * {@link CorpusIndex.ensureFreshSymbols}). A caller that opens a NEW
+ * `CorpusIndex` per request (e.g. the investigate preprocessor, which
+ * open()s → uses → close()s the index every call) must pass the SAME
+ * `FallbackSweepState` object across those calls — an instance keeping this
+ * state purely in its own private fields would reset it (and so lose the
+ * throttle entirely) on every request.
+ */
+export interface FallbackSweepState {
+  lastFallbackSweepAt: number | null;
+  fallbackSweepCount: number;
+}
+
 export class CorpusIndex {
   static async open(opts: {
     root: string;
@@ -85,8 +139,21 @@ export class CorpusIndex {
      * which never sweeps. Defaults to {@link DEFAULT_FALLBACK_SWEEP_INTERVAL_MS}.
      */
     fallbackSweepIntervalMs?: number;
+    /**
+     * Shared throttle state for the non-git fallback sweep (see
+     * {@link FallbackSweepState}). Omit for a fresh, instance-local state
+     * (fine for a long-lived `CorpusIndex`); pass a shared object when the
+     * caller opens a new `CorpusIndex` per call against the same root, so the
+     * throttle actually applies across calls.
+     */
+    sweepState?: FallbackSweepState;
   }): Promise<CorpusIndex> {
-    const index = new CorpusIndex(opts.root, opts.adapter, opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS);
+    const index = new CorpusIndex(
+      opts.root,
+      opts.adapter,
+      opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS,
+      opts.sweepState ?? { lastFallbackSweepAt: null, fallbackSweepCount: 0 },
+    );
     // First-use bootstrap: `new DatabaseSync(<root>/index.db)` throws
     // ENOENT/SQLITE_CANTOPEN when the parent dir does not exist yet.
     await mkdir(opts.root, { recursive: true });
@@ -96,13 +163,12 @@ export class CorpusIndex {
 
   private db!: DatabaseSync;
   private freshnessDecision: FreshnessDecision | null = null;
-  private lastFallbackSweepAt: number | null = null;
-  private fallbackSweepCount = 0;
 
   private constructor(
     private readonly root: string,
     private readonly adapter: CorpusAdapter | SymbolCorpusAdapter,
     private readonly fallbackSweepIntervalMs: number,
+    private readonly sweepState: FallbackSweepState,
   ) {}
 
   private get dbPath(): string {
@@ -110,11 +176,32 @@ export class CorpusIndex {
   }
 
   private openDatabase(): void {
-    this.db = new DatabaseSync(this.dbPath);
-    this.db.exec('PRAGMA journal_mode = WAL;');
-    this.db.exec('PRAGMA busy_timeout = 5000;');
-    this.db.exec('PRAGMA foreign_keys = ON;');
-    this.bootstrapSchema();
+    // Guard against a leaked native SQLite handle: `new DatabaseSync(...)`
+    // assigns a LIVE handle on its first line, and the PRAGMAs / schema
+    // bootstrap that follow can still throw (e.g. SQLITE_BUSY under
+    // contention). Without this try/catch, `CorpusIndex.open()` propagates
+    // that throw with the half-built instance already discarded — unclosed —
+    // and nothing left holding a reference to `db` ever calls `.close()` on
+    // it. A caller that retries `open()` (e.g. the investigate preprocessor's
+    // bounded retry) can leak one handle per attempt.
+    let db: DatabaseSync | undefined;
+    try {
+      db = new DatabaseSync(this.dbPath);
+      this.db = db;
+      db.exec('PRAGMA journal_mode = WAL;');
+      db.exec('PRAGMA busy_timeout = 5000;');
+      db.exec('PRAGMA foreign_keys = ON;');
+      this.bootstrapSchema();
+    } catch (error) {
+      if (db) {
+        try {
+          db.close();
+        } catch {
+          // already closed / never fully opened — nothing more to release.
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -336,28 +423,37 @@ export class CorpusIndex {
    * path — see the two branches below.
    */
   private async ensureFreshSymbols(adapter: SymbolCorpusAdapter): Promise<void> {
-    const gitChanges = await detectGitChanges(this.root);
+    // A schema-valid but EMPTY `files` table — the very first `ensureFresh()`
+    // after `CorpusIndex.open()` bootstrapped a fresh database — has nothing
+    // indexed yet to diff against. Only THIS case needs `git ls-files`: every
+    // other (steady-state) call must cost exactly one `git status` subprocess,
+    // not two — `symbolFilesCount() === 0` is a single cheap `SELECT
+    // count(*)`, computed once and reused for both the tracked-file request
+    // and the empty-index union below.
+    const isEmptyIndex = this.symbolFilesCount() === 0;
+    const gitChanges = await detectGitChanges(this.root, { includeTracked: isEmptyIndex });
     if (gitChanges !== null) {
       // Git path: `git status --porcelain` already told us exactly what
       // changed — no corpus-wide `fs.stat` sweep, ever. Exclude the engine's
-      // own derived-database artifacts: they live inside the corpus root but
-      // are never content to (re)index.
-      const trackedPaths = gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path));
-      const statusChangedPaths = gitChanges.changedPaths.filter((path) => !isEngineArtifactPath(path));
-      const deletedPaths = gitChanges.deletedPaths.filter((path) => !isEngineArtifactPath(path));
-      // A schema-valid but EMPTY `files` table — the very first
-      // `ensureFresh()` after `CorpusIndex.open()` bootstrapped a fresh
-      // database — has nothing indexed yet to diff against. `git status`
-      // alone reports only what changed SINCE the last commit, which is
-      // nothing for a clean working tree: taking only `statusChangedPaths`
-      // here would leave a first-time index against an already-committed
-      // repository empty forever. On a genuinely empty index, treat every
-      // git-KNOWN path (tracked, plus anything `git status` already flags as
-      // new/modified) as needing indexing, not only today's diff.
-      const changedPaths =
-        this.symbolFilesCount() === 0
-          ? Array.from(new Set([...trackedPaths, ...statusChangedPaths]))
-          : statusChangedPaths;
+      // own derived-database artifacts (they live inside the corpus root but
+      // are never content to (re)index) and anything under an ignored
+      // directory (`node_modules`/`dist`/`build`/`.git`) — the SAME predicate
+      // `FileCorpusAdapter.walk` applies while pruning directories, applied
+      // here explicitly because this path receives a flat list of git-reported
+      // paths with no directory structure left to prune.
+      const trackedPaths = gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path));
+      const statusChangedPaths = gitChanges.changedPaths.filter(
+        (path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path),
+      );
+      const deletedPaths = gitChanges.deletedPaths.filter((path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path));
+      // `git status` alone reports only what changed SINCE the last commit,
+      // which is nothing for a clean working tree: taking only
+      // `statusChangedPaths` here would leave a first-time index against an
+      // already-committed repository empty forever. On a genuinely empty
+      // index, treat every git-KNOWN path (tracked, plus anything `git
+      // status` already flags as new/modified) as needing indexing, not only
+      // today's diff.
+      const changedPaths = isEmptyIndex ? Array.from(new Set([...trackedPaths, ...statusChangedPaths])) : statusChangedPaths;
       if (changedPaths.length > 0 || deletedPaths.length > 0) {
         await this.syncSymbolPaths(adapter, changedPaths, deletedPaths);
       }
@@ -373,15 +469,19 @@ export class CorpusIndex {
 
     // Non-git fallback: a full stat sweep is the only way to detect drift
     // without git metadata, so throttle it — it must not run on every query.
+    // `this.sweepState` (see {@link FallbackSweepState}) may be shared across
+    // several `CorpusIndex` instances opened for the same root, so the
+    // throttle survives a caller that opens+closes a fresh instance per call.
     const now = Date.now();
     const dueForSweep =
-      this.lastFallbackSweepAt === null || now - this.lastFallbackSweepAt >= this.fallbackSweepIntervalMs;
+      this.sweepState.lastFallbackSweepAt === null ||
+      now - this.sweepState.lastFallbackSweepAt >= this.fallbackSweepIntervalMs;
     if (dueForSweep) {
       await this.syncSymbolsIncremental(adapter);
-      this.lastFallbackSweepAt = now;
-      this.fallbackSweepCount += 1;
+      this.sweepState.lastFallbackSweepAt = now;
+      this.sweepState.fallbackSweepCount += 1;
     }
-    this.freshnessDecision = { mode: 'stat', statSweep: dueForSweep, sweepCount: this.fallbackSweepCount };
+    this.freshnessDecision = { mode: 'stat', statSweep: dueForSweep, sweepCount: this.sweepState.fallbackSweepCount };
   }
 
   /**
@@ -417,40 +517,54 @@ export class CorpusIndex {
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
 
+    // Prepare every targeted file before opening the transaction. This is the
+    // git counterpart to `rebuildSymbols`/`syncSymbolsIncremental`: filesystem
+    // I/O and extraction may take arbitrarily long, while the SQLite writer
+    // lock must cover only the resulting delete/upsert statements.
+    const prepared: Array<{ relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] }> = [];
+    const pathsToDelete = new Set(deletedPaths);
+    for (const relPath of changedPaths) {
+      const fullPath = join(this.root, relPath);
+      if (!(await isSafeGitReportedFile(this.root, relPath))) {
+        console.warn(`[corpus-engine:${adapter.corpusId}] skipping non-regular or unsafe git-reported path ${relPath}`);
+        pathsToDelete.add(relPath);
+        continue;
+      }
+      let raw: string;
+      let mtimeMs: number;
+      try {
+        raw = await readFile(fullPath, 'utf8');
+        mtimeMs = (await stat(fullPath)).mtimeMs;
+      } catch (error) {
+        // Vanished between `git status` and this read (race), or otherwise
+        // unreadable — treat exactly like a deleted path rather than fail the
+        // whole sync.
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] skipping unreadable changed file ${relPath}: ${(error as Error).message}`,
+        );
+        pathsToDelete.add(relPath);
+        continue;
+      }
+      const contentHash = createHash('sha256').update(raw).digest('hex');
+      let symbols: SymbolInput[];
+      try {
+        symbols = await adapter.extractSymbols(relPath, raw);
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+        );
+        continue;
+      }
+      prepared.push({ relPath, mtimeMs, contentHash, symbols });
+    }
+
     this.db.exec('BEGIN');
     try {
-      for (const relPath of deletedPaths) {
+      for (const relPath of pathsToDelete) {
         deleteSymbolsForFile.run(relPath);
         deleteFile.run(relPath);
       }
-      for (const relPath of changedPaths) {
-        const fullPath = join(this.root, relPath);
-        let raw: string;
-        let mtimeMs: number;
-        try {
-          raw = await readFile(fullPath, 'utf8');
-          mtimeMs = (await stat(fullPath)).mtimeMs;
-        } catch (error) {
-          // Vanished between `git status` and this read (race), or otherwise
-          // unreadable — treat exactly like a deleted path rather than fail
-          // the whole sync.
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] skipping unreadable changed file ${relPath}: ${(error as Error).message}`,
-          );
-          deleteSymbolsForFile.run(relPath);
-          deleteFile.run(relPath);
-          continue;
-        }
-        const contentHash = createHash('sha256').update(raw).digest('hex');
-        let symbols: SymbolInput[];
-        try {
-          symbols = await adapter.extractSymbols(relPath, raw);
-        } catch (error) {
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
-          );
-          continue;
-        }
+      for (const { relPath, mtimeMs, contentHash, symbols } of prepared) {
         deleteSymbolsForFile.run(relPath);
         upsertFile.run(relPath, mtimeMs, contentHash);
         symbols.forEach((symbol, position) => {
@@ -561,37 +675,49 @@ export class CorpusIndex {
   private async rebuildSymbols(adapter: SymbolCorpusAdapter): Promise<void> {
     this.dropAndRecreateFileSymbolTables();
     const files = await adapter.listFiles();
+
+    // Read, hash, and extract symbols for EVERY file FIRST, entirely outside
+    // any transaction. `readFile`/`extractSymbols` are async I/O/CPU work;
+    // running them while a `BEGIN` transaction is open would hold SQLite's
+    // writer lock for the whole rebuild, starving any concurrent writer's
+    // bounded `SQLITE_BUSY` retries. Only the DB writes below run inside the
+    // (now short) transaction.
+    const prepared: Array<{ relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] }> = [];
+    for (const relPath of files) {
+      let raw: string;
+      let mtimeMs: number;
+      try {
+        const fullPath = join(this.root, relPath);
+        raw = await readFile(fullPath, 'utf8');
+        mtimeMs = (await stat(fullPath)).mtimeMs;
+      } catch (error) {
+        console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
+        continue;
+      }
+      const contentHash = createHash('sha256').update(raw).digest('hex');
+      // Tier 3 (fixed-size blocks) is a NON-FAILING fallback per the adapter
+      // contract, but a rogue adapter implementation is still tolerated here
+      // exactly like the records-mode decode() path: skip-and-warn rather
+      // than abort the whole rebuild.
+      let symbols: SymbolInput[];
+      try {
+        symbols = await adapter.extractSymbols(relPath, raw);
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+        );
+        continue;
+      }
+      prepared.push({ relPath, mtimeMs, contentHash, symbols });
+    }
+
     const insertFile = this.db.prepare(`INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)`);
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     this.db.exec('BEGIN');
     try {
-      for (const relPath of files) {
-        let raw: string;
-        let mtimeMs: number;
-        try {
-          const fullPath = join(this.root, relPath);
-          raw = await readFile(fullPath, 'utf8');
-          mtimeMs = (await stat(fullPath)).mtimeMs;
-        } catch (error) {
-          console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
-          continue;
-        }
-        const contentHash = createHash('sha256').update(raw).digest('hex');
-        // Tier 3 (fixed-size blocks) is a NON-FAILING fallback per the adapter
-        // contract, but a rogue adapter implementation is still tolerated here
-        // exactly like the records-mode decode() path: skip-and-warn rather
-        // than abort the whole rebuild.
-        let symbols: SymbolInput[];
-        try {
-          symbols = await adapter.extractSymbols(relPath, raw);
-        } catch (error) {
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
-          );
-          continue;
-        }
+      for (const { relPath, mtimeMs, contentHash, symbols } of prepared) {
         insertFile.run(relPath, mtimeMs, contentHash);
         symbols.forEach((symbol, position) => {
           insertSymbol.run(
@@ -718,64 +844,91 @@ export class CorpusIndex {
 
     const files = await adapter.listFiles();
     const seenPaths = new Set<string>();
+
+    // Read, hash, and (when content changed) extract symbols for EVERY file
+    // FIRST, entirely outside any transaction — same reasoning as
+    // {@link rebuildSymbols}: this loop is async I/O/CPU work and must not
+    // hold SQLite's writer lock while it runs. Only the DB writes derived
+    // from these plans run inside the (now short) transaction below.
+    type Plan =
+      | { kind: 'mtime-only'; relPath: string; mtimeMs: number }
+      | { kind: 'content-changed'; relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] };
+    const plans: Plan[] = [];
+    for (const relPath of files) {
+      seenPaths.add(relPath);
+      const fullPath = join(this.root, relPath);
+      let st;
+      try {
+        st = await stat(fullPath);
+      } catch (error) {
+        console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
+        continue;
+      }
+      const prior = existing.get(relPath);
+
+      let raw: string;
+      try {
+        raw = await readFile(fullPath, 'utf8');
+      } catch (error) {
+        console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
+        continue;
+      }
+      const contentHash = createHash('sha256').update(raw).digest('hex');
+      if (prior && prior.contentHash === contentHash) {
+        // Content identical — refresh a changed mtime but never re-parse.
+        // An explicit incremental sync deliberately hashes the source even
+        // when its timestamp is unchanged: timestamp resolution and a
+        // preserved mtime must not hide a genuine content change.
+        if (prior.mtimeMs !== st.mtimeMs) {
+          plans.push({ kind: 'mtime-only', relPath, mtimeMs: st.mtimeMs });
+        }
+        continue;
+      }
+      let symbols: SymbolInput[];
+      try {
+        symbols = await adapter.extractSymbols(relPath, raw);
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+        );
+        continue;
+      }
+      plans.push({ kind: 'content-changed', relPath, mtimeMs: st.mtimeMs, contentHash, symbols });
+    }
+
+    // Files whose path disappeared from this listing entirely — determined
+    // from the DB snapshot read above `files`/`seenPaths`; no I/O needed.
+    const deletedPaths: string[] = [];
+    for (const relPath of existing.keys()) {
+      if (!seenPaths.has(relPath)) deletedPaths.push(relPath);
+    }
+
     const upsertFile = this.db.prepare(
       `INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)
        ON CONFLICT(file_path) DO UPDATE SET mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash`,
     );
+    const updateMtimeOnly = this.db.prepare('UPDATE files SET mtime_ms = ? WHERE file_path = ?');
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
 
     this.db.exec('BEGIN');
     try {
-      for (const relPath of files) {
-        seenPaths.add(relPath);
-        const fullPath = join(this.root, relPath);
-        let st;
-        try {
-          st = await stat(fullPath);
-        } catch (error) {
-          console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
-          continue;
-        }
-        const prior = existing.get(relPath);
-
-        let raw: string;
-        try {
-          raw = await readFile(fullPath, 'utf8');
-        } catch (error) {
-          console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
-          continue;
-        }
-        const contentHash = createHash('sha256').update(raw).digest('hex');
-        if (prior && prior.contentHash === contentHash) {
-          // Content identical — refresh a changed mtime but never re-parse.
-          // An explicit incremental sync deliberately hashes the source even
-          // when its timestamp is unchanged: timestamp resolution and a
-          // preserved mtime must not hide a genuine content change.
-          if (prior.mtimeMs !== st.mtimeMs) {
-            this.db.prepare('UPDATE files SET mtime_ms = ? WHERE file_path = ?').run(st.mtimeMs, relPath);
-          }
-          continue;
-        }
-        let symbols: SymbolInput[];
-        try {
-          symbols = await adapter.extractSymbols(relPath, raw);
-        } catch (error) {
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
-          );
+      for (const plan of plans) {
+        if (plan.kind === 'mtime-only') {
+          updateMtimeOnly.run(plan.mtimeMs, plan.relPath);
           continue;
         }
         // Whole-file replace: never attempt per-symbol change detection — an
         // edit shifts the line numbers of every symbol below it anyway.
-        deleteSymbolsForFile.run(relPath);
-        upsertFile.run(relPath, st.mtimeMs, contentHash);
-        symbols.forEach((symbol, position) => {
+        deleteSymbolsForFile.run(plan.relPath);
+        upsertFile.run(plan.relPath, plan.mtimeMs, plan.contentHash);
+        plan.symbols.forEach((symbol, position) => {
           insertSymbol.run(
-            `${relPath}#${position}`,
-            relPath,
+            `${plan.relPath}#${position}`,
+            plan.relPath,
             symbol.name,
             symbol.kind,
             symbol.startLine,
@@ -786,12 +939,9 @@ export class CorpusIndex {
       }
 
       // Drop files (and their symbols) that disappeared.
-      const currentFiles = this.db.prepare('SELECT file_path FROM files').all() as Array<Record<string, unknown>>;
-      for (const row of currentFiles) {
-        const filePath = asString(row.file_path);
-        if (seenPaths.has(filePath)) continue;
-        this.db.prepare('DELETE FROM files WHERE file_path = ?').run(filePath);
-        deleteSymbolsForFile.run(filePath);
+      for (const relPath of deletedPaths) {
+        deleteFile.run(relPath);
+        deleteSymbolsForFile.run(relPath);
       }
       this.db.exec('COMMIT');
     } catch (error) {

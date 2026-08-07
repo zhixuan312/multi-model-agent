@@ -3,6 +3,7 @@ import { extname, join, relative, sep } from 'node:path';
 import { CORPUS_INDEX_DB_FILENAME } from '../engine/index-store.js';
 import type { SymbolCorpusAdapter, SymbolInput } from '../engine/types.js';
 import { extractBlocks, extractMarkdownSections, extractSourceSymbols } from './file-symbols.js';
+import { IGNORED_DIR_NAMES } from './ignored-dirs.js';
 
 /**
  * Repository file corpus adapter — the SECOND `SymbolCorpusAdapter`
@@ -15,9 +16,6 @@ import { extractBlocks, extractMarkdownSections, extractSourceSymbols } from './
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.mdx', '.markdown']);
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
-
-/** Directories never worth indexing as repository content: VCS metadata, dependencies, build output. */
-const IGNORED_DIR_NAMES = new Set(['.git', 'node_modules', 'dist', 'build']);
 
 /** The engine's own derived-database artifacts live in the same root as the corpus; never index them as content. */
 const IGNORED_FILE_NAMES = new Set([

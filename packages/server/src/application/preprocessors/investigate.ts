@@ -1,5 +1,6 @@
+import { resolve } from 'node:path';
 import { CorpusIndex, FileCorpusAdapter } from '@zhixuan92/multi-model-agent-core';
-import type { SymbolRecord } from '@zhixuan92/multi-model-agent-core';
+import type { FallbackSweepState, SymbolRecord } from '@zhixuan92/multi-model-agent-core';
 import { PreprocessFailure } from './types.js';
 import type { Preprocessor } from './types.js';
 
@@ -121,8 +122,40 @@ function withRootQueue<T>(root: string, run: () => Promise<T>): Promise<T> {
   // Chain future callers off a NEVER-REJECTING promise so one failed call
   // doesn't poison the queue for the next caller; each caller still observes
   // its own `next`'s real outcome via the returned promise.
-  rootQueues.set(root, next.catch(() => undefined));
+  const settled = next.catch(() => undefined);
+  rootQueues.set(root, settled);
+  // Delete the entry once it settles, so a root that stops receiving calls
+  // does not hold a `rootQueues` entry (and its resolved promise) forever —
+  // this map has no other eviction path. Only delete when this call's
+  // `settled` marker is STILL the tail of the queue for `root`: a later
+  // caller may already have chained off it and replaced the map entry with
+  // its own `settled` marker, which must be left alone (deleting it here
+  // would drop a still-pending caller's serialization).
+  void settled.finally(() => {
+    if (rootQueues.get(root) === settled) rootQueues.delete(root);
+  });
   return next;
+}
+
+/**
+ * Process-wide, canonical-root-keyed non-git fallback-sweep throttle state
+ * (see {@link CorpusIndex}'s `FallbackSweepState`). This preprocessor opens a
+ * NEW `CorpusIndex` per request and closes it (see {@link attemptLoadIndexState}),
+ * so the throttle state must live here rather than on the `CorpusIndex`
+ * instance, or it resets — and so never actually throttles — on every
+ * request. Keyed by `resolve(cwd)` so equivalent (non-symlink) path spellings
+ * of the same root share one throttle.
+ */
+const sweepStateByRoot = new Map<string, FallbackSweepState>();
+
+function sweepStateFor(cwd: string): FallbackSweepState {
+  const canonicalRoot = resolve(cwd);
+  let state = sweepStateByRoot.get(canonicalRoot);
+  if (!state) {
+    state = { lastFallbackSweepAt: null, fallbackSweepCount: 0 };
+    sweepStateByRoot.set(canonicalRoot, state);
+  }
+  return state;
 }
 
 /** One open→ensureHealthy→ensureFresh→allSymbols→allFiles→close attempt, tagged with the phase that failed (if any) so the caller can classify + retry. */
@@ -132,7 +165,7 @@ async function attemptLoadIndexState(
   const adapter = new FileCorpusAdapter({ root: cwd });
   let index: CorpusIndex;
   try {
-    index = await CorpusIndex.open({ root: cwd, adapter });
+    index = await CorpusIndex.open({ root: cwd, adapter, sweepState: sweepStateFor(cwd) });
   } catch (error) {
     throw new IndexPhaseError('open', error);
   }
