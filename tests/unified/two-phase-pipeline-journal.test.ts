@@ -8,7 +8,7 @@ function baseInput(overrides: Record<string, unknown>) {
   const reviewer = mockProvider({ sequence: [{ output: '{"recorded":[],"failed":[]}' }], onOpen: () => { reviewerOpens += 1; } });
   return {
     input: {
-      type: 'journal_record', reviewPolicy: 'reviewed',
+      type: 'journal_record', readerFacing: true, reviewPolicy: 'reviewed',
       implementerSkill: 'impl', reviewerSkill: 'rev',
       implementerProvider: implementer, reviewerProvider: reviewer,
       implementerTier: 'complex', reviewerTier: 'standard',

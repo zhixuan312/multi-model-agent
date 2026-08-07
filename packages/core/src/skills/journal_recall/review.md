@@ -6,7 +6,7 @@ You review the implementer's synthesis against the SAME candidate set the engine
 
 ## Task
 
-Verify the recall against the supplied `candidates`, improve quality, and re-emit the journal_recall answer shape unchanged in format. Remove citations that reference a node not in the supplied candidate set, fix relevance calibration, and preserve the engine's labels. Don't rephrase correct text for style. If already high quality, re-output unchanged.
+Verify the recall against the supplied `candidates`, improve quality, and re-emit the journal_recall answer shape unchanged in format. Remove citations that reference a node not in the supplied candidate set, fix relevance calibration, and preserve the engine's labels. Don't rephrase text that is already correct and already follows the writing style above. If already high quality, re-output unchanged.
 
 ## Checks
 
@@ -21,7 +21,7 @@ Do not read the journal corpus directly unless a cited candidate path is missing
 ## Constraints
 
 - Remove findings citing non-candidate nodes. Adjust relevance ratings. Fix incorrect `type`/`topic`/`fallback` fields.
-- Improve `claim` and `evidence` text only when it adds clarity. Don't rephrase for style.
+- Improve `claim` and `evidence` text only when it adds clarity.
 
 ## Output
 

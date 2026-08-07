@@ -46,6 +46,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'do X',
@@ -75,6 +76,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'audit doc',
@@ -113,6 +115,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '# Audit Implement',
       reviewerSkill: '# Audit Review',
       taskPayload,
@@ -153,6 +156,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -175,6 +179,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -197,6 +202,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -222,6 +228,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'do X',
@@ -262,6 +269,7 @@ describe('runTwoPhasePipeline', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'do X',
@@ -282,6 +290,7 @@ describe('runTwoPhasePipeline', () => {
   it('does not touch git for a read route', async () => {
     const result = await runTwoPhasePipeline({
       type: 'investigate',
+      readerFacing: true,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'look at X',
@@ -318,6 +327,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload,
@@ -350,6 +360,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -377,6 +388,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'audit doc',
@@ -402,6 +414,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -435,6 +448,7 @@ describe('runTwoPhasePipeline', () => {
 
     await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -456,6 +470,7 @@ describe('runTwoPhasePipeline', () => {
   it('commits on the review-skipped path too (reviewPolicy=none)', async () => {
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '# Implement',
       reviewerSkill: '# Review',
       taskPayload: 'do X',

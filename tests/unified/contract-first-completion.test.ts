@@ -51,6 +51,7 @@ function baseInput(overrides: Partial<PipelineInput> & { reviewerOutput: string;
   const { reviewerOutput, run, ...rest } = overrides;
   return {
     type: 'execute_plan',
+    readerFacing: false,
     implementerSkill: '# impl', reviewerSkill: '# rev', taskPayload: 'do',
     implementerProvider: mockProvider(mockSession('{"tasks":[{"id":"I-9","status":"done"}]}')),
     reviewerProvider: mockProvider(mockSession(reviewerOutput)),
