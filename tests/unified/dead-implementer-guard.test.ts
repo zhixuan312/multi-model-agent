@@ -49,6 +49,7 @@ describe('dead-implementer guard', () => {
     let reviewerInvoked = false;
     const result = await runTwoPhasePipeline({
       type: 'investigate',
+      readerFacing: true,
       implementerSkill: 'skill',
       reviewerSkill: 'review skill',
       taskPayload: '{"prompt":"q"}',
@@ -75,6 +76,7 @@ describe('dead-implementer guard', () => {
   it('carries the provider errorCode when the dead turn has one', async () => {
     const result = await runTwoPhasePipeline({
       type: 'investigate',
+      readerFacing: true,
       implementerSkill: 'skill',
       reviewerSkill: 'review skill',
       taskPayload: '{"prompt":"q"}',
@@ -96,6 +98,7 @@ describe('dead-implementer guard', () => {
     let reviewerInvoked = false;
     const result = await runTwoPhasePipeline({
       type: 'investigate',
+      readerFacing: true,
       implementerSkill: 'skill',
       reviewerSkill: 'review skill',
       taskPayload: '{"prompt":"q"}',

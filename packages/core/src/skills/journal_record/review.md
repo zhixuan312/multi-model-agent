@@ -13,7 +13,7 @@ Check the applied result:
 1. **Completeness** — every submitted record appears exactly once across `recorded` + `failed`. None silently dropped or duplicated. If the prompt includes a submitted-record count or stable labels, reconcile against them.
 2. **Recorded entries** — each `recorded` entry maps to a real node path (`nodePath`) with a plausible `type` (one of `decision`, `design`, `behavior`, `process`, `knowledge`, `style`) and exactly one lowercase-kebab `topic`.
 3. **Failed entries** — each `failed` entry carries a clear, specific `reason`.
-4. **Classification** — if the recorded `type` or `topic` is clearly wrong for the learning, correct it in the report text. Do not rephrase correct text for style.
+4. **Classification** — if the recorded `type` or `topic` is clearly wrong for the learning, correct it in the report text. Don't rephrase text that is already correct and already follows the writing style above.
 
 You may correct classification or wording in the report, but you do NOT re-apply, re-run, or write journal files — the deterministic engine already did.
 

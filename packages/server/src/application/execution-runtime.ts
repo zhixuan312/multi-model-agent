@@ -191,6 +191,7 @@ export class ExecutionRuntime {
         reviewPolicy, callerForcedReview, startedAtMs,
         writeRoute: typeConfig.writeRoute,
         sandbox: typeConfig.sandbox,
+        readerFacing: typeConfig.readerFacing,
       });
     });
 
@@ -218,6 +219,7 @@ export class ExecutionRuntime {
     startedAtMs: number;
     writeRoute: boolean;
     sandbox: 'read-only' | 'cwd-only';
+    readerFacing: boolean;
   }): Promise<void> {
     const { deps } = this;
     const {
@@ -316,6 +318,7 @@ export class ExecutionRuntime {
 
       const result = await runTwoPhasePipeline({
         type: input.type,
+        readerFacing: run.readerFacing,
         implementerSkill: skills.implement,
         reviewerSkill: skills.review,
         abortSignal: scope.signal,

@@ -35,6 +35,7 @@ describe('Session resume', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -67,6 +68,7 @@ describe('Session resume', () => {
 
     await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -96,6 +98,7 @@ describe('Session resume', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',
+      readerFacing: false,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',
@@ -130,6 +133,7 @@ describe('Session resume', () => {
 
     const result = await runTwoPhasePipeline({
       type: 'audit',
+      readerFacing: true,
       implementerSkill: '#',
       reviewerSkill: '#',
       taskPayload: 'x',

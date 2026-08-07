@@ -105,6 +105,7 @@ export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from
 // Unified task engine
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';
 export type { TaskType, TypeConfig, TargetAcceptance } from './unified/type-registry.js';
+export { WRITING_STYLE_BLOCK } from './unified/writing-style-block.js';
 export { SPEC_COMPONENTS, resolveComponents } from './unified/spec-components.js';
 export type { SpecComponent } from './unified/spec-components.js';
 export { taskInputSchema } from './unified/task-input-schema.js';

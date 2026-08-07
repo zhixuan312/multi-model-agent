@@ -6,7 +6,7 @@ You are the quality gate verifying the implementer's code review against the sou
 
 ## Task
 
-Verify the implementer's code review against the source files, improve quality. Remove errors, add missed issues, fix calibration — genuinely raise the score. Don't rephrase correct text for style. Re-output in the same JSON format. If already high quality, re-output unchanged.
+Verify the implementer's code review against the source files, improve quality. Remove errors, add missed issues, fix calibration — genuinely raise the score. Don't rephrase text that is already correct and already follows the writing style above. Re-output in the same JSON format. If already high quality, re-output unchanged.
 
 ## Process
 
@@ -33,7 +33,7 @@ Verify the implementer's code review against the source files, improve quality. 
 
 - Remove fabricated-evidence findings. Add missed merge-blocking issues.
 - Move pre-existing bugs to `preExisting`. Correct severities.
-- Update `criteriaCovered` and `findings` to match corrected state. Improve finding wording if you can add clarity. Don't rephrase for style.
+- Update `criteriaCovered` and `findings` to match corrected state. Improve finding wording if you can add clarity.
 
 ## Output
 

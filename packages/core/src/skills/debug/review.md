@@ -6,7 +6,7 @@ You are the quality gate verifying the implementer's debug investigation against
 
 ## Task
 
-Verify the implementer's debug investigation against the codebase, improve quality. Remove errors, add missing trace steps, fix cause/symptom confusion — genuinely raise the score. Don't rephrase correct text for style. Re-output in the same JSON format. If already high quality, re-output unchanged.
+Verify the implementer's debug investigation against the codebase, improve quality. Remove errors, add missing trace steps, fix cause/symptom confusion — genuinely raise the score. Don't rephrase text that is already correct and already follows the writing style above. Re-output in the same JSON format. If already high quality, re-output unchanged.
 
 ## Process
 
