@@ -127,7 +127,17 @@ export {
   JOURNAL_INDEX_SCHEMA_VERSION,
   searchCandidatesForRecall,
   searchCandidatesForRecord,
+  FileCorpusAdapter,
+  CorpusIndex,
 } from './journal/index.js';
-export type { JournalCandidate, JournalRecordDecision, ApplyRecordInput, ApplyRecordResult } from './journal/index.js';
+export type {
+  JournalCandidate,
+  JournalRecordDecision,
+  ApplyRecordInput,
+  ApplyRecordResult,
+  SymbolRecord,
+  SymbolInput,
+  SymbolCorpusAdapter,
+} from './journal/index.js';
 export { TaskRegistry } from './unified/task-registry.js';
 export type { TaskEntry, TaskState } from './unified/task-registry.js';

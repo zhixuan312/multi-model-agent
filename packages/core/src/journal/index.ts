@@ -34,3 +34,14 @@ export type {
   LexicalHit,
   JournalCandidate,
 } from './adapters/journal-adapter.js';
+export { FileCorpusAdapter } from './adapters/file-adapter.js';
+export { CorpusIndex } from './engine/index-store.js';
+export type {
+  CorpusAdapter,
+  CorpusRecord,
+  StoredRecord,
+  SymbolCorpusAdapter,
+  SymbolInput,
+  SymbolRecord,
+  FileRecord,
+} from './engine/types.js';

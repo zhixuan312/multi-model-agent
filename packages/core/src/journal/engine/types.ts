@@ -77,3 +77,70 @@ export interface CorpusAdapter {
     lexicalOrder?: string[],
   ): RankedList[] | Promise<RankedList[]>;
 }
+
+/**
+ * One extracted addressable unit within a source file — a markdown heading
+ * section, a source function/class range, or a fixed-size fallback block.
+ * Unlike {@link CorpusRecord}, MANY symbols can share the same `filePath`.
+ */
+export interface SymbolRecord {
+  /** Stable identifier, unique within the corpus (engine-assigned). */
+  id: string;
+  /** Adapter-relative source path (relative to the corpus root). */
+  filePath: string;
+  /** Heading text, function/class name, or `block-N` for fallback blocks. */
+  name: string;
+  /** Extraction tier that produced this symbol, e.g. `'heading' | 'function' | 'class' | 'block'`. */
+  kind: string;
+  /** 1-based inclusive start line within the source file. */
+  startLine: number;
+  /** 1-based inclusive end line within the source file. */
+  endLine: number;
+  /** Extracted source text for this symbol's line range. */
+  body: string;
+}
+
+/** A symbol as an adapter decodes it, before the engine assigns a stable `id`/`filePath`. */
+export type SymbolInput = Omit<SymbolRecord, 'id' | 'filePath'>;
+
+/** A `files` row: purely for per-file change detection, not for search. */
+export interface FileRecord {
+  filePath: string;
+  mtimeMs: number;
+  contentHash: string;
+}
+
+/**
+ * A corpus-neutral adapter for corpora where ONE source file yields MANY
+ * addressable symbol rows (e.g. a repository: markdown heading sections,
+ * source function/class ranges, or fixed-size fallback blocks) rather than a
+ * single record. Distinct from {@link CorpusAdapter} (exactly one record per
+ * file, backing the `records`/`records_fts` lexical schema). `CorpusIndex`
+ * detects which contract an adapter implements by the presence of
+ * `extractSymbols` (see {@link isSymbolCorpusAdapter}) and switches storage
+ * mode — `files`/`symbols` tables instead of `records`/`records_fts` —
+ * accordingly. The engine has no concept of what a symbol represents; that
+ * stays with the adapter (e.g. the repository file adapter under
+ * `../adapters/`).
+ */
+export interface SymbolCorpusAdapter {
+  /** Stable identifier for this corpus kind, used only in diagnostics. */
+  corpusId: string;
+  /** Corpus root directory; adapter-relative paths resolve against this. */
+  root: string;
+  /** Enumerate every source file, as paths relative to the corpus root. */
+  listFiles(): Promise<string[]> | string[];
+  /**
+   * Decode one file's raw contents into zero or more symbols. MUST NOT throw
+   * solely because content is malformed or the extension is unknown — the
+   * fixed-size block fallback tier guarantees every file can be decoded.
+   */
+  extractSymbols(relPath: string, raw: string): Promise<SymbolInput[]> | SymbolInput[];
+}
+
+/** Runtime capability check: does `adapter` implement {@link SymbolCorpusAdapter}? */
+export function isSymbolCorpusAdapter(
+  adapter: CorpusAdapter | SymbolCorpusAdapter,
+): adapter is SymbolCorpusAdapter {
+  return typeof (adapter as SymbolCorpusAdapter).extractSymbols === 'function';
+}
