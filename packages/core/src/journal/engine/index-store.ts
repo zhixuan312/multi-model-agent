@@ -18,9 +18,8 @@ import type {
  * Corpus-neutral derived SQLite index.
  *
  * This engine stores and ranks generic "records" supplied by a `CorpusAdapter`
- * (see `./types.ts`) — it has no concept of journals, topics, status,
- * supersession, or typed graph edges. Those all belong to the adapter. The
- * engine only knows: enumerate the adapter's files, decode each into a
+ * (see `./types.ts`). Domain semantics belong to the adapter. The engine only
+ * knows: enumerate the adapter's files, decode each into a
  * record, keep an SQLite + FTS5 cache of those records in sync with their
  * source files, and rank a candidate pool by fusing lexical search with
  * whatever extra ranked signal lists the adapter supplies.
@@ -29,7 +28,7 @@ import type {
  * fully rebuildable from them at any time.
  */
 
-export const CORPUS_INDEX_SCHEMA_VERSION = 1;
+export const CORPUS_INDEX_SCHEMA_VERSION = 2;
 export const CORPUS_INDEX_DB_FILENAME = 'index.db';
 
 const REQUIRED_TABLES = ['records', 'records_fts'];
@@ -73,14 +72,41 @@ export class CorpusIndex {
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA busy_timeout = 5000;');
     this.db.exec('PRAGMA foreign_keys = ON;');
+    this.bootstrapSchema();
+  }
+
+  /**
+   * Bootstrap the schema ONLY on a genuinely fresh database file (no known
+   * table of either storage mode exists yet). An EXISTING database — even one
+   * on an outdated schema version — is left untouched here: {@link ensureSchema}
+   * runs `CREATE TABLE IF NOT EXISTS`, a no-op against an already-existing
+   * table that would silently skip a newly added column (e.g. `adapter_meta`),
+   * and then unconditionally stamps `PRAGMA user_version` to the CURRENT
+   * version — which would make {@link schemaIsValid} / {@link fileSymbolTablesValid}
+   * report that stale table as valid forever, so an outdated on-disk database
+   * would never actually rebuild. Every caller runs {@link ensureHealthy}
+   * before reading or writing, which detects a genuine version/table mismatch
+   * and performs a full drop + recreate rebuild instead.
+   */
+  private bootstrapSchema(): void {
+    let tables: string[];
+    try {
+      tables = this.tableNames();
+    } catch {
+      tables = [];
+    }
+    const hasAnyKnownTable = [...REQUIRED_TABLES, ...REQUIRED_FILE_SYMBOL_TABLES].some((name) =>
+      tables.includes(name),
+    );
+    if (hasAnyKnownTable) return;
     this.ensureSchema();
   }
 
   /**
    * Create only the tables the current adapter's contract needs. The two
-   * storage modes never mix in one database file (a `CorpusAdapter` corpus
-   * like the journal never touches `files`/`symbols`; a `SymbolCorpusAdapter`
-   * corpus like the repository file adapter never touches
+   * storage modes never mix in one database file (a one-record-per-file
+   * `CorpusAdapter` corpus never touches `files`/`symbols`; a
+   * `SymbolCorpusAdapter` corpus never touches
    * `records`/`records_fts`), so there is no reason to pay FTS5
    * virtual-table creation cost, or carry unused tables, for the mode a
    * corpus doesn't use. Both modes still share one `user_version` — the
@@ -121,7 +147,8 @@ export class CorpusIndex {
           title        TEXT NOT NULL,
           body         TEXT NOT NULL,
           mtime_ms     REAL NOT NULL,
-          content_hash TEXT NOT NULL
+          content_hash TEXT NOT NULL,
+          adapter_meta TEXT
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
           id UNINDEXED,
@@ -187,8 +214,8 @@ export class CorpusIndex {
    * Indexed record count — a single cheap `SELECT count(*)`.
    *
    * Public because adapters need a freshness comparison that does NOT load the
-   * corpus. Journal learning 0084: a derived index loses its value when the
-   * freshness check costs more than the read it protects.
+   * corpus. A derived index loses its value when the freshness check costs more
+   * than the read it protects.
    */
   recordCount(): number {
     const row = this.db.prepare('SELECT count(*) AS n FROM records').get() as Record<string, unknown> | undefined;
@@ -261,7 +288,7 @@ export class CorpusIndex {
     this.dropAndRecreateSchema();
     const files = await adapter.listFiles();
     const insertRecord = this.db.prepare(
-      `INSERT INTO records (id, path, title, body, mtime_ms, content_hash) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, adapter_meta) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertFts = this.db.prepare(`INSERT INTO records_fts (id, title, body) VALUES (?, ?, ?)`);
     this.db.exec('BEGIN');
@@ -278,7 +305,15 @@ export class CorpusIndex {
           );
           continue;
         }
-        insertRecord.run(loaded.id, loaded.path, loaded.title, loaded.body, loaded.mtimeMs, loaded.contentHash);
+        insertRecord.run(
+          loaded.id,
+          loaded.path,
+          loaded.title,
+          loaded.body,
+          loaded.mtimeMs,
+          loaded.contentHash,
+          loaded.adapterMeta ?? null,
+        );
         insertFts.run(loaded.id, loaded.title, loaded.body);
       }
       this.db.exec('COMMIT');
@@ -538,16 +573,25 @@ export class CorpusIndex {
   private upsertRecord(loaded: StoredRecord): void {
     this.db
       .prepare(
-        `INSERT INTO records (id, path, title, body, mtime_ms, content_hash)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, adapter_meta)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            path = excluded.path,
            title = excluded.title,
            body = excluded.body,
            mtime_ms = excluded.mtime_ms,
-           content_hash = excluded.content_hash`,
+           content_hash = excluded.content_hash,
+           adapter_meta = excluded.adapter_meta`,
       )
-      .run(loaded.id, loaded.path, loaded.title, loaded.body, loaded.mtimeMs, loaded.contentHash);
+      .run(
+        loaded.id,
+        loaded.path,
+        loaded.title,
+        loaded.body,
+        loaded.mtimeMs,
+        loaded.contentHash,
+        loaded.adapterMeta ?? null,
+      );
     this.db.prepare('DELETE FROM records_fts WHERE id = ?').run(loaded.id);
     this.db.prepare('INSERT INTO records_fts (id, title, body) VALUES (?, ?, ?)').run(loaded.id, loaded.title, loaded.body);
   }
@@ -589,7 +633,7 @@ export class CorpusIndex {
   /** Every derived-index row, decoded back into structured form. */
   allRecords(): StoredRecord[] {
     const rows = this.db
-      .prepare('SELECT id, path, title, body, mtime_ms, content_hash FROM records')
+      .prepare('SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records')
       .all() as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       id: asString(row.id),
@@ -598,6 +642,7 @@ export class CorpusIndex {
       body: asString(row.body),
       mtimeMs: asNumber(row.mtime_ms),
       contentHash: asString(row.content_hash),
+      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
     }));
   }
 

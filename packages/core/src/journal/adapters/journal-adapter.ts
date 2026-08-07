@@ -1,9 +1,8 @@
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { CorpusIndex, CORPUS_INDEX_DB_FILENAME } from '../engine/index-store.js';
 import type { CorpusAdapter, CorpusRecord, IndexHealth, RankedList, StoredRecord } from '../engine/types.js';
-import { parseJournalNodeDocument, type JournalNodeDocument } from '../node-codec.js';
+import { parseJournalNodeDocument } from '../node-codec.js';
 
 /**
  * Journal corpus adapter + journal-specific ranked retrieval.
@@ -17,43 +16,48 @@ import { parseJournalNodeDocument, type JournalNodeDocument } from '../node-code
  *  1. `JournalCorpusAdapter` — implements the engine's `CorpusAdapter`
  *     contract so `CorpusIndex` can enumerate/decode/index journal node
  *     markdown as generic records (id/path/title/body) and lexically search
- *     them (FTS5/BM25) without knowing what a "journal" is.
- *  2. `JournalIndexStore` — the public store journal callers have always used.
- *     It wraps a `CorpusIndex` for content + lexical search, and keeps a
- *     SEPARATE `journal_meta` table (topic/status/tags/links/description) in
- *     the SAME derived database file, synchronized in lockstep with the
- *     engine's own records via `JournalCorpusAdapter.onDecoded`. The engine
- *     never sees or touches that table.
+ *     them (FTS5/BM25) without knowing what a "journal" is. Journal-only
+ *     metadata (topic/status/tags/links/description) rides along as a JSON
+ *     string in the record's opaque `adapterMeta` field — persisted by the
+ *     engine in the SAME row, SAME statement, and SAME transaction as the
+ *     record itself. There is no second table and no second database
+ *     connection: the engine never parses `adapterMeta`, it only stores and
+ *     returns it.
+ *  2. `JournalIndexStore` — the public store journal callers have always
+ *     used. It wraps a `CorpusIndex` for content, lexical search, and
+ *     metadata, deserializing each record's `adapterMeta` back into journal
+ *     metadata on read.
  */
 
 // ---------------------------------------------------------------------------
-// Engine-facing adapter: content + lexical indexing only.
+// Engine-facing adapter: content + lexical indexing, plus opaque metadata.
 // ---------------------------------------------------------------------------
 
 /** Re-exported under the journal's historical constant name/value — it is now
  * the shared engine's generic derived-database filename. */
 export const JOURNAL_INDEX_DB_FILENAME = CORPUS_INDEX_DB_FILENAME;
-/** Schema version of the journal's OWN `journal_meta` table, independent of
- * the shared engine's own `records`/`records_fts` schema version. */
-export const JOURNAL_INDEX_SCHEMA_VERSION = 1;
+
+/** Journal-only metadata, serialized into a record's opaque `adapterMeta`. */
+interface JournalAdapterMeta {
+  topic: string;
+  status: string;
+  tags: string[];
+  links: { type: string; target: string }[];
+  description: string;
+}
+
+function parseAdapterMeta(raw: string | undefined): JournalAdapterMeta | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as JournalAdapterMeta;
+  } catch {
+    return undefined;
+  }
+}
 
 export class JournalCorpusAdapter implements CorpusAdapter {
   readonly corpusId = 'journal';
   readonly root: string;
-  private readonly decodedMeta = new Map<string, JournalMetaRow>();
-  /**
-   * JournalIndexStore supplies the persisted metadata view after opening the
-   * index. The decoded cache keeps this adapter independently usable by a
-   * plain CorpusIndex during a rebuild.
-   */
-  metadata?: () => Map<string, JournalMetaRow>;
-  /**
-   * Fired synchronously whenever `decode()` successfully parses a node, so a
-   * caller (here, `JournalIndexStore`) can keep a parallel metadata table in
-   * lockstep with the engine's own indexing pass without a second full-corpus
-   * read. Not part of the `CorpusAdapter` contract — a journal-only hook.
-   */
-  onDecoded?: (doc: JournalNodeDocument) => void;
 
   constructor(opts: { journalRoot: string }) {
     this.root = opts.journalRoot;
@@ -73,18 +77,15 @@ export class JournalCorpusAdapter implements CorpusAdapter {
 
   async decode(relPath: string, raw: string): Promise<CorpusRecord> {
     const parsed = parseJournalNodeDocument(raw, relPath);
-    this.decodedMeta.set(parsed.id, {
-      nodeId: parsed.id,
-      nodePath: parsed.sourcePath,
+    const meta: JournalAdapterMeta = {
       topic: parsed.topic,
       status: parsed.status,
       tags: parsed.tags,
       links: parsed.links,
       description: parsed.description,
-    });
-    this.onDecoded?.(parsed);
+    };
     const body = `${parsed.title}\n${parsed.description}\n${parsed.context}\n${parsed.consequences}`.trim();
-    return { id: parsed.id, path: relPath, title: parsed.title, body };
+    return { id: parsed.id, path: relPath, title: parsed.title, body, adapterMeta: JSON.stringify(meta) };
   }
 
   /**
@@ -92,10 +93,11 @@ export class JournalCorpusAdapter implements CorpusAdapter {
    * and typed-edge expansion are supplied here as ranked lists for it to fuse
    * with lexical order. Passing lexical order in lets the adapter preserve the
    * historical seed rule: lexical hits first, then tag hits, capped at ten.
+   * `pool` records already carry their own `adapterMeta` — no separate lookup.
    */
   signals(tokens: string[], pool: StoredRecord[], lexicalOrder: string[] = []): RankedList[] {
-    const metaById = this.metadata?.() ?? this.decodedMeta;
     const poolIds = new Set(pool.map((record) => record.id));
+    const metaById = new Map(pool.map((record) => [record.id, parseAdapterMeta(record.adapterMeta)]));
     const tokenSet = new Set(tokens);
     const tagOrder = pool
       .map((record) => ({
@@ -124,116 +126,8 @@ export class JournalCorpusAdapter implements CorpusAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// journal_meta: topic/status/tags/links/description, in a table the engine
-// never sees, kept in the same derived database file as `records`.
-// ---------------------------------------------------------------------------
-
-interface JournalMetaRow {
-  nodeId: string;
-  nodePath: string;
-  topic: string;
-  status: string;
-  tags: string[];
-  links: { type: string; target: string }[];
-  description: string;
-}
-
-function asString(value: unknown): string {
-  return typeof value === 'string' ? value : value == null ? '' : String(value);
-}
-
-function asNumber(value: unknown): number {
-  return typeof value === 'number' ? value : Number(value ?? 0);
-}
-
-class JournalMetaStore {
-  constructor(private readonly db: DatabaseSync) {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS journal_meta (
-        node_id     TEXT PRIMARY KEY,
-        node_path   TEXT NOT NULL,
-        topic       TEXT NOT NULL,
-        status      TEXT NOT NULL,
-        tags        TEXT NOT NULL,
-        links       TEXT NOT NULL,
-        description TEXT NOT NULL
-      );
-    `);
-  }
-
-  /**
-   * Prepared once, reused for every row. Re-preparing per call recompiles the
-   * statement on each of N nodes during a rebuild, which measurably regressed
-   * the record-latency benchmark gate.
-   */
-  private upsertStmt: ReturnType<DatabaseSync['prepare']> | null = null;
-
-  upsert(doc: JournalNodeDocument): void {
-    this.upsertStmt ??= this.db.prepare(
-      `INSERT INTO journal_meta (node_id, node_path, topic, status, tags, links, description)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(node_id) DO UPDATE SET
-           node_path = excluded.node_path,
-           topic = excluded.topic,
-           status = excluded.status,
-           tags = excluded.tags,
-           links = excluded.links,
-           description = excluded.description`,
-    );
-    this.upsertStmt.run(
-        doc.id,
-        doc.sourcePath,
-        doc.topic,
-        doc.status,
-        JSON.stringify(doc.tags),
-        JSON.stringify(doc.links),
-        doc.description,
-      );
-  }
-
-  count(): number {
-    const row = this.db.prepare('SELECT count(*) AS n FROM journal_meta').get() as Record<string, unknown> | undefined;
-    return asNumber(row?.n);
-  }
-
-  all(): Map<string, JournalMetaRow> {
-    const rows = this.db
-      .prepare('SELECT node_id, node_path, topic, status, tags, links, description FROM journal_meta')
-      .all() as Array<Record<string, unknown>>;
-    return new Map(
-      rows.map((row) => [
-        asString(row.node_id),
-        {
-          nodeId: asString(row.node_id),
-          nodePath: asString(row.node_path),
-          topic: asString(row.topic),
-          status: asString(row.status),
-          tags: JSON.parse(asString(row.tags) || '[]') as string[],
-          links: JSON.parse(asString(row.links) || '[]') as { type: string; target: string }[],
-          description: asString(row.description),
-        },
-      ]),
-    );
-  }
-
-  clear(): void {
-    this.db.exec('DELETE FROM journal_meta');
-  }
-
-  /** Drop rows that no longer match an indexed record's id/path pair. */
-  pruneNotMatching(currentRecords: Map<string, string>): void {
-    const rows = this.db.prepare('SELECT node_id, node_path FROM journal_meta').all() as Array<Record<string, unknown>>;
-    const del = this.db.prepare('DELETE FROM journal_meta WHERE node_id = ?');
-    for (const row of rows) {
-      const nodeId = asString(row.node_id);
-      if (currentRecords.get(nodeId) !== asString(row.node_path)) del.run(nodeId);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Public journal index store — same names/semantics journal callers have
-// always used, now backed by the corpus-neutral engine plus `journal_meta`.
+// always used, now backed entirely by the corpus-neutral engine.
 // ---------------------------------------------------------------------------
 
 export interface IndexedLink {
@@ -275,121 +169,54 @@ export class JournalIndexStore {
     await mkdir(join(opts.journalRoot, 'nodes'), { recursive: true });
     const adapter = new JournalCorpusAdapter({ journalRoot: opts.journalRoot });
     const index = await CorpusIndex.open({ root: opts.journalRoot, adapter });
-    const metaDb = new DatabaseSync(join(opts.journalRoot, JOURNAL_INDEX_DB_FILENAME));
-    metaDb.exec('PRAGMA journal_mode = WAL;');
-    metaDb.exec('PRAGMA busy_timeout = 5000;');
-    const meta = new JournalMetaStore(metaDb);
-    adapter.metadata = () => meta.all();
-    const store = new JournalIndexStore(adapter, index, metaDb, meta);
-    // Buffer only — see `pendingMeta` for why this must not write to `metaDb`
-    // synchronously here (decode() fires inside the engine's own transaction).
-    adapter.onDecoded = (doc) => store.pendingMeta.push(doc);
-    return store;
+    return new JournalIndexStore(adapter, index);
   }
-
-  /**
-   * `decode()` fires — and therefore `onDecoded` pushes here — WHILE the
-   * engine holds an open write transaction on its own connection (inside
-   * `rebuild()`/`syncIncremental()`). Writing to `journal_meta` (a SEPARATE
-   * connection to the same database file) at that moment contends for the
-   * single SQLite writer lock and throws `SQLITE_BUSY`. So `onDecoded` only
-   * buffers in memory here; {@link flushPendingMeta} performs the actual
-   * writes AFTER the engine call has returned (its transaction committed).
-   */
-  private pendingMeta: JournalNodeDocument[] = [];
 
   private constructor(
     private readonly adapter: JournalCorpusAdapter,
     private readonly index: CorpusIndex,
-    private readonly metaDb: DatabaseSync,
-    private readonly meta: JournalMetaStore,
   ) {}
 
-  /**
-   * One transaction for the whole buffer. Without this each upsert runs in its
-   * own implicit transaction, so a rebuild of N nodes pays N commits — that
-   * alone regressed the record-latency benchmark gate below its 2x floor.
-   */
-  private flushPendingMeta(): void {
-    if (this.pendingMeta.length === 0) return;
-    this.metaDb.exec('BEGIN');
-    try {
-      for (const doc of this.pendingMeta) this.meta.upsert(doc);
-      this.metaDb.exec('COMMIT');
-    } catch (error) {
-      this.metaDb.exec('ROLLBACK');
-      throw error;
-    }
-    this.pendingMeta = [];
-  }
-
-  /**
-   * Keep `journal_meta` in lockstep with the current node files. Cheap
-   * fast path: a matching row/record count skips the per-row diff entirely,
-   * mirroring the engine's own count-based freshness gate — no file content
-   * is ever read here, only a directory listing.
-   */
-  private async reconcileMeta(): Promise<void> {
-    // Compare COUNTS first, with two cheap `SELECT count(*)` queries. Loading
-    // every record here to take its `.length` made this O(corpus) on EVERY
-    // record and recall operation, which regressed the record-latency gate.
-    // Journal learning 0084: the freshness check must cost less than the read
-    // it protects. Only a mismatch pays for the full record list.
-    if (this.meta.count() === this.index.recordCount()) return;
-    const records = this.index.allRecords();
-    this.meta.pruneNotMatching(new Map(records.map((record) => [record.id, record.path])));
-  }
-
   async ensureHealthy(): Promise<IndexHealth> {
-    const health = await this.index.ensureHealthy();
-    this.flushPendingMeta();
-    await this.reconcileMeta();
-    return health;
+    return this.index.ensureHealthy();
   }
 
   /**
    * Cheap per-query freshness gate — delegates to the engine's own count-based
    * check (schema invalid → rebuild; file count changed → incremental sync;
-   * otherwise a no-op), then reconciles `journal_meta` the same cheap way.
-   * Same-count out-of-band content edits are NOT detected here, exactly as
-   * before — that is the job of an explicit {@link rebuildIndex} /
-   * `syncIndexIncremental`.
+   * otherwise a no-op).
    */
   async ensureFresh(): Promise<void> {
     await this.index.ensureFresh();
-    this.flushPendingMeta();
-    await this.reconcileMeta();
   }
 
   /** Full rebuild: recreate the schema and re-derive every row from the node files. */
   async rebuildIndex(): Promise<void> {
-    this.meta.clear();
     await this.index.rebuild();
-    this.flushPendingMeta();
-    await this.reconcileMeta();
   }
 
   async syncIndexIncremental(): Promise<void> {
     await this.index.syncIncremental();
-    this.flushPendingMeta();
-    await this.reconcileMeta();
   }
 
-  /** Every derived-index row, decoded back into structured form. */
+  /**
+   * Every derived-index row, decoded back into structured form. Journal
+   * metadata is deserialized from each record's own `adapterMeta` field —
+   * there is no separate metadata table or connection to join against.
+   */
   allDocuments(): IndexedDocument[] {
     const records = this.index.allRecords();
-    const metaById = this.meta.all();
     return records.map((record) => {
-      const row = metaById.get(record.id);
+      const meta = parseAdapterMeta(record.adapterMeta);
       return {
         nodeId: record.id,
         nodePath: record.path,
         title: record.title,
-        topic: row?.topic ?? '',
-        status: row?.status ?? 'adopted',
-        tags: row?.tags ?? [],
-        links: row?.links ?? [],
-        description: row?.description ?? '',
+        topic: meta?.topic ?? '',
+        status: meta?.status ?? 'adopted',
+        tags: meta?.tags ?? [],
+        links: meta?.links ?? [],
+        description: meta?.description ?? '',
         body: record.body,
       };
     });
@@ -427,11 +254,6 @@ export class JournalIndexStore {
 
   close(): void {
     this.index.close();
-    try {
-      this.metaDb.close();
-    } catch {
-      // already closed
-    }
   }
 }
 

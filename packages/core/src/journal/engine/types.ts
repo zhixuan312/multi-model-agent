@@ -1,10 +1,8 @@
 /**
  * Corpus-neutral engine types.
  *
- * The engine (this directory) stores and ranks generic "records" — it has no
- * concept of journals, topics, status, supersession, or typed graph edges.
- * An adapter (e.g. the journal adapter or a repository-file adapter, added in
- * later tasks under `../adapters/`) decodes its own corpus into these generic
+ * The engine (this directory) stores and ranks generic "records". Domain
+ * semantics stay with the adapter, which decodes its corpus into these generic
  * shapes and may contribute extra ranked signals for the engine to fuse.
  */
 
@@ -18,6 +16,14 @@ export interface CorpusRecord {
   title: string;
   /** Full indexable text body. */
   body: string;
+  /**
+   * Opaque adapter-owned metadata, persisted and returned verbatim alongside
+   * the record. The engine never parses or interprets this string — it exists
+   * so an adapter can persist its own metadata in the SAME row, SAME
+   * statement, and SAME transaction as the record itself, without a second
+   * database connection. `undefined`/omitted persists as `NULL`.
+   */
+  adapterMeta?: string;
 }
 
 /** A record row as persisted and returned by the engine, including derived fields. */

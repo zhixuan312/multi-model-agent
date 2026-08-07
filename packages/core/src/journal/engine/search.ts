@@ -1,7 +1,7 @@
 import type { CorpusAdapter, RankedList, StoredRecord } from './types.js';
 import type { CorpusIndex } from './index-store.js';
 
-/** Reciprocal Rank Fusion constant. Standard RRF damping. Preserved verbatim from the journal's original ranking. */
+/** Reciprocal Rank Fusion constant. Standard RRF damping. */
 const RRF_K = 60;
 
 /** RRF contribution for a 1-based rank position. */
@@ -18,7 +18,7 @@ function rrf(rank1Based: number): number {
  * to those ids; when omitted every indexed record is eligible. Only records
  * that appear in at least one ranked list are returned — a pool member no
  * signal ever ranked contributes nothing and is omitted, exactly as the
- * journal's original fused ranking behaved.
+ * original fused ranking behaved.
  */
 export async function rrfSearch(
   index: CorpusIndex,
