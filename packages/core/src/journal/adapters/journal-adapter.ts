@@ -1,6 +1,6 @@
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CorpusIndex, CORPUS_INDEX_DB_FILENAME } from '../engine/index-store.js';
+import { CorpusIndex, CORPUS_INDEX_DB_FILENAME, CORPUS_INDEX_SCHEMA_VERSION } from '../engine/index-store.js';
 import type { CorpusAdapter, CorpusRecord, IndexHealth, RankedList, StoredRecord } from '../engine/types.js';
 import { parseJournalNodeDocument } from '../node-codec.js';
 
@@ -36,6 +36,10 @@ import { parseJournalNodeDocument } from '../node-codec.js';
 /** Re-exported under the journal's historical constant name/value — it is now
  * the shared engine's generic derived-database filename. */
 export const JOURNAL_INDEX_DB_FILENAME = CORPUS_INDEX_DB_FILENAME;
+
+/** Re-exported under the journal's historical constant name/value — it is now
+ * the shared engine's generic derived-database schema version. */
+export const JOURNAL_INDEX_SCHEMA_VERSION = CORPUS_INDEX_SCHEMA_VERSION;
 
 /** Journal-only metadata, serialized into a record's opaque `adapterMeta`. */
 interface JournalAdapterMeta {

@@ -56,6 +56,15 @@ export const CORPUS_INDEX_DB_FILENAME = 'index.db';
 const REQUIRED_TABLES = ['records', 'records_fts'];
 /** Required tables for the `SymbolCorpusAdapter` (files/symbols) storage mode. */
 const REQUIRED_FILE_SYMBOL_TABLES = ['files', 'symbols'];
+/**
+ * Tables owned by the deleted pre-engine journal store
+ * (`packages/core/src/journal/index-store.ts`, removed in Task I-5). A
+ * database file carrying any of these is explicitly stale, independent of
+ * `PRAGMA user_version`: an old build could have stamped the version to the
+ * current value before this check existed, or a future bump could reintroduce
+ * the same trap this list forecloses. Their presence alone forces a rebuild.
+ */
+const LEGACY_TABLES = ['vectors_meta', 'documents', 'documents_fts'];
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -127,10 +136,18 @@ export class CorpusIndex {
     } catch {
       tables = [];
     }
-    const hasAnyKnownTable = [...REQUIRED_TABLES, ...REQUIRED_FILE_SYMBOL_TABLES].some((name) =>
-      tables.includes(name),
-    );
-    if (hasAnyKnownTable) return;
+    // ANY existing table — known-current, unrecognized, or an explicitly
+    // legacy one such as `vectors_meta` — means this database file is not
+    // genuinely fresh. Bootstrapping only ever runs `CREATE TABLE IF NOT
+    // EXISTS` and then unconditionally stamps the CURRENT `user_version`; if
+    // it ran against a database that still carries the pre-engine
+    // `documents`/`vectors_meta` tables, it would create `records`/
+    // `records_fts` alongside them and stamp the version to current BEFORE
+    // {@link ensureHealthy} ever runs — making the legacy tables look valid
+    // forever. Defer entirely to {@link ensureHealthy} (and its explicit
+    // legacy-table check in {@link schemaIsValid} / {@link fileSymbolTablesValid})
+    // whenever any table already exists.
+    if (tables.length > 0) return;
     this.ensureSchema();
   }
 
@@ -205,7 +222,15 @@ export class CorpusIndex {
     return asNumber(row?.user_version);
   }
 
-  /** True when every required table exists and the schema version matches. */
+  /**
+   * True when every required table exists, no legacy pre-engine table is
+   * present, and the schema version matches. Table absence/presence is
+   * checked explicitly and BEFORE relying on `user_version` at all: a legacy
+   * database can carry a `user_version` that already equals the current
+   * constant (an old build stamped it, or the constant was bumped without a
+   * corresponding structural check), so the version comparison alone can
+   * never be trusted to detect a stale schema.
+   */
   private schemaIsValid(): boolean {
     let tables: string[];
     try {
@@ -213,11 +238,12 @@ export class CorpusIndex {
     } catch {
       return false;
     }
-    if (this.schemaVersion() !== CORPUS_INDEX_SCHEMA_VERSION) return false;
-    return REQUIRED_TABLES.every((name) => tables.includes(name));
+    if (LEGACY_TABLES.some((name) => tables.includes(name))) return false;
+    if (!REQUIRED_TABLES.every((name) => tables.includes(name))) return false;
+    return this.schemaVersion() === CORPUS_INDEX_SCHEMA_VERSION;
   }
 
-  /** True when every required `files`/`symbols` table exists (the SymbolCorpusAdapter storage mode). */
+  /** True when every required `files`/`symbols` table exists (the SymbolCorpusAdapter storage mode), no legacy table is present, and the schema version matches. Same table-first ordering as {@link schemaIsValid}, for the same reason. */
   private fileSymbolTablesValid(): boolean {
     let tables: string[];
     try {
@@ -225,8 +251,9 @@ export class CorpusIndex {
     } catch {
       return false;
     }
-    if (this.schemaVersion() !== CORPUS_INDEX_SCHEMA_VERSION) return false;
-    return REQUIRED_FILE_SYMBOL_TABLES.every((name) => tables.includes(name));
+    if (LEGACY_TABLES.some((name) => tables.includes(name))) return false;
+    if (!REQUIRED_FILE_SYMBOL_TABLES.every((name) => tables.includes(name))) return false;
+    return this.schemaVersion() === CORPUS_INDEX_SCHEMA_VERSION;
   }
 
   /**
@@ -419,11 +446,25 @@ export class CorpusIndex {
     }
   }
 
+  /**
+   * Migration cleanup only — never schema creation. Drops every table owned
+   * by the deleted pre-engine journal store, if present. A fresh or already-
+   * current database has none of these and the statements are no-ops.
+   */
+  private dropLegacyTables(): void {
+    this.db.exec(`
+      DROP TABLE IF EXISTS vectors_meta;
+      DROP TABLE IF EXISTS documents_fts;
+      DROP TABLE IF EXISTS documents;
+    `);
+  }
+
   private dropAndRecreateSchema(): void {
     this.db.exec(`
       DROP TABLE IF EXISTS records;
       DROP TABLE IF EXISTS records_fts;
     `);
+    this.dropLegacyTables();
     this.ensureSchema();
   }
 
@@ -432,6 +473,7 @@ export class CorpusIndex {
       DROP TABLE IF EXISTS symbols;
       DROP TABLE IF EXISTS files;
     `);
+    this.dropLegacyTables();
     this.ensureSchema();
   }
 

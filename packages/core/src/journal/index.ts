@@ -23,6 +23,7 @@ export type {
 export {
   JournalIndexStore,
   JOURNAL_INDEX_DB_FILENAME,
+  JOURNAL_INDEX_SCHEMA_VERSION,
   searchCandidatesForRecall,
   searchCandidatesForRecord,
 } from './adapters/journal-adapter.js';
