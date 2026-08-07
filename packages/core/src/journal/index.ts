@@ -24,12 +24,25 @@ export {
   JournalIndexStore,
   JOURNAL_INDEX_DB_FILENAME,
   JOURNAL_INDEX_SCHEMA_VERSION,
-} from './index-store.js';
+  searchCandidatesForRecall,
+  searchCandidatesForRecord,
+} from './adapters/journal-adapter.js';
 export type {
   IndexedDocument,
   IndexedLink,
   IndexHealth,
   LexicalHit,
-} from './index-store.js';
-export { searchCandidatesForRecall, searchCandidatesForRecord } from './search.js';
-export type { JournalCandidate } from './search.js';
+  JournalCandidate,
+} from './adapters/journal-adapter.js';
+export { FileCorpusAdapter } from './adapters/file-adapter.js';
+export { CorpusIndex } from './engine/index-store.js';
+export type { FallbackSweepState } from './engine/index-store.js';
+export type {
+  CorpusAdapter,
+  CorpusRecord,
+  StoredRecord,
+  SymbolCorpusAdapter,
+  SymbolInput,
+  SymbolRecord,
+  FileRecord,
+} from './engine/types.js';

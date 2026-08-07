@@ -133,7 +133,7 @@ describe('mma journal reindex', () => {
     try {
       const schema = await store.inspectSchema();
       expect(schema.tables).toEqual(
-        expect.arrayContaining(['documents', 'documents_fts', 'vectors_meta']),
+        expect.arrayContaining(['records', 'records_fts']),
       );
       expect(store.allDocuments().map((doc) => doc.nodeId)).toEqual(['0001']);
     } finally {

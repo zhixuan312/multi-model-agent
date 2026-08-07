@@ -77,6 +77,16 @@ export function buildEnvelopeSnapshot(
     });
   }
 
+  // Project each runner's per-call toolCalls onto envelope ToolCallRecords,
+  // tagged with the owning stage. filesWritten stays empty here — runners
+  // report toolCalls as { turn, tool } only (no per-call file attribution);
+  // the turn-level file set already lands in stages[].filesWrittenCount /
+  // env.filesWritten via implTurn.filesWritten, so nothing is lost.
+  const toolCalls: TaskEnvelope['toolCalls'] = [
+    ...implTurn.toolCalls.map((tc) => ({ ts: now, stage: 'implementing', turn: tc.turn, tool: tc.tool, filesWritten: [] })),
+    ...(result.reviewerTurn?.toolCalls.map((tc) => ({ ts: now, stage: 'reviewing', turn: tc.turn, tool: tc.tool, filesWritten: [] })) ?? []),
+  ];
+
   const totalInputTokens = stages.reduce((s, st) => s + st.inputTokens, 0);
   const totalOutputTokens = stages.reduce((s, st) => s + st.outputTokens, 0);
   const totalCachedRead = stages.reduce((s, st) => s + (st.cachedReadTokens ?? 0), 0);
@@ -103,7 +113,7 @@ export function buildEnvelopeSnapshot(
     reviewPolicy: reviewPolicy === 'none' ? 'none' : 'reviewed',
     plannedStageTotal: stages.length,
     stages,
-    toolCalls: [],
+    toolCalls,
     filesWritten: implTurn.filesWritten,
     realFilesChanged: implTurn.filesWritten,
     commitSha: null,

@@ -29,7 +29,7 @@ import type { ContractPlanSnapshot } from '../../packages/core/src/unified/contr
 const mockTurn = (output: string) => ({
   output,
   usage: { inputTokens: 10, outputTokens: 5, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-  costUSD: 0.01, turns: 1, durationMs: 10, terminationReason: 'ok' as const, filesWritten: [], usedShell: false,
+  costUSD: 0.01, turns: 1, durationMs: 10, terminationReason: 'ok' as const, filesWritten: [], usedShell: false, toolCalls: [],
 });
 const mockSession = (output: string) => ({
   send: vi.fn().mockResolvedValue(mockTurn(output)),

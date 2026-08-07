@@ -191,6 +191,16 @@ export const TaskCompletedEventSchema = z.object({
   // Stages array
   stages: z.array(StageEntrySchema).min(0).max(16),
 
+  // Per-tool-call telemetry (AC-1.1), grouped and path-free: no file names or
+  // contents ever reach the wire — only the (stage, turn, tool) cardinality.
+  // Bounded generously above realistic per-task tool-call diversity.
+  toolCalls: z.array(z.object({
+    stage: z.string(),
+    turn: z.number().int().min(1).max(250),
+    tool: z.string(),
+    count: z.number().int().min(1).max(10_000),
+  })).max(500),
+
   // Validation warnings populated by the recorder before enqueue;
   // absent for healthy events. Each entry carries the rule name
   // (e.g. "R1: ...") and the Zod issue path (empty string = cross-field).

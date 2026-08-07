@@ -57,6 +57,8 @@ export interface StageRecord {
 export interface ToolCallRecord {
   ts: string;
   stage: string;
+  /** 1-based runner turn the call occurred in — mirrors TurnResult.toolCalls[].turn. */
+  turn: number;
   tool: string;
   filesWritten: string[];
 }

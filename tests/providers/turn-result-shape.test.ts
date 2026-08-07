@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { TurnResult } from '../../packages/core/src/types/run-result.js';
 
-const NINE_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [
+const TEN_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [
   'output',
   'usage',
   'costUSD',
@@ -11,11 +11,12 @@ const NINE_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [
   'errorCode',
   'filesWritten',
   'usedShell',
+  'toolCalls',
 ];
 
 describe('TurnResult shape (A4.2)', () => {
-  it('the only allowed top-level keys are the 9 spec-listed fields', () => {
-    const allowed = new Set<string>(NINE_KEYS as string[]);
+  it('the only allowed top-level keys are the 10 spec-listed fields', () => {
+    const allowed = new Set<string>(TEN_KEYS as string[]);
     const sample: TurnResult = {
       output: '',
       usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -25,6 +26,7 @@ describe('TurnResult shape (A4.2)', () => {
       terminationReason: 'ok',
       filesWritten: [],
       usedShell: false,
+      toolCalls: [],
     };
     for (const k of Object.keys(sample)) {
       expect(allowed.has(k)).toBe(true);

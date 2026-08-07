@@ -30,6 +30,27 @@
  * This module imports nothing from `application/` and constructs no
  * ExecutionRuntime/ExecutionStore/provider — it only ever talks to the
  * daemon over HTTP, like any other MCP client would.
+ *
+ * Why this module never reconciles anything (and never should). The real
+ * `POST /mcp` protocol handler lives inside the daemon process
+ * (`../mcp/mcp-adapter.ts`), on the same `ExecutionRuntime` / `ExecutionStore`
+ * that `startServer` (`../http/server.ts`) already reconciles by calling
+ * `reconcileOnBoot` (`../application/reconcile.ts`) before the listener
+ * accepts any request. That store's stale-pending scan is keyed by
+ * `daemonPid`, not by "this run", so ANY daemon boot sweeps every row left
+ * behind by every previously-dead daemon — including rows a `mma mcp`
+ * bridge session was talking to. Combined with the fatal `/health`
+ * preflight above, this makes stranding through the bridge impossible: this
+ * process can only ever forward frames to an already-booted, already-
+ * reconciled daemon, and a dead daemon's leftover `pending` rows are always
+ * cleaned up by the next boot, never by this bridge. Adding a second
+ * `ExecutionStore` connection here would duplicate that guarantee and
+ * violate the "no execution state" invariant stated above, so this module
+ * deliberately does not do it. See `tests/cli/mcp-boot-reconcile.test.ts`
+ * for the end-to-end proof (dead-daemon row unreachable through the bridge
+ * → reconciled by `reconcileOnBoot` → bridge reachable again) and
+ * `tests/server/application/reconcile.test.ts` for the reconciliation unit
+ * tests this relies on.
  */
 import * as path from 'node:path';
 import * as net from 'node:net';

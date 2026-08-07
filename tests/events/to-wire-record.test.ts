@@ -116,10 +116,10 @@ describe('toWireRecord', () => {
     expect(wire.costDeltaVsMainUSD).toBeNull();
   });
 
-  it('drops PII fields: no file paths, no toolCalls, no findings text', () => {
+  it('drops PII fields: no file paths, no raw toolCalls file writes, no findings text', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'm', tier: 'standard' });
-    s.recordToolCall({ stage: 'implementing', tool: 'Read', filesRead: ['/secret/path'] });
+    s.recordToolCall({ stage: 'implementing', tool: 'Read', turn: 1, filesWritten: ['/secret/path'] });
     s.completeStage('implementing', 1, {
       outcome: 'advance',
       durationMs: 1,
@@ -139,7 +139,10 @@ describe('toWireRecord', () => {
     });
     const json = JSON.stringify(wire);
     expect(json).not.toContain('/secret/path');
-    expect(json).not.toContain('toolCalls');
+    // toolCalls now legitimately appears on the wire in aggregated, path-free
+    // form: { stage, turn, tool, count }. The PII guard is that no raw file
+    // path leaks through it, not that the key is absent.
+    expect(wire.toolCalls).toEqual([{ stage: 'implementing', turn: 1, tool: 'Read', count: 1 }]);
     // `findingsBySeverity` is PII-safe (counts only, no claim/evidence text)
     // so it IS present on the wire. The PII rule is: no finding *text* leaks.
     expect(json).not.toContain('"claim"');

@@ -34,6 +34,7 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
     durationMs: rr.durationMs ?? 0,
     costUSD: rr.actualCostUSD ?? rr.cost?.costUSD ?? null,
     terminationReason: statusToTermination(rr.status),
+    toolCalls: [],
     ...(rr.errorCode && { errorCode: rr.errorCode }),
     ...(rr.error && { errorMessage: rr.error }),
     ...(rr.workerStatus && { workerSelfAssessment: rr.workerStatus }),

@@ -196,6 +196,7 @@ function earlyFailureResult(input: PipelineInput, code: string, message: string)
     errorMessage: message,
     filesWritten: [],
     usedShell: false,
+    toolCalls: [],
   };
   return {
     status: 'failed',

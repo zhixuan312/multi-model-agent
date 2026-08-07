@@ -205,6 +205,7 @@ export class CodexCliSession implements Session {
       ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
       filesWritten: [...tracker.filesWritten],
       usedShell: tracker.usedShell,
+      toolCalls: [...tracker.toolCalls],
     };
   }
 
@@ -297,6 +298,7 @@ export class CodexCliSession implements Session {
       errorMessage: message,
       filesWritten: [],
       usedShell: false,
+      toolCalls: [],
     };
   }
 }
@@ -392,6 +394,7 @@ class TurnTracker {
   turns = 0;
   lastAgentMessage = '';
   filesWritten = new Set<string>();
+  toolCalls: { turn: number; tool: string }[] = [];
   usedShell = false;
   terminationReason: TurnResult['terminationReason'] = 'ok';
   errorCode?: string;
@@ -468,12 +471,14 @@ class TurnTracker {
       }));
     } else if (item.type === 'command_execution') {
       this.usedShell = true;
+      this.toolCalls.push({ turn: this.turns, tool: 'command_execution' });
       this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_command_completed', {
         command: String(item.command ?? '').slice(0, 500),
         exitCode: item.exit_code ?? null,
         ...this.tag,
       }));
     } else if (item.type === 'file_change') {
+      this.toolCalls.push({ turn: this.turns, tool: 'file_change' });
       // Collect paths from both the modern `changes: [{ path, kind }]` shape
       // (codex 0.130.0+) and the legacy flat `path` field. We treat them
       // identically, unioning the paths into filesWritten for the TurnResult.
