@@ -1,12 +1,13 @@
 import type { IncomingMessage } from 'node:http';
-import { CLIENT_IDS, type CallerClient } from '@zhixuan92/multi-model-agent-core';
+import { CLIENT_IDS, AGENT_PLUGIN_CLIENT, type CallerClient } from '@zhixuan92/multi-model-agent-core';
 
-// Derived, not hand-maintained: the canonical client roster plus `forge`, which
-// is a real caller (MMA's own SDLC harness, the sole HTTP consumer) but not a
-// provisioned client. `other` is deliberately absent — it is the fallback below
+// Derived, not hand-maintained: the canonical client roster plus the two real
+// callers that are not provisioned clients — `forge` (MMA's own SDLC harness)
+// and `agent-plugin` (an Agent Plugins artifact, which many clients load and
+// none of them owns). `other` is deliberately absent — it is the fallback below
 // for anything unrecognised, so listing it here would be unreachable: a caller
 // sending `other` resolves to `other` with or without it.
-const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge']);
+const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge', AGENT_PLUGIN_CLIENT]);
 
 
 interface CallerIdentity {

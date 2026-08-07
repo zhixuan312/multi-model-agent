@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
-import { CLIENT_IDS } from '../../packages/core/src/clients/client-id.js';
+import { CLIENT_IDS, AGENT_PLUGIN_CLIENT } from '../../packages/core/src/clients/client-id.js';
 import { resolveCallerIdentity, DEFAULT_IDENTITY } from '../../packages/server/src/http/middleware/caller-identity.js';
 
 function fakeReq(headers: Record<string, string>): IncomingMessage {
@@ -76,5 +76,13 @@ describe('resolveCallerIdentity', () => {
   it('accepts the explicit other attribution', () => {
     const req = fakeReq({ 'x-mma-client': 'other' });
     expect(resolveCallerIdentity(req).callerClient).toBe('other');
+  });
+  // An Agent Plugins artifact is loaded by many clients and owned by none, so it
+  // is not a member of CLIENT_IDS — but it IS a real, distinguishable caller,
+  // exactly like `forge`. Collapsing it to `other` would erase the one number
+  // that tells us whether the standard is carrying traffic yet.
+  it('accepts the agent-plugin artifact as its own identity, not "other"', () => {
+    const req = fakeReq({ 'x-mma-client': AGENT_PLUGIN_CLIENT });
+    expect(resolveCallerIdentity(req).callerClient).toBe('agent-plugin');
   });
 });

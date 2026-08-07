@@ -1,8 +1,8 @@
 # MCP client registration profiles — primary-source verification
 
-Task I-1 evidence artifact. It is the **sole** unblocking input for the VS Code, opencode, and
-Windsurf registration writers (Task I-6). No writer may guess a path or a schema; a client whose
-record below is incomplete stays blocked.
+Task I-1 evidence artifact. It is the **sole** unblocking input for the VS Code, Antigravity,
+opencode, and Windsurf registration writers (Task I-6). No writer may guess a path or a schema; a
+client whose record below is incomplete stays blocked.
 
 **Rules this document is held to**
 
@@ -109,14 +109,53 @@ complete, successful provision for it.
 
 ---
 
+## Antigravity
+
+**Status: BLOCKED — the verified paths were retired by the vendor; replacements not verified for
+MMA's registration shape.**
+
+Sources (vendor-owned, `antigravity.google` / `developers.googleblog.com`):
+- https://antigravity.google/docs/cli/plugins
+- https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
+
+### Verified
+
+| Item | Value |
+|---|---|
+| Prior MMA target (now dead) | `~/.gemini/config/mcp_config.json`, skills at `~/.gemini/skills` |
+| Vendor transition | Gemini CLI folded into Antigravity CLI; Gemini CLI stopped serving Pro/Ultra requests **2026-06-18** |
+| Current plugin root | `~/.gemini/antigravity-cli/plugins/<plugin_name>/` |
+| Current global skills root | `~/.gemini/antigravity-cli/skills/` |
+| Plugin manifest | `plugin.json` at the plugin ROOT, under the vendor's own schema `https://antigravity.google/schemas/v1/plugin.json` |
+| MCP config | `mcp_config.json` at the plugin root — **not** the Agent Plugins `mcp.json` |
+| Install mechanism | `agy plugin install /path/to/local/plugin` |
+
+### Unresolved — this is what blocks the writer
+
+The vendor moved from a **home-level config MMA writes into** to a **plugin bundle the CLI installs**.
+Those are different integration models, not a changed path, so there is nothing to re-point the
+existing writer at. The plugin route is also not reachable through this repo's Agent Plugins target:
+Antigravity claims root `plugin.json` under its *own* `$schema`, colliding with Agent Plugins 1.0 at
+the same filename, so one directory cannot satisfy both.
+
+Google is an Agent Plugins Core Maintainer, so the likely resolution is that Antigravity converges on
+the standard and this client is served by the `agent-plugin` package with no writer at all. Until
+either that lands or `agy`'s manifest is verified against a real install, the row stays blocked —
+which is also the honest description of its state before this section existed: the writer was aimed
+at paths that no longer exist and nothing detected it.
+
+---
+
 ## Summary
 
 | Client | Path | Schema | Credential | Writer |
 |---|---|---|---|---|
 | VS Code | ❌ user-level unpublished | ✅ | ⚠️ `${input:…}` is interactive | **BLOCKED** |
+| Antigravity | ❌ prior path retired by vendor | ❌ vendor schema, not AP 1.0 | — | **BLOCKED** |
 | opencode | ✅ `~/.config/opencode/opencode.json` | ✅ `mcp` / `type: remote` | ✅ `{env:…}` | ready |
 | Windsurf | ✅ `~/.codeium/windsurf/mcp_config.json` | ✅ `mcpServers` / `serverUrl` | ✅ `${file:…}` | ready |
 
-Two of the three gated clients are unblocked. VS Code remains blocked on a path its vendor does not
-publish — a genuine external constraint, not an unfinished search, and precisely the case this
-artifact exists to record rather than paper over.
+Two of the four gated clients are unblocked. VS Code remains blocked on a path its vendor does not
+publish. Antigravity is blocked on a vendor migration that replaced the integration model outright —
+both are genuine external constraints, not unfinished searches, and precisely the case this artifact
+exists to record rather than paper over.

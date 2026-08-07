@@ -28,7 +28,13 @@ describe('contract: gated MCP client registration profiles', () => {
     // Every host cited must belong to the vendor whose client it documents.
     // docs.devin.ai is included because docs.windsurf.com 307-redirects to it
     // (Cognition acquired Windsurf), which the artifact records as provenance.
-    const vendorHosts = ['code.visualstudio.com', 'opencode.ai', 'docs.devin.ai', 'docs.windsurf.com'];
+    // developers.googleblog.com is Google's own channel and is where the Gemini
+    // CLI -> Antigravity CLI retirement date is published; antigravity.google is
+    // that product's own docs host.
+    const vendorHosts = [
+      'code.visualstudio.com', 'opencode.ai', 'docs.devin.ai', 'docs.windsurf.com',
+      'antigravity.google', 'developers.googleblog.com',
+    ];
     const urls = document.match(/https:\/\/[^\s)]+/g) ?? [];
     expect(urls.length).toBeGreaterThan(0);
     for (const url of urls) {

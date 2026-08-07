@@ -32,7 +32,6 @@ import {
 import { claudeCodeRegistrationPath, writeClaudeCodeRegistration } from './claude-code.js';
 import { removeClaudeDesktopRegistration, writeClaudeDesktopRegistration } from './claude-desktop.js';
 import { codexRegistrationPath, removeCodexRegistration, writeCodexRegistration } from './codex.js';
-import { antigravityRegistrationPath, writeAntigravityRegistration } from './antigravity.js';
 import { cursorRegistrationPath, writeCursorRegistration } from './cursor.js';
 import { opencodeRegistrationPath, writeOpencodeRegistration } from './opencode.js';
 import { windsurfRegistrationPath, writeWindsurfRegistration } from './windsurf.js';
@@ -43,7 +42,6 @@ const UNBLOCKED_WRITERS: Partial<Record<ClientId, ClientRegistrationFn>> = {
   'claude-code': writeClaudeCodeRegistration,
   'claude-desktop': writeClaudeDesktopRegistration,
   codex: writeCodexRegistration,
-  antigravity: writeAntigravityRegistration,
   cursor: writeCursorRegistration,
   opencode: writeOpencodeRegistration,
   windsurf: writeWindsurfRegistration,
@@ -60,7 +58,6 @@ const UNBLOCKED_REMOVERS: Partial<Record<ClientId, ClientRegistrationFn>> = {
   'claude-code': jsonRemover(claudeCodeRegistrationPath),
   'claude-desktop': removeClaudeDesktopRegistration,
   codex: removeCodexRegistration,
-  antigravity: jsonRemover(antigravityRegistrationPath),
   cursor: jsonRemover(cursorRegistrationPath),
   opencode: jsonRemover(opencodeRegistrationPath),
   windsurf: jsonRemover(windsurfRegistrationPath),
@@ -69,8 +66,10 @@ const UNBLOCKED_REMOVERS: Partial<Record<ClientId, ClientRegistrationFn>> = {
 /**
  * Install `capability`'s recognised home-level MMA MCP entry by dispatching to its
  * registered writer — the registry above, not a target switch, selects which one
- * runs. A client with no writer (currently only VS Code, whose user-level path
- * its vendor does not publish) returns `failed` rather than throwing.
+ * runs. A client with no writer returns `failed` rather than throwing. Two are
+ * writer-less today, both because no verified path exists: VS Code, whose vendor
+ * does not publish a user-level path, and Antigravity, whose vendor retired the
+ * path this repo had verified. Both carry `mcpConfigPaths: []`.
  */
 export async function writeClientRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {
   const writer = UNBLOCKED_WRITERS[input.capability.id];
@@ -88,9 +87,9 @@ export async function writeClientRegistration(input: WriteClientRegistrationInpu
  * The registered writer function for `clientId`, or `undefined` when none exists
  * yet — the checkable signal the evidence gate relies on. A client stays
  * writer-less until its profile in `docs/verification/
- * mcp-client-registration-profiles.md` is VERIFIED; `vscode` remains undefined
- * here because its profile is still BLOCKED (see the capability registry's
- * `mcpConfigPaths: []` for the same signal from the other direction).
+ * mcp-client-registration-profiles.md` is VERIFIED; `vscode` and `antigravity`
+ * remain undefined here because their profiles are BLOCKED (see the capability
+ * registry's `mcpConfigPaths: []` for the same signal from the other direction).
  */
 export function writerForClient(clientId: ClientId): ClientRegistrationFn | undefined {
   return UNBLOCKED_WRITERS[clientId];

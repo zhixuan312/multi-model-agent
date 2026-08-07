@@ -125,3 +125,39 @@ describe('mma mcp bridge', () => {
     expect(auth).toHaveLength(callsBeforeMissingToken);
   });
 });
+// Caller attribution. The daemon's only signal for which client a run came from
+// is `X-MMA-Client`; without it every bridge-based install reports as `other`,
+// which is exactly the blind spot that makes "can this writer be retired?"
+// unanswerable. Absent flag must stay absent header — a pre-flag registration
+// keeps working and keeps attributing as `other`, as it always did.
+describe('mma mcp bridge — caller attribution', () => {
+  async function forwardOnce(callerClient?: string) {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const code = await runMcpBridge({
+      daemonUrl: 'http://127.0.0.1:7337', env: { MMA_AUTH_TOKEN: 'T' }, homeDir: '/unused',
+      stdin: lines(['{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n']),
+      stdout: () => true, stderr: () => true,
+      resolveHost: async () => [{ address: '127.0.0.1' }],
+      readFile: () => { throw new Error('unexpected token file read'); },
+      fetch: (async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        if (new URL(url).pathname === '/health') return new Response('{"status":"ok"}', { status: 200 });
+        return new Response('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n', {
+          status: 200, headers: { 'content-type': 'text/event-stream' },
+        });
+      }) as typeof fetch,
+      ...(callerClient !== undefined && { callerClient: callerClient as 'agent-plugin' }),
+    });
+    expect(code).toBe(0);
+    const forwarded = calls.find((call) => new URL(call.url).pathname === '/mcp');
+    return new Headers(forwarded?.init?.headers).get('x-mma-client');
+  }
+
+  it('forwards X-MMA-Client when the bridge was started with --client', async () => {
+    expect(await forwardOnce('agent-plugin')).toBe('agent-plugin');
+  });
+
+  it('sends no X-MMA-Client at all when the flag is omitted', async () => {
+    expect(await forwardOnce()).toBeNull();
+  });
+});

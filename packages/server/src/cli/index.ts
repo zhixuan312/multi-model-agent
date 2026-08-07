@@ -30,6 +30,8 @@ import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
 import {
   loadConfigFromFile,
+  MCP_BRIDGE_CLIENT_IDS,
+  type CallerClient,
   type MultiModelConfig,
 } from '@zhixuan92/multi-model-agent-core';
 import { startServe } from './serve.js';
@@ -84,7 +86,7 @@ interface CliDeps {
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config', 'batch'],
+    string: ['config', 'batch', 'client'],
     boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log', 'regenerate-catalog'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
@@ -538,6 +540,16 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         exit(1);
         break;
       }
+      // `--client=<ClientId>` is validated BEFORE the config load: a typo must
+      // report itself as a typo, not as whatever the config discovery happens
+      // to fail with first. Omitting it stays valid — the daemon attributes
+      // such a bridge as `other`, exactly as every pre-flag registration did.
+      const clientArg = typeof opts['client'] === 'string' ? opts['client'] : undefined;
+      if (clientArg !== undefined && !(MCP_BRIDGE_CLIENT_IDS as readonly string[]).includes(clientArg)) {
+        stderr(`mma mcp: unknown --client "${clientArg}". Valid IDs: ${MCP_BRIDGE_CLIENT_IDS.join(', ')}\n`);
+        exit(1);
+        break;
+      }
       const config = await loadConfig(configArg, deps);
       const daemonUrl = buildServerUrl(config.server.bind, config.server.port);
       const homeDir = deps.homeDir?.() ?? os.homedir();
@@ -559,6 +571,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
           fetch,
           resolveHost: (hostname: string) => dnsLookup(hostname, { all: true }),
           readFile: (p: string) => fs.readFileSync(p, 'utf-8'),
+          ...(clientArg !== undefined && { callerClient: clientArg as CallerClient }),
         });
       } finally {
         rl.close();

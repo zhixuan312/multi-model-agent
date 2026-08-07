@@ -20,6 +20,7 @@ const EVIDENCE_URL = new URL('../../../docs/verification/mcp-client-registration
  *  A name here with no section, or a section with no entry here, fails below. */
 const DISPLAY_NAME_TO_ID: Readonly<Record<string, ClientId>> = {
   'VS Code': 'vscode',
+  Antigravity: 'antigravity',
   opencode: 'opencode',
   Windsurf: 'windsurf',
 };

@@ -7,7 +7,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import minimist from 'minimist';
-import { buildPlugin, PLUGIN_NAME } from '../plugin/build-plugin.js';
+import { buildPlugin, PLUGIN_NAME, PLUGIN_TARGETS, type PluginTarget } from '../plugin/build-plugin.js';
 
 interface PluginCliDeps {
   argv: string[];
@@ -19,19 +19,23 @@ interface PluginCliDeps {
   stderr: (s: string) => void;
 }
 
-const USAGE = `Usage: mma plugin build [--out <dir>] [--port <n>] [--json]
+const USAGE = `Usage: mma plugin build [--target <t>] [--out <dir>] [--port <n>] [--json]
 
-Generate the Claude Code plugin (skills + commands + MCP server registration).
+Generate a plugin package (skills + commands + MCP server registration) from the
+packaged skills.
 
 Options:
-  --out <dir>   Output directory (default: ~/.mma/plugin)
+  --target <t>  Packaging format: ${PLUGIN_TARGETS.join(' | ')} (default: claude-code)
+                  claude-code   .claude-plugin/plugin.json + http MCP entry
+                  agent-plugin  Agent Plugins 1.0 — plugin.json + stdio MCP entry
+  --out <dir>   Output directory (default: ~/.mma/plugin[-<target>])
   --port <n>    Daemon port the MCP entry targets (default: from config)
   --json        Machine-readable output
 `;
 
 export function runPlugin(deps: PluginCliDeps): number {
   const opts = minimist(deps.argv, {
-    string: ['out'],
+    string: ['out', 'target'],
     boolean: ['json', 'help'],
     alias: { h: 'help' },
   });
@@ -52,13 +56,23 @@ export function runPlugin(deps: PluginCliDeps): number {
     return 1;
   }
 
+  const target = (opts.target === undefined ? 'claude-code' : String(opts.target)) as PluginTarget;
+  if (!(PLUGIN_TARGETS as readonly string[]).includes(target)) {
+    deps.stderr(`mma plugin build: unknown --target "${target}". Valid: ${PLUGIN_TARGETS.join(', ')}\n`);
+    return 1;
+  }
+
+  // Default out dirs are per-target so building both never has one overwrite the
+  // other — the two layouts share a root filename (`plugin.json` vs
+  // `.claude-plugin/plugin.json`) and stale files from the other target would
+  // make a package ambiguous to a client that auto-detects format.
   const outDir = opts.out
     ? path.resolve(String(opts.out))
-    : path.join(deps.homeDir, '.mma', 'plugin');
+    : path.join(deps.homeDir, '.mma', target === 'claude-code' ? 'plugin' : `plugin-${target}`);
 
   let result;
   try {
-    result = buildPlugin({ outDir, version: deps.version, port });
+    result = buildPlugin({ outDir, version: deps.version, port, target });
   } catch (err) {
     deps.stderr(`mma plugin build: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -67,21 +81,25 @@ export function runPlugin(deps: PluginCliDeps): number {
   if (opts.json) {
     deps.stdout(`${JSON.stringify({
       outDir: result.outDir,
+      target: result.target,
       skills: result.skills,
       commands: result.commands,
       mcpUrl: result.mcpUrl,
+      transport: result.transport,
       version: deps.version,
     }, null, 2)}\n`);
     return 0;
   }
 
   deps.stdout(
-    `Built plugin "${PLUGIN_NAME}" v${deps.version}\n`
+    `Built ${result.target} package "${PLUGIN_NAME}" v${deps.version}\n`
     + `  ${result.outDir}\n`
-    + `  ${result.skills.length} skills, ${result.commands.length} commands, MCP -> ${result.mcpUrl}\n`
-    + `  no auth token written (headersHelper reads it at connect time)\n\n`
+    + `  ${result.skills.length} skills, ${result.commands.length} commands, MCP -> ${result.transport}\n`
+    + `  no auth token written (resolved at connect time)\n\n`
     + `Try it:\n`
-    + `  claude --plugin-dir ${result.outDir}\n\n`
+    + `  ${result.target === 'claude-code'
+      ? `claude --plugin-dir ${result.outDir}`
+      : `see ${result.outDir}/README.md — Agent Plugins defines no install protocol`}\n\n`
     + `Already using \`mma sync-skills\`? Standalone and plugin skills coexist —\n`
     + `run \`mma disable --target=claude-code\` first to avoid duplicates.\n`,
   );

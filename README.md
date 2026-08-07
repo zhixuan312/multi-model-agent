@@ -62,7 +62,7 @@ your config — see [Declaring your clients](#declaring-your-clients) below.
 | Claude Code | `~/.claude/skills/` | `${CLAUDE_PLUGIN_ROOT}/.mcp.json` (plugin) or `~/.mma/plugin/.mcp.json` (standalone `mma mcp install`) |
 | Claude Desktop | — (MCP only) | `claude_desktop_config.json`, via the `mma mcp` stdio bridge |
 | Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
-| Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
+| Antigravity | `~/.gemini/antigravity-cli/skills/` | — (see below) |
 | Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
 | VS Code | `~/.agents/skills/` | — (see below) |
 | opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |
@@ -77,9 +77,36 @@ script, a client's own `${env:VAR}`/`{env:VAR}` interpolation, or a `${file:...}
 command, and VS Code profiles are relocatable — so there is no stable home-level path for MMA to
 write. Rather than guess one, MMA writes nothing: `mma mcp install vscode` refuses, and `mma clients`
 reports `mcp=absent`. Add the server yourself through that command, pointing it at
-`http://127.0.0.1:7337/mcp`. Every other client's path is verified against its vendor's own
+`http://127.0.0.1:7337/mcp`.
+
+**Antigravity gets skills but not an MCP registration.** Google folded Gemini CLI into Antigravity
+CLI (Gemini CLI stopped serving Pro/Ultra requests on 2026-06-18) and replaced the home-level config
+MMA used to write with a plugin bundle its own CLI installs — a different integration model, not a
+moved path. MMA writes nothing rather than guess: `mma mcp install antigravity` refuses, and
+`mma clients` reports `mcp=absent`. Install the Agent Plugins package instead
+(`mma plugin build --target=agent-plugin`, then `agy plugin install <dir>`). Every other client's
+path is verified against its vendor's own
 documentation in
 [`docs/verification/mcp-client-registration-profiles.md`](docs/verification/mcp-client-registration-profiles.md).
+
+### Agent Plugins (one package, many clients)
+
+The table above is MMA writing into each client's own config. The alternative is a package the
+client installs itself:
+
+```bash
+mma plugin build --target=agent-plugin      # -> ~/.mma/plugin-agent-plugin
+```
+
+That emits an [Agent Plugins 1.0](https://agent-plugins.org/specification) package — root
+`plugin.json`, the same 16 skills, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
+so no token is ever written into the package. Codex, Cursor and VS Code read this format directly;
+Claude Code does not, and keeps its own package (`mma plugin build`, the default target). Both are
+generated from the same skills — the payload never forks.
+
+Agent Plugins deliberately defines no install protocol, so each client installs it its own way; the
+generated `README.md` lists the exact command per client. The `mma` CLI must be on PATH at the same
+version that generated the package.
 
 #### Client support at a glance
 
@@ -88,7 +115,7 @@ documentation in
 | **Claude Code** | ✅ | ✅ | ✅ |
 | Claude Desktop | — | — | ✅ (via `mma mcp` stdio bridge) |
 | Codex | ✅ | — | ✅ |
-| Antigravity | ✅ | — | ✅ |
+| Antigravity | ✅ | — | — (see below) |
 | Cursor | ✅ | — | ✅ |
 | VS Code | ✅ | — | — (see below) |
 | opencode | ✅ | — | ✅ |

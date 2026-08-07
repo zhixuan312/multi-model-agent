@@ -47,7 +47,7 @@ is reported `suggested` by `mma clients` and left untouched. Make a declaration 
 | Claude Code | `~/.claude/skills/` | plugin `.mcp.json`, or `~/.mma/plugin/.mcp.json` via `mma mcp install` |
 | Claude Desktop | — (MCP only) | `claude_desktop_config.json`, via the `mma mcp` stdio bridge |
 | Codex | `~/.codex/skills/` | `~/.codex/config.toml` |
-| Antigravity | `~/.gemini/skills/` | `~/.gemini/config/mcp_config.json` |
+| Antigravity | `~/.gemini/antigravity-cli/skills/` | — MMA writes none; Google replaced the home-level config with a CLI-installed plugin bundle (use `mma plugin build --target=agent-plugin`) |
 | Cursor | `~/.agents/skills/` | `~/.cursor/mcp.json` |
 | VS Code | `~/.agents/skills/` | — MMA writes none; VS Code publishes no stable user-level path (add it via *MCP: Open User Configuration*) |
 | opencode | `~/.agents/skills/` | `~/.config/opencode/opencode.json` |

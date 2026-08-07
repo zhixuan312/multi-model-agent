@@ -1,5 +1,5 @@
 // Client identity
-export { CLIENT_IDS } from './clients/client-id.js';
+export { CLIENT_IDS, AGENT_PLUGIN_CLIENT, MCP_BRIDGE_CLIENT_IDS } from './clients/client-id.js';
 export type { ClientId, ClientState, CallerClient } from './clients/client-id.js';
 
 // Config

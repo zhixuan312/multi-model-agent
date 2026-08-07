@@ -28,7 +28,6 @@ const EXPECTED: ReadonlyArray<{
   { clientId: 'claude-code', urlKey: 'url', credential: null },       // headersHelper script, no header literal
   { clientId: 'claude-desktop', urlKey: null, credential: null },     // stdio bridge: command/args, no URL at all
   { clientId: 'codex', urlKey: 'url', credential: null },             // TOML bearer_token_env_var, not a header
-  { clientId: 'antigravity', urlKey: 'serverUrl', credential: 'Bearer ${env:MMA_AUTH_TOKEN}' },
   { clientId: 'cursor', urlKey: 'url', credential: 'Bearer ${env:MMA_AUTH_TOKEN}' },
   { clientId: 'opencode', urlKey: 'url', credential: 'Bearer {env:MMA_AUTH_TOKEN}' },
   { clientId: 'windsurf', urlKey: 'serverUrl', credential: 'Bearer ${file:~/.mma/auth-token}' },
