@@ -118,10 +118,13 @@ export class TaskEnvelopeStore {
     this.notify('completeStage');
   }
 
-  recordToolCall(entry: { stage: string; tool: string; filesWritten?: string[] }): void {
+  // `turn` defaults to 1 (deterministic) so existing callers that predate the
+  // turn field keep behaving exactly as before; callers that care about
+  // multi-turn grouping (e.g. the wire-projection PII guard) pass it explicitly.
+  recordToolCall(entry: { stage: string; tool: string; turn?: number; filesWritten?: string[] }): void {
     this.guard('recordToolCall');
     const rec: ToolCallRecord = {
-      ts: new Date().toISOString(), stage: entry.stage, tool: entry.tool,
+      ts: new Date().toISOString(), stage: entry.stage, turn: entry.turn ?? 1, tool: entry.tool,
       filesWritten: entry.filesWritten ?? [],
     };
     this.env.toolCalls.push(rec);

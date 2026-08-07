@@ -225,6 +225,26 @@ export function toWireRecord(
     };
   });
 
+  // Group envelope tool-call records by (stage, turn, tool) into wire-safe
+  // cardinality counts. `ts` and `filesWritten` are dropped here — only the
+  // grouped counts ever reach the wire, never a raw file path (PII rule).
+  // Ordering: stage, then turn, then tool — matches first-seen insertion
+  // order of the (stage, turn, tool) key, which is stable because
+  // env.toolCalls is itself recorded in chronological (stage, turn) order.
+  const toolCallGroups = new Map<string, { stage: string; turn: number; tool: string; count: number }>();
+  for (const tc of env.toolCalls) {
+    const key = `${tc.stage} ${tc.turn} ${tc.tool}`;
+    const existing = toolCallGroups.get(key);
+    if (existing) existing.count += 1;
+    else toolCallGroups.set(key, { stage: tc.stage, turn: tc.turn, tool: tc.tool, count: 1 });
+  }
+  // Sort explicitly by (stage, turn, tool) — the contract's ordering
+  // invariant — rather than relying on env.toolCalls' recording order.
+  const wireToolCalls = [...toolCallGroups.values()]
+    .sort((a, b) =>
+      a.stage.localeCompare(b.stage) || a.turn - b.turn || a.tool.localeCompare(b.tool))
+    .slice(0, 500);
+
   const distinctProviders = new Set(
     env.escalationLog
       .map((e) => (e as { toModel?: string }).toModel ?? '')
@@ -351,6 +371,7 @@ export function toWireRecord(
     taskMaxIdleMs: env.taskMaxIdleMs,
     sandboxViolationCount: env.sandboxViolationCount,
     stages: wireStages as never,
+    toolCalls: wireToolCalls,
     // 4.7.5: surface parser-side validation warnings (dropped Findings, malformed
     // bullets) on the wire so the backend can analytics on output-format drift.
     // Optional in schema — absent for healthy events; populated only when the
