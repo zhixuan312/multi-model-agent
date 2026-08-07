@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { isUnderIgnoredDir } from '../adapters/ignored-dirs.js';
 import { detectGitChanges } from './freshness.js';
@@ -45,23 +45,6 @@ type PreparedSymbolFile = { relPath: string; mtimeMs: number; contentHash: strin
 type SymbolSyncPlan =
   | { kind: 'mtime-only'; relPath: string; mtimeMs: number }
   | { kind: 'content-changed'; relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] };
-
-/**
- * The engine's own derived-database artifacts live inside the corpus root
- * (see {@link CorpusIndex.dbPath}). A git worktree that has no `.gitignore`
- * entry for them (typical for a corpus root that is itself a repository)
- * reports them as untracked changes via `git status --porcelain` — filter
- * them out before treating a change as a content change to (re)index.
- */
-function isEngineArtifactPath(relPath: string): boolean {
-  const name = basename(relPath);
-  return (
-    name === CORPUS_INDEX_DB_FILENAME ||
-    name === `${CORPUS_INDEX_DB_FILENAME}-wal` ||
-    name === `${CORPUS_INDEX_DB_FILENAME}-shm` ||
-    name === `${CORPUS_INDEX_DB_FILENAME}-journal`
-  );
-}
 
 /**
  * Corpus-neutral derived SQLite index.
@@ -171,6 +154,18 @@ export class CorpusIndex {
     root: string;
     adapter: CorpusAdapter | SymbolCorpusAdapter;
     /**
+     * Optional override for where the derived SQLite file itself lives.
+     * Absent (the default) — identical to today's behavior: the database sits
+     * at `<root>/index.db`, alongside the corpus it derives from. The journal
+     * index (`JournalCorpusAdapter`, via `JournalIndexStore`) relies on this
+     * default and must keep it: its database stays at `.mma/journal/index.db`.
+     * Present — the corpus root is walked/read exactly as normal, but the
+     * derived database is written to this path instead. Used by the
+     * repository code-corpus index (the investigate preprocessor) so a
+     * derived cache never lands inside a source tree the caller does not own.
+     */
+    dbPath?: string;
+    /**
      * Throttle interval, in milliseconds, for the non-git full stat-sweep
      * freshness fallback (see {@link ensureFresh}). Ignored on the git path,
      * which never sweeps. Defaults to {@link DEFAULT_FALLBACK_SWEEP_INTERVAL_MS}.
@@ -190,10 +185,12 @@ export class CorpusIndex {
       opts.adapter,
       opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS,
       opts.sweepState ?? { lastFallbackSweepAt: null, fallbackSweepCount: 0 },
+      opts.dbPath,
     );
-    // First-use bootstrap: `new DatabaseSync(<root>/index.db)` throws
-    // ENOENT/SQLITE_CANTOPEN when the parent dir does not exist yet.
-    await mkdir(opts.root, { recursive: true });
+    // First-use bootstrap: `new DatabaseSync(<dbPath>)` throws
+    // ENOENT/SQLITE_CANTOPEN when its parent dir does not exist yet — true of
+    // both the default (`<root>/index.db`) and a caller-supplied override.
+    await mkdir(dirname(index.dbPath), { recursive: true });
     index.openDatabase();
     return index;
   }
@@ -206,10 +203,28 @@ export class CorpusIndex {
     private readonly adapter: CorpusAdapter | SymbolCorpusAdapter,
     private readonly fallbackSweepIntervalMs: number,
     private readonly sweepState: FallbackSweepState,
+    private readonly dbPathOverride: string | undefined,
   ) {}
 
   private get dbPath(): string {
-    return join(this.root, CORPUS_INDEX_DB_FILENAME);
+    return this.dbPathOverride ?? join(this.root, CORPUS_INDEX_DB_FILENAME);
+  }
+
+  /**
+   * True when `relPath` (root-relative) is one of THIS index's own derived
+   * SQLite files — the main database, or a WAL/SHM/rollback-journal sidecar.
+   * Compares against the ACTUAL configured {@link dbPath}, not a bare
+   * basename match: a basename-only check would also match a legitimately
+   * named user file living elsewhere in the corpus (e.g. `src/db/index.db`)
+   * that has nothing to do with this engine — and, now that a caller may
+   * point {@link dbPath} entirely outside the corpus root (see `open()`'s
+   * `dbPath` override), no file under the root is ever this index's own
+   * artifact, so this correctly stops filtering anything in that case.
+   */
+  private isOwnArtifactPath(relPath: string): boolean {
+    const candidate = resolvePath(this.root, relPath);
+    const db = resolvePath(this.dbPath);
+    return candidate === db || candidate === `${db}-wal` || candidate === `${db}-shm` || candidate === `${db}-journal`;
   }
 
   private openDatabase(): void {
@@ -471,18 +486,19 @@ export class CorpusIndex {
     const gitChanges = await detectGitChanges(this.root, { includeTracked: isEmptyIndex });
     if (gitChanges !== null) {
       // Git path: `git status --porcelain` already told us exactly what
-      // changed — no corpus-wide `fs.stat` sweep, ever. Exclude the engine's
-      // own derived-database artifacts (they live inside the corpus root but
-      // are never content to (re)index) and anything under an ignored
+      // changed — no corpus-wide `fs.stat` sweep, ever. Exclude this index's
+      // own derived-database artifacts, IF they happen to live inside the
+      // corpus root (see {@link isOwnArtifactPath} — never true once a caller
+      // points `dbPath` outside the root), and anything under an ignored
       // directory (`node_modules`/`dist`/`build`/`.git`) — the SAME predicate
       // `FileCorpusAdapter.walk` applies while pruning directories, applied
       // here explicitly because this path receives a flat list of git-reported
       // paths with no directory structure left to prune.
-      const trackedPaths = gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path));
+      const trackedPaths = gitChanges.trackedPaths.filter((path) => !this.isOwnArtifactPath(path) && !isUnderIgnoredDir(path));
       const statusChangedPaths = gitChanges.changedPaths.filter(
-        (path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path),
+        (path) => !this.isOwnArtifactPath(path) && !isUnderIgnoredDir(path),
       );
-      const deletedPaths = gitChanges.deletedPaths.filter((path) => !isEngineArtifactPath(path) && !isUnderIgnoredDir(path));
+      const deletedPaths = gitChanges.deletedPaths.filter((path) => !this.isOwnArtifactPath(path) && !isUnderIgnoredDir(path));
       // `git status` alone reports only what changed SINCE the last commit,
       // which is nothing for a clean working tree: taking only
       // `statusChangedPaths` here would leave a first-time index against an
@@ -775,7 +791,13 @@ export class CorpusIndex {
    */
   private async rebuildSymbols(adapter: SymbolCorpusAdapter): Promise<void> {
     this.dropAndRecreateFileSymbolTables();
-    const files = await adapter.listFiles();
+    // Exclude this index's own derived-database artifacts, IF they happen to
+    // live inside the corpus root (see {@link isOwnArtifactPath} — never
+    // true once a caller points `dbPath` outside the root, e.g. the
+    // investigate preprocessor). The adapter itself is corpus-neutral and has
+    // no notion of "where does the derived database live" — only the engine
+    // knows the actual configured `dbPath`.
+    const files = (await adapter.listFiles()).filter((relPath) => !this.isOwnArtifactPath(relPath));
 
     for (let i = 0; i < files.length; i += SYMBOL_SYNC_BATCH_SIZE) {
       const batchFiles = files.slice(i, i + SYMBOL_SYNC_BATCH_SIZE);
@@ -961,7 +983,8 @@ export class CorpusIndex {
       });
     }
 
-    const files = await adapter.listFiles();
+    // Same own-artifact exclusion as {@link rebuildSymbols} — see there for why.
+    const files = (await adapter.listFiles()).filter((relPath) => !this.isOwnArtifactPath(relPath));
     const seenPaths = new Set<string>();
 
     // Read, hash, and (when content changed) extract symbols in BOUNDED

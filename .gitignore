@@ -26,13 +26,6 @@ coverage/
 .mma/journal/index.db
 .mma/journal/index.db-wal
 .mma/journal/index.db-shm
-# Derived SQLite repository-symbol index (the investigate preprocessor's
-# code index) — lives at the corpus root alongside the files it indexes,
-# same convention as the journal index above; rebuildable, never committable.
-/index.db
-/index.db-wal
-/index.db-shm
-/index.db-journal
 *.tgz
 full-smoke-results.json
 

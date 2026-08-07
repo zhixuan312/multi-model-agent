@@ -57,6 +57,22 @@ it('uses git change metadata without a full stat sweep and throttles non-git fal
   gitIndex.close(); plainIndex.close();
 });
 
+it('indexes a git-tracked file literally named index.db once the derived database itself lives outside the corpus root', async () => {
+  const gitRoot = await mkdtemp(join(tmpdir(), 'mma-user-index-db-git-'));
+  const stateRoot = await mkdtemp(join(tmpdir(), 'mma-user-index-db-state-'));
+  execFileSync('git', ['init', '-q', gitRoot]);
+  await writeFile(join(gitRoot, 'index.db'), 'this is the user\'s own file, not a real sqlite database\n');
+  execFileSync('git', ['-C', gitRoot, 'add', 'index.db']);
+  execFileSync('git', ['-C', gitRoot, '-c', 'user.email=a@b.c', '-c', 'user.name=test', 'commit', '-qm', 'seed']);
+
+  const dbPath = join(stateRoot, 'code.db');
+  const index = await CorpusIndex.open({ root: gitRoot, adapter: new FileCorpusAdapter({ root: gitRoot }), dbPath });
+  await index.ensureFresh();
+
+  expect((await index.allFiles()).map((file) => file.filePath)).toContain('index.db');
+  index.close();
+});
+
 it('never dereferences a tracked symlink pointing outside the corpus root via the git fast path', async () => {
   const secretRoot = await mkdtemp(join(tmpdir(), 'mma-secret-'));
   const secretPath = join(secretRoot, 'secret.txt');

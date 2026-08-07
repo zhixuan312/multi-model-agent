@@ -1,6 +1,9 @@
-import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { mkdir, realpath } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
 import { CorpusIndex, FileCorpusAdapter } from '@zhixuan92/multi-model-agent-core';
 import type { FallbackSweepState, SymbolRecord } from '@zhixuan92/multi-model-agent-core';
+import { expandHome } from '../../expand-home.js';
 import { PreprocessFailure } from './types.js';
 import type { Preprocessor } from './types.js';
 
@@ -181,14 +184,38 @@ function sweepStateFor(cwd: string): FallbackSweepState {
   return state;
 }
 
+/**
+ * Where THIS repository's derived code-corpus index lives — inside MMA's own
+ * state directory, keyed by the repository's REAL (symlink- and
+ * relative/trailing-slash-spelling-resolved) path, never inside the
+ * repository itself. A derived cache must never appear in a source tree the
+ * caller does not own: `investigate` may be pointed at any repository, not
+ * only this one, and that repository's own `.gitignore` has no reason to
+ * know about MMA's cache files.
+ *
+ * `realpath(cwd)` first, so `/repo`, `/repo/`, a relative spelling, and a
+ * symlink to `/repo` all hash to the SAME path and so share one index file.
+ * The readable repository basename is prefixed to the hash purely so the
+ * `corpus-index/` directory stays debuggable by eye; the hash is what
+ * actually guarantees uniqueness.
+ */
+async function corpusIndexDbPath(cwd: string, stateDir: string): Promise<string> {
+  const realRoot = await realpath(cwd);
+  const hash = createHash('sha256').update(realRoot).digest('hex').slice(0, 16);
+  const dir = join(expandHome(stateDir), 'corpus-index');
+  await mkdir(dir, { recursive: true });
+  return join(dir, `${basename(realRoot)}-${hash}.db`);
+}
+
 /** One open→ensureHealthy→ensureFresh→allSymbols→allFiles→close attempt, tagged with the phase that failed (if any) so the caller can classify + retry. */
 async function attemptLoadIndexState(
   cwd: string,
+  dbPath: string,
 ): Promise<{ allSymbols: SymbolRecord[]; allFiles: Array<{ filePath: string }> }> {
   const adapter = new FileCorpusAdapter({ root: cwd });
   let index: CorpusIndex;
   try {
-    index = await CorpusIndex.open({ root: cwd, adapter, sweepState: sweepStateFor(cwd) });
+    index = await CorpusIndex.open({ root: cwd, adapter, dbPath, sweepState: sweepStateFor(cwd) });
   } catch (error) {
     throw new IndexPhaseError('open', error);
   }
@@ -225,11 +252,12 @@ async function attemptLoadIndexState(
  */
 async function loadIndexState(
   cwd: string,
+  dbPath: string,
 ): Promise<{ allSymbols: SymbolRecord[]; allFiles: Array<{ filePath: string }> }> {
   let lastError: IndexPhaseError | undefined;
   for (let attempt = 1; attempt <= MAX_INDEX_ATTEMPTS; attempt++) {
     try {
-      return await attemptLoadIndexState(cwd);
+      return await attemptLoadIndexState(cwd, dbPath);
     } catch (error) {
       if (!(error instanceof IndexPhaseError)) throw error;
       lastError = error;
@@ -255,20 +283,21 @@ async function loadIndexState(
  *
  * Mirrors the open/search/write-payload/`finally` close lifecycle of
  * journal-recall.ts, against the repository file index instead of the
- * journal. The index root is the repository root itself (`cwd`) — the same
- * convention `FileCorpusAdapter`'s own tests use — because `index.db` lives
- * alongside the code it indexes and the adapter already filters its own
- * derived-database files out of `listFiles()`.
+ * journal. The corpus root walked/read is the repository root itself
+ * (`cwd`), but the derived `index.db` itself lives OUTSIDE that root, under
+ * MMA's own state directory (see {@link corpusIndexDbPath}) — a derived
+ * cache must never appear in a source tree this preprocessor does not own.
  *
  * This search runs ONCE, before the worker's first turn. It cannot help the
  * worker discover a symbol introduced mid-investigation (e.g. one only found
  * by following an import chain) — the worker still has full grep/read tools
  * for that; see the skill guidance this preprocessor's candidates feed into.
  */
-export const investigatePreprocessor: Preprocessor = async ({ cwd, payload }) => {
+export const investigatePreprocessor: Preprocessor = async ({ cwd, payload, config }) => {
   const invPayload = payload as { prompt: string };
 
-  const { allSymbols, allFiles } = await withRootQueue(cwd, () => loadIndexState(cwd));
+  const dbPath = await corpusIndexDbPath(cwd, config.server.stateDir);
+  const { allSymbols, allFiles } = await withRootQueue(cwd, () => loadIndexState(cwd, dbPath));
 
   // Folder-level map: aggregated over the WHOLE indexed corpus (every
   // file/symbol the engine knows about), never a full file list. A full

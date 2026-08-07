@@ -1,6 +1,5 @@
 import { readdir } from 'node:fs/promises';
 import { extname, join, relative, sep } from 'node:path';
-import { CORPUS_INDEX_DB_FILENAME } from '../engine/index-store.js';
 import type { SymbolCorpusAdapter, SymbolInput } from '../engine/types.js';
 import { extractBlocks, extractMarkdownSections, extractSourceSymbols } from './file-symbols.js';
 import { IGNORED_DIR_NAMES } from './ignored-dirs.js';
@@ -12,18 +11,20 @@ import { IGNORED_DIR_NAMES } from './ignored-dirs.js';
  * schema, selecting one of three extraction tiers by file extension. See
  * `./file-symbols.ts` for the tier implementations; this module is only
  * responsible for corpus enumeration and tier selection.
+ *
+ * This adapter has no notion of "where does the derived database live" — it
+ * enumerates every regular file under the root, full stop. Excluding the
+ * engine's own derived-database artifacts (main db + WAL/SHM/rollback-journal
+ * sidecars), when they happen to sit inside this root, is `CorpusIndex`'s job
+ * (see `index-store.ts`'s `isOwnArtifactPath`, applied on top of this
+ * adapter's `listFiles()`), because only `CorpusIndex` knows the actual
+ * configured `dbPath` — a bare basename match here would also wrongly hide a
+ * legitimately named user file elsewhere in the corpus (e.g. `src/db/index.db`)
+ * that has nothing to do with this engine.
  */
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.mdx', '.markdown']);
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
-
-/** The engine's own derived-database artifacts live in the same root as the corpus; never index them as content. */
-const IGNORED_FILE_NAMES = new Set([
-  CORPUS_INDEX_DB_FILENAME,
-  `${CORPUS_INDEX_DB_FILENAME}-wal`,
-  `${CORPUS_INDEX_DB_FILENAME}-shm`,
-  `${CORPUS_INDEX_DB_FILENAME}-journal`,
-]);
 
 export class FileCorpusAdapter implements SymbolCorpusAdapter {
   readonly corpusId = 'file';
@@ -54,7 +55,6 @@ export class FileCorpusAdapter implements SymbolCorpusAdapter {
         continue;
       }
       if (!entry.isFile()) continue; // skip symlinks/sockets/etc — not addressable file content
-      if (IGNORED_FILE_NAMES.has(entry.name)) continue;
       const relPath = relative(this.root, join(dir, entry.name)).split(sep).join('/');
       out.push(relPath);
     }
