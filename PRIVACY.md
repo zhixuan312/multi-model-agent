@@ -116,6 +116,26 @@ Single top-level source of truth for findings-summary signals. Previously these 
 | `sandboxViolationCount` | integer (0–100) | Sandbox-policy violation rate |
 | `validation_warnings` | optional array of `{ rule: string, path: string }` | Validation warnings from two producers: (1) **Zod cross-field schema validation (R1–R16)** — `rule` is the rule name (e.g. `"R1: ..."`), `path` is the Zod issue path (empty string for cross-field rules); (2) **Findings-parser drops (4.7.5+)** — `rule` is `"findings_parser_drop"`, `path` is `"<reason>:<heading>"` where reason is one of `empty_claim` / `missing_core_bullet` / `invalid_severity` / `invalid_evidence_format` and `heading` is the literal `Finding N: <title>` text the worker emitted (truncated to 120 chars). The heading slice may contain a fragment of the worker's output (the finding title only) so a worker that put sensitive content in a Finding title would leak that fragment here. Backend uses this to quantify warning rates without re-running validation. Absent on healthy events. |
 
+#### Tool-call rollup (`toolCalls`, 0–500 entries) — added in 6.3.0
+
+A per-turn count of which tools the worker invoked. **This reintroduces individual tool names to
+the wire**, which schema v3 had removed (see the 2026-04-29 row in the changelog below). It is
+listed here rather than folded into the stages array because it is the one field in the schema
+that carries a name rather than only a measurement, and a reader deciding whether to opt in should
+be able to find that fact directly.
+
+| Field | Type | Decision driver |
+|-------|------|-----------------|
+| `stage` | string — the stage the call belongs to (`implementing`, `review`, …) | Attributes tool use to a phase of the pipeline |
+| `turn` | integer (1–250) | Per-turn resolution, so tool use can be read as a sequence rather than one total |
+| `tool` | string — the tool identifier the runner reports (e.g. `Read`, `Bash`, `Grep`) | Which tools workers actually reach for, per task type and tier |
+| `count` | integer (1–10,000) | How many times that tool was called in that turn |
+
+**No tool arguments, file paths, commands, or outputs are transmitted** — only the identifier of
+the tool and how often it ran. Aggregation is path-free by construction: the runner projects each
+call to `(stage, turn, tool)` before it reaches the wire, so nothing a tool was pointed *at* can be
+recovered from it.
+
 #### Stages array (0–16 entries)
 
 Each stage is a discriminated-union entry on `(name, round)`. As of 4.3.1 (schema v5), the stage vocabulary collapses to five names: `implementing`, `review` (combined spec + quality sub-reviewers, one entry per round), `rework` (single combined pass), `annotating`, `committing`. The `round` field still distinguishes per-round entries; the array max remains 16. Base fields common to all stage types:
@@ -199,9 +219,9 @@ Full technical schema with every field, enum value, and validation rule: [docs/P
 - **Content:** Source code, diffs, file contents, prompts, model outputs, conversation history, commit messages, commit SHAs.
 - **Secrets:** API keys, OAuth tokens, environment variable values, credentials of any kind.
 - **Diagnostics:** Stack traces, raw error messages (only enum error codes are sent), internal state dumps.
-- **Free-form text:** No unbounded string fields exist in the schema. Every field is a typed enum, a bucket, or a constrained value. Adding one requires a schema change, a PRIVACY.md update, and a CHANGELOG entry.
+- **Free-form text:** No field carries text a human wrote — no prompts, no titles, no messages — with the single documented exception of `validation_warnings.path` described above. Every other field is a typed enum, a bucket, a number, or a machine-generated identifier. The `stage` and `tool` values in the tool-call rollup are strings rather than enums because the tool vocabulary is the runner's, not ours, and pinning it to a closed list would silently drop tools a provider adds; they are machine-emitted identifiers, never user input. Adding any new string field requires a schema change, a PRIVACY.md update, and a CHANGELOG entry.
 - **Timestamps:** No wall-clock timestamps — only monotonic-clock durations. The server's `received_at` is server-set for retention partitioning.
-- **Tool names:** The `topToolNames` field from V2 has been removed. Tool-call counts are aggregated per stage but individual tool names are not transmitted.
+- **Tool arguments and targets:** No tool is ever reported with what it was pointed at — no paths, commands, patterns, URLs, or payloads. **Individual tool names are transmitted as of 6.3.0** via the `toolCalls` rollup documented above; before 6.3.0 they were not, and the V2 `topToolNames` field remains removed. If you opted in before 6.3.0 and are not comfortable with tool names being included, run `mma telemetry disable`.
 - **Model family fields:** No model family fields beyond the single `mainModelFamily` enum. The old per-stage `modelFamily` fields are removed.
 
 If you discover us collecting something not listed in "What we collect," that is a bug. Please file an issue — we will treat it as a security incident.
@@ -252,6 +272,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mma telemetr
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-08-08 | 6 | Additive within v6 (6.3.0 release). New top-level `toolCalls` array (0–500 entries) of `{ stage, turn, tool, count }`. **This is a change in kind, not only in volume: individual tool names return to the wire**, having been removed as `topToolNames` in the 2026-04-29 V3 pass. Names only — no arguments, paths, commands, or outputs; the runner projects each call to `(stage, turn, tool)` before it reaches the wire. No schema version bump: the field is additive and optional, and bumping would silently drop queued v6 records at `flusher.ts` the way a v5 bump would have. **Consent was not re-requested**, because opt-in is a stored flag with no schema binding in code; README.md previously claimed opt-ins are cleared on major schema upgrades, which described an intention rather than a mechanism and has been corrected. Anyone who opted in before 6.3.0 and does not want tool names included should run `mma telemetry disable`. |
 | 2026-05-18 | 5 | Wire-record honesty pass (4.7.7 release). **Removed:** `verifyCommandPresent` (boolean) — the verify-command feature was deleted end-to-end, so the adoption signal is no longer collected; backend column `verify_command_present` remains nullable and accepts null for new records (no migration required). **Removed:** `validationsRun` byproduct field — inert plumbing that carried no signal. **Semantic redefinition** of `reviewPolicy` — same enum (`full` / `quality_only` / `diff_only` / `none`) but now sourced from per-task `TaskEnvelope.reviewPolicy` populated at envelope construction from the caller's per-task intent, no longer a server default. The wire `review_policy` column is now complementary to `stages.review.outcome` — intent vs what actually ran. An intent=`full` + outcome=`skipped` row is now a legitimate queryable signal rather than the apparent contradiction it used to be. **New invariant** on `errorCode`: the field was always nullable on the wire schema, but `recordTaskCompletedHandler` now preserves `errorCode` through seal so reviewer-rejection rows land `review_quality_findings_unresolved` or `review_spec_rejected_terminal` instead of `null`; previously `terminal_status=error + error_code=null` was indistinguishable from a transport failure. No new content collected; no schema version bump (bumping would silently drop queued v5 records via `flusher.ts:143`). |
 | 2026-05-18 | 5 | Wire field rename (4.7.6 release): `mainEquivalentCostUSD` → `mainCostUSD` at top-level AND on every stage. Same semantic ("what these tokens would have cost at the main model's rate"); renamed for column-parity with `events_raw.main_cost_usd`. Also restores the per-stage and top-level compute that was accidentally dropped to `null` in 4.7.2's envelope-unification refactor — every v4.7.2–v4.7.5 event was emitting the field as `null`, collapsing per-model savings attribution. Backend dual-accepts both wire names during the daemon-restart transition. No new content collected. |
 | 2026-05-18 | 5 | Additive within v5 (4.7.4 release). Top-level findings rollup: `findingsBySeverity` (relocated from per-stage review row), `findingsOutcome` (enum), `findingsOutcomeReason` (string), `outcomeInferred` (bool), `outcomeMalformed` (bool). Same data the review stage previously carried, lifted to top-level so all routes (not just routes that ran the review stage) contribute. Backend reads top-level; per-stage rows no longer carry these. No new content collected. |
