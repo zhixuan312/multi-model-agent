@@ -304,6 +304,19 @@ export function verify(rec) {
       && JSON.stringify(m.restEnvelope) === JSON.stringify(w);
     out.push(C('mcp-rest-parity', parity ? 'PASS' : 'FAIL',
       `restStatus=${m.restStatus} identical=${JSON.stringify(m.restEnvelope) === JSON.stringify(w)}`));
+
+    // Caller attribution over MCP (6.2.0). The handshake sends clientInfo
+    // name='full-smoke', which is NOT in the allowlist, so resolution must fall
+    // through to the declared X-MMA-Client header. `mcp` here means the fallback
+    // chain collapsed to the anonymous value, which is what made Agent Plugins
+    // adoption unmeasurable — and adoption data is what decides whether the
+    // per-client registration writers can be retired.
+    const mcpClients = [...new Set(
+      (q?.records ?? []).flatMap((x) => (Array.isArray(x.events) ? x.events : [])).map((ev) => ev.client).filter(Boolean),
+    )];
+    out.push(C('mcp-client-attribution',
+      mcpClients.length === 0 ? 'NA' : (mcpClients.every((c) => c === SMOKE_CLIENT) ? 'PASS' : 'FAIL'),
+      `client=[${mcpClients.join(', ')}] want=${SMOKE_CLIENT} (clientInfo='full-smoke' is unlisted, so the declared header must win)`));
     return out;
   }
 

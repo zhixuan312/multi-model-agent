@@ -94,8 +94,18 @@ async function runScenario(spec, ctx, log) {
 
     // MCP adapter: JSON-RPC round trip + REST cross-surface parity.
     if (spec.kind === 'mcp') {
+      // The wire window is read for THIS scenario because MCP caller attribution
+      // is only observable here. 6.2.0 fixed `X-MMA-Client` having no effect on
+      // MCP tasks — the adapter derived `client` from the protocol's clientInfo
+      // alone, so an Agent Plugins install could never be attributed. This
+      // scenario declares a clientInfo name that is deliberately NOT in the
+      // allowlist, so a correct daemon must fall back to the declared header
+      // rather than collapsing to the anonymous `mcp`.
+      const queueBefore = queueLineCount();
       const res = await runMcpScenario(ctx);
-      const rec = normalize(spec, { response: res.waitPayload });
+      const settleUntil = Date.now() + 15000;
+      while (queueLineCount() <= queueBefore && Date.now() < settleUntil) await sleep(300);
+      const rec = normalize(spec, { response: res.waitPayload, queue: collectQueue(queueBefore) });
       rec.mcp = res;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
