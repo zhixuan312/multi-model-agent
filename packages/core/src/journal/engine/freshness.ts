@@ -95,14 +95,21 @@ export async function detectGitChanges(
     if (entry.length < 4) continue;
     const status = entry.slice(0, 2);
     const path = entry.slice(3);
-    if (status[0] === 'R' || status[1] === 'R') {
-      // Rename: with `-z`, git prints the OLD (pre-rename) path as a SEPARATE
-      // NUL-terminated token immediately following this entry — unlike the
-      // newline-delimited format's single "R  old -> new" line — so consume
-      // one extra token here. Old path is gone, new path needs (re)indexing.
+    const isRename = status[0] === 'R' || status[1] === 'R';
+    const isCopy = status[0] === 'C' || status[1] === 'C';
+    if (isRename || isCopy) {
+      // Rename OR copy: with `-z`, git prints the OLD (source) path as a
+      // SEPARATE NUL-terminated token immediately following this entry —
+      // unlike the newline-delimited format's single "R  old -> new" line —
+      // so consume one extra token here for BOTH statuses. A copy emits this
+      // same extra token; leaving it unconsumed corrupts the parse of every
+      // status record that follows (it gets read as its own, unrelated
+      // entry). Only a RENAME's source is gone — a copy leaves the source
+      // file in place, so only a rename's old path is deleted; the new path
+      // always needs (re)indexing.
       const oldPath = tokens[i + 1];
       i += 1;
-      if (oldPath) deletedPaths.push(oldPath);
+      if (oldPath && isRename) deletedPaths.push(oldPath);
       changedPaths.push(path);
       continue;
     }

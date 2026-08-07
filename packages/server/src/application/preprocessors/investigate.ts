@@ -148,12 +148,35 @@ function withRootQueue<T>(root: string, run: () => Promise<T>): Promise<T> {
  */
 const sweepStateByRoot = new Map<string, FallbackSweepState>();
 
+/**
+ * Bounded-eviction cap for {@link sweepStateByRoot} — the same unbounded-map
+ * defect {@link rootQueues} was fixed for, reintroduced here because this
+ * map has no natural "settle and delete" point of its own: a sweep-state
+ * entry is a long-lived throttle counter meant to persist ACROSS calls for
+ * the same root, not a per-call promise that resolves and can be cleaned up.
+ * Instead, bound the map with simple LRU eviction: the least-recently-used
+ * root's entry is dropped once the map would otherwise exceed this size, so
+ * a process that serves many distinct repository roots over its lifetime
+ * cannot grow this map forever.
+ */
+const MAX_TRACKED_SWEEP_ROOTS = 500;
+
 function sweepStateFor(cwd: string): FallbackSweepState {
   const canonicalRoot = resolve(cwd);
-  let state = sweepStateByRoot.get(canonicalRoot);
-  if (!state) {
-    state = { lastFallbackSweepAt: null, fallbackSweepCount: 0 };
-    sweepStateByRoot.set(canonicalRoot, state);
+  const existing = sweepStateByRoot.get(canonicalRoot);
+  if (existing) {
+    // Bump recency: `Map` iteration order is insertion order, so a
+    // delete-then-set moves this entry to the end — "most recently used" for
+    // the eviction check below.
+    sweepStateByRoot.delete(canonicalRoot);
+    sweepStateByRoot.set(canonicalRoot, existing);
+    return existing;
+  }
+  const state: FallbackSweepState = { lastFallbackSweepAt: null, fallbackSweepCount: 0 };
+  sweepStateByRoot.set(canonicalRoot, state);
+  if (sweepStateByRoot.size > MAX_TRACKED_SWEEP_ROOTS) {
+    const oldestRoot = sweepStateByRoot.keys().next().value;
+    if (oldestRoot !== undefined) sweepStateByRoot.delete(oldestRoot);
   }
   return state;
 }

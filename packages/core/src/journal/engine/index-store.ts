@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
+import { constants } from 'node:fs';
+import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
+import { basename, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { isUnderIgnoredDir } from '../adapters/ignored-dirs.js';
 import { detectGitChanges } from './freshness.js';
@@ -20,6 +22,29 @@ import type {
 
 /** Default throttle for the non-git full stat-sweep fallback: at most once every 5 minutes per open index. */
 const DEFAULT_FALLBACK_SWEEP_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * Batch size for the `files`/`symbols` storage mode's prepare-then-write
+ * steps ({@link CorpusIndex.rebuildSymbols}, {@link
+ * CorpusIndex.syncSymbolsIncremental}, {@link CorpusIndex.syncSymbolPaths}).
+ * Each batch is read/hashed/extracted OUTSIDE any transaction and then
+ * written inside its own short transaction before the next batch starts —
+ * holding every file's extracted symbol bodies for a WHOLE large repository
+ * in memory at once (the pre-batching behavior) can exhaust the heap.
+ */
+const SYMBOL_SYNC_BATCH_SIZE = 256;
+
+/** One file's read/hashed/extracted state, ready to write to `files`/`symbols`. */
+type PreparedSymbolFile = { relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] };
+
+/**
+ * One file's incremental-sync plan: either only its `files.mtime_ms` needs
+ * refreshing (content unchanged), or its symbols need a full whole-file
+ * replace (content changed).
+ */
+type SymbolSyncPlan =
+  | { kind: 'mtime-only'; relPath: string; mtimeMs: number }
+  | { kind: 'content-changed'; relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] };
 
 /**
  * The engine's own derived-database artifacts live inside the corpus root
@@ -90,11 +115,23 @@ function asNumber(value: unknown): number {
  * that resolves outside the corpus root (a defense against a path-traversal
  * `relPath`, independent of the symlink check).
  */
+/**
+ * True when `rel` (a `path.relative()` result) escapes the base it was
+ * computed against — either the base itself (`'..'`) or an ancestor-escaping
+ * `'..' + sep + ...` prefix. A plain `rel.startsWith('..')` check is too
+ * broad: it also rejects a legitimate path whose first segment merely
+ * STARTS WITH `..`, such as a tracked `..generated/file.ts` directory, which
+ * is a real (if unusual) directory name and not a traversal attempt.
+ */
+function escapesBase(rel: string): boolean {
+  return rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel);
+}
+
 async function isSafeGitReportedFile(root: string, relPath: string): Promise<boolean> {
   const resolvedRoot = resolvePath(root);
   const candidate = resolvePath(root, relPath);
   const rel = relative(resolvedRoot, candidate);
-  if (rel.startsWith('..') || isAbsolute(rel)) return false;
+  if (escapesBase(rel)) return false;
   let st;
   try {
     st = await lstat(candidate);
@@ -109,7 +146,7 @@ async function isSafeGitReportedFile(root: string, relPath: string): Promise<boo
   try {
     const [canonicalRoot, canonicalCandidate] = await Promise.all([realpath(root), realpath(candidate)]);
     const canonicalRel = relative(canonicalRoot, canonicalCandidate);
-    return !canonicalRel.startsWith('..') && !isAbsolute(canonicalRel);
+    return !escapesBase(canonicalRel);
   } catch {
     return false;
   }
@@ -507,8 +544,91 @@ export class CorpusIndex {
     changedPaths: string[],
     deletedPaths: string[],
   ): Promise<void> {
+    const pathsToDelete = new Set(deletedPaths);
+
+    // Prepare and write in BOUNDED BATCHES (see {@link SYMBOL_SYNC_BATCH_SIZE}):
+    // `changedPaths` can be the WHOLE git-tracked file set (a first-time
+    // index against an already-committed repository), so holding every
+    // file's extracted symbol bodies in memory at once — the pre-batching
+    // behavior — could exhaust the heap. Each batch is still fully prepared
+    // (filesystem I/O + extraction) OUTSIDE any transaction, same reasoning
+    // as `rebuildSymbols`/`syncSymbolsIncremental`: the SQLite writer lock
+    // must cover only the resulting delete/upsert statements.
+    for (let i = 0; i < changedPaths.length; i += SYMBOL_SYNC_BATCH_SIZE) {
+      const batch = changedPaths.slice(i, i + SYMBOL_SYNC_BATCH_SIZE);
+      const prepared: PreparedSymbolFile[] = [];
+      for (const relPath of batch) {
+        if (!(await isSafeGitReportedFile(this.root, relPath))) {
+          console.warn(`[corpus-engine:${adapter.corpusId}] skipping non-regular or unsafe git-reported path ${relPath}`);
+          pathsToDelete.add(relPath);
+          continue;
+        }
+
+        const fullPath = join(this.root, relPath);
+        let raw: string;
+        let mtimeMs: number;
+        let fh: FileHandle | undefined;
+        try {
+          // Close the validate-then-read TOCTOU gap: `isSafeGitReportedFile`
+          // just canonicalized `fullPath` and rejected a symlink, but a
+          // process with write access to the repository could still swap the
+          // validated file for a symlink between that check and this read.
+          // `O_NOFOLLOW` makes the open itself fail outright when the FINAL
+          // path component is a symlink, so the descriptor read below is
+          // provably the SAME regular file that was just validated — not
+          // whatever a race swapped it for.
+          //
+          // Residual risk: this protects only the final path component. An
+          // attacker who swaps an ANCESTOR DIRECTORY mid-flight is not closed
+          // by this — Node has no ergonomic per-component `openat` — so that
+          // narrower race remains a known, accepted limitation.
+          fh = await open(fullPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+          const st = await fh.stat();
+          if (!st.isFile()) throw new Error(`not a regular file: ${relPath}`);
+          raw = await fh.readFile('utf8');
+          mtimeMs = st.mtimeMs;
+        } catch (error) {
+          // ELOOP (final component became a symlink), ENOENT (vanished
+          // between `git status` and this open — an ordinary race), EACCES
+          // (permission race) — all treated exactly like a deleted path
+          // rather than failing the whole sync.
+          console.warn(
+            `[corpus-engine:${adapter.corpusId}] skipping unreadable changed file ${relPath}: ${(error as Error).message}`,
+          );
+          pathsToDelete.add(relPath);
+          continue;
+        } finally {
+          await fh?.close();
+        }
+
+        const contentHash = createHash('sha256').update(raw).digest('hex');
+        let symbols: SymbolInput[];
+        try {
+          symbols = await adapter.extractSymbols(relPath, raw);
+        } catch (error) {
+          console.warn(
+            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+          );
+          continue;
+        }
+        prepared.push({ relPath, mtimeMs, contentHash, symbols });
+      }
+      this.writeSymbolFileBatch(prepared);
+    }
+
+    this.deleteSymbolFilesBatch([...pathsToDelete]);
+  }
+
+  /**
+   * Delete-then-upsert one BATCH of prepared `files`/`symbols` rows inside
+   * its own short transaction. Shared by {@link rebuildSymbols}, {@link
+   * syncSymbolsIncremental} (via {@link applySymbolSyncPlans}), and {@link
+   * syncSymbolPaths}. A delete against a non-existent row is a no-op, so this
+   * is also a valid write for a freshly (re)created table.
+   */
+  private writeSymbolFileBatch(prepared: PreparedSymbolFile[]): void {
+    if (prepared.length === 0) return;
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
-    const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
     const upsertFile = this.db.prepare(
       `INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)
        ON CONFLICT(file_path) DO UPDATE SET mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash`,
@@ -516,54 +636,8 @@ export class CorpusIndex {
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
-
-    // Prepare every targeted file before opening the transaction. This is the
-    // git counterpart to `rebuildSymbols`/`syncSymbolsIncremental`: filesystem
-    // I/O and extraction may take arbitrarily long, while the SQLite writer
-    // lock must cover only the resulting delete/upsert statements.
-    const prepared: Array<{ relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] }> = [];
-    const pathsToDelete = new Set(deletedPaths);
-    for (const relPath of changedPaths) {
-      const fullPath = join(this.root, relPath);
-      if (!(await isSafeGitReportedFile(this.root, relPath))) {
-        console.warn(`[corpus-engine:${adapter.corpusId}] skipping non-regular or unsafe git-reported path ${relPath}`);
-        pathsToDelete.add(relPath);
-        continue;
-      }
-      let raw: string;
-      let mtimeMs: number;
-      try {
-        raw = await readFile(fullPath, 'utf8');
-        mtimeMs = (await stat(fullPath)).mtimeMs;
-      } catch (error) {
-        // Vanished between `git status` and this read (race), or otherwise
-        // unreadable — treat exactly like a deleted path rather than fail the
-        // whole sync.
-        console.warn(
-          `[corpus-engine:${adapter.corpusId}] skipping unreadable changed file ${relPath}: ${(error as Error).message}`,
-        );
-        pathsToDelete.add(relPath);
-        continue;
-      }
-      const contentHash = createHash('sha256').update(raw).digest('hex');
-      let symbols: SymbolInput[];
-      try {
-        symbols = await adapter.extractSymbols(relPath, raw);
-      } catch (error) {
-        console.warn(
-          `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
-        );
-        continue;
-      }
-      prepared.push({ relPath, mtimeMs, contentHash, symbols });
-    }
-
     this.db.exec('BEGIN');
     try {
-      for (const relPath of pathsToDelete) {
-        deleteSymbolsForFile.run(relPath);
-        deleteFile.run(relPath);
-      }
       for (const { relPath, mtimeMs, contentHash, symbols } of prepared) {
         deleteSymbolsForFile.run(relPath);
         upsertFile.run(relPath, mtimeMs, contentHash);
@@ -578,6 +652,24 @@ export class CorpusIndex {
             symbol.body,
           );
         });
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /** Delete every `files`/`symbols` row for the given paths inside one short transaction. */
+  private deleteSymbolFilesBatch(relPaths: string[]): void {
+    if (relPaths.length === 0) return;
+    const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
+    this.db.exec('BEGIN');
+    try {
+      for (const relPath of relPaths) {
+        deleteSymbolsForFile.run(relPath);
+        deleteFile.run(relPath);
       }
       this.db.exec('COMMIT');
     } catch (error) {
@@ -671,19 +763,36 @@ export class CorpusIndex {
    * Full rebuild for the `files`/`symbols` storage mode: for every adapter
    * file, read once, extract its symbols once, and insert the fresh set.
    * Unreadable files are warned-and-skipped, exactly like the records mode.
+   *
+   * Processed in BOUNDED BATCHES (see {@link SYMBOL_SYNC_BATCH_SIZE}): each
+   * batch is read/hashed/extracted entirely OUTSIDE any transaction (async
+   * I/O/CPU work; running it while a `BEGIN` transaction is open would hold
+   * SQLite's writer lock for the whole rebuild, starving any concurrent
+   * writer's bounded `SQLITE_BUSY` retries), then written inside its own
+   * short transaction before the next batch starts. Holding every file's
+   * extracted symbol bodies for the WHOLE corpus in memory at once — the
+   * pre-batching behavior — can exhaust the heap on a large repository.
    */
   private async rebuildSymbols(adapter: SymbolCorpusAdapter): Promise<void> {
     this.dropAndRecreateFileSymbolTables();
     const files = await adapter.listFiles();
 
-    // Read, hash, and extract symbols for EVERY file FIRST, entirely outside
-    // any transaction. `readFile`/`extractSymbols` are async I/O/CPU work;
-    // running them while a `BEGIN` transaction is open would hold SQLite's
-    // writer lock for the whole rebuild, starving any concurrent writer's
-    // bounded `SQLITE_BUSY` retries. Only the DB writes below run inside the
-    // (now short) transaction.
-    const prepared: Array<{ relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] }> = [];
-    for (const relPath of files) {
+    for (let i = 0; i < files.length; i += SYMBOL_SYNC_BATCH_SIZE) {
+      const batchFiles = files.slice(i, i + SYMBOL_SYNC_BATCH_SIZE);
+      const prepared = await this.prepareSymbolFiles(adapter, batchFiles);
+      const fresh = await this.reprepareDriftedSymbolFiles(adapter, prepared);
+      this.writeSymbolFileBatch(fresh);
+    }
+  }
+
+  /**
+   * Read, hash, and extract symbols for each of `relPaths`, entirely outside
+   * any transaction. Unreadable/undecodable files are warned-and-skipped
+   * rather than aborting the whole batch.
+   */
+  private async prepareSymbolFiles(adapter: SymbolCorpusAdapter, relPaths: string[]): Promise<PreparedSymbolFile[]> {
+    const prepared: PreparedSymbolFile[] = [];
+    for (const relPath of relPaths) {
       let raw: string;
       let mtimeMs: number;
       try {
@@ -710,32 +819,42 @@ export class CorpusIndex {
       }
       prepared.push({ relPath, mtimeMs, contentHash, symbols });
     }
+    return prepared;
+  }
 
-    const insertFile = this.db.prepare(`INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)`);
-    const insertSymbol = this.db.prepare(
-      `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    );
-    this.db.exec('BEGIN');
-    try {
-      for (const { relPath, mtimeMs, contentHash, symbols } of prepared) {
-        insertFile.run(relPath, mtimeMs, contentHash);
-        symbols.forEach((symbol, position) => {
-          insertSymbol.run(
-            `${relPath}#${position}`,
-            relPath,
-            symbol.name,
-            symbol.kind,
-            symbol.startLine,
-            symbol.endLine,
-            symbol.body,
-          );
-        });
+  /**
+   * Immediately before a batch's write transaction, re-`stat` each prepared
+   * file and compare its mtime against what was captured during preparation.
+   * Preparation (read/hash/extract) runs entirely outside any transaction and
+   * can take arbitrarily long; if a file changed — and was possibly committed
+   * — DURING that window, writing the stale snapshot would mean a
+   * subsequently clean `git status` never triggers a refresh, and the stale
+   * row stays wrong forever. Re-prepare just the drifted files so the batch
+   * commits their CURRENT content instead.
+   */
+  private async reprepareDriftedSymbolFiles(
+    adapter: SymbolCorpusAdapter,
+    prepared: PreparedSymbolFile[],
+  ): Promise<PreparedSymbolFile[]> {
+    const fresh: PreparedSymbolFile[] = [];
+    for (const entry of prepared) {
+      let currentMtimeMs: number;
+      try {
+        currentMtimeMs = (await stat(join(this.root, entry.relPath))).mtimeMs;
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] ${entry.relPath} vanished after preparation, dropping from this batch: ${(error as Error).message}`,
+        );
+        continue;
       }
-      this.db.exec('COMMIT');
-    } catch (error) {
-      this.db.exec('ROLLBACK');
-      throw error;
+      if (currentMtimeMs === entry.mtimeMs) {
+        fresh.push(entry);
+        continue;
+      }
+      const [reprepared] = await this.prepareSymbolFiles(adapter, [entry.relPath]);
+      if (reprepared) fresh.push(reprepared);
     }
+    return fresh;
   }
 
   /**
@@ -845,55 +964,58 @@ export class CorpusIndex {
     const files = await adapter.listFiles();
     const seenPaths = new Set<string>();
 
-    // Read, hash, and (when content changed) extract symbols for EVERY file
-    // FIRST, entirely outside any transaction — same reasoning as
-    // {@link rebuildSymbols}: this loop is async I/O/CPU work and must not
-    // hold SQLite's writer lock while it runs. Only the DB writes derived
-    // from these plans run inside the (now short) transaction below.
-    type Plan =
-      | { kind: 'mtime-only'; relPath: string; mtimeMs: number }
-      | { kind: 'content-changed'; relPath: string; mtimeMs: number; contentHash: string; symbols: SymbolInput[] };
-    const plans: Plan[] = [];
-    for (const relPath of files) {
-      seenPaths.add(relPath);
-      const fullPath = join(this.root, relPath);
-      let st;
-      try {
-        st = await stat(fullPath);
-      } catch (error) {
-        console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
-        continue;
-      }
-      const prior = existing.get(relPath);
-
-      let raw: string;
-      try {
-        raw = await readFile(fullPath, 'utf8');
-      } catch (error) {
-        console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
-        continue;
-      }
-      const contentHash = createHash('sha256').update(raw).digest('hex');
-      if (prior && prior.contentHash === contentHash) {
-        // Content identical — refresh a changed mtime but never re-parse.
-        // An explicit incremental sync deliberately hashes the source even
-        // when its timestamp is unchanged: timestamp resolution and a
-        // preserved mtime must not hide a genuine content change.
-        if (prior.mtimeMs !== st.mtimeMs) {
-          plans.push({ kind: 'mtime-only', relPath, mtimeMs: st.mtimeMs });
+    // Read, hash, and (when content changed) extract symbols in BOUNDED
+    // BATCHES (see {@link SYMBOL_SYNC_BATCH_SIZE}), applying each batch's
+    // writes in its own short transaction before moving to the next — same
+    // reasoning as {@link rebuildSymbols}: this loop is async I/O/CPU work
+    // that must not hold SQLite's writer lock while it runs, and holding
+    // every file's plan (with a content change's extracted symbol bodies)
+    // for the WHOLE corpus in memory at once could exhaust the heap.
+    for (let i = 0; i < files.length; i += SYMBOL_SYNC_BATCH_SIZE) {
+      const batch = files.slice(i, i + SYMBOL_SYNC_BATCH_SIZE);
+      const plans: SymbolSyncPlan[] = [];
+      for (const relPath of batch) {
+        seenPaths.add(relPath);
+        const fullPath = join(this.root, relPath);
+        let st;
+        try {
+          st = await stat(fullPath);
+        } catch (error) {
+          console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
+          continue;
         }
-        continue;
+        const prior = existing.get(relPath);
+
+        let raw: string;
+        try {
+          raw = await readFile(fullPath, 'utf8');
+        } catch (error) {
+          console.warn(`[corpus-engine:${adapter.corpusId}] skipping unreadable file ${relPath}: ${(error as Error).message}`);
+          continue;
+        }
+        const contentHash = createHash('sha256').update(raw).digest('hex');
+        if (prior && prior.contentHash === contentHash) {
+          // Content identical — refresh a changed mtime but never re-parse.
+          // An explicit incremental sync deliberately hashes the source even
+          // when its timestamp is unchanged: timestamp resolution and a
+          // preserved mtime must not hide a genuine content change.
+          if (prior.mtimeMs !== st.mtimeMs) {
+            plans.push({ kind: 'mtime-only', relPath, mtimeMs: st.mtimeMs });
+          }
+          continue;
+        }
+        let symbols: SymbolInput[];
+        try {
+          symbols = await adapter.extractSymbols(relPath, raw);
+        } catch (error) {
+          console.warn(
+            `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
+          );
+          continue;
+        }
+        plans.push({ kind: 'content-changed', relPath, mtimeMs: st.mtimeMs, contentHash, symbols });
       }
-      let symbols: SymbolInput[];
-      try {
-        symbols = await adapter.extractSymbols(relPath, raw);
-      } catch (error) {
-        console.warn(
-          `[corpus-engine:${adapter.corpusId}] extractSymbols failed for ${relPath}, skipping: ${(error as Error).message}`,
-        );
-        continue;
-      }
-      plans.push({ kind: 'content-changed', relPath, mtimeMs: st.mtimeMs, contentHash, symbols });
+      this.applySymbolSyncPlans(plans);
     }
 
     // Files whose path disappeared from this listing entirely — determined
@@ -902,14 +1024,18 @@ export class CorpusIndex {
     for (const relPath of existing.keys()) {
       if (!seenPaths.has(relPath)) deletedPaths.push(relPath);
     }
+    this.deleteSymbolFilesBatch(deletedPaths);
+  }
 
+  /** Apply one batch of {@link SymbolSyncPlan}s inside its own short transaction. */
+  private applySymbolSyncPlans(plans: SymbolSyncPlan[]): void {
+    if (plans.length === 0) return;
     const upsertFile = this.db.prepare(
       `INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)
        ON CONFLICT(file_path) DO UPDATE SET mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash`,
     );
     const updateMtimeOnly = this.db.prepare('UPDATE files SET mtime_ms = ? WHERE file_path = ?');
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
-    const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
@@ -936,12 +1062,6 @@ export class CorpusIndex {
             symbol.body,
           );
         });
-      }
-
-      // Drop files (and their symbols) that disappeared.
-      for (const relPath of deletedPaths) {
-        deleteFile.run(relPath);
-        deleteSymbolsForFile.run(relPath);
       }
       this.db.exec('COMMIT');
     } catch (error) {
