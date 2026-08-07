@@ -199,7 +199,7 @@ Commands:
   mcp              Bridge stdio MCP (e.g. Claude Desktop) to the running daemon
   mcp install <id> Fully provision one client (registration + skills) — see \`mma clients\` for valid IDs
   mcp uninstall    Remove MMA from Claude Desktop's MCP config
-  plugin build     Generate the Claude Code plugin (skills + commands + MCP server)
+  plugin build     Generate a plugin package — --target=claude-code (default) or agent-plugin
   disable          Remove MMA from declared clients and pin them off (survives npm upgrades)
   enable           Declare clients on and (re)provision them (clears a prior \`disable\`)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)

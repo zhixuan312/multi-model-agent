@@ -39,23 +39,36 @@ Measured across a **2-developer team over one week** (1,000 delegated tasks): **
 
 ## Initial setup
 
-Four steps, in order.
-
-### 1. Install CLI + skills
+Two commands.
 
 ```bash
-pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
-mma sync-skills --target=claude-code        # provision the client(s) you use, by id — repeatable
-                                             # claude-code | claude-desktop | codex | antigravity
-                                             # | cursor | vscode | opencode | windsurf
+npm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (pnpm works too)
+mma setup
 ```
+
+`mma setup` is the whole first run. It asks two things — which models back each tier, and which
+clients to provision — then writes `~/.mma/config.json`, declares your client roster, and runs
+`sync-skills` for you. It probes each model as you enter it, so a green check means that tier
+actually works before you leave the wizard.
+
+Re-run it any time to change something: it prefills what is already configured, so pressing Enter
+through it is a no-op, and it doubles as the way to read your current setup back.
+
+It never writes a credential into the config — an API key is recorded as `apiKeyEnv`, the **name**
+of an environment variable, because a config file is a backup/dotfile/git footgun.
+
+Then [start the daemon](#4-start-the-daemon--verify). Everything below is reference: what the wizard
+is choosing for you, and the individual commands to script the same thing without prompts.
+
+### 1. Clients — what `mma setup` provisions
 
 MMA provisions **eight canonical clients**, each with its own MCP registration and (where the
 client supports Agent Skills) its own skill install. Which clients get touched is **declared, not
 just detected** — a client that is merely detected but never declared is reported `suggested` and
-left untouched, so a bare `mma sync-skills` with nothing declared yet provisions nothing. Use
-`--target=<ClientId>` (repeatable) the first time, then make it durable by declaring `clients` in
-your config — see [Declaring your clients](#declaring-your-clients) below.
+left untouched, so a bare `mma sync-skills` with nothing declared yet provisions nothing. `mma setup`
+declares them for you; to do it without prompts use `mma sync-skills --target=<ClientId>`
+(repeatable), or declare `clients` in your config — see
+[Declaring your clients](#declaring-your-clients) below.
 
 | Client | Skills | MCP registration |
 |---|---|---|
@@ -176,7 +189,7 @@ That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 S
 >
 > Other clients are unaffected — this overlap is Claude-Code-only.
 
-### 2. Choose your main model — intentionally (4.0.3+)
+### 2. Choosing your main model — intentionally (4.0.3+)
 
 Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
 
@@ -195,9 +208,9 @@ calling agent's "main" model, rather than yours.
 (Programmatic/REST callers — Forge, custom integrations — set the equivalent `X-MMA-Main-Model`
 header per-request; see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).)
 
-### 3. Write the config
+### 3. The config file
 
-Paste this into your shell — it creates `~/.mma/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
+`mma setup` writes this for you. Paste it by hand only if you are scripting a machine — it creates `~/.mma/config.json` with the minimum-viable starter config (overwriting any existing file at that path):
 
 ```bash
 mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
@@ -238,13 +251,15 @@ For a long-running background install (always-on, survives reboots), use [the la
 ## Updating
 
 ```bash
-pnpm install -g @zhixuan92/multi-model-agent@latest
+npm i -g @zhixuan92/multi-model-agent@latest
 pkill -f "mma serve"            # stop the running daemon
-mma sync-skills                 # reconcile installed skills with the new bundle
 # next AI-client session respawns the daemon via the skill preflight
 ```
 
-A drift warning prints on `mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.mma/auth-token && mma serve` (a new token is regenerated on boot).
+Nothing else to type: the package's postinstall hook re-runs `sync-skills` against the roster you
+already declared, so every declared client's skills are refreshed by the install itself. (Run
+`mma sync-skills` by hand only to re-reconcile without reinstalling.) A drift warning prints on
+`mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.mma/auth-token && mma serve` (a new token is regenerated on boot).
 
 ## Disabling / re-enabling
 
@@ -436,6 +451,7 @@ Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date
 ## Operator commands
 
 ```bash
+mma setup                                    # interactive first run: models + clients + config, then sync-skills
 mma [--verbose] [--log]                      # start daemon (serve is the default command)
 mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
 mma status [--json]                          # health + stats from a running daemon
@@ -444,6 +460,7 @@ mma print-token                              # print the current auth token
 mma clients [--json]                         # declared vs. detected vs. actual status, per client
 mma mcp install <ClientId>                   # provision one client's MCP registration + skills now
 mma sync-skills [--target=<ClientId>] [--all-targets] [--dry-run] [--json]   # provision every declared-'on' client
+mma plugin build [--target=claude-code|agent-plugin] [--out <dir>]            # emit a plugin package
 mma disable [--target=<ClientId>] [--all-targets] [--dry-run] [--json]       # declare 'off' + remove (survives upgrades)
 mma enable  [--target=<ClientId>] [--all-targets] [--dry-run] [--json]       # declare 'on' + (re)install
 mma telemetry status                         # show consent state + source (env / config / default)
@@ -528,28 +545,19 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 6.0
+## What's new in 6.2
 
-**Breaking — read before upgrading.** Provisioning is now **declared, not detected**: a client MMA
-merely finds on disk is reported `suggested` and left alone. Declare what you use
-(`clients.<ClientId>: "on"` in `~/.mma/config.json`) or pass `--target=<ClientId>`, or your next
-`mma sync-skills` provisions nothing. The client roster is canonical — `codex-cli` is now `codex`,
-`gemini-cli` is gone — `mma mcp install` requires a client id, and `~/.mma/skills-disabled.json` is
-replaced by `clients.<ClientId>: "off"`.
-
-- **Provisioning proves ownership before it replaces or deletes anything.** Installed skill
-  directories carry a digest record; a directory that no longer matches, or that contains a symlink
-  at any depth, is preserved and reported as a conflict rather than overwritten. Turning a client on
-  or off is atomic and survives a crash, and shared skill roots are reference-counted.
-- **A task says what it is, everywhere.** Handles, polls and cancel acknowledgements carry `type`,
-  `cwd` and an `audit`'s `subtype` — on both wires, from one shared builder.
-- **`mma_task_list`** answers "what is running right now?", the question you cannot ask once you no
-  longer hold a taskId. The MCP surface is now seven tools, including context-block registration.
-- **The execution monitor plays a three-act scene** — the worker at the bench, the reviewer joining
-  to check the same piece, then one of four endings. The motion is derived from the type registry,
-  so a hammer on screen means the route writes your files and a lens means it cannot. Its activity
-  history is computed by the daemon from what actually happened, so opening the panel late — or
-  re-opening it after the run — shows the same shape as watching from the start.
+- **MMA packages itself as an [Agent Plugins 1.0](https://agent-plugins.org/specification)
+  package.** `mma plugin build --target=agent-plugin` emits one directory that Codex, Cursor and
+  VS Code install directly — the same 16 skills, no per-client config writing. Its MCP entry is the
+  `mma mcp` stdio bridge, which resolves your token at connect time, so the package ships no secret
+  (the spec has no portable way to carry one). Claude Code keeps its own package, generated from the
+  same skills.
+- **Runs say which client they came from, over MCP too.** An MCP task whose protocol doesn't carry a
+  client name now falls back to what the install declared rather than to an anonymous `mcp`.
+- **Antigravity no longer claims an MCP registration it cannot perform.** Google folded Gemini CLI
+  into Antigravity CLI and retired the paths MMA wrote to; `mma mcp install antigravity` now refuses
+  instead of writing somewhere nothing reads. Install the Agent Plugins package instead.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.0] - 2026-08-07
+
+MMA can now be packaged the way the rest of the ecosystem agreed on: one Agent Plugins 1.0 directory
+that Codex, Cursor and VS Code install themselves, instead of MMA writing into each client's own
+config. `SCHEMA_VERSION` stays at **6** — no telemetry field was added or removed, only the set of
+values `client` can take.
+
+### Added
+
+- **`mma plugin build --target=agent-plugin`** emits an [Agent Plugins
+  1.0](https://agent-plugins.org/specification) package: root `plugin.json`, the same 16 skills, and
+  Claude-Code-only commands filed under the `com.anthropic.claude-code/` extension namespace. Both
+  targets are generated from one payload — a contract test asserts the skill bytes are byte-identical
+  between them, so the content cannot fork.
+- **The package's MCP entry is the `mma mcp` stdio bridge.** Agent Plugins permits only
+  `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` interpolation and states that `headers` values are visible
+  package data, so an HTTP entry could only carry a literal token. The bridge resolves the token
+  itself at connect time, which makes one `mcp.json` work on every conformant client and ship no
+  secret. Requires the `mma` CLI on PATH at the version that generated the package.
+- **`mma mcp --client=<id>`** makes the bridge send `X-MMA-Client`, so a bridge-based install stops
+  reporting as `other`. `agent-plugin` is a new caller identity — deliberately not a member of the
+  provisioning roster, since one package is loaded by many clients and owned by none.
+
+### Changed
+
+- **MCP caller attribution falls back to the declared client.** Resolution is now
+  `io.modelcontextprotocol/clientInfo` → `X-MMA-Client` → `mcp`. clientInfo still wins when present
+  (`mcp:cursor` says more than the packaging an install arrived in); the declaration only replaces
+  the anonymous `mcp`, which answered nothing. Declared values are validated against the same
+  allowlist REST uses, so a caller cannot invent a client id.
+- **Antigravity is blocked rather than misconfigured.** Google folded Gemini CLI into Antigravity CLI
+  and stopped serving Gemini CLI on 2026-06-18, retiring `~/.gemini/config/mcp_config.json` and
+  `~/.gemini/skills`; MMA had been writing to paths that no longer exist. The row now carries the
+  same empty-`mcpConfigPaths` signal VS Code uses, `mma mcp install antigravity` refuses, its skill
+  root is corrected to `~/.gemini/antigravity-cli/skills`, and the evidence is recorded in
+  `docs/verification/mcp-client-registration-profiles.md`. Use the Agent Plugins package instead.
+
+### Fixed
+
+- **`X-MMA-Client` had no effect on MCP tasks.** The MCP adapter derived `client` solely from the
+  protocol's `clientInfo`, so an Agent Plugins install — which reaches the daemon over MCP — could
+  never be attributed. Adoption of the standard is now measurable, which is what decides whether a
+  per-client registration writer can be retired.
+
 ## [6.1.0] - 2026-08-05
 
 The execution monitor's activity history moves into the daemon. `SCHEMA_VERSION` stays at **6** —

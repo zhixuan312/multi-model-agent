@@ -23,19 +23,27 @@ Plus structural quality: implementation and review run on **different** model fa
 
 ## Initial setup
 
-Four steps, in order.
-
-### 1. Install CLI + skills
+Two commands.
 
 ```bash
-pnpm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (npm works too)
-mma sync-skills --target=claude-code        # provision the client(s) you use, by id — repeatable
-                                             # claude-code | claude-desktop | codex | antigravity
-                                             # | cursor | vscode | opencode | windsurf
+npm i -g @zhixuan92/multi-model-agent      # requires Node ≥ 22 (pnpm works too)
+mma setup
 ```
 
+`mma setup` is the whole first run: it asks which models back each tier (probing each as you enter
+it) and which clients to provision, then writes `~/.mma/config.json`, declares the roster, and runs
+`sync-skills`. Re-run it to change anything — it prefills what is configured, so pressing Enter
+through it is a no-op. It never writes a credential into the config: an API key is recorded as
+`apiKeyEnv`, the **name** of an environment variable.
+
+Everything below is reference — what the wizard chooses for you, and the individual commands for
+scripting a machine without prompts.
+
+### Clients
+
 Which clients get touched is **declared, not just detected** — a merely-detected, undeclared client
-is reported `suggested` by `mma clients` and left untouched. Make a declaration durable in
+is reported `suggested` by `mma clients` and left untouched. `mma setup` declares them for you; to do
+it without prompts use `mma sync-skills --target=<ClientId>` (repeatable), or declare them durably in
 `~/.mma/config.json`:
 
 ```json
@@ -96,10 +104,12 @@ curl -s http://localhost:7337/health   # → {"status":"ok"}
 ## Updating
 
 ```bash
-pnpm install -g @zhixuan92/multi-model-agent@latest
+npm i -g @zhixuan92/multi-model-agent@latest
 pkill -f "mma serve"            # stop the running daemon
-mma sync-skills                 # reconcile installed skills with the new bundle
 ```
+
+Nothing else to type: the package's postinstall hook re-runs `sync-skills` against the roster you
+already declared, so the install itself refreshes every declared client's skills.
 
 ## Skills
 
@@ -184,6 +194,7 @@ All endpoints except `/health` require bearer auth: `Authorization: Bearer <toke
 ## Operator commands
 
 ```bash
+mma setup                                    # interactive first run: models + clients + config, then sync-skills
 mma [--log]                                  # start daemon (serve is the default command)
 mma info  [--json]                           # version, bind/port, token fingerprint
 mma status [--json]                          # health + stats from a running daemon
@@ -192,6 +203,7 @@ mma print-token                              # print the current auth token
 mma clients [--json]                         # declared vs. detected vs. actual status, per client
 mma mcp install <ClientId>                   # provision one client's MCP registration + skills now
 mma sync-skills [--target=<ClientId>]        # provision every declared-'on' client
+mma plugin build [--target=<t>] [--out <d>]  # emit a plugin package (claude-code | agent-plugin)
 mma disable [--target=<ClientId>]            # declare 'off' + remove registration/skills
 mma enable  [--target=<ClientId>]            # declare 'on' + (re)install
 mma telemetry status|enable|disable          # manage telemetry consent
