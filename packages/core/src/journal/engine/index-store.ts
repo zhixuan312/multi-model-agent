@@ -8,6 +8,7 @@ import { rrfSearch } from './search.js';
 import { isSymbolCorpusAdapter } from './types.js';
 import type {
   CorpusAdapter,
+  FileRecord,
   IndexHealth,
   LexicalHit,
   StoredRecord,
@@ -282,6 +283,17 @@ export class CorpusIndex {
   }
 
   /**
+   * Indexed `files` row count for the `files`/`symbols` storage mode — the
+   * symbol-mode counterpart to {@link recordCount}. Used by
+   * {@link ensureFreshSymbols} to detect a schema-valid but still-EMPTY index
+   * (nothing yet to diff against) without loading the corpus.
+   */
+  private symbolFilesCount(): number {
+    const row = this.db.prepare('SELECT count(*) AS n FROM files').get() as Record<string, unknown> | undefined;
+    return asNumber(row?.n);
+  }
+
+  /**
    * Cheap per-query freshness gate.
    *
    * `SymbolCorpusAdapter` corpora (the repository file adapter) use the
@@ -330,15 +342,29 @@ export class CorpusIndex {
       // changed — no corpus-wide `fs.stat` sweep, ever. Exclude the engine's
       // own derived-database artifacts: they live inside the corpus root but
       // are never content to (re)index.
-      const changedPaths = gitChanges.changedPaths.filter((path) => !isEngineArtifactPath(path));
+      const trackedPaths = gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path));
+      const statusChangedPaths = gitChanges.changedPaths.filter((path) => !isEngineArtifactPath(path));
       const deletedPaths = gitChanges.deletedPaths.filter((path) => !isEngineArtifactPath(path));
+      // A schema-valid but EMPTY `files` table — the very first
+      // `ensureFresh()` after `CorpusIndex.open()` bootstrapped a fresh
+      // database — has nothing indexed yet to diff against. `git status`
+      // alone reports only what changed SINCE the last commit, which is
+      // nothing for a clean working tree: taking only `statusChangedPaths`
+      // here would leave a first-time index against an already-committed
+      // repository empty forever. On a genuinely empty index, treat every
+      // git-KNOWN path (tracked, plus anything `git status` already flags as
+      // new/modified) as needing indexing, not only today's diff.
+      const changedPaths =
+        this.symbolFilesCount() === 0
+          ? Array.from(new Set([...trackedPaths, ...statusChangedPaths]))
+          : statusChangedPaths;
       if (changedPaths.length > 0 || deletedPaths.length > 0) {
         await this.syncSymbolPaths(adapter, changedPaths, deletedPaths);
       }
       this.freshnessDecision = {
         mode: 'git',
         statSweep: false,
-        trackedPaths: gitChanges.trackedPaths.filter((path) => !isEngineArtifactPath(path)),
+        trackedPaths,
         changedPaths,
         deletedPaths,
       };
@@ -831,6 +857,45 @@ export class CorpusIndex {
       startLine: asNumber(row.start_line),
       endLine: asNumber(row.end_line),
       body: asString(row.body),
+    }));
+  }
+
+  /**
+   * Every `symbols` row across the WHOLE corpus (the `files`/`symbols`
+   * storage mode), unordered. {@link symbolsForFile} answers "what does this
+   * one known file contain"; this answers "what does the corpus contain" —
+   * the shape a corpus-wide candidate search (e.g. the investigate
+   * preprocessor) needs and no per-file lookup can serve.
+   */
+  async allSymbols(): Promise<SymbolRecord[]> {
+    const rows = this.db
+      .prepare('SELECT id, file_path, name, kind, start_line, end_line, body FROM symbols')
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      filePath: asString(row.file_path),
+      name: asString(row.name),
+      kind: asString(row.kind),
+      startLine: asNumber(row.start_line),
+      endLine: asNumber(row.end_line),
+      body: asString(row.body),
+    }));
+  }
+
+  /**
+   * Every `files` row (the `files`/`symbols` storage mode) — per-file
+   * change-detection metadata (path, mtime, content hash) only, never
+   * content. Used alongside {@link allSymbols} to build a folder-level map
+   * of the whole corpus without enumerating every file's content.
+   */
+  async allFiles(): Promise<FileRecord[]> {
+    const rows = this.db
+      .prepare('SELECT file_path, mtime_ms, content_hash FROM files')
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      filePath: asString(row.file_path),
+      mtimeMs: asNumber(row.mtime_ms),
+      contentHash: asString(row.content_hash),
     }));
   }
 

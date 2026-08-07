@@ -4,6 +4,7 @@ import { journalRecordPreprocessor } from './journal-record.js';
 import { journalRecallPreprocessor } from './journal-recall.js';
 import { specPreprocessor, planPreprocessor } from './spec-plan.js';
 import { researchPreprocessor } from './research.js';
+import { investigatePreprocessor } from './investigate.js';
 
 export { PreprocessFailure } from './types.js';
 export type { Preprocessor, PreprocessorArgs, PreprocessResult } from './types.js';
@@ -22,4 +23,5 @@ export const PREPROCESSORS: PreprocessorMap = {
   spec: specPreprocessor,
   plan: planPreprocessor,
   research: researchPreprocessor,
+  investigate: investigatePreprocessor,
 };
