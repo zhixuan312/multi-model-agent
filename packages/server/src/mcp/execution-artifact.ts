@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -40,20 +40,29 @@ interface ExecutionArtifact {
  * in whichever mode the test happens to run in, making the regression it
  * guards against untestable by construction.
  *
- * Always resolves to `packages/server/dist/ui/execution.html` — from
- * compiled `dist/mcp/*` that is the adjacent `../ui/execution.html`; from
- * source/Vitest execution it resolves explicitly to the package's
- * `dist/ui/execution.html`, never to the unbundled `src/ui/execution/
- * execution.html`.
+ * Always resolves to the package's `dist/ui/execution.html` — from compiled
+ * `dist/mcp/*` that is the adjacent `../ui/execution.html`; from source/Vitest
+ * execution it steps out of `src/` into the sibling `dist/`, never to the
+ * unbundled `src/ui/execution/execution.html`.
+ *
+ * RESOLVED RELATIVE TO THE MODULE, NOT TO AN ABSOLUTE-PATH MARKER. An earlier
+ * version searched the module path for a `/packages/server/` segment and fell
+ * back to the module path ITSELF when absent. That segment only exists in this
+ * monorepo, so every npm-installed copy took the fallback and built a path with
+ * the filename embedded in it — `dist/mcp/execution-artifact.js/dist/ui/
+ * execution.html` — which never reads. Shipped users therefore always got
+ * `available: false`, and the daemon advertised `MCP_CAPABILITIES_TOOLS_ONLY`
+ * despite carrying a perfectly good 381 KB bundle. Only the developing
+ * monorepo, where the marker happens to match, ever served the App. Layout is
+ * a property of the module's own location, so that is the only thing this
+ * reads.
  */
-function resolveExecutionArtifactPath(moduleUrl: string): string {
-  const modulePath = fileURLToPath(moduleUrl);
-  const marker = `${sep}packages${sep}server${sep}`;
-  const markerIndex = modulePath.indexOf(marker);
-  const packageRoot = markerIndex === -1
-    ? modulePath
-    : modulePath.slice(0, markerIndex + marker.length);
-  return join(packageRoot, 'dist', 'ui', 'execution.html');
+export function resolveExecutionArtifactPath(moduleUrl: string): string {
+  const moduleDir = dirname(fileURLToPath(moduleUrl));  // <pkg>/dist/mcp | <pkg>/src/mcp
+  const treeRoot = dirname(moduleDir);                  // <pkg>/dist     | <pkg>/src
+  return basename(treeRoot) === 'src'
+    ? join(dirname(treeRoot), 'dist', 'ui', 'execution.html')
+    : join(treeRoot, 'ui', 'execution.html');
 }
 
 function loadArtifact(): ExecutionArtifact {

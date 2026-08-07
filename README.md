@@ -426,9 +426,9 @@ Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUT
 }
 ```
 
-When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.mma/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
+When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. As of 6.3.0 it also carries which tools ran, per turn: tool names and counts only, never the arguments, paths, or commands they were given. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.mma/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
 
-**Telemetry upgrade note:** Previous opt-ins are cleared on major schema upgrades. Run `mma telemetry enable` to opt in to the current wire schema (v6).
+**Telemetry upgrade note:** Opting in is a stored decision that persists across upgrades — it is not re-requested when the wire schema changes, so an upgrade can widen what a standing opt-in covers (6.3.0 added tool names). The current wire schema is v6. Re-read [PRIVACY.md](./PRIVACY.md) after a release that changes the telemetry section, and run `mma telemetry disable` at any time to stop uploads and revoke the install's identity.
 
 ### Verbose / diagnostics
 
@@ -545,19 +545,22 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 6.2
+## What's new in 6.3
 
-- **MMA packages itself as an [Agent Plugins 1.0](https://agent-plugins.org/specification)
-  package.** `mma plugin build --target=agent-plugin` emits one directory that Codex, Cursor and
-  VS Code install directly — the same 16 skills, no per-client config writing. Its MCP entry is the
-  `mma mcp` stdio bridge, which resolves your token at connect time, so the package ships no secret
-  (the spec has no portable way to carry one). Claude Code keeps its own package, generated from the
-  same skills.
-- **Runs say which client they came from, over MCP too.** An MCP task whose protocol doesn't carry a
-  client name now falls back to what the install declared rather than to an anonymous `mcp`.
-- **Antigravity no longer claims an MCP registration it cannot perform.** Google folded Gemini CLI
-  into Antigravity CLI and retired the paths MMA wrote to; `mma mcp install antigravity` now refuses
-  instead of writing somewhere nothing reads. Install the Agent Plugins package instead.
+- **`investigate` starts with a map of the repository.** A code index built on the journal's
+  retrieval engine runs before the worker does, handing it candidate files and a folder map instead
+  of making it grep its way in. Freshness costs time proportional to what changed, not to the size
+  of the repo, and the index lives in MMA's own state directory — never in the folder you pointed it
+  at.
+- **Worker output reads the same way everywhere.** One plain-English style instruction is applied to
+  both halves of the pipeline for the nine task types whose output a person reads, so the reviewer —
+  which writes the final answer — cannot discard it.
+- **The execution monitor actually appears now.** Every released build shipped the panel's bundle
+  but looked for it in a path that only exists in this repo's source tree, so an installed daemon
+  reported the App as unavailable and served tools only. Tools were never affected; if you use
+  Claude Desktop, the panel works from this version on.
+- **If you have telemetry on, tool names are now included** — names and counts only, never what a
+  tool was pointed at. See [PRIVACY.md](./PRIVACY.md); `mma telemetry disable` turns it all off.
 
 See [CHANGELOG](./CHANGELOG.md) for full details.
 

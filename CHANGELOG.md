@@ -5,6 +5,93 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.3.0] - 2026-08-08
+
+`investigate` gets a map of the repository before the worker starts, worker prose converges on one
+plain-English style, and the execution monitor works in a released build for the first time.
+`SCHEMA_VERSION` stays at **6**, but one field is added to the wire and it carries individual tool
+names — read the telemetry note below if you have opted in.
+
+### Added
+
+- **A code index for `investigate`.** The journal's SQLite/FTS5 retrieval engine is now
+  corpus-neutral, and a second adapter indexes ordinary repository files on top of it. Markdown
+  splits on headings, source code on function and class ranges via a dependency-free scanner, and
+  anything else into fixed 200-line blocks — the third tier never throws, so no file type can fail
+  indexing. A preprocessor runs the search before dispatch and hands the worker candidates plus a
+  folder map; the worker still makes the judgement, and no new worker tool surface was added.
+  Freshness is sublinear: git answers "what changed" in time proportional to the change, with a
+  throttled stat sweep for non-git roots.
+- **One writing style across worker output.** A shared `WRITING_STYLE_BLOCK` is prefixed to **both**
+  phases of the two-phase pipeline for the nine task types a person reads (`spec`, `plan`,
+  `research`, `journal_recall`, `journal_record`, `audit`, `review`, `investigate`, `debug`).
+  Injecting it from code rather than copying it into skill files is deliberate: the reviewer writes
+  the entire final `output.summary`, so a rule living only in the implementer skills would be
+  discarded before anyone saw it. `delegate`, `execute_plan` and `orchestrate` are excluded — their
+  output is a short status a program consumes.
+- **Per-turn tool-call telemetry** (opt-in only). See the telemetry note below.
+
+### Changed
+
+- **Journal operations are ~2.6x slower in absolute terms** (8.4 ms → 22.2 ms) after the engine
+  generalisation, because the adapter reads the whole record set per query rather than only the
+  candidate set. The repo's own perf gate is a 2x floor and passes at 2.4–2.7x. Recorded with
+  measurements rather than left to be rediscovered.
+
+### Fixed
+
+- **The code index no longer lands in your source tree.** It was written to `index.db` at the root
+  of whatever folder `investigate` targeted; the `.gitignore` entries hiding it existed only in this
+  repository, so pointing `investigate` at any other repo left its owner a multi-megabyte untracked
+  file in `git status`. The file/symbol corpus now lives at
+  `<stateDir>/corpus-index/<basename>-<hash>.db`, hashed over the `realpath` so symlinked, relative
+  and trailing-slash spellings of one repository share an index. The journal keeps its own index at
+  `.mma/journal/index.db` — behaviour there is unchanged.
+
+- **The MCP App resource was unreachable in every npm-installed copy.** The daemon located its
+  execution-monitor bundle by searching its own module path for a `/packages/server/` segment, and
+  fell back to the module path *itself* when the segment was absent. That segment exists only in
+  this monorepo, so an installed copy built a path with the filename embedded in it —
+  `dist/mcp/execution-artifact.js/dist/ui/execution.html` — which never reads. The bundle ships and
+  is intact; nothing ever looked for it in the right place. Every released daemon therefore reported
+  the App as unavailable, logged `mcp_capabilities_degraded`, and advertised
+  `MCP_CAPABILITIES_TOOLS_ONLY` — dropping the `resources` capability and the
+  `io.modelcontextprotocol/ui` extension. Tools were never affected; hosts that render MCP Apps
+  (Claude Desktop) simply had no UI to render.
+
+  The path is now resolved relative to the module's own directory, with no absolute-path marker at
+  all. This also closes a second hole in the old approach: a consumer whose own repository contains
+  a `packages/server/` directory would have matched the marker against *their* path.
+
+  The bug was invisible to the suite because the resolver — written as a pure function precisely so
+  both layouts could be tested — was never exported, so no test could call it, and both tested
+  layouts happened to contain the marker. `full-smoke` now asserts the advertised MCP capabilities,
+  fetches the resource over `resources/list` + `resources/read`, and gates on the artifact resolving
+  from a real packaged layout.
+
+- **`PRIVACY.md` said tool names are never transmitted, while this release transmits them.** The
+  document also claimed no unbounded string fields exist in the schema. Both statements were
+  falsified by the `toolCalls` field before it ever reached a release; the sync contract test did
+  not catch it because it asserted a hand-written list of field names, which can detect a removed
+  field but never a new one. The test now derives its field set from `TaskCompletedEventSchema`
+  itself, so an undocumented wire field fails the suite.
+
+### Telemetry
+
+Telemetry remains **off unless you turned it on**. If it is off, nothing here applies to you.
+
+- **New field: `toolCalls`** — up to 500 entries of `{ stage, turn, tool, count }` on the
+  `task.completed` event, giving per-turn resolution on which tools workers reach for.
+- **This returns individual tool names to the wire**, which schema v3 removed in April. Names only:
+  no arguments, paths, commands, or outputs — the runner projects each call to `(stage, turn, tool)`
+  before it reaches the wire, so what a tool was pointed *at* cannot be recovered from it.
+- **`SCHEMA_VERSION` stays at 6** because the field is additive and optional; bumping it would
+  silently drop already-queued v6 records at the flusher.
+- **Existing opt-ins are not re-requested.** Consent is a stored flag with no schema binding in
+  code — the "opt-ins are cleared on major schema upgrades" line in the README describes a manual
+  practice, not a mechanism. If you opted in before 6.3.0 and would rather tool names were not
+  included, run `mma telemetry disable`.
+
 ## [6.2.0] - 2026-08-07
 
 MMA can now be packaged the way the rest of the ecosystem agreed on: one Agent Plugins 1.0 directory

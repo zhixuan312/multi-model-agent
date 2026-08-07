@@ -54,6 +54,20 @@ export async function runMcpScenario(ctx) {
 
   const tools = await mcpCall(ctx.token, 'tools/list', undefined, 2);
 
+  // The App surface, exercised as a host would. Skipped when the handshake did not
+  // advertise `resources` — asking anyway would only produce a method-not-found that
+  // says less than the capability check already did. `available` records WHY it was
+  // skipped so verify can tell "correctly absent" from "silently missing".
+  const capabilities = init?.json?.result?.capabilities ?? {};
+  const resourcesAdvertised = Object.prototype.hasOwnProperty.call(capabilities, 'resources');
+  let resourceList = null;
+  let resourceRead = null;
+  if (resourcesAdvertised) {
+    resourceList = await mcpCall(ctx.token, 'resources/list', undefined, 20);
+    const uri = (resourceList?.json?.result?.resources ?? [])[0]?.uri;
+    if (uri) resourceRead = await mcpCall(ctx.token, 'resources/read', { uri }, 21);
+  }
+
   const run = await mcpCall(ctx.token, 'tools/call', {
     name: 'mma_run',
     arguments: {
@@ -74,7 +88,7 @@ export async function runMcpScenario(ctx) {
   const runPayload = parseToolText(run);
   const taskId = runPayload?.taskId ?? null;
   if (!taskId) {
-    return { init, tools, run, runPayload, taskId: null, waitPayload: null, restEnvelope: null };
+    return { init, tools, resourceList, resourceRead, run, runPayload, taskId: null, waitPayload: null, restEnvelope: null };
   }
 
   const wait = await mcpCall(ctx.token, 'tools/call', {
@@ -91,7 +105,7 @@ export async function runMcpScenario(ctx) {
   }
 
   const rest = await getTask(ctx.token, taskId);
-  return { init, tools, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
+  return { init, tools, resourceList, resourceRead, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
 }
 
 // Returns { type, body } for a scenario given run context.
@@ -244,16 +258,23 @@ export async function pollTask(token, taskId) {
   let delay = POLL.taskEveryMs;
   let polls = 0;
   let first202 = null;
+  // The LAST running snapshot as well as the first. They answer different questions:
+  // the first proves the shape exists from the outset, the last is the only one that
+  // can carry a settled activity series — the first 202 often lands before the worker
+  // has emitted a single provider event, so asserting activity there would report NA
+  // forever, which is indistinguishable from a check that always passes.
+  let last202 = null;
   for (;;) {
     const { status, body } = await getTask(token, taskId);
     if (status === 200) {
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       process.stderr.write(`    poll ${++polls}: terminal (${elapsed}s)\n`);
-      return { envelope: body, polling202: first202 };
+      return { envelope: body, polling202: first202, polling202Last: last202 };
     }
     if (status !== 202) throw new Error(`poll ${taskId}: HTTP ${status}`);
     if (Date.now() - start >= POLL.taskMaxMs) throw new Error(`poll ${taskId}: timeout`);
     if (!first202 && body && typeof body === 'object') first202 = body;
+    if (body && typeof body === 'object') last202 = body;
     const phase = body?.phase ?? '';
     const elapsed = ((Date.now() - start) / 1000).toFixed(0);
     if (++polls % 3 === 0) {
