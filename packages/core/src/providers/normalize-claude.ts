@@ -19,6 +19,7 @@ export function normalizeClaudeTurn(
   let outputText = '';
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
   const filesWritten = new Set<string>();
+  const toolCalls: { turn: number; tool: string }[] = [];
   let usedShell = false;
   let turns = 0;
   let sdkTermination: TurnResult['terminationReason'] = 'ok';
@@ -37,6 +38,9 @@ export function normalizeClaudeTurn(
           const { writtenPath, isShell } = classifyClaudeToolCall(name, input);
           if (writtenPath) filesWritten.add(writtenPath);
           if (isShell) usedShell = true;
+          // turns is incremented once per assistant event, AFTER this loop —
+          // so `turns + 1` is the 1-based turn this block belongs to.
+          toolCalls.push({ turn: turns + 1, tool: name });
         }
       }
       turns += 1;
@@ -93,6 +97,7 @@ export function normalizeClaudeTurn(
     usage,
     filesWritten: [...filesWritten],
     usedShell,
+    toolCalls,
     turns,
     durationMs: args.durationMs,
     costUSD: args.costUSD,

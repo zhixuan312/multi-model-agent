@@ -31,6 +31,7 @@ function okTurn(output: string): TurnResult {
     durationMs: 3,
     costUSD: 0.001,
     terminationReason: 'ok',
+    toolCalls: [],
   };
 }
 

@@ -21,6 +21,10 @@ export interface TurnResult {
   errorMessage?: string;
   filesWritten: string[];
   usedShell: boolean;
+  /** One entry per actual tool call, tagged with its 1-based runner turn.
+   *  Empty array when the turn made no tool calls. Populated by each
+   *  runner's normalizer (normalize-claude.ts, codex-cli-session.ts). */
+  toolCalls: { turn: number; tool: string }[];
 }
 
 /** Resolved + staged skills for a worker session. `stagedRoot` contains a

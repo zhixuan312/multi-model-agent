@@ -18,6 +18,7 @@ function turn(overrides: Partial<TurnResult>): TurnResult {
     durationMs: 5,
     costUSD: 0,
     terminationReason: 'ok',
+    toolCalls: [],
     ...overrides,
   };
 }

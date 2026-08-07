@@ -24,6 +24,7 @@ function fakeProvider(result: { errorCode: string; errorMessage: string }): Prov
           errorMessage: result.errorMessage,
           filesWritten: [],
           usedShell: false,
+          toolCalls: [],
         };
       },
       async close() {},

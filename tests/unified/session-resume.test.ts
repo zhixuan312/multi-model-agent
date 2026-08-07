@@ -10,6 +10,7 @@ const mockTurn = (output: string) => ({
   terminationReason: 'ok' as const,
   filesWritten: [],
   usedShell: false,
+  toolCalls: [],
 });
 
 const mockSession = (output: string, sessionId: string | null = null) => ({
