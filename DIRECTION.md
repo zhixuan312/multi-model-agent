@@ -1,12 +1,20 @@
 # multi-model-agent — Product Direction
 
-multi-model-agent (MMA) helps engineers adopt the **full AI software development
-lifecycle** — as an individual or as a team — and proves the work was worth it.
-One engine routes the right agent to the right task and enforces quality through
-cross-agent review. Two adoption modes sit on that engine: the **engine directly**
-for the individual, **Forge** for the team. One **proof surface** shows the
-economics, honestly. Models go deep; we connect them wide — and the engineer
-always keeps the judgment.
+multi-model-agent (MMA) helps people adopt the full AI-assisted
+**solution development lifecycle** — as an individual or as a team — and proves
+the work was worth it. The lifecycle's five stages (explore, spec, plan, execute,
+verify) are general professional practice, not software's invention —
+architecture, academic research, and audit all run an equivalent sequence under
+their own names. What MMA carries forward from software engineering is its
+verification discipline: declare what good means before execution starts, name
+the reference each claim is checked against, and automate the check whenever a
+deterministic one can honestly settle it. Software is one optional technique
+available during execution, not the definition of the lifecycle. One engine
+routes the right agent to the right task and enforces quality through
+cross-agent review. Two adoption modes sit on that engine: the **engine
+directly** for the individual, **Forge** for the team. One **proof surface**
+shows the economics, honestly. Models go deep; we connect them wide — and the
+caller owns the workflow: the responsible human always keeps the judgment.
 
 ## The Insight
 
@@ -19,15 +27,37 @@ cross-agent review, controlling cost through bounded execution, and proving it.
 The providers go deeper; we connect them wider — and we wrap the whole thing in a
 lifecycle an individual or a team can actually adopt.
 
+## The Shared Vocabulary
+
+- **Problem** — the situation that needs resolution; every flow starts here.
+- **Solution** — the selected way to address the problem, which is not
+  necessarily an artifact.
+- **Deliverable** — a durable output that represents or implements the solution.
+- **Artifact** — one file that forms part of the deliverable.
+- **Acceptance criterion** — a claim that must be true of the finished
+  deliverable.
+- **Reference** — the authority or source used to check that claim.
+- **Evidence** — the recorded result of applying a verification method to a
+  claim.
+- **Disposition** — the caller's declared delivery mode for the solution
+  package; it governs its git lifecycle.
+
 ## The Aim
 
-Help every user — the individual power-user and the product team alike — adopt the
-**full AI SDLC**, and assist product teams in their delivery work. The lifecycle
-(investigate / research → spec → plan → execute → review → debug, with audit
-gating the spec and the plan) is not a feature bolted on; it is the thing we help
-people adopt, instrument, and trust. Whether one engineer wields it directly or a
-team runs it through a gated workflow, the aim is the same: more of the delivery
-lifecycle, done with a routed, reviewed, evidenced harness.
+Help every user — the individual power-user and the product team alike — adopt
+the **full solution development lifecycle**, whatever the deliverable: code, a
+specification, a report, a workflow configuration, or any other durable output,
+and assist teams in their delivery work. The lifecycle (investigate / research →
+spec → plan → execute → review → debug, with audit gating the spec and the plan)
+is not a feature bolted on; it is the thing we help people adopt, instrument, and
+trust. The stages themselves are general professional practice — every field
+that produces accountable work runs an equivalent sequence under its own names —
+and MMA's specific contribution is carrying software engineering's verification
+discipline into all of them: declare acceptance before execution starts, name
+the reference each claim is checked against, and automate the check whenever a
+deterministic one can honestly settle it. Whether one practitioner wields MMA
+directly or a team runs it through a gated workflow, the aim is the same: more
+of the lifecycle, done with a routed, reviewed, evidenced harness.
 
 ## One Engine, Two Modes
 
@@ -38,9 +68,10 @@ There is one engine and two ways to adopt it:
   unopinionated about workflow, deployed however they like. The power-user path:
   maximum control, minimum ceremony.
 - **Forge — the team mode.** A collaborative orchestration app built on the engine
-  (over HTTP), giving a team a standardized, gated SDLC workflow with roles,
-  review gates, and shared knowledge. The path for a product team that wants the
-  lifecycle consistent across people, not reinvented per engineer.
+  (over HTTP), giving a team a standardized, gated solution development lifecycle
+  workflow with roles, review gates, and shared knowledge. The path for a product
+  team that wants the lifecycle consistent across people, not reinvented per
+  practitioner.
 
 Same engine underneath. The mode is a choice about how much structure the user
 wants — not a different product.
@@ -49,10 +80,14 @@ wants — not a different product.
 
 Three surfaces, one product:
 
-- **mma engine** executes each stateless per-stage rod and returns evidence. It is
-  the labor layer. → `mma/GUIDELINES.md`.
-- **mma-forge** owns the SDLC chain and its gates, driving the engine from outside
-  over HTTP. It is the team workflow. → `mma-forge/GUIDELINES.md`.
+- **mma engine** executes each stateless per-stage rod of the solution
+  development lifecycle, validates the contract at the boundary, and returns
+  evidence. It holds no cross-request workflow state — it is the labor layer. →
+  `mma/GUIDELINES.md`.
+- **mma-forge** is the team workflow surface: it drives the engine from outside
+  over HTTP and owns its own lifecycle progression, gates, and durable state, the
+  same way any caller does — the engine never holds that state on Forge's behalf.
+  → `mma-forge/GUIDELINES.md`.
 - **telemetry** aggregates usage from *both* the engine and Forge and presents the
   economic proof. It is the evidence surface. → `telemetry/GUIDELINES.md`.
 
@@ -73,9 +108,12 @@ global.
 These govern every surface. Surface-specific mechanisms live in each package's
 guidelines.
 
-1. **We help, we don't replace.** The engineer does judgment; we do labor and
-   gating. We never decide what to build, which approach to take, or whether to
-   merge. The engineer's judgment is input; our output is evidence.
+1. **We help, we don't replace.** The practitioner does judgment; we do labor and
+   gating. The agent proposes domain reasoning, candidate acceptance criteria,
+   and their references — it does not hold the expertise. Declared references
+   and responsible humans establish what is accepted. We never decide what to
+   build, which approach to take, or whether to merge. The practitioner's
+   judgment is input; our output is evidence.
 2. **Quality is structural, not aspirational.** Quality comes from structure —
    independent checks, not a model grading its own work: a *different* agent
    reviews the engine's output, human gates review Forge's, and the proof surface
@@ -96,10 +134,13 @@ guidelines.
    system around models, never a model-specific branch — and the whole product
    stays provider-neutral: the engine routes any model, Forge orchestrates any
    model, and the proof surface reports across families without favor.
-6. **We harness the lifecycle; we don't author it.** We instrument and gate each
-   stage — evaluation, review, audit — but the engineer makes every call: what to
-   build, which approach, whether to advance. We are the rails and the gates,
-   never the driver.
+6. **We define the lifecycle method; the caller owns its progression.** MMA
+   defines which stages exist, what each stage must establish, and what makes an
+   advance honest. The caller — the practitioner directly, the `mma-flow`
+   packaged skill, or Forge — decides which stage runs next, holds the durable
+   workflow record, and makes every judgment call: what to build, which
+   approach, whether to advance. We are the rails and the gates, never the
+   driver.
 
 ## Where We're Going
 
@@ -111,17 +152,20 @@ guidelines.
 - **Both modes mature** — the individual gets more power with less ceremony; the
   team gets a more complete, more standardized workflow.
 
-The reviewed multi-agent harness becomes the unit of AI software engineering. The
-question shifts from "which model should I use?" to "how is my harness configured,
-and how wide is its lifecycle coverage?"
+The reviewed multi-agent harness becomes the unit of AI-assisted solution
+delivery — for code and beyond it. The question shifts from "which model should
+I use?" to "how is my harness configured, and how wide is its lifecycle
+coverage?"
 
 ## What We Won't Do
 
 - **No model-specific hacks.** A quirk gets fixed in the platform, not a per-model
   branch.
 - **No decisions for the engineer.** We execute, review, audit, and report.
-- **No hidden workflow state we own.** The caller — or Forge — owns the workflow;
-  the engine owns individual task execution. Stateless requests, stateful caller.
+- **No hidden workflow state we own.** The caller owns the workflow — directly,
+  through the `mma-flow` packaged skill, or through Forge; the engine owns
+  individual task execution and returns evidence. Stateless requests, stateful
+  caller.
 - **No autonomy theater.** Bounded execution with checkpoints, not hours-long runs.
 - **No dressed-up numbers.** Real savings against a real baseline; advisory
   findings shown as advisory. A north star built on a flattering chart is not a

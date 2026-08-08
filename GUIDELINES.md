@@ -1,9 +1,10 @@
 # multi-model-agent (engine) — Product Guidelines
 
-> The engine is MMA's labor layer and its individual (power-user) mode: it routes
-> the right agent to the right task, enforces quality through cross-agent review,
-> and returns evidence — called directly from whatever agent client the engineer
-> already uses.
+> The engine is MMA's labor layer and its individual (power-user) mode: it
+> executes bounded stages of the solution development lifecycle, routes the
+> right agent to the right task, enforces quality through cross-agent review,
+> and returns evidence — called directly from whatever agent client the
+> practitioner already uses.
 
 ## Role in the MMA product
 
@@ -14,6 +15,14 @@ HTTP daemon on loopback, and exposes installable skills to any agent client
 HTTP; telemetry reports on it. The global north star is `DIRECTION.md`; this
 document carries the engine's product-specific direction — the parts of the old
 engine-scoped DIRECTION that are engine *mechanism*, not whole-product bet.
+
+The engine executes the solution development lifecycle's bounded stages for
+whatever deliverable the caller declares — code, a specification, a report, or
+any other durable output. It does not decide which stage runs next and it does
+not hold the lifecycle's durable record; that stays with the caller, per
+`DIRECTION.md`'s refusal of hidden workflow state. Software is one supported
+technique among others, routed by the caller rather than assumed from the
+deliverable — it is not what defines the lifecycle.
 
 ## Product-specific principles
 
@@ -90,9 +99,9 @@ engine-scoped DIRECTION that are engine *mechanism*, not whole-product bet.
 ## Relationship to the other surfaces
 
 - **Forge (team mode)** drives the engine from outside, over HTTP on loopback
-  (`127.0.0.1:7337`), owning the SDLC chain and its gates. The engine never links
-  Forge and knows nothing of teams, projects, or RBAC — the boundary is strictly
-  HTTP.
+  (`127.0.0.1:7337`) and, like any caller, owns its own lifecycle progression,
+  durable workflow state, and gates. The engine never links Forge and knows
+  nothing of teams, projects, or RBAC — the boundary is strictly HTTP.
 - **Telemetry (proof surface)** consumes the usage and evidence the engine emits
   (per-stage cost, tier, findings) to prove the economics. The engine's job is to
   emit honest, per-stage-attributed data; how it is presented is the telemetry

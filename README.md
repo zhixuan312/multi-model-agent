@@ -13,6 +13,8 @@
 
 Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for **up to 97% less per task**.
 
+multi-model-agent is the engine behind MMA's **solution development lifecycle** — explore, spec, plan, execute, verify — a general professional practice, not something software invented; software is one optional technique this engine supports, not the definition of the lifecycle. The caller owns the workflow: this package is the stateless labor and cross-agent review layer underneath it, usable directly or through Forge, the team mode.
+
 A local daemon for Claude Code, Claude Desktop, Codex, Cursor, VS Code, opencode, Windsurf, and Antigravity — reached over MCP. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
 *(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md).)*

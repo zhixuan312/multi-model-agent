@@ -2,6 +2,8 @@
 
 One-page orientation for maintainers. Deeper content lives alongside code.
 
+multi-model-agent (MMA) is the engine layer of a solution development lifecycle: a general five-stage practice (explore, spec, plan, execute, verify) that this product carries software engineering's verification discipline into, rather than a software-only pipeline. MMA defines the lifecycle method — what each stage must establish and what makes an advance honest. The caller (a practitioner directly, the `mma-flow` packaged skill, or Forge) owns lifecycle progression and durable workflow state; the engine executes one bounded stage per request, validates the contract at the boundary, and records evidence — see `DIRECTION.md`'s refusal of hidden workflow state. Software remains one supported technique, selected by the caller rather than assumed from the deliverable; it is not the definition of the lifecycle the axes below describe.
+
 ## The three axes
 
 multi-model-agent is organized around three axes. A request is a *path* through them, not a region.
