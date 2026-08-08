@@ -14,7 +14,7 @@ const control = vi.hoisted(() => ({
   closeCalls: 0,
   openThrows: null as (() => Error) | null,
   ensureFreshThrows: null as (() => Error) | null,
-  allSymbolsThrows: null as (() => Error) | null,
+  rankedSymbolsByTokensThrows: null as (() => Error) | null,
 }));
 
 vi.mock('@zhixuan92/multi-model-agent-core', () => ({
@@ -30,11 +30,12 @@ vi.mock('@zhixuan92/multi-model-agent-core', () => ({
         ensureFresh: async () => {
           if (control.ensureFreshThrows) throw control.ensureFreshThrows();
         },
-        allSymbols: async () => {
-          if (control.allSymbolsThrows) throw control.allSymbolsThrows();
+        rankedSymbolsByTokens: async () => {
+          if (control.rankedSymbolsByTokensThrows) throw control.rankedSymbolsByTokensThrows();
           return [];
         },
-        allFiles: async () => [],
+        folderSummaries: () => [],
+        symbolsByIds: async () => [],
         close: () => {
           control.closeCalls += 1;
         },
@@ -72,7 +73,7 @@ describe('investigate preprocessor failure paths', () => {
     control.closeCalls = 0;
     control.openThrows = null;
     control.ensureFreshThrows = null;
-    control.allSymbolsThrows = null;
+    control.rankedSymbolsByTokensThrows = null;
     stateDir = await mkdtemp(join(tmpdir(), 'mma-investigate-failure-state-'));
   });
 
@@ -110,8 +111,8 @@ describe('investigate preprocessor failure paths', () => {
     expect(control.closeCalls).toBe(1);
   });
 
-  it('closes the index when allSymbols throws, and surfaces the search failure code', async () => {
-    control.allSymbolsThrows = nonTransientError;
+  it('closes the index when SQL candidate ranking throws, and surfaces the search failure code', async () => {
+    control.rankedSymbolsByTokensThrows = nonTransientError;
     const cwd = await freshCwd();
     await expect(
       investigatePreprocessor({ cwd, payload: { prompt: 'x' }, config: configWithStateDir(stateDir) } as never),

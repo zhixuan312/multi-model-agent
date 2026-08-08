@@ -536,3 +536,28 @@ export async function searchCandidatesForRecord(
   // Record retrieval never surfaces superseded history: dedup targets are live nodes.
   return search(store, { prompt: input.prompt, topic: input.topic, includeHistory: false });
 }
+
+/**
+ * Batch counterpart of {@link searchCandidatesForRecord}: health + freshness
+ * run ONCE for the whole batch, not once per submitted record. A
+ * `journal_record` request with N records previously paid health/freshness
+ * work N times (once per {@link searchCandidatesForRecord} call) even though
+ * nothing in the store changes between records within one request — searching
+ * record 2 can never observe a staleness that record 1's check didn't already
+ * resolve, so the repeat work was pure waste. Same per-search semantics as
+ * {@link searchCandidatesForRecord} (record retrieval never surfaces
+ * superseded history) for every record in the batch.
+ */
+export async function searchCandidatesForRecordBatch(
+  store: JournalIndexStore,
+  records: Array<{ prompt: string; topic?: string }>,
+): Promise<JournalCandidate[][]> {
+  await store.ensureHealthy();
+  // Cheap count-based freshness gate — skips the O(N) stat sweep in steady state.
+  await store.ensureFresh();
+  const results: JournalCandidate[][] = [];
+  for (const record of records) {
+    results.push(await search(store, { prompt: record.prompt, topic: record.topic, includeHistory: false }));
+  }
+  return results;
+}

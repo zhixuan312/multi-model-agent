@@ -121,6 +121,16 @@ export interface SymbolRecord {
 /** A symbol as an adapter decodes it, before the engine assigns a stable `id`/`filePath`. */
 export type SymbolInput = Omit<SymbolRecord, 'id' | 'filePath'>;
 
+/**
+ * A {@link SymbolRecord} projection WITHOUT `body`. Ranking a symbol corpus
+ * (e.g. the investigate preprocessor's candidate search) needs a symbol's id,
+ * path, name, kind, and line range to score and order candidates; it needs
+ * `body` only for the small number of candidates that survive ranking.
+ * Fetching this shape instead of {@link SymbolRecord} for the whole corpus is
+ * what lets a query avoid materializing every symbol's body text on every call.
+ */
+export type SymbolRecordMeta = Omit<SymbolRecord, 'body'>;
+
 /** A `files` row: purely for per-file change detection, not for search. */
 export interface FileRecord {
   filePath: string;

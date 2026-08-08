@@ -2,7 +2,12 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { JournalIndexStore, searchCandidatesForRecall, searchCandidatesForRecord } from '../../packages/core/src/journal/index.js';
+import {
+  JournalIndexStore,
+  searchCandidatesForRecall,
+  searchCandidatesForRecord,
+  searchCandidatesForRecordBatch,
+} from '../../packages/core/src/journal/index.js';
 
 async function makeCorpus(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'mma-journal-search-'));
@@ -136,5 +141,33 @@ Malformed: missing title/topic/status/timestamp.
     const record = await searchCandidatesForRecord(store, { prompt: 'index health rebuild fallback', topic: 'journal-engine' });
     expect(record[0]?.topic).toBe('journal-engine');
     expect(record.some((candidate) => candidate.nodeId === '0001')).toBe(true);
+  });
+
+  it('runs health + freshness ONCE for a batch of records, not once per record', async () => {
+    const root = await makeCorpus();
+    const store = await JournalIndexStore.open({ journalRoot: root });
+    await store.rebuildIndex();
+
+    const ensureHealthySpy = vi.spyOn(store, 'ensureHealthy');
+    const ensureFreshSpy = vi.spyOn(store, 'ensureFresh');
+    try {
+      const records = [
+        { prompt: 'index health rebuild fallback', topic: 'journal-engine' },
+        { prompt: 'current retrieval answer', topic: 'journal-engine' },
+        { prompt: 'history superseded answer', topic: 'journal-engine' },
+      ];
+      const results = await searchCandidatesForRecordBatch(store, records);
+
+      expect(results).toHaveLength(records.length);
+      // Same result as calling searchCandidatesForRecord for the first record individually.
+      expect(results[0]?.some((candidate) => candidate.nodeId === '0001')).toBe(true);
+
+      // Health/freshness ran ONCE for the whole batch — not once per submitted record.
+      expect(ensureHealthySpy).toHaveBeenCalledTimes(1);
+      expect(ensureFreshSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      ensureHealthySpy.mockRestore();
+      ensureFreshSpy.mockRestore();
+    }
   });
 });

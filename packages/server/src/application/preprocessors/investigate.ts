@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { CorpusIndex, FileCorpusAdapter } from '@zhixuan92/multi-model-agent-core';
-import type { FallbackSweepState, SymbolRecord } from '@zhixuan92/multi-model-agent-core';
+import type { FallbackSweepState } from '@zhixuan92/multi-model-agent-core';
 import { expandHome } from '../../expand-home.js';
 import { PreprocessFailure } from './types.js';
 import type { Preprocessor } from './types.js';
@@ -41,28 +41,6 @@ function collapseWhitespace(text: string): string {
 }
 
 /**
- * Cheap lexical relevance score: name matches count more than body matches,
- * because a symbol whose NAME contains a query token is more likely to be
- * exactly what the prompt is asking about than one that merely mentions the
- * token somewhere in its body.
- */
-function scoreSymbol(tokens: string[], symbol: SymbolRecord): number {
-  const name = symbol.name.toLowerCase();
-  const body = symbol.body.toLowerCase();
-  let score = 0;
-  for (const token of tokens) {
-    if (name.includes(token)) score += 3;
-    if (body.includes(token)) score += 1;
-  }
-  return score;
-}
-
-/** Parent directory of a corpus-relative path, `.` for a root-level file. */
-function parentFolder(filePath: string): string {
-  const index = filePath.lastIndexOf('/');
-  return index === -1 ? '.' : filePath.slice(0, index);
-}
-
 /**
  * Conservative serialized-context estimate. Compact JSON often contains very
  * little whitespace, so counting whitespace-separated words would treat an
@@ -207,11 +185,33 @@ async function corpusIndexDbPath(cwd: string, stateDir: string): Promise<string>
   return join(dir, `${basename(realRoot)}-${hash}.db`);
 }
 
-/** One open→ensureHealthy→ensureFresh→allSymbols→allFiles→close attempt, tagged with the phase that failed (if any) so the caller can classify + retry. */
+/**
+ * Let SQLite rank every indexed symbol and return only the top
+ * {@link CANDIDATE_CAP} metadata rows, then materialize `body` text ONLY for
+ * those survivors — never for the whole corpus. Must run while `index` is
+ * still open.
+ */
+async function buildCandidates(index: CorpusIndex, prompt: string): Promise<InvestigateCandidate[]> {
+  const tokens = tokenize(prompt ?? '');
+  const ranked = await index.rankedSymbolsByTokens(tokens, CANDIDATE_CAP);
+
+  const bodyById = new Map((await index.symbolsByIds(ranked.map((symbol) => symbol.id))).map((s) => [s.id, s.body]));
+
+  return ranked.map((symbol) => ({
+    path: symbol.filePath,
+    name: symbol.name,
+    startLine: symbol.startLine,
+    endLine: symbol.endLine,
+    snippet: collapseWhitespace(bodyById.get(symbol.id) ?? '').slice(0, SNIPPET_MAX_CHARS),
+  }));
+}
+
+/** One open→ensureHealthy→ensureFresh→rank→materialize-survivors→close attempt, tagged with the phase that failed (if any) so the caller can classify + retry. */
 async function attemptLoadIndexState(
   cwd: string,
   dbPath: string,
-): Promise<{ allSymbols: SymbolRecord[]; allFiles: Array<{ filePath: string }> }> {
+  prompt: string,
+): Promise<{ candidates: InvestigateCandidate[]; folderMap: FolderSummary[] }> {
   const adapter = new FileCorpusAdapter({ root: cwd });
   let index: CorpusIndex;
   try {
@@ -230,9 +230,11 @@ async function attemptLoadIndexState(
       throw new IndexPhaseError('sync', error);
     }
     try {
-      const allSymbols = await index.allSymbols();
-      const allFiles = await index.allFiles();
-      return { allSymbols, allFiles };
+      // Folder counts and candidate ranking both execute in SQLite. The only
+      // symbol bodies materialized in JS are the capped candidate survivors.
+      const folderMap = index.folderSummaries();
+      const candidates = await buildCandidates(index, prompt);
+      return { candidates, folderMap };
     } catch (error) {
       throw new IndexPhaseError('search', error);
     }
@@ -243,21 +245,23 @@ async function attemptLoadIndexState(
 }
 
 /**
- * Open the repository-wide symbol index, refresh it, and read back every
- * indexed symbol/file — with bounded retry against transient write-lock
- * contention. See {@link withRootQueue} and {@link isTransientLockError} for
- * why retry is needed at all: this preprocessor is the first consumer that
- * opens the `SymbolCorpusAdapter` index against a large, actively-shared
- * corpus (the whole repository) rather than the small `.mma/journal/` tree.
+ * Open the repository-wide symbol index, refresh it, and rank/materialize the
+ * bounded candidate list plus folder map — with bounded retry against
+ * transient write-lock contention. See {@link withRootQueue} and
+ * {@link isTransientLockError} for why retry is needed at all: this
+ * preprocessor is the first consumer that opens the `SymbolCorpusAdapter`
+ * index against a large, actively-shared corpus (the whole repository)
+ * rather than the small `.mma/journal/` tree.
  */
 async function loadIndexState(
   cwd: string,
   dbPath: string,
-): Promise<{ allSymbols: SymbolRecord[]; allFiles: Array<{ filePath: string }> }> {
+  prompt: string,
+): Promise<{ candidates: InvestigateCandidate[]; folderMap: FolderSummary[] }> {
   let lastError: IndexPhaseError | undefined;
   for (let attempt = 1; attempt <= MAX_INDEX_ATTEMPTS; attempt++) {
     try {
-      return await attemptLoadIndexState(cwd, dbPath);
+      return await attemptLoadIndexState(cwd, dbPath, prompt);
     } catch (error) {
       if (!(error instanceof IndexPhaseError)) throw error;
       lastError = error;
@@ -297,54 +301,7 @@ export const investigatePreprocessor: Preprocessor = async ({ cwd, payload, conf
   const invPayload = payload as { prompt: string };
 
   const dbPath = await corpusIndexDbPath(cwd, config.server.stateDir);
-  const { allSymbols, allFiles } = await withRootQueue(cwd, () => loadIndexState(cwd, dbPath));
-
-  // Folder-level map: aggregated over the WHOLE indexed corpus (every
-  // file/symbol the engine knows about), never a full file list. A full
-  // file list for this repository alone runs to roughly 5,500 tokens and
-  // only grows with the repo; a folder map with a count per directory stays
-  // small and still tells the worker where the weight of the code lives.
-  const folderStats = new Map<string, { fileCount: number; symbolCount: number }>();
-  for (const file of allFiles) {
-    const folder = parentFolder(file.filePath);
-    const entry = folderStats.get(folder) ?? { fileCount: 0, symbolCount: 0 };
-    entry.fileCount += 1;
-    folderStats.set(folder, entry);
-  }
-  for (const symbol of allSymbols) {
-    const folder = parentFolder(symbol.filePath);
-    const entry = folderStats.get(folder) ?? { fileCount: 0, symbolCount: 0 };
-    entry.symbolCount += 1;
-    folderStats.set(folder, entry);
-  }
-  let folderMap: FolderSummary[] = Array.from(folderStats.entries())
-    .map(([folder, stats]) => ({ folder, ...stats }))
-    .sort((a, b) => {
-      if (b.symbolCount !== a.symbolCount) return b.symbolCount - a.symbolCount;
-      if (b.fileCount !== a.fileCount) return b.fileCount - a.fileCount;
-      return a.folder.localeCompare(b.folder);
-    });
-
-  // Candidates: rank every indexed symbol against the prompt's tokens, best
-  // first; deterministic tie-break by (path, startLine) so repeated runs
-  // against an unchanged index produce the same order.
-  const tokens = tokenize(invPayload.prompt ?? '');
-  const ranked = allSymbols
-    .map((symbol) => ({ symbol, score: scoreSymbol(tokens, symbol) }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (a.symbol.filePath !== b.symbol.filePath) return a.symbol.filePath.localeCompare(b.symbol.filePath);
-      return a.symbol.startLine - b.symbol.startLine;
-    });
-
-  let candidates: InvestigateCandidate[] = ranked.slice(0, CANDIDATE_CAP).map(({ symbol }) => ({
-    path: symbol.filePath,
-    name: symbol.name,
-    startLine: symbol.startLine,
-    endLine: symbol.endLine,
-    snippet: collapseWhitespace(symbol.body).slice(0, SNIPPET_MAX_CHARS),
-  }));
+  let { candidates, folderMap } = await withRootQueue(cwd, () => loadIndexState(cwd, dbPath, invPayload.prompt ?? ''));
 
   // Deterministic budget guard: preserve the best candidate leads first,
   // trimming the least information-dense folders before the lowest-ranked

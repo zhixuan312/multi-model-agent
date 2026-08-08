@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import {
   JournalIndexStore,
   JournalStore,
-  searchCandidatesForRecord,
+  searchCandidatesForRecordBatch,
   parseRecordDecisions,
 } from '@zhixuan92/multi-model-agent-core';
 import type { Preprocessor } from './types.js';
@@ -13,10 +13,25 @@ import type { Preprocessor } from './types.js';
  * record must appear exactly once across recorded[]/failed[]).
  *
  * Candidate injection: the deterministic engine retrieves supersede/refine/merge
- * candidates per record so the implementer decides against real nodes. Searches run
- * SEQUENTIALLY (not Promise.all): searchCandidatesForRecord opens a SQLite transaction
- * (syncIndexIncremental → BEGIN) on the store's single connection, so concurrent
- * searches would throw "cannot start a transaction within a transaction".
+ * candidates per record so the implementer decides against real nodes.
+ * `searchCandidatesForRecordBatch` runs health + freshness ONCE for the whole
+ * batch (not once per record — nothing in the store changes between records
+ * within one request, so per-record health/freshness was pure repeat work)
+ * and searches every record SEQUENTIALLY (not Promise.all): the underlying
+ * search opens a SQLite transaction (syncIndexIncremental → BEGIN) on the
+ * store's single connection, so concurrent searches would throw "cannot
+ * start a transaction within a transaction".
+ *
+ * `JournalIndexStore` (opened below, a derived SQLite index the store owns
+ * for search/candidate ranking) and `JournalStore` (opened in
+ * `applyDecisions`, the authoritative markdown-file node store) stay on
+ * separate handles: `JournalStore` never opens a database connection at all
+ * — it reads/writes `.mma/journal/nodes/*.md` directly — so there is no
+ * SQLite handle for it to share with `JournalIndexStore`'s. Nor could the two
+ * share a lifetime even if `JournalStore` did use SQLite: the index store is
+ * opened, used, and closed here (candidate search happens before the
+ * implementer runs), while `JournalStore` is opened later, only if/when
+ * `applyDecisions` runs against the implementer's output.
  */
 export const journalRecordPreprocessor: Preprocessor = async ({ cwd, payload }) => {
   const jrPayload = payload as { records: Array<{ prompt: string; topic?: string }> };
@@ -27,11 +42,7 @@ export const journalRecordPreprocessor: Preprocessor = async ({ cwd, payload }) 
 
   const indexStore = await JournalIndexStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
   try {
-    await indexStore.ensureHealthy();
-    const candidatesByRecord = [];
-    for (const r of jrPayload.records) {
-      candidatesByRecord.push(await searchCandidatesForRecord(indexStore, { prompt: r.prompt, topic: r.topic }));
-    }
+    const candidatesByRecord = await searchCandidatesForRecordBatch(indexStore, jrPayload.records);
     (payload as Record<string, unknown>).candidatesByRecord = candidatesByRecord;
   } finally {
     // Close the WAL connection so no lock leaks per request.

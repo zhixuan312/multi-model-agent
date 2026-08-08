@@ -19,6 +19,7 @@ import type {
   SymbolCorpusAdapter,
   SymbolInput,
   SymbolRecord,
+  SymbolRecordMeta,
 } from './types.js';
 
 /** Default throttle for the non-git full stat-sweep fallback: at most once every 5 minutes per open index. */
@@ -79,6 +80,18 @@ const LEGACY_TABLES = ['vectors_meta', 'documents', 'documents_fts'];
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+/**
+ * Escape SQLite `LIKE` wildcards (`%`, `_`) and the escape character itself
+ * (`\`) in a literal substring, so it can be embedded in a `%<token>%`
+ * pattern and matched with `ESCAPE '\'` as a plain substring — not
+ * interpreted as a wildcard. Needed because {@link CorpusIndex.symbolTokenMatches}
+ * receives caller-supplied query tokens, which may contain `_` (a valid
+ * identifier character and also `LIKE`'s single-character wildcard).
+ */
+function escapeLikeLiteral(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 function asNumber(value: unknown): number {
@@ -214,6 +227,22 @@ export class CorpusIndex {
   private recordCountStmt?: StatementSync;
   /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
   private readonly recordsByIdsStmts = new Map<number, StatementSync>();
+
+  /**
+   * Cached prepared statements for the `files`/`symbols` read path (the
+   * `SymbolCorpusAdapter` storage mode's hot per-query operations) —
+   * the symbol-mode counterpart to the `records`/`records_fts` statements
+   * above. Cleared by {@link invalidateSymbolStatements} whenever
+   * `files`/`symbols` is dropped and recreated.
+   */
+  private allSymbolsMetaStmt?: StatementSync;
+  private symbolTokenMatchStmt?: StatementSync;
+  /** Cached by token count for SQL-side candidate ranking. */
+  private readonly rankedSymbolsByTokenCountStmts = new Map<number, StatementSync>();
+  /** Whole-corpus folder aggregation, returned as one row per folder. */
+  private folderSummariesStmt?: StatementSync;
+  /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
+  private readonly symbolsByIdsStmts = new Map<number, StatementSync>();
 
   private constructor(
     private readonly root: string,
@@ -741,6 +770,19 @@ export class CorpusIndex {
     this.recordsByIdsStmts.clear();
   }
 
+  /**
+   * Drop every cached prepared statement bound to `files`/`symbols`. Must run
+   * before those tables are dropped — same reasoning as
+   * {@link invalidateRecordStatements}, for the symbol-mode statements.
+   */
+  private invalidateSymbolStatements(): void {
+    this.allSymbolsMetaStmt = undefined;
+    this.symbolTokenMatchStmt = undefined;
+    this.rankedSymbolsByTokenCountStmts.clear();
+    this.folderSummariesStmt = undefined;
+    this.symbolsByIdsStmts.clear();
+  }
+
   private dropAndRecreateSchema(): void {
     this.invalidateRecordStatements();
     this.db.exec(`
@@ -753,6 +795,7 @@ export class CorpusIndex {
 
   private dropAndRecreateFileSymbolTables(): void {
     this.invalidateRecordStatements();
+    this.invalidateSymbolStatements();
     this.db.exec(`
       DROP TABLE IF EXISTS symbols;
       DROP TABLE IF EXISTS files;
@@ -1225,6 +1268,170 @@ export class CorpusIndex {
       filePath: asString(row.file_path),
       mtimeMs: asNumber(row.mtime_ms),
       contentHash: asString(row.content_hash),
+    }));
+  }
+
+  /**
+   * Every `symbols` row's metadata ONLY — id/path/name/kind/line-range, never
+   * `body` (the `files`/`symbols` storage mode's counterpart to
+   * {@link allRecordsMeta}). Ranking a symbol corpus (candidate scoring, the
+   * folder-level map the investigate preprocessor builds) needs none of a
+   * symbol's body text; only a caller that will actually return a symbol's
+   * text should pay to project it (see {@link symbolsByIds}). Same row set as
+   * {@link allSymbols}, just a cheaper column list.
+   */
+  async allSymbolsMeta(): Promise<SymbolRecordMeta[]> {
+    if (!this.allSymbolsMetaStmt) {
+      this.allSymbolsMetaStmt = this.db.prepare('SELECT id, file_path, name, kind, start_line, end_line FROM symbols');
+    }
+    const rows = this.allSymbolsMetaStmt.all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      filePath: asString(row.file_path),
+      name: asString(row.name),
+      kind: asString(row.kind),
+      startLine: asNumber(row.start_line),
+      endLine: asNumber(row.end_line),
+    }));
+  }
+
+  /**
+   * For one already-lowercased query token, the ids of every symbol whose
+   * `name` matches (case-insensitive substring) and, separately, whose `body`
+   * matches — resolved entirely in SQL via `LIKE`, so a caller can score a
+   * whole corpus against many tokens without ever reading `name`/`body` text
+   * itself back into this process. A symbol whose name AND body both match
+   * appears in both lists. `token` may contain `_` (a valid identifier
+   * character that is also `LIKE`'s single-character wildcard); see
+   * {@link escapeLikeLiteral}.
+   *
+   * Weighting a match (e.g. "name match counts more than a body match") is a
+   * caller/adapter-owned scoring decision, not the engine's — this returns
+   * raw match membership only, mirroring how {@link CorpusAdapter.signals}
+   * keeps domain scoring out of the corpus-neutral engine.
+   */
+  symbolTokenMatches(token: string): { nameMatches: string[]; bodyMatches: string[] } {
+    const pattern = `%${escapeLikeLiteral(token)}%`;
+    if (!this.symbolTokenMatchStmt) {
+      this.symbolTokenMatchStmt = this.db.prepare(
+        `SELECT id, (name LIKE ? ESCAPE '\\') AS name_hit, (body LIKE ? ESCAPE '\\') AS body_hit
+         FROM symbols
+         WHERE name LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\'`,
+      );
+    }
+    const rows = this.symbolTokenMatchStmt.all(pattern, pattern, pattern, pattern) as Array<Record<string, unknown>>;
+    const nameMatches: string[] = [];
+    const bodyMatches: string[] = [];
+    for (const row of rows) {
+      const id = asString(row.id);
+      if (asNumber(row.name_hit) === 1) nameMatches.push(id);
+      if (asNumber(row.body_hit) === 1) bodyMatches.push(id);
+    }
+    return { nameMatches, bodyMatches };
+  }
+
+  /**
+   * The highest-scoring symbols for the supplied unique query tokens, with
+   * ranking, cap, and metadata projection all performed by SQLite. The body
+   * column is used only inside `LIKE` predicates; it is never projected. A
+   * caller that needs bodies for these winners must fetch them separately via
+   * {@link symbolsByIds}.
+   *
+   * The score exactly mirrors investigate's historical JS calculation: every
+   * token contributes 3 for a name substring match and 1 for a body substring
+   * match. `tokenize` produces ASCII tokens, matching SQLite `LIKE`'s default
+   * case-insensitive semantics for those tokens.
+   */
+  async rankedSymbolsByTokens(tokens: string[], limit: number): Promise<SymbolRecordMeta[]> {
+    if (tokens.length === 0 || limit <= 0) return [];
+    let stmt = this.rankedSymbolsByTokenCountStmts.get(tokens.length);
+    if (!stmt) {
+      const scoreTerms = tokens.map(
+        () => `(CASE WHEN name LIKE ? ESCAPE '\\' THEN 3 ELSE 0 END + CASE WHEN body LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END)`,
+      );
+      stmt = this.db.prepare(
+        `SELECT id, file_path, name, kind, start_line, end_line
+         FROM (
+           SELECT id, file_path, name, kind, start_line, end_line,
+             ${scoreTerms.join(' + ')} AS score
+           FROM symbols
+         )
+         WHERE score > 0
+         ORDER BY score DESC, file_path ASC, start_line ASC
+         LIMIT ?`,
+      );
+      this.rankedSymbolsByTokenCountStmts.set(tokens.length, stmt);
+    }
+    const patterns = tokens.map((token) => `%${escapeLikeLiteral(token)}%`);
+    const bindings = patterns.flatMap((pattern) => [pattern, pattern]);
+    const rows = stmt.all(...bindings, limit) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      filePath: asString(row.file_path),
+      name: asString(row.name),
+      kind: asString(row.kind),
+      startLine: asNumber(row.start_line),
+      endLine: asNumber(row.end_line),
+    }));
+  }
+
+  /**
+   * Folder-level file and symbol counts for the whole indexed corpus. SQLite
+   * does the aggregation so callers don't have to materialize every file or
+   * symbol merely to build a compact folder map.
+   */
+  folderSummaries(): Array<{ folder: string; fileCount: number; symbolCount: number }> {
+    if (!this.folderSummariesStmt) {
+      // Strip the final path component using only built-in SQLite functions:
+      // remove trailing non-slash characters, then the remaining slash. A
+      // root-level path becomes an empty string, normalized to `.`.
+      const folder = "COALESCE(NULLIF(rtrim(rtrim(file_path, replace(file_path, '/', '')), '/'), ''), '.')";
+      this.folderSummariesStmt = this.db.prepare(
+        `SELECT folder, SUM(file_count) AS file_count, SUM(symbol_count) AS symbol_count
+         FROM (
+           SELECT ${folder} AS folder, 1 AS file_count, 0 AS symbol_count FROM files
+           UNION ALL
+           SELECT ${folder} AS folder, 0 AS file_count, 1 AS symbol_count FROM symbols
+         )
+         GROUP BY folder
+         ORDER BY symbol_count DESC, file_count DESC, folder ASC`,
+      );
+    }
+    const rows = this.folderSummariesStmt.all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      folder: asString(row.folder),
+      fileCount: asNumber(row.file_count),
+      symbolCount: asNumber(row.symbol_count),
+    }));
+  }
+
+  /**
+   * Full `symbols` rows (including `body`) for exactly the given ids — the
+   * `files`/`symbols` storage mode's counterpart to {@link recordsByIds}. The
+   * targeted lookup a caller runs once to materialize text for the symbols it
+   * has already decided, via {@link rankedSymbolsByTokens}, that it will
+   * actually return. Unmatched ids are silently
+   * omitted. Empty `ids` short-circuits without touching the database.
+   */
+  async symbolsByIds(ids: string[]): Promise<SymbolRecord[]> {
+    if (ids.length === 0) return [];
+    let stmt = this.symbolsByIdsStmts.get(ids.length);
+    if (!stmt) {
+      const placeholders = ids.map(() => '?').join(', ');
+      stmt = this.db.prepare(
+        `SELECT id, file_path, name, kind, start_line, end_line, body FROM symbols WHERE id IN (${placeholders})`,
+      );
+      this.symbolsByIdsStmts.set(ids.length, stmt);
+    }
+    const rows = stmt.all(...ids) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: asString(row.id),
+      filePath: asString(row.file_path),
+      name: asString(row.name),
+      kind: asString(row.kind),
+      startLine: asNumber(row.start_line),
+      endLine: asNumber(row.end_line),
+      body: asString(row.body),
     }));
   }
 
