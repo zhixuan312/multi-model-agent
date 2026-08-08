@@ -48,18 +48,15 @@ export function resolveClaudeDesktopPath(input: WriteClientRegistrationInput): s
  *  file is not executable as a bare `command` on Windows at all. No `env`, and
  *  never a credential.
  *
- *  Deliberately NOT `--client=claude-desktop`, even though the bridge accepts it
- *  and Desktop would then attribute as itself instead of `other`. `isOwnedMcpEntry`
- *  proves ownership of a stdio entry by requiring args to be EXACTLY
- *  `[entrypoint, 'mcp']` — extra arguments are its evidence that a human edited
- *  the entry, and it fails closed on them. Appending a flag would therefore make
- *  MMA's own registration unrecognisable to MMA: already-installed entries would
- *  stop being updatable or removable, and fixing that would mean either weakening
- *  a fail-closed security check or shipping a migration for prior arg shapes.
- *  Desktop is the one client kept regardless of adoption data, so its attribution
- *  is also the least informative — not worth either price. */
+ *  `--client=claude-desktop` is what makes Desktop attribute as itself; without it
+ *  the bridge sends no `X-MMA-Client` and the daemon records the anonymous `mcp`.
+ *  `isOwnedMcpEntry` accepts a closed set of two arg shapes so this stays
+ *  recognisable alongside entries written before the flag existed. */
 function buildEntry(input: WriteClientRegistrationInput): { command: string; args: string[] } {
-  return { command: input.execPath ?? process.execPath, args: [input.cliEntrypoint, 'mcp'] };
+  return {
+    command: input.execPath ?? process.execPath,
+    args: [input.cliEntrypoint, 'mcp', '--client=claude-desktop'],
+  };
 }
 
 export async function writeClaudeDesktopRegistration(input: WriteClientRegistrationInput): Promise<ClientRegistrationResult> {

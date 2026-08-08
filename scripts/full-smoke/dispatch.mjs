@@ -72,7 +72,6 @@ export async function runMcpScenario(ctx) {
     name: 'mma_run',
     arguments: {
       cwd: ctx.dir,
-      mainModel: 'claude-opus-4-7',
       request: {
         type: 'investigate',
         prompt: 'In src/math.ts, does divide handle a zero divisor? Answer in one sentence.',
@@ -229,7 +228,6 @@ export async function runDispatch(spec, ctx) {
     const headers = {
       'Authorization': `Bearer ${token}`,
       'X-MMA-Client': SMOKE_CLIENT,
-      'X-MMA-Main-Model': 'claude-opus-4-7',
       'Content-Type': 'application/json',
     };
     const cwd = ctx.dir;

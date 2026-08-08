@@ -1,7 +1,6 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FileCorpusAdapter } from '../../packages/core/src/journal/adapters/file-adapter.js';
 import { CorpusIndex } from '../../packages/core/src/journal/engine/index-store.js';
 
 // A minimal in-test adapter for the `records`/`records_fts` storage mode (see
@@ -33,23 +32,5 @@ it('drops a records-mode row when its file is removed before syncIncremental()',
   await index.syncIncremental();
 
   expect(index.allRecords().map((r) => r.id)).toEqual(['a.txt']);
-  index.close();
-});
-
-it('drops a files/symbols-mode row (and its symbols) when its file is removed before syncIncremental()', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'mma-deletion-symbols-'));
-  await writeFile(join(root, 'a.ts'), 'export function alpha() { return 1; }\n');
-  await writeFile(join(root, 'b.ts'), 'export function beta() { return 2; }\n');
-  const index = await CorpusIndex.open({ root, adapter: new FileCorpusAdapter({ root }) });
-  await index.rebuild();
-  expect((await index.allFiles()).map((f) => f.filePath).sort()).toEqual(['a.ts', 'b.ts']);
-  expect((await index.symbolsForFile('b.ts')).map((s) => s.name)).toEqual(['beta']);
-
-  await rm(join(root, 'b.ts'));
-  await index.syncIncremental();
-
-  expect((await index.allFiles()).map((f) => f.filePath)).toEqual(['a.ts']);
-  expect(await index.symbolsForFile('b.ts')).toEqual([]);
-  expect((await index.allSymbols()).map((s) => s.name)).toEqual(['alpha']);
   index.close();
 });

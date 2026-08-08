@@ -2,7 +2,8 @@ import { HTTPListener } from '@zhixuan92/multi-model-agent-core';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readServerVersion } from '../server-version.js';
-import type { ServerConfig, RunnableConfig } from '@zhixuan92/multi-model-agent-core';
+import type { ServerConfig, RunnableConfig, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { assertRunnable } from '@zhixuan92/multi-model-agent-core';
 import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
@@ -26,14 +27,26 @@ import { getRecorder } from '../telemetry/recorder.js';
 /** Server package version — read once at module load time (single source: server-version.ts). */
 export const SERVER_VERSION = readServerVersion();
 
-/** The agents check here IS the RunnableConfig narrowing — a config without
- *  tiers cannot drive a runtime, and every caller already treats `undefined` as
- *  "no tool handlers". Saying so in the return type removes the need for callers
- *  to re-prove it. */
+/** The tier check here IS the RunnableConfig narrowing — a config without tiers
+ *  cannot drive a runtime, and every caller already treats `undefined` as "no
+ *  tool handlers". Saying so in the return type removes the need for callers to
+ *  re-prove it.
+ *
+ *  Absent `agents` and PARTIAL `agents` are different states and must fail
+ *  differently. Absent is legitimate (a provisioning-only daemon records a
+ *  client roster before any model is chosen), so it yields `undefined` and no
+ *  tool handlers. Partial is a broken config, and it must throw HERE: this
+ *  function is the only narrowing gate for `startServer`, which `mma serve`
+ *  reaches AFTER `assertRunnable` but every direct caller reaches without it.
+ *  Casting a partial block to `RunnableConfig` handed the runtime a config whose
+ *  `agents.main` does not exist, and the failure surfaced much later as an
+ *  unhandled TypeError while pricing a finished run — long after the point where
+ *  the config could be named as the cause. */
 function extractMultiModelConfig(config: ServerConfig): RunnableConfig | undefined {
-  return (config as unknown as { agents?: unknown }).agents
-    ? (config as unknown as RunnableConfig)
-    : undefined;
+  const candidate = config as unknown as { agents?: unknown };
+  if (!candidate.agents) return undefined;
+  assertRunnable(candidate as MultiModelConfig);
+  return config as unknown as RunnableConfig;
 }
 
 export interface RunningServer {
@@ -61,11 +74,10 @@ const CWD_REQUIRED_PATHS = new Set([
   '/context-blocks',
 ]);
 
-/** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
- *  so wire telemetry's main_model column is never null for billed runs. The
- *  tool routes need it; the introspection / task-polling / context-block
- *  utility routes do not. */
-const MAIN_MODEL_REQUIRED_PATHS = new Set([
+/** Routes that require the X-MMA-Client header, so wire telemetry's `client`
+ *  column is never anonymous for a billed run. Tool routes need it; the
+ *  introspection / task-polling / context-block utility routes do not. */
+const CLIENT_REQUIRED_PATHS = new Set([
   '/task',
 ]);
 
@@ -330,5 +342,5 @@ const PIPELINE_CFG = {
   loopbackOnlyPaths: LOOPBACK_ONLY_PATHS,
   authExemptPaths: AUTH_EXEMPT_PATHS,
   cwdRequiredPaths: CWD_REQUIRED_PATHS,
-  mainModelRequiredPaths: MAIN_MODEL_REQUIRED_PATHS,
+  clientRequiredPaths: CLIENT_REQUIRED_PATHS,
 };

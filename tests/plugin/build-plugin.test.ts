@@ -120,8 +120,11 @@ describe('buildPlugin', () => {
     const script = join(out, 'scripts', 'mma-mcp-headers.sh');
     expect(statSync(script).mode & 0o111).toBeGreaterThan(0);
 
+    // Two headers: the credential, and the client attribution that is the ONLY
+    // signal telling the daemon this traffic came from an Agent Plugins install
+    // rather than an anonymous MCP caller.
     const withEnv = execFileSync(script, { encoding: 'utf8', env: { ...process.env, MMA_AUTH_TOKEN: 'tok-123' } });
-    expect(JSON.parse(withEnv)).toEqual({ Authorization: 'Bearer tok-123' });
+    expect(JSON.parse(withEnv)).toEqual({ Authorization: 'Bearer tok-123', 'X-MMA-Client': 'agent-plugin' });
 
     // Explicit token file wins over the default location.
     const tokenFile = join(out, 'tok');
@@ -130,15 +133,16 @@ describe('buildPlugin', () => {
       encoding: 'utf8',
       env: { ...process.env, MMA_AUTH_TOKEN: '', MMA_TOKEN_FILE: tokenFile },
     });
-    expect(JSON.parse(withFile)).toEqual({ Authorization: 'Bearer file-tok' });
+    expect(JSON.parse(withFile)).toEqual({ Authorization: 'Bearer file-tok', 'X-MMA-Client': 'agent-plugin' });
 
-    // No token anywhere: emit no headers rather than failing the connection,
-    // so the user sees an actionable auth error.
+    // No token anywhere: emit no CREDENTIAL rather than failing the connection,
+    // so the user sees an actionable auth error. Attribution still goes out —
+    // it carries no secret, and a rejected call is still worth attributing.
     const none = execFileSync(script, {
       encoding: 'utf8',
       env: { ...process.env, MMA_AUTH_TOKEN: '', MMA_TOKEN_FILE: join(out, 'does-not-exist') },
     });
-    expect(JSON.parse(none)).toEqual({});
+    expect(JSON.parse(none)).toEqual({ 'X-MMA-Client': 'agent-plugin' });
   });
 
   it('inlines @include directives', () => {

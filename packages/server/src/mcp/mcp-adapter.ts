@@ -162,7 +162,6 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
   if (!DELIVERY_MODES.includes(mode)) {
     return errorResult('invalid_request', `mode must be one of ${DELIVERY_MODES.join(', ')}`);
   }
-  const mainModel = typeof args.mainModel === 'string' ? args.mainModel : null;
 
   const parsed = taskInputSchema.safeParse(args.request);
   if (!parsed.success) {
@@ -173,7 +172,6 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
 
   const outcome = await deps.runtime.submit(parsed.data, {
     clientName,
-    mainModel,
     projectRoot: cwdCheck.canonicalCwd,
   });
   if (!outcome.ok) {

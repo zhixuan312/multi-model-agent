@@ -189,24 +189,34 @@ That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 S
 >
 > Other clients are unaffected — this overlap is Claude-Code-only.
 
-### 2. Choosing your main model — intentionally (4.0.3+)
+### 2. Choosing your main model — intentionally (6.6.0+)
 
-Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
+Your **main model** is **the model you'd use without mma**. It is the `agents.main` tier in your
+config, and it does two jobs: it runs the `orchestrate` route, and it is the cost baseline for every
+task. The per-task headline reports `$X actual / $Y saved vs <agents.main.model> (Z× ROI)`. Pick on
+purpose:
 
 - Heavy Claude Code user → `claude-opus-4-8`
 - ChatGPT-led workflow → `gpt-5.6`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Over MCP, client identity is attributed automatically from the connecting client's own protocol
-metadata — there is nothing to configure. `mainModel` is an optional `mma_run` parameter: pass it
-and the per-task headline reports the savings delta above; omit it and MMA still runs, just without
-that comparison. Auto-detection of the main model is deliberately **not** attempted — the
-claude-agent-sdk used by claude-tier workers writes JSONL files into the same
-`~/.claude/projects/<slug>/` a detector would read, so it could return the *worker's* model as the
-calling agent's "main" model, rather than yours.
+`agents.main` is **required**. A config with only `standard` and `complex` does not start, and the
+error names the missing tier. Callers cannot supply the baseline per request: there is no `mainModel`
+parameter on `mma_run` and no `X-MMA-Main-Model` header. You declare the value once and mma trusts
+it.
 
-(Programmatic/REST callers — Forge, custom integrations — set the equivalent `X-MMA-Main-Model`
-header per-request; see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).)
+The reason is that a per-call claim was usually absent over MCP, and mma then fell back to the
+implementer tier's own model — one of the workers that had just run the task. That priced a run
+against a worker instead of against your model, and reported a **negative** saving for runs that
+actually saved money.
+
+The trade-off: one declared value serves every client on a daemon, and it cannot follow a `/model`
+switch inside a session. That costs some precision. It buys a baseline that is never a worker model
+and that no caller can omit or mistype. If the price registry does not recognise your main model,
+the comparison is reported as null rather than guessed.
+
+Over MCP, client identity (which tool called mma) is still attributed automatically from the
+connecting client — there is nothing to configure for that.
 
 ### 3. The config file
 
@@ -225,12 +235,17 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
     "complex": {
       "type": "codex",
       "model": "gpt-5.6"
+    },
+    "main": {
+      "type": "claude",
+      "model": "claude-opus-4-8"
     }
   }
 }
 EOF
 ```
 
+All three tiers are required — see [Choosing your main model](#2-choosing-your-main-model--intentionally-660).
 That's the whole minimum-viable file. All other knobs (`server.*`, `clients.*`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
 ### 4. Start the daemon + verify
@@ -590,24 +605,21 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 6.3
+## What's new
 
-- **`investigate` starts with a map of the repository.** A code index built on the journal's
-  retrieval engine runs before the worker does, handing it candidate files and a folder map instead
-  of making it grep its way in. Freshness costs time proportional to what changed, not to the size
-  of the repo, and the index lives in MMA's own state directory — never in the folder you pointed it
-  at.
-- **Worker output reads the same way everywhere.** One plain-English style instruction is applied to
-  both halves of the pipeline for the nine task types whose output a person reads, so the reviewer —
-  which writes the final answer — cannot discard it.
-- **The execution monitor actually appears now.** Every released build shipped the panel's bundle
-  but looked for it in a path that only exists in this repo's source tree, so an installed daemon
-  reported the App as unavailable and served tools only. Tools were never affected; if you use
-  Claude Desktop, the panel works from this version on.
-- **If you have telemetry on, tool names are now included** — names and counts only, never what a
-  tool was pointed at. See [PRIVACY.md](./PRIVACY.md); `mma telemetry disable` turns it all off.
-
-See [CHANGELOG](./CHANGELOG.md) for full details.
+- **`agents.main` is now required, and it is the cost baseline.** Add the tier to your config before
+  upgrading — the daemon refuses to start without it and names what is missing. Every run is priced
+  against the model you declared, never against a worker tier. Before this change mma guessed the
+  baseline when a caller sent none, and the guess was one of the two models that had just run the
+  task, so the per-task headline could report a negative saving for a run that saved money. The
+  `mainModel` parameter and the `X-MMA-Main-Model` header are gone.
+- **The code index has been removed.** `investigate` no longer starts with a pre-built list of
+  candidate files, and `mma search` is gone. Measured against its own absence, the index made no
+  difference on questions that name a symbol — plain `rg` already finds those — and it found the
+  right file for 33% of questions phrased as sentences, against 25% for a worker that picks a
+  keyword and greps. No measurement ever showed it improved answer quality. The journal index keeps
+  every gain: record and recall stay at about 0.31 ms with unchanged retrieval quality. See the
+  CHANGELOG for the full reasoning.
 
 ## License
 

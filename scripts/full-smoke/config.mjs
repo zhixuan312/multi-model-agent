@@ -19,6 +19,7 @@
 // scenarios each get their OWN git repo on their own caller-created branch, because the
 // engine commits the submitted cwd in place — sharing one repo would make every commit sweep
 // in the other scenarios' files.
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,6 +36,37 @@ export const IDENTITY_FILE = join(HOME_MM, 'identity.json');
 export const DIAG_DIR = process.env.MMA_LOG_DIR || join(HOME_MM, 'logs'); // mma-YYYY-MM-DD.jsonl
 
 export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
+
+export const CONFIG_FILE = join(HOME_MM, 'config.json');
+
+/** The model the daemon prices every run against: `agents.main.model` from the
+ *  live config. Read from disk rather than pinned here, because the whole point
+ *  of the check it feeds is that the wire baseline follows the CONFIG and never
+ *  a worker tier. A pinned copy could only ever agree with itself.
+ *  Returns null when the config is unreadable or declares no main tier — the
+ *  caller reports NA rather than inventing a comparison. */
+export function configuredMainModel() {
+  try {
+    const cfg = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    const model = cfg?.agents?.main?.model;
+    return typeof model === 'string' && model.length > 0 ? model : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The worker tier models, for the "baseline is not a worker" half of the check.
+ *  Empty array when the config is unreadable. */
+export function configuredWorkerModels() {
+  try {
+    const cfg = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    return ['standard', 'complex']
+      .map((tier) => cfg?.agents?.[tier]?.model)
+      .filter((m) => typeof m === 'string' && m.length > 0);
+  } catch {
+    return [];
+  }
+}
 
 // events_raw flat columns that always exist (001_init.sql). Per-tier model/cost
 // detail lives in the `event` JSONB column, not flat columns — parse that.

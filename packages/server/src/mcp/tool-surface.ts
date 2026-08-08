@@ -140,13 +140,8 @@ export const MCP_TOOLS: McpToolDefinition[] = [
             + "for the result (downgraded to a handle if the task outlives the wait budget); "
             + "'auto' (default) inlines short task types and hands back a handle for long ones.",
         },
-        mainModel: {
-          type: 'string',
-          description:
-            "The calling agent's own model id (e.g. claude-opus-5). Used to compute "
-            + 'main-model-equivalent cost savings in telemetry.',
-        },
       },
+      // No `mainModel`: the cost baseline is the daemon's configured `agents.main`.
       required: ['cwd', 'request'],
       additionalProperties: false,
     },

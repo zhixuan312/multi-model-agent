@@ -19,9 +19,9 @@ function baseAgentsConfig(stateDir: string): MultiModelConfig {
     agents: {
       standard: { type: 'codex', model: 'mock-standard', baseUrl: 'http://mock.local' },
       complex: { type: 'codex', model: 'mock-complex', baseUrl: 'http://mock.local' },
+      main: { type: 'codex', model: 'mock-main', baseUrl: 'http://mock.local' },
     },
     // The `investigate` preprocessor resolves its own derived code-corpus
-    // index under `server.stateDir` (see investigate.ts's `corpusIndexDbPath`)
     // — every test here dispatches `type: 'investigate'`, so this must be
     // present. Reuses the SAME per-test `stateDir` the `ExecutionStore` in
     // `beforeEach` is already keyed off, mirroring real server wiring where
@@ -121,7 +121,7 @@ describe('ExecutionRuntime', () => {
 
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'what is up', contextBlockIds: [id] } as never,
-      { clientName: 'claude-code', mainModel: 'claude-opus-5', projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
     const taskId = (outcome as { ok: true; taskId: string }).taskId;
@@ -143,7 +143,7 @@ describe('ExecutionRuntime', () => {
 
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'what is up', contextBlockIds: [id] } as never,
-      { clientName: 'claude-code', mainModel: 'claude-opus-5', projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
     const taskId = (outcome as { ok: true; taskId: string }).taskId;
@@ -152,6 +152,90 @@ describe('ExecutionRuntime', () => {
     const entry = taskRegistry.get(taskId)!;
     expect(entry.state).toBe('complete');
     expect(refcount()).toBe(0);
+  });
+
+  /**
+   * The cost baseline is the CONFIGURED `agents.main` tier — never a worker tier.
+   *
+   * The runtime used to fall back to `config.agents[implTier].model`. That priced the
+   * run against one of the two models that had just executed it, so
+   * `savedVsMainCostUsd` stopped meaning "saved versus the model driving mma" and
+   * started meaning "is the reviewer's model dearer per token than the implementer's"
+   * — which on a cross-tier route reported a NEGATIVE saving for a run that saved
+   * money.
+   *
+   * Both workers here run `claude-sonnet-5` and `main` runs `claude-opus-5`. The two
+   * models have different rate cards, so pricing the SAME tokens against each yields
+   * different numbers. Asserting the opus figure — and explicitly not the sonnet one —
+   * is what proves which tier the baseline read.
+   */
+  it('prices the run against agents.main, not against the tier that executed it', async () => {
+    const config = baseAgentsConfig(stateDir);
+    config.agents!.standard.model = 'claude-sonnet-5';
+    config.agents!.complex.model = 'claude-sonnet-5';
+    config.agents!.main.model = 'claude-opus-5';
+    const runtime = new ExecutionRuntime({
+      config, bus, taskRegistry, projectRegistry, store,
+      resolveAgentFn: resolverFor(workingProvider('an answer')),
+    });
+
+    const outcome = await runtime.submit(
+      { type: 'investigate', prompt: 'what is up' } as never,
+      { clientName: 'claude-code', projectRoot: cwd },
+    );
+    expect(outcome.ok).toBe(true);
+    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+
+    await waitTerminal(taskRegistry, taskId);
+    const metrics = (taskRegistry.get(taskId)!.result as {
+      metrics: {
+        mainEquivalentCostUsd: number | null;
+        savedVsMainCostUsd: number | null;
+        totalCostUsd: number;
+        totalUsage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
+      };
+    }).metrics;
+
+    // Price the run's OWN reported usage at each card, so the expectation does not
+    // hard-code how many turns the mock provider happened to run.
+    const u = metrics.totalUsage;
+    const at = (inp: number, out: number, cr: number, cw: number): number =>
+      (u.inputTokens * inp + u.outputTokens * out + u.cachedReadTokens * cr + u.cachedNonReadTokens * cw) / 1e6;
+    const opus = at(5, 25, 0.5, 6.25);
+    const sonnet = at(3, 15, 0.3, 3.75);
+    expect(opus).not.toBeCloseTo(sonnet, 10); // the two cards must actually differ
+
+    expect(metrics.mainEquivalentCostUsd).toBeCloseTo(opus, 10);
+    expect(metrics.mainEquivalentCostUsd).not.toBeCloseTo(sonnet, 10);
+    expect(metrics.savedVsMainCostUsd).toBeCloseTo(opus - metrics.totalCostUsd, 10);
+  });
+
+  /**
+   * A main tier the price registry does not recognise yields NO comparison rather
+   * than a fabricated one. `agents.main` is required config, so the tier always
+   * exists — but a user may legitimately declare a model mma has no rate card for.
+   */
+  it('reports a null comparison when agents.main names an unpriced model', async () => {
+    const config = baseAgentsConfig(stateDir);
+    config.agents!.main.model = 'some-unprofiled-local-model';
+    const runtime = new ExecutionRuntime({
+      config, bus, taskRegistry, projectRegistry, store,
+      resolveAgentFn: resolverFor(workingProvider('an answer')),
+    });
+
+    const outcome = await runtime.submit(
+      { type: 'investigate', prompt: 'what is up' } as never,
+      { clientName: 'claude-code', projectRoot: cwd },
+    );
+    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    await waitTerminal(taskRegistry, taskId);
+    const metrics = (taskRegistry.get(taskId)!.result as {
+      metrics: { mainEquivalentCostUsd: number | null; savedVsMainCostUsd: number | null; totalCostUsd: number };
+    }).metrics;
+    expect(metrics.mainEquivalentCostUsd).toBeNull();
+    expect(metrics.savedVsMainCostUsd).toBeNull();
+    // The run's own cost is unaffected — only the comparison is withheld.
+    expect(metrics.totalCostUsd).toBeGreaterThan(0);
   });
 
   /** Provider whose turn hangs until the execution's abort signal fires, then
@@ -189,7 +273,7 @@ describe('ExecutionRuntime', () => {
 
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'hangs until cancelled' } as never,
-      { clientName: 'claude-code', mainModel: 'claude-opus-5', projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
     const taskId = (outcome as { ok: true; taskId: string }).taskId;
@@ -241,7 +325,7 @@ describe('ExecutionRuntime', () => {
 
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
-      { clientName: 'claude-code', mainModel: null, projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     const taskId = (outcome as { ok: true; taskId: string }).taskId;
     // Cancel in the same tick — before setImmediate runs the executor.
@@ -268,7 +352,7 @@ describe('ExecutionRuntime', () => {
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
-      { clientName: 'claude-code', mainModel: null, projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     const taskId = (outcome as { ok: true; taskId: string }).taskId;
     await waitTerminal(taskRegistry, taskId);
@@ -287,7 +371,7 @@ describe('ExecutionRuntime', () => {
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
-      { clientName: 'claude-code', mainModel: null, projectRoot: cwd },
+      { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(false);
     expect((outcome as { ok: false; error: { kind: string } }).error.kind).toBe('agent_not_configured');

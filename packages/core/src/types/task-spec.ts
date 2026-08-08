@@ -22,7 +22,6 @@ export interface TaskSpec {
   timeoutMs?: number
   cwd?: string
   reviewPolicy?: 'reviewed' | 'none'
-  mainModel?: string
   skills?: string[]
   subtype?: string
 }

@@ -68,6 +68,7 @@ describe('ResearchConfigSchema inside multiModelConfigSchema', () => {
   const minimalAgents = {
     standard: { type: 'codex' as const, model: 'test', baseUrl: 'https://example.com' },
     complex: { type: 'codex' as const, model: 'test', baseUrl: 'https://example.com' },
+    main: { type: 'codex' as const, model: 'test', baseUrl: 'https://example.com' },
   };
 
   it('defaults research when omitted from full config', () => {

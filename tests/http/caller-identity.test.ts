@@ -21,17 +21,17 @@ describe('resolveCallerIdentity', () => {
 
   it('reads X-MMA-Client from headers', () => {
     const req = fakeReq({ 'x-mma-client': 'claude-code' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
   });
 
   it('normalizes case of header values', () => {
     const req = fakeReq({ 'x-mma-client': 'Claude-Code' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
   });
 
   it('trims whitespace from header values', () => {
     const req = fakeReq({ 'x-mma-client': '  claude-code  ' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
   });
 
   it('maps unknown client to "other"', () => {
@@ -41,22 +41,15 @@ describe('resolveCallerIdentity', () => {
 
   it('defaults client to "other" when header missing', () => {
     const req = fakeReq({});
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'other', mainModel: null });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'other' });
   });
 
-  it('reads X-MMA-Main-Model from headers', () => {
-    const req = fakeReq({ 'x-mma-main-model': 'claude-opus-4-7' });
-    expect(resolveCallerIdentity(req).mainModel).toBe('claude-opus-4-7');
-  });
-
-  it('defaults mainModel to null when header missing', () => {
-    const req = fakeReq({});
-    expect(resolveCallerIdentity(req).mainModel).toBeNull();
-  });
-
-  it('treats empty X-MMA-Main-Model as null', () => {
-    const req = fakeReq({ 'x-mma-main-model': '   ' });
-    expect(resolveCallerIdentity(req).mainModel).toBeNull();
+  // No X-MMA-Main-Model case: the header is no longer read. The cost baseline is
+  // the daemon's configured `agents.main` tier, so an inbound model claim has no
+  // effect and resolveCallerIdentity reports client attribution only.
+  it('ignores a X-MMA-Main-Model header entirely', () => {
+    const req = fakeReq({ 'x-mma-client': 'claude-code', 'x-mma-main-model': 'claude-opus-4-7' });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
   });
 
   it('accepts all canonical clients', () => {

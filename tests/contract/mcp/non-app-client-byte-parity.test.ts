@@ -11,7 +11,7 @@ async function runOnce(h: HarnessHandle): Promise<string> {
   try {
     const result = await client.callTool({
       name: 'mma_run',
-      arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'fixed byte-parity prompt' }, mainModel: 'claude-opus-4-8' },
+      arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'fixed byte-parity prompt' } },
     });
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     expect(content).toHaveLength(1);

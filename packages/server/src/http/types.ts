@@ -6,8 +6,6 @@ export interface RequestContext {
   cwd?: string;       // set by cwd-validator middleware when required
   body?: unknown;     // set by body-reader middleware on POST/PATCH/DELETE
   callerClient: CallerClient;
-  /** Calling agent's model id from x-mma-main-model header (null if absent). */
-  mainModel: string | null;
 }
 
 /**

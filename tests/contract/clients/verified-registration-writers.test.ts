@@ -51,11 +51,15 @@ describe('contract: verified registration writers', () => {
 
     if (row.urlKey === null) {
       // Claude Desktop is a stdio bridge — its entry is { command, args: [entrypoint,
-      // 'mcp'] } with no URL at all, and its ownership recogniser rejects any other
-      // key. Asserting a loopback URL here would contradict its own contract.
+      // 'mcp', '--client=claude-desktop'] } with no URL at all, and its ownership
+      // recogniser rejects any other key. Asserting a loopback URL here would
+      // contradict its own contract.
       expect(bytes).toContain('"mcp"');
       expect(bytes).toContain('/opt/mma.js');
       expect(bytes).not.toContain('127.0.0.1');
+      // The attribution flag is the ONLY thing that stops Desktop's traffic landing in
+      // the anonymous `mcp` bucket, indistinguishable from every other MCP caller.
+      expect(bytes).toContain('"--client=claude-desktop"');
     } else {
       expect(bytes).toContain(`${row.urlKey}`);
       expect(bytes).toContain('http://127.0.0.1:7337/mcp');

@@ -16,7 +16,7 @@ describe('mma mcp command registration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-mcp-command-'));
     const config = join(dir, 'mma.json');
     writeFileSync(config, JSON.stringify({
-      agents: { standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' } },
+      agents: { standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, main: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' } },
       server: { bind: '127.0.0.1', port: 7337, auth: { tokenFile: join(dir, 'token') }, limits: { maxBodyBytes: 1, batchTtlMs: 1, projectCap: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 }, stateDir: dir, autoUpdateSkills: false }, diagnostics: { log: false },
     }));
     const exits: number[] = [];
@@ -44,7 +44,7 @@ describe('mma mcp command registration', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-mcp-client-'));
     const config = join(dir, 'mma.json');
     writeFileSync(config, JSON.stringify({
-      agents: { standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' } },
+      agents: { standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' }, main: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'x', model: 'x' } },
       server: { bind: '127.0.0.1', port: 7337, auth: { tokenFile: join(dir, 'token') }, limits: { maxBodyBytes: 1, batchTtlMs: 1, projectCap: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 }, stateDir: dir, autoUpdateSkills: false }, diagnostics: { log: false },
     }));
     const base = {

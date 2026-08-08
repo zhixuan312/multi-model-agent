@@ -31,7 +31,11 @@ export async function writeOpencodeRegistration(input: WriteClientRegistrationIn
   const entry = {
     type: 'remote',
     url: `http://127.0.0.1:${daemonPort}/mcp`,
-    headers: { Authorization: 'Bearer {env:MMA_AUTH_TOKEN}' },
+    headers: {
+      Authorization: 'Bearer {env:MMA_AUTH_TOKEN}',
+      // Attribution, not auth — see the same header in the Cursor writer.
+      'X-MMA-Client': 'opencode',
+    },
     enabled: true,
   };
   return installJsonClientRegistration({ capability, path, entry, fs: input.fs });

@@ -61,7 +61,8 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   const origBaseUrl = (opts.provider.config as Record<string, unknown>).baseUrl ?? 'http://mock.local';
   const standardProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/standard` } };
   const complexProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/complex` } };
-  __setCoreTestProviderOverrideMap(new Map([['standard', standardProvider], ['complex', complexProvider]]));
+  const mainProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/main` } };
+  __setCoreTestProviderOverrideMap(new Map([['standard', standardProvider], ['complex', complexProvider], ['main', mainProvider]]));
 
   const token = randomUUID();
   const tokenPath = join(tmpdir(), `mma-test-token-${randomUUID()}`);
@@ -80,6 +81,15 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         baseUrl: 'http://mock.local',
         apiKey: 'stub',
         model: 'mock',
+      },
+      // A REAL model id, unlike the workers' 'mock'. `agents.main` is the cost
+      // baseline every run is priced against, so an unprofiled id would make
+      // mainEquivalentCostUsd null and there would be nothing to assert.
+      main: {
+        type: 'codex',
+        baseUrl: 'http://mock.local',
+        apiKey: 'stub',
+        model: 'gpt-5.6-terra',
       },
     },
     diagnostics: {

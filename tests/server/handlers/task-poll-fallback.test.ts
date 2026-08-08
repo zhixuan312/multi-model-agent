@@ -27,7 +27,7 @@ function fakeRes(): { res: ServerResponse; status: () => number; body: () => unk
   return { res, status: () => statusCode, body: () => JSON.parse(payload) };
 }
 
-const CTX = { url: new URL('http://127.0.0.1/task/x'), callerClient: 'claude-code' as const, mainModel: null };
+const CTX = { url: new URL('http://127.0.0.1/task/x'), callerClient: 'claude-code' as const };
 
 describe('GET /task/:taskId durable fallback', () => {
   let dir: string;

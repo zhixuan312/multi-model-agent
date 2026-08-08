@@ -51,7 +51,7 @@ available in this session, run `mma clients`.
 | `sessionIds` | object | no | `{ implementer: "<session-id>" }` — reuse a prior session |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) |
 
-> Worker tier defaults to `main` (falls back to `complex` if `agents.main` is not configured). Send `agentTier` to override if needed. Review is always skipped — there is no reviewer phase.
+> Worker tier defaults to `main` — the model driving mma. `agents.main` is required in the config and the daemon refuses to start without it, so there is no substitution to another tier. Send `agentTier` to run on `standard` or `complex` instead. Review is always skipped — there is no reviewer phase.
 
 ## Session Reuse
 

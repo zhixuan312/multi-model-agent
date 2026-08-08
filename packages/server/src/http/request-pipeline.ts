@@ -26,9 +26,9 @@ export interface PipelineConfig {
   loopbackOnlyPaths: ReadonlySet<string>;
   authExemptPaths: ReadonlySet<string>;
   cwdRequiredPaths: ReadonlySet<string>;
-  /** Routes that REQUIRE X-MMA-Main-Model header. Tool dispatches must
-   *  attribute to a main model so wire telemetry's main_model is never null. */
-  mainModelRequiredPaths: ReadonlySet<string>;
+  /** Routes that REQUIRE the X-MMA-Client header, so wire telemetry's `client`
+   *  column is never anonymous for a billed run. */
+  clientRequiredPaths: ReadonlySet<string>;
 }
 
 export async function handleRequest(
@@ -157,26 +157,13 @@ export async function handleRequest(
   // ── Step 8: Caller identity from headers ────────────────────────────────────
   const identity = resolveCallerIdentity(req);
 
-  if (pipelineCfg.mainModelRequiredPaths.has(pathname)) {
+  if (pipelineCfg.clientRequiredPaths.has(pathname)) {
     if (identity.callerClient === 'other') {
       sendError(
         res,
         400,
         'client_required',
         `X-MMA-Client header is required on tool routes. Set it to one of: ${CLIENT_IDS.join(', ')}.`,
-      );
-      return;
-    }
-    // Auto-detect was unreliable: the claude-agent-sdk used by our own
-    // claude-tier workers writes JSONL files into the same project slug,
-    // and the resolver would pick those up (e.g. haiku) as the "main"
-    // model. The header must come from the calling client.
-    if (!identity.mainModel) {
-      sendError(
-        res,
-        400,
-        'main_model_required',
-        'X-MMA-Main-Model header is required on tool routes. Set it to the calling agent\'s model id (e.g. claude-opus-4-7, gpt-5.4).',
       );
       return;
     }
@@ -188,7 +175,6 @@ export async function handleRequest(
     cwd: cwdValue,
     body: parsedBody,
     callerClient: identity.callerClient,
-    mainModel: identity.mainModel,
   };
 
   const t0 = Date.now();

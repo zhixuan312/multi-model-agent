@@ -20,6 +20,7 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
       agents: {
         standard: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
         complex: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
+        main: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
       },
       server: {
         bind: '127.0.0.1',
