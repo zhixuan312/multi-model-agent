@@ -22,7 +22,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const HOME_MM = join(homedir(), '.mma');
+export const HOME_MM = join(homedir(), '.mma');
 
 export const PORT = 7337;
 export const BASE_URL = `http://127.0.0.1:${PORT}`;

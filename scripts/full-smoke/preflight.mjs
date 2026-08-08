@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { BASE_URL, IDENTITY_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR } from './config.mjs';
+import { BASE_URL, IDENTITY_FILE, APPROVED_DB_HOSTS, QUEUE_FILE, DIAG_DIR, HOME_MM } from './config.mjs';
 import { readToken } from './http.mjs';
 
 // The packaged skill surface the running server installs to its clients
@@ -544,6 +544,190 @@ async function clientRosterGate(token) {
   void token;
 }
 
+/**
+ * Daemon-lifecycle release gate — `mma stop`, `mma restart`, `mma doctor`, the
+ * pidfile, and the occupied-port error.
+ *
+ * WHY IT RESTARTS THE LIVE DAEMON. These commands ARE the upgrade path: a user
+ * updating MMA stops and restarts this exact daemon, at this port, with this
+ * config and this state directory. Proving them against a synthetic daemon on a
+ * scratch port would test the code and skip the deployment. So the gate acts on
+ * the real one.
+ *
+ * WHY IT IS SAFE HERE AND NOWHERE ELSE. It runs FIRST — before `bootId` is
+ * captured and before a single scenario is dispatched. Nothing is in flight to
+ * interrupt, and every later check measures the daemon this gate left running.
+ * The same restart later in the run would interrupt concurrent scenarios and
+ * invalidate the captured identity, which is why it lives here and not in a
+ * scenario. Pass `--skip-lifecycle` to opt out.
+ *
+ * WHAT A FAILURE MEANS. The user cannot reliably update. That is a release
+ * blocker, not a warning — so every assertion here aborts the run.
+ */
+async function daemonLifecycleGate() {
+  const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
+  if (!existsSync(cliPath)) {
+    throw new AbortError('daemon-lifecycle', `no built CLI at ${cliPath}`, 'run `npm run build` before the smoke');
+  }
+  const run = (args) => {
+    const res = execFileSyncSafe('node', [cliPath, ...args]);
+    return { code: res.code, out: res.out };
+  };
+  const alive = async () => fetch(`${BASE_URL}/health`).then((r) => r.ok).catch(() => false);
+  // Read the daemon's own configured stateDir rather than assuming the default:
+  // an operator who moved it would otherwise see this gate assert against a
+  // pidfile path the daemon never writes.
+  const pidfile = join(resolveStateDir(), 'daemon.pid');
+
+  // ── the documented surface exists ───────────────────────────────────────
+  // A release that drops one of these silently breaks the upgrade instructions.
+  const help = run(['--help']).out;
+  for (const cmd of ['update', 'doctor', 'stop', 'restart']) {
+    if (!new RegExp(`^\\s+${cmd}\\s`, 'm').test(help)) {
+      throw new AbortError('daemon-lifecycle', `\`mma --help\` does not list '${cmd}'`,
+        'every lifecycle command the README tells users to run must appear in the help output');
+    }
+  }
+
+  // ── an occupied port explains itself ────────────────────────────────────
+  // Only meaningful while a daemon holds the port, so it runs before the stop.
+  if (await alive()) {
+    const clash = run(['serve']);
+    if (clash.code === 0) {
+      throw new AbortError('daemon-lifecycle', 'a second daemon started while the port was already bound',
+        'binding an occupied port must fail, not silently produce two daemons');
+    }
+    if (!/already in use/i.test(clash.out) || /at Server\.|node:net/.test(clash.out)) {
+      throw new AbortError('daemon-lifecycle', `occupied-port output: ${clash.out.trim().slice(0, 200)}`,
+        'expected a readable message naming the port and its owner, not a raw EADDRINUSE stack trace');
+    }
+  }
+
+  // ── stop actually stops, and waits for it ───────────────────────────────
+  const stopped = run(['stop']);
+  if (stopped.code !== 0) {
+    throw new AbortError('daemon-lifecycle', `\`mma stop\` exited ${stopped.code}: ${stopped.out.trim()}`,
+      'stop must succeed against the running daemon');
+  }
+  if (await alive()) {
+    throw new AbortError('daemon-lifecycle', '/health still answered after `mma stop` returned',
+      'stop must not return until the process is gone — returning early is what made the old kill-then-start recipe lose the port race with its own replacement');
+  }
+  if (existsSync(pidfile)) {
+    throw new AbortError('daemon-lifecycle', `${pidfile} survived a graceful stop`,
+      'a stale record would make the next stop signal a pid the daemon no longer owns');
+  }
+  // Idempotent: a script that stops before installing must not fail because
+  // there was nothing to stop.
+  const again = run(['stop']);
+  if (again.code !== 0) {
+    throw new AbortError('daemon-lifecycle', `a second \`mma stop\` exited ${again.code}`,
+      'stop is idempotent');
+  }
+
+  // ── restart brings the daemon back, and proves it ───────────────────────
+  const restarted = run(['restart']);
+  if (restarted.code !== 0) {
+    throw new AbortError('daemon-lifecycle', `\`mma restart\` exited ${restarted.code}: ${restarted.out.trim()}`,
+      'restart must start a daemon and wait until it answers /health — the rest of this smoke depends on it');
+  }
+  if (!(await alive())) {
+    throw new AbortError('daemon-lifecycle', '`mma restart` reported success but nothing answers /health',
+      'restart asserts health before returning, so success must mean the daemon is serving');
+  }
+
+  // ── the daemon recorded itself, and the record is true ──────────────────
+  if (!existsSync(pidfile)) {
+    throw new AbortError('daemon-lifecycle', `no pidfile at ${pidfile} after a successful start`,
+      'the daemon must record itself so stop/restart/update find it by fact rather than by matching a process name');
+  }
+  const record = JSON.parse(readFileSync(pidfile, 'utf8'));
+  for (const field of ['pid', 'port', 'bind', 'version', 'bootId', 'startedAt']) {
+    if (!(field in record)) {
+      throw new AbortError('daemon-lifecycle', `pidfile is missing '${field}'`,
+        'an incomplete record must never be written — a partial read is treated as absent');
+    }
+  }
+  const live = await fetch(`${BASE_URL}/status`, { headers: { Authorization: `Bearer ${readToken()}` } })
+    .then((r) => r.ok ? r.json() : null).catch(() => null);
+  if (!live || live.pid !== record.pid) {
+    throw new AbortError('daemon-lifecycle', `pidfile pid=${record.pid} but /status reports pid=${live?.pid}`,
+      'the record must describe the daemon that is actually serving');
+  }
+
+  // ── doctor reports every surface and gates on its findings ──────────────
+  const doc = run(['doctor', '--offline', '--json']);
+  let report;
+  try { report = JSON.parse(doc.out); }
+  catch {
+    throw new AbortError('daemon-lifecycle', `\`mma doctor --json\` did not emit JSON: ${doc.out.slice(0, 200)}`,
+      'doctor must stay machine-readable — it is what a user pastes into a bug report');
+  }
+  for (const key of ['package', 'daemon', 'plugin', 'skills', 'problems']) {
+    if (!(key in report)) {
+      throw new AbortError('daemon-lifecycle', `doctor JSON is missing '${key}'`,
+        'doctor reports every surface an update can leave behind');
+    }
+  }
+  if (report.daemon.running !== true || report.daemon.pid !== record.pid) {
+    throw new AbortError('daemon-lifecycle',
+      `doctor reports ${JSON.stringify(report.daemon)} but the serving pid is ${record.pid}`,
+      'doctor must read the daemon it is pointed at, never infer it from the CLI it runs from');
+  }
+  if ((doc.code === 0) !== (report.problems.length === 0)) {
+    throw new AbortError('daemon-lifecycle', `doctor exited ${doc.code} with ${report.problems.length} problem(s)`,
+      'the exit code must track the findings so a script can gate on it');
+  }
+}
+
+/**
+ * Feature-coverage release gate — every shipped task type has a smoke scenario.
+ *
+ * WHY. `SCENARIOS` is hand-maintained. Adding a task type means touching the
+ * type registry, a Zod variant, skill files and the capability row — and it is
+ * entirely possible to do all of that, ship it, and never notice the release
+ * smoke does not exercise it. The scheduler already refuses to drop a DECLARED
+ * scenario; this refuses to drop a declared PRODUCT FEATURE, which is the gap
+ * one level up.
+ *
+ * Read from the built registry rather than a list kept here, so the gate cannot
+ * drift from the thing it is gating.
+ */
+async function taskTypeCoverageGate() {
+  const coreDist = join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!existsSync(coreDist)) {
+    throw new AbortError('feature-coverage', `no built core at ${coreDist}`, 'run `npm run build` before the smoke');
+  }
+  const { TASK_TYPES } = await import(pathToFileURL(coreDist).href);
+  const { SCENARIOS } = await import(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'config.mjs')).href);
+
+  const covered = new Set(SCENARIOS.map((s) => s.type));
+  const missing = [...TASK_TYPES].filter((t) => !covered.has(t));
+  if (missing.length > 0) {
+    throw new AbortError('feature-coverage', `task type(s) with no smoke scenario: ${missing.join(', ')}`,
+      'add a SCENARIOS entry in scripts/full-smoke/config.mjs, a buildRequest case in dispatch.mjs, and schedule the id in phase2Threads');
+  }
+}
+
+/** The daemon's state directory, from its config, defaulting as the schema does. */
+function resolveStateDir() {
+  let configured = '~/.mma/state';
+  try {
+    configured = JSON.parse(readFileSync(join(HOME_MM, 'config.json'), 'utf8')).server?.stateDir ?? configured;
+  } catch { /* no config, or no server block — the schema default applies */ }
+  return configured.startsWith('~/') ? join(HOME_MM, '..', configured.slice(2)) : configured;
+}
+
+/** execFileSync that returns the exit code instead of throwing on non-zero —
+ *  several assertions here are ABOUT the non-zero paths. */
+function execFileSyncSafe(cmd, args) {
+  try {
+    return { code: 0, out: execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
+  } catch (e) {
+    return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+  }
+}
+
 export class AbortError extends Error {
   constructor(gate, observed, remediation) {
     super(`[preflight ${gate}] observed: ${observed} | fix: ${remediation}`);
@@ -565,7 +749,14 @@ function dbHostApproved(url) {
   try { return APPROVED_DB_HOSTS.includes(new URL(url).hostname); } catch { return false; }
 }
 
-export async function preflight({ skipBackend = false, expectBranch = null, allowMismatch = false } = {}) {
+export async function preflight({ skipBackend = false, expectBranch = null, allowMismatch = false,
+                                  skipLifecycle = false } = {}) {
+  // FIRST, before anything else reads the daemon. This gate STOPS AND RESTARTS
+  // the live daemon, so it must run before `bootId` and `serverVersion` are
+  // captured below — every later check and every scenario is then measured
+  // against the daemon this gate left running.
+  if (!skipLifecycle) await daemonLifecycleGate();
+
   const health = await fetch(`${BASE_URL}/health`).then((r) => r.status).catch(() => 0);
   if (health !== 200) throw new AbortError('health', `GET /health -> ${health}`, 'start `pnpm run serve`');
 
@@ -641,6 +832,9 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
 
   // Canonical client roster: the live inventory matches CLIENT_IDS exactly.
   await clientRosterGate(token);
+
+  // Feature coverage: every shipped task type has a scenario in this smoke.
+  await taskTypeCoverageGate();
 
   const ctx = { token, serverVersion, bootId, serverBranch, installId,
                 runStartTs: new Date().toISOString(), databaseUrl: null,

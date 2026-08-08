@@ -42,6 +42,12 @@ const opts = {
   waitFlush: argv.includes('--wait-flush'),
   sequential: argv.includes('--sequential'),
   concurrency: Number((argv.find((a) => a.startsWith('--concurrency=')) || '').split('=')[1]) || 8,
+  // The lifecycle gate STOPS AND RESTARTS the live daemon before any scenario
+  // runs. That is deliberate — stop/restart are the upgrade path, and proving
+  // them anywhere but the real daemon proves the code and skips the deployment.
+  // Opt out when you are attached to that specific process (a debugger, a
+  // profiler, a log tail you cannot lose).
+  skipLifecycle: argv.includes('--skip-lifecycle'),
 };
 
 let ctx;
