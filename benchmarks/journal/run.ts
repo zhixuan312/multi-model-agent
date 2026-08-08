@@ -99,9 +99,9 @@ function candidateInjectedText(c: JournalCandidate): string {
   return `${c.title}\n${c.description}\n${c.snippet}`;
 }
 
-function makeTempJournal(prefix: string, seed: number): string {
+function makeTempJournal(prefix: string, seed: number, count: number): string {
   const root = mkdtempSync(join(tmpdir(), prefix));
-  writeFixtureToJournal(generateFixture({ seed, count: FIXTURE_COUNT }), root);
+  writeFixtureToJournal(generateFixture({ seed, count }), root);
   return root;
 }
 
@@ -189,8 +189,8 @@ function auditApplied(journalRoot: string, batch: ApplyRecordInput[], recordedLe
 // Engine path
 // ---------------------------------------------------------------------------
 
-async function runEngine(queries: FrozenQuery[], seed: number): Promise<BenchmarkOutput> {
-  const root = makeTempJournal('mma-bench-engine-', seed);
+async function runEngine(queries: FrozenQuery[], seed: number, count: number): Promise<BenchmarkOutput> {
+  const root = makeTempJournal('mma-bench-engine-', seed, count);
   let store = await JournalIndexStore.open({ journalRoot: root });
   await store.rebuildIndex();
 
@@ -245,7 +245,7 @@ async function runEngine(queries: FrozenQuery[], seed: number): Promise<Benchmar
   const rebuildEquivalent = JSON.stringify(before) === JSON.stringify(after);
 
   // Mechanical errors: apply the batch on a fresh copy via the deterministic engine.
-  const mechRoot = makeTempJournal('mma-bench-engine-mech-', seed);
+  const mechRoot = makeTempJournal('mma-bench-engine-mech-', seed, count);
   const journalStore = await JournalStore.open({ journalRoot: mechRoot });
   const batch = mechanicalBatch();
   const applied = await journalStore.applyRecordBatch(batch);
@@ -337,8 +337,8 @@ function naiveApply(journalRoot: string, batch: ApplyRecordInput[]): Set<string>
   return recorded;
 }
 
-async function runBaseline(queries: FrozenQuery[], seed: number): Promise<BenchmarkOutput> {
-  const root = makeTempJournal('mma-bench-baseline-', seed);
+async function runBaseline(queries: FrozenQuery[], seed: number, count: number): Promise<BenchmarkOutput> {
+  const root = makeTempJournal('mma-bench-baseline-', seed, count);
   const nodesDir = join(root, 'nodes');
   const catalog = readFileSync(join(root, 'index.md'), 'utf8');
   const bodies = readdirSync(nodesDir)
@@ -378,7 +378,7 @@ async function runBaseline(queries: FrozenQuery[], seed: number): Promise<Benchm
   const rebuildEquivalent = JSON.stringify(before) === JSON.stringify(after);
 
   // Mechanical errors under the naive pre-engine apply.
-  const mechRoot = makeTempJournal('mma-bench-baseline-mech-', seed);
+  const mechRoot = makeTempJournal('mma-bench-baseline-mech-', seed, count);
   const batch = mechanicalBatch();
   const recorded = naiveApply(mechRoot, batch);
   const mechanicalErrors = auditApplied(mechRoot, batch, recorded);
@@ -403,8 +403,10 @@ export async function runBenchmark(opts: {
   path: 'baseline' | 'engine';
   fixtureSeed: number;
   queries: FrozenQuery[];
+  count?: number;
 }): Promise<BenchmarkOutput> {
+  const count = opts.count ?? FIXTURE_COUNT;
   return opts.path === 'engine'
-    ? runEngine(opts.queries, opts.fixtureSeed)
-    : runBaseline(opts.queries, opts.fixtureSeed);
+    ? runEngine(opts.queries, opts.fixtureSeed, count)
+    : runBaseline(opts.queries, opts.fixtureSeed, count);
 }

@@ -16,6 +16,7 @@ const UTC_DATE = new Date().toISOString().slice(0, 10);
 
 let baseline: BenchmarkOutput;
 let engine: BenchmarkOutput;
+let engineSmall: BenchmarkOutput;
 
 function newestBenchmarkFile(): string {
   const files = readdirSync(BENCH_DIR)
@@ -49,8 +50,8 @@ query set — no LLM, no server, no network.
 
 | Metric | baseline | engine | gate | result |
 |---|---:|---:|---|---|
-| record latency p50 (ms) | ${b.recordLatencyMsP50.toFixed(3)} | ${e.recordLatencyMsP50.toFixed(3)} | baseline/engine ≥ 1.0× | ${recLat.toFixed(1)}× |
-| recall latency p50 (ms) | ${b.recallLatencyMsP50.toFixed(3)} | ${e.recallLatencyMsP50.toFixed(3)} | baseline/engine ≥ 1.0× | ${recallLat.toFixed(1)}× |
+| record latency p50 (ms) | ${b.recordLatencyMsP50.toFixed(3)} | ${e.recordLatencyMsP50.toFixed(3)} | informational only (see sublinear-scaling + ceiling gates below) | ${recLat.toFixed(1)}× |
+| recall latency p50 (ms) | ${b.recallLatencyMsP50.toFixed(3)} | ${e.recallLatencyMsP50.toFixed(3)} | informational only (see sublinear-scaling + ceiling gates below) | ${recallLat.toFixed(1)}× |
 | record tokens (total) | ${b.recordTokenTotal} | ${e.recordTokenTotal} | ≥ 80% reduction | ${(recTok * 100).toFixed(1)}% |
 | recall tokens (total) | ${b.recallTokenTotal} | ${e.recallTokenTotal} | ≥ 80% reduction | ${(recallTok * 100).toFixed(1)}% |
 | retrieval mAP | ${b.retrievalMAP.toFixed(4)} | ${e.retrievalMAP.toFixed(4)} | engine ≥ baseline | ${e.retrievalMAP >= b.retrievalMAP ? 'pass' : 'FAIL'} |
@@ -64,6 +65,10 @@ describe('journal benchmark gates', () => {
   beforeAll(async () => {
     baseline = await runBenchmark({ path: 'baseline', fixtureSeed: 42, queries: FROZEN_QUERIES });
     engine = await runBenchmark({ path: 'engine', fixtureSeed: 42, queries: FROZEN_QUERIES });
+    // Second engine-only arm at a quarter of the corpus, for the sublinear-scaling
+    // gate below. No baseline counterpart is needed — that gate compares the
+    // engine to itself at two corpus sizes, not to the baseline arm.
+    engineSmall = await runBenchmark({ path: 'engine', fixtureSeed: 42, queries: FROZEN_QUERIES, count: 750 });
     mkdirSync(BENCH_DIR, { recursive: true });
     writeFileSync(
       resolve(BENCH_DIR, `benchmark-${UTC_DATE}.json`),
@@ -74,7 +79,10 @@ describe('journal benchmark gates', () => {
       'utf8',
     );
     writeSummary(baseline, engine);
-  }, 240_000);
+    // 240s covered two arms (baseline + engine at 3000 records); a third,
+    // smaller arm (engine at 750 records) is added above, so the budget is
+    // raised to 360s to keep headroom.
+  }, 360_000);
 
   it('persisted a raw benchmark-<UTC-date>.json and report-summary.md', () => {
     const raw = JSON.parse(readFileSync(newestBenchmarkFile(), 'utf8')) as {
@@ -95,45 +103,49 @@ describe('journal benchmark gates', () => {
     expect(engine.rebuildEquivalent).toBe(true);
   });
 
-  // THE LATENCY GATE IS DORMANT AS OF 6.3.0. This threshold is a debt, not a calibration.
+  // LATENCY GATES: sublinear scaling + an absolute catastrophe ceiling.
   //
-  // This is the ONLY wall-clock assertion in the file, so it is the only one whose result
-  // depends on the hardware underneath it. It began at 3x, was lowered to 2x when a shared
-  // GitHub runner measured 2.994x against 7.19x on the maintainer's machine, and now sits at
-  // parity. The history is the point:
+  // What actually broke in #227, and what these gates check for directly: per-query
+  // engine work became proportional to CORPUS SIZE instead of to the CANDIDATE SET a
+  // query returns. The adapter read the whole record set on every query rather than
+  // only the top-K candidates. That is a property of the algorithm, not of the
+  // machine running it, so it can be gated directly and cannot be flaked by CI
+  // hardware being slower or faster than a laptop.
   //
-  //   benchmark-2026-08-01..06 (before #227)   4.75x – 11.57x record
-  //   benchmark-2026-08-07     (after  #227)   2.74x record / 2.48x recall  (dev machine)
-  //   GitHub runner            (after  #227)   1.20x, then 1.099x on the next dispatch
+  // This file used to gate a RATIO against a simulated baseline arm instead
+  // (`baseline.p50 / engine.p50 >= MIN_SPEEDUP`). That combines TWO independently
+  // noisy wall-clock measurements into one number: stored history in
+  // benchmarks/journal/benchmark-*.json shows the baseline arm alone swinging
+  // between 51ms and 124ms on the same seeded fixture, while the engine arm moved
+  // independently. Because the ratio was noisy, its floor was lowered four times
+  // (3x -> 2x -> 1.1x -> 1.0) to stop it from flaking, and at 1.0 it asserted
+  // nothing useful: it only required the engine not to be literally slower than a
+  // full linear scan of the whole corpus. That ratio assertion and its
+  // MIN_SPEEDUP constant are gone. The baseline arm itself stays — it still backs
+  // the report-summary comparison above and the token-reduction gate below.
   //
-  // It did not move because the measurement was wrong. It moved because the engine got
-  // slower. #227 generalised the retrieval engine to index any corpus and names the cause
-  // outright: the adapter reads the whole record set per query rather than only the candidate
-  // set. CI measures roughly 0.42x of a dev machine's ratio, so 2.7x local lands near 1.13x
-  // there — systematic, and re-dispatching does not clear it. A 1.1 floor duly failed on its
-  // first dispatch, by 0.08%.
+  // Gate 1 — sublinear scaling. Compares the ENGINE arm to ITSELF at two corpus
+  // sizes (750 records, then 3000 records — a 4x corpus), with no baseline
+  // involved. If per-query work were proportional to corpus size, latency at 3000
+  // records would be roughly 4x latency at 750. A candidate-bounded engine (the
+  // intended design) stays close to 1x. The threshold of 2.2x sits between those:
+  // loose enough to absorb fixed costs and run-to-run noise, tight enough to fail
+  // if the #227 defect (an O(N) corpus read per query) comes back.
   //
-  // Two samples around 1.1x with noise that straddles any floor placed at the measured value
-  // is not a calibration problem. It means that on CI-class hardware the indexed engine now
-  // performs about the same as linearly scanning the entire corpus, and there is no margin
-  // left to calibrate against.
-  //
-  // 1.0 is the last rung. It asserts only that the engine is not literally SLOWER than the
-  // scan it replaced; below this the assertion inverts and means nothing. So a future failure
-  // here cannot be answered by lowering the number again — only by making the engine faster.
-  // Until the candidate-set fix lands, the real protection in this file is the mAP,
-  // token-reduction and mechanical-correctness gates around it, which still have thresholds
-  // that bite. Raise this back toward 2x with the fix; do not leave 1.0 as the permanent
-  // definition of acceptable.
-  //
-  // Precedent for keeping it as a RATIO at all: an earlier wall-clock baseline-vs-baseline
-  // harness was deleted from this repo because it compared cross-machine absolute timings
-  // (see the note in vitest.config.ts). A ratio measured within a single run survives that
-  // objection; an absolute millisecond budget would not.
-  const MIN_SPEEDUP = 1.0;
-  it('engine record + recall latency are not slower than the baseline scan', () => {
-    expect(baseline.recordLatencyMsP50 / engine.recordLatencyMsP50).toBeGreaterThanOrEqual(MIN_SPEEDUP);
-    expect(baseline.recallLatencyMsP50 / engine.recallLatencyMsP50).toBeGreaterThanOrEqual(MIN_SPEEDUP);
+  // Gate 2 — absolute catastrophe ceiling. Engine p50 at 3000 records must stay
+  // under 60ms. This is deliberately loose. It does not police normal variation —
+  // it exists only to catch a total blowup (e.g. the index silently going unused)
+  // on any hardware, fast or slow.
+  const SCALING_CEILING = 2.2;
+  it('engine latency does not scale with corpus size (4x corpus stays within 2.2x latency)', () => {
+    expect(engine.recordLatencyMsP50).toBeLessThanOrEqual(SCALING_CEILING * engineSmall.recordLatencyMsP50);
+    expect(engine.recallLatencyMsP50).toBeLessThanOrEqual(SCALING_CEILING * engineSmall.recallLatencyMsP50);
+  });
+
+  const ABSOLUTE_CEILING_MS = 60;
+  it('engine latency at 3000 records stays under an absolute catastrophe ceiling', () => {
+    expect(engine.recordLatencyMsP50).toBeLessThan(ABSOLUTE_CEILING_MS);
+    expect(engine.recallLatencyMsP50).toBeLessThan(ABSOLUTE_CEILING_MS);
   });
 
   it('engine injects >= 80% fewer record + recall tokens than the baseline corpus dump', () => {
