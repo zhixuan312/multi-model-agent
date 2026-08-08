@@ -372,6 +372,23 @@ jobs:
           ls node_modules/@anthropic-ai/claude-agent-sdk-*/claude* >/dev/null 2>&1 \
             || ls node_modules/@anthropic-ai/claude-agent-sdk/cli.js >/dev/null 2>&1 \
             || echo "::warning::could not locate the claude-agent-sdk native CLI on disk"
+          # Every route loads a skill markdown file from the core package before it
+          # can start, so an install that resolves the wrong skills directory is
+          # unusable even though every check above passes. That is not
+          # hypothetical: a resolver assumed core sits nested inside the server
+          # package's node_modules, npm hoists it to the top level instead, and
+          # the failure shipped through several releases because this step only
+          # ever checked --version.
+          node --input-type=module -e "
+            const { SKILLS_DIR } = await import('file:///tmp/mma-smoke/node_modules/@zhixuan92/multi-model-agent/dist/application/skills-dir.js');
+            const fs = await import('node:fs');
+            const probe = SKILLS_DIR + '/investigate/implement.md';
+            if (!fs.existsSync(probe)) {
+              console.error('::error::skills unreachable from an installed package — SKILLS_DIR resolved to ' + SKILLS_DIR);
+              process.exit(1);
+            }
+            console.log('skills reachable at ' + SKILLS_DIR);
+          "
           echo "consumer install OK — mma --version = $OUT"
 
       # Only now, after everything above passed. See the header note.
