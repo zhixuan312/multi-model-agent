@@ -37,7 +37,6 @@ export type {
   JournalCandidate,
 } from './adapters/journal-adapter.js';
 export { CorpusIndex } from './engine/index-store.js';
-export type { FallbackSweepState } from './engine/index-store.js';
 export type {
   CorpusAdapter,
   CorpusRecord,

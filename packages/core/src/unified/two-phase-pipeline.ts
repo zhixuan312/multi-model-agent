@@ -4,6 +4,7 @@ import type { Provider, Session, TurnResult } from '../types/run-result.js';
 import type { AgentType } from '../types/task-spec.js';
 import type { TaskType, SandboxPolicy } from './type-registry.js';
 import { WRITING_STYLE_BLOCK } from './writing-style-block.js';
+import { SEARCH_HYGIENE_BLOCK } from './search-hygiene-block.js';
 import { parseReviewerOutput } from './reviewer-output-parser.js';
 import { captureBaseline, commitAll, assertRepoUntampered, type CommitOutcome } from './repo-commit.js';
 import {
@@ -342,7 +343,8 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     const stylePrefix = input.readerFacing ? `${WRITING_STYLE_BLOCK}\n\n` : '';
     // Injected for BOTH phases: a refiner verifying citations searches the
     // codebase just as hard as the implementer that produced them.
-    const implPrompt = `${stylePrefix}${input.implementerSkill}${workspaceNotice}${priorContext}\n\n---\n\n## Task\n\n${effectivePayload}`;
+    const hygiene = `\n\n${SEARCH_HYGIENE_BLOCK}\n`;
+    const implPrompt = `${stylePrefix}${input.implementerSkill}${hygiene}${workspaceNotice}${priorContext}\n\n---\n\n## Task\n\n${effectivePayload}`;
     const implTurn = await implSession.send(implPrompt, {
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
@@ -469,7 +471,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const completenessSection = buildCompletenessSection(input);
     const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
-    const revPrompt = `${stylePrefix}${input.reviewerSkill}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(effectiveOutput)}`;
+    const revPrompt = `${stylePrefix}${input.reviewerSkill}${hygiene}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(effectiveOutput)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });

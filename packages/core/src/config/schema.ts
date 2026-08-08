@@ -168,13 +168,23 @@ export const multiModelConfigSchema = z.object({
    * below is what the daemon calls, and it reports the missing tiers by name
    * instead of a Zod path.
    */
+  /* Each tier is optional HERE and required by `assertRunnable`, for the same
+   * reason the whole block is optional: a partially-filled `agents` block is a
+   * real state on the way to a complete one (`mma configure-provider` writes one
+   * tier at a time), and the daemon is the thing that needs all three. Requiring
+   * a tier in this schema would reject that file with a raw Zod `invalid_type`
+   * at path `["agents","main"]` — precisely the message the comment above says
+   * to avoid, and the message EVERY config written before 6.6.0 would get. */
   agents: z.object({
-    standard: agentConfigSchema,
-    complex: agentConfigSchema,
-    // Required like the worker tiers: `main` is the model driving mma, used both
-    // to resolve an `agentTier: 'main'` dispatch and to price every run's
-    // main-model-equivalent cost. Optional, it left the cost baseline to a guess.
-    main: agentConfigSchema,
+    standard: agentConfigSchema.optional(),
+    complex: agentConfigSchema.optional(),
+    /* `main` is the model driving mma. It resolves an `agentTier: 'main'`
+     * dispatch and prices every run's main-model-equivalent cost. Optional in
+     * this schema, required to serve: `assertRunnable` refuses a config without
+     * it, and the runtime then prices every run against `agents.main.model`
+     * with no fallback to another tier. Before 6.6.0 an absent `main` left the
+     * baseline to a guess, which resolved to a worker tier's own model. */
+    main: agentConfigSchema.optional(),
   }).optional(),
   diagnostics: z.object({
     log: z.boolean().default(false),
@@ -221,7 +231,7 @@ export function parseConfig(raw: unknown): MultiModelConfig {
  * to a machine that has not chosen its models yet.
  */
 export type RunnableConfig = MultiModelConfig & {
-  agents: NonNullable<MultiModelConfig['agents']>;
+  agents: Required<NonNullable<MultiModelConfig['agents']>>;
 };
 
 /**

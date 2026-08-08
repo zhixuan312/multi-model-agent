@@ -23,6 +23,13 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         model: 'fake-model-complex',
         baseUrl: 'http://localhost:1/v1',
       },
+      // Required since 6.6.0: the daemon prices every run against this tier, and
+      // `startServer` refuses a partially configured `agents` block.
+      main: {
+        type: 'codex',
+        model: 'fake-model-main',
+        baseUrl: 'http://localhost:1/v1',
+      },
     },
     server: {
       bind: '127.0.0.1',

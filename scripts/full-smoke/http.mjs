@@ -6,10 +6,12 @@ import { BASE_URL, TOKEN_FILE } from './config.mjs';
  *  hardcoded copy that could drift into agreeing with a bug. */
 export const SMOKE_CLIENT = 'claude-code';
 
+// No `X-MMA-Main-Model`: the header was deleted. The cost baseline is the
+// daemon's configured `agents.main` tier, which the telemetry verifier asserts
+// against `~/.mma/config.json` rather than against anything this harness sends.
 const HEADERS = (token) => ({
   'Authorization': `Bearer ${token}`,
   'X-MMA-Client': SMOKE_CLIENT,
-  'X-MMA-Main-Model': 'claude-opus-4-7',
   'Content-Type': 'application/json',
 });
 

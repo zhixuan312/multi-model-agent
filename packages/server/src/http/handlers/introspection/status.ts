@@ -39,23 +39,21 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     } = deps;
 
     const now = Date.now();
-    // `config.agents` is optional at the schema level so a machine can record a
-    // client roster before choosing models; the daemon refuses to start without
-    // tiers, so this is undefined only for a config-less status read.
+    // `config.agents` and each tier inside it are optional at the schema level
+    // so a machine can record a client roster before choosing models; the daemon
+    // refuses to start unless all three tiers are present, so a tier reads as
+    // null only on a config-less or half-configured status read.
+    //
+    // No cross-tier substitution: reporting `complex` under the name `main`
+    // would tell an operator a tier is configured when it is not, and `main` is
+    // now the value every run's cost baseline is priced against.
+    const describeTier = (tier?: Parameters<typeof resolveConfiguredAuthMode>[0] & { type: string }) =>
+      (tier ? { type: tier.type, mode: resolveConfiguredAuthMode(tier) } : null);
     const agents = config?.agents
       ? {
-          standard: {
-            type: config.agents.standard.type,
-            mode: resolveConfiguredAuthMode(config.agents.standard),
-          },
-          complex: {
-            type: config.agents.complex.type,
-            mode: resolveConfiguredAuthMode(config.agents.complex),
-          },
-          main: {
-            type: (config.agents.main ?? config.agents.complex).type,
-            mode: resolveConfiguredAuthMode(config.agents.main ?? config.agents.complex),
-          },
+          standard: describeTier(config.agents.standard),
+          complex: describeTier(config.agents.complex),
+          main: describeTier(config.agents.main),
         }
       : undefined;
 

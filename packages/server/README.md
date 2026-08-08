@@ -63,12 +63,17 @@ it without prompts use `mma sync-skills --target=<ClientId>` (repeatable), or de
 
 ### 2. Choose your main model — intentionally
 
-Your **main model** is **the model you'd use without mma** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
+Your **main model** is **the model you'd use without mma**. It is the `agents.main` tier in your
+config, and it is the cost baseline for every per-task headline
+(`$X actual / $Y saved vs <agents.main.model> (Z× ROI)`).
 
-Client identity is attributed automatically from MCP protocol metadata — nothing to set. `mainModel`
-is an optional `mma_run` parameter (installed skills pass it); omit it and MMA still runs, just
-without the savings comparison. (Programmatic/REST callers set the equivalent `X-MMA-Main-Model`
-header — see [REST API](#rest-api).)
+`agents.main` is **required** — a config with only `standard` and `complex` does not start. There is
+no per-request override: `mma_run` has no `mainModel` parameter and the `X-MMA-Main-Model` header no
+longer exists. A per-call claim was usually absent over MCP, which made mma fall back to the
+implementer tier's own model and report a negative saving for runs that saved money.
+
+Client identity (which tool called mma) is still attributed automatically from MCP protocol
+metadata — nothing to set for that.
 
 ### 3. Write the config
 
@@ -86,13 +91,17 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
       "type": "codex",
       "model": "gpt-5.6",
       "apiKeyEnv": "OPENAI_API_KEY"
+    },
+    "main": {
+      "type": "claude",
+      "model": "claude-opus-4-8"
     }
   }
 }
 EOF
 ```
 
-That's the whole minimum-viable file. All other knobs have sane built-in defaults.
+All three tiers are required. That's the whole minimum-viable file. All other knobs have sane built-in defaults.
 
 ### 4. Start the daemon + verify
 

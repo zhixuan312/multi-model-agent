@@ -1,12 +1,8 @@
 import { createHash } from 'node:crypto';
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
-import type { FileHandle } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
+import { mkdir, readFile, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { StatementSync } from 'node:sqlite';
-import { detectGitChanges } from './freshness.js';
-import type { FreshnessDecision } from './freshness.js';
 import { rrfSearch } from './search.js';
 import type {
   CorpusAdapter,
@@ -15,12 +11,6 @@ import type {
   StoredRecord,
   StoredRecordMeta,
 } from './types.js';
-
-/** Default throttle for the non-git full stat-sweep fallback: at most once every 5 minutes per open index. */
-const DEFAULT_FALLBACK_SWEEP_INTERVAL_MS = 5 * 60_000;
-
-
-
 
 /**
  * Corpus-neutral derived SQLite index.
@@ -91,103 +81,21 @@ function toStoredRecord(row: Record<string, unknown>, includeBody: boolean): Sto
 }
 
 
-/**
- * Process-wide, root-keyed non-git fallback-sweep throttle state (see
- * {@link CorpusIndex.ensureFreshSymbols}). A caller that opens a NEW
- * `CorpusIndex` per request (e.g. the investigate preprocessor, which
- * open()s → uses → close()s the index every call) must pass the SAME
- * `FallbackSweepState` object across those calls — an instance keeping this
- * state purely in its own private fields would reset it (and so lose the
- * throttle entirely) on every request.
- */
-export interface FallbackSweepState {
-  lastFallbackSweepAt: number | null;
-  fallbackSweepCount: number;
-}
-
 export class CorpusIndex {
   static async open(opts: {
     root: string;
     adapter: CorpusAdapter;
-    /**
-     * Optional override for where the derived SQLite file itself lives.
-     * Absent (the default) — identical to today's behavior: the database sits
-     * at `<root>/index.db`, alongside the corpus it derives from. The journal
-     * index (`JournalCorpusAdapter`, via `JournalIndexStore`) relies on this
-     * default and must keep it: its database stays at `.mma/journal/index.db`.
-     * Present — the corpus root is walked/read exactly as normal, but the
-     * derived database is written to this path instead. Used by the
-     * repository code-corpus index (the investigate preprocessor) so a
-     * derived cache never lands inside a source tree the caller does not own.
-     */
-    dbPath?: string;
-    /**
-     * Throttle interval, in milliseconds, for the non-git full stat-sweep
-     * freshness fallback (see {@link ensureFresh}). Ignored on the git path,
-     * which never sweeps. Defaults to {@link DEFAULT_FALLBACK_SWEEP_INTERVAL_MS}.
-     */
-    fallbackSweepIntervalMs?: number;
-    /**
-     * Shared throttle state for the non-git fallback sweep (see
-     * {@link FallbackSweepState}). Omit for a fresh, instance-local state
-     * (fine for a long-lived `CorpusIndex`); pass a shared object when the
-     * caller opens a new `CorpusIndex` per call against the same root, so the
-     * throttle actually applies across calls.
-     */
-    sweepState?: FallbackSweepState;
-    /**
-     * Open the database WITHOUT write access.
-     *
-     * A read-only route's worker runs inside an OS sandbox (codex uses
-     * `-s read-only`) that denies writes outside its cwd. SQLite opens
-     * read-write by default and creates `-wal`/`-shm` sidecars next to the
-     * database, so a normal open fails there with "attempt to write a
-     * readonly database" even when the caller only intends to read.
-     *
-     * With this set the connection is read-only and the schema bootstrap is
-     * skipped. The caller MUST NOT then call `ensureHealthy()` or
-     * `ensureFresh()` — both write. That is the correct division anyway: the
-     * daemon's preprocessor refreshes the index before the worker starts, so
-     * a worker only ever needs to read what is already current.
-     */
-    readOnly?: boolean;
-    /**
-     * SQLite journal mode for a read-write open. Defaults to `wal`.
-     *
-     * Pass `delete` for an index that sandboxed readers must open read-only.
-     * WAL keeps a `-shm` sidecar that SQLite needs WRITE access to map, even
-     * for a reader — and it deletes that sidecar when the last connection
-     * closes. So a WAL index is unreadable from a read-only sandbox after the
-     * writer disconnects. `delete` mode leaves a self-contained file that a
-     * read-only connection can open with no write access at all.
-     *
-     * The trade-off is concurrency: `delete` blocks readers during a write.
-     * That is the right trade for the code index, which has ONE writer (the
-     * daemon's preprocessor, briefly, only when files changed) and MANY
-     * readers (workers). The journal index keeps `wal`.
-     */
-    journalMode?: 'wal' | 'delete';
   }): Promise<CorpusIndex> {
-    const index = new CorpusIndex(
-      opts.root,
-      opts.adapter,
-      opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS,
-      opts.sweepState ?? { lastFallbackSweepAt: null, fallbackSweepCount: 0 },
-      opts.dbPath,
-      opts.readOnly === true,
-      opts.journalMode ?? 'wal',
-    );
+    const index = new CorpusIndex(opts.root, opts.adapter);
     // First-use bootstrap: `new DatabaseSync(<dbPath>)` throws
-    // ENOENT/SQLITE_CANTOPEN when its parent dir does not exist yet — true of
-    // both the default (`<root>/index.db`) and a caller-supplied override.
-    // A read-only open must not create anything, including the parent dir.
-    if (!opts.readOnly) await mkdir(dirname(index.dbPath), { recursive: true });
+    // ENOENT/SQLITE_CANTOPEN when the database's parent directory does not
+    // exist yet.
+    await mkdir(dirname(index.dbPath), { recursive: true });
     index.openDatabase();
     return index;
   }
 
   private db!: DatabaseSync;
-  private freshnessDecision: FreshnessDecision | null = null;
   /**
    * The `CorpusAdapter.rootMtimeMs()` value observed on the last {@link
    * ensureFreshRecords} check that actually ran `listFiles()` — `null`
@@ -234,15 +142,10 @@ export class CorpusIndex {
   private constructor(
     private readonly root: string,
     private readonly adapter: CorpusAdapter,
-    private readonly fallbackSweepIntervalMs: number,
-    private readonly sweepState: FallbackSweepState,
-    private readonly dbPathOverride: string | undefined,
-    private readonly readOnly: boolean = false,
-    private readonly journalMode: 'wal' | 'delete' = 'wal',
   ) {}
 
   private get dbPath(): string {
-    return this.dbPathOverride ?? join(this.root, CORPUS_INDEX_DB_FILENAME);
+    return join(this.root, CORPUS_INDEX_DB_FILENAME);
   }
 
   private openDatabase(): void {
@@ -252,24 +155,15 @@ export class CorpusIndex {
     // contention). Without this try/catch, `CorpusIndex.open()` propagates
     // that throw with the half-built instance already discarded — unclosed —
     // and nothing left holding a reference to `db` ever calls `.close()` on
-    // it. A caller that retries `open()` (e.g. the investigate preprocessor's
-    // bounded retry) can leak one handle per attempt.
+    // it. A caller that retries `open()` can leak one handle per attempt.
     let db: DatabaseSync | undefined;
     try {
-      if (this.readOnly) {
-        // No WAL pragma and no schema bootstrap: both write. `busy_timeout`
-        // is safe and still useful while the daemon refreshes concurrently.
-        db = new DatabaseSync(this.dbPath, { readOnly: true });
-        this.db = db;
-        db.exec('PRAGMA busy_timeout = 5000;');
-      } else {
-        db = new DatabaseSync(this.dbPath);
-        this.db = db;
-        db.exec(`PRAGMA journal_mode = ${this.journalMode === 'delete' ? 'DELETE' : 'WAL'};`);
-        db.exec('PRAGMA busy_timeout = 5000;');
-        db.exec('PRAGMA foreign_keys = ON;');
-        this.bootstrapSchema();
-      }
+      db = new DatabaseSync(this.dbPath);
+      this.db = db;
+      db.exec('PRAGMA journal_mode = WAL;');
+      db.exec('PRAGMA busy_timeout = 5000;');
+      db.exec('PRAGMA foreign_keys = ON;');
+      this.bootstrapSchema();
     } catch (error) {
       if (db) {
         try {
@@ -284,12 +178,12 @@ export class CorpusIndex {
 
   /**
    * Bootstrap the schema ONLY on a genuinely fresh database file (no known
-   * table of either storage mode exists yet). An EXISTING database — even one
+   * known table exists yet). An EXISTING database — even one
    * on an outdated schema version — is left untouched here: {@link ensureSchema}
    * runs `CREATE TABLE IF NOT EXISTS`, a no-op against an already-existing
    * table that would silently skip a newly added column (e.g. `adapter_meta`),
    * and then unconditionally stamps `PRAGMA user_version` to the CURRENT
-   * version — which would make {@link schemaIsValid} / {@link fileSymbolTablesValid}
+   * version — which would make {@link schemaIsValid}
    * report that stale table as valid forever, so an outdated on-disk database
    * would never actually rebuild. Every caller runs {@link ensureHealthy}
    * before reading or writing, which detects a genuine version/table mismatch
@@ -311,7 +205,7 @@ export class CorpusIndex {
     // `records_fts` alongside them and stamp the version to current BEFORE
     // {@link ensureHealthy} ever runs — making the legacy tables look valid
     // forever. Defer entirely to {@link ensureHealthy} (and its explicit
-    // legacy-table check in {@link schemaIsValid} / {@link fileSymbolTablesValid})
+    // legacy-table check in {@link schemaIsValid})
     // whenever any table already exists.
     if (tables.length > 0) return;
     this.ensureSchema();
@@ -435,12 +329,6 @@ export class CorpusIndex {
   }
 
   /**
-   * Indexed `files` row count for the `files`/`symbols` storage mode — the
-   * symbol-mode counterpart to {@link recordCount}. Used by
-   * {@link ensureFreshSymbols} to detect a schema-valid but still-EMPTY index
-   * (nothing yet to diff against) without loading the corpus.
-   */
-  /**
    * Cheap per-query freshness gate.
    *
    * The corpus root's mtime is checked first, which is a single `stat`. Only
@@ -492,32 +380,6 @@ export class CorpusIndex {
   }
 
   /**
-   * The freshness decision {@link ensureFresh} took on its most recent call —
-   * `null` before `ensureFresh()` has ever run. Exposed for diagnostics and
-   * tests; never itself triggers work.
-   */
-  lastFreshnessDecision(): FreshnessDecision | null {
-    return this.freshnessDecision;
-  }
-
-  /**
-   * Targeted symbol-table sync for an EXACT set of changed/deleted paths —
-   * the git path's counterpart to {@link syncSymbolsIncremental}. Unlike that
-   * method, this never enumerates or stats the whole corpus: it reads and
-   * re-parses only the paths git already told us changed, and deletes rows
-   * only for the paths git already told us are gone. Whole-file replace,
-   * same as every other symbol write path: an edit shifts every symbol's
-   * line range below it, so per-symbol change detection is never attempted.
-   */
-  /**
-   * Delete-then-upsert one BATCH of prepared `files`/`symbols` rows inside
-   * its own short transaction. Shared by {@link rebuildSymbols}, {@link
-   * syncSymbolsIncremental} (via {@link applySymbolSyncPlans}), and {@link
-   * syncSymbolPaths}. A delete against a non-existent row is a no-op, so this
-   * is also a valid write for a freshly (re)created table.
-   */
-  /** Delete every `files`/`symbols`/`symbols_trgm` row for the given paths inside one short transaction. */
-  /**
    * Migration cleanup only — never schema creation. Drops every table owned
    * by the deleted pre-engine journal store, if present. A fresh or already-
    * current database has none of these and the statements are no-ops.
@@ -548,9 +410,10 @@ export class CorpusIndex {
   }
 
   /**
-   * Drop every cached prepared statement bound to `files`/`symbols`. Must run
-   * before those tables are dropped — same reasoning as
-   * {@link invalidateRecordStatements}, for the symbol-mode statements.
+   * Drop `records`/`records_fts` and recreate them empty, then clear any
+   * legacy pre-engine table. Cached statements are invalidated FIRST, because
+   * a statement prepared against the table object being dropped must not be
+   * reused against its replacement.
    */
   private dropAndRecreateSchema(): void {
     this.invalidateRecordStatements();
@@ -608,35 +471,6 @@ export class CorpusIndex {
     }
   }
 
-  /**
-   * Full rebuild for the `files`/`symbols` storage mode: for every adapter
-   * file, read once, extract its symbols once, and insert the fresh set.
-   * Unreadable files are warned-and-skipped, exactly like the records mode.
-   *
-   * Processed in BOUNDED BATCHES (see {@link SYMBOL_SYNC_BATCH_SIZE}): each
-   * batch is read/hashed/extracted entirely OUTSIDE any transaction (async
-   * I/O/CPU work; running it while a `BEGIN` transaction is open would hold
-   * SQLite's writer lock for the whole rebuild, starving any concurrent
-   * writer's bounded `SQLITE_BUSY` retries), then written inside its own
-   * short transaction before the next batch starts. Holding every file's
-   * extracted symbol bodies for the WHOLE corpus in memory at once — the
-   * pre-batching behavior — can exhaust the heap on a large repository.
-   */
-  /**
-   * Read, hash, and extract symbols for each of `relPaths`, entirely outside
-   * any transaction. Unreadable/undecodable files are warned-and-skipped
-   * rather than aborting the whole batch.
-   */
-  /**
-   * Immediately before a batch's write transaction, re-`stat` each prepared
-   * file and compare its mtime against what was captured during preparation.
-   * Preparation (read/hash/extract) runs entirely outside any transaction and
-   * can take arbitrarily long; if a file changed — and was possibly committed
-   * — DURING that window, writing the stale snapshot would mean a
-   * subsequently clean `git status` never triggers a refresh, and the stale
-   * row stays wrong forever. Re-prepare just the drifted files so the batch
-   * commits their CURRENT content instead.
-   */
   /**
    * Incremental sync keyed by source path + mtime + content hash. Only files
    * whose mtime AND content hash differ from the stored row are re-decoded and
@@ -711,17 +545,6 @@ export class CorpusIndex {
     }
   }
 
-  /**
-   * Incremental sync for the `files`/`symbols` storage mode, keyed by
-   * `file_path` + mtime + content hash. A file is UNCHANGED only when both
-   * mtime and content hash match its stored `files` row; per-symbol change
-   * detection is never attempted, because a single-line edit shifts every
-   * symbol's line range below it. On a genuine content change: delete every
-   * `symbols` row for that exact `file_path`, upsert its `files` row, parse
-   * once, and insert the fresh symbol set — all inside one transaction, so a
-   * reader never observes a half-replaced file's symbols.
-   */
-  /** Apply one batch of {@link SymbolSyncPlan}s inside its own short transaction. */
   private upsertRecord(loaded: StoredRecord): void {
     this.db
       .prepare(
@@ -766,75 +589,6 @@ export class CorpusIndex {
     return { ...record, mtimeMs: st.mtimeMs, contentHash };
   }
 
-  /**
-   * Every `symbols` row for one exact `file_path` (the `files`/`symbols`
-   * storage mode), ordered by source position. Empty array for a file with
-   * no indexed symbols (including when the corpus was never indexed).
-   */
-  /**
-   * Every `symbols` row across the WHOLE corpus (the `files`/`symbols`
-   * storage mode), unordered. {@link symbolsForFile} answers "what does this
-   * one known file contain"; this answers "what does the corpus contain" —
-   * the shape a corpus-wide candidate search (e.g. the investigate
-   * preprocessor) needs and no per-file lookup can serve.
-   */
-  /**
-   * Every `files` row (the `files`/`symbols` storage mode) — per-file
-   * change-detection metadata (path, mtime, content hash) only, never
-   * content. Used alongside {@link allSymbols} to build a folder-level map
-   * of the whole corpus without enumerating every file's content.
-   */
-  /**
-   * Every `symbols` row's metadata ONLY — id/path/name/kind/line-range, never
-   * `body` (the `files`/`symbols` storage mode's counterpart to
-   * {@link allRecordsMeta}). Ranking a symbol corpus (candidate scoring, the
-   * folder-level map the investigate preprocessor builds) needs none of a
-   * symbol's body text; only a caller that will actually return a symbol's
-   * text should pay to project it (see {@link symbolsByIds}). Same row set as
-   * {@link allSymbols}, just a cheaper column list.
-   */
-  /**
-   * For one already-lowercased query token, the ids of every symbol whose
-   * `name` matches (case-insensitive substring) and, separately, whose `body`
-   * matches — resolved entirely in SQL via `LIKE`, so a caller can score a
-   * whole corpus against many tokens without ever reading `name`/`body` text
-   * itself back into this process. A symbol whose name AND body both match
-   * appears in both lists. `token` may contain `_` (a valid identifier
-   * character that is also `LIKE`'s single-character wildcard); see
-   * {@link escapeLikeLiteral}.
-   *
-   * Weighting a match (e.g. "name match counts more than a body match") is a
-   * caller/adapter-owned scoring decision, not the engine's — this returns
-   * raw match membership only, mirroring how {@link CorpusAdapter.signals}
-   * keeps domain scoring out of the corpus-neutral engine.
-   */
-  /**
-   * Produces the FTS-backed candidate ids for a ranked symbol query. For
-   * multi-token searches, a rarity-first prefix caps the FTS fanout at the
-   * requested result limit. Tokens with no matching rows are excluded before
-   * prefix selection so they cannot consume the guaranteed first slot.
-   */
-  /**
-   * The highest-scoring symbols for the supplied unique query tokens, with
-   * FTS candidate selection, ranking, cap, and metadata projection all
-   * performed by SQLite. The body column is used only inside `LIKE`
-   * predicates; it is never projected. A caller that needs bodies for these
-   * winners must fetch them separately via {@link symbolsByIds}.
-   *
-   * The score exactly mirrors investigate's historical JS calculation: every
-   * token contributes 3 for a name substring match and 1 for a body substring
-   * match. `tokenize` produces ASCII tokens, matching SQLite `LIKE`'s default
-   * case-insensitive semantics for those tokens.
-   *
-   * `symbols_trgm` supplies the candidate ids before the score expression is
-   * evaluated. The final `LIMIT` remains in this statement, and only metadata
-   * (never symbol bodies) is materialized for the surviving winners.
-   */
-  /**
-   * Folder-level file and symbol counts for the whole indexed corpus. SQLite
-   * does the aggregation so callers don't have to materialize every file or
-   * symbol merely to build a compact folder map.
-   */
   /** Every derived-index row, decoded back into structured form. */
   allRecords(): StoredRecord[] {
     if (!this.allRecordsStmt) {

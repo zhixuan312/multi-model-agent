@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { SCHEMA_VERSION } from './config.mjs';
+import { SCHEMA_VERSION, configuredMainModel, configuredWorkerModels } from './config.mjs';
 import { SMOKE_CLIENT } from './http.mjs';
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
@@ -740,6 +740,28 @@ export function verify(rec) {
     const attributed = clients.length > 0 && clients.every((c) => c === SMOKE_CLIENT);
     out.push(C('client-attribution', clients.length === 0 ? 'NA' : (attributed ? 'PASS' : 'FAIL'),
       `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
+
+    // The cost baseline must be the CONFIGURED main tier on every event. The
+    // defect this replaces: with no per-call model claim, the runtime fell back
+    // to `agents[implTier].model` — one of the two workers that had just run the
+    // task — so `mainCostUSD` compared a run against itself and reported a
+    // negative saving for runs that saved money. Two separate assertions,
+    // because they fail differently: equality catches a wrong source, and the
+    // worker-tier exclusion catches a fallback that happens to look plausible.
+    const wantMain = configuredMainModel();
+    const workerModels = configuredWorkerModels().filter((m) => m !== wantMain);
+    const mainModels = [...new Set(
+      q.records.flatMap((r) => (Array.isArray(r.events) ? r.events : [])).map((e) => e.mainModel).filter(Boolean),
+    )];
+    out.push(C('main-model-baseline',
+      wantMain === null ? 'NA'
+        : mainModels.length === 0 ? 'FAIL'
+          : (mainModels.every((m) => m === wantMain) ? 'PASS' : 'FAIL'),
+      `mainModel=[${mainModels.join(', ')}] want=${wantMain ?? '(no agents.main in config)'}`));
+    out.push(C('baseline-is-not-a-worker-tier',
+      workerModels.length === 0 || mainModels.length === 0 ? 'NA'
+        : (mainModels.some((m) => workerModels.includes(m)) ? 'FAIL' : 'PASS'),
+      `mainModel=[${mainModels.join(', ')}] workerTiers=[${workerModels.join(', ')}]`));
   }
   return out;
 }

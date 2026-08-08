@@ -189,24 +189,34 @@ That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 S
 >
 > Other clients are unaffected — this overlap is Claude-Code-only.
 
-### 2. Choosing your main model — intentionally (4.0.3+)
+### 2. Choosing your main model — intentionally (6.6.0+)
 
-Your **main model** is **the model you'd use without mma** — the cost baseline for every task. The per-task headline reports `$X actual / $Y saved vs <mainModel> (Z× ROI)`. Pick on purpose:
+Your **main model** is **the model you'd use without mma**. It is the `agents.main` tier in your
+config, and it does two jobs: it runs the `orchestrate` route, and it is the cost baseline for every
+task. The per-task headline reports `$X actual / $Y saved vs <agents.main.model> (Z× ROI)`. Pick on
+purpose:
 
 - Heavy Claude Code user → `claude-opus-4-8`
 - ChatGPT-led workflow → `gpt-5.6`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Over MCP, client identity is attributed automatically from the connecting client's own protocol
-metadata — there is nothing to configure. `mainModel` is an optional `mma_run` parameter: pass it
-and the per-task headline reports the savings delta above; omit it and MMA still runs, just without
-that comparison. Auto-detection of the main model is deliberately **not** attempted — the
-claude-agent-sdk used by claude-tier workers writes JSONL files into the same
-`~/.claude/projects/<slug>/` a detector would read, so it could return the *worker's* model as the
-calling agent's "main" model, rather than yours.
+`agents.main` is **required**. A config with only `standard` and `complex` does not start, and the
+error names the missing tier. Callers cannot supply the baseline per request: there is no `mainModel`
+parameter on `mma_run` and no `X-MMA-Main-Model` header. You declare the value once and mma trusts
+it.
 
-(Programmatic/REST callers — Forge, custom integrations — set the equivalent `X-MMA-Main-Model`
-header per-request; see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).)
+The reason is that a per-call claim was usually absent over MCP, and mma then fell back to the
+implementer tier's own model — one of the workers that had just run the task. That priced a run
+against a worker instead of against your model, and reported a **negative** saving for runs that
+actually saved money.
+
+The trade-off: one declared value serves every client on a daemon, and it cannot follow a `/model`
+switch inside a session. That costs some precision. It buys a baseline that is never a worker model
+and that no caller can omit or mistype. If the price registry does not recognise your main model,
+the comparison is reported as null rather than guessed.
+
+Over MCP, client identity (which tool called mma) is still attributed automatically from the
+connecting client — there is nothing to configure for that.
 
 ### 3. The config file
 
@@ -225,12 +235,17 @@ mkdir -p ~/.mma && cat > ~/.mma/config.json <<'EOF'
     "complex": {
       "type": "codex",
       "model": "gpt-5.6"
+    },
+    "main": {
+      "type": "claude",
+      "model": "claude-opus-4-8"
     }
   }
 }
 EOF
 ```
 
+All three tiers are required — see [Choosing your main model](#2-choosing-your-main-model--intentionally-660).
 That's the whole minimum-viable file. All other knobs (`server.*`, `clients.*`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
 ### 4. Start the daemon + verify

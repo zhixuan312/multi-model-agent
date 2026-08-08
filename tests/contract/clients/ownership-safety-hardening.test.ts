@@ -176,4 +176,29 @@ describe('contract: stdio entry ownership admits exactly one arg shape', () => {
   it('refuses when there is no expected entrypoint to compare against', () => {
     expect(isOwnedMcpEntry(owned, 'stdio-json')).toBe(false);
   });
+
+  // The second admitted shape, added in 6.6.0 so Claude Desktop attributes as
+  // itself instead of the anonymous `mcp` bucket.
+  it('recognises the entry carrying the client flag MMA writes', () => {
+    const withFlag = { command: '/usr/local/bin/node', args: ['/opt/mma.js', 'mcp', '--client=claude-desktop'] };
+    expect(isOwnedMcpEntry(withFlag, 'stdio-json', '/opt/mma.js')).toBe(true);
+  });
+
+  // `claude-desktop` is the ONLY client id MMA writes into a stdio entry, because
+  // Claude Desktop is the only client whose registration takes this form. The
+  // bridge's own `--client` roster is much wider; accepting all of it would let a
+  // hand-written `--client=cursor` entry be claimed as MMA's, and then silently
+  // overwritten by an install or deleted by an uninstall.
+  it.each(['cursor', 'agent-plugin', 'codex', 'windsurf'])(
+    'refuses a stdio entry carrying --client=%s, which MMA never writes here',
+    (clientId) => {
+      const foreign = { command: '/usr/local/bin/node', args: ['/opt/mma.js', 'mcp', `--client=${clientId}`] };
+      expect(isOwnedMcpEntry(foreign, 'stdio-json', '/opt/mma.js')).toBe(false);
+    },
+  );
+
+  it('refuses a third argument that is not a client flag at all', () => {
+    const handEdited = { command: '/usr/local/bin/node', args: ['/opt/mma.js', 'mcp', '--verbose'] };
+    expect(isOwnedMcpEntry(handEdited, 'stdio-json', '/opt/mma.js')).toBe(false);
+  });
 });

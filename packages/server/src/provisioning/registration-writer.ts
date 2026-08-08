@@ -32,7 +32,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { MCP_BRIDGE_CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
+import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import { atomicWriteBytes, realFsDeps, type AtomicFsDeps } from './atomic-write.js';
 import { CLIENT_CAPABILITIES, type ClientCapability, type McpConfigFormat } from './capability-registry.js';
 
@@ -95,13 +95,21 @@ function stdioEntrypointOf(entry: Record<string, unknown>): string | undefined {
   return typeof first === 'string' ? first : undefined;
 }
 
-/** True only for `--client=<id>` with a real bridge client id — the exact third
- *  argument the stdio writer emits, against the same roster the bridge validates. */
+/** The ONLY client id an MMA-written stdio entry can carry. Claude Desktop is
+ *  the only client whose registration MMA writes in `stdio-json` form, and its
+ *  writer emits exactly `--client=claude-desktop`.
+ *
+ *  Deliberately this one value rather than membership in `MCP_BRIDGE_CLIENT_IDS`.
+ *  The roster is what the BRIDGE accepts on its command line — a much wider set
+ *  than what this writer produces. Accepting the whole roster made a hand-written
+ *  `--client=cursor` entry in `claude_desktop_config.json` look MMA-owned, so an
+ *  install would overwrite it and an uninstall would delete it. Ownership must be
+ *  proven against what MMA writes, not against what the bridge tolerates. */
+const OWNED_STDIO_CLIENT_FLAG = '--client=claude-desktop';
+
+/** True only for the exact third argument the stdio writer emits. */
 function isOwnedClientFlag(value: unknown): boolean {
-  if (typeof value !== 'string') return false;
-  const prefix = '--client=';
-  if (!value.startsWith(prefix)) return false;
-  return (MCP_BRIDGE_CLIENT_IDS as readonly string[]).includes(value.slice(prefix.length));
+  return value === OWNED_STDIO_CLIENT_FLAG;
 }
 
 /**

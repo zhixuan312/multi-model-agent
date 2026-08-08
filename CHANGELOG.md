@@ -7,9 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Removes the code index. `SCHEMA_VERSION` stays at **6**.
+Two breaking changes: `agents.main` becomes a required config tier and takes over the cost baseline,
+and the code index is removed. `SCHEMA_VERSION` stays at **6**.
+
+### Changed
+
+- **BREAKING — the cost baseline comes from `agents.main`, not from a per-call claim.** `agents.main`
+  is now required in the config. A config with only `standard` and `complex` no longer starts, and
+  the startup error names the missing tier. `mma setup` asks for all three tiers and no longer offers
+  to skip `main`.
+
+  Before this change, mma priced every run against `caller.mainModel ?? agents[implTier].model`. Over
+  MCP the caller rarely sent a model, so the baseline silently became the implementer tier's own
+  model — one of the two workers that had just executed the task. `savedVsMainCostUsd` then stopped
+  meaning "saved versus the model driving mma" and started meaning "is the reviewer's model dearer
+  per token than the implementer's". On a cross-tier route that answer is often yes, so the per-task
+  headline reported a **negative** saving for runs that saved money. About two thirds of recent MCP
+  runs carried such a baseline, and the same value reached the telemetry wire record, so
+  `main_cost_usd` and `total_delta_usd` mixed two incomparable measurements.
+
+  The baseline is now `config.agents.main.model` — a value you declare once and mma trusts. `main`
+  was already a real tier (`orchestrate` runs on it, `mma setup` asks for it first), so this gives an
+  existing declaration one more use rather than adding a concept.
+
+  The trade-off: one declared value serves every client on a daemon, and it cannot follow a `/model`
+  switch inside a session. That is a real loss of precision. It buys a baseline that is never a
+  worker model and that no caller can omit, mistype, or guess. A main tier the price registry does
+  not recognise yields a null comparison, not a fabricated one. Existing telemetry rows are
+  unchanged; only new runs are affected.
+
+- **A config missing a tier fails with a sentence, not a Zod dump.** The three tiers stay optional in
+  the config *schema* and are required by `assertRunnable`, which is what `mma serve` runs. Making
+  `agents.main` required in the schema instead would have met every upgrading user with a raw
+  `invalid_type` at path `["agents","main"]` — exactly the message `assertRunnable` exists to
+  replace. A partially configured `agents` block is also a real intermediate state, because
+  `mma configure-provider` writes one tier at a time. `startServer` runs the same check before it
+  registers any task handler, so a caller that bypasses the CLI gets the named error too, instead of
+  a `TypeError` raised much later while pricing a finished run.
+
+- **`GET /status` reports each tier independently.** It used to report the `complex` tier under the
+  name `main` when `main` was unset, which told an operator a tier was configured when it was not.
+  Each tier is now its own value, and `null` when absent.
+
+- **An MMA-written Claude Desktop entry is recognised by the exact flag MMA writes.** Ownership of a
+  stdio registration accepts `--client=claude-desktop` only. Accepting any id from the bridge's
+  wider `--client` roster would have made a hand-written `--client=cursor` entry look MMA-owned, so
+  an install could overwrite it and an uninstall could delete it.
+
+- **The corpus engine serves one storage mode instead of two.** Every `isSymbolCorpusAdapter` branch
+  is gone from `ensureSchema`, `ensureHealthy`, `ensureFresh`, `rebuild`, `syncIncremental`, and
+  `search`, so the journal's path no longer pays a mode check on any hot operation, and the engine
+  no longer creates `files`, `symbols`, or `symbols_trgm` tables it does not use. The engine is
+  about 900 lines smaller.
 
 ### Removed
+
+- **BREAKING — every per-call main-model claim is gone.** The `mainModel` argument on `mma_run`, the
+  `X-MMA-Main-Model` header, `CallerContext.mainModel`, `RequestContext.mainModel`, and the model
+  field on `CallerIdentity` are all deleted. No packaged skill, command, or plugin sent them, so no
+  bundled caller needs a change. The `main -> complex` substitutions in `agent-resolver` and
+  `provider-factory` are gone too, since all three tiers are now declared config. `X-MMA-Client` is
+  unaffected and still required on tool routes.
+
+### Added
+
+- **MCP callers now identify themselves.** Every MCP caller previously landed in the anonymous `mcp`
+  bucket, which made client attribution useless for the transport most callers use. The Agent
+  Plugins headers helper now sends `X-MMA-Client: agent-plugin` — the value is `agent-plugin` rather
+  than `claude-code` because several clients can load the plugin and none owns it. The Claude Desktop
+  stdio entry passes `--client=claude-desktop`. The cursor, windsurf, and opencode writers send their
+  own `X-MMA-Client`. Codex is **not** covered: its TOML writer emits flat key/value pairs and cannot
+  express Codex's nested `http_headers` table.
+
+- **Two search habits are now in every worker prompt.** `SEARCH_HYGIENE_BLOCK` tells a worker not to
+  re-run a search it already ran, and not to read a whole file when it already knows the line range.
+  These two rules were the tool-neutral part of the deleted `mma search` guidance, and the
+  measurement behind them is unaffected by the removal: across 285 real tasks, 84% of worker tool
+  calls were search or read, and the most common consecutive pairs were search-then-search and
+  read-then-read. Each repeat costs a turn, and every turn resends the whole transcript. Injected for
+  every task type rather than a subset — not repeating a lookup applies to a journal query and a web
+  search as much as to a `grep`.
 
 - **The code index is gone.** `investigate` no longer receives `candidates` or `folderMap` in its
   payload, and the `mma search` command no longer exists. The `FileCorpusAdapter`, its extraction
@@ -35,6 +112,13 @@ Removes the code index. `SCHEMA_VERSION` stays at **6**.
   the word "recover". Lexical matching cannot bridge that gap at any level of tuning. Closing it
   needs semantic retrieval, which is a different and much larger feature.
 
+- **The engine's remaining code-index scaffolding is gone too.** The `readOnly` and `journalMode`
+  open modes, the `dbPath` override, the non-git fallback-sweep throttle (`FallbackSweepState`), the
+  `detectGitChanges` git-freshness module, and `lastFreshnessDecision()` existed only to serve the
+  code index. The journal adapter — now the only caller — opens with `{ root, adapter }` and none of
+  them ran. Sixteen orphaned documentation blocks describing already-deleted methods were removed
+  with them.
+
   **The journal index is unaffected and keeps every gain.** Journal record and recall latency stay at
   about 0.31 ms with `mAP` 1.0000, and the sublinear freshness work remains. Those live in the shared
   engine and never depended on the code index.
@@ -48,6 +132,17 @@ Removes the code index. `SCHEMA_VERSION` stays at **6**.
   about 900 lines smaller.
 
 ### Upgrade note
+
+- **Add `agents.main` to your config before upgrading, or the daemon will not start.** Copy the tier
+  you would use without mma, for example:
+
+  ```json
+  "main": { "type": "claude", "model": "claude-opus-4-8" }
+  ```
+
+  Re-running `mma setup` writes all three tiers for you. The startup error names the missing tier, so
+  a daemon that fails after the upgrade tells you exactly what to add. Provisioning commands
+  (`mma sync`, `mma clients`) still work without any tier configured.
 
 - Derived code indexes under `~/.mma/state/corpus-index/` are now orphaned. Nothing reads or writes
   them and nothing recreates them. Delete the directory to reclaim the space — it can be hundreds of

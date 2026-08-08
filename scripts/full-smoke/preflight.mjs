@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, statSync, readdirSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, mkdirSync, rmSync, cpSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -545,6 +545,69 @@ async function clientRosterGate(token) {
 }
 
 /**
+ * Required-tier release gate — a config without `agents.main` must REFUSE to
+ * start, and must say which tier is missing.
+ *
+ * WHY IT EXISTS. `agents.main` became required so the cost baseline is a value
+ * the user declares once, never a worker tier the runtime guessed. A guessed
+ * baseline priced a run against one of the models that had just executed it and
+ * reported a negative saving for runs that saved money. The guess is only
+ * actually gone if the daemon refuses the config that used to permit it.
+ *
+ * WHY THE ERROR TEXT IS ASSERTED, NOT ONLY THE EXIT CODE. Every upgrading user
+ * with a two-tier config meets this failure. A non-zero exit that does not name
+ * `agents.main` turns a one-line config edit into a support question, so the
+ * message is the deliverable, not a detail.
+ *
+ * WHY IT USES A SCRATCH CONFIG ON A FREE PORT. It must not touch the live
+ * daemon this smoke measures. The run is expected to die during config
+ * validation, before any bind, but the free port means even a regression that
+ * reaches the listener cannot collide with the daemon on 7337.
+ */
+function requiredTierGate() {
+  const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
+  if (!existsSync(cliPath)) {
+    throw new AbortError('required-tier', `no built CLI at ${cliPath}`, 'run `npm run build` before the smoke');
+  }
+  const dir = join(tmpdir(), `mma-smoke-required-tier-${process.pid}`);
+  const configPath = join(dir, 'config.json');
+  mkdirSync(dir, { recursive: true });
+  // Deliberately the pre-6.6.0 shape: the two worker tiers and no `main`.
+  writeFileSync(configPath, JSON.stringify({
+    agents: {
+      standard: { type: 'claude', model: 'claude-sonnet-5' },
+      complex: { type: 'claude', model: 'claude-sonnet-5' },
+    },
+    server: { port: 7399 },
+  }), 'utf8');
+
+  let exitCode = 0;
+  let output = '';
+  try {
+    output = execFileSync('node', [cliPath, 'serve'], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 30_000,
+      env: { ...process.env, MMA_CONFIG: configPath },
+    });
+  } catch (e) {
+    exitCode = typeof e.status === 'number' ? e.status : 1;
+    output = String(e.stdout ?? '') + String(e.stderr ?? '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+
+  if (exitCode === 0) {
+    throw new AbortError('required-tier', 'a config with no agents.main started the daemon',
+      'agents.main is required — assertRunnable must reject a config that declares only standard and complex');
+  }
+  if (!output.includes('agents.main')) {
+    throw new AbortError('required-tier', `startup failed but the message never names agents.main: ${output.trim().slice(0, 300)}`,
+      'the error must name the missing tier so an upgrading user knows what to add');
+  }
+}
+
+/**
  * Daemon-lifecycle release gate — `mma stop`, `mma restart`, `mma doctor`, the
  * pidfile, and the occupied-port error.
  *
@@ -832,6 +895,9 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
 
   // Canonical client roster: the live inventory matches CLIENT_IDS exactly.
   await clientRosterGate(token);
+
+  // Required tiers: a config without agents.main refuses to start, by name.
+  requiredTierGate();
 
   // Feature coverage: every shipped task type has a scenario in this smoke.
   await taskTypeCoverageGate();
