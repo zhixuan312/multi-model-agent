@@ -13,8 +13,6 @@ Answer a codebase question via a read-only mma worker. The worker greps and read
 
 **Core principle:** Investigation is labor (read, grep, synthesize). Delegate it. The main agent stays on judgment — deciding what the answer means and what to do with it.
 
-**The worker does not start cold.** Before the worker's first turn, mma searches a repository-wide code index once and hands the worker a bounded set of ranked candidate symbols (path, name, line range, short snippet) plus a folder-level map of the repository. The worker starts from those leads, then still greps and reads for anything the index missed or that only shows up mid-investigation (e.g. a symbol it discovers by following an import chain) — the one-time search before the worker starts cannot see that. Callers of this skill do not need to do anything differently; this is automatic.
-
 ## When to Use
 
 ```dot

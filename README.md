@@ -590,24 +590,17 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 6.3
+## What's new
 
-- **`investigate` starts with a map of the repository.** A code index built on the journal's
-  retrieval engine runs before the worker does, handing it candidate files and a folder map instead
-  of making it grep its way in. Freshness costs time proportional to what changed, not to the size
-  of the repo, and the index lives in MMA's own state directory — never in the folder you pointed it
-  at.
-- **Worker output reads the same way everywhere.** One plain-English style instruction is applied to
-  both halves of the pipeline for the nine task types whose output a person reads, so the reviewer —
-  which writes the final answer — cannot discard it.
-- **The execution monitor actually appears now.** Every released build shipped the panel's bundle
-  but looked for it in a path that only exists in this repo's source tree, so an installed daemon
-  reported the App as unavailable and served tools only. Tools were never affected; if you use
-  Claude Desktop, the panel works from this version on.
-- **If you have telemetry on, tool names are now included** — names and counts only, never what a
-  tool was pointed at. See [PRIVACY.md](./PRIVACY.md); `mma telemetry disable` turns it all off.
-
-See [CHANGELOG](./CHANGELOG.md) for full details.
+- **The code index has been removed.** `investigate` no longer starts with a pre-built list of
+  candidate files, and `mma search` is gone. Measured against its own absence, the index made no
+  difference on questions that name a symbol — plain `rg` already finds those — and it found the
+  right file for 33% of questions phrased as sentences, against 25% for a worker that picks a
+  keyword and greps. No measurement ever showed it improved answer quality. See the CHANGELOG for
+  the full reasoning.
+- **The journal index keeps every gain and gets simpler.** Record and recall stay at about 0.31 ms
+  with unchanged retrieval quality, and the retrieval engine now serves one storage mode instead of
+  two.
 
 ## License
 

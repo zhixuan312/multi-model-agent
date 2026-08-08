@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
  * its own cached index rather than this process issuing one `fs.stat` per
  * file. Only when the root is not a git repository do we fall back to a full
  * stat sweep, and that fallback is explicitly throttled by the caller
- * (`CorpusIndex.ensureFreshSymbols`) so it cannot run on every query either.
+ * so it cannot run on every query either.
  */
 
 const execFileAsync = promisify(execFile);
@@ -49,7 +49,7 @@ function splitNulDelimited(raw: string): string[] {
  *
  * `opts.includeTracked` also runs `git ls-files -z` to populate
  * {@link GitChangeSet.trackedPaths} — needed only to seed a genuinely EMPTY
- * index (see `CorpusIndex.ensureFreshSymbols`), where `git status` alone (which
+ * index, where `git status` alone (which
  * reports only what changed since the last commit) would leave an
  * already-committed repository's first-time index empty forever. Every other
  * call is steady state and must cost exactly ONE subprocess call: defaults to

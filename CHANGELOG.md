@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Removes the code index. `SCHEMA_VERSION` stays at **6**.
+
+### Removed
+
+- **The code index is gone.** `investigate` no longer receives `candidates` or `folderMap` in its
+  payload, and the `mma search` command no longer exists. The `FileCorpusAdapter`, its extraction
+  tiers, the investigate preprocessor, and the `files`/`symbols` half of the corpus engine have all
+  been deleted.
+
+  The reason is measurement, not preference. The feature was compared against its own absence on the
+  same questions and the same repository. On a question that names a symbol, `rg` finds the right
+  file 100% of the time and returns a single line; the index cannot improve on that, and the earlier
+  A/B measured exactly 313 s against 312 s. On a question phrased as a sentence — which is how an
+  `investigate` prompt is actually written — a worker that extracts a keyword and greps finds the
+  right file 25% of the time, and the index found it 33% of the time. That is one question out of
+  twelve. No measurement, at any point in the feature's life, showed an improvement in answer
+  quality.
+
+  The cost was not small. The feature shipped four defects, including a 2x journal slowdown that
+  reached users in 6.3.0. A later review found that 32.6% of all corpus lines were never indexed at
+  all, that 187 of 462 TypeScript files produced zero symbols, and that the file path was scored
+  during ranking but could never be matched, making that score a silent no-op.
+
+  The limit is structural rather than a tuning problem. A question asks "how does the daemon recover
+  executions after it restarts" and the answer lives in a file called `reconcile.ts` that never uses
+  the word "recover". Lexical matching cannot bridge that gap at any level of tuning. Closing it
+  needs semantic retrieval, which is a different and much larger feature.
+
+  **The journal index is unaffected and keeps every gain.** Journal record and recall latency stay at
+  about 0.31 ms with `mAP` 1.0000, and the sublinear freshness work remains. Those live in the shared
+  engine and never depended on the code index.
+
+### Changed
+
+- **The corpus engine serves one storage mode instead of two.** Every `isSymbolCorpusAdapter` branch
+  is gone from `ensureSchema`, `ensureHealthy`, `ensureFresh`, `rebuild`, `syncIncremental`, and
+  `search`, so the journal's path no longer pays a mode check on any hot operation, and the engine
+  no longer creates `files`, `symbols`, or `symbols_trgm` tables it does not use. The engine is
+  about 900 lines smaller.
+
+### Upgrade note
+
+- Derived code indexes under `~/.mma/state/corpus-index/` are now orphaned. Nothing reads or writes
+  them and nothing recreates them. Delete the directory to reclaim the space — it can be hundreds of
+  megabytes on a machine that investigated several repositories.
+
 ## [6.5.1] - 2026-08-08
 
 Fixes a defect that made every route fail on a normal `npm install`. `SCHEMA_VERSION` stays at **6**.

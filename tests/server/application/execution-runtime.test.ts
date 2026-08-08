@@ -22,7 +22,6 @@ function baseAgentsConfig(stateDir: string): MultiModelConfig {
       main: { type: 'codex', model: 'mock-main', baseUrl: 'http://mock.local' },
     },
     // The `investigate` preprocessor resolves its own derived code-corpus
-    // index under `server.stateDir` (see investigate.ts's `corpusIndexDbPath`)
     // — every test here dispatches `type: 'investigate'`, so this must be
     // present. Reuses the SAME per-test `stateDir` the `ExecutionStore` in
     // `beforeEach` is already keyed off, mirroring real server wiring where

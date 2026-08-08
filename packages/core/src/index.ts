@@ -130,7 +130,6 @@ export {
   searchCandidatesForRecall,
   searchCandidatesForRecord,
   searchCandidatesForRecordBatch,
-  FileCorpusAdapter,
   CorpusIndex,
 } from './journal/index.js';
 export type {
@@ -138,10 +137,6 @@ export type {
   JournalRecordDecision,
   ApplyRecordInput,
   ApplyRecordResult,
-  SymbolRecord,
-  SymbolRecordMeta,
-  SymbolInput,
-  SymbolCorpusAdapter,
   FallbackSweepState,
 } from './journal/index.js';
 export { TaskRegistry } from './unified/task-registry.js';

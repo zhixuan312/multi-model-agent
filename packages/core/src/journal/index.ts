@@ -36,7 +36,6 @@ export type {
   LexicalHit,
   JournalCandidate,
 } from './adapters/journal-adapter.js';
-export { FileCorpusAdapter } from './adapters/file-adapter.js';
 export { CorpusIndex } from './engine/index-store.js';
 export type { FallbackSweepState } from './engine/index-store.js';
 export type {
@@ -44,9 +43,4 @@ export type {
   CorpusRecord,
   StoredRecord,
   StoredRecordMeta,
-  SymbolCorpusAdapter,
-  SymbolInput,
-  SymbolRecord,
-  SymbolRecordMeta,
-  FileRecord,
 } from './engine/types.js';
