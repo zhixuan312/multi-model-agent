@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.5.1] - 2026-08-08
+
+Fixes a defect that made every route fail on a normal `npm install`. `SCHEMA_VERSION` stays at **6**.
+
+### Fixed
+
+- **Skill files are found on an installed package.** Every route loads a skill markdown file from the
+  core package before it can start. The resolver guessed two relative paths and both missed on a
+  real install: the installed guess assumed `@zhixuan92/multi-model-agent-core` sits nested inside
+  the server package's own `node_modules`, but npm and pnpm hoist it to the top level, so that
+  directory does not exist. The resolver then fell back to the monorepo path, and every task failed
+  with `skill_load_failed` naming `node_modules/packages/core/src/skills/...` — a location no
+  install has. Node's module resolver is now asked where the package actually is, which is correct
+  for hoisted, nested, pnpm-symlinked and global layouts alike. The monorepo path still wins when it
+  exists, so a local edit to `packages/core/src/skills/` still takes effect.
+
+  This shipped in earlier releases. It was not caught because the release pipeline's consumer-install
+  check verified `mma --version`, that core installed transitively, and that the runner's native CLI
+  was on disk — but never loaded a skill. That check now resolves the skills directory from the
+  installed package and asserts a skill file is readable, so this class of defect fails the release
+  instead of reaching users.
+
 ## [6.5.0] - 2026-08-08
 
 Updating MMA is now one command. `mma update` installs the new package, restarts the daemon and
