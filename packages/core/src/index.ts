@@ -107,8 +107,47 @@ export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';
 export type { TaskType, TypeConfig, TargetAcceptance } from './unified/type-registry.js';
 export { WRITING_STYLE_BLOCK } from './unified/writing-style-block.js';
-export { SPEC_COMPONENTS, resolveComponents } from './unified/spec-components.js';
-export type { SpecComponent } from './unified/spec-components.js';
+export {
+  SPEC_COMPONENTS,
+  resolveComponents,
+  SPEC_COMPONENT_CATALOG,
+  resolveComponentHeading,
+} from './unified/spec-components.js';
+export type { SpecComponent, SpecComponentCatalogEntry } from './unified/spec-components.js';
+// Deliverable Contract: shared types, canonical digest, and command execution bounds.
+// See packages/core/src/unified/deliverable-contract.ts for the algorithm this digest
+// implements and why it is deliberately filesystem-free.
+export {
+  VERIFICATION_METHODS,
+  DISPOSITIONS,
+  DEFAULT_COMMAND_TIMEOUT_MS,
+  MAX_COMMAND_TIMEOUT_MS,
+  MAX_CAPTURED_OUTPUT_BYTES,
+  canonicalContractDigest,
+  normalizeArtifactPath,
+  draftContractSchema,
+  proposedContractSchema,
+  approvedContractSchema,
+  declaredArtifactSchema,
+  declaredReferenceSchema,
+  resolvedReferenceSchema,
+  commandCheckSchema,
+  deliverableAcceptanceSchema,
+  contractApprovalSchema,
+} from './unified/deliverable-contract.js';
+export type {
+  VerificationMethod,
+  Disposition,
+  DraftContract,
+  ProposedContract,
+  ApprovedContract,
+  DeclaredArtifact,
+  DeclaredReference,
+  ResolvedReference,
+  CommandCheck,
+  DeliverableAcceptance,
+  ContractApproval,
+} from './unified/deliverable-contract.js';
 export { taskInputSchema } from './unified/task-input-schema.js';
 export type { TaskInput } from './unified/task-input-schema.js';
 export { loadSkill } from './unified/skill-loader.js';
