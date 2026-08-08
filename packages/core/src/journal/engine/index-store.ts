@@ -256,6 +256,38 @@ export class CorpusIndex {
      * throttle actually applies across calls.
      */
     sweepState?: FallbackSweepState;
+    /**
+     * Open the database WITHOUT write access.
+     *
+     * A read-only route's worker runs inside an OS sandbox (codex uses
+     * `-s read-only`) that denies writes outside its cwd. SQLite opens
+     * read-write by default and creates `-wal`/`-shm` sidecars next to the
+     * database, so a normal open fails there with "attempt to write a
+     * readonly database" even when the caller only intends to read.
+     *
+     * With this set the connection is read-only and the schema bootstrap is
+     * skipped. The caller MUST NOT then call `ensureHealthy()` or
+     * `ensureFresh()` — both write. That is the correct division anyway: the
+     * daemon's preprocessor refreshes the index before the worker starts, so
+     * a worker only ever needs to read what is already current.
+     */
+    readOnly?: boolean;
+    /**
+     * SQLite journal mode for a read-write open. Defaults to `wal`.
+     *
+     * Pass `delete` for an index that sandboxed readers must open read-only.
+     * WAL keeps a `-shm` sidecar that SQLite needs WRITE access to map, even
+     * for a reader — and it deletes that sidecar when the last connection
+     * closes. So a WAL index is unreadable from a read-only sandbox after the
+     * writer disconnects. `delete` mode leaves a self-contained file that a
+     * read-only connection can open with no write access at all.
+     *
+     * The trade-off is concurrency: `delete` blocks readers during a write.
+     * That is the right trade for the code index, which has ONE writer (the
+     * daemon's preprocessor, briefly, only when files changed) and MANY
+     * readers (workers). The journal index keeps `wal`.
+     */
+    journalMode?: 'wal' | 'delete';
   }): Promise<CorpusIndex> {
     const index = new CorpusIndex(
       opts.root,
@@ -263,11 +295,14 @@ export class CorpusIndex {
       opts.fallbackSweepIntervalMs ?? DEFAULT_FALLBACK_SWEEP_INTERVAL_MS,
       opts.sweepState ?? { lastFallbackSweepAt: null, fallbackSweepCount: 0 },
       opts.dbPath,
+      opts.readOnly === true,
+      opts.journalMode ?? 'wal',
     );
     // First-use bootstrap: `new DatabaseSync(<dbPath>)` throws
     // ENOENT/SQLITE_CANTOPEN when its parent dir does not exist yet — true of
     // both the default (`<root>/index.db`) and a caller-supplied override.
-    await mkdir(dirname(index.dbPath), { recursive: true });
+    // A read-only open must not create anything, including the parent dir.
+    if (!opts.readOnly) await mkdir(dirname(index.dbPath), { recursive: true });
     index.openDatabase();
     return index;
   }
@@ -344,6 +379,8 @@ export class CorpusIndex {
     private readonly fallbackSweepIntervalMs: number,
     private readonly sweepState: FallbackSweepState,
     private readonly dbPathOverride: string | undefined,
+    private readonly readOnly: boolean = false,
+    private readonly journalMode: 'wal' | 'delete' = 'wal',
   ) {}
 
   private get dbPath(): string {
@@ -378,12 +415,20 @@ export class CorpusIndex {
     // bounded retry) can leak one handle per attempt.
     let db: DatabaseSync | undefined;
     try {
-      db = new DatabaseSync(this.dbPath);
-      this.db = db;
-      db.exec('PRAGMA journal_mode = WAL;');
-      db.exec('PRAGMA busy_timeout = 5000;');
-      db.exec('PRAGMA foreign_keys = ON;');
-      this.bootstrapSchema();
+      if (this.readOnly) {
+        // No WAL pragma and no schema bootstrap: both write. `busy_timeout`
+        // is safe and still useful while the daemon refreshes concurrently.
+        db = new DatabaseSync(this.dbPath, { readOnly: true });
+        this.db = db;
+        db.exec('PRAGMA busy_timeout = 5000;');
+      } else {
+        db = new DatabaseSync(this.dbPath);
+        this.db = db;
+        db.exec(`PRAGMA journal_mode = ${this.journalMode === 'delete' ? 'DELETE' : 'WAL'};`);
+        db.exec('PRAGMA busy_timeout = 5000;');
+        db.exec('PRAGMA foreign_keys = ON;');
+        this.bootstrapSchema();
+      }
     } catch (error) {
       if (db) {
         try {
