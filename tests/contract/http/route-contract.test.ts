@@ -227,7 +227,7 @@ describe('route contract', () => {
       } finally { await h.close(); }
     });
 
-    it('task.subtype present for audit, absent for other routes', async () => {
+    it('task.subtype present for audit, absent for other routes; task.practice present only when requested', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const r1 = await dispatch(h, { type: 'audit', subtype: 'spec', target: { paths: ['/tmp/a.md'] } });
@@ -239,6 +239,17 @@ describe('route contract', () => {
         const { taskId: t2 } = (await r2.json()) as { taskId: string };
         const env2 = await pollToTerminal(h, t2);
         expect((env2.task as Record<string, unknown>).subtype).toBeUndefined();
+        // Intentional contract change (Task I-4): `practice` is now its own wire
+        // field, carried on plan/execute_plan/review/debug terminal envelopes —
+        // distinct from `subtype`, which stays audit-only. A `review` task that
+        // did not request a practice carries neither field.
+        expect((env2.task as Record<string, unknown>).practice).toBeUndefined();
+
+        const r3 = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] }, practice: 'software' });
+        const { taskId: t3 } = (await r3.json()) as { taskId: string };
+        const env3 = await pollToTerminal(h, t3);
+        expect((env3.task as Record<string, unknown>).practice).toBe('software');
+        expect((env3.task as Record<string, unknown>).subtype).toBeUndefined();
       } finally { await h.close(); }
     });
 

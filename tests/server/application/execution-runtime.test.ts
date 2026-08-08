@@ -3,12 +3,14 @@
 // even when the pipeline CRASHES (previously a runner crash skipped the unpin
 // loop, leaving the block pinned forever — DELETE /context-blocks/:id 409'd
 // until server restart).
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExecutionRuntime } from '../../../packages/server/src/application/execution-runtime.js';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
+import { SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
 import { TaskRegistry } from '../../../packages/core/src/unified/task-registry.js';
 import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
@@ -375,5 +377,60 @@ describe('ExecutionRuntime', () => {
     );
     expect(outcome.ok).toBe(false);
     expect((outcome as { ok: false; error: { kind: string } }).error.kind).toBe('agent_not_configured');
+  });
+
+  /**
+   * AC-6.6 regression: the engine must NEVER infer `practice` from the workspace —
+   * not from the presence of `.git`, not from source-file extensions in the cwd.
+   * `cwd` here is a real git repository containing a TypeScript source file, which
+   * is exactly the shape an inference heuristic would key off. The task requests
+   * no `practice`, so it must still load the generic `implement.md`, never a
+   * software-specific asset it inferred on its own.
+   */
+  it('never infers practice from a git-repo cwd full of source files — omitted practice loads the generic implementer', async () => {
+    execFileSync('git', ['init', '-q'], { cwd });
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd });
+    writeFileSync(join(cwd, 'index.ts'), 'export const x = 1;\n');
+    execFileSync('git', ['add', '-A'], { cwd });
+    execFileSync('git', ['commit', '-qm', 'init'], { cwd });
+
+    const capturedPrompts: string[] = [];
+    const capturingProvider: Provider = {
+      name: 'mock:capturing',
+      config: { type: 'codex', model: 'mock', baseUrl: 'http://mock.local' } as Provider['config'],
+      openSession(_opts: SessionOpts): Session {
+        return {
+          async send(instruction: string): Promise<TurnResult> {
+            capturedPrompts.push(instruction);
+            return okTurn('done');
+          },
+          async close(): Promise<void> { /* no-op */ },
+          getSessionId(): string | null { return null; },
+        };
+      },
+    };
+
+    const runtime = new ExecutionRuntime({
+      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      resolveAgentFn: resolverFor(capturingProvider),
+    });
+
+    const outcome = await runtime.submit(
+      { type: 'debug', prompt: 'why does this fail' } as never,
+      { clientName: 'claude-code', projectRoot: cwd },
+    );
+    expect(outcome.ok).toBe(true);
+    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    await waitTerminal(taskRegistry, taskId);
+
+    const genericImplementer = readFileSync(join(SKILLS_DIR, 'debug', 'implement.md'), 'utf8');
+    // The first send() is the implementer turn — its prompt embeds implementerSkill verbatim.
+    expect(capturedPrompts[0]).toContain(genericImplementer);
+
+    const entry = taskRegistry.get(taskId)!;
+    expect(entry.practice).toBeNull();
+    const terminalTask = (entry.result as { task: Record<string, unknown> }).task;
+    expect(terminalTask.practice).toBeUndefined();
   });
 });

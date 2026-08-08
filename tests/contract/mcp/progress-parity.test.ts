@@ -3,11 +3,11 @@ import { mockProvider } from '../fixtures/mock-providers.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-async function runningPayload(headline: string | null) {
+async function runningPayload(headline: string | null, body: Record<string, unknown> = { type: 'investigate', prompt: 'wait' }) {
   const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
   const response = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
     method: 'POST', headers: { Authorization: `Bearer ${h.token}`, 'X-MMA-Client': 'claude-code', 'X-MMA-Main-Model': 'test', 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'investigate', prompt: 'wait' }),
+    body: JSON.stringify(body),
   });
   const { taskId } = await response.json() as { taskId: string };
   const registry = h.taskRegistry;
@@ -58,6 +58,26 @@ describe('contract: running progress parity', () => {
       // No subtype on a non-audit type — absent, not null.
       expect(x.rest).not.toHaveProperty('subtype');
       expect(x.mcp).not.toHaveProperty('subtype');
+    } finally { await x.client.close(); await x.h.close(); }
+  });
+
+  /**
+   * Intentional contract change (Task I-4): `practice` is a new wire field on the
+   * running payload, carried identically on both wires for `plan`/`execute_plan`/
+   * `review`/`debug` when the caller requested one. `investigate` above still
+   * carries neither `subtype` nor `practice` — this test covers the field the old
+   * subtype-absence assertion did not, using a `debug` task that DID request one.
+   */
+  it('carries a requested practice identically across both wires, alongside no subtype', async () => {
+    const x = await runningPayload(null, { type: 'debug', prompt: 'wait', practice: 'software' });
+    try {
+      expect(x.rest.type).toBe('debug');
+      expect(x.mcp.type).toBe('debug');
+      expect(x.rest.practice).toBe('software');
+      expect(x.mcp.practice).toBe('software');
+      expect(x.rest).not.toHaveProperty('subtype');
+      expect(x.mcp).not.toHaveProperty('subtype');
+      expect(new Set(Object.keys(x.mcp))).toEqual(new Set(Object.keys(x.rest)));
     } finally { await x.client.close(); await x.h.close(); }
   });
 });

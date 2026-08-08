@@ -14,6 +14,13 @@ export interface TaskEntry {
    *  `task.subtype` — "audit" alone does not say whether a plan or a spec is under
    *  review. */
   subtype: string | null;
+  /** The technique `plan` | `execute_plan` | `review` | `debug` requested (currently
+   *  only `'software'`), null for every other type AND for those four types when
+   *  omitted. Its own field, distinct from `subtype`: `subtype` picks WHAT is being
+   *  examined (audit's criteria set), `practice` picks HOW to do the work. Carried
+   *  here for the same reason `subtype` is — so a running task is as self-describing
+   *  as its terminal envelope. */
+  practice: string | null;
   result: unknown;
   runningHeadline: string | null;
   /**
@@ -79,10 +86,10 @@ export class TaskRegistry {
     }
   }
 
-  register(taskId: string, cwd: string, tool: string, subtype: string | null): void {
+  register(taskId: string, cwd: string, tool: string, subtype: string | null, practice: string | null = null): void {
     this.evictExpired(Date.now());
     this.entries.set(taskId, {
-      taskId, cwd, tool, subtype,
+      taskId, cwd, tool, subtype, practice,
       state: 'pending',
       result: null,
       runningHeadline: null,

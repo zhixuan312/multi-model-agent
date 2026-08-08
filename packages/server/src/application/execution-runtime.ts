@@ -83,6 +83,35 @@ function subtypeOf(input: TaskInput): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+/**
+ * The `practice` a task input carries, or `null`.
+ *
+ * Only `plan`, `execute_plan`, `review`, and `debug` can declare one (the input
+ * schema is strict), and only when the caller explicitly asked for it — the engine
+ * never infers `practice` from the workspace, the cwd's git state, or artifact
+ * extensions. Read the same way `subtypeOf` reads `subtype`, for the same reason:
+ * one reader keeps a running task and its terminal envelope in agreement by
+ * construction.
+ */
+function practiceOf(input: TaskInput): string | null {
+  const value = (input as Record<string, unknown>).practice;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * The skill-loader key for this task, or `undefined`.
+ *
+ * `audit` selects its criteria set via `subtype`; `plan`/`execute_plan`/`review`/
+ * `debug` select a technique via `practice`. The schema's strict discriminated
+ * union guarantees at most one of the two fields is ever present on a given input,
+ * so reading "whichever field the arm carries" is unambiguous. `loadSkill()` takes
+ * a plain string and does its own `implement-<key>.md` filename selection — this
+ * function only decides what string (if any) to hand it.
+ */
+function skillSelectorOf(input: TaskInput): string | undefined {
+  return subtypeOf(input) ?? practiceOf(input) ?? undefined;
+}
+
 export class ExecutionRuntime {
   /** Live abort channels, keyed by taskId. An entry exists from admission until
    *  the execution's finally block — cancel() fires the scope's signal, the
@@ -156,7 +185,7 @@ export class ExecutionRuntime {
 
     let skills: SkillPair;
     try {
-      skills = await loadSkill(input.type, SKILLS_DIR, subtypeOf(input) ?? undefined);
+      skills = await loadSkill(input.type, SKILLS_DIR, skillSelectorOf(input));
     } catch (err) {
       return { ok: false, error: { kind: 'skill_load_failed', message: err instanceof Error ? err.message : 'Skill load failed' } };
     }
@@ -174,7 +203,7 @@ export class ExecutionRuntime {
     // scope (the live abort channel) is created here too, so a cancel that
     // lands before the async executor starts still aborts the execution.
     const taskId = randomUUID();
-    deps.taskRegistry.register(taskId, cwd, input.type, subtypeOf(input));
+    deps.taskRegistry.register(taskId, cwd, input.type, subtypeOf(input), practiceOf(input));
     deps.store.admit(taskId, input.type, cwd, process.pid);
     const scope = new ExecutionScope(taskId);
     this.liveScopes.set(taskId, scope);
@@ -389,10 +418,15 @@ export class ExecutionRuntime {
         task: {
           taskId,
           type: input.type,
-          // No `type === 'audit'` gate: only audit can carry a subtype at all, so
-          // the gate restated the schema while giving the terminal envelope a
-          // second rule the running snapshot did not share.
+          // No `type === 'audit'` gate: the strict input schema already limits
+          // `subtype` to audit and `practice` to plan/execute_plan/review/debug, so
+          // a type-based gate here would only restate the schema while giving the
+          // terminal envelope a second rule the running snapshot did not share.
+          // Two separate fields, never both present on the same task: `subtype`
+          // picks WHAT is examined (audit's criteria set), `practice` picks HOW to
+          // do the work (the retained software technique).
           ...(subtypeOf(input) !== null ? { subtype: subtypeOf(input) } : {}),
+          ...(practiceOf(input) !== null ? { practice: practiceOf(input) } : {}),
           status: wasCancelled ? ('cancelled' as const) : result.status,
         },
         output: {

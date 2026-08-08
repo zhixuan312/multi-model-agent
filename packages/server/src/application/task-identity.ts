@@ -28,6 +28,10 @@ interface TaskIdentity {
   type: string;
   /** Present only for `audit`, matching the terminal envelope's `task.subtype`. */
   subtype?: string;
+  /** Present only for `plan` | `execute_plan` | `review` | `debug` when the caller
+   *  requested one, matching the terminal envelope's `task.practice`. Its own field
+   *  — `subtype` stays audit-only, `practice` never appears alongside it. */
+  practice?: string;
   cwd: string;
 }
 
@@ -36,6 +40,7 @@ export function taskIdentity(entry: TaskEntry): TaskIdentity {
     taskId: entry.taskId,
     type: entry.tool,
     ...(entry.subtype !== null ? { subtype: entry.subtype } : {}),
+    ...(entry.practice !== null ? { practice: entry.practice } : {}),
     cwd: entry.cwd,
   };
 }
