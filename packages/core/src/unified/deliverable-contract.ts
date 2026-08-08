@@ -235,7 +235,7 @@ function checkProposedInvariants(
 ): void {
   const seenArtifacts = new Set<string>();
   contract.artifacts.forEach((artifact, index) => {
-    const key = `${artifact.root} ${normalizeArtifactPath(artifact.path)}`;
+    const key = `${artifact.root}\u0000${normalizeArtifactPath(artifact.path)}`;
     if (seenArtifacts.has(key)) {
       ctx.addIssue({
         code: 'custom',
