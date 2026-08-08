@@ -75,7 +75,15 @@ const REQUIRED_TABLES = ['records', 'records_fts'];
  */
 const NARROW_FANOUT_MARGIN = 1;
 /** Required tables for the `SymbolCorpusAdapter` (files/symbols) storage mode. */
-const REQUIRED_FILE_SYMBOL_TABLES = ['files', 'symbols'];
+const REQUIRED_FILE_SYMBOL_TABLES = ['files', 'symbols', 'symbols_trgm'];
+/**
+ * Minimum token length the `trigram` FTS5 tokenizer can answer via `MATCH`:
+ * it indexes only 3-character runs, so a shorter `MATCH` pattern silently
+ * matches nothing (confirmed against SQLite 3.53), even though `LIKE`
+ * against the same table stays correct at any length. Tokens shorter than
+ * this fall back to the `LIKE` path in {@link CorpusIndex.symbolCandidateIds}.
+ */
+const SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH = 3;
 /**
  * Tables owned by the deleted pre-engine journal store
  * (`packages/core/src/journal/index-store.ts`, removed in Task I-5). A
@@ -100,6 +108,20 @@ function asString(value: unknown): string {
  */
 function escapeLikeLiteral(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Quote one token as an FTS5 string literal (`"..."`, doubling any embedded
+ * `"`), so it is matched as an inert phrase rather than parsed as FTS5 query
+ * syntax (column filters, boolean operators, `NEAR`, ...). Used for every
+ * `MATCH` query {@link CorpusIndex.symbolCandidateIds} builds against
+ * `symbols_trgm`: `tokenize()` (the investigate preprocessor's caller) only
+ * ever emits plain `[a-z0-9_]+` tokens, but `rankedSymbolsByTokens` is a
+ * general engine method, not an investigate-only one, so it does not assume
+ * a caller-supplied token is free of FTS5-meaningful characters.
+ */
+function fts5QuoteToken(token: string): string {
+  return `"${token.replace(/"/g, '""')}"`;
 }
 
 function asNumber(value: unknown): number {
@@ -292,12 +314,17 @@ export class CorpusIndex {
    */
   private allSymbolsMetaStmt?: StatementSync;
   private symbolTokenMatchStmt?: StatementSync;
-  /** Cached by token count for SQL-side candidate ranking. */
-  private readonly rankedSymbolsByTokenCountStmts = new Map<number, StatementSync>();
   /** Whole-corpus folder aggregation, returned as one row per folder. */
   private folderSummariesStmt?: StatementSync;
   /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
   private readonly symbolsByIdsStmts = new Map<number, StatementSync>();
+  private symbolTrgmMatchCandidatesStmt?: StatementSync;
+  private symbolTrgmMatchCountStmt?: StatementSync;
+  private readonly symbolTrgmPerTokenMatchCountStmts = new Map<number, StatementSync>();
+  private symbolTrgmNameCandidatesStmt?: StatementSync;
+  private symbolTrgmBodyCandidatesStmt?: StatementSync;
+  /** Cached by `<token count>:<candidate id count>` for final SQL ranking. */
+  private readonly symbolCandidateScoreStmts = new Map<string, StatementSync>();
 
   private constructor(
     private readonly root: string,
@@ -428,6 +455,30 @@ export class CorpusIndex {
           body       TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols(file_path);
+        -- Substring-search accelerator for the \`symbols\` table's \`name\`/\`body\`
+        -- columns (see {@link CorpusIndex.rankedSymbolsByTokens}). \`name\`/\`body\`
+        -- carry no plain SQL index because every existing lookup against them is a
+        -- \`LIKE '%token%'\` substring match, which a btree index cannot serve (a
+        -- leading wildcard defeats prefix ordering). FTS5's \`trigram\` tokenizer
+        -- exists specifically to accelerate \`LIKE\`/\`GLOB\` substring queries: it
+        -- indexes every 3-character run of the source text, so a query still
+        -- expressed as an ordinary \`name LIKE ?\` / \`body LIKE ?\` predicate against
+        -- THIS table can be satisfied from the trigram index instead of a full
+        -- table scan, while a \`case_sensitive 0\` tokenizer keeps matches
+        -- case-insensitive, matching \`LIKE\`'s own default ASCII semantics exactly
+        -- (verified empirically against SQLite 3.53's \`node:sqlite\` binding).
+        -- \`id\`/\`file_path\` are UNINDEXED passenger columns: they are never
+        -- searched here, only projected/filtered by exact value, so paying to
+        -- trigram-index them would be pure waste. Kept in exact row-for-row sync
+        -- with \`symbols\` at every write path (see {@link writeSymbolFileBatch},
+        -- {@link applySymbolSyncPlans}, {@link deleteSymbolFilesBatch}).
+        CREATE VIRTUAL TABLE IF NOT EXISTS symbols_trgm USING fts5(
+          id UNINDEXED,
+          file_path UNINDEXED,
+          name,
+          body,
+          tokenize = 'trigram case_sensitive 0'
+        );
       `);
     } else {
       this.db.exec(`
@@ -806,6 +857,7 @@ export class CorpusIndex {
   private writeSymbolFileBatch(prepared: PreparedSymbolFile[]): void {
     if (prepared.length === 0) return;
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteSymbolsTrgmForFile = this.db.prepare('DELETE FROM symbols_trgm WHERE file_path = ?');
     const upsertFile = this.db.prepare(
       `INSERT INTO files (file_path, mtime_ms, content_hash) VALUES (?, ?, ?)
        ON CONFLICT(file_path) DO UPDATE SET mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash`,
@@ -813,21 +865,17 @@ export class CorpusIndex {
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
+    const insertSymbolTrgm = this.db.prepare(`INSERT INTO symbols_trgm (id, file_path, name, body) VALUES (?, ?, ?, ?)`);
     this.db.exec('BEGIN');
     try {
       for (const { relPath, mtimeMs, contentHash, symbols } of prepared) {
         deleteSymbolsForFile.run(relPath);
+        deleteSymbolsTrgmForFile.run(relPath);
         upsertFile.run(relPath, mtimeMs, contentHash);
         symbols.forEach((symbol, position) => {
-          insertSymbol.run(
-            `${relPath}#${position}`,
-            relPath,
-            symbol.name,
-            symbol.kind,
-            symbol.startLine,
-            symbol.endLine,
-            symbol.body,
-          );
+          const id = `${relPath}#${position}`;
+          insertSymbol.run(id, relPath, symbol.name, symbol.kind, symbol.startLine, symbol.endLine, symbol.body);
+          insertSymbolTrgm.run(id, relPath, symbol.name, symbol.body);
         });
       }
       this.db.exec('COMMIT');
@@ -837,15 +885,17 @@ export class CorpusIndex {
     }
   }
 
-  /** Delete every `files`/`symbols` row for the given paths inside one short transaction. */
+  /** Delete every `files`/`symbols`/`symbols_trgm` row for the given paths inside one short transaction. */
   private deleteSymbolFilesBatch(relPaths: string[]): void {
     if (relPaths.length === 0) return;
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteSymbolsTrgmForFile = this.db.prepare('DELETE FROM symbols_trgm WHERE file_path = ?');
     const deleteFile = this.db.prepare('DELETE FROM files WHERE file_path = ?');
     this.db.exec('BEGIN');
     try {
       for (const relPath of relPaths) {
         deleteSymbolsForFile.run(relPath);
+        deleteSymbolsTrgmForFile.run(relPath);
         deleteFile.run(relPath);
       }
       this.db.exec('COMMIT');
@@ -893,9 +943,14 @@ export class CorpusIndex {
   private invalidateSymbolStatements(): void {
     this.allSymbolsMetaStmt = undefined;
     this.symbolTokenMatchStmt = undefined;
-    this.rankedSymbolsByTokenCountStmts.clear();
     this.folderSummariesStmt = undefined;
     this.symbolsByIdsStmts.clear();
+    this.symbolTrgmMatchCandidatesStmt = undefined;
+    this.symbolTrgmMatchCountStmt = undefined;
+    this.symbolTrgmPerTokenMatchCountStmts.clear();
+    this.symbolTrgmNameCandidatesStmt = undefined;
+    this.symbolTrgmBodyCandidatesStmt = undefined;
+    this.symbolCandidateScoreStmts.clear();
   }
 
   private dropAndRecreateSchema(): void {
@@ -913,6 +968,7 @@ export class CorpusIndex {
     this.invalidateSymbolStatements();
     this.db.exec(`
       DROP TABLE IF EXISTS symbols;
+      DROP TABLE IF EXISTS symbols_trgm;
       DROP TABLE IF EXISTS files;
     `);
     this.dropLegacyTables();
@@ -1255,9 +1311,11 @@ export class CorpusIndex {
     );
     const updateMtimeOnly = this.db.prepare('UPDATE files SET mtime_ms = ? WHERE file_path = ?');
     const deleteSymbolsForFile = this.db.prepare('DELETE FROM symbols WHERE file_path = ?');
+    const deleteSymbolsTrgmForFile = this.db.prepare('DELETE FROM symbols_trgm WHERE file_path = ?');
     const insertSymbol = this.db.prepare(
       `INSERT INTO symbols (id, file_path, name, kind, start_line, end_line, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
+    const insertSymbolTrgm = this.db.prepare(`INSERT INTO symbols_trgm (id, file_path, name, body) VALUES (?, ?, ?, ?)`);
 
     this.db.exec('BEGIN');
     try {
@@ -1269,17 +1327,12 @@ export class CorpusIndex {
         // Whole-file replace: never attempt per-symbol change detection — an
         // edit shifts the line numbers of every symbol below it anyway.
         deleteSymbolsForFile.run(plan.relPath);
+        deleteSymbolsTrgmForFile.run(plan.relPath);
         upsertFile.run(plan.relPath, plan.mtimeMs, plan.contentHash);
         plan.symbols.forEach((symbol, position) => {
-          insertSymbol.run(
-            `${plan.relPath}#${position}`,
-            plan.relPath,
-            symbol.name,
-            symbol.kind,
-            symbol.startLine,
-            symbol.endLine,
-            symbol.body,
-          );
+          const id = `${plan.relPath}#${position}`;
+          insertSymbol.run(id, plan.relPath, symbol.name, symbol.kind, symbol.startLine, symbol.endLine, symbol.body);
+          insertSymbolTrgm.run(id, plan.relPath, symbol.name, symbol.body);
         });
       }
       this.db.exec('COMMIT');
@@ -1452,20 +1505,90 @@ export class CorpusIndex {
   }
 
   /**
+   * Produces the FTS-backed candidate ids for a ranked symbol query. For
+   * multi-token searches, a rarity-first prefix caps the FTS fanout at the
+   * requested result limit. Tokens with no matching rows are excluded before
+   * prefix selection so they cannot consume the guaranteed first slot.
+   */
+  private symbolCandidateIds(tokens: string[], limit: number): string[] {
+    const usable = tokens.filter((token) => token.length >= SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH);
+    const short = tokens.filter((token) => token.length < SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH);
+    let selected = usable;
+
+    // FTS5's trigram index has no correct indexed lookup for a <3-character
+    // substring. Retain the exact LIKE path for these uncommon tokens rather
+    // than silently changing the match contract.
+    if (short.length === 0 && usable.length > 1) {
+      if (!this.symbolTrgmMatchCountStmt) {
+        this.symbolTrgmMatchCountStmt = this.db.prepare('SELECT count(*) AS n FROM symbols_trgm WHERE symbols_trgm MATCH ?');
+      }
+      const total = asNumber(
+        (this.symbolTrgmMatchCountStmt.get(usable.map(fts5QuoteToken).join(' OR ')) as Record<string, unknown> | undefined)?.n,
+      );
+      if (total > limit) {
+        let stmt = this.symbolTrgmPerTokenMatchCountStmts.get(usable.length);
+        if (!stmt) {
+          stmt = this.db.prepare(usable.map(() => 'SELECT count(*) AS n FROM symbols_trgm WHERE symbols_trgm MATCH ?').join(' UNION ALL '));
+          this.symbolTrgmPerTokenMatchCountStmts.set(usable.length, stmt);
+        }
+        const rows = stmt.all(...usable.map(fts5QuoteToken)) as Array<Record<string, unknown>>;
+        const counted = usable
+          .map((token, i) => ({ token, n: asNumber(rows[i]?.n) }))
+          .filter(({ n }) => n > 0)
+          .sort((a, b) => a.n - b.n);
+        let sum = 0;
+        selected = [];
+        for (const { token, n } of counted) {
+          if (selected.length > 0 && sum + n > limit) break;
+          selected.push(token);
+          sum += n;
+        }
+      }
+    }
+
+    const ids = new Set<string>();
+    if (selected.length > 0) {
+      if (!this.symbolTrgmMatchCandidatesStmt) {
+        this.symbolTrgmMatchCandidatesStmt = this.db.prepare('SELECT id FROM symbols_trgm WHERE symbols_trgm MATCH ?');
+      }
+      for (const row of this.symbolTrgmMatchCandidatesStmt.all(selected.map(fts5QuoteToken).join(' OR ')) as Array<Record<string, unknown>>) {
+        ids.add(asString(row.id));
+      }
+    }
+    if (short.length > 0) {
+      if (!this.symbolTrgmNameCandidatesStmt) this.symbolTrgmNameCandidatesStmt = this.db.prepare("SELECT id FROM symbols_trgm WHERE name LIKE ? ESCAPE '\\'");
+      if (!this.symbolTrgmBodyCandidatesStmt) this.symbolTrgmBodyCandidatesStmt = this.db.prepare("SELECT id FROM symbols_trgm WHERE body LIKE ? ESCAPE '\\'");
+      for (const token of short) {
+        const pattern = `%${escapeLikeLiteral(token)}%`;
+        for (const row of this.symbolTrgmNameCandidatesStmt.all(pattern) as Array<Record<string, unknown>>) ids.add(asString(row.id));
+        for (const row of this.symbolTrgmBodyCandidatesStmt.all(pattern) as Array<Record<string, unknown>>) ids.add(asString(row.id));
+      }
+    }
+    return [...ids];
+  }
+
+  /**
    * The highest-scoring symbols for the supplied unique query tokens, with
-   * ranking, cap, and metadata projection all performed by SQLite. The body
-   * column is used only inside `LIKE` predicates; it is never projected. A
-   * caller that needs bodies for these winners must fetch them separately via
-   * {@link symbolsByIds}.
+   * FTS candidate selection, ranking, cap, and metadata projection all
+   * performed by SQLite. The body column is used only inside `LIKE`
+   * predicates; it is never projected. A caller that needs bodies for these
+   * winners must fetch them separately via {@link symbolsByIds}.
    *
    * The score exactly mirrors investigate's historical JS calculation: every
    * token contributes 3 for a name substring match and 1 for a body substring
    * match. `tokenize` produces ASCII tokens, matching SQLite `LIKE`'s default
    * case-insensitive semantics for those tokens.
+   *
+   * `symbols_trgm` supplies the candidate ids before the score expression is
+   * evaluated. The final `LIMIT` remains in this statement, and only metadata
+   * (never symbol bodies) is materialized for the surviving winners.
    */
   async rankedSymbolsByTokens(tokens: string[], limit: number): Promise<SymbolRecordMeta[]> {
     if (tokens.length === 0 || limit <= 0) return [];
-    let stmt = this.rankedSymbolsByTokenCountStmts.get(tokens.length);
+    const candidateIds = this.symbolCandidateIds(tokens, limit);
+    if (candidateIds.length === 0) return [];
+    const key = `${tokens.length}:${candidateIds.length}`;
+    let stmt = this.symbolCandidateScoreStmts.get(key);
     if (!stmt) {
       const scoreTerms = tokens.map(
         () => `(CASE WHEN name LIKE ? ESCAPE '\\' THEN 3 ELSE 0 END + CASE WHEN body LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END)`,
@@ -1476,16 +1599,17 @@ export class CorpusIndex {
            SELECT id, file_path, name, kind, start_line, end_line,
              ${scoreTerms.join(' + ')} AS score
            FROM symbols
+           WHERE id IN (${candidateIds.map(() => '?').join(', ')})
          )
          WHERE score > 0
          ORDER BY score DESC, file_path ASC, start_line ASC
          LIMIT ?`,
       );
-      this.rankedSymbolsByTokenCountStmts.set(tokens.length, stmt);
+      this.symbolCandidateScoreStmts.set(key, stmt);
     }
     const patterns = tokens.map((token) => `%${escapeLikeLiteral(token)}%`);
-    const bindings = patterns.flatMap((pattern) => [pattern, pattern]);
-    const rows = stmt.all(...bindings, limit) as Array<Record<string, unknown>>;
+    const scoreBindings = patterns.flatMap((pattern) => [pattern, pattern]);
+    const rows = stmt.all(...scoreBindings, ...candidateIds, limit) as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       id: asString(row.id),
       filePath: asString(row.file_path),
