@@ -205,6 +205,7 @@ Commands:
   enable           Declare clients on and (re)provision them (clears a prior \`disable\`)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
+  search <query>   Find where something lives: ranked path + line range + enclosing symbol, body numbered
   journal reindex  Rebuild .mma/journal/index.db from markdown nodes (--regenerate-catalog to also rewrite index.md)
 
 Global options:
