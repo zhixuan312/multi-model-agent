@@ -1,4 +1,4 @@
-import { mkdir, readdir } from 'node:fs/promises';
+import { mkdir, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CorpusIndex, CORPUS_INDEX_DB_FILENAME, CORPUS_INDEX_SCHEMA_VERSION } from '../engine/index-store.js';
 import type { CorpusAdapter, CorpusRecord, IndexHealth, RankedList, StoredRecordMeta } from '../engine/types.js';
@@ -16,13 +16,15 @@ import { parseJournalNodeDocument } from '../node-codec.js';
  *  1. `JournalCorpusAdapter` — implements the engine's `CorpusAdapter`
  *     contract so `CorpusIndex` can enumerate/decode/index journal node
  *     markdown as generic records (id/path/title/body) and lexically search
- *     them (FTS5/BM25) without knowing what a "journal" is. Journal-only
- *     metadata (topic/status/tags/links/description) rides along as a JSON
- *     string in the record's opaque `adapterMeta` field — persisted by the
- *     engine in the SAME row, SAME statement, and SAME transaction as the
- *     record itself. There is no second table and no second database
- *     connection: the engine never parses `adapterMeta`, it only stores and
- *     returns it.
+ *     them (FTS5/BM25) without knowing what a "journal" is. `topic` and
+ *     `status` are supplied as the engine's real, INDEXED `topic`/`status`
+ *     columns (schema version 3) — so a query can prefilter/scope candidates
+ *     in SQL. Everything else journal-only (tags/links/description) rides
+ *     along as a JSON string in the record's opaque `adapterMeta` field —
+ *     persisted by the engine in the SAME row, SAME statement, and SAME
+ *     transaction as the record itself. There is no second table and no
+ *     second database connection: the engine never parses `adapterMeta`, it
+ *     only stores and returns it.
  *  2. `JournalIndexStore` — the public store journal callers have always
  *     used. It wraps a `CorpusIndex` for content, lexical search, and
  *     metadata, deserializing each record's `adapterMeta` back into journal
@@ -41,10 +43,15 @@ export const JOURNAL_INDEX_DB_FILENAME = CORPUS_INDEX_DB_FILENAME;
  * the shared engine's generic derived-database schema version. */
 export const JOURNAL_INDEX_SCHEMA_VERSION = CORPUS_INDEX_SCHEMA_VERSION;
 
-/** Journal-only metadata, serialized into a record's opaque `adapterMeta`. */
+/**
+ * Journal-only metadata, serialized into a record's opaque `adapterMeta`.
+ * `topic` and `status` are NOT here — schema version 3 promoted both to real,
+ * indexed columns on the engine's `records` table (see
+ * `../engine/index-store.ts`'s `ensureSchema`) so a query can prefilter and
+ * scope candidates in SQL. `adapterMeta` still carries everything the engine
+ * has no reason to index: tags, links, and the frontmatter description.
+ */
 interface JournalAdapterMeta {
-  topic: string;
-  status: string;
   tags: string[];
   links: { type: string; target: string }[];
   description: string;
@@ -79,17 +86,40 @@ export class JournalCorpusAdapter implements CorpusAdapter {
       .map((entry) => join('nodes', entry));
   }
 
+  /**
+   * Modification time of the `nodes/` directory itself — updates whenever a
+   * node file is added or removed (standard filesystem behavior), so the
+   * engine can use it as a cheap, exact "did anything change" pre-check
+   * before paying for a full {@link listFiles} enumeration on every query
+   * (see `CorpusIndex.ensureFreshRecords`). `null` if the directory is
+   * unreadable (e.g. not yet created) — the engine falls back to its
+   * unconditional `listFiles()` check in that case.
+   */
+  async rootMtimeMs(): Promise<number | null> {
+    try {
+      return (await stat(this.nodesDir)).mtimeMs;
+    } catch {
+      return null;
+    }
+  }
+
   async decode(relPath: string, raw: string): Promise<CorpusRecord> {
     const parsed = parseJournalNodeDocument(raw, relPath);
     const meta: JournalAdapterMeta = {
-      topic: parsed.topic,
-      status: parsed.status,
       tags: parsed.tags,
       links: parsed.links,
       description: parsed.description,
     };
     const body = `${parsed.title}\n${parsed.description}\n${parsed.context}\n${parsed.consequences}`.trim();
-    return { id: parsed.id, path: relPath, title: parsed.title, body, adapterMeta: JSON.stringify(meta) };
+    return {
+      id: parsed.id,
+      path: relPath,
+      title: parsed.title,
+      body,
+      topic: parsed.topic,
+      status: parsed.status,
+      adapterMeta: JSON.stringify(meta),
+    };
   }
 
   /**
@@ -214,26 +244,30 @@ export class JournalIndexStore {
   }
 
   /**
-   * Every derived-index row, decoded back into structured form. Journal
-   * metadata is deserialized from each record's own `adapterMeta` field —
-   * there is no separate metadata table or connection to join against.
+   * Decode one engine record's metadata fields into an {@link
+   * IndexedDocumentMeta}: `topic`/`status` come straight off the record's own
+   * (real, indexed) columns; `tags`/`links`/`description` are deserialized
+   * from its `adapterMeta` JSON — there is no separate metadata table or
+   * connection to join against. Shared by every read path so this mapping is
+   * written once.
    */
+  private toIndexedDocumentMeta(record: StoredRecordMeta): IndexedDocumentMeta {
+    const meta = parseAdapterMeta(record.adapterMeta);
+    return {
+      nodeId: record.id,
+      nodePath: record.path,
+      title: record.title,
+      topic: record.topic ?? '',
+      status: record.status || 'adopted',
+      tags: meta?.tags ?? [],
+      links: meta?.links ?? [],
+      description: meta?.description ?? '',
+    };
+  }
+
+  /** Every derived-index row, decoded back into structured form. */
   allDocuments(): IndexedDocument[] {
-    const records = this.index.allRecords();
-    return records.map((record) => {
-      const meta = parseAdapterMeta(record.adapterMeta);
-      return {
-        nodeId: record.id,
-        nodePath: record.path,
-        title: record.title,
-        topic: meta?.topic ?? '',
-        status: meta?.status ?? 'adopted',
-        tags: meta?.tags ?? [],
-        links: meta?.links ?? [],
-        description: meta?.description ?? '',
-        body: record.body,
-      };
-    });
+    return this.index.allRecords().map((record) => ({ ...this.toIndexedDocumentMeta(record), body: record.body }));
   }
 
   /**
@@ -246,20 +280,29 @@ export class JournalIndexStore {
    * direct caller like the reindex CLI's node count).
    */
   allDocumentsMeta(): IndexedDocumentMeta[] {
-    const records = this.index.allRecordsMeta();
-    return records.map((record) => {
-      const meta = parseAdapterMeta(record.adapterMeta);
-      return {
-        nodeId: record.id,
-        nodePath: record.path,
-        title: record.title,
-        topic: meta?.topic ?? '',
-        status: meta?.status ?? 'adopted',
-        tags: meta?.tags ?? [],
-        links: meta?.links ?? [],
-        description: meta?.description ?? '',
-      };
-    });
+    return this.index.allRecordsMeta().map((record) => this.toIndexedDocumentMeta(record));
+  }
+
+  /**
+   * SQL-BOUNDED candidate metadata: lexical FTS5/BM25 match, scoped to an
+   * optional exact `topic` and status visibility, capped at `opts.limit` rows
+   * — the candidate-bounded counterpart to {@link allDocumentsMeta}. Returned
+   * in bm25 (lexical relevance) order, best match first. This is the read a
+   * per-query candidate search should use: unlike {@link allDocumentsMeta},
+   * its row count never grows with corpus or topic size.
+   */
+  candidateDocumentsMeta(opts: { tokens: string[]; topic?: string; includeHistory: boolean; limit: number }): IndexedDocumentMeta[] {
+    return this.index.candidateRecordsMeta(opts).map((record) => this.toIndexedDocumentMeta(record));
+  }
+
+  /**
+   * Metadata for exactly the given node ids — used for BOUNDED
+   * graph-neighbour target lookups (a handful of specific link targets a
+   * candidate pool's seed documents point to, capped by seeds x edges), never
+   * for a whole-corpus read. Unmatched ids are silently omitted.
+   */
+  documentsMetaByIds(nodeIds: string[]): IndexedDocumentMeta[] {
+    return this.index.recordsMetaByIds([...new Set(nodeIds)]).map((record) => this.toIndexedDocumentMeta(record));
   }
 
   /**
@@ -293,8 +336,6 @@ export class JournalIndexStore {
   rankedSignals(tokens: string[], pool: IndexedDocumentMeta[], lexicalOrder: string[]): RankedList[] {
     const records: StoredRecordMeta[] = pool.map((doc) => {
       const meta: JournalAdapterMeta = {
-        topic: doc.topic,
-        status: doc.status,
         tags: doc.tags,
         links: doc.links,
         description: doc.description,
@@ -305,6 +346,8 @@ export class JournalIndexStore {
         title: doc.title,
         mtimeMs: 0,
         contentHash: '',
+        topic: doc.topic,
+        status: doc.status,
         adapterMeta: JSON.stringify(meta),
       };
     });
@@ -386,6 +429,18 @@ const MIN_IN_TOPIC = 3;
 const NEIGHBOR_EDGE_TYPES = new Set(['refines', 'depends-on', 'parent', 'supersedes']);
 /** How many top lexical/tag hits seed graph-neighbor expansion. */
 const NEIGHBOR_SEED_LIMIT = 10;
+/**
+ * Upper bound on how many rows a single candidate query pulls from SQL (see
+ * {@link JournalIndexStore.candidateDocumentsMeta}). This is what makes a
+ * query CANDIDATE-BOUNDED rather than corpus-bounded: the row count a query
+ * materializes never grows with corpus or topic size, only with how many
+ * distinct documents can plausibly matter for one prompt. Generous relative
+ * to how concentrated a real lexical match set is (a query's rare/distinctive
+ * tokens match a small fraction of the corpus; only very common tokens could
+ * approach this cap, and bm25 ordering keeps the genuinely relevant rows at
+ * the front regardless).
+ */
+const CANDIDATE_CAP = 200;
 
 function tokenize(value: string): string[] {
   return value
@@ -404,33 +459,31 @@ interface JournalRankedList {
   order: string[]; // node ids, best-first
 }
 
+/** Prompt-token / tag overlap count, descending — used both to pick
+ * graph-neighbor seeds (see {@link rankCandidates}) and, via {@link
+ * JournalIndexStore.rankedSignals}, as one of the fused RRF signals. Pure and
+ * cheap: it only ever runs over an already-bounded candidate pool (at most
+ * {@link CANDIDATE_CAP} documents), never the corpus. */
+function tagOverlapOrder(pool: IndexedDocumentMeta[], tokenSet: Set<string>): string[] {
+  return pool
+    .map((doc) => ({ id: doc.nodeId, overlap: doc.tags.filter((tag) => tokenSet.has(tag.toLowerCase())).length }))
+    .filter((entry) => entry.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap || a.id.localeCompare(b.id))
+    .map((entry) => entry.id);
+}
+
 /**
- * Rank a fixed pool of documents against the prompt by fusing three ranked
- * signals with Reciprocal Rank Fusion (k=60):
- *   1. lexical  — FTS5/BM25 order (best-first) restricted to the pool
- *   2. tag      — prompt-token / tag overlap count, descending
- *   3. neighbor — graph neighbours of the top lexical+tag seeds, over
- *                 refines / depends-on / parent / supersession edges
- *
- * `pool` is metadata-only — this never reads or ranks a record's body text.
- * This is the SOLE ranking pass for a pool: it is the fused RRF score itself
- * (not a second call into the engine's own RRF) that determines final order
- * in {@link toCandidateMetas}, so a pool's lexical/tag/neighbor signals are
- * computed exactly once.
+ * Fuse the lexical order (already computed by the SQL candidate query — see
+ * {@link rankCandidates}) with the adapter's tag/neighbor signal lists via
+ * Reciprocal Rank Fusion (k=60). `pool` is metadata-only — this never reads
+ * or ranks a record's body text.
  */
-function rankPool(
+function fusePool(
   store: JournalIndexStore,
   pool: IndexedDocumentMeta[],
   tokens: string[],
+  lexicalOrder: string[],
 ): Map<string, { score: number; via: Set<string> }> {
-  const poolIds = new Set(pool.map((doc) => doc.nodeId));
-
-  // Signal 1: lexical (FTS5/BM25). Filter global hits down to the pool.
-  const lexicalOrder = store
-    .lexicalSearch(tokens)
-    .map((hit) => hit.nodeId)
-    .filter((id) => poolIds.has(id));
-
   const lists: JournalRankedList[] = [
     { via: 'lexical', order: lexicalOrder },
     ...store.rankedSignals(tokens, pool, lexicalOrder),
@@ -446,6 +499,67 @@ function rankPool(
     });
   }
   return fused;
+}
+
+/**
+ * Rank a SQL-bounded candidate pool (see {@link
+ * JournalIndexStore.candidateDocumentsMeta}) against the prompt, fusing three
+ * ranked signals:
+ *   1. lexical  — FTS5/BM25 order (best-first); the SQL candidate query
+ *                 already returns rows in this order, so this is read off
+ *                 `candidates` directly rather than queried a second time.
+ *   2. tag      — prompt-token / tag overlap count, descending, computed
+ *                 over `candidates` only (never the corpus).
+ *   3. neighbor — graph neighbours of the top lexical+tag seeds, over
+ *                 refines / depends-on / parent / supersession edges.
+ *
+ * Graph-neighbor expansion may legitimately reach documents OUTSIDE
+ * `candidates` (a seed's linked neighbor need not itself be a lexical/tag
+ * match) — but that reach is bounded by (seed count x edges per seed), via a
+ * single targeted `id IN (...)` lookup, never by a corpus- or topic-wide
+ * read. Expansion targets are filtered to the same visibility `scope`
+ * (topic equality when scoped, status per `includeHistory`) the candidate
+ * query itself applied.
+ */
+function rankCandidates(
+  store: JournalIndexStore,
+  candidates: IndexedDocumentMeta[],
+  tokens: string[],
+  scope: { topic?: string; includeHistory: boolean },
+): { fused: Map<string, { score: number; via: Set<string> }>; pool: IndexedDocumentMeta[] } {
+  const poolIds = new Set(candidates.map((doc) => doc.nodeId));
+  const byId = new Map(candidates.map((doc) => [doc.nodeId, doc]));
+  const lexicalOrder = candidates.map((doc) => doc.nodeId); // SQL already returned bm25 order.
+  const tokenSet = new Set(tokens);
+
+  const tagSeedOrder = tagOverlapOrder(candidates, tokenSet);
+  const seeds = [...new Set([...lexicalOrder, ...tagSeedOrder])].slice(0, NEIGHBOR_SEED_LIMIT);
+
+  const missingTargets = new Set<string>();
+  for (const id of seeds) {
+    for (const link of byId.get(id)?.links ?? []) {
+      if (!NEIGHBOR_EDGE_TYPES.has(link.type) || poolIds.has(link.target)) continue;
+      missingTargets.add(link.target);
+    }
+  }
+
+  let pool = candidates;
+  if (missingTargets.size > 0) {
+    const fetched = store.documentsMetaByIds([...missingTargets]);
+    const inScope = fetched.filter(
+      (doc) =>
+        (scope.includeHistory || doc.status !== 'superseded') && (scope.topic === undefined || doc.topic === scope.topic),
+    );
+    if (inScope.length > 0) {
+      pool = [...candidates, ...inScope];
+      for (const doc of inScope) {
+        poolIds.add(doc.nodeId);
+        byId.set(doc.nodeId, doc);
+      }
+    }
+  }
+
+  return { fused: fusePool(store, pool, tokens, lexicalOrder), pool };
 }
 
 /**
@@ -478,37 +592,64 @@ function toCandidateMetas(
   return out.sort((a, b) => b.score - a.score || a.nodeId.localeCompare(b.nodeId));
 }
 
+/** Run one candidate-bounded ranking pass and resolve it to candidate metas. */
+function rankPass(
+  store: JournalIndexStore,
+  candidates: IndexedDocumentMeta[],
+  tokens: string[],
+  scope: { topic?: string; includeHistory: boolean },
+  fallback: boolean,
+): JournalCandidateMeta[] {
+  const { fused, pool } = rankCandidates(store, candidates, tokens, scope);
+  const byId = new Map(pool.map((doc) => [doc.nodeId, doc]));
+  return toCandidateMetas(fused, byId, fallback);
+}
+
 async function search(
   store: JournalIndexStore,
   input: { prompt: string; topic?: string; includeHistory: boolean },
 ): Promise<JournalCandidate[]> {
   const tokens = tokenize(input.prompt);
-  const visible = store
-    .allDocumentsMeta()
-    .filter((doc) => input.includeHistory || doc.status !== 'superseded');
-  const byId = new Map(visible.map((doc) => [doc.nodeId, doc]));
+  // No tokens can never win any fused signal (lexical/tag/neighbor-seeded-
+  // from-lexical-or-tag are all driven off tokens) regardless of what a query
+  // against the database would return, so skip the query entirely.
+  if (tokens.length === 0) return [];
+
+  const candidateOpts = (topic: string | undefined) => ({
+    tokens,
+    topic,
+    includeHistory: input.includeHistory,
+    limit: CANDIDATE_CAP,
+  });
 
   let metas: JournalCandidateMeta[];
   if (!input.topic) {
-    metas = toCandidateMetas(rankPool(store, visible, tokens), byId, false);
+    const candidates = store.candidateDocumentsMeta(candidateOpts(undefined));
+    metas = rankPass(store, candidates, tokens, { topic: undefined, includeHistory: input.includeHistory }, false);
   } else {
-    const inTopic = visible.filter((doc) => doc.topic === input.topic);
-    const results = toCandidateMetas(rankPool(store, inTopic, tokens), byId, false);
+    const inTopicScope = { topic: input.topic, includeHistory: input.includeHistory };
+    const inTopicCandidates = store.candidateDocumentsMeta(candidateOpts(input.topic));
+    const results = rankPass(store, inTopicCandidates, tokens, inTopicScope, false);
 
     // Cross-topic fallback ONLY when the in-topic pass is thin (< MIN_IN_TOPIC).
     if (results.length >= MIN_IN_TOPIC) {
       metas = results;
     } else {
       const present = new Set(results.map((candidate) => candidate.nodeId));
-      const crossResults = toCandidateMetas(rankPool(store, visible, tokens), byId, true).filter(
-        (candidate) => !present.has(candidate.nodeId),
-      );
+      const crossCandidates = store.candidateDocumentsMeta(candidateOpts(undefined));
+      const crossResults = rankPass(
+        store,
+        crossCandidates,
+        tokens,
+        { topic: undefined, includeHistory: input.includeHistory },
+        true,
+      ).filter((candidate) => !present.has(candidate.nodeId));
       metas = [...results, ...crossResults];
     }
   }
 
   // Body is fetched ONCE, only for the ids that survived ranking — never for
-  // the whole visible pool.
+  // the whole candidate pool.
   const bodyById = store.documentsBodyByIds(metas.map((meta) => meta.nodeId));
   return metas.map((meta) => ({
     ...meta,

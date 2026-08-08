@@ -62,10 +62,18 @@ type SymbolSyncPlan =
  * fully rebuildable from them at any time.
  */
 
-export const CORPUS_INDEX_SCHEMA_VERSION = 2;
+export const CORPUS_INDEX_SCHEMA_VERSION = 3;
 export const CORPUS_INDEX_DB_FILENAME = 'index.db';
 
 const REQUIRED_TABLES = ['records', 'records_fts'];
+/**
+ * Fanout multiplier for {@link CorpusIndex.narrowedMatchPattern}'s
+ * rarest-tokens-first prefix: tokens are kept while their SUMMED un-scoped
+ * match counts stay at or below `limit x NARROW_FANOUT_MARGIN`. Keeping this
+ * at one bounds the FTS rows that must be ranked before the SQL `LIMIT` to the
+ * same candidate cap the rest of retrieval uses.
+ */
+const NARROW_FANOUT_MARGIN = 1;
 /** Required tables for the `SymbolCorpusAdapter` (files/symbols) storage mode. */
 const REQUIRED_FILE_SYMBOL_TABLES = ['files', 'symbols'];
 /**
@@ -96,6 +104,27 @@ function escapeLikeLiteral(value: string): string {
 
 function asNumber(value: unknown): number {
   return typeof value === 'number' ? value : Number(value ?? 0);
+}
+
+/**
+ * Decode one `records` row into a {@link StoredRecord} or {@link
+ * StoredRecordMeta} (`includeBody` selects which), shared by every read path
+ * that selects the same column set (`allRecords`, `allRecordsMeta`,
+ * `recordsByIds`, `recordsMetaByIds`, `candidateRecordsMeta`) so the mapping
+ * is written once.
+ */
+function toStoredRecord(row: Record<string, unknown>, includeBody: boolean): StoredRecord | StoredRecordMeta {
+  const base = {
+    id: asString(row.id),
+    path: asString(row.path),
+    title: asString(row.title),
+    mtimeMs: asNumber(row.mtime_ms),
+    contentHash: asString(row.content_hash),
+    topic: asString(row.topic),
+    status: asString(row.status),
+    adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
+  };
+  return includeBody ? { ...base, body: asString(row.body) } : base;
 }
 
 /**
@@ -211,6 +240,14 @@ export class CorpusIndex {
 
   private db!: DatabaseSync;
   private freshnessDecision: FreshnessDecision | null = null;
+  /**
+   * The `CorpusAdapter.rootMtimeMs()` value observed on the last {@link
+   * ensureFreshRecords} check that actually ran `listFiles()` — `null`
+   * before any check has run. Used to skip that O(corpus) enumeration when
+   * the root's mtime is unchanged; irrelevant to the `SymbolCorpusAdapter`
+   * (files/symbols) path, which has its own git/stat-sweep freshness logic.
+   */
+  private lastKnownRootMtimeMs: number | null = null;
 
   /**
    * Cached prepared statements for the `records`/`records_fts` read path
@@ -227,6 +264,24 @@ export class CorpusIndex {
   private recordCountStmt?: StatementSync;
   /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
   private readonly recordsByIdsStmts = new Map<number, StatementSync>();
+  /**
+   * Cached by `IN` placeholder count for targeted metadata-only reads (no
+   * `body`) — used for bounded graph-neighbour target lookups
+   * ({@link recordsMetaByIds}), never for a whole-corpus read.
+   */
+  private readonly recordsMetaByIdsStmts = new Map<number, StatementSync>();
+  /**
+   * Cached candidate-query statements ({@link candidateRecordsMeta}), keyed
+   * by `<hasTopic>:<includeHistory>` — at most four variants (topic
+   * present/absent x history included/excluded).
+   */
+  private readonly candidateStmts = new Map<string, StatementSync>();
+  /**
+   * Cached un-scoped `count(*)` statement backing {@link unscopedMatchCount}/
+   * {@link narrowedMatchPattern} — a single statement (no topic/status
+   * variants; it never joins to `records`).
+   */
+  private candidateCountStmt?: StatementSync;
 
   /**
    * Cached prepared statements for the `files`/`symbols` read path (the
@@ -383,6 +438,8 @@ export class CorpusIndex {
           body         TEXT NOT NULL,
           mtime_ms     REAL NOT NULL,
           content_hash TEXT NOT NULL,
+          topic        TEXT NOT NULL DEFAULT '',
+          status       TEXT NOT NULL DEFAULT '',
           adapter_meta TEXT
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
@@ -391,6 +448,8 @@ export class CorpusIndex {
           body,
           tokenize = 'porter unicode61'
         );
+        CREATE INDEX IF NOT EXISTS idx_records_topic ON records(topic);
+        CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
       `);
     }
     this.db.exec(`PRAGMA user_version = ${CORPUS_INDEX_SCHEMA_VERSION};`);
@@ -426,7 +485,34 @@ export class CorpusIndex {
     }
     if (LEGACY_TABLES.some((name) => tables.includes(name))) return false;
     if (!REQUIRED_TABLES.every((name) => tables.includes(name))) return false;
+    if (!this.recordsFacetColumnsPresent()) return false;
     return this.schemaVersion() === CORPUS_INDEX_SCHEMA_VERSION;
+  }
+
+  /**
+   * True when the `records` table itself carries the indexed `topic`/`status`
+   * facet columns this schema version requires. An explicit STRUCTURAL check,
+   * independent of `user_version` — the same defense {@link LEGACY_TABLES}
+   * provides for a table that was dropped, applied here for a table whose
+   * COLUMN SET changed instead ({@link CORPUS_INDEX_SCHEMA_VERSION} 2 -> 3,
+   * `topic`/`status` promoted out of `adapter_meta` into real columns).
+   * `ensureSchema` only ever stamps `PRAGMA user_version` — it never runs
+   * `ALTER TABLE` against an existing table — so a database file left over
+   * from schema version 2 has a `records` table with NO `topic`/`status`
+   * columns at all; comparing `user_version` alone would already correctly
+   * force a rebuild on THIS specific bump (2 -> 3 is a version this codebase
+   * never wrote before), but a structural check that does not depend on
+   * every prior build's version-stamping discipline having been perfect is
+   * cheap here and closes that class of trap for good.
+   */
+  private recordsFacetColumnsPresent(): boolean {
+    try {
+      const rows = this.db.prepare(`PRAGMA table_info(records)`).all() as Array<Record<string, unknown>>;
+      const columns = new Set(rows.map((row) => asString(row.name)));
+      return columns.has('topic') && columns.has('status');
+    } catch {
+      return false;
+    }
   }
 
   /** True when every required `files`/`symbols` table exists (the SymbolCorpusAdapter storage mode), no legacy table is present, and the schema version matches. Same table-first ordering as {@link schemaIsValid}, for the same reason. */
@@ -493,11 +579,16 @@ export class CorpusIndex {
    * {@link ensureFreshSymbols} — so it cannot run on every query either.
    *
    * `CorpusAdapter` corpora (journal) keep their existing cheap count
-   * comparison unchanged: compare the adapter's current file COUNT to the
-   * indexed record count and only run the full incremental sync when they
-   * differ (add/remove drift) or the schema is invalid. Same-count
-   * out-of-band content edits are NOT detected here — those are the job of an
-   * explicit {@link rebuild} / {@link syncIncremental}.
+   * comparison: compare the adapter's current file COUNT to the indexed
+   * record count and only run the full incremental sync when they differ
+   * (add/remove drift) or the schema is invalid. Same-count out-of-band
+   * content edits are NOT detected here — those are the job of an explicit
+   * {@link rebuild} / {@link syncIncremental}. When the adapter supplies
+   * {@link CorpusAdapter.rootMtimeMs}, that count comparison itself is
+   * pre-gated by a single cheap `stat` (see {@link ensureFreshRecords}):
+   * `listFiles()` — an O(corpus) directory enumeration — only runs when the
+   * root's mtime has actually changed since the last check, which is the
+   * common case for the overwhelming majority of queries.
    */
   async ensureFresh(): Promise<void> {
     if (isSymbolCorpusAdapter(this.adapter)) {
@@ -512,7 +603,28 @@ export class CorpusIndex {
       await this.rebuild();
       return;
     }
-    const files = await this.adapter.listFiles();
+    await this.ensureFreshRecords(this.adapter);
+  }
+
+  /**
+   * The `CorpusAdapter` (records) half of {@link ensureFresh}. Pre-gated by
+   * the adapter's optional {@link CorpusAdapter.rootMtimeMs}: when supplied
+   * and UNCHANGED since the last check, this skips `listFiles()` (an
+   * O(corpus) directory enumeration) entirely — nothing could have been
+   * added or removed if the directory's own mtime never moved. When absent,
+   * or when the mtime DID change, falls through to the exact same
+   * `listFiles().length !== recordCount()` comparison this always ran.
+   */
+  private async ensureFreshRecords(adapter: CorpusAdapter): Promise<void> {
+    if (adapter.rootMtimeMs) {
+      const currentMtimeMs = await adapter.rootMtimeMs();
+      if (currentMtimeMs !== null && currentMtimeMs === this.lastKnownRootMtimeMs) return;
+      const files = await adapter.listFiles();
+      if (files.length !== this.recordCount()) await this.syncIncremental();
+      this.lastKnownRootMtimeMs = currentMtimeMs;
+      return;
+    }
+    const files = await adapter.listFiles();
     if (files.length !== this.recordCount()) {
       await this.syncIncremental();
     }
@@ -768,6 +880,9 @@ export class CorpusIndex {
     this.lexicalSearchStmt = undefined;
     this.recordCountStmt = undefined;
     this.recordsByIdsStmts.clear();
+    this.recordsMetaByIdsStmts.clear();
+    this.candidateStmts.clear();
+    this.candidateCountStmt = undefined;
   }
 
   /**
@@ -819,7 +934,7 @@ export class CorpusIndex {
     this.dropAndRecreateSchema();
     const files = await adapter.listFiles();
     const insertRecord = this.db.prepare(
-      `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, adapter_meta) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, topic, status, adapter_meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertFts = this.db.prepare(`INSERT INTO records_fts (id, title, body) VALUES (?, ?, ?)`);
     this.db.exec('BEGIN');
@@ -843,6 +958,8 @@ export class CorpusIndex {
           loaded.body,
           loaded.mtimeMs,
           loaded.contentHash,
+          loaded.topic ?? '',
+          loaded.status ?? '',
           loaded.adapterMeta ?? null,
         );
         insertFts.run(loaded.id, loaded.title, loaded.body);
@@ -1175,14 +1292,16 @@ export class CorpusIndex {
   private upsertRecord(loaded: StoredRecord): void {
     this.db
       .prepare(
-        `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, adapter_meta)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, topic, status, adapter_meta)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            path = excluded.path,
            title = excluded.title,
            body = excluded.body,
            mtime_ms = excluded.mtime_ms,
            content_hash = excluded.content_hash,
+           topic = excluded.topic,
+           status = excluded.status,
            adapter_meta = excluded.adapter_meta`,
       )
       .run(
@@ -1192,6 +1311,8 @@ export class CorpusIndex {
         loaded.body,
         loaded.mtimeMs,
         loaded.contentHash,
+        loaded.topic ?? '',
+        loaded.status ?? '',
         loaded.adapterMeta ?? null,
       );
     this.db.prepare('DELETE FROM records_fts WHERE id = ?').run(loaded.id);
@@ -1439,44 +1560,33 @@ export class CorpusIndex {
   allRecords(): StoredRecord[] {
     if (!this.allRecordsStmt) {
       this.allRecordsStmt = this.db.prepare(
-        'SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records',
+        'SELECT id, path, title, body, mtime_ms, content_hash, topic, status, adapter_meta FROM records',
       );
     }
     const rows = this.allRecordsStmt.all() as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      id: asString(row.id),
-      path: asString(row.path),
-      title: asString(row.title),
-      body: asString(row.body),
-      mtimeMs: asNumber(row.mtime_ms),
-      contentHash: asString(row.content_hash),
-      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
-    }));
+    return rows.map((row) => toStoredRecord(row, true) as StoredRecord);
   }
 
   /**
    * Every derived-index row's metadata ONLY — id/path/title/mtime/hash/
-   * adapter-meta, never `body`. Ranking (lexical fusion, tag overlap,
-   * graph-neighbour expansion) needs none of a record's body text; only a
-   * caller that will actually return a record's text should pay to project
-   * it (see {@link recordsByIds}). Same row set as {@link allRecords}, just a
-   * cheaper column list.
+   * topic/status/adapter-meta, never `body`. Ranking (lexical fusion, tag
+   * overlap, graph-neighbour expansion) needs none of a record's body text;
+   * only a caller that will actually return a record's text should pay to
+   * project it (see {@link recordsByIds}). Same row set as {@link
+   * allRecords}, just a cheaper column list. This is still a WHOLE-CORPUS
+   * read — callers on the per-query candidate path should use {@link
+   * candidateRecordsMeta} instead, which is SQL-bounded; this remains for
+   * callers that genuinely need every record (e.g. the reindex CLI's node
+   * count).
    */
   allRecordsMeta(): StoredRecordMeta[] {
     if (!this.allRecordsMetaStmt) {
       this.allRecordsMetaStmt = this.db.prepare(
-        'SELECT id, path, title, mtime_ms, content_hash, adapter_meta FROM records',
+        'SELECT id, path, title, mtime_ms, content_hash, topic, status, adapter_meta FROM records',
       );
     }
     const rows = this.allRecordsMetaStmt.all() as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      id: asString(row.id),
-      path: asString(row.path),
-      title: asString(row.title),
-      mtimeMs: asNumber(row.mtime_ms),
-      contentHash: asString(row.content_hash),
-      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
-    }));
+    return rows.map((row) => toStoredRecord(row, false) as StoredRecordMeta);
   }
 
   /**
@@ -1494,20 +1604,150 @@ export class CorpusIndex {
     if (!stmt) {
       const placeholders = ids.map(() => '?').join(', ');
       stmt = this.db.prepare(
-        `SELECT id, path, title, body, mtime_ms, content_hash, adapter_meta FROM records WHERE id IN (${placeholders})`,
+        `SELECT id, path, title, body, mtime_ms, content_hash, topic, status, adapter_meta FROM records WHERE id IN (${placeholders})`,
       );
       this.recordsByIdsStmts.set(ids.length, stmt);
     }
     const rows = stmt.all(...ids) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      id: asString(row.id),
-      path: asString(row.path),
-      title: asString(row.title),
-      body: asString(row.body),
-      mtimeMs: asNumber(row.mtime_ms),
-      contentHash: asString(row.content_hash),
-      adapterMeta: row.adapter_meta == null ? undefined : asString(row.adapter_meta),
-    }));
+    return rows.map((row) => toStoredRecord(row, true) as StoredRecord);
+  }
+
+  /**
+   * Metadata-only records (no `body`) for exactly the given ids — the
+   * `recordsByIds` counterpart used for BOUNDED graph-neighbour target
+   * lookups: a handful of specific link targets a candidate pool's seed
+   * documents point to, never a whole-corpus read. Cached by `IN` placeholder
+   * count, same reasoning as {@link recordsByIds}. Empty `ids` short-circuits
+   * without touching the database.
+   */
+  recordsMetaByIds(ids: string[]): StoredRecordMeta[] {
+    if (ids.length === 0) return [];
+    let stmt = this.recordsMetaByIdsStmts.get(ids.length);
+    if (!stmt) {
+      const placeholders = ids.map(() => '?').join(', ');
+      stmt = this.db.prepare(
+        `SELECT id, path, title, mtime_ms, content_hash, topic, status, adapter_meta FROM records WHERE id IN (${placeholders})`,
+      );
+      this.recordsMetaByIdsStmts.set(ids.length, stmt);
+    }
+    const rows = stmt.all(...ids) as Array<Record<string, unknown>>;
+    return rows.map((row) => toStoredRecord(row, false) as StoredRecordMeta);
+  }
+
+  /**
+   * SQL-BOUNDED candidate query: lexical FTS5/BM25 match, joined against
+   * `records` and scoped by an optional exact `topic` equality and
+   * `status != 'superseded'` visibility — both against the real, indexed
+   * columns added in schema version 3 (see {@link ensureSchema}) — capped at
+   * `limit` rows and returned in bm25 order (best match first). This is the
+   * query that replaces reading the whole corpus (or a whole topic) into JS
+   * and filtering there: every predicate that can run in SQL does, and the
+   * row COUNT returned is bounded by `limit`, never by corpus or topic size.
+   *
+   * Empty `tokens` short-circuits without touching the database: an empty
+   * FTS5 MATCH pattern cannot express "match nothing", and every ranking
+   * signal this engine fuses for a query (lexical, tag overlap, and
+   * neighbour expansion seeded from lexical/tag) is driven off `tokens` — no
+   * tokens can never win any signal regardless of what the candidate pool
+   * contains, so there is nothing a query against the database could add.
+   */
+  candidateRecordsMeta(opts: { tokens: string[]; topic?: string; includeHistory: boolean; limit: number }): StoredRecordMeta[] {
+    const clean = opts.tokens.map((token) => token.replace(/"/g, '').trim()).filter((token) => token.length > 0);
+    if (clean.length === 0) return [];
+    const key = `${opts.topic !== undefined ? 1 : 0}:${opts.includeHistory ? 1 : 0}`;
+    const match = this.narrowedMatchPattern(clean, opts.limit);
+    const stmt = this.candidateSelectStmt(key, opts.topic !== undefined, opts.includeHistory);
+    const bindings: Array<string | number> = [match];
+    if (opts.topic !== undefined) bindings.push(opts.topic);
+    bindings.push(opts.limit);
+    const rows = stmt.all(...bindings) as Array<Record<string, unknown>>;
+    return rows.map((row) => toStoredRecord(row, false) as StoredRecordMeta);
+  }
+
+  private candidateSelectStmt(key: string, hasTopic: boolean, includeHistory: boolean): StatementSync {
+    let stmt = this.candidateStmts.get(key);
+    if (!stmt) {
+      const topicClause = hasTopic ? 'AND r.topic = ?' : '';
+      const statusClause = includeHistory ? '' : `AND r.status != 'superseded'`;
+      stmt = this.db.prepare(
+        `SELECT r.id, r.path, r.title, r.mtime_ms, r.content_hash, r.topic, r.status, r.adapter_meta
+         FROM records r
+         JOIN records_fts f ON f.id = r.id
+         WHERE f.records_fts MATCH ? ${topicClause} ${statusClause}
+         ORDER BY bm25(f.records_fts)
+         LIMIT ?`,
+      );
+      this.candidateStmts.set(key, stmt);
+    }
+    return stmt;
+  }
+
+  /**
+   * Un-scoped (no topic/status join) document count for one FTS5 MATCH
+   * pattern — a cheap, bounded posting-list-length lookup FTS5 answers from
+   * its own term statistics without materializing a single row or joining to
+   * `records`. Used only to RANK tokens by rarity in {@link
+   * narrowedMatchPattern}; a topic/status-SCOPED count would need the same
+   * per-row join {@link candidateSelectStmt} does, which is exactly the cost
+   * narrowing exists to avoid paying more than once.
+   */
+  private unscopedMatchCount(pattern: string): number {
+    if (!this.candidateCountStmt) {
+      this.candidateCountStmt = this.db.prepare(`SELECT count(*) AS n FROM records_fts WHERE records_fts MATCH ?`);
+    }
+    const row = this.candidateCountStmt.get(pattern) as Record<string, unknown> | undefined;
+    return asNumber(row?.n);
+  }
+
+  /**
+   * Reorder `tokens` rarest-document-frequency-first, then OR-join a PREFIX
+   * of them — the query's actual MATCH pattern — stopping once the prefix's
+   * SUMMED individual match counts (an upper bound on their true union: union
+   * size <= sum of sizes) exceeds `limit x NARROW_FANOUT_MARGIN`. This exists
+   * because `ORDER BY bm25(...)` (needed for a genuinely best-first result)
+   * forces SQLite to fully materialize AND sort every MATCHing row before
+   * applying `LIMIT` — cheap when the match set is small, but proportional to
+   * corpus size when a query's tokens include common words that appear in a
+   * large, roughly-constant FRACTION of the corpus (their match count grows
+   * with corpus size, not with how many documents are actually relevant).
+   * Narrowing the pattern down to its rarest tokens first keeps the match set
+   * — and so the sort — bounded regardless of corpus size, while never
+   * dropping the rarest (most discriminating) tokens a query has.
+   *
+   * Ranking is by UN-SCOPED count ({@link unscopedMatchCount}, no topic/status
+   * join) rather than the topic-scoped count the final query will actually
+   * see: a topic-scoped count is itself only answerable by the same per-row
+   * join {@link candidateSelectStmt} pays for, which would reintroduce
+   * per-token O(matches) work — exactly what narrowing exists to avoid. Using
+   * the un-scoped count as a rarity PROXY is safe: the topic-scoped result is
+   * always a subset of the un-scoped one, so a token rare un-scoped is at
+   * least as rare within any one topic, and `NARROW_FANOUT_MARGIN` leaves
+   * headroom for a topic's share of common tokens to still clear `limit`
+   * matches once genuinely scoped.
+   *
+   * Skipped entirely (returns the full OR of every token) when there is at
+   * most one token, or the full pattern's UN-SCOPED count is already at or
+   * below `limit`: a topic-scoped count can only be smaller, so sorting that
+   * few rows is cheap and narrowing would only add cost for no benefit.
+   */
+  private narrowedMatchPattern(tokens: string[], limit: number): string {
+    const fullPattern = tokens.map((token) => `"${token}"`).join(' OR ');
+    if (tokens.length <= 1) return fullPattern;
+    if (this.unscopedMatchCount(fullPattern) <= limit) return fullPattern;
+
+    const byRarity = tokens
+      .map((token) => ({ token, n: this.unscopedMatchCount(`"${token}"`) }))
+      .sort((a, b) => a.n - b.n);
+
+    const ceiling = limit * NARROW_FANOUT_MARGIN;
+    let sum = 0;
+    const kept: string[] = [];
+    for (const { token, n } of byRarity) {
+      if (kept.length > 0 && sum + n > ceiling) break;
+      sum += n;
+      kept.push(token);
+    }
+    return kept.map((token) => `"${token}"`).join(' OR ');
   }
 
   /**

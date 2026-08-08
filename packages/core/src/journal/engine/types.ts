@@ -17,6 +17,20 @@ export interface CorpusRecord {
   /** Full indexable text body. */
   body: string;
   /**
+   * Optional indexed SQL filter/facet fields. Unlike `adapterMeta` (an opaque
+   * blob the engine never parses), `topic` and `status` are stored as real,
+   * INDEXED columns on the `records` table (see `../engine/index-store.ts`'s
+   * `ensureSchema`) — so a query can prefilter and scope candidates in SQL
+   * (equality on `topic`, visibility on `status`) before any row is read into
+   * JS. The engine treats both as opaque scoping values: it only ever
+   * compares them for equality, never interprets what they mean. Today only
+   * the journal adapter (`../adapters/journal-adapter.ts`) supplies them, for
+   * its topic prefilter and superseded-status visibility; an adapter that has
+   * no use for SQL-side filtering simply omits them (stored as `''`).
+   */
+  topic?: string;
+  status?: string;
+  /**
    * Opaque adapter-owned metadata, persisted and returned verbatim alongside
    * the record. The engine never parses or interprets this string — it exists
    * so an adapter can persist its own metadata in the SAME row, SAME
@@ -94,6 +108,23 @@ export interface CorpusAdapter {
     pool: StoredRecordMeta[],
     lexicalOrder?: string[],
   ): RankedList[] | Promise<RankedList[]>;
+  /**
+   * Optional cheap "has anything been added or removed" signal: the
+   * modification time of the directory {@link listFiles} enumerates, or
+   * `null` if unavailable. When an adapter supplies this, the engine's {@link
+   * CorpusIndex.ensureFresh} pre-checks it (a single `stat`, independent of
+   * corpus size) and SKIPS the full `listFiles()` + record-count comparison
+   * entirely whenever it is unchanged since the last check — the common case
+   * for the overwhelming majority of queries, where nothing was added or
+   * removed since the last one. A directory's own mtime updates whenever an
+   * entry is added or removed (standard filesystem behavior), so this is an
+   * exact, not approximate, short-circuit for add/remove drift — the ONLY
+   * drift {@link CorpusIndex.ensureFresh}'s count comparison ever detects;
+   * content edits to an existing file are unaffected either way (that is a
+   * different explicit-rebuild/sync concern). Adapters that omit this
+   * (`undefined`) get today's unconditional `listFiles()` behavior, unchanged.
+   */
+  rootMtimeMs?(): Promise<number | null> | number | null;
 }
 
 /**
