@@ -35,9 +35,12 @@ and a worker can finally read the code index from inside its sandbox. `SCHEMA_VE
   flat as the corpus grows instead of linear. Retrieval quality is unchanged — `mAP` was 1.0000
   before and after, and the characterization test that pins exact candidate IDs and ordering passes
   untouched.
-- **The symbol index stopped scaling with the repository too.** `rankedSymbolsByTokens` scored every
-  matching symbol in JavaScript after materializing candidate ids; SQLite now matches, scores, sorts
-  and limits in one statement, and only metadata for the survivors is returned.
+- **The symbol index stopped scaling linearly with the repository.** `rankedSymbolsByTokens` scored
+  every matching symbol in JavaScript after materializing candidate ids; SQLite now matches, scores,
+  sorts and limits in one statement, and only metadata for the survivors crosses into JavaScript. A
+  4x corpus went from 3.9x latency (linear) to about 2.5x. It is sublinear rather than flat, and that
+  is correct: unlike the journal, a symbol query has no topic partition to prefilter on, so FTS5 must
+  still rank every matching row to pick the top N.
 - **A rare query token no longer suppresses a common one.** The first bounded-fanout attempt capped
   the number of *tokens* searched rather than the number of *results* returned: it sorted tokens by
   rarity and stopped once their cumulative match count exceeded the limit, so a rare token paired
