@@ -1,9 +1,7 @@
-import { createHash } from 'node:crypto';
-import { mkdir, realpath } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { CorpusIndex, FileCorpusAdapter } from '@zhixuan92/multi-model-agent-core';
 import type { FallbackSweepState } from '@zhixuan92/multi-model-agent-core';
-import { expandHome } from '../../expand-home.js';
+import { corpusIndexDbPath, tokenize } from '../corpus-index-locator.js';
 import { PreprocessFailure } from './types.js';
 import type { Preprocessor } from './types.js';
 
@@ -29,11 +27,6 @@ interface FolderSummary {
   folder: string;
   fileCount: number;
   symbolCount: number;
-}
-
-function tokenize(text: string): string[] {
-  const matches = text.toLowerCase().match(/[a-z0-9_]+/g) ?? [];
-  return Array.from(new Set(matches.filter((token) => token.length > 1)));
 }
 
 function collapseWhitespace(text: string): string {
@@ -177,14 +170,6 @@ function sweepStateFor(cwd: string): FallbackSweepState {
  * `corpus-index/` directory stays debuggable by eye; the hash is what
  * actually guarantees uniqueness.
  */
-async function corpusIndexDbPath(cwd: string, stateDir: string): Promise<string> {
-  const realRoot = await realpath(cwd);
-  const hash = createHash('sha256').update(realRoot).digest('hex').slice(0, 16);
-  const dir = join(expandHome(stateDir), 'corpus-index');
-  await mkdir(dir, { recursive: true });
-  return join(dir, `${basename(realRoot)}-${hash}.db`);
-}
-
 /**
  * Let SQLite rank every indexed symbol and return only the top
  * {@link CANDIDATE_CAP} metadata rows, then materialize `body` text ONLY for
@@ -215,7 +200,10 @@ async function attemptLoadIndexState(
   const adapter = new FileCorpusAdapter({ root: cwd });
   let index: CorpusIndex;
   try {
-    index = await CorpusIndex.open({ root: cwd, adapter, dbPath, sweepState: sweepStateFor(cwd) });
+    // `delete` journal mode, not WAL: a worker opens this same index read-only
+    // from inside a sandbox, and WAL's -shm sidecar needs write access even to
+    // read. See CorpusIndex.open's journalMode doc.
+    index = await CorpusIndex.open({ root: cwd, adapter, dbPath, sweepState: sweepStateFor(cwd), journalMode: 'delete' });
   } catch (error) {
     throw new IndexPhaseError('open', error);
   }
