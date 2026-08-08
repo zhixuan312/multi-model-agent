@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.5.0] - 2026-08-08
+
+Updating MMA is now one command. `mma update` installs the new package, restarts the daemon and
+waits until it answers, refreshes your skill files, updates the Claude Code plugin, and finishes by
+naming the applications you still have to restart yourself — verifying each step instead of assuming
+it. The previous instructions told you to run `pkill -f "mma serve"`, which silently matched nothing
+unless the daemon happened to be started by typing `mma serve`; the restart then lost the port race
+with its own predecessor, and the failure went to a log nobody reads. `SCHEMA_VERSION` stays at 6.
+
+### Added
+
+- **`mma update`** — the whole upgrade in one command, then a list of the applications to restart.
+  `--no-install` skips the package install if you manage it yourself. When it cannot tell which
+  package manager owns the install, it stops and prints the exact command rather than guessing.
+- **`mma doctor`** — a read-only report of every version surface (package, daemon, plugin, skill
+  files, declared clients) and any disagreement between them. Exits non-zero when it finds a
+  problem, so scripts can gate on it. `--json` for machine reading, `--offline` to skip the registry
+  lookup.
+- **`mma stop` / `mma restart`** — stop waits until the process is actually gone; restart waits until
+  the replacement answers `/health`. Both work on macOS, Linux and Windows.
+- **A daemon pidfile** at `<stateDir>/daemon.pid`. The lifecycle commands resolve the daemon from
+  that record and confirm it against the daemon's own `/status`, falling back to the port's
+  listening owner only when the record is missing — never by matching a process name.
+
+### Changed
+
+- The `Updating` section of both READMEs now documents the one-command flow, which surfaces an
+  update actually touches, and which client needs restarting and why.
+- `mma sync-skills --json` gained a `removed` field (assets successfully removed). `retired` keeps
+  its original meaning — assets detected for retirement — so existing consumers are unaffected.
+
+### Fixed
+
+- **An occupied port now explains itself.** Starting a daemon while one is already running printed
+  an uncaught `EADDRINUSE` stack trace, which a backgrounded start swallowed entirely. It now names
+  the port and the process that owns it, and exits non-zero.
+- **A retired client id no longer disables skill synchronisation.** A manifest naming a client that
+  has since been renamed (`gemini` → `antigravity`) failed strict validation, and because every sync
+  path reads that manifest, skill updates silently stopped for **every** client on the machine. Such
+  ids are now ignored and reported.
+- **`mma sync-skills` no longer reports success after a failed removal.** When retiring the
+  standalone Claude Code copies superseded by the plugin, a removal that failed was swallowed, so
+  the run exited 0 having left two copies of every skill in place.
+- The plugin-supersedes message said only skill entries were touched, while the same path also
+  removed `~/.claude/commands/mma-flow.md` and `mma-breakout.md`.
+- A socket error arriving after a successful bind is logged instead of terminating the daemon.
+
 ## [6.4.0] - 2026-08-08
 
 Retrieval stops scaling with the size of what it searches. Journal lookups are about **59x faster**
