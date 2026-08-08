@@ -1,4 +1,4 @@
-export { HTTPListener, type HTTPListenerOptions, type HTTPRequestHandler } from './http-listener.js';
+export { HTTPListener, PortInUseError, type HTTPListenerOptions, type HTTPRequestHandler } from './http-listener.js';
 export { RouteDispatcher } from './route-dispatcher.js';
 export {
   isLoopbackAddress,

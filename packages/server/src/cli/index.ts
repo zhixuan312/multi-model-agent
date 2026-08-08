@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { readServerVersion } from '../server-version.js';
 import minimist, { type ParsedArgs } from 'minimist';
 import {
+  loadAuthToken,
   loadConfigFromFile,
   MCP_BRIDGE_CLIENT_IDS,
   type CallerClient,
@@ -38,6 +39,11 @@ import { startServe } from './serve.js';
 import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { runInfo } from './info.js';
+import { runStop } from './stop.js';
+import { runRestart } from './restart.js';
+import { runDoctor } from './doctor.js';
+import { runUpdate, type PackageManager } from './update.js';
+import { expandHome } from '../expand-home.js';
 import { runSyncSkills } from './sync-skills.js';
 import { runSetup, ttyPrompts, isInteractive } from './setup.js';
 import { runDisable, runEnable } from './toggle.js';
@@ -84,11 +90,62 @@ interface CliDeps {
   exit?: (code: number) => never;
 }
 
+/**
+ * The inputs `stop`, `restart`, `doctor` and `update` all need.
+ *
+ * Built once, in one place, so the four commands cannot disagree about which
+ * daemon they are acting on — the failure the old `pkill` recipe produced every
+ * time it matched a different process than the one serving.
+ *
+ * Returns null when the config cannot be loaded; the caller reports that,
+ * because the message names the subcommand.
+ */
+async function buildLifecycleDeps(
+  configArg: string | undefined,
+  deps: CliDeps,
+): Promise<{
+  stateDir: string;
+  serverUrl: string;
+  token: string;
+  homeDir: string;
+  cliPath: string;
+  logPath: string;
+  serveArgs: string[];
+  declared: DeclaredClientRoster | undefined;
+} | null> {
+  const config = await loadConfig(configArg, deps).catch(() => null);
+  if (!config) return null;
+  const homeDir = deps.homeDir?.() ?? os.homedir();
+  let token = '';
+  try {
+    token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
+  } catch {
+    // /status needs it, /health does not. An unreadable token degrades the
+    // report rather than blocking a stop the user asked for.
+  }
+  return {
+    stateDir: expandHome(config.server.stateDir, homeDir),
+    serverUrl: buildServerUrl(config.server.bind, config.server.port),
+    token,
+    homeDir,
+    // This module IS the CLI entry point, so its own path is the one to
+    // re-execute and the one to spawn the daemon from. Deriving it from
+    // process.argv[1] would break under a wrapper or a symlinked bin shim.
+    cliPath: fileURLToPath(import.meta.url),
+    logPath: path.join(homeDir, '.mma', 'serve.log'),
+    serveArgs: configArg ? ['--config', configArg] : [],
+    declared: (config as unknown as { clients?: DeclaredClientRoster }).clients,
+  };
+}
+
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config', 'batch', 'client'],
-    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log', 'regenerate-catalog'],
+    string: ['config', 'batch', 'client', 'package-manager', 'previous-version'],
+    boolean: [
+      'help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log',
+      'regenerate-catalog', 'now', 'no-install', 'post-install', 'offline',
+    ],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -190,7 +247,11 @@ Usage:
 
 Commands:
   setup            Configure agents + clients interactively (start here; re-run to change anything)
+  update           Update everything, then name the applications you must restart
+  doctor           Report every version surface and any drift between them (read-only)
   serve            Start the HTTP server (default — just \`mma\` with no command)
+  stop             Stop the running daemon and wait for it to exit
+  restart          Stop the daemon, start a replacement, wait until it answers
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
@@ -207,6 +268,12 @@ Commands:
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
   search <query>   Find where something lives: ranked path + line range + enclosing symbol, body numbered
   journal reindex  Rebuild .mma/journal/index.db from markdown nodes (--regenerate-catalog to also rewrite index.md)
+
+Update / lifecycle options:
+  --no-install          update: skip the package install (you manage the package yourself)
+  --package-manager <m> update: force npm | pnpm | bun instead of inferring one
+  --now                 stop/restart: skip the daemon's drain window for in-flight tasks
+  --offline             doctor: do not contact the npm registry
 
 Global options:
   --config, -c <path>   Path to config file
@@ -337,6 +404,53 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
+      exit(code);
+      break;
+    }
+    case 'stop':
+    case 'restart':
+    case 'doctor':
+    case 'update': {
+      const lifecycle = await buildLifecycleDeps(configArg, deps);
+      if (lifecycle === null) {
+        stderr(`mma ${subcommand}: cannot load config. Set --config or $MMA_CONFIG.\n`);
+        exit(1);
+        break;
+      }
+      const json = opts['json'] === true;
+      let code: number;
+      if (subcommand === 'stop') {
+        code = await runStop({ ...lifecycle, now_: opts['now'] === true, json, stdout: deps.stdout, stderr: deps.stderr });
+      } else if (subcommand === 'restart') {
+        code = await runRestart({ ...lifecycle, now_: opts['now'] === true, json, stdout: deps.stdout, stderr: deps.stderr });
+      } else if (subcommand === 'doctor') {
+        code = await runDoctor({
+          ...lifecycle,
+          cliVersion: readServerVersion(),
+          declared: lifecycle.declared,
+          json,
+          offline: opts['offline'] === true,
+          stdout: deps.stdout,
+          stderr: deps.stderr,
+        });
+      } else {
+        const pm = typeof opts['package-manager'] === 'string'
+          ? (opts['package-manager'] as PackageManager)
+          : undefined;
+        code = await runUpdate({
+          ...lifecycle,
+          cliVersion: readServerVersion(),
+          // minimist maps `--no-install` onto the negation of `install`, so read
+          // both spellings rather than only the one a user is likely to guess.
+          noInstall: opts['no-install'] === true || opts['install'] === false,
+          packageManager: pm,
+          postInstall: opts['post-install'] === true,
+          previousVersion: typeof opts['previous-version'] === 'string' ? opts['previous-version'] : undefined,
+          json,
+          stdout: deps.stdout,
+          stderr: deps.stderr,
+        });
+      }
       exit(code);
       break;
     }

@@ -176,6 +176,27 @@ export class ExecutionStore {
   /** Reconciliation transition: pending → interrupted (CAS, same discipline). */
   interrupt(id: string, resultJson: string): boolean { return this.terminalize(id, 'interrupted', resultJson); }
 
+  /**
+   * Rows marked `interrupted` at or after `since`.
+   *
+   * Exists for `mma restart` / `mma update`, which must tell the user what the
+   * restart just destroyed. That report has to happen at restart time: terminal
+   * rows expire after `batchTtlMs` (one hour by default) and are pruned at the
+   * next boot, so a user who thinks to look later may find nothing.
+   *
+   * It returns identity only — id, type, cwd — because that is all the table
+   * holds. Admission never stored the prompt, target or options
+   * (`application/execution-runtime.ts`), so nothing here can rebuild the
+   * request. The caller retries; MMA cannot.
+   */
+  interruptedSince(since: number): ExecutionRecord[] {
+    if (this.closed) return [];
+    const rows = this.db.prepare(
+      `SELECT * FROM executions WHERE state = 'interrupted' AND terminal_at >= ? ORDER BY terminal_at ASC`,
+    ).all(since) as unknown as Row[];
+    return rows.map(toRecord);
+  }
+
   /** Drop terminal rows past their retention TTL. Returns rows removed. */
   pruneExpired(now = Date.now()): number {
     if (this.closed) return 0;
