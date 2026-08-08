@@ -129,3 +129,13 @@ you submit, on whatever branch that checkout already has. **You own the branch**
 your task branch BEFORE dispatching; the engine never creates a branch or a worktree, it commits your
 work on yours. A **non-git** target is edited in-place too, just with no commit. No new execution task type
 is introduced, and git is never forced.
+
+## Relationship to a disposition-driven flow (mma-flow B5)
+
+execute_plan itself is disposition-agnostic — it does not read or branch on `disposition`. When
+dispatched as B5 inside `mma-flow`'s caller-owned flow (see `mma-flow/SKILL.md` → Stage 0 —
+LOCATE), its edits ARE the deliverable the flow's later stages check: B6 (`mma-review`) reviews
+them, and B7 runs the approved contract's declared `command` acceptance criteria against them.
+Whether that output ends up committed on a PR branch (`pr`), committed directly on the current
+branch (`commit-in-place`), or written to a declared artifact path (`deliver-file`) is entirely
+the caller's concern — execute_plan just implements the plan's tasks in the checkout it is given.

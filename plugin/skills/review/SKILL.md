@@ -270,3 +270,13 @@ The block is registered server-side at task completion; no caller action is need
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 
 **Empty findings is not a failure.** A review with zero findings is a success — the code passed inspection. Check `output.summary.findings.length === 0`.
+
+## Acceptance-criteria review (B6 in a disposition-driven mma:flow)
+
+When invoked as B6 of `mma:flow`'s caller-owned flow (see `mma:flow/SKILL.md` → Common:
+Acceptance closure), mma:review is the ONLY producer of `agent-review` acceptance evidence: for
+every acceptance criterion on the approved contract whose `method` is `agent-review`, the
+reviewer's verdict is a `passed` / `failed` outcome the caller persists as that criterion's
+`VerificationRecord` in `.mma/verifications/<stem>.json`, bound to the exact output reviewed
+(`subjectDigest`). A `command` outcome from B7 is never substituted with an `agent-review`
+verdict from here, and vice versa — the two methods stay distinct evidence, never interchanged.

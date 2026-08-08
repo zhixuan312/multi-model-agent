@@ -10,10 +10,18 @@ const skillsRoot = path.resolve('packages/server/src/skills');
 // required substrings (case-insensitive); UNCHANGED skills are deliberately left non-parent-aware.
 // These two maps ARE the machine-checkable mirror of the spec's Skill sweep inventory table.
 const CHANGED: Record<string, string[]> = {
+  // Ratchet updated deliberately: 'no pr (non-git target)' described the OLD model where
+  // git-ness (not a declared `disposition`) decided whether a repo got a PR, and a non-git
+  // repo was a soft per-repo skip. The flow is now disposition-driven (pr / commit-in-place /
+  // deliver-file, declared once on the contract): B4/B8/B9 run only for `pr`, and the other
+  // two dispositions never attempt a PR at all — there is nothing to skip. 'pr only' is the
+  // new marker for that gating; 'stopped-unmet-requirements' and 'commitbaseline' anchor the
+  // rebuilt LOCATE/closure machinery this same task introduced.
   'mma-flow': [
     'topology detection', 'immediate child', 'does not recurse', 'does not follow symlinks',
     'multi-repo mode', 'single-project', 'involved repo', 're-prompt', 'slug collision',
-    'parent workspace', 'design/<stem>.md', 'one plan per repo', 'in-place', 'no pr (non-git target)',
+    'parent workspace', 'design/<stem>.md', 'one plan per repo', 'in-place', 'pr only',
+    'stopped-unmet-requirements', 'commitbaseline',
   ],
   'multi-model-agent': ['multi-repo', 'single-project'],
   'mma-explore': ['multi-repo mode', 'parent workspace', '.mma/explorations'],
