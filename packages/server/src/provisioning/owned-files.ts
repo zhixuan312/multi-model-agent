@@ -250,7 +250,7 @@ export async function inspectRetiredSkillOwnership(dir: string): Promise<SkillOw
 }
 
 /** Never a real release string, so `marker.release` can never equal it. */
-const RETIRED_SKILL_SENTINEL_RELEASE = ' retired';
+const RETIRED_SKILL_SENTINEL_RELEASE = '\u0000retired';
 
 async function inspect(
   dir: string,

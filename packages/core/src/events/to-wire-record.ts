@@ -233,7 +233,7 @@ export function toWireRecord(
   // env.toolCalls is itself recorded in chronological (stage, turn) order.
   const toolCallGroups = new Map<string, { stage: string; turn: number; tool: string; count: number }>();
   for (const tc of env.toolCalls) {
-    const key = `${tc.stage} ${tc.turn} ${tc.tool}`;
+    const key = `${tc.stage}\u0000${tc.turn}\u0000${tc.tool}`;
     const existing = toolCallGroups.get(key);
     if (existing) existing.count += 1;
     else toolCallGroups.set(key, { stage: tc.stage, turn: tc.turn, tool: tc.tool, count: 1 });
