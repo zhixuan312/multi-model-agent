@@ -120,11 +120,38 @@ function readManifest(homeDir?: string): InstallManifest {
     throw new FutureManifestError(parsedVersion);
   }
 
-  // v2 — validate strictly
+  // v2 — validate strictly, but retire unknown client ids first.
+  //
+  // WHY THIS STEP EXISTS. `targets` is validated against CLIENT_IDS, which is a
+  // living roster: `gemini` became `antigravity` when Google folded Gemini CLI
+  // into Antigravity CLI. Without this, every manifest written before such a
+  // rename fails validation forever, and because listEntries() throws, skill
+  // sync stops for EVERY client on that machine — not just the renamed one —
+  // with no message anywhere. A retired client id is stale bookkeeping, not
+  // corruption, so it is dropped and reported rather than made fatal.
+  //
+  // Structural damage still throws. The distinction is deliberate: an entry
+  // naming a client that no longer exists is recoverable by re-syncing, while a
+  // malformed file is not something to guess at.
   if (parsedVersion === 2) {
-    const result = installManifestSchema.safeParse(parsed);
+    const { cleaned, retired } = dropUnknownTargets(parsed);
+    const result = installManifestSchema.safeParse(cleaned);
     if (!result.success) {
       throw new ManifestSchemaValidationError(p, result.error);
+    }
+    if (retired.length > 0) {
+      // Reported, NOT written back. A read that writes is a bad trade twice
+      // over: `appendEntry`/`removeEntry` are unlocked read-modify-write
+      // operations, so a repair racing one of them silently discards the
+      // other's changes; and on a read-only filesystem the write would throw
+      // out of what the caller invoked as a read, failing every consumer of
+      // listEntries() over a cleanup that was only cosmetic. The cleaned value
+      // is returned in memory, so every caller behaves correctly right now, and
+      // the next real write persists the cleaned form.
+      process.stderr.write(
+        `[mma] manifest references ${retired.length} retired client id(s): ${retired.join(', ')}. ` +
+        `Ignoring them; run 'mma sync-skills' to rewrite the file.\n`,
+      );
     }
     return result.data;
   }
@@ -135,6 +162,39 @@ function readManifest(homeDir?: string): InstallManifest {
   const empty = emptyManifest();
   writeManifest(empty, homeDir);
   return empty;
+}
+
+/**
+ * Strip target ids that are no longer canonical clients.
+ *
+ * Touches ONLY the `targets` arrays — every other field is passed through
+ * untouched so real structural damage still reaches the validator. An entry
+ * left with no targets is dropped: it records an install into a client that no
+ * longer exists.
+ *
+ * @returns the cleaned value and the sorted set of ids that were retired.
+ */
+function dropUnknownTargets(parsed: unknown): { cleaned: unknown; retired: string[] } {
+  const known = new Set<string>(CLIENT_IDS);
+  const retired = new Set<string>();
+  if (typeof parsed !== 'object' || parsed === null) return { cleaned: parsed, retired: [] };
+  const root = parsed as { entries?: unknown };
+  if (!Array.isArray(root.entries)) return { cleaned: parsed, retired: [] };
+
+  const entries: unknown[] = [];
+  for (const entry of root.entries) {
+    if (typeof entry !== 'object' || entry === null) { entries.push(entry); continue; }
+    const e = entry as { targets?: unknown };
+    if (!Array.isArray(e.targets)) { entries.push(entry); continue; }
+    const kept = e.targets.filter((t) => {
+      if (typeof t === 'string' && !known.has(t)) { retired.add(t); return false; }
+      return true;
+    });
+    if (kept.length === 0) continue; // installed only into clients that no longer exist
+    entries.push({ ...e, targets: kept });
+  }
+  if (retired.size === 0) return { cleaned: parsed, retired: [] };
+  return { cleaned: { ...root, entries }, retired: [...retired].sort() };
 }
 
 function writeManifest(manifest: InstallManifest, homeDir?: string): void {

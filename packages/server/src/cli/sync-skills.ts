@@ -188,6 +188,11 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
   const bestEffort = deps.bestEffort ?? false;
   const log = silent ? (_: string) => true : stdout;
 
+  // Set when the plugin-supersedes branch could not remove a standalone asset.
+  // Carried to the final exit decision so a leftover duplicate is a partial
+  // failure, not a silent success.
+  let retirementFailed = false;
+
   if (deps.ifExists && !manifestPresent(homeDir)) return ExitCode.SUCCESS;
 
   let parsed: ParsedArgs;
@@ -248,12 +253,27 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
       .filter((command) => readInstalledVersionAt(path.join(homeDir, '.claude', 'commands', `${command}.md`)) !== null);
     const retired = presentSkills.length + presentCommands.length;
 
+    // A removal that fails is the ONLY way a user ends up with two copies of a
+    // skill without asking for it. Every failure here used to be swallowed, so
+    // the run reported "retired N" and left the copies in place — the one
+    // outcome this whole branch exists to prevent, reported as success.
+    // Collect failures and report them; the sync itself still proceeds, because
+    // a leftover file is a smaller problem than a half-finished install.
+    const failedRemovals: string[] = [];
     if (!parsed.dryRun) {
       for (const skill of presentSkills) {
-        try { removeStandaloneClaudeCodeSkill(skill, homeDir); } catch { /* best-effort */ }
+        try {
+          removeStandaloneClaudeCodeSkill(skill, homeDir);
+        } catch (err) {
+          failedRemovals.push(`${skill}: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       for (const command of presentCommands) {
-        try { removeCommandFromClaudeCode(command, homeDir); } catch { /* best-effort */ }
+        try {
+          removeCommandFromClaudeCode(command, homeDir);
+        } catch (err) {
+          failedRemovals.push(`${command}.md: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       for (const name of [...SUPPORTED_SKILLS, ...SUPPORTED_COMMANDS]) {
         removeEntry(name, ['claude-code' as ClientId], homeDir);
@@ -266,13 +286,36 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
         outcome: 'plugin-supersedes-standalone',
         plugin: supersedingPlugin,
         target: 'claude-code',
+        // `retired` keeps its original meaning — assets DETECTED for retirement.
+        // Redefining an existing field to mean "successfully removed" would make
+        // an existing consumer silently compute a different number whenever a
+        // removal failed, which is the one case it most needs to notice.
         retired,
+        removed: retired - failedRemovals.length,
+        failedRemovals,
         dryRun: parsed.dryRun,
       }) + '\n');
     } else {
-      log(pluginSupersedesMessage(supersedingPlugin, retired));
+      log(pluginSupersedesMessage(supersedingPlugin, retired - failedRemovals.length));
+      if (failedRemovals.length > 0) {
+        // Always to stderr, and never suppressed by --silent: this is the state
+        // the user must know about, because two copies of a skill make the
+        // client pick between near-identical descriptions arbitrarily.
+        stderr(
+          `warning: ${failedRemovals.length} standalone Claude Code asset(s) could NOT be removed, ` +
+          `so you now have two copies of them:\n` +
+          failedRemovals.map((f) => `  ${f}\n`).join('') +
+          `  Remove them by hand, then re-run 'mma sync-skills'.\n`,
+        );
+      }
     }
-    if (targets.length === 0) return ExitCode.SUCCESS;
+    // A failed removal must reach the EXIT CODE, not only stderr. A script that
+    // checks the status of `mma sync-skills` would otherwise read success while
+    // the command's own output says two copies of a skill now exist.
+    if (targets.length === 0) {
+      return failedRemovals.length > 0 && !bestEffort ? ExitCode.ERR_PARTIAL : ExitCode.SUCCESS;
+    }
+    if (failedRemovals.length > 0) retirementFailed = true;
   }
 
   if (parsed.dryRun) {
@@ -399,6 +442,6 @@ export async function runSyncSkills(deps: SyncSkillsDeps = {}): Promise<number> 
     for (const e of outcome.errors) stderr(`error: ${e.clientId}: ${e.reason}\n`);
   }
 
-  if (outcome.errors.length > 0) return bestEffort ? 0 : ExitCode.ERR_PARTIAL;
+  if (outcome.errors.length > 0 || retirementFailed) return bestEffort ? 0 : ExitCode.ERR_PARTIAL;
   return ExitCode.SUCCESS;
 }

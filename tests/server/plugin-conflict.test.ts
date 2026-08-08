@@ -9,7 +9,7 @@
 // runs from npm postinstall, so the reverse would make a routine
 // `npm i -g @zhixuan92/multi-model-agent@latest` silently delete a Claude Code
 // plugin the user chose.
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -109,6 +109,52 @@ describe('sync-skills: plugin supersedes standalone', () => {
     // asserted here via the retired disabled-sentinel file (disabled-state.ts,
     // Task I-7). Persisting that pin now belongs to the declared `clients`
     // roster (Task I-8); this test only pins the retirement itself.
+  });
+
+  // A removal that fails is the ONLY way a user ends up with two copies of a
+  // skill without asking for it. Every failure here used to be swallowed, so
+  // the run reported success and left the duplicates in place — the one outcome
+  // this branch exists to prevent, reported as if it had been prevented.
+  it('reports removals it could not perform instead of claiming success', async () => {
+    const home = homeWithStandalone(true);
+    const err: string[] = [];
+    // chmod 0o500 on the parent: its children can still be read, but not
+    // unlinked. This is what an unwritable or locked directory looks like.
+    const skillsDir = join(home, '.claude', 'skills');
+    chmodSync(skillsDir, 0o500);
+    try {
+      await runSyncSkills({
+        argv: ['--target=claude-code'], homeDir: home,
+        silent: true, stdout: () => true, stderr: (s) => { err.push(s); return true; },
+      });
+    } finally {
+      chmodSync(skillsDir, 0o700);
+    }
+
+    const text = err.join('');
+    expect(text).toContain('could NOT be removed');
+    expect(text).toContain('two copies');
+    // And the copies really are still there, so the warning is not theatre.
+    expect(readdirSync(skillsDir).length).toBeGreaterThan(0);
+  });
+
+  // --silent exists so the npm postinstall hook stays quiet. It must not be
+  // able to hide this: the user is being told about a state they have to fix.
+  it('reports failed removals even under --silent', async () => {
+    const home = homeWithStandalone(true);
+    const err: string[] = [];
+    const skillsDir = join(home, '.claude', 'skills');
+    chmodSync(skillsDir, 0o500);
+    try {
+      await runSyncSkills({
+        argv: ['--target=claude-code'], homeDir: home,
+        silent: true, bestEffort: true,
+        stdout: () => true, stderr: (s) => { err.push(s); return true; },
+      });
+    } finally {
+      chmodSync(skillsDir, 0o700);
+    }
+    expect(err.join('')).toContain('could NOT be removed');
   });
 
   it('NEVER touches the plugin — only MMA-owned files', async () => {

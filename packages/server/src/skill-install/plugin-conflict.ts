@@ -44,6 +44,34 @@ export function findEnabledMmaPlugin(homeDir: string): string | null {
 }
 
 /**
+ * The version Claude Code currently has installed for `pluginKey`, or null.
+ *
+ * Read from `~/.claude/plugins/installed_plugins.json`, which records one or
+ * more install records per plugin key. The newest by `lastUpdated` is the one
+ * in force. Returns null on any missing or malformed input rather than
+ * guessing — `mma doctor` reports "unknown" for that, which is honest, whereas
+ * a guessed version would be reported as drift or as agreement.
+ */
+export function readInstalledPluginVersion(homeDir: string, pluginKey: string): string | null {
+  try {
+    const p = path.join(homeDir, '.claude', 'plugins', 'installed_plugins.json');
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf-8')) as {
+      plugins?: Record<string, Array<{ version?: string; lastUpdated?: string }>>;
+    };
+    const records = parsed.plugins?.[pluginKey];
+    if (!Array.isArray(records) || records.length === 0) return null;
+    const newest = [...records].sort((a, b) =>
+      String(b.lastUpdated ?? '').localeCompare(String(a.lastUpdated ?? '')))[0];
+    const version = newest?.version;
+    // Claude Code writes the literal string "unknown" for plugins whose
+    // manifest carried no version. That is not a version.
+    return typeof version === 'string' && version !== '' && version !== 'unknown' ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Message for the auto-supersede path: the plugin is present, so the standalone
  * Claude Code install is redundant and gets retired.
  *
@@ -64,7 +92,12 @@ export function pluginSupersedesMessage(pluginKey: string, removed: number): str
     removed > 0
       ? `Retired ${removed} standalone Claude Code asset(s) to avoid two copies of every skill.`
       : `Skipping the standalone Claude Code install for the same reason.`,
-    `Claude Code is unchanged; only MMA's own ~/.claude/skills entries were touched.`,
+    // Name BOTH locations. This line used to say only ~/.claude/skills was
+    // touched, while the same code path also deletes the standalone command
+    // files — so a user who went looking for /mma-flow found it gone and no
+    // message accounting for it.
+    `Claude Code is unchanged; only MMA's own ~/.claude/skills entries and its`,
+    `~/.claude/commands/mma-*.md command files were touched.`,
     ``,
     `  want standalone instead?  claude plugin uninstall ${pluginKey} && mma enable --target=claude-code`,
     `  keep both anyway?         mma sync-skills --target=claude-code --keep-standalone`,
