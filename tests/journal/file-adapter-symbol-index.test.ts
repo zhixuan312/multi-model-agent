@@ -54,3 +54,35 @@ it('re-prepares a file that changes during the pre-transaction preparation windo
   expect((await index.symbolsForFile('drift.ts')).map((symbol) => symbol.name)).toEqual(['fresh']);
   index.close();
 });
+
+// Regression: a bounded-fanout optimisation once capped the number of TOKENS
+// searched rather than the number of RESULTS returned. It sorted tokens by
+// rarity and stopped once their cumulative match count exceeded the limit, so a
+// rare token paired with a common one caused the common token to be dropped
+// entirely — its symbols never became candidates and never appeared in the
+// result. The cap belongs on results, not on tokens.
+it('keeps every query token in play — a rare token must not suppress a common one', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mma-symbol-tokens-'));
+  // One symbol matches the rare token; 21 match the common token.
+  await writeFile(join(root, 'rare.ts'), 'export function needleFn() { return 1; }\n');
+  for (let i = 0; i < 21; i++) {
+    await writeFile(join(root, `common${i}.ts`), `export function commonFn${i}() { return ${i}; }\n`);
+  }
+  const index = await CorpusIndex.open({ root, adapter: new FileCorpusAdapter({ root }) });
+  await index.rebuild();
+
+  // 'needle' is rare (1 hit); 'return' is common (all 22 bodies). Their combined
+  // match count exceeds the limit, which is exactly the condition that made the
+  // old rarity-prefix loop discard the common token.
+  const ranked = await index.rankedSymbolsByTokens(['needle', 'return'], 20);
+  const names = ranked.map((symbol) => symbol.name);
+
+  // The rare match scores highest (name hit + body hit) and must rank first.
+  expect(names[0]).toBe('needleFn');
+  // The common token must ALSO have been searched. Before the fix it was dropped
+  // entirely and this returned ['needleFn'] alone.
+  expect(names.filter((name) => name.startsWith('commonFn')).length).toBeGreaterThan(0);
+  // The LIMIT — not the token count — is what bounds the result.
+  expect(ranked.length).toBe(20);
+  index.close();
+});

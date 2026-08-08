@@ -84,6 +84,18 @@ const REQUIRED_FILE_SYMBOL_TABLES = ['files', 'symbols', 'symbols_trgm'];
  * this fall back to the `LIKE` path in {@link CorpusIndex.symbolCandidateIds}.
  */
 const SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH = 3;
+
+/**
+ * How many candidates each token source contributes, as a multiple of the
+ * caller's result limit, before the LIKE-based score picks the winners.
+ *
+ * This bounds per-query work to a constant instead of to corpus size. It is a
+ * deliberate approximation: a symbol that FTS5's bm25 ranks outside the pool
+ * cannot win on LIKE score afterwards. The factor is set well above 1 so that
+ * the score still has real choice — the practical effect at realistic corpus
+ * sizes is nil, and it is how an FTS index is intended to be driven.
+ */
+const SYMBOL_CANDIDATE_POOL_FACTOR = 10;
 /**
  * Tables owned by the deleted pre-engine journal store
  * (`packages/core/src/journal/index-store.ts`, removed in Task I-5). A
@@ -1585,21 +1597,47 @@ export class CorpusIndex {
    */
   async rankedSymbolsByTokens(tokens: string[], limit: number): Promise<SymbolRecordMeta[]> {
     if (tokens.length === 0 || limit <= 0) return [];
-    const candidateIds = this.symbolCandidateIds(tokens, limit);
-    if (candidateIds.length === 0) return [];
-    const key = `${tokens.length}:${candidateIds.length}`;
+    const usable = tokens.filter((token) => token.length >= SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH);
+    const short = tokens.filter((token) => token.length < SYMBOL_TRIGRAM_MIN_TOKEN_LENGTH);
+
+    // Candidate membership and scoring happen in ONE statement so that no
+    // candidate is ever materialized in this process merely to be discarded,
+    // and so that EVERY token stays in play.
+    //
+    // A previous version capped FTS fanout by dropping whole tokens: it sorted
+    // tokens by rarity and stopped once their cumulative match count exceeded
+    // `limit`. That silently removed valid results — a rare token plus a common
+    // one returned only the rare token's symbols, because the common token was
+    // never searched at all. The cap belongs on RESULTS (the LIMIT below), not
+    // on tokens. Work here is proportional to the number of MATCHING rows,
+    // never to corpus size, which is what the scaling gate pins.
+    const key = `${tokens.length}:${usable.length}:${short.length}`;
     let stmt = this.symbolCandidateScoreStmts.get(key);
     if (!stmt) {
+      const candidateSelects: string[] = [];
+      // Every token stays in the MATCH, but the POOL is bounded by FTS5's own
+      // relevance ordering rather than by dropping tokens. `ORDER BY rank` is
+      // FTS5's bm25 ordering, so the pool keeps the most relevant matches for
+      // any token. ORDER BY/LIMIT is illegal in a bare compound-SELECT operand,
+      // hence the nested subquery.
+      if (usable.length > 0) {
+        candidateSelects.push('SELECT id FROM (SELECT id FROM symbols_trgm WHERE symbols_trgm MATCH ? ORDER BY rank LIMIT ?)');
+      }
+      for (const _ of short) {
+        candidateSelects.push("SELECT id FROM (SELECT id FROM symbols_trgm WHERE name LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' LIMIT ?)");
+      }
       const scoreTerms = tokens.map(
-        () => `(CASE WHEN name LIKE ? ESCAPE '\\' THEN 3 ELSE 0 END + CASE WHEN body LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END)`,
+        () => `(CASE WHEN s.name LIKE ? ESCAPE '\\' THEN 3 ELSE 0 END + CASE WHEN s.body LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END)`,
       );
       stmt = this.db.prepare(
-        `SELECT id, file_path, name, kind, start_line, end_line
+        `WITH cand(id) AS (${candidateSelects.join(' UNION ')})
+         SELECT id, file_path, name, kind, start_line, end_line
          FROM (
-           SELECT id, file_path, name, kind, start_line, end_line,
+           SELECT s.id AS id, s.file_path AS file_path, s.name AS name, s.kind AS kind,
+                  s.start_line AS start_line, s.end_line AS end_line,
              ${scoreTerms.join(' + ')} AS score
-           FROM symbols
-           WHERE id IN (${candidateIds.map(() => '?').join(', ')})
+           FROM symbols s
+           JOIN cand c ON c.id = s.id
          )
          WHERE score > 0
          ORDER BY score DESC, file_path ASC, start_line ASC
@@ -1607,9 +1645,21 @@ export class CorpusIndex {
       );
       this.symbolCandidateScoreStmts.set(key, stmt);
     }
-    const patterns = tokens.map((token) => `%${escapeLikeLiteral(token)}%`);
-    const scoreBindings = patterns.flatMap((pattern) => [pattern, pattern]);
-    const rows = stmt.all(...scoreBindings, ...candidateIds, limit) as Array<Record<string, unknown>>;
+    // Pool size per candidate source. Generous relative to the final LIMIT so
+    // the LIKE-based score below still has real choice, but a constant — which
+    // is what keeps latency flat as the corpus grows.
+    const pool = limit * SYMBOL_CANDIDATE_POOL_FACTOR;
+    const bindings: Array<string | number> = [];
+    if (usable.length > 0) bindings.push(usable.map(fts5QuoteToken).join(' OR '), pool);
+    for (const token of short) {
+      const pattern = `%${escapeLikeLiteral(token)}%`;
+      bindings.push(pattern, pattern, pool);
+    }
+    for (const token of tokens) {
+      const pattern = `%${escapeLikeLiteral(token)}%`;
+      bindings.push(pattern, pattern);
+    }
+    const rows = stmt.all(...bindings, limit) as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       id: asString(row.id),
       filePath: asString(row.file_path),
