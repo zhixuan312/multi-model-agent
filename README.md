@@ -251,15 +251,55 @@ For a long-running background install (always-on, survives reboots), use [the la
 ## Updating
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent@latest
-pkill -f "mma serve"            # stop the running daemon
-# next AI-client session respawns the daemon via the skill preflight
+mma update
 ```
 
-Nothing else to type: the package's postinstall hook re-runs `sync-skills` against the roster you
-already declared, so every declared client's skills are refreshed by the install itself. (Run
-`mma sync-skills` by hand only to re-reconcile without reinstalling.) A drift warning prints on
-`mma serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.mma/auth-token && mma serve` (a new token is regenerated on boot).
+Then **restart the applications it names**. That is the whole procedure.
+
+`mma update` installs the new package, restarts the daemon and waits until it answers, refreshes
+your skill files, updates the Claude Code plugin if you use one, and finishes by listing the
+applications you have to restart yourself. It verifies each step instead of assuming it worked. Run
+`mma doctor` at any time to see the same information without changing anything.
+
+### What an update changes, and what you must do
+
+An update touches four things. Only two of them ever need action from you.
+
+| What changed | What you do |
+|---|---|
+| Engine behaviour — routing, providers, a new task type | Nothing. `mma update` restarts the daemon, and **every client picks up the new tool surface at once**, because the daemon generates it. |
+| Skill files — how your client decides to call MMA | **Restart the client.** A client reads its skill files when it starts. |
+| The Claude Code plugin | **Restart Claude Code.** A plugin directory is fixed when the application starts, so updating from inside a session does not affect that session. |
+| MCP registration — the address or command your client uses (rare) | `mma mcp install <client>`, then restart the client. |
+
+Credentials are never in that list. No client stores a fixed token: Claude Code runs a helper
+script, Cursor and Codex read an environment variable, and Claude Desktop's bridge reads
+`~/.mma/auth-token`. All four resolve it when they connect, so **rotating the token never requires a
+client update** — `rm ~/.mma/auth-token && mma restart` and carry on.
+
+### Per client
+
+| Client | How it connects | Skill files | After an update |
+|---|---|---|---|
+| **Claude Code** | direct HTTP to the daemon | the plugin's copy, or `~/.claude/skills` | restart Claude Code |
+| **Claude Desktop** | `mma mcp` bridge | none — this client has no skill mechanism | restart Claude Desktop |
+| **Codex** | `mma mcp` bridge | `~/.codex/skills` | restart Codex |
+| **Cursor** | direct HTTP to the daemon | `~/.agents/skills` | restart Cursor |
+
+You never have two copies of the skills. When the Claude Code plugin is installed it provides them,
+and `sync-skills` retires the standalone copies under `~/.claude/skills` and `~/.claude/commands`
+rather than installing alongside. Pass `--keep-standalone` if you deliberately want both.
+
+### Updating by hand
+
+If you manage the npm package yourself, install it your own way and then run:
+
+```bash
+mma update --no-install
+```
+
+`mma update` also stops rather than guessing when it cannot tell which package manager owns the
+install — it prints the exact command for you to run.
 
 ## Disabling / re-enabling
 
@@ -452,7 +492,11 @@ Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date
 
 ```bash
 mma setup                                    # interactive first run: models + clients + config, then sync-skills
+mma update [--no-install] [--package-manager=npm|pnpm|bun]  # update everything, then name what to restart
+mma doctor [--json] [--offline]              # report every version surface + drift; exits non-zero on problems
 mma [--verbose] [--log]                      # start daemon (serve is the default command)
+mma stop    [--now]                          # stop the daemon and wait for it to exit (--now skips the drain)
+mma restart [--now]                          # stop, start a replacement, wait until it answers /health
 mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
 mma status [--json]                          # health + stats from a running daemon
 mma logs  [--follow] [--task=<id>]           # tail today's diagnostic log
@@ -537,11 +581,12 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 
 | Symptom | Fix |
 |---|---|
-| Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
-| Daemon stale after upgrade | `pkill -f "mma serve"`; the skill preflight respawns it on next client session |
+| Not sure what state anything is in | `mma doctor` — reports every version surface and any drift, and changes nothing |
+| Port 7337 already in use | `mma restart`. The daemon names the process that owns the port when it refuses to start |
+| Daemon stale after upgrade | `mma restart`. Nothing respawns the daemon on its own — no skill starts it for you |
 | Skill version mismatch | `mma sync-skills` and restart your client |
 | A client fails to auth against the daemon | `export MMA_AUTH_TOKEN=$(mma print-token)` before launching the client, or `mma mcp install <ClientId>` again to rewrite its registration |
-| `pkill` reports success but `mma info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mma-info>` directly |
+| Updated, but the client still behaves the old way | Restart the client. Skill files and plugin directories are read when the application starts |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so it re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 

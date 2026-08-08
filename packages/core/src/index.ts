@@ -72,6 +72,7 @@ export type { ProjectContext } from './stores/project-context-registry.js';
 // Transport (C1 substrate)
 export {
   HTTPListener,
+  PortInUseError,
   type HTTPListenerOptions,
   type HTTPRequestHandler,
   isLoopbackAddress,

@@ -104,12 +104,28 @@ curl -s http://localhost:7337/health   # → {"status":"ok"}
 ## Updating
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent@latest
-pkill -f "mma serve"            # stop the running daemon
+mma update
 ```
 
-Nothing else to type: the package's postinstall hook re-runs `sync-skills` against the roster you
-already declared, so the install itself refreshes every declared client's skills.
+Then **restart the applications it names**. That is the whole procedure.
+
+`mma update` installs the new package, restarts the daemon and waits until it answers, refreshes
+your skill files, updates the Claude Code plugin if you use one, and finishes by listing the
+applications you have to restart yourself. Each step is verified rather than assumed. Run
+`mma doctor` at any time to see the same information without changing anything.
+
+Only two things ever need action from you:
+
+| What changed | What you do |
+|---|---|
+| Engine behaviour — routing, providers, a new task type | Nothing. Restarting the daemon updates the tool surface for **every** client at once, because the daemon generates it. |
+| Skill files, or the Claude Code plugin | **Restart the client.** Skill files and plugin directories are read when the application starts. |
+
+Credentials never appear in that list. No client stores a fixed token — all of them resolve it when
+they connect — so rotating the token needs no client update:
+`rm ~/.mma/auth-token && mma restart`.
+
+If you manage the npm package yourself, install it your own way and run `mma update --no-install`.
 
 ## Skills
 

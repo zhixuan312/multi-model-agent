@@ -20,9 +20,11 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
-import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
+import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken, PortInUseError } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
+import { expandHome } from '../expand-home.js';
+import { writePidfile, readPidfile, removePidfile } from '../pidfile.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
@@ -214,11 +216,36 @@ export async function startServe(
   const mmaVersion = SERVER_VERSION;
   createRecorder({ homeDir, mmaVersion });
 
+  // Same directory executions.db lives in — both answer "what was this daemon
+  // doing", so diagnosing means pointing at one place, and a test redirecting
+  // stateDir moves both.
+  const stateDir = expandHome(config.server.stateDir);
+
   // Pass the full MultiModelConfig (not just the server block) so
   // registerToolHandlers sees `agents` and registers real tool endpoints.
   // Stripping to { server } here caused a 3.1.0 regression where tool
   // endpoints returned 503 'no_agent_config' even when agents were set.
-  const running = await startServer(config as Parameters<typeof startServer>[0], undefined, configPath);
+  let running: Awaited<ReturnType<typeof startServer>>;
+  try {
+    running = await startServer(config as Parameters<typeof startServer>[0], undefined, configPath);
+  } catch (err) {
+    // The most common startup failure by far is "a daemon is already running".
+    // Until the listener raised PortInUseError this arrived as an uncaught
+    // EADDRINUSE stack trace, which a backgrounded start swallowed entirely —
+    // so the user saw nothing at all and believed the restart had worked.
+    if (err instanceof PortInUseError) {
+      const owner = readPidfile(stateDir);
+      const who = owner && owner.port === err.port
+        ? ` It is owned by an mma daemon (pid ${owner.pid}, version ${owner.version}).`
+        : '';
+      stderr(
+        `[mma] cannot start: ${err.bind}:${err.port} is already in use.${who}\n` +
+        `  Run 'mma restart' to replace it, or 'mma status' to see what it is doing.\n`,
+      );
+      return exit(1) as never;
+    }
+    throw err;
+  }
 
   // ── stdout/stderr error + uncaught/unhandled rejection guards ────────
   const onStdoutError = (err: NodeJS.ErrnoException) => {
@@ -343,6 +370,9 @@ export async function startServe(
       .then(() => drainTelemetry)
       .catch(() => { /* drain is best-effort */ })
       .then(() => running.stop())
+      // Remove the record only once the socket is closed. Removing it earlier
+      // would make `mma stop` report no daemon while the port is still bound.
+      .then(() => removePidfile(stateDir))
       .then(() => exit(0))
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -363,14 +393,30 @@ export async function startServe(
   // (useful when port=0 selects an ephemeral port).
   const host = running.serverAddress ?? config.server.bind;
 
+  // bootId discriminates successive startups that reuse a pid. Generated here
+  // rather than inside the startup-line try block because the pidfile records
+  // it too, and both must name the same boot.
+  const bootId = randomUUID();
+
+  // Record the daemon so `mma stop` / `mma restart` / `mma update` can find it
+  // by fact rather than by matching a command-line pattern. Written after a
+  // successful bind so the file never advertises a daemon that failed to start.
+  writePidfile(stateDir, {
+    pid: process.pid,
+    port: running.port,
+    bind: host,
+    version: SERVER_VERSION,
+    bootId,
+    startedAt: Date.now(),
+  });
+
   // Emit a single structured startup line before the "listening" line.
   // Fingerprint the auth token (first 8 hex of sha256) so operators can verify
   // the running instance matches what their clients are using, without ever
-  // revealing the token. bootId discriminates successive startups from the same pid.
+  // revealing the token.
   try {
     const token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
     const fp = createHash('sha256').update(token).digest('hex').slice(0, 8);
-    const bootId = randomUUID();
     const version = SERVER_VERSION;
     process.stdout.write(
       `[mma] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
@@ -430,6 +476,7 @@ export async function startServe(
         await flusher.drain().catch(() => { /* best-effort */ });
       }
       await running.stop();
+      removePidfile(stateDir);
     },
   };
 }

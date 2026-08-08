@@ -10,6 +10,36 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 
 export type HTTPRequestHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 
+/**
+ * The port is already bound by something else.
+ *
+ * Raised instead of letting the socket's `error` event go unhandled. Without a
+ * listener on that event Node turns EADDRINUSE into an uncaught exception, so
+ * the single most common startup failure — a daemon is already running — was
+ * reported as a stack trace, and a backgrounded start swallowed it entirely.
+ * Callers catch this to name the port and, where they can determine it, the
+ * process that owns it.
+ */
+export class PortInUseError extends Error {
+  readonly code = 'EADDRINUSE';
+  constructor(readonly bind: string, readonly port: number) {
+    super(`${bind}:${port} is already in use`);
+    this.name = 'PortInUseError';
+  }
+}
+
+/**
+ * What the socket does with an error raised AFTER a successful bind.
+ *
+ * Named and exported so its behaviour is testable directly. Node terminates the
+ * process on an `error` event with no listener, so the point of this function is
+ * that it exists at all and does not rethrow — a transient socket fault must not
+ * take a daemon down mid-request.
+ */
+export function logLateSocketError(err: Error): void {
+  process.stderr.write(`[mma] listener socket error: ${err.message}\n`);
+}
+
 export interface HTTPListenerOptions {
   /** Bind address — must be a loopback interface in production (127.0.0.1 or ::1). */
   bind: string;
@@ -37,8 +67,25 @@ export class HTTPListener {
         }
       });
     });
-    await new Promise<void>((resolve) => {
-      server.listen(this.options.port, this.options.bind, resolve);
+    // Bind failures arrive as an `error` event, never as a callback argument, so
+    // the listening callback alone cannot see them. Both events are registered
+    // before listen() and each removes the other, so exactly one settles the
+    // promise. After a successful bind the startup handler is replaced by a
+    // logging one — the socket can still emit errors later, and an unhandled
+    // 'error' event would take the whole daemon down.
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        server.removeListener('listening', onListening);
+        reject(err.code === 'EADDRINUSE' ? new PortInUseError(this.options.bind, this.options.port) : err);
+      };
+      const onListening = () => {
+        server.removeListener('error', onError);
+        server.on('error', logLateSocketError);
+        resolve();
+      };
+      server.once('error', onError);
+      server.once('listening', onListening);
+      server.listen(this.options.port, this.options.bind);
     });
     this.server = server;
     const addr = server.address();
