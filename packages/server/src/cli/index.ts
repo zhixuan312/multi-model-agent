@@ -44,6 +44,7 @@ import { runDisable, runEnable } from './toggle.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 import { runJournalReindex } from './journal-reindex.js';
+import { runSearch } from './search.js';
 import { runPlugin } from './plugin.js';
 import { runMcpBridge, bufferedLines } from './mcp.js';
 import { removeClientRegistration } from '../provisioning/writers/registry.js';
@@ -576,6 +577,30 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       } finally {
         rl.close();
       }
+      exit(code);
+      break;
+    }
+    case 'search': {
+      const query = positional.slice(1).join(' ').trim();
+      if (!query) {
+        stderr('mma search: a query is required\nUsage: mma search "<question>" [--limit N] [--lines N] [--cwd <path>] [--json]\n');
+        exit(1);
+        break;
+      }
+      // Config is optional here: the index lives under the state dir, and the
+      // default is correct for every standard install.
+      const searchConfig = await loadConfig(configArg, deps).catch(() => null);
+      const cfg = searchConfig as unknown as { server?: { stateDir?: string } } | null;
+      const code = await runSearch({
+        query,
+        cwd: typeof opts['cwd'] === 'string' ? opts['cwd'] : (deps.cwd?.() ?? process.cwd()),
+        stateDir: cfg?.server?.stateDir ?? '~/.mma/state',
+        limit: typeof opts['limit'] === 'string' ? Number(opts['limit']) : undefined,
+        lines: typeof opts['lines'] === 'string' ? Number(opts['lines']) : undefined,
+        json: opts['json'] === true,
+        stdout,
+        stderr,
+      });
       exit(code);
       break;
     }
