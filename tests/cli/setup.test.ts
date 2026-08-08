@@ -40,7 +40,7 @@ describe('contract: mma setup writes a usable config on a machine that had none'
 
     const s = scripted(
       ['claude', 'claude-opus-5', 'claude', 'claude-sonnet-5', 'codex', 'gpt-5.6'],
-      [true /* configure main */, true /* oauth */, true /* oauth */, true /* oauth */, true /* provision claude-code */],
+      [true /* main oauth */, true /* complex oauth */, true /* standard oauth */, true /* provision claude-code */],
     );
     const code = await runSetup({
       homeDir: home, configPath, skipProbe: true, detected: new Set(['claude-code' as never]),
@@ -59,9 +59,20 @@ describe('contract: mma setup writes a usable config on a machine that had none'
     // A config file is a backup/dotfile/git footgun. Even when the user is
     // configuring an API key, what lands on disk is a reference.
     const { home, configPath } = freshHome();
+    // Three tiers, none skippable. Per tier the prompts are:
+    // provider → oauth? → env var → base URL → model.
     const s = scripted(
-      ['claude', 'MY_SECRET_KEY', '', 'claude-opus-5', 'claude', 'MY_SECRET_KEY', '', 'claude-sonnet-5'],
-      [false /* skip main */, false /* not oauth → api key */, false /* not oauth */, false /* no clients */],
+      [
+        'claude', 'MY_SECRET_KEY', '', 'claude-opus-5',
+        'claude', 'MY_SECRET_KEY', '', 'claude-sonnet-5',
+        'claude', 'MY_SECRET_KEY', '', 'claude-haiku-4-5',
+      ],
+      [
+        false /* main: not oauth → api key */,
+        false /* complex: not oauth */,
+        false /* standard: not oauth */,
+        false /* no clients */,
+      ],
     );
     await runSetup({
       homeDir: home, configPath, skipProbe: true, detected: new Set(),

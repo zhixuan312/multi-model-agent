@@ -22,7 +22,12 @@ export async function writeCursorRegistration(input: WriteClientRegistrationInpu
   const path = cursorRegistrationPath(homeDir);
   const entry = {
     url: `http://127.0.0.1:${daemonPort}/mcp`,
-    headers: { Authorization: 'Bearer ${env:MMA_AUTH_TOKEN}' },
+    headers: {
+      Authorization: 'Bearer ${env:MMA_AUTH_TOKEN}',
+      // Attribution, not auth: HTTP MCP carries no other signal of which client
+      // is calling, so without this header the run records the anonymous `mcp`.
+      'X-MMA-Client': 'cursor',
+    },
   };
   return installJsonClientRegistration({ capability, path, entry, fs: input.fs });
 }

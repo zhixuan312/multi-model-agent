@@ -171,7 +171,10 @@ export const multiModelConfigSchema = z.object({
   agents: z.object({
     standard: agentConfigSchema,
     complex: agentConfigSchema,
-    main: agentConfigSchema.optional(),
+    // Required like the worker tiers: `main` is the model driving mma, used both
+    // to resolve an `agentTier: 'main'` dispatch and to price every run's
+    // main-model-equivalent cost. Optional, it left the cost baseline to a guess.
+    main: agentConfigSchema,
   }).optional(),
   diagnostics: z.object({
     log: z.boolean().default(false),
@@ -232,10 +235,11 @@ export type RunnableConfig = MultiModelConfig & {
  */
 export function assertRunnable(config: MultiModelConfig, configPath?: string): asserts config is RunnableConfig {
   const missing: string[] = [];
-  if (!config.agents) missing.push('agents.standard', 'agents.complex');
+  if (!config.agents) missing.push('agents.standard', 'agents.complex', 'agents.main');
   else {
     if (!config.agents.standard) missing.push('agents.standard');
     if (!config.agents.complex) missing.push('agents.complex');
+    if (!config.agents.main) missing.push('agents.main');
   }
   if (missing.length === 0) return;
   const where = configPath ? ` in ${configPath}` : '';

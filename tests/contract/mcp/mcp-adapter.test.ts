@@ -53,9 +53,12 @@ describe('contract: MCP adapter', () => {
       const run = tools.find((t) => t.name === 'mma_run')!;
       const schema = run.inputSchema as {
         required: string[];
-        properties: { request: { oneOf?: unknown[]; anyOf?: unknown[] } };
+        properties: Record<string, unknown> & { request: { oneOf?: unknown[]; anyOf?: unknown[] } };
       };
+      // No `mainModel` on the wire. The cost baseline is the daemon's configured
+      // `agents.main` tier, so the caller carries nothing for it.
       expect(schema.required).toEqual(['cwd', 'request']);
+      expect(Object.keys(schema.properties)).not.toContain('mainModel');
       // The request schema is the SAME discriminated union REST validates with:
       // one variant per task type, generated — never a hand-written copy.
       const variants = (schema.properties.request.oneOf ?? schema.properties.request.anyOf) as Array<{
@@ -77,7 +80,6 @@ describe('contract: MCP adapter', () => {
         arguments: {
           cwd: process.cwd(),
           request: { type: 'investigate', prompt: 'what is going on here' },
-          mainModel: 'claude-opus-4-8',
         },
       }));
       expect(run.status).toBe('running');
@@ -122,6 +124,30 @@ describe('contract: MCP adapter', () => {
       const payload = parseText(result) as { error: { code: string; fieldErrors: unknown } };
       expect(payload.error.code).toBe('invalid_request');
       expect(payload.error.fieldErrors).toBeDefined();
+    } finally { await client.close(); await h.close(); }
+  });
+
+  /**
+   * The inverse of the rule that used to live here.
+   *
+   * `mainModel` was briefly a required argument, because the runtime otherwise
+   * guessed the cost baseline from a worker tier and reported a negative saving
+   * for runs that saved money. The baseline now comes from the daemon's
+   * configured `agents.main` tier, so the caller carries nothing: a call with no
+   * model argument is admitted and runs normally.
+   *
+   * An unknown extra argument is still refused — the tool schema is closed.
+   */
+  it('mma_run admits a call that names no model at all', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    const client = await mcpClient(h);
+    try {
+      const run = parseText(await client.callTool({
+        name: 'mma_run',
+        arguments: { cwd: process.cwd(), mode: 'handle', request: { type: 'investigate', prompt: 'x' } },
+      }));
+      expect(run.taskId).toBeTruthy();
+      expect(run.status).toBe('running');
     } finally { await client.close(); await h.close(); }
   });
 

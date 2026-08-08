@@ -13,6 +13,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
     });
     expect(result.agents.standard.model).toBe('test-model');
@@ -23,6 +24,7 @@ describe('parseConfig', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
         complex: { type: 'codex', model: 'gpt-5', baseUrl: 'https://api.example.com' },
+        main: { type: 'claude', model: 'claude-opus-4-7' },
       },
     };
     const result = parseConfig(input);
@@ -34,6 +36,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
       diagnostics: { log: true },
     });
@@ -45,6 +48,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
       diagnostics: { log: true, logDir: '/tmp/foo' },
     });
@@ -56,6 +60,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
       diagnostics: { log: 'yes' as any },
     })).toThrow();
@@ -75,6 +80,7 @@ describe('parseConfig', () => {
       agents: {
         standard: { type: 'codex', model: 'gpt-5.5' },
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
     })).not.toThrow();
   });
@@ -106,7 +112,7 @@ describe('parseConfig', () => {
   });
 
   it('assertRunnable passes a fully configured config through', () => {
-    const config = parseConfig({ agents: { standard: minimalAgentConfig, complex: minimalAgentConfig } });
+    const config = parseConfig({ agents: { standard: minimalAgentConfig, complex: minimalAgentConfig, main: minimalAgentConfig } });
     expect(() => assertRunnable(config)).not.toThrow();
   });
 
@@ -131,6 +137,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
     });
     expect(result.research.brave.apiKeys).toEqual([]);
@@ -148,6 +155,7 @@ describe('parseConfig', () => {
       agents: {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
+        main: minimalAgentConfig,
       },
       research: {
         brave: { apiKeys: ['k1'], timeoutMs: 5000 },

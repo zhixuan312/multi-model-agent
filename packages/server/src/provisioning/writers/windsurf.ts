@@ -28,7 +28,11 @@ export async function writeWindsurfRegistration(input: WriteClientRegistrationIn
   const path = windsurfRegistrationPath(homeDir);
   const entry = {
     serverUrl: `http://127.0.0.1:${daemonPort}/mcp`,
-    headers: { Authorization: 'Bearer ${file:~/.mma/auth-token}' },
+    headers: {
+      Authorization: 'Bearer ${file:~/.mma/auth-token}',
+      // Attribution, not auth — see the same header in the Cursor writer.
+      'X-MMA-Client': 'windsurf',
+    },
   };
   return installJsonClientRegistration({ capability, path, entry, fs: input.fs });
 }

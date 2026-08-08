@@ -61,11 +61,10 @@ const CWD_REQUIRED_PATHS = new Set([
   '/context-blocks',
 ]);
 
-/** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
- *  so wire telemetry's main_model column is never null for billed runs. The
- *  tool routes need it; the introspection / task-polling / context-block
- *  utility routes do not. */
-const MAIN_MODEL_REQUIRED_PATHS = new Set([
+/** Routes that require the X-MMA-Client header, so wire telemetry's `client`
+ *  column is never anonymous for a billed run. Tool routes need it; the
+ *  introspection / task-polling / context-block utility routes do not. */
+const CLIENT_REQUIRED_PATHS = new Set([
   '/task',
 ]);
 
@@ -330,5 +329,5 @@ const PIPELINE_CFG = {
   loopbackOnlyPaths: LOOPBACK_ONLY_PATHS,
   authExemptPaths: AUTH_EXEMPT_PATHS,
   cwdRequiredPaths: CWD_REQUIRED_PATHS,
-  mainModelRequiredPaths: MAIN_MODEL_REQUIRED_PATHS,
+  clientRequiredPaths: CLIENT_REQUIRED_PATHS,
 };

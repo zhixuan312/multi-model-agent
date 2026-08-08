@@ -9,6 +9,7 @@ function minimalConfig(tokenFile: string) {
     agents: {
       standard: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
       complex: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
+      main: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
     },
     server: {
       bind: '127.0.0.1',

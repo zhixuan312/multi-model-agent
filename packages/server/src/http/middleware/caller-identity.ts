@@ -10,21 +10,14 @@ import { CLIENT_IDS, AGENT_PLUGIN_CLIENT, type CallerClient } from '@zhixuan92/m
 const CLIENT_ALLOWLIST: ReadonlySet<string> = new Set<string>([...CLIENT_IDS, 'forge', AGENT_PLUGIN_CLIENT]);
 
 
+// No model field: the cost baseline is the configured `agents.main` tier.
 interface CallerIdentity {
   callerClient: CallerClient;
-  /** Calling agent's model id (e.g., claude-opus-4-7). Sourced from the
-   *  required X-MMA-Main-Model header on tool routes. Used as `mainModel`
-   *  in wire telemetry so cost-delta-vs-main and family attribution can
-   *  be computed. null only when the caller didn't send the header; the
-   *  request pipeline rejects with 400 main_model_required on tool routes
-   *  before any handler sees a null. */
-  mainModel: string | null;
 }
 
 /** Default identity when no caller header is present. */
 export const DEFAULT_IDENTITY: CallerIdentity = {
   callerClient: 'other',
-  mainModel: null,
 };
 
 export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
@@ -34,8 +27,5 @@ export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
     ? (rawClient as CallerClient)
     : 'other';
 
-  const rawMainModel = (req.headers['x-mma-main-model'] as string | undefined)?.trim();
-  const mainModel = rawMainModel && rawMainModel.length > 0 ? rawMainModel : null;
-
-  return { callerClient, mainModel };
+  return { callerClient };
 }

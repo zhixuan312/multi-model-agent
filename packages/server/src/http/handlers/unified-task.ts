@@ -42,7 +42,6 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
 
     const outcome = await deps.runtime.submit(parsed.data, {
       clientName: ctx.callerClient,
-      mainModel: ctx.mainModel,
       projectRoot: cwd,
     });
 

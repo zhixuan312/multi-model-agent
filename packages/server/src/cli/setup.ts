@@ -47,12 +47,12 @@ import type { DeclaredClientRoster } from '../provisioning/roster.js';
 
 /** Tiers in the order they are asked. `main` first because it is the one a user
  *  has an opinion about — it is the orchestrator brain — and answering it makes
- *  the other two easier to reason about. It is also the only optional one:
- *  omitted, the engine falls back to `complex`. */
+ *  the other two easier to reason about. All three are required: `main` is both
+ *  the `orchestrate` tier and the cost baseline every run is priced against. */
 const TIERS = [
-  { key: 'main' as const, label: 'main', blurb: 'the orchestrator brain', optional: true },
-  { key: 'complex' as const, label: 'complex', blurb: 'smart workers', optional: false },
-  { key: 'standard' as const, label: 'standard', blurb: 'cheap workers', optional: false },
+  { key: 'main' as const, label: 'main', blurb: 'your own model — drives mma, runs orchestrate' },
+  { key: 'complex' as const, label: 'complex', blurb: 'smart workers' },
+  { key: 'standard' as const, label: 'standard', blurb: 'cheap workers' },
 ];
 
 export interface SetupDeps {
@@ -118,17 +118,7 @@ export async function runSetup(deps: SetupDeps = {}): Promise<number> {
 
   for (const tier of TIERS) {
     const current = existing[tier.key];
-    if (tier.optional) {
-      const want = await confirm(`  configure ${tier.label} (${tier.blurb})?`, current !== undefined);
-      if (!want) {
-        // Explicitly dropping it is meaningful — the engine falls back to complex.
-        delete (config.agents as Record<string, unknown>)[tier.key];
-        out(`  ${tier.label}: skipped (falls back to complex)\n`);
-        continue;
-      }
-    } else {
-      out(`  ${tier.label} (${tier.blurb})\n`);
-    }
+    out(`  ${tier.label} (${tier.blurb})\n`);
 
     const provider = (await ask('    provider — claude or codex', current?.type ?? 'claude')).toLowerCase();
     if (provider !== 'claude' && provider !== 'codex') {

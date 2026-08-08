@@ -8,6 +8,7 @@ describe('agents.<tier>.model — single-model invariant', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-5' },
         complex: { type: 'claude', model: 'claude-opus-4-7' },
+        main: { type: 'claude', model: 'claude-opus-4-7' },
       },
     });
     expect(result.success).toBe(true);

@@ -32,7 +32,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { ClientId } from '@zhixuan92/multi-model-agent-core';
+import { MCP_BRIDGE_CLIENT_IDS, type ClientId } from '@zhixuan92/multi-model-agent-core';
 import { atomicWriteBytes, realFsDeps, type AtomicFsDeps } from './atomic-write.js';
 import { CLIENT_CAPABILITIES, type ClientCapability, type McpConfigFormat } from './capability-registry.js';
 
@@ -95,13 +95,22 @@ function stdioEntrypointOf(entry: Record<string, unknown>): string | undefined {
   return typeof first === 'string' ? first : undefined;
 }
 
+/** True only for `--client=<id>` with a real bridge client id — the exact third
+ *  argument the stdio writer emits, against the same roster the bridge validates. */
+function isOwnedClientFlag(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const prefix = '--client=';
+  if (!value.startsWith(prefix)) return false;
+  return (MCP_BRIDGE_CLIENT_IDS as readonly string[]).includes(value.slice(prefix.length));
+}
+
 /**
  * Is this `mcpServers.mma` (or equivalent) value an entry MMA itself wrote?
  *
  * Dispatches on the client's `mcpConfigFormat`:
  *  - `stdio-json` (the Claude Desktop bridge shape): exactly `{command, args}`;
- *    `args` ends with `"mcp"`, and both the Node command and resolved CLI
- *    entrypoint are absolute paths.
+ *    `args` is `[entrypoint, "mcp"]` or that plus `--client=<known id>`, and both
+ *    the Node command and resolved CLI entrypoint are absolute paths.
  *  - every other supported format (`json`, `plugin-json`): key set ⊆
  *    `{url, serverUrl, headers, env}` and the URL is exactly MMA's own loopback
  *    `/mcp` endpoint.
@@ -125,12 +134,14 @@ export function isOwnedMcpEntry(
       if (key !== 'command' && key !== 'args') return false;
     }
     const args = entry.args;
-    // Exactly `[entrypoint, 'mcp']` — no more. A `>= 2` check would accept
-    // `[entrypoint, '--inspect', 'mcp']`, i.e. an entry a user hand-edited to add
-    // their own flag, and treat it as ours to overwrite or delete. Extra
-    // arguments are exactly the evidence that somebody else edited this entry.
-    if (!Array.isArray(args) || args.length !== 2) return false;
+    // A CLOSED set of the two shapes MMA writes: `[entrypoint, 'mcp']` (pre-flag
+    // installs) and `[entrypoint, 'mcp', '--client=<known id>']`. Never a prefix or
+    // `>= 2` test — an unrecognised extra argument is still the evidence that a
+    // human edited this entry, and it still fails closed.
+    if (!Array.isArray(args)) return false;
+    if (args.length !== 2 && args.length !== 3) return false;
     if (args[1] !== 'mcp') return false;
+    if (args.length === 3 && !isOwnedClientFlag(args[2])) return false;
     const first = args[0];
     return Object.keys(entry).length === 2
       && typeof entry.command === 'string'
@@ -450,8 +461,11 @@ export function assertInitializable(entry: Record<string, unknown>, format: McpC
     if (typeof entry.command !== 'string' || entry.command === '') {
       throw new Error('Claude Desktop entry is missing a usable "command".');
     }
-    if (!Array.isArray(entry.args) || entry.args.length < 2 || entry.args[entry.args.length - 1] !== 'mcp') {
-      throw new Error('Claude Desktop entry is missing a usable "args" ending in "mcp".');
+    // The subcommand is at index 1, NOT at the end: the entry now carries a trailing
+    // `--client=<id>` attribution flag, so an "ends in mcp" check would reject the very
+    // shape the writer emits.
+    if (!Array.isArray(entry.args) || entry.args.length < 2 || entry.args[1] !== 'mcp') {
+      throw new Error('Claude Desktop entry is missing a usable "args" whose second element is "mcp".');
     }
     return;
   }

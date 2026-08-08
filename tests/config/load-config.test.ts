@@ -15,6 +15,13 @@ const minimalAgentConfig = {
     model: 'test-model-complex',
     baseUrl: 'https://test2.example.com/v1',
   },
+  // No inline apiKey — the collectInlineApiKeyOffenders test asserts an exact
+  // offender list, so this tier must never contribute to it.
+  main: {
+    type: 'codex' as const,
+    model: 'test-model-main',
+    baseUrl: 'https://test3.example.com/v1',
+  },
 };
 
 describe('loadConfigFromFile', () => {
@@ -43,6 +50,11 @@ describe('loadConfigFromFile', () => {
           model: 'claude-opus-4-6',
           baseUrl: 'https://api.claude.ai/v1',
         },
+        main: {
+          type: 'codex',
+          model: 'claude-opus-4-7',
+          baseUrl: 'https://api.claude.ai/v1',
+        },
       },
     }));
 
@@ -64,6 +76,7 @@ describe('loadConfigFromFile', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-opus-4-6', effort: 'high' },
         complex: minimalAgentConfig.complex,
+        main: minimalAgentConfig.main,
       },
     }));
 
@@ -82,6 +95,7 @@ describe('loadConfigFromFile', () => {
           apiKey: 'sk-inline-key',
         },
         complex: minimalAgentConfig.complex,
+        main: minimalAgentConfig.main,
       },
     }));
 
@@ -99,6 +113,7 @@ describe('loadConfigFromFile', () => {
           apiKey: 'sk-inline-key',
         },
         complex: minimalAgentConfig.complex,
+        main: minimalAgentConfig.main,
       },
     }));
 

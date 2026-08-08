@@ -366,9 +366,11 @@ export class ExecutionRuntime {
 
       const totalActualCostUSD = result.cost.implementerUsd + (result.cost.reviewerUsd ?? 0);
 
-      // Compute main-model equivalent cost using the caller's declared main model
-      // (from X-MMA-Main-Model header) — same computation as to-wire-record.ts
-      const mainModelId = caller.mainModel ?? deps.config.agents[implTier]?.model ?? 'unknown';
+      // Baseline = the configured main tier, never a worker tier. Guessing from
+      // `agents[implTier]` priced a run against one of the models that had just
+      // executed it, reporting a negative saving for runs that saved money.
+      // Trade-off: one declared value per daemon; it cannot follow a /model switch.
+      const mainModelId = deps.config.agents.main.model;
       const mainCard = resolveRateCard(mainModelId);
       const totalUsage = {
         inputTokens: result.implementerTurn.usage.inputTokens + (result.reviewerTurn?.usage.inputTokens ?? 0),

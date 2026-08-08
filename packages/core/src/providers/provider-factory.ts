@@ -223,12 +223,12 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
 
   // Reaching here without tiers means something bypassed the daemon's own
   // `assertRunnable` check at startup — report that, rather than a slot name.
-  const agentConfig = config.agents?.[slot] ?? (slot === 'main' ? config.agents?.complex : undefined);
+  const agentConfig = config.agents?.[slot];
   if (!agentConfig) {
     throw new Error(
       config.agents
-        ? `Unknown agent slot: "${slot}". Config must have "standard" and "complex".`
-        : 'No agent tiers are configured. Add agents.standard and agents.complex to your config.',
+        ? `Unknown agent slot: "${slot}". Config must have "standard", "complex" and "main".`
+        : 'No agent tiers are configured. Add agents.standard, agents.complex and agents.main to your config.',
     );
   }
 

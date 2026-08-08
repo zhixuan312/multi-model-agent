@@ -9,6 +9,7 @@ const minimalConfig = {
   agents: {
     standard: { type: 'codex', model: 'gpt-test' },
     complex: { type: 'codex', model: 'gpt-test' },
+    main: { type: 'codex', model: 'gpt-test' },
   },
   server: {},
   research: {},
