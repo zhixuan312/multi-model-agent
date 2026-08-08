@@ -73,6 +73,10 @@ The `target.inline` content must be a markdown document with any of these eight 
 
 If the `components` field is provided, only those components need to be present in the input; the worker will emit exactly the requested subset. In other words, omitted or empty `components` means all eight components. The worker expands terse sections (the worker adds prose) or preserves detailed sections.
 
+**Identifier vs. displayed heading.** `Context`, `Problem`, `Goals & Requirements`, `Alternatives`, `Technical Design`, `Testing Plan`, `Risks & Mitigations`, and `User Stories & Tasks` are the stable IDENTIFIERS — what you send in `components`, and what comes back in the response's `sections`. In the written spec file, three of them display a neutral label instead of their identifier text: `Technical Design` renders as `## Approach, Method & Structure`, `Testing Plan` as `## Verification Plan`, and `User Stories & Tasks` as `## Stakeholders & Work`. The worker dual-reads both forms on input, so `target.inline`/`target.paths` content written before this change (using the identifier text as its heading) still parses.
+
+**You never need to supply a preformed contract.** The worker proposes the full deliverable contract — `kind`, `audience`, `artifacts`, `acceptance` (each criterion with an explicit method and reference), and `disposition` — from the decisions you provide, in plain language, and writes it into the spec file's frontmatter for a human to confirm afterward. A caller who cannot author formal acceptance criteria (a business user, a product manager, a student) still gets a complete proposal — never a request to supply one.
+
 @include _shared/review-policy.md
 
 ## Full example

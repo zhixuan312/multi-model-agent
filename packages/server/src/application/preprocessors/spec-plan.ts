@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { resolveComponents, type SkillPair } from '@zhixuan92/multi-model-agent-core';
+import { resolveComponents, SPEC_COMPONENT_CATALOG, type SkillPair } from '@zhixuan92/multi-model-agent-core';
 import { deriveDefaultOutputPath } from './derive-output-path.js';
 import { PreprocessFailure, type Preprocessor, type PreprocessResult } from './types.js';
 
@@ -62,9 +62,25 @@ function preprocessSpecPlan(
 export const planPreprocessor: Preprocessor = async ({ cwd, payload }) =>
   preprocessSpecPlan('plan', cwd, payload);
 
+/**
+ * The requested-components block always names components by their stable IDENTIFIER (the
+ * `SPEC_COMPONENTS` wire enum) — the emitted spec's `##` heading text is that identifier's
+ * neutral DISPLAY LABEL where the catalog defines one (see `SPEC_COMPONENT_CATALOG` /
+ * `resolveComponentHeading` in `@zhixuan92/multi-model-agent-core`). Reinforce the mapping
+ * for whichever requested identifiers actually have a distinct display label, so the worker
+ * does not have to hold the whole eight-entry catalog in mind for a small subset request.
+ */
 function buildSpecScopeInstruction(rawComponents: unknown): string {
   const resolved = resolveComponents(rawComponents as Parameters<typeof resolveComponents>[0]);
-  return `Emit only these spec components, in canonical order: ${resolved.join(', ')}.`;
+  const base = `Emit only these spec components, in canonical order: ${resolved.join(', ')}.`;
+
+  const relabeled = resolved
+    .map((id) => SPEC_COMPONENT_CATALOG.find((entry) => entry.id === id))
+    .filter((entry) => entry !== undefined && entry.displayLabel !== entry.id);
+  if (relabeled.length === 0) return base;
+
+  const mapping = relabeled.map((entry) => `'${entry!.id}' as '## ${entry!.displayLabel}'`).join(', ');
+  return `${base} Write the heading for ${mapping}; every other requested component keeps its identifier text as its heading.`;
 }
 
 /** Spec adds component resolution + scope injection on top of the shared logic. */

@@ -93,7 +93,8 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       return [
         'You have read the structured design decisions from the input.',
         'You have written a complete spec file with YAML frontmatter and the requested canonical sections only, preserving canonical order.',
-        'The canonical section labels are: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks.',
+        'The canonical section identifiers are: Context, Problem, Goals & Requirements, Alternatives, Technical Design, Testing Plan, Risks & Mitigations, User Stories & Tasks; the displayed heading text uses their neutral labels, so Technical Design renders as "Approach, Method & Structure", Testing Plan as "Verification Plan", and User Stories & Tasks as "Stakeholders & Work".',
+        'You have proposed the whole deliverable contract in the frontmatter (state: proposed, kind, audience, artifacts, acceptance criteria each with an explicit method, a why rationale, and a reference, and disposition), derived in plain language from the caller\'s own answers, never demanded preformed from the caller.',
         'No placeholder language exists (no TBD, TODO, or vague verbs).',
         'You have produced the required JSON output block.',
       ].join(' ');
