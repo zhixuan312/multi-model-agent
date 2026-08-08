@@ -128,6 +128,7 @@ export {
   JOURNAL_INDEX_SCHEMA_VERSION,
   searchCandidatesForRecall,
   searchCandidatesForRecord,
+  searchCandidatesForRecordBatch,
   FileCorpusAdapter,
   CorpusIndex,
 } from './journal/index.js';
@@ -137,6 +138,7 @@ export type {
   ApplyRecordInput,
   ApplyRecordResult,
   SymbolRecord,
+  SymbolRecordMeta,
   SymbolInput,
   SymbolCorpusAdapter,
   FallbackSweepState,

@@ -26,9 +26,11 @@ export {
   JOURNAL_INDEX_SCHEMA_VERSION,
   searchCandidatesForRecall,
   searchCandidatesForRecord,
+  searchCandidatesForRecordBatch,
 } from './adapters/journal-adapter.js';
 export type {
   IndexedDocument,
+  IndexedDocumentMeta,
   IndexedLink,
   IndexHealth,
   LexicalHit,
@@ -41,8 +43,10 @@ export type {
   CorpusAdapter,
   CorpusRecord,
   StoredRecord,
+  StoredRecordMeta,
   SymbolCorpusAdapter,
   SymbolInput,
   SymbolRecord,
+  SymbolRecordMeta,
   FileRecord,
 } from './engine/types.js';

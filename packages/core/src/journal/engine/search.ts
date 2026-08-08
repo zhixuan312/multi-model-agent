@@ -26,7 +26,10 @@ export async function rrfSearch(
   tokens: string[],
   pool?: string[],
 ): Promise<StoredRecord[]> {
-  const all = index.allRecords();
+  // Ranking needs ids plus adapter-owned metadata, not record text.  Keep
+  // whole-corpus body materialization out of the hot path, then fetch full
+  // rows only for the fused ids that will be returned.
+  const all = index.allRecordsMeta();
   const poolIds = pool ? new Set(pool) : new Set(all.map((record) => record.id));
   const scoped = all.filter((record) => poolIds.has(record.id));
   const byId = new Map(scoped.map((record) => [record.id, record]));
@@ -47,7 +50,12 @@ export async function rrfSearch(
     });
   }
 
-  return [...fused.entries()]
+  const rankedIds = [...fused.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([id]) => byId.get(id)!);
+    .map(([id]) => id);
+  const recordsById = new Map(index.recordsByIds(rankedIds).map((record) => [record.id, record]));
+  return rankedIds.flatMap((id) => {
+    const record = recordsById.get(id);
+    return record ? [record] : [];
+  });
 }

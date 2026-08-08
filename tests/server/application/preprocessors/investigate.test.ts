@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { vi } from 'vitest';
+import { CorpusIndex } from '@zhixuan92/multi-model-agent-core';
 import { investigatePreprocessor } from '../../../../packages/server/src/application/preprocessors/investigate.js';
 
 /** Minimal `PreprocessorArgs.config` stand-in — only `server.stateDir` is read. */
@@ -23,6 +25,44 @@ it('injects bounded indexed candidates and folder map before investigate starts'
   expect(candidates).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'packages/core/src/index.ts', name: 'searchIndex', startLine: 1, endLine: 1 })]));
   expect(folders).toEqual(expect.arrayContaining([expect.objectContaining({ folder: 'packages/core/src', fileCount: 1, symbolCount: 1 })]));
   expect(JSON.stringify({ candidates, folders }).split(/\s+/).length).toBeLessThanOrEqual(4000);
+});
+
+it('never materializes symbol body text beyond the candidate cap, even when far more than the cap match', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'mma-investigate-cap-'));
+  const stateDir = await mkdtemp(join(tmpdir(), 'mma-investigate-cap-state-'));
+  await mkdir(join(cwd, 'src'), { recursive: true });
+  // 25 matching symbols — more than CANDIDATE_CAP (20) — each in its own file
+  // so ranking has real work to do before capping.
+  const matchingFileCount = 25;
+  for (let i = 0; i < matchingFileCount; i++) {
+    const padded = String(i).padStart(2, '0');
+    await writeFile(join(cwd, 'src', `target-${padded}.ts`), `export function targetFn${padded}() { return ${i}; }\n`);
+  }
+
+  const symbolsByIdsSpy = vi.spyOn(CorpusIndex.prototype, 'symbolsByIds');
+  const allSymbolsSpy = vi.spyOn(CorpusIndex.prototype, 'allSymbols');
+  const allSymbolsMetaSpy = vi.spyOn(CorpusIndex.prototype, 'allSymbolsMeta');
+  try {
+    const payload: Record<string, unknown> = { prompt: 'where is target defined?' };
+    await investigatePreprocessor({ cwd, payload, config: configWithStateDir(stateDir) } as never);
+    const candidates = payload.candidates as Array<{ path: string }>;
+
+    // Capped at CANDIDATE_CAP even though 25 symbols matched.
+    expect(candidates).toHaveLength(20);
+
+    // The whole-corpus, full-body read path must never run: ranking uses
+    // SQL to select the cap, and body is fetched exactly once, only for the
+    // ids that survived. The folder map is likewise database-aggregated, so
+    // it must not force a full metadata materialization either.
+    expect(allSymbolsSpy).not.toHaveBeenCalled();
+    expect(allSymbolsMetaSpy).not.toHaveBeenCalled();
+    expect(symbolsByIdsSpy).toHaveBeenCalledTimes(1);
+    expect(symbolsByIdsSpy.mock.calls[0]![0]).toHaveLength(20);
+  } finally {
+    symbolsByIdsSpy.mockRestore();
+    allSymbolsSpy.mockRestore();
+    allSymbolsMetaSpy.mockRestore();
+  }
 });
 
 /** Recursively collect every file path under `dir`, relative to `dir`. */
