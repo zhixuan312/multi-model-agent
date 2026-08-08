@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [6.6.0] - 2026-08-08
 
 Two breaking changes: `agents.main` becomes a required config tier and takes over the cost baseline,
 and the code index is removed. `SCHEMA_VERSION` stays at **6**.
+
+**Upgrading:** add an `agents.main` tier to `~/.mma/config.json` before you upgrade, or the daemon
+refuses to start. See the upgrade note at the end of this section.
 
 ### Changed
 

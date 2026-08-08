@@ -607,15 +607,19 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 
 ## What's new
 
+- **`agents.main` is now required, and it is the cost baseline.** Add the tier to your config before
+  upgrading — the daemon refuses to start without it and names what is missing. Every run is priced
+  against the model you declared, never against a worker tier. Before this change mma guessed the
+  baseline when a caller sent none, and the guess was one of the two models that had just run the
+  task, so the per-task headline could report a negative saving for a run that saved money. The
+  `mainModel` parameter and the `X-MMA-Main-Model` header are gone.
 - **The code index has been removed.** `investigate` no longer starts with a pre-built list of
   candidate files, and `mma search` is gone. Measured against its own absence, the index made no
   difference on questions that name a symbol — plain `rg` already finds those — and it found the
   right file for 33% of questions phrased as sentences, against 25% for a worker that picks a
-  keyword and greps. No measurement ever showed it improved answer quality. See the CHANGELOG for
-  the full reasoning.
-- **The journal index keeps every gain and gets simpler.** Record and recall stay at about 0.31 ms
-  with unchanged retrieval quality, and the retrieval engine now serves one storage mode instead of
-  two.
+  keyword and greps. No measurement ever showed it improved answer quality. The journal index keeps
+  every gain: record and recall stay at about 0.31 ms with unchanged retrieval quality. See the
+  CHANGELOG for the full reasoning.
 
 ## License
 
