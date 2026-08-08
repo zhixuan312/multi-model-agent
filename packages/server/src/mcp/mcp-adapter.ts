@@ -23,11 +23,12 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { taskInputSchema, type TaskRegistry } from '@zhixuan92/multi-model-agent-core';
+import { taskInputSchema, type TaskRegistry, type ApprovedContract } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
 import { validateCwd } from '../application/cwd-validator.js';
+import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
 import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
 import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
 import { resolveCallerIdentity } from '../http/middleware/caller-identity.js';
@@ -167,6 +168,16 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
   if (!parsed.success) {
     return errorResult('invalid_request', 'request failed validation', {
       fieldErrors: parsed.error.flatten(),
+    });
+  }
+
+  // Deliverable Contract boundary — same check REST runs, against the same shared union
+  // and the same canonical cwd, so MCP and REST report identical field-specific errors.
+  const deliverable = (parsed.data as Record<string, unknown>).deliverable as ApprovedContract | undefined;
+  const boundary = validateDeliverableContractBoundary(deliverable, cwdCheck.canonicalCwd);
+  if (!boundary.ok) {
+    return errorResult('invalid_request', 'request failed validation', {
+      fieldErrors: boundary.fieldErrors,
     });
   }
 

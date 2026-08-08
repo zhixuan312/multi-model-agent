@@ -7,10 +7,11 @@
 
 import type { RawHandler } from '../types.js';
 import type { HandlerDeps } from '../handler-deps.js';
-import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
+import { taskInputSchema, type ApprovedContract } from '@zhixuan92/multi-model-agent-core';
 import { sendJson, sendError } from '../errors.js';
 import type { SubmitError } from '../../application/execution-runtime.js';
 import { taskIdentity, buildRunningSnapshot } from '../../application/task-identity.js';
+import { validateDeliverableContractBoundary } from '../../application/deliverable-contract-validator.js';
 
 /** Map an application-layer submit error onto the REST status/code contract. */
 function submitErrorToHttp(error: SubmitError): { status: number; code: string; message: string } {
@@ -37,6 +38,18 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
     const cwd = ctx.cwd;
     if (!cwd) {
       sendError(res, 400, 'invalid_cwd', 'cwd query parameter required');
+      return;
+    }
+
+    // Deliverable Contract boundary: realpath containment of every declared artifact
+    // root and command cwd, plus disposition/git feasibility — the filesystem-dependent
+    // checks core cannot do. Runs before ExecutionRuntime.submit so a rejected contract
+    // never opens a provider session. `deliverable` is present only on spec/plan/
+    // execute_plan/review input variants; absent elsewhere.
+    const deliverable = (parsed.data as Record<string, unknown>).deliverable as ApprovedContract | undefined;
+    const boundary = validateDeliverableContractBoundary(deliverable, cwd);
+    if (!boundary.ok) {
+      sendError(res, 400, 'invalid_request', 'Validation failed', { fieldErrors: boundary.fieldErrors });
       return;
     }
 

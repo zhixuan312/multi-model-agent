@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
+import { canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
 
 const HEADERS = (token: string) => ({
   'Content-Type': 'application/json',
@@ -529,6 +530,76 @@ describe('route contract', () => {
         // … and created no worktree directory.
         expect(existsSync(join(tmp, '.mma', 'worktrees'))).toBe(false);
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
+    });
+  });
+
+  // ── Deliverable Contract boundary (I-3): the filesystem-dependent checks core cannot
+  //    do — realpath containment, disposition/git feasibility. The digest-mismatch case
+  //    is covered by deliverable-contract-boundary.test.ts; this covers INV-3 disposition
+  //    feasibility, which needs a real (non-git) cwd. ──
+
+  describe('Deliverable Contract boundary — disposition feasibility', () => {
+    it('rejects disposition "pr" for a non-git cwd, naming the field in fieldErrors.deliverable', async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-deliverable-nongit-'));
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+      try {
+        const contractContent = {
+          kind: 'report', audience: 'board', disposition: 'pr' as const,
+          artifacts: [{ root: 'workspaceRoot', path: 'out/report.md' }],
+          acceptance: [{ id: 'review', criterion: 'Reviewed', method: 'human' as const, references: [{ kind: 'none', reason: 'Owner judgement' }] }],
+        };
+        const digest = canonicalContractDigest(contractContent);
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({
+            type: 'plan', prompt: 'plan', target: { inline: 'spec' },
+            deliverable: {
+              state: 'approved', ...contractContent,
+              contractApproval: { contractDigest: digest, approvedBy: 'Owner', approvedAt: '2026-08-08T00:00:00.000Z' },
+            },
+          }),
+        });
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as { error: { code: string; details: { fieldErrors: { fieldErrors: Record<string, string[]> } } } };
+        expect(body.error.code).toBe('invalid_request');
+        expect(body.error.details.fieldErrors.fieldErrors.deliverable?.[0]).toMatch(/requires the workspace root to be a git repository/);
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
+    });
+
+    it('permits disposition "deliver-file" for the SAME non-git cwd — only pr/commit-in-place require git', async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-deliverable-nongit-'));
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+      try {
+        const contractContent = {
+          kind: 'report', audience: 'board', disposition: 'deliver-file' as const,
+          artifacts: [{ root: 'workspaceRoot', path: 'out/report.md' }],
+          acceptance: [{ id: 'review', criterion: 'Reviewed', method: 'human' as const, references: [{ kind: 'none', reason: 'Owner judgement' }] }],
+        };
+        const digest = canonicalContractDigest(contractContent);
+        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+          method: 'POST', headers: HEADERS(h.token),
+          body: JSON.stringify({
+            type: 'plan', prompt: 'plan', target: { inline: 'spec' },
+            deliverable: {
+              state: 'approved', ...contractContent,
+              contractApproval: { contractDigest: digest, approvedBy: 'Owner', approvedAt: '2026-08-08T00:00:00.000Z' },
+            },
+          }),
+        });
+        expect(res.status).toBe(202);
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
+    });
+
+    it('rejects deliverable on a route that does not declare it (investigate) with 400', async () => {
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+      try {
+        const res = await dispatch(h, {
+          type: 'investigate',
+          prompt: 'what is going on here',
+          deliverable: { state: 'draft', audience: 'board' },
+        });
+        expect(res.status).toBe(400);
+      } finally { await h.close(); }
     });
   });
 }, 60_000);
