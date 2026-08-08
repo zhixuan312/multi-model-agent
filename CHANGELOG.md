@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.0] - 2026-08-08
+
+Retrieval stops scaling with the size of what it searches. Journal lookups are about **59x faster**
+than 6.3.0, both indexes are now bounded by how many results you ask for rather than by corpus size,
+and a worker can finally read the code index from inside its sandbox. `SCHEMA_VERSION` stays at
+**6** and the wire is unchanged.
+
+### Added
+
+- **`mma search`** — one command that answers "where is this?". It returns ranked matches with the
+  file path, the line range, the enclosing symbol and its kind, and the body already numbered, so a
+  follow-up read is usually unnecessary. Output is capped by hit count, lines per hit, and a total
+  character budget. It reads the index the `investigate` preprocessor already maintains, through a
+  shared locator, so the command and the route can never disagree or build two indexes of one
+  repository. Guidance is injected into both pipeline phases for the eight task types that search
+  code, alongside the existing writing-style block.
+
+### Fixed
+
+- **Journal retrieval no longer reads the whole corpus per query.** 6.3.0 shipped a regression: a
+  normal recall read every record four times and a fallback read them seven, because the adapter and
+  the engine each materialized and ranked the same set, projecting full `body` text for rows that
+  were then discarded. Underneath that, `topic` and `status` lived inside a serialized blob rather
+  than as columns, so neither could be filtered in SQL — which is what forced the full-table read.
+  Both are now real indexed columns, the prefilter and the candidate cap run in SQLite, and the
+  secondary ranking signals are computed over candidates rather than the corpus. Record and recall
+  p50 go from **18.93ms / 18.95ms to 0.32ms / 0.31ms** on a 3000-record fixture, and latency is now
+  flat as the corpus grows instead of linear. Retrieval quality is unchanged — `mAP` was 1.0000
+  before and after, and the characterization test that pins exact candidate IDs and ordering passes
+  untouched.
+- **The symbol index stopped scaling with the repository too.** `rankedSymbolsByTokens` scored every
+  matching symbol in JavaScript after materializing candidate ids; SQLite now matches, scores, sorts
+  and limits in one statement, and only metadata for the survivors is returned.
+- **A rare query token no longer suppresses a common one.** The first bounded-fanout attempt capped
+  the number of *tokens* searched rather than the number of *results* returned: it sorted tokens by
+  rarity and stopped once their cumulative match count exceeded the limit, so a rare token paired
+  with a common one dropped the common token entirely and its symbols never became candidates.
+  Reproduced as a rare term with 1 match plus a common term with 22, at limit 20, returning only the
+  rare symbol. Every token now stays in the match; the pool is bounded by FTS5's own bm25 ordering.
+- **A sandboxed worker can read the code index.** Opening it from a read-only route failed with
+  `attempt to write a readonly database`. Two causes: SQLite opens read-write by default and creates
+  `-wal`/`-shm` sidecars, and WAL needs a writable `-shm` even for a pure reader — which SQLite then
+  deletes when the last writer disconnects, so a WAL index was unreadable from a sandbox in practice.
+  `CorpusIndex.open()` gains a `readOnly` option and the code index uses `journal_mode = delete`,
+  leaving one self-contained file. The journal index keeps WAL and is untouched.
+
+### Changed
+
+- **The journal performance gate measures the property that broke, not a ratio against a noisy
+  control.** Its floor had been lowered four times — 3x, 2x, 1.1x, then 1.0 — each time to stop it
+  failing, and at 1.0 it permitted the engine to be exactly as slow as scanning every file. The
+  baseline arm it compared against swung between 51ms and 124ms run to run on identical data. It now
+  measures the engine at two corpus sizes and asserts that four times the data costs no more than
+  2.2x the time, which does not depend on how fast the machine is. A matching gate covers the symbol
+  index. Below a 2ms floor the ratio is not asserted and an absolute bound applies instead, because
+  at a few tenths of a millisecond timer jitter dominates; an O(corpus) regression cannot stay under
+  that floor, so the ratio assertion would run again.
+
 ## [6.3.0] - 2026-08-08
 
 `investigate` gets a map of the repository before the worker starts, worker prose converges on one
