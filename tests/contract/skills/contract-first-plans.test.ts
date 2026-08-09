@@ -9,6 +9,7 @@ const planImpl = read('packages/core/src/skills/plan/implement.md');
 const planRev = read('packages/core/src/skills/plan/review.md');
 const execImpl = read('packages/core/src/skills/execute_plan/implement.md');
 const execRev = read('packages/core/src/skills/execute_plan/review.md');
+const reviewImpl = read('packages/core/src/skills/review/implement.md');
 const mmaPlanDoc = read('packages/server/src/skills/mma-plan/SKILL.md');
 const mmaExecDoc = read('packages/server/src/skills/mma-execute-plan/SKILL.md');
 
@@ -127,5 +128,29 @@ describe('public skill docs describe contract-first (I-8)', () => {
     expect(mmaExecDoc.toLowerCase()).toContain('committed on your branch');
     // …and must NOT reintroduce a numeric commit gate.
     expect(mmaExecDoc).not.toContain('>= 80');
+  });
+});
+
+describe('generic implementers stay deliverable-neutral, software technique moved out (I-9)', () => {
+  it('plan/implement.md and execute_plan/implement.md point at the software practice asset instead of repeating its technique', () => {
+    expect(planImpl).toContain("practice: 'software'");
+    expect(execImpl).toContain("practice: 'software'");
+    // The technique itself — not just its name — lives only in implement-software.md.
+    expect(planImpl).not.toContain('security sinks');
+    expect(execImpl).not.toContain('security sinks');
+  });
+
+  it('review/implement.md is deliverable-neutral: generalized taxonomy, no source-code-only vocabulary', () => {
+    expect(reviewImpl).toContain("practice: 'software'");
+    for (const codeOnlyTerm of ['TOCTOU', 'N+1', 'the diff', 'wire schema']) {
+      expect(reviewImpl).not.toContain(codeOnlyTerm);
+    }
+    expect(reviewImpl.toLowerCase()).toContain('deliverable-neutral');
+  });
+
+  it('every generic implementer that offers a software practice ships the matching implement-software.md', () => {
+    for (const route of ['plan', 'execute_plan', 'review', 'debug']) {
+      expect(() => read(`packages/core/src/skills/${route}/implement-software.md`)).not.toThrow();
+    }
   });
 });

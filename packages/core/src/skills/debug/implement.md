@@ -100,9 +100,8 @@ Findings that fail any check should be downgraded or dropped. However, partial-e
 ### Deliverable-specific technique
 
 This diagnosis is deliverable-neutral by default. When the caller's deliverable is code, deeper
-code-specific technique (stack-trace reading, bisection across revisions, isolating the failure to
-one test) is available through the `practice: 'software'` diagnostic asset — use it in addition to,
-not instead of, the five angles above.
+code-specific technique is available through the `practice: 'software'` diagnostic asset — use it in
+addition to, not instead of, the five angles above.
 
 ## Output
 
