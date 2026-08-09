@@ -303,20 +303,26 @@ async function pathExists(absPath: string): Promise<boolean> {
   }
 }
 
-async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string, declaredPath: string): Promise<void> {
-  try {
-    const testsRootStat = await lstat(testsRoot);
-    if (testsRootStat.isSymbolicLink()) {
-      throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${declaredPath}" has a symlinked ancestor at "${testsRoot}"`);
-    }
-  } catch (err) {
-    if (err instanceof ContractPlanError) throw err;
-    // A not-yet-created tests root has no existing ancestor to inspect here.
-  }
-
-  const relFromTestsRoot = absTargetPath.slice(testsRoot.length + 1);
-  const segments = relFromTestsRoot.split(sep).filter(Boolean);
-  let current = testsRoot;
+/**
+ * Reject a declared check path with a symlinked ancestor, inspecting EVERY segment from the
+ * repository root down to the target — not merely the matched root and below.
+ *
+ * The earlier version started its walk AT the matched root. That was sound while every accepted
+ * root was a single top-level directory, because `lstat(repositoryRoot/tests)` inspects `tests`
+ * itself. It stopped being sound the moment a NESTED root (`src/test`) was accepted:
+ * `lstat(repositoryRoot/src/test)` silently FOLLOWS a symlinked `src` while resolving the path and
+ * then reports only on the final `test` component. A repository containing a symlinked `src` — git
+ * tracks symlinks, so this is ordinary content, not an exotic setup — would pass validation, and
+ * `materializeAcceptanceTests` would then `writeFile` outside the submitted repository root. This
+ * is a direct server-side write with no sandbox in front of it.
+ *
+ * Walking from the repository root removes the whole class: adding another nested root later
+ * cannot reintroduce it.
+ */
+async function assertNoSymlinkAncestors(repositoryRoot: string, absTargetPath: string, declaredPath: string): Promise<void> {
+  const relative = absTargetPath.slice(repositoryRoot.length + 1);
+  const segments = relative.split(sep).filter(Boolean);
+  let current = repositoryRoot;
   for (const segment of segments) {
     current = resolve(current, segment);
     try {
@@ -326,27 +332,13 @@ async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string
       }
     } catch (err) {
       if (err instanceof ContractPlanError) throw err;
-      // Ancestor/segment does not exist yet — nothing further to check on this branch.
+      // This segment does not exist yet. Nothing below it can exist either, so nothing below it
+      // can be a symlink — stop rather than reporting a missing directory as unsafe.
       break;
     }
   }
 }
 
-/**
- * Directories a declared check may be materialised into, relative to the submitted `cwd`.
- *
- * A single hardcoded `tests/` was a JavaScript convention embedded in a deliverable-neutral
- * grammar, and it rejected real work: Python commonly uses `test/`, Java uses `src/test/java`,
- * and for a non-code deliverable — a finance report whose check reconciles figures against a
- * source ledger — a directory called `tests` is simply the wrong word. A caller hit this and
- * had to abandon `execute_plan` for `delegate` to get the work done.
- *
- * Confinement is still bounded and still named. What actually keeps materialisation safe does
- * not depend on the directory's NAME: the path must be relative, must contain no traversal
- * segment, must resolve inside the chosen root, must cross no symlink, and must never overwrite
- * an existing file (`test-path-collision`). Widening the set of permitted roots changes none of
- * those properties.
- */
 export const ACCEPTED_CHECK_ROOTS = ['tests', 'test', 'spec', 'specs', 'checks', '__tests__', 'src/test'] as const;
 
 export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapshot, repositoryRoot: string): Promise<void> {
@@ -370,7 +362,7 @@ export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapsh
         + `(relative to the submitted cwd). A check for a non-code deliverable belongs under "checks".`,
       );
     }
-    await assertNoSymlinkAncestors(matchedRoot, resolved, test.path);
+    await assertNoSymlinkAncestors(repositoryRoot, resolved, test.path);
   }
 }
 

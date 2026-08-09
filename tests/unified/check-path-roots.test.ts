@@ -111,6 +111,25 @@ describe('confinement is unchanged by the widening', () => {
     }
   });
 
+  it('refuses a check whose INTERMEDIATE ancestor is a symlink', async () => {
+    // Third-review finding, introduced by accepting the NESTED root `src/test`. The guard used to
+    // start its walk AT the matched root, so `lstat(<repo>/src/test)` silently FOLLOWED a symlinked
+    // `src` and then reported only on `test`. The check file would have been written outside the
+    // repository, by a direct server-side write with no sandbox in front of it.
+    const repo = await mkdtemp(join(tmpdir(), 'mma-check-midlink-'));
+    const outside = await mkdtemp(join(tmpdir(), 'mma-check-midlink-target-'));
+    try {
+      await mkdir(join(outside, 'test'), { recursive: true });
+      // `src` itself is the symlink; `src/test` beyond it is an ordinary directory.
+      await symlink(outside, join(repo, 'src'), 'dir');
+      await expect(assertSafeAcceptanceTestPaths(snapshot('src/test/java/FooTest.java'), repo))
+        .rejects.toThrow(/symlinked ancestor/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('still refuses a check whose root is a symlink escaping the repository', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'mma-check-link-'));
     const outside = await mkdtemp(join(tmpdir(), 'mma-check-outside-real-'));

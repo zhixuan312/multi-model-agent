@@ -586,8 +586,16 @@ export class CorpusIndex {
     // Moving the I/O out of the transaction is what opened that window — the single-transaction
     // version serialised these calls, at the cost of the crash this split repairs. Restricting the
     // deletion set to the opening snapshot closes the window without giving the lock back.
+    // Never queue an id that an upsert is about to relocate. A record's id is stable while its
+    // FILENAME can change — the journal names files `<id>-<slug>.md`, so editing a title renames
+    // the file and keeps the id. The old path is absent from `seenPaths` (that file is gone), so it
+    // would be queued for deletion; the upsert then relocates the SAME id to the new path via
+    // `ON CONFLICT(id) DO UPDATE SET path = ...`, and the deletion that follows would remove the
+    // row that was just correctly moved. The record would vanish from the index while its file sat
+    // on disk. It self-heals on the next sync, but every recall in between silently omits it.
+    const relocatedIds = new Set(upserts.map(({ loaded }) => loaded.id));
     const deletions = [...existing.entries()]
-      .filter(([path]) => !seenPaths.has(path))
+      .filter(([path, prior]) => !seenPaths.has(path) && !relocatedIds.has(prior.id))
       .map(([, prior]) => prior.id);
     if (mtimeRefreshes.length === 0 && upserts.length === 0 && deletions.length === 0) return;
 

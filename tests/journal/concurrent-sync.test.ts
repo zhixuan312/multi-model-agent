@@ -185,6 +185,49 @@ describe('a concurrent sync must not delete another sync\'s new record', () => {
   });
 });
 
+describe('renaming a file must not delete its record', () => {
+  it('relocates a record whose path changed but whose id did not', async () => {
+    // Third-review finding, introduced by deriving deletions from the opening snapshot. A journal
+    // file is named `<id>-<slug>.md`, so editing a title RENAMES the file while the id stays
+    // stable. The old path is absent from `seenPaths`, so its id was queued for deletion; the
+    // upsert then relocated that same id to the new path, and the deletion removed the row that
+    // had just been correctly moved.
+    //
+    // The adapter here derives `id` from the file's CONTENT, not its path — the property that
+    // makes a rename observable. An adapter whose id IS the path cannot exercise this, which is
+    // why the existing deletion test did not catch it.
+    const root = await mkdtemp(join(tmpdir(), 'mma-rename-'));
+    try {
+      const idOf = (raw: string) => raw.split('\n')[0]!.replace('id: ', '').trim();
+      const files = ['0001-old-slug.md'];
+      await writeFile(join(root, files[0]!), 'id: 0001\nbody for the note');
+      const adapter = {
+        corpusId: 'renamable',
+        root,
+        listFiles: async () => [...files],
+        decode: async (relPath: string, raw: string) => ({ id: idOf(raw), path: relPath, title: relPath, body: raw }),
+        signals: () => [],
+      };
+      const index = await CorpusIndex.open({ root, adapter });
+      await index.rebuild();
+      expect(index.allRecords().map((r) => r.id)).toEqual(['0001']);
+
+      // Rename the file, keeping the same id inside it.
+      await rm(join(root, files[0]!));
+      files[0] = '0001-new-slug.md';
+      await writeFile(join(root, files[0]!), 'id: 0001\nbody for the note');
+
+      await index.syncIncremental();
+
+      const rows = index.allRecords();
+      expect(rows.map((r) => r.id), 'the renamed record was deleted').toEqual(['0001']);
+      expect(rows[0]!.path).toBe('0001-new-slug.md');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('the two structural properties a refactor must not undo', () => {
   const source = () => readFileSync('packages/core/src/journal/engine/index-store.ts', 'utf8');
 
