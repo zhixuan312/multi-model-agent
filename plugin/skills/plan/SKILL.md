@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch a spec file to a complex worker that writes a **contract-first** implementation plan. The worker reads the spec, explores the codebase, verifies ground truth at HEAD, then produces ordered **Contract Tasks** — each a contract (inputs, outputs, data mapping, errors, invariants) plus complete **plan-authored acceptance tests** and NO implementation code. The reviewer verifies every path and symbol against the real codebase.
+Dispatch a spec file to a complex worker that writes a **contract-first** implementation plan. The worker reads the spec, explores the target material (a codebase, or a non-code deliverable such as a report format or workflow configuration), verifies ground truth at HEAD, then produces ordered **Contract Tasks** — each a contract (inputs, outputs, data mapping, errors, invariants) plus complete **plan-authored acceptance tests** and NO implementation code. The reviewer verifies every path and symbol against the real target material.
 
 **Core principle:** The spec defines WHAT to build. The plan defines the *contract* for each unit of work and the executable tests that pin it — then a capable executor implements freely against that contract. The plan does not dictate implementation code; the acceptance tests are the contract's teeth.
 
@@ -257,21 +257,24 @@ The terminal envelope's `output.summary` contains:
 |---|---|---|
 | `executable` | Zero critical/high findings. Safe to dispatch to `mma:execute-plan` | Dispatch directly |
 | `partial` | High findings, no critical. May execute but results are ambiguous | Review before dispatching |
-| `blocked` | Critical findings. Would silently fail or mis-edit code | Fix the plan before dispatching |
+| `blocked` | Critical findings. Would silently fail or mis-edit the deliverable | Fix the plan before dispatching |
 
 ### Plan structure (what the worker produces)
 
 The plan file follows this structure:
-- **Header:** Goal, Architecture, Tech Stack, Ground truth at HEAD
-- **File Structure:** complete tree of all files to create/modify/test
-- **Tracks:** logical groupings (2-6 tasks per track)
-- **Tasks:** TDD structure (failing test → verify fail → implement → verify pass)
-- **Track verification subsets** between track boundaries
+- **Phases:** sequential build stages (`## Phase N — <name>: <what works at the end>`), each a
+  working increment a human could verify, holding a sensible handful of tasks (roughly 2–6).
+- **Contract Tasks:** each task (`### Task I-N: <title>`) carries a contract (inputs, outputs, data
+  mapping, errors, behavior/invariants), a technical acceptance criterion traced to a business AC,
+  and complete **plan-authored acceptance tests** — but no implementation code. The task's contract
+  and tests are deliverable-neutral: they apply the same way whether the task builds code, produces
+  a document, or configures a workflow.
+- **Full-suite gate:** the commands/checks that must pass at every task boundary.
 
 ## Natural next step
 
 The plan is written. Usual next moves (soft suggestions — none forced):
-- **Audit it against the codebase** → `mma:audit` (subtype: plan) — verify task ordering, signatures, and file paths before execution.
+- **Audit it against the target material** → `mma:audit` (subtype: plan) — verify task ordering, signatures, and file paths before execution.
 - **Execute it** → `mma:execute-plan` — implement the tasks on a worker.
 
 ## Best practices

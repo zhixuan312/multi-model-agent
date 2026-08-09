@@ -31,7 +31,7 @@ digraph picker {
     "Audit a doc?" [shape=diamond];
     "Review code?" [shape=diamond];
     "Debug a failure?" [shape=diamond];
-    "Codebase question?" [shape=diamond];
+    "Question about the project?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
     "mma-brainstorm" [shape=box];
     "/mma-flow" [shape=box, style=bold];
@@ -59,9 +59,9 @@ digraph picker {
     "Review code?" -> "mma-review" [label="yes"];
     "Review code?" -> "Debug a failure?" [label="no"];
     "Debug a failure?" -> "mma-debug" [label="yes"];
-    "Debug a failure?" -> "Codebase question?" [label="no"];
-    "Codebase question?" -> "Convergent or divergent?" [label="yes"];
-    "Codebase question?" -> "mma-delegate" [label="no — ad-hoc"];
+    "Debug a failure?" -> "Question about the project?" [label="no"];
+    "Question about the project?" -> "Convergent or divergent?" [label="yes"];
+    "Question about the project?" -> "mma-delegate" [label="no — ad-hoc"];
     "Convergent or divergent?" -> "mma-investigate" [label="convergent (one answer)"];
     "Convergent or divergent?" -> "mma-explore" [label="divergent — writes exploration.md"];
 }
@@ -74,12 +74,12 @@ digraph picker {
 | `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge. Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
 | `/mma-breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma-breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
-| `mma-plan` | Write a TDD implementation plan from a spec file (dispatches to `plan` task type) |
+| `mma-plan` | Write a contract-first implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
 | `mma-audit` | Audit a document, spec, plan, or skill for coherence, correctness, and executability (subtype-driven: `default` / `plan` / `spec` / `skill`; lens biasing goes through the free-text prompt) |
-| `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
-| `mma-debug` | Debug a failure with a structured hypothesis |
-| `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
+| `mma-review` | Review source code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
+| `mma-debug` | Debug a wrong deliverable (code or non-code) with a structured hypothesis |
+| `mma-investigate` | Project Q&A (code or non-code material) — structured answer with `file:line` citations + confidence |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 
@@ -124,13 +124,13 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 ### Recipe C — Investigate-plan-execute
 
-`mma-investigate` (codebase Q&A) → write the plan (main-context judgment task) → `mma-execute-plan` (workers implement against named plan headings). Register the plan file as a context block before execute-plan so it isn't re-inlined into every worker's prompt.
+`mma-investigate` (project Q&A, code or non-code) → write the plan (main-context judgment task) → `mma-execute-plan` (workers implement against named plan headings). Register the plan file as a context block before execute-plan so it isn't re-inlined into every worker's prompt.
 
 ### Anti-patterns
 
 1. **`parallel-rounds-same-target`** — Caller fans out 3 parallel calls of the same skill on the same target — `mma-audit` on one document, or `mma-review` on the same source file. The reports overlap heavily; later rounds never see the fix from earlier rounds, so they re-flag the same issues. Corrective: sequential rounds with a fix between each (Recipe A).
 
-2. **`inline-labor-leakage`** — Caller does 3+ `Read` calls, or any `grep`, in main context "just to understand the situation." Main tokens get burned on labor; the answer the caller actually needs is one paragraph of synthesis. Corrective: `mma-investigate` for codebase Q&A; if the goal is implementation, jump straight to `mma-delegate` with file paths and let the worker read.
+2. **`inline-labor-leakage`** — Caller does 3+ `Read` calls, or any `grep`, in main context "just to understand the situation." Main tokens get burned on labor; the answer the caller actually needs is one paragraph of synthesis. Corrective: `mma-investigate` for project Q&A; if the goal is implementation, jump straight to `mma-delegate` with file paths and let the worker read.
 
 3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 separate task dispatches (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
 

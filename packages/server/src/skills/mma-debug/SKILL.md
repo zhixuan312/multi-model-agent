@@ -1,7 +1,7 @@
 ---
 name: mma-debug
-description: Use when a test fails, a build breaks, or behavior is unexpected AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
-when_to_use: A failure has surfaced (test/build/runtime) AND you need investigation work — read files, reproduce, trace — OR a systematic-debugging workflow routes its investigation step here. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
+description: Use when a deliverable is wrong — a test fails, a build breaks, a report shows the wrong figures, a workflow misbehaves — AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
+when_to_use: A failure has surfaced in a deliverable (test/build/runtime for code; a wrong report, configuration, or process outcome for non-code work) AND you need investigation work — read files, reproduce, trace — OR a systematic-debugging workflow routes its investigation step here. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,14 +9,17 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Submit a problem, context, and hypothesis to a worker for focused debugging. Unlike `mma-audit` and `mma-review`, all `target.paths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
+Submit a problem, context, and hypothesis to a worker for focused debugging. The deliverable under
+investigation may be code, or it may be a non-code deliverable that produced a wrong result — a
+generated report, a workflow configuration, a data pipeline. Unlike `mma-audit` and `mma-review`, all `target.paths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
 
 **Core principle:** The hypothesis is judgment (your job). Reading files and reproducing the failure is labor (the worker's job). Pass the hypothesis as input; receive structured findings.
 
 ## When to Use
 
 **Use when:**
-- A test fails / build breaks / runtime behavior is unexpected
+- A deliverable is wrong — a test fails / build breaks / runtime behavior is unexpected; or a
+  report, configuration, or process output is incorrect
 - The root cause likely spans 2+ files
 - You have a hypothesis to test (or want the worker to suggest one)
 - A systematic-debugging workflow routed the investigation here
