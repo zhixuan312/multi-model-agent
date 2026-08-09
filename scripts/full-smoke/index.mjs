@@ -22,10 +22,10 @@ function keepWorkspaceClean(dir) {
     execFileSync('git', ['-C', dir, 'commit', '--no-verify', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
   } catch { /* best-effort */ }
 }
-import { createProject, createWriteRepo } from './fixtures.mjs';
+import { createProject, createWriteRepo, createNonCodeProject } from './fixtures.mjs';
 import { SPEC_COMPONENT_CATALOG } from '../../packages/core/dist/index.js';
 import { SCENARIOS, ENGINE_COMMIT_TYPES } from './config.mjs';
-import { runDispatch, pollTask, runCancelScenario, runMcpScenario, runMcpContractScenario, runMcpToolsScenario } from './dispatch.mjs';
+import { runDispatch, pollTask, runCancelScenario, runMcpScenario, runMcpContractScenario, runMcpToolsScenario, runClientTimeoutScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
@@ -99,6 +99,17 @@ async function runScenario(spec, ctx, log) {
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
       log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      return;
+    }
+
+    // A client that abandons its request mid-flight must still be able to find the task.
+    if (spec.kind === 'client-timeout') {
+      const res = await runClientTimeoutScenario(ctx);
+      const rec = normalize(spec, { response: res.terminal });
+      rec.clientTimeout = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  reconcile  → taskId=${res.taskId} discoverable=${res.discovered}`);
       return;
     }
 
@@ -399,6 +410,7 @@ try {
   // One isolated repo per engine-commit scenario, each on its own caller-created branch. The
   // engine commits the submitted cwd IN PLACE, so scenarios sharing a checkout would sweep each
   // other's files into their commits — and this is also what lets them run in parallel.
+  ctx.nonCodeDir = createNonCodeProject().dir;
   ctx.writeRepos = {};
   for (const spec of SCENARIOS) {
     if (!ENGINE_COMMIT_TYPES.has(spec.type) || spec.nonGitCwd) continue;
@@ -492,6 +504,9 @@ try {
       [54],          // spec + deliverable (spec takes no practice)
       [55],          // MCP transport carrying deliverable + practice
       [56],          // the remaining MCP tools: list, get, cancel, context-block create/delete
+      [57],          // investigate a NON-CODE workspace (documents + data, no source)
+      [58],          // plan a NON-CODE deliverable (no build, no suite, no tests/)
+      [59],          // a client that abandons the request must still be able to reconcile
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario

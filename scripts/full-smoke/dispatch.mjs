@@ -203,6 +203,49 @@ export async function runMcpToolsScenario(ctx) {
   return { createBlock, blockId, listPayload, getPayload, cancelPayload, deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null, terminal, taskId };
 }
 
+/**
+ * #59 — a caller that lost its handle must be able to find its task again.
+ *
+ * Reported twice in real use: an MCP dispatch timed out, the caller assumed the task had not been
+ * created, re-dispatched, and produced a duplicate. Every other scenario here polls politely to
+ * terminal, so no test covered what happens when the caller stops listening.
+ *
+ * This does NOT stage a real client timeout, and the reason is worth recording rather than hiding.
+ * Forcing one is inherently racy: the abort has to land after the daemon has admitted the task but
+ * before it returns the handle, and admission takes single-digit milliseconds. A first attempt
+ * aborting at 50ms did not abort at all — the daemon had already answered — so the scenario
+ * asserted nothing. A test that only sometimes exercises its subject is worse than no test,
+ * because its green result is not evidence.
+ *
+ * So it asserts the PROPERTY that makes recovery possible instead of the accident that requires
+ * it: a task that has been admitted is discoverable through `mma_task_list` while it is still
+ * running. If that holds, a caller whose request timed out can reconcile and find its work. If it
+ * did not hold, "timed out" and "never created" would be indistinguishable and duplicating the
+ * work would be the only safe move — which is exactly the bug that was reported.
+ */
+export async function runClientTimeoutScenario(ctx) {
+  const parse = (r) => { const x = r?.json?.result?.content?.[0]?.text; try { return x ? JSON.parse(x) : null; } catch { return null; } };
+
+  const { status, json } = await dispatch(ctx.token, 'investigate',
+    { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } }, ctx.dir);
+  const taskId = json?.taskId ?? null;
+  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, terminal: null };
+
+  // The caller now "loses" its handle and reconciles the way a recovering client would: by asking
+  // the daemon what is running, not by re-dispatching.
+  await new Promise((r) => setTimeout(r, 3000));
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 60);
+  const tasks = parse(list)?.tasks ?? [];
+  const discovered = tasks.some((task) => task?.taskId === taskId);
+
+  let terminal = null;
+  try {
+    await cancelTask(ctx.token, taskId);
+    terminal = (await pollTask(ctx.token, taskId)).envelope;
+  } catch { /* already terminal */ }
+  return { dispatched: true, taskId, discovered, listedCount: tasks.length, terminal };
+}
+
 // Returns { type, body } for a scenario given run context.
 export function buildRequest(spec, ctx) {
   // Engine-commit scenarios each get their OWN repo, on their own caller-created branch. They
@@ -397,6 +440,18 @@ export function buildRequest(spec, ctx) {
       prompt: 'Guarded arithmetic — spec dispatched under an approved contract',
       target: { paths: [`${ctx.dir}/design-decisions.md`] },
       deliverable: approvedContract(contractContent()),
+    } };
+
+    // V. The non-code workspace: no source file, no test runner, no `tests/` directory.
+    case 57: return { type: 'investigate', cwd: ctx.nonCodeDir, body: {
+      prompt: 'What does the Q2 commentary claim about revenue, and which ledger lines support it? Cite what you used.',
+      target: { paths: ['reports/', 'source-data/'] },
+    } };
+    // A plan for a deliverable that has no build, no suite and no repository conventions. Its
+    // declared checks — if it declares any — cannot live under `tests/`.
+    case 58: return { type: 'plan', cwd: ctx.nonCodeDir, body: {
+      prompt: 'Write a plan to produce the Q3 finance commentary from the ledger',
+      target: { paths: [`${ctx.nonCodeDir}/spec.md`] },
     } };
 
     default: throw new Error(`no request builder for scenario ${spec.id}`);

@@ -91,6 +91,36 @@ function contractPlan(title, header, implPath, testPath, testSrc) {
 }
 
 /**
+ * A NON-CODE workspace, deliberately unlike every other fixture in this harness.
+ *
+ * Every other fixture repository here is the same shape: `math.ts`, `spec.md`, `plan.md`. That
+ * uniformity is a blind spot, not a convenience. A fixture we generate from our own conventions
+ * cannot falsify those conventions — which is exactly how two reported defects survived the gate:
+ * `execute_plan` demanded checks under a JavaScript `tests/` directory, and the plan parser broke
+ * on a blockquote, because no fixture ever presented anything else.
+ *
+ * This workspace contains NO source file, NO test runner and NO `tests/` directory. It is a
+ * folder of documents and data, which is what a finance or policy deliverable actually looks
+ * like. A route that silently assumes a code project fails here and passes everywhere else.
+ */
+export function createNonCodeProject() {
+  const dir = mkdtempSync(join(tmpdir(), 'mma-smoke-noncode-'));
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' });
+  git('init', '-q'); git('config', 'user.email', 's@s'); git('config', 'user.name', 's');
+
+  mkdirSync(join(dir, 'source-data'));
+  mkdirSync(join(dir, 'reports'));
+  writeFileSync(join(dir, 'source-data', 'ledger-q3.csv'),
+    'account,quarter,amount\nrevenue,Q3,124500\ncost-of-sales,Q3,71200\noperating-expense,Q3,38900\n');
+  writeFileSync(join(dir, 'reports', 'q2-commentary.md'),
+    `# Q2 commentary\n\nRevenue rose against Q1. ${SENTINEL}: every figure quoted in commentary must tie to the ledger.\n`);
+  writeFileSync(join(dir, 'spec.md'),
+    `# Spec — quarterly finance commentary\n\nRequirement ${SENTINEL}: every figure quoted in the commentary must tie to a line in source-data/ledger-q3.csv.\n`);
+  git('add', '.'); git('commit', '-qm', 'seed non-code workspace');
+  return { dir };
+}
+
+/**
  * A Contract Task that declares NO deterministic check.
  *
  * This is the central new behaviour of the deliverable-neutral grammar: a task whose

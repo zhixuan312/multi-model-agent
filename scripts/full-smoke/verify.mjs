@@ -258,6 +258,19 @@ export function verify(rec) {
     return out;
   }
 
+  // ─── A caller that lost its handle (#59) ───
+  if (e.kind === 'client-timeout') {
+    const c = rec.clientTimeout ?? {};
+    out.push(C('inflight-dispatch-admitted', c.dispatched ? 'PASS' : 'FAIL',
+      `dispatched=${c.dispatched} taskId=${c.taskId}`));
+    // The load-bearing assertion. Without it, a timed-out caller cannot tell "created" from
+    // "not created", and re-dispatching — duplicating the work — is the only safe move.
+    out.push(C('inflight-task-discoverable', c.discovered ? 'PASS' : 'FAIL',
+      `the running task ${c.discovered ? 'was' : 'was NOT'} listed among ${c.listedCount} live tasks — `
+      + `a caller that lost its handle must be able to reconcile instead of re-dispatching`));
+    return out;
+  }
+
   // ─── MCP carrying the new request fields (#55) ───
   //     The generated MCP request schema comes from the same Zod union REST validates with, so
   //     these assertions catch a generation bug or an adapter that strips unknown keys — either

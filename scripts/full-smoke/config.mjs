@@ -380,4 +380,24 @@ export const SCENARIOS = [
   //       the remaining tools have never been driven over MCP at all — only their REST
   //       equivalents. A tool that throws on every call would not fail any existing scenario.
   { id: 56, type: 'investigate', tier: 'standard', kind: 'mcp-tools', emits: 0 },
+
+  //    V. A workspace that is NOT our shape.
+  //       Every other fixture here is `math.ts` + markdown, so any assumption baked into the
+  //       product is also baked into the fixture, and a fixture cannot falsify the conventions it
+  //       was generated from. That is precisely how two reported defects survived this gate: a
+  //       check path forced under a JavaScript `tests/`, and a parser that broke on a blockquote.
+  //       These two run against a folder of documents and data with NO source file, NO test runner
+  //       and NO `tests/` directory — what a finance or policy deliverable actually looks like.
+  //       A route that silently assumes a code project fails here and passes everywhere else.
+  { id: 57, type: 'investigate', tier: 'complex', kind: 'read', nonCodeWorkspace: true, emits: 1 },
+  { id: 58, type: 'plan', tier: 'complex', kind: 'write', nonCodeWorkspace: true, emits: 1 },
+
+  //    W. A client that gives up before the daemon answers.
+  //       Reported twice in real use: an MCP dispatch timed out and the task had in fact been
+  //       created, so re-dispatching produced a duplicate. Every scenario here polls politely to
+  //       terminal, so no test ever staged a transport failure and this path was never covered.
+  //       The property that makes recovery possible is not that the timeout stops happening — it
+  //       is that an admitted task remains DISCOVERABLE afterwards, so a caller can reconcile
+  //       instead of guessing. That is what this asserts.
+  { id: 59, type: 'investigate', tier: 'standard', kind: 'client-timeout', emits: 0 },
 ];
