@@ -328,19 +328,30 @@ rest of the chain — see Common: Artifact stem).
 current evidence, and a journal record this session. Delivery alone is not enough — an earlier
 design let `done` render even with a `human` criterion still `not-run`.
 
+**Do not re-implement this rule or the subject digest.** Both ship from
+`@zhixuan92/multi-model-agent-core`, because closure only works if every component computes the
+SAME digest for the same output. A second implementation would fail silently and in the worst
+possible way: evidence written by one component reads as STALE to the other, so a finished flow
+waits forever for verification it already has, with no error raised anywhere.
+
 ```ts
-function acceptanceClosed(contract, evidence, subjectDigest) {
-  return contract.acceptance.every((criterion) => {
-    const record = evidence.records[criterion.id];
-    if (!record) return false;                                    // no evidence at all
-    if (record.subjectDigest !== subjectDigest) return false;      // evidence is for a STALE output
-    if (record.outcome.method !== criterion.method) return false;  // evidence used the wrong method
-    switch (criterion.method) {
-      case 'command':
-      case 'agent-review': return record.outcome.status === 'passed';
-      case 'human':        return record.outcome.status === 'approved';
-    }
-  });
+import { canonicalSubjectDigest, acceptanceClosed } from '@zhixuan92/multi-model-agent-core';
+
+// WHAT was checked — git commits per repository, or file digests per (root, path).
+const subjectDigest = canonicalSubjectDigest(subject);
+const closed = acceptanceClosed(contract.acceptance, evidence.records, subjectDigest);
+```
+
+The rule it applies, for reference — four independent reasons a record proves nothing:
+
+```ts
+if (!record) return false;                                    // no evidence at all
+if (record.subjectDigest !== subjectDigest) return false;      // evidence is for a STALE output
+if (record.outcome.method !== criterion.method) return false;  // evidence used the wrong method
+switch (criterion.method) {
+  case 'command':
+  case 'agent-review': return record.outcome.status === 'passed';
+  case 'human':        return record.outcome.status === 'approved';
 }
 ```
 
@@ -350,7 +361,7 @@ method-specific. `failed`, `error`, and `not-run` all fail closure for a `comman
 
 | Method | Producer of the record |
 |---|---|
-| `command` | B7 execution — the engine returns the outcome, the CALLER persists it |
+| `command` | B7 execution — the CALLER runs the declared command and persists the outcome. No engine route executes acceptance commands: they verify the caller's own delivery, and the engine is stateless about the flow. |
 | `agent-review` | The B6 independent reviewer, per criterion |
 | `human` | Forge, or the interactive caller, recording a named person's decision |
 | All methods | The caller writes `.mma/verifications/<stem>.json` — never the engine |

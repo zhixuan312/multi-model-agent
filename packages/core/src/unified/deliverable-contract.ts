@@ -1,5 +1,8 @@
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
+// The canonicalisation is SHARED with `canonicalSubjectDigest` rather than duplicated. Both
+// digests must be reproduced byte-identically by Forge; two private copies of the sorting and
+// NFC rules could drift apart while each kept passing its own tests.
+import { canonicalDigest, compareByCodePoint } from './canonical-json.js';
 
 /**
  * The Deliverable Contract: the declared set of facts a caller and MMA agree on for one
@@ -340,33 +343,6 @@ export type ApprovedContract = z.infer<typeof approvedContractSchema>;
 //  5. Encode as UTF-8 JSON with no insignificant whitespace; digest with SHA-256.
 // ---------------------------------------------------------------------------
 
-function compareByCodePoint(a: string, b: string): number {
-  const left = Array.from(a);
-  const right = Array.from(b);
-  const length = Math.min(left.length, right.length);
-  for (let i = 0; i < length; i += 1) {
-    const diff = (left[i].codePointAt(0) ?? 0) - (right[i].codePointAt(0) ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return left.length - right.length;
-}
-
-function canonicalizeValue(value: unknown): unknown {
-  if (typeof value === 'string') return value.normalize('NFC');
-  if (Array.isArray(value)) return value.map(canonicalizeValue);
-  if (value !== null && typeof value === 'object') {
-    const sortedKeys = Object.keys(value as Record<string, unknown>)
-      .map((key) => key.normalize('NFC'))
-      .sort(compareByCodePoint);
-    const canonical: Record<string, unknown> = {};
-    for (const key of sortedKeys) {
-      canonical[key] = canonicalizeValue((value as Record<string, unknown>)[key]);
-    }
-    return canonical;
-  }
-  return value;
-}
-
 /** The digest content: every field an approval is over, and nothing else. `state` and
  *  `contractApproval` are deliberately excluded from this type — passing a full
  *  `ProposedContract` or `ApprovedContract` is fine, since both are structural
@@ -378,17 +354,14 @@ export function canonicalContractDigest(contract: ContractDigestContent): string
     .map((artifact) => ({ root: artifact.root, path: normalizeArtifactPath(artifact.path) }))
     .sort((a, b) => compareByCodePoint(a.root, b.root) || compareByCodePoint(a.path, b.path));
 
-  const digestContent = canonicalizeValue({
+  return canonicalDigest({
     kind: contract.kind,
     audience: contract.audience,
     disposition: contract.disposition,
     artifacts: normalizedArtifacts,
-    // Acceptance order is preserved by canonicalizeValue's array handling — it maps
-    // each element in place and never sorts the array itself.
+    // Acceptance order is preserved by the shared canonicaliser's array handling — it maps each
+    // element in place and never sorts the array itself, because acceptance order is semantic
+    // (declared commands run in that order).
     acceptance: contract.acceptance,
   });
-
-  const json = JSON.stringify(digestContent);
-  const hex = createHash('sha256').update(json, 'utf8').digest('hex');
-  return `sha256:${hex}`;
 }

@@ -104,6 +104,32 @@ section, a design decision, a configuration a human must eyeball) OMIT the whole
 not force a fake check just to have one; the contract and technical AC still carry the full weight of
 what "done" means for that task.
 
+### How each technical AC gets verified — choose the method the claim requires
+
+A declared check is not the only way a criterion is verified; it is one of three, and it covers only
+the claims a machine can settle. **Acceptance is broader than testing.** For every technical AC you
+write, decide which method proves it and say so in the AC's own wording:
+
+| The claim… | Method | In the plan |
+|---|---|---|
+| a machine can settle it (a runner, a linter, a schema validator, a diff) | `command` | declare a **Check** — this is the only method that produces one |
+| needs analysis that can be delegated and evidenced (does the section follow from the data? is this consistent with the source?) | `agent-review` | no Check; state what the reviewer must compare against |
+| needs authority or accountability (a professional sign-off, a decision only a named person may make) | `human` | no Check; name WHO must decide, and what they are deciding |
+
+Two rules that decide the hard cases:
+
+- **Choose by what the claim requires, not by what is convenient.** There is no ranking, and
+  `agent-review` is never a substitute for `human`. A claim that needs professional authority is
+  `human` even when a model could produce a plausible opinion — a plausible opinion is not
+  accountability.
+- **A missing Check is a statement, not an omission.** When a task declares none, its technical AC
+  must say plainly how the claim IS established instead. A task whose AC is unverifiable by any of
+  the three methods is not ready to be planned; say what is missing rather than writing it anyway.
+
+This is a planning obligation, not an engine gate: the engine records what you declare and never
+refuses a criterion for its choice of method. Getting it wrong therefore fails at review, or later
+at delivery, rather than at dispatch.
+
 ### Format — required heading & file conventions
 
 The plan file is parsed by the SDLC plan-stage renderer to display phases, tasks, and outputs. Use

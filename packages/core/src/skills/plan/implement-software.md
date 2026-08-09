@@ -96,6 +96,22 @@ paired with exactly one fenced source block and one `Run:` command:
 
 The five Contract bullets appear in exactly this order and label text. The only code you write is a
 declared check's source. The Contract's own bullets — not a separate file list — are where every path
+
+### How each technical AC gets verified — choose the method the claim requires
+
+For a code deliverable most technical ACs are settled by a `command`, which is why a declared Check
+is the norm here rather than the exception. It is still not the only method, and a plan that treats
+it as the only one will quietly drop the claims it cannot express:
+
+| The claim… | Method | In the plan |
+|---|---|---|
+| a machine can settle it (test runner, linter, type checker, schema validator) | `command` | declare a **Check** — the only method that produces one |
+| needs delegable analysis (is this migration safe for existing callers? does this match the documented contract?) | `agent-review` | no Check; state what the reviewer compares against |
+| needs authority (a security sign-off, a data-handling decision a named person owns) | `human` | no Check; name who decides and what they decide |
+
+`agent-review` is never a substitute for `human`. A claim needing accountability stays `human` even
+when a model could produce a confident opinion.
+
 and symbol the task touches is named and verified against HEAD.
 
 ### Format — required heading & file conventions

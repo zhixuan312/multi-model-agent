@@ -114,6 +114,22 @@ export {
   resolveComponentHeading,
 } from './unified/spec-components.js';
 export type { SpecComponent, SpecComponentCatalogEntry } from './unified/spec-components.js';
+// Verification evidence: the shape of what was checked, and the named `subjectDigest`
+// algorithm. Exported because closure depends on this package and Forge computing the SAME
+// digest for the same output — a second implementation could only ever agree with itself.
+export {
+  canonicalSubjectDigest,
+  isClosingRecord,
+  acceptanceClosed,
+} from './unified/verification.js';
+export type {
+  VerificationSubject,
+  VerificationOutcome,
+  VerificationRecord,
+  VerificationFile,
+} from './unified/verification.js';
+// The single canonical-JSON serialisation both digests are built on.
+export { canonicalDigest, canonicalizeValue, compareByCodePoint } from './unified/canonical-json.js';
 // Deliverable Contract: shared types, canonical digest, and command execution bounds.
 // See packages/core/src/unified/deliverable-contract.ts for the algorithm this digest
 // implements and why it is deliberately filesystem-free.
