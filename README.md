@@ -555,6 +555,16 @@ programmatic callers — see [packages/server/README.md#rest-api](./packages/ser
 It is not part of the agent-facing surface: no packaged skill, command, or plugin instructs an agent to
 construct an HTTP request.
 
+`spec`, `plan`, `execute_plan`, and `review` optionally carry a `deliverable`: an approved **Deliverable
+Contract** — `kind` (a free-form label the agent proposes and the human confirms), `audience`,
+declared `artifacts`, `acceptance` criteria (each with an explicit verification method — `command`,
+`agent-review`, or `human`), and a `disposition` (`pr`, `commit-in-place`, or `deliver-file`) — bound to
+a digest that matches its content, so a human approval can never be silently applied to different
+content. The contract classifies nothing: `kind` is free-form, not drawn from a registry, and the
+engine itself picks no technique — `practice` (currently only `software`) is a separate, optional,
+caller-chosen field. See [docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
+for the full validation model.
+
 ### MCP endpoint
 
 The daemon exposes the runtime over MCP at `POST /mcp` (streamable HTTP, stateless) — this is what

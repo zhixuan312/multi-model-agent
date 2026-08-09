@@ -14,9 +14,11 @@ import { z } from 'zod';
  *  - `ApprovedContract` (execution onward) — adds a digest-matched `contractApproval`.
  *    Only `ApprovedContract` crosses the REST/MCP wire.
  *
- * The contract classifies nothing: there is no `subtype`, `methodProfile`, `rigor`,
- * `kindConfirmation`, or kind registry anywhere in this module. `kind` is a free-form,
- * shape-checked label proposed by the agent and confirmed by the human.
+ * The contract classifies nothing: there is no `subtype`, no per-task verification-strictness
+ * field, no kind-confirmation field, and no kind registry anywhere in this module. `kind` is a
+ * free-form, shape-checked label proposed by the agent and confirmed by the human. (A caller-facing
+ * strictness default may still exist outside this module, at the user interface, but never as
+ * contract validation state.)
  *
  * `canonicalContractDigest` is the one named, filesystem-free serialisation algorithm
  * every component (this package and Forge) computes identically. Workspace-aware checks

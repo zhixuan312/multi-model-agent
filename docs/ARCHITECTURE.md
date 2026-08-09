@@ -190,6 +190,55 @@ C.7  Distribution                server/src/provisioning/{capability-registry,ro
 
 A single request reads as a path: the horizontal axis tells you *which stage*, the vertical axis tells you *which file does that stage's work for this tool*, and the substrate tells you *which capability the stage borrows from*.
 
+## The Deliverable Contract
+
+The Deliverable Contract (`core/src/unified/deliverable-contract.ts`) is the declared set of facts a
+caller and the engine agree on for one solution: `kind` (a free-form label the agent proposes and the
+human confirms — the contract has no kind registry, no `subtype`, and no per-task verification-strictness
+field), `audience`, `artifacts` (declared output paths), `acceptance` (criteria, each with an explicit
+verification `method` of `command`, `agent-review`, or `human`, and at least one `reference` to check
+against), and `disposition` (how the finished solution reaches the caller: `pr`, `commit-in-place`, or
+`deliver-file`).
+
+A contract widens through three states, so validation grows stricter as the caller's intent firms up:
+
+- `draft` (exploration) — only `audience` is required.
+- `proposed` (spec / plan) — `kind`, `artifacts`, `acceptance`, and `disposition` are all required.
+- `approved` (execution onward) — adds a `contractApproval` whose `contractDigest` must equal
+  `canonicalContractDigest(contract)`, a filesystem-free SHA-256 digest computed from the contract's
+  content (key order, artifact order, and string normalization are all canonicalized first; `state` and
+  `contractApproval` itself are excluded, since they describe lifecycle, not content). Only an
+  `approved` contract crosses the REST or MCP wire — `draft` and `proposed` contracts stay on disk in
+  spec/plan frontmatter and are never sent to the engine.
+
+Validation splits across two layers because only the server has a filesystem to check against:
+
+- **Core** (`unified/deliverable-contract.ts`, pure Zod, no disk access) checks shape and the
+  digest match: artifact paths are lexically relative (no absolute prefix, no `..` segment), acceptance
+  ids and normalized artifacts are unique, an empty artifact set requires at least one terminal
+  `command` criterion (no vacuous completion), and an `approved` contract's digest matches its content.
+- **Server boundary** (`server/src/application/deliverable-contract-validator.ts`,
+  `validateDeliverableContractBoundary`) checks what needs the live filesystem and the task's `cwd`:
+  realpath containment of every declared artifact root and path (and of any `CommandCheck.cwd`), and
+  disposition feasibility (`pr` and `commit-in-place` require a git repository; `deliver-file` does
+  not). Both the REST handler (`server/src/http/handlers/unified-task.ts`) and the MCP adapter
+  (`server/src/mcp/mcp-adapter.ts`) call
+  this same function with the same already-Zod-validated contract, so a caller sees identical
+  field-specific errors regardless of transport. This check runs before `ExecutionRuntime.submit`, so a
+  boundary rejection never opens a provider session.
+
+An optional `deliverable` field (an `ApprovedContract`) is wired onto exactly four task types —
+`spec`, `plan`, `execute_plan`, and `review` (`core/src/unified/task-input-schema.ts`) — the routes a
+contract governs. Every other task type omits the field entirely, so it cannot appear on their input.
+Omitting `deliverable` stays valid: an unmanaged direct call carries none.
+
+A separate, optional `practice` field (`z.enum(['software'])`, wired onto `plan`, `execute_plan`,
+`review`, and `debug`) selects an optional technique — currently only the retained `software` code
+technique — without classifying what the deliverable is. It answers *how* to do the work; `kind`
+answers *what* the deliverable is; `audit`'s own `subtype` field (which criteria set examines the
+artifact) is a third, unrelated axis. Omitting `practice` loads the generic, deliverable-neutral
+implementer skill.
+
 ## Provider runners
 
 Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.ts`) encapsulates provider-specific I/O (Anthropic Claude SDK, Codex CLI subprocess). Result assembly is handled per-provider: `providers/normalize-claude.ts` for Claude, `providers/codex-cli-session.ts` for Codex. Agent resolution (`providers/agent-resolver.ts`) maps task-type tiers to configured agents. Provider-specific session management, tool categories, and normalization are co-located in the providers directory.
