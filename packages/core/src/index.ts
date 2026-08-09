@@ -34,6 +34,7 @@ export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanH
 export {
   ContractPlanError,
   parseContractPlan,
+  ACCEPTED_CHECK_ROOTS,
   assertSafeAcceptanceTestPaths,
   materializeAcceptanceTests,
   rematerializeAcceptanceTests,

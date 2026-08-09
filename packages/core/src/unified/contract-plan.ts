@@ -332,8 +332,24 @@ async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string
   }
 }
 
+/**
+ * Directories a declared check may be materialised into, relative to the submitted `cwd`.
+ *
+ * A single hardcoded `tests/` was a JavaScript convention embedded in a deliverable-neutral
+ * grammar, and it rejected real work: Python commonly uses `test/`, Java uses `src/test/java`,
+ * and for a non-code deliverable — a finance report whose check reconciles figures against a
+ * source ledger — a directory called `tests` is simply the wrong word. A caller hit this and
+ * had to abandon `execute_plan` for `delegate` to get the work done.
+ *
+ * Confinement is still bounded and still named. What actually keeps materialisation safe does
+ * not depend on the directory's NAME: the path must be relative, must contain no traversal
+ * segment, must resolve inside the chosen root, must cross no symlink, and must never overwrite
+ * an existing file (`test-path-collision`). Widening the set of permitted roots changes none of
+ * those properties.
+ */
+export const ACCEPTED_CHECK_ROOTS = ['tests', 'test', 'spec', 'specs', 'checks', '__tests__'] as const;
+
 export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapshot, repositoryRoot: string): Promise<void> {
-  const testsRoot = resolve(repositoryRoot, 'tests');
   for (const test of collectUniqueTests(snapshot)) {
     if (isAbsolute(test.path)) {
       throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" must be relative, not absolute`);
@@ -342,10 +358,19 @@ export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapsh
       throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" must not contain traversal segments`);
     }
     const resolved = resolve(repositoryRoot, test.path);
-    if (resolved !== testsRoot && !resolved.startsWith(testsRoot + sep)) {
-      throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" escapes the repository "tests" directory`);
+    // The FIRST accepted root the path actually falls under. Checking every root rather than
+    // one fixed root is the whole change; everything after it is unchanged.
+    const matchedRoot = ACCEPTED_CHECK_ROOTS
+      .map((name) => resolve(repositoryRoot, name))
+      .find((root) => resolved === root || resolved.startsWith(root + sep));
+    if (!matchedRoot) {
+      throw new ContractPlanError(
+        'unsafe-test-path',
+        `Acceptance test path "${test.path}" must sit under one of: ${ACCEPTED_CHECK_ROOTS.join(', ')} `
+        + `(relative to the submitted cwd). A check for a non-code deliverable belongs under "checks".`,
+      );
     }
-    await assertNoSymlinkAncestors(testsRoot, resolved, test.path);
+    await assertNoSymlinkAncestors(matchedRoot, resolved, test.path);
   }
 }
 

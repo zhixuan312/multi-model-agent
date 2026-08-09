@@ -170,7 +170,8 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
    collapsed to one task and zero checks. Decompose the work on its merits, then decide each task's
    check on its own merits.
 5. **Each declared check's `Check:` path is a NEW dedicated test file** — never the task's own
-   `**Output:**` path.
+   `**Output:**` path — and it sits under one of `tests`, `test`, `spec`, `specs`, `checks`,
+   `__tests__`, relative to the repository root. Use whichever your project already uses.
 6. **Human-executable phases and granularity** as above.
 7. **Conditional tasks** depending on an external prerequisite are marked BLOCKED with the unblocking
    condition.
