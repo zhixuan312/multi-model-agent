@@ -1,5 +1,5 @@
 import { lstat, mkdir, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative as relativePath, resolve, sep } from 'node:path';
 
 /**
  * Parses and validates the deliverable-agnostic Contract Task grammar that
@@ -320,9 +320,21 @@ async function pathExists(absPath: string): Promise<boolean> {
  * cannot reintroduce it.
  */
 async function assertNoSymlinkAncestors(repositoryRoot: string, absTargetPath: string, declaredPath: string): Promise<void> {
-  const relative = absTargetPath.slice(repositoryRoot.length + 1);
+  // `path.relative`, NOT slice arithmetic. Round 3 derived the relative path with
+  // `absTargetPath.slice(repositoryRoot.length + 1)`, which silently produces garbage whenever
+  // `repositoryRoot` carries a trailing separator or is the filesystem root: for `/repo/` it eats
+  // the first character, the walk then starts at a segment that does not exist, breaks on the
+  // first iteration, and NO symlink check runs at all. `relative()` is correct for every spelling
+  // of the same directory, so the guard cannot be disabled by how the caller wrote its path.
+  const relative = relativePath(repositoryRoot, absTargetPath);
+  // A target that is not under the root at all must never be walked as though it were. The caller
+  // already checked containment, so reaching here means the two disagree — refuse rather than
+  // proceed on an assumption.
+  if (relative === '' || relative.startsWith('..') || isAbsolute(relative)) {
+    throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${declaredPath}" does not resolve inside the repository root`);
+  }
   const segments = relative.split(sep).filter(Boolean);
-  let current = repositoryRoot;
+  let current = resolve(repositoryRoot);
   for (const segment of segments) {
     current = resolve(current, segment);
     try {

@@ -111,6 +111,24 @@ describe('confinement is unchanged by the widening', () => {
     }
   });
 
+  it('still catches a symlinked root when the repository root carries a trailing separator', async () => {
+    // Fourth-review finding, created by round 3's fix. That fix derived the relative path with
+    // `absTargetPath.slice(repositoryRoot.length + 1)`. For a root written as `/repo/` the slice
+    // eats the first character, the walk starts at a segment that does not exist, breaks on its
+    // first iteration, and NO symlink check runs — the guard silently disables itself based on how
+    // the caller spelled its path. `path.relative` is correct for every spelling.
+    const repo = await mkdtemp(join(tmpdir(), 'mma-check-trailing-'));
+    const outside = await mkdtemp(join(tmpdir(), 'mma-check-trailing-target-'));
+    try {
+      await symlink(outside, join(repo, 'tests'), 'dir');
+      await expect(assertSafeAcceptanceTestPaths(snapshot('tests/verify.mjs'), repo + '/'))
+        .rejects.toThrow(/symlinked ancestor/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a check whose INTERMEDIATE ancestor is a symlink', async () => {
     // Third-review finding, introduced by accepting the NESTED root `src/test`. The guard used to
     // start its walk AT the matched root, so `lstat(<repo>/src/test)` silently FOLLOWED a symlinked
