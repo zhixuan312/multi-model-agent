@@ -781,12 +781,34 @@ export function verify(rec) {
     // attribution lives on each event, not the envelope. Reading it off the wrong
     // level yields undefined everywhere, which would report NA forever — a check
     // that never runs looks exactly like a check that always passes.
+    // The queue is sampled by LINE-COUNT WINDOW, and a wire event carries `eventId`, `route` and
+    // `client` but deliberately NO task id — telemetry is not task-correlated. So this sample
+    // cannot separate the harness's own events from those of any other client using the same
+    // daemon during the window. That distinction changes what a non-matching client MEANS:
+    //
+    //   - no SMOKE_CLIENT event at all  → FAIL. Attribution genuinely did not survive the path,
+    //     which is the defect this check exists for (a silent collapse to `other`).
+    //   - SMOKE_CLIENT present, plus a foreign client → the sample is CONTAMINATED. The harness
+    //     cannot tell a collapsed event of its own from a legitimate event of the other client,
+    //     so it has not learned whether attribution held. Report that as unsettled, not as a
+    //     defect: "another client shared this daemon" and "attribution is broken" are different
+    //     facts, and reporting the first as the second sends a reader hunting a bug that is not
+    //     there. This cost a full 50-scenario run on 2026-08-09.
+    //   - only SMOKE_CLIENT → PASS.
     const clients = [...new Set(
       q.records.flatMap((r) => (Array.isArray(r.events) ? r.events : [])).map((e) => e.client).filter(Boolean),
     )];
-    const attributed = clients.length > 0 && clients.every((c) => c === SMOKE_CLIENT);
-    out.push(C('client-attribution', clients.length === 0 ? 'NA' : (attributed ? 'PASS' : 'FAIL'),
-      `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
+    const foreign = clients.filter((c) => c !== SMOKE_CLIENT);
+    const mineSeen = clients.includes(SMOKE_CLIENT);
+    const status = clients.length === 0 ? 'NA'
+      : !mineSeen ? 'FAIL'
+        : foreign.length > 0 ? 'WARN'
+          : 'PASS';
+    out.push(C('client-attribution', status,
+      status === 'WARN'
+        ? `UNSETTLED — another client shared this daemon during the window: foreign=[${foreign.join(', ')}]. `
+          + `smoke:full needs exclusive use of the daemon; re-run with nothing else dispatching to it.`
+        : `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
 
     // The cost baseline must be the CONFIGURED main tier on every event. The
     // defect this replaces: with no per-call model claim, the runtime fell back
