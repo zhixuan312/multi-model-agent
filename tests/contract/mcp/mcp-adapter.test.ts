@@ -5,11 +5,13 @@
 // execution submitted over MCP is observable over REST with the same result.
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
-import { TASK_TYPES } from '@zhixuan92/multi-model-agent-core';
+import { TASK_TYPES, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
 
 async function mcpClient(h: HarnessHandle): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
@@ -226,5 +228,42 @@ describe('contract: MCP adapter', () => {
       expect(result.isError).toBe(true);
       expect((parseText(result).error as { code: string }).code).toBe('not_found');
     } finally { await client.close(); await h.close(); }
+  });
+
+  /**
+   * Deliverable Contract boundary (I-3) — the same disposition-feasibility rejection
+   * `route-contract.test.ts` exercises over REST, exercised over MCP with the SAME
+   * `deliverable-contract-validator.ts` call. Confirms the two transports report the
+   * SAME field-specific detail, not two hand-maintained checks that could drift.
+   */
+  it('mma_run rejects disposition "pr" for a non-git cwd with a deliverable-scoped fieldError', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mma-deliverable-mcp-nongit-'));
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
+    const client = await mcpClient(h);
+    try {
+      const contractContent = {
+        kind: 'report', audience: 'board', disposition: 'pr' as const,
+        artifacts: [{ root: 'workspaceRoot', path: 'out/report.md' }],
+        acceptance: [{ id: 'review', criterion: 'Reviewed', method: 'human' as const, references: [{ kind: 'none', reason: 'Owner judgement' }] }],
+      };
+      const digest = canonicalContractDigest(contractContent);
+      const result = await client.callTool({
+        name: 'mma_run',
+        arguments: {
+          cwd: tmp,
+          request: {
+            type: 'plan', prompt: 'plan', target: { inline: 'spec' },
+            deliverable: {
+              state: 'approved', ...contractContent,
+              contractApproval: { contractDigest: digest, approvedBy: 'Owner', approvedAt: '2026-08-08T00:00:00.000Z' },
+            },
+          },
+        },
+      });
+      expect(result.isError).toBe(true);
+      const payload = parseText(result) as { error: { code: string; fieldErrors: { fieldErrors: Record<string, string[]> } } };
+      expect(payload.error.code).toBe('invalid_request');
+      expect(payload.error.fieldErrors.fieldErrors.deliverable?.[0]).toMatch(/requires the workspace root to be a git repository/);
+    } finally { await client.close(); await h.close(); await rm(tmp, { recursive: true, force: true }); }
   });
 });

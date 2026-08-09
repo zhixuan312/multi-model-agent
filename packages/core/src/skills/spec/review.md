@@ -13,7 +13,7 @@ Verify the implementer's specification in the worktree against the original desi
 1. Read the spec file the implementer wrote.
 2. Read the original design decisions from the Original Task context.
 3. **Complete any unfinished scaffold.** If the implementer ran out of budget, some `###` sections may still hold a `<!-- brief: ... -->` line instead of real content. Before anything else, write the full content for every such section (per the same Section Rules the implementer follows) so **zero `<!-- brief:` markers remain**. A spec that reaches you half-scaffolded is finished here, not rejected.
-4. Apply each of the 10 criteria below sequentially.
+4. Apply each of the 11 criteria below sequentially.
 5. Fix issues inline in the worktree file.
 6. Your FINAL message must be a single ```json fenced block — nothing else.
 
@@ -23,7 +23,7 @@ The task context contains a `## Requested Spec Components` block. Complete and v
 
 Apply cross-component checks only when every component the check requires is present. Acceptance-criteria coverage (every functional requirement maps to an acceptance criterion) requires both `Goals & Requirements` and `User Stories & Tasks`, and is **skipped if either is absent**. All other checks are single-component or cross-cutting and are never skipped for a missing companion.
 
-In the output JSON, `sections` must list exactly the resolved component set in canonical order.
+In the output JSON, `sections` must list exactly the resolved component set in canonical order, using the stable identifiers (e.g. `Technical Design`), never the displayed headings — the resolved component set itself is always expressed as identifiers. Match each `##` heading actually in the file to its identifier by its DISPLAYED label (`Approach, Method & Structure` → `Technical Design`, `Verification Plan` → `Testing Plan`, `Stakeholders & Work` → `User Stories & Tasks`) or, if the implementer left a historical heading in place, by the identifier text itself — both name the same component.
 
 ## Checks
 
@@ -45,7 +45,9 @@ In the output JSON, `sections` must list exactly the resolved component set in c
 
 9. **Placeholder scan** — no TBD, TODO, "to be determined", vague verbs, incomplete sections, or leftover `<!-- brief:` scaffold markers. Fix: replace with concrete content.
 
-10. **Reader accessibility** — the business-facing components (Context, Problem, Goals, Alternatives, User Stories) open in plain English a non-engineer (business/product) can follow, lead with the business value, and define a specialist term on first use. The spec is a shared human-alignment contract, not an engineering-only doc. Fix: rewrite jargon-first openings into plain language; keep Technical Design precise.
+10. **Reader accessibility** — the business-facing components (Context, Problem, Goals, Alternatives, Stakeholders & Work) open in plain English a non-specialist (business/product) can follow, lead with the value, and define a specialist term on first use. The spec is a shared human-alignment contract, not an engineering-only doc. Fix: rewrite jargon-first openings into plain language; keep Approach, Method & Structure precise.
+
+11. **Proposed-contract completeness** — the frontmatter `contract` block declares `state: proposed`, a specific free-form `kind`, `audience`, `disposition`, at least one `artifacts` entry or a terminal `command` criterion, and every `acceptance` entry has an explicit `method`, a `why` rationale, and at least one `references` entry (a `references` entry of kind `none` carries a `reason`). Every criterion's `method` fits what the claim requires — `command` where a deterministic check honestly settles it, `agent-review` for delegable analytical judgement, `human` where authority or accountability is required; a claim needing professional authority must never be downgraded to `agent-review`, and `agent-review` is never treated as stronger than `human`. Fix: fill a missing field from the design decisions; if a decision genuinely does not state the fact, propose the most defensible plain-language reading and flag it in the spec's own prose, do not fabricate specifics silently.
 
 ## Constraints
 

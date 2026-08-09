@@ -9,18 +9,31 @@ const planImpl = read('packages/core/src/skills/plan/implement.md');
 const planRev = read('packages/core/src/skills/plan/review.md');
 const execImpl = read('packages/core/src/skills/execute_plan/implement.md');
 const execRev = read('packages/core/src/skills/execute_plan/review.md');
+const reviewImpl = read('packages/core/src/skills/review/implement.md');
 const mmaPlanDoc = read('packages/server/src/skills/mma-plan/SKILL.md');
 const mmaExecDoc = read('packages/server/src/skills/mma-execute-plan/SKILL.md');
 
 describe('contract-first plan authoring prompts (I-6)', () => {
-  it('plan/implement.md expresses the frozen Contract Task template', () => {
+  it('plan/implement.md expresses the deliverable-neutral Contract Task template', () => {
     for (const label of ['Inputs / Request:', 'Outputs / Response:', 'Data mapping:', 'Errors:', 'Behavior / invariants:']) {
       expect(planImpl).toContain(label);
     }
-    expect(planImpl).toContain('Acceptance tests (plan-authored');
-    expect(planImpl).toContain('Path:');
+    expect(planImpl).toContain('**Output:**');
+    expect(planImpl).toContain('**Dependencies:**');
+    expect(planImpl).toContain('Checks (plan-authored');
+    expect(planImpl).toContain('Check:');
     expect(planImpl).toContain('Run:');
-    expect(planImpl).toContain('**Implementation:** left to the executor');
+    expect(planImpl).toContain('**Plan boundary:** final deliverable content is not in this plan.');
+    // The retired software-only grammar must be gone from the generator prose, not merely renamed.
+    expect(planImpl).not.toContain('**Files:**');
+    expect(planImpl).not.toContain('Acceptance tests (plan-authored');
+    expect(planImpl).not.toContain('**Implementation:** left to the executor');
+  });
+
+  it('plan/implement.md makes the declared-check section optional, not mandatory', () => {
+    expect(planImpl.toLowerCase()).toContain('optional');
+    // A task with no deterministic check is explicitly not an error.
+    expect(planImpl.toLowerCase()).toContain('no deterministic check');
   });
 
   it('plan/implement.md is human-executable: phased, technical-AC-per-task, human completion bar', () => {
@@ -37,13 +50,14 @@ describe('contract-first plan authoring prompts (I-6)', () => {
     expect(planImpl.toLowerCase()).toContain('divide and conquer');
   });
 
-  it('plan/implement.md specifies the required render format (## phases, multi-line **Files:**) and MMA execution', () => {
-    // Phases parse by level-2 headings; task files by a multi-line `- ` bullet list.
+  it('plan/implement.md specifies the required render format (## phases, **Output:**/**Dependencies:**) and MMA execution', () => {
+    // Phases parse by level-2 headings; task output/dependency metadata by two single lines.
     expect(planImpl.toLowerCase()).toContain('required heading & file conventions');
     expect(planImpl).toContain('## Phase N —');
-    // The Files template must be the multi-line bullet form, not a single inline line.
-    expect(planImpl).toMatch(/\*\*Files:\*\*\n- Create:/);
-    expect(planImpl).toContain('- Test: `');
+    // The Output/Dependencies template must be two single lines, not a Files bullet list.
+    expect(planImpl).toMatch(/\*\*Output:\*\* `/);
+    expect(planImpl).toContain('**Dependencies:**');
+    expect(planImpl).toContain('- Check: `');
     // MMA executes its own plans: reference mma-execute-plan, never superpowers, and don't name Forge.
     expect(planImpl).toContain('mma-execute-plan');
     expect(planImpl.toLowerCase()).not.toContain('superpowers');
@@ -61,6 +75,18 @@ describe('contract-first plan authoring prompts (I-6)', () => {
     expect(planRev.toLowerCase()).toContain('technical acceptance criterion');
     expect(planRev.toLowerCase()).toContain('contract completeness');
     expect(planRev).toContain('contractCompleteness');
+  });
+
+  it('plan/review.md speaks the same deliverable-neutral grammar as the generator, not the retired one', () => {
+    expect(planRev).toContain('**Output:**');
+    expect(planRev).toContain('**Dependencies:**');
+    expect(planRev).toContain('**Plan boundary:** final deliverable content is not in this plan.');
+    expect(planRev).toContain('Checks (plan-authored');
+    // A declared check is optional — the refiner must never fabricate one for an uncheckable task.
+    expect(planRev.toLowerCase()).toContain('optional');
+    expect(planRev).not.toContain('**Files:**');
+    expect(planRev).not.toContain('Acceptance tests (plan-authored');
+    expect(planRev).not.toContain('**Implementation:** left to the executor');
   });
 });
 
@@ -105,9 +131,10 @@ describe('autonomous executor prompts (I-7)', () => {
 });
 
 describe('public skill docs describe contract-first (I-8)', () => {
-  it('mma-plan/SKILL.md describes Contract Tasks + plan-authored acceptance tests', () => {
+  it('mma-plan/SKILL.md describes Contract Tasks + plan-authored (optional) checks', () => {
     expect(mmaPlanDoc).toContain('Contract Task');
-    expect(mmaPlanDoc.toLowerCase()).toContain('plan-authored acceptance tests');
+    expect(mmaPlanDoc.toLowerCase()).toContain('plan-authored');
+    expect(mmaPlanDoc.toLowerCase()).toContain('deterministic check');
     expect(mmaPlanDoc.toLowerCase()).not.toContain('follow mechanically');
   });
   // Ratchet updated deliberately: this previously required the doc to state a
@@ -127,5 +154,29 @@ describe('public skill docs describe contract-first (I-8)', () => {
     expect(mmaExecDoc.toLowerCase()).toContain('committed on your branch');
     // …and must NOT reintroduce a numeric commit gate.
     expect(mmaExecDoc).not.toContain('>= 80');
+  });
+});
+
+describe('generic implementers stay deliverable-neutral, software technique moved out (I-9)', () => {
+  it('plan/implement.md and execute_plan/implement.md point at the software practice asset instead of repeating its technique', () => {
+    expect(planImpl).toContain("practice: 'software'");
+    expect(execImpl).toContain("practice: 'software'");
+    // The technique itself — not just its name — lives only in implement-software.md.
+    expect(planImpl).not.toContain('security sinks');
+    expect(execImpl).not.toContain('security sinks');
+  });
+
+  it('review/implement.md is deliverable-neutral: generalized taxonomy, no source-code-only vocabulary', () => {
+    expect(reviewImpl).toContain("practice: 'software'");
+    for (const codeOnlyTerm of ['TOCTOU', 'N+1', 'the diff', 'wire schema']) {
+      expect(reviewImpl).not.toContain(codeOnlyTerm);
+    }
+    expect(reviewImpl.toLowerCase()).toContain('deliverable-neutral');
+  });
+
+  it('every generic implementer that offers a software practice ships the matching implement-software.md', () => {
+    for (const route of ['plan', 'execute_plan', 'review', 'debug']) {
+      expect(() => read(`packages/core/src/skills/${route}/implement-software.md`)).not.toThrow();
+    }
   });
 });

@@ -1,7 +1,7 @@
 ---
 name: mma-investigate
-description: Use when you need to answer a question about the codebase ("how does X work", "where is Y called", "what does this directory do") and reading + grepping the codebase yourself would consume main-context tokens
-when_to_use: A question about THIS codebase has surfaced — from the user, from a methodology skill, or from your own next-step planning — AND mma is running. Delegate the read/grep/synthesis to a worker so the main context stays on judgment. Codebase only — does not perform web research or git-history queries. OR you are about to read 3+ files / run any grep in main context — that's the inline-labor-leakage anti-pattern (AP2); delegate to this skill instead.
+description: Use when you need to answer a question about the project ("how does X work", "where is Y called", "what does this directory do") and reading + grepping the material yourself would consume main-context tokens
+when_to_use: A question about THIS project has surfaced — from the user, from a methodology skill, or from your own next-step planning — AND mma is running. Delegate the read/grep/synthesis to a worker so the main context stays on judgment. Project material only — source code, configuration, specs, data files, or documents — does not perform web research or git-history queries. OR you are about to read 3+ files / run any grep in main context — that's the inline-labor-leakage anti-pattern (AP2); delegate to this skill instead.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,7 +9,9 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Answer a codebase question via a read-only mma worker. The worker greps and reads on its cheap budget; you read its synthesis on yours.
+Answer a project question via a read-only mma worker. The subject may be source code, or it may be
+non-code material — configuration, specifications, data files, spreadsheets, or documents. The
+worker greps and reads on its cheap budget; you read its synthesis on yours.
 
 **Core principle:** Investigation is labor (read, grep, synthesize). Delegate it. The main agent stays on judgment — deciding what the answer means and what to do with it.
 
@@ -17,14 +19,14 @@ Answer a codebase question via a read-only mma worker. The worker greps and read
 
 ```dot
 digraph when_to_use {
-    "Question about codebase?" [shape=diamond];
+    "Question about project material?" [shape=diamond];
     "About web / git history?" [shape=diamond];
     "Already have the file in context?" [shape=diamond];
     "mma-investigate" [shape=box];
     "Read inline (1–2 reads)" [shape=box];
     "WebSearch / git log" [shape=box];
 
-    "Question about codebase?" -> "About web / git history?";
+    "Question about project material?" -> "About web / git history?";
     "About web / git history?" -> "WebSearch / git log" [label="yes"];
     "About web / git history?" -> "Already have the file in context?" [label="no"];
     "Already have the file in context?" -> "Read inline (1–2 reads)" [label="yes"];
@@ -33,7 +35,7 @@ digraph when_to_use {
 ```
 
 **Use when:**
-- "How does X work in this codebase?"
+- "How does X work in this codebase?" (or in this spreadsheet, config bundle, or document set)
 - "Where is Y called from?"
 - "What does this directory do?"
 - The answer requires reading 3+ files or grepping

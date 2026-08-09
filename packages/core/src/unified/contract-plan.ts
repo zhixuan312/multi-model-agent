@@ -1,28 +1,36 @@
 import { lstat, mkdir, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative as relativePath, resolve, sep } from 'node:path';
 
 /**
- * Parses and validates the FROZEN Contract Task template that contract-first
- * plans (produced by the `plan` task type) author for `execute_plan` to consume.
+ * Parses and validates the deliverable-agnostic Contract Task grammar that
+ * contract-first plans (produced by the `plan` task type) author for
+ * `execute_plan` to consume. This grammar makes no assumption that the
+ * deliverable is code: a task never names an implementation file, and a
+ * deterministic check is optional, not mandatory.
  *
  * A Contract Task is a `### Task <roman>-<n>:` heading section containing:
- *  - an inline `**Files:** ... Test: <path>[, <path>...]` field naming the
- *    plan-authored dedicated acceptance-test path(s) for this task;
+ *  - a `**Output:**` line declaring the task's deliverable output (a path,
+ *    an artifact name, or free text — never final deliverable content);
+ *  - a `**Dependencies:**` line declaring what the task depends on (other
+ *    tasks, approved inputs, or "none");
  *  - the five literal Contract bullets, in this exact order and label text:
  *    `Inputs / Request:`, `Outputs / Response:`, `Data mapping:`, `Errors:`,
  *    `Behavior / invariants:`;
- *  - an `Acceptance tests (plan-authored` block containing, for EACH declared
- *    test path, exactly one `Path:` line (matching one `Files: ... Test:`
- *    entry), exactly one complete fenced source block, and exactly one
- *    `Run:` command (a shell-metacharacter-free argv, safe for
- *    `execFile(cmd, args[])` with `shell: false`);
- *  - the exact closing line `**Implementation:** left to the executor — no
- *    code in the plan.`
+ *  - an OPTIONAL `Checks (plan-authored` block containing zero or more
+ *    declared checks, each exactly one `Check:` line naming a destination
+ *    path, exactly one complete fenced source block, and exactly one `Run:`
+ *    command (a shell-metacharacter-free argv, safe for `execFile(cmd,
+ *    args[])` with `shell: false`). A task that declares no check produces
+ *    `acceptanceTests: []` — that is not an error;
+ *  - the exact closing line `**Plan boundary:** final deliverable content is
+ *    not in this plan.`
  *
- * This module owns parsing that frozen shape into an immutable snapshot,
- * validating acceptance-test destination paths are safe repository-relative
- * paths beneath `tests/`, and materializing / re-materializing the
- * plan-authored acceptance-test sources verbatim to disk.
+ * This module owns parsing that shape into an immutable snapshot, validating
+ * declared check destination paths are safe repository-relative paths
+ * beneath `tests/`, and materializing / re-materializing the plan-authored
+ * check sources verbatim to disk. Only a task that declares a deterministic
+ * check produces a materialized file and a scored command; a no-check task
+ * is fully skipped by both.
  */
 
 type ContractPlanErrorCode =
@@ -60,6 +68,11 @@ export interface ParsedContractTask {
    *  the reviewer contract matches on — titles are prose and must never be load-bearing. */
   readonly id: string;
   readonly title: string;
+  /** The task's declared deliverable output (a path, an artifact name, or free text). Metadata
+   *  only — never final deliverable content. */
+  readonly output: string;
+  /** What the task depends on (other tasks, approved inputs, or "none"). Metadata only. */
+  readonly dependencies: string;
   readonly contract: ContractClauses;
   readonly acceptanceTests: readonly PlanAcceptanceTest[];
 }
@@ -76,25 +89,24 @@ const CONTRACT_BULLET_LABELS = [
   'Behavior / invariants:',
 ] as const;
 
-const ACCEPTANCE_HEADING_MARKER = 'Acceptance tests (plan-authored';
-const IMPLEMENTATION_SENTINEL = '**Implementation:** left to the executor — no code in the plan.';
+const OUTPUT_FIELD_LABEL = '**Output:**';
+const DEPENDENCIES_FIELD_LABEL = '**Dependencies:**';
+// Deliberately excludes the leading "**" bold marker — the last Contract bullet's content is
+// bounded by this marker's index, and the trailing "**" is stripped from that content afterward.
+const CHECKS_HEADING_MARKER = 'Checks (plan-authored';
+const PLAN_BOUNDARY_SENTINEL = '**Plan boundary:** final deliverable content is not in this plan.';
 
 const TASK_HEADING_RE = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
-// Capture the whole **Files:** block — the inline remainder AND/OR the multi-line bullet list
-// that follows — up to the next blank line, the next bold field, or the next task heading. This
-// accepts BOTH the inline `**Files:** Create: … · Test: …` form and Forge's multi-line
-// `**Files:**\n- Create: \`…\`\n- Test: \`…\`` form, so one plan renders in Forge and runs here.
-const FILES_BLOCK_RE = /\*\*Files:\*\*([\s\S]*?)(?=\n[ \t]*\n|\n\*\*[A-Za-z]|\n###\s|$)/;
 const SHELL_METACHAR_RE = /[|&;<>$`()'"]/;
-// Acceptance-test block matcher — tolerant of the markdown list form the `mma-plan` generator
-// authors (and of the column-0 form). It accepts, on the Path / fence / Run lines: an optional
+// Declared-check block matcher — tolerant of the markdown list form the `mma-plan` generator
+// authors (and of the column-0 form). It accepts, on the Check / fence / Run lines: an optional
 // `- `/`* ` bullet and leading indentation, an INDENTED fenced source block, optional blank lines
 // between the three parts, and trailing prose after the `Run:` command (e.g. "Expected: PASS once
 // implemented"). The captured source is dedented and the command is extracted from the Run remainder
 // (see below) — so generator output and validator agree without forcing a rigid column-0 shape.
-const TEST_BLOCK_RE = /^[ \t]*(?:[-*][ \t]+)?Path:[ \t]*`?([^\n`]+?)`?[ \t]*\n(?:[ \t]*\n)*[ \t]*```[^\n]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n(?:[ \t]*\n)*[ \t]*(?:[-*][ \t]+)?Run:[ \t]*(.+)$/gm;
-// Count declared acceptance tests by their `Path:` line, tolerating a leading bullet + indentation.
-const PATH_LINE_RE = /^[ \t]*(?:[-*][ \t]+)?Path:/gm;
+const CHECK_BLOCK_RE = /^[ \t]*(?:[-*][ \t]+)?Check:[ \t]*`?([^\n`]+?)`?[ \t]*\n(?:[ \t]*\n)*[ \t]*```[^\n]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n(?:[ \t]*\n)*[ \t]*(?:[-*][ \t]+)?Run:[ \t]*(.+)$/gm;
+// Count declared checks by their `Check:` line, tolerating a leading bullet + indentation.
+const CHECK_LINE_RE = /^[ \t]*(?:[-*][ \t]+)?Check:/gm;
 
 function stripBacktick(value: string): string {
   return value.trim().replace(/^`+|`+$/g, '').trim();
@@ -116,18 +128,19 @@ function extractCommand(runRemainder: string): string {
   return (backticked ? backticked[1]! : runRemainder.split(/\s{2,}/)[0]!).trim();
 }
 
-function extractDeclaredTestPaths(filesBlock: string): string[] {
-  const testIdx = filesBlock.indexOf('Test:');
-  if (testIdx === -1) {
-    throw new ContractPlanError('malformed-plan', `Files block is missing a "Test:" field: "${filesBlock.trim()}"`);
+/** Extract a required `**<Label>:**` metadata field's value — the rest of its line. Unlike a
+ *  declared check path, this value is descriptive metadata (an output declaration or a
+ *  dependency list), so it is returned verbatim (trimmed), not stripped of backticks. */
+function extractBoldField(body: string, label: string, title: string, fieldName: string): string {
+  const idx = body.indexOf(label);
+  if (idx === -1) {
+    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing the required "${label}" ${fieldName} declaration`);
   }
-  // Take only the remainder of the line that holds "Test:" — works for both the inline
-  // `… Test: a, b` form and the multi-line `- Test: \`a\`` bullet form.
-  const testLineRest = filesBlock.slice(testIdx + 'Test:'.length).split('\n')[0]!;
-  return testLineRest
-    .split(',')
-    .map(stripBacktick)
-    .filter(p => p.length > 0);
+  const value = body.slice(idx + label.length).split('\n')[0]!.trim();
+  if (!value) {
+    throw new ContractPlanError('malformed-plan', `Task "${title}" has an empty "${label}" ${fieldName} declaration`);
+  }
+  return value;
 }
 
 /** Pull the stable id out of a `### Task I-1: …` heading. TASK_HEADING_RE already guaranteed
@@ -145,17 +158,8 @@ function parseTaskSection(headingLine: string, body: string): ParsedContractTask
   const title = headingLine.replace(/^###\s+/, '').trim();
   const id = parseTaskId(headingLine, title);
 
-  const filesMatch = body.match(FILES_BLOCK_RE);
-  if (!filesMatch) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing a "**Files:**" field`);
-  }
-  const declaredPaths = extractDeclaredTestPaths(filesMatch[1]!);
-  if (declaredPaths.length === 0) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" declares no acceptance-test paths in its "Files: ... Test:" field`);
-  }
-  if (new Set(declaredPaths).size !== declaredPaths.length) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" declares duplicate acceptance-test paths in its "Files: ... Test:" field`);
-  }
+  const output = extractBoldField(body, OUTPUT_FIELD_LABEL, title, 'output');
+  const dependencies = extractBoldField(body, DEPENDENCIES_FIELD_LABEL, title, 'dependencies');
 
   let cursor = 0;
   const bulletStarts: number[] = [];
@@ -168,73 +172,74 @@ function parseTaskSection(headingLine: string, body: string): ParsedContractTask
     cursor = idx + label.length;
   }
 
-  const acceptanceHeadingIdx = body.indexOf(ACCEPTANCE_HEADING_MARKER, cursor);
-  if (acceptanceHeadingIdx === -1) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing the "${ACCEPTANCE_HEADING_MARKER}" acceptance-tests heading`);
+  const boundaryIdx = body.indexOf(PLAN_BOUNDARY_SENTINEL, cursor);
+  if (boundaryIdx === -1) {
+    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing the exact closing line "${PLAN_BOUNDARY_SENTINEL}"`);
   }
+
+  // The Checks section is OPTIONAL — a task that declares no deterministic check has no such
+  // heading at all, and that is not an error (Contract: "Do not reject a task merely because it
+  // has no check"). Only trust a heading found strictly before the mandatory boundary sentinel.
+  const rawChecksHeadingIdx = body.indexOf(CHECKS_HEADING_MARKER, cursor);
+  const checksHeadingIdx = rawChecksHeadingIdx !== -1 && rawChecksHeadingIdx < boundaryIdx ? rawChecksHeadingIdx : -1;
+  const hasChecks = checksHeadingIdx !== -1;
 
   const bulletContents: string[] = [];
   for (let i = 0; i < CONTRACT_BULLET_LABELS.length; i++) {
     const contentStart = bulletStarts[i]! + CONTRACT_BULLET_LABELS[i]!.length;
-    const contentEnd = i < CONTRACT_BULLET_LABELS.length - 1 ? bulletStarts[i + 1]! : acceptanceHeadingIdx;
-    // The last bullet's content is bounded by the acceptance-tests heading index, which can
-    // leave that heading's leading "**" bold marker attached to the slice; strip it.
+    const contentEnd = i < CONTRACT_BULLET_LABELS.length - 1 ? bulletStarts[i + 1]! : (hasChecks ? checksHeadingIdx : boundaryIdx);
+    // The last bullet's content is bounded by the Checks heading (or the boundary sentinel when
+    // there are no checks), which can leave that marker's leading "**" bold marker attached to
+    // the slice; strip it.
     bulletContents.push(body.slice(contentStart, contentEnd).trim().replace(/\*+$/, '').trim());
   }
 
-  const implementationIdx = body.indexOf(IMPLEMENTATION_SENTINEL, acceptanceHeadingIdx);
-  if (implementationIdx === -1) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" is missing the exact closing line "${IMPLEMENTATION_SENTINEL}"`);
-  }
-
-  const acceptanceBlock = body.slice(acceptanceHeadingIdx, implementationIdx);
-
-  PATH_LINE_RE.lastIndex = 0;
-  const declaredPathHeadingCount = (acceptanceBlock.match(PATH_LINE_RE) ?? []).length;
-
   const tests: PlanAcceptanceTest[] = [];
-  const seenPaths = new Set<string>();
-  TEST_BLOCK_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = TEST_BLOCK_RE.exec(acceptanceBlock)) !== null) {
-    const path = stripBacktick(match[1]!);
-    const source = dedent(match[2]!);
-    const command = extractCommand(match[3]!);
+  if (hasChecks) {
+    const checksBlock = body.slice(checksHeadingIdx, boundaryIdx);
 
-    if (!path) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" has an acceptance test with an empty "Path:"`);
-    }
-    if (seenPaths.has(path)) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" declares duplicate acceptance test path "${path}"`);
-    }
-    seenPaths.add(path);
-
-    if (!declaredPaths.includes(path)) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" has acceptance test "Path: ${path}" that is not declared in its "Files: ... Test:" field`);
-    }
-    if (!command) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" acceptance test "${path}" is missing a "Run:" command`);
-    }
-    if (SHELL_METACHAR_RE.test(command)) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" acceptance test "${path}" has a "Run:" command containing unsafe shell metacharacters: "${command}"`);
+    CHECK_LINE_RE.lastIndex = 0;
+    const declaredCheckHeadingCount = (checksBlock.match(CHECK_LINE_RE) ?? []).length;
+    if (declaredCheckHeadingCount === 0) {
+      throw new ContractPlanError('malformed-plan', `Task "${title}" declares a "${CHECKS_HEADING_MARKER}" section but names no check entries`);
     }
 
-    tests.push(Object.freeze({ path, source, command }));
-  }
+    const seenPaths = new Set<string>();
+    CHECK_BLOCK_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = CHECK_BLOCK_RE.exec(checksBlock)) !== null) {
+      const path = stripBacktick(match[1]!);
+      const source = dedent(match[2]!);
+      const command = extractCommand(match[3]!);
 
-  if (tests.length !== declaredPathHeadingCount) {
-    throw new ContractPlanError('malformed-plan', `Task "${title}" has an acceptance test block with an unclosed or malformed fenced source block`);
-  }
+      if (!path) {
+        throw new ContractPlanError('malformed-plan', `Task "${title}" has a check with an empty "Check:" path`);
+      }
+      if (seenPaths.has(path)) {
+        throw new ContractPlanError('malformed-plan', `Task "${title}" declares duplicate check path "${path}"`);
+      }
+      seenPaths.add(path);
 
-  for (const declared of declaredPaths) {
-    if (!seenPaths.has(declared)) {
-      throw new ContractPlanError('malformed-plan', `Task "${title}" declares "Files: ... Test: ${declared}" with no matching "Path:" acceptance test`);
+      if (!command) {
+        throw new ContractPlanError('malformed-plan', `Task "${title}" names check "${path}" but omits its required "Run:" command`);
+      }
+      if (SHELL_METACHAR_RE.test(command)) {
+        throw new ContractPlanError('malformed-plan', `Task "${title}" check "${path}" has a "Run:" command containing unsafe shell metacharacters: "${command}"`);
+      }
+
+      tests.push(Object.freeze({ path, source, command }));
+    }
+
+    if (tests.length !== declaredCheckHeadingCount) {
+      throw new ContractPlanError('malformed-plan', `Task "${title}" has a check block with an unclosed or malformed fenced source block`);
     }
   }
 
   return Object.freeze({
     id,
     title,
+    output,
+    dependencies,
     contract: Object.freeze({
       inputsRequest: bulletContents[0]!,
       outputsResponse: bulletContents[1]!,
@@ -298,20 +303,38 @@ async function pathExists(absPath: string): Promise<boolean> {
   }
 }
 
-async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string, declaredPath: string): Promise<void> {
-  try {
-    const testsRootStat = await lstat(testsRoot);
-    if (testsRootStat.isSymbolicLink()) {
-      throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${declaredPath}" has a symlinked ancestor at "${testsRoot}"`);
-    }
-  } catch (err) {
-    if (err instanceof ContractPlanError) throw err;
-    // A not-yet-created tests root has no existing ancestor to inspect here.
+/**
+ * Reject a declared check path with a symlinked ancestor, inspecting EVERY segment from the
+ * repository root down to the target — not merely the matched root and below.
+ *
+ * The earlier version started its walk AT the matched root. That was sound while every accepted
+ * root was a single top-level directory, because `lstat(repositoryRoot/tests)` inspects `tests`
+ * itself. It stopped being sound the moment a NESTED root (`src/test`) was accepted:
+ * `lstat(repositoryRoot/src/test)` silently FOLLOWS a symlinked `src` while resolving the path and
+ * then reports only on the final `test` component. A repository containing a symlinked `src` — git
+ * tracks symlinks, so this is ordinary content, not an exotic setup — would pass validation, and
+ * `materializeAcceptanceTests` would then `writeFile` outside the submitted repository root. This
+ * is a direct server-side write with no sandbox in front of it.
+ *
+ * Walking from the repository root removes the whole class: adding another nested root later
+ * cannot reintroduce it.
+ */
+async function assertNoSymlinkAncestors(repositoryRoot: string, absTargetPath: string, declaredPath: string): Promise<void> {
+  // `path.relative`, NOT slice arithmetic. Round 3 derived the relative path with
+  // `absTargetPath.slice(repositoryRoot.length + 1)`, which silently produces garbage whenever
+  // `repositoryRoot` carries a trailing separator or is the filesystem root: for `/repo/` it eats
+  // the first character, the walk then starts at a segment that does not exist, breaks on the
+  // first iteration, and NO symlink check runs at all. `relative()` is correct for every spelling
+  // of the same directory, so the guard cannot be disabled by how the caller wrote its path.
+  const relative = relativePath(repositoryRoot, absTargetPath);
+  // A target that is not under the root at all must never be walked as though it were. The caller
+  // already checked containment, so reaching here means the two disagree — refuse rather than
+  // proceed on an assumption.
+  if (relative === '' || relative.startsWith('..') || isAbsolute(relative)) {
+    throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${declaredPath}" does not resolve inside the repository root`);
   }
-
-  const relFromTestsRoot = absTargetPath.slice(testsRoot.length + 1);
-  const segments = relFromTestsRoot.split(sep).filter(Boolean);
-  let current = testsRoot;
+  const segments = relative.split(sep).filter(Boolean);
+  let current = resolve(repositoryRoot);
   for (const segment of segments) {
     current = resolve(current, segment);
     try {
@@ -321,14 +344,16 @@ async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string
       }
     } catch (err) {
       if (err instanceof ContractPlanError) throw err;
-      // Ancestor/segment does not exist yet — nothing further to check on this branch.
+      // This segment does not exist yet. Nothing below it can exist either, so nothing below it
+      // can be a symlink — stop rather than reporting a missing directory as unsafe.
       break;
     }
   }
 }
 
+export const ACCEPTED_CHECK_ROOTS = ['tests', 'test', 'spec', 'specs', 'checks', '__tests__', 'src/test'] as const;
+
 export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapshot, repositoryRoot: string): Promise<void> {
-  const testsRoot = resolve(repositoryRoot, 'tests');
   for (const test of collectUniqueTests(snapshot)) {
     if (isAbsolute(test.path)) {
       throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" must be relative, not absolute`);
@@ -337,10 +362,19 @@ export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapsh
       throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" must not contain traversal segments`);
     }
     const resolved = resolve(repositoryRoot, test.path);
-    if (resolved !== testsRoot && !resolved.startsWith(testsRoot + sep)) {
-      throw new ContractPlanError('unsafe-test-path', `Acceptance test path "${test.path}" escapes the repository "tests" directory`);
+    // The FIRST accepted root the path actually falls under. Checking every root rather than
+    // one fixed root is the whole change; everything after it is unchanged.
+    const matchedRoot = ACCEPTED_CHECK_ROOTS
+      .map((name) => resolve(repositoryRoot, name))
+      .find((root) => resolved === root || resolved.startsWith(root + sep));
+    if (!matchedRoot) {
+      throw new ContractPlanError(
+        'unsafe-test-path',
+        `Acceptance test path "${test.path}" must sit under one of: ${ACCEPTED_CHECK_ROOTS.join(', ')} `
+        + `(relative to the submitted cwd). A check for a non-code deliverable belongs under "checks".`,
+      );
     }
-    await assertNoSymlinkAncestors(testsRoot, resolved, test.path);
+    await assertNoSymlinkAncestors(repositoryRoot, resolved, test.path);
   }
 }
 

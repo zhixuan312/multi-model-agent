@@ -36,27 +36,28 @@ function task(id: string, title: string, testPath: string): string {
   return `
 ### Task ${id}: ${title}
 
-**Files:** Modify: ${BT}packages/core/src/unified/example.ts${BT} — Test: ${BT}${testPath}${BT}
+**Output:** ${BT}packages/core/src/unified/example.ts${BT}
+**Dependencies:** none
 
-Inputs / Request: A markdown string containing one frozen Contract Task section.
+Inputs / Request: A markdown string containing one Contract Task section.
 
 Outputs / Response: A ContractPlanSnapshot with the parsed task.
 
-Data mapping: The Files: ... Test: path maps one-to-one to the Path: acceptance-test entry.
+Data mapping: Each declared check's Check: path maps one-to-one to its parsed acceptance test.
 
 Errors: Throws ContractPlanError for any structural violation.
 
 Behavior / invariants: Parsing is pure and returns an immutable, frozen snapshot.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}${testPath}${BT}
+Check: ${BT}${testPath}${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run ${testPath}${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 }
 

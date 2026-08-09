@@ -1,7 +1,7 @@
 ---
 name: mma-debug
-description: Use when a test fails, a build breaks, or behavior is unexpected AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
-when_to_use: A failure has surfaced (test/build/runtime) AND you need investigation work — read files, reproduce, trace — OR a systematic-debugging workflow routes its investigation step here. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
+description: Use when a deliverable is wrong — a test fails, a build breaks, a report shows the wrong figures, a workflow misbehaves — AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
+when_to_use: A failure has surfaced in a deliverable (test/build/runtime for code; a wrong report, configuration, or process outcome for non-code work) AND you need investigation work — read files, reproduce, trace — OR a systematic-debugging workflow routes its investigation step here. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,14 +9,17 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Submit a problem, context, and hypothesis to a worker for focused debugging. Unlike `mma-audit` and `mma-review`, all `target.paths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
+Submit a problem, context, and hypothesis to a worker for focused debugging. The deliverable under
+investigation may be code, or it may be a non-code deliverable that produced a wrong result — a
+generated report, a workflow configuration, a data pipeline. Unlike `mma-audit` and `mma-review`, all `target.paths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
 
 **Core principle:** The hypothesis is judgment (your job). Reading files and reproducing the failure is labor (the worker's job). Pass the hypothesis as input; receive structured findings.
 
 ## When to Use
 
 **Use when:**
-- A test fails / build breaks / runtime behavior is unexpected
+- A deliverable is wrong — a test fails / build breaks / runtime behavior is unexpected; or a
+  report, configuration, or process output is incorrect
 - The root cause likely spans 2+ files
 - You have a hypothesis to test (or want the worker to suggest one)
 - A systematic-debugging workflow routed the investigation here
@@ -52,6 +55,7 @@ is not available in this session, run `mma clients`.
 | `prompt` | string | yes | What is broken (one sentence; concrete symptom, min 1 char) |
 | `target.paths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — e.g. error logs, traces |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (stack-trace reading, bisection, test isolation, reproduction of a failing test). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma-flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 
 > Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 

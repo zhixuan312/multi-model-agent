@@ -15,8 +15,8 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 ## Contract-first execution (what the worker does)
 
-- The plan must be a contract-first plan (frozen Contract Task format). A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
-- The pipeline validates and materializes each task's plan-authored acceptance tests, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
+- The plan must be a contract-first, deliverable-neutral Contract Task plan. A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
+- A task's deterministic check is OPTIONAL — a task with no check is not an error, and its Contract alone defines what "done" means. The pipeline validates and materializes any task's plan-authored checks, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
 - **Completion is REPORTED, not gated.** `completionPercent` is derived from the reviewer's
   per-task verdicts (`round(done / dispatched * 100)`), and a shortfall names the outstanding task
   ids. A task reported not-done, an unresolvable reviewer report, or failing acceptance tests all
@@ -67,6 +67,7 @@ is not available in this session, run `mma clients`.
 | `tasks` | string[] | no | Task selectors matching plan headings. Empty or omitted = run all tasks in the plan |
 | `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file |
 | `contextBlockIds` | string[] | no | IDs from `mma:context-blocks` (max 2) — the right place for source files referenced by the plan |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (caller tracing, error paths, security sinks, schema conformance, test adequacy). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma:flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 
 ### `reviewPolicy` — review lifecycle per task
 
@@ -270,3 +271,13 @@ you submit, on whatever branch that checkout already has. **You own the branch**
 your task branch BEFORE dispatching; the engine never creates a branch or a worktree, it commits your
 work on yours. A **non-git** target is edited in-place too, just with no commit. No new execution task type
 is introduced, and git is never forced.
+
+## Relationship to a disposition-driven flow (mma:flow B5)
+
+execute_plan itself is disposition-agnostic — it does not read or branch on `disposition`. When
+dispatched as B5 inside `mma:flow`'s caller-owned flow (see `mma:flow/SKILL.md` → Stage 0 —
+LOCATE), its edits ARE the deliverable the flow's later stages check: B6 (`mma:review`) reviews
+them, and B7 runs the approved contract's declared `command` acceptance criteria against them.
+Whether that output ends up committed on a PR branch (`pr`), committed directly on the current
+branch (`commit-in-place`), or written to a declared artifact path (`deliver-file`) is entirely
+the caller's concern — execute_plan just implements the plan's tasks in the checkout it is given.

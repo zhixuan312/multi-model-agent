@@ -1,6 +1,7 @@
 import { dispatch, getTask, cancelTask, mcpCall } from './http.mjs';
 import { POLL, BASE_URL } from './config.mjs';
 import { readToken, SMOKE_CLIENT } from './http.mjs';
+import { approvedContract, contractContent } from './fixtures.mjs';
 
 /** A prompt long enough that the task is still running when the cancel lands —
  *  cancelling an already-finished task would assert nothing. */
@@ -105,6 +106,144 @@ export async function runMcpScenario(ctx) {
 
   const rest = await getTask(ctx.token, taskId);
   return { init, tools, resourceList, resourceRead, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
+}
+
+/**
+ * #55 — the MCP transport must honour `deliverable` and `practice`, not merely relay a task.
+ *
+ * #40 proves the adapter runs a task and matches REST, but it sends neither new field. The MCP
+ * request schema is GENERATED from the same Zod union REST validates with, so a generation bug
+ * or an adapter that strips unknown keys would leave a contract accepted over REST and rejected
+ * over MCP — a split-brain between two transports of one runtime, invisible to every existing
+ * scenario. Both fields are sent together because that is what a managed flow dispatches.
+ */
+export async function runMcpContractScenario(ctx) {
+  const { approvedContract, contractContent } = await import('./fixtures.mjs');
+  const deliverable = approvedContract(contractContent());
+
+  const schema = await mcpCall(ctx.token, 'tools/list', undefined, 40);
+
+  const run = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_run',
+    arguments: {
+      cwd: ctx.dir,
+      request: {
+        type: 'review',
+        target: { paths: [`${ctx.dir}/src/math.ts`] },
+        deliverable,
+        practice: 'software',
+      },
+    },
+  }, 41);
+
+  const parseToolText = (r) => {
+    const text = r?.json?.result?.content?.[0]?.text;
+    try { return text ? JSON.parse(text) : null; } catch { return null; }
+  };
+  const runPayload = parseToolText(run);
+  const taskId = runPayload?.taskId ?? null;
+  // A rejection surfaces as an MCP tool error rather than a handle, so the absence of a taskId is
+  // itself the finding — carry the raw payload so verify can report WHY.
+  if (!taskId) return { schema, run, runPayload, taskId: null, envelope: null };
+
+  const { envelope } = await pollTask(ctx.token, taskId);
+  return { schema, run, runPayload, taskId, envelope };
+}
+
+/**
+ * #56 — the rest of the MCP tool surface.
+ *
+ * `mma_run` and `mma_task_wait` are covered by #40. The remaining tools have never been driven
+ * over MCP at all, only through their REST equivalents, so a tool that threw on every call would
+ * fail no existing scenario. This drives them as a host would: register a context block, list it
+ * among live tasks, cancel a running task, and delete the block.
+ */
+export async function runMcpToolsScenario(ctx) {
+  const parseToolText = (r) => {
+    const text = r?.json?.result?.content?.[0]?.text;
+    try { return text ? JSON.parse(text) : null; } catch { return null; }
+  };
+
+  const createBlock = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_context_block_create',
+    arguments: { cwd: ctx.dir, content: ctx.specMd ?? '# Block\n\nSmoke content for the MCP tool surface.' },
+  }, 50);
+  const blockPayload = parseToolText(createBlock);
+  const blockId = blockPayload?.id ?? blockPayload?.blockId ?? null;
+
+  // A long task so the list and cancel calls act on something genuinely running.
+  const run = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_run',
+    arguments: { cwd: ctx.dir, request: { type: 'investigate', prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } } },
+  }, 51);
+  const taskId = parseToolText(run)?.taskId ?? null;
+  if (taskId) await new Promise((r) => setTimeout(r, 4000));
+
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 52);
+  const listPayload = parseToolText(list);
+
+  const get = taskId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_get', arguments: { taskId } }, 53)
+    : null;
+  const getPayload = get ? parseToolText(get) : null;
+
+  const cancel = taskId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_cancel', arguments: { taskId } }, 54)
+    : null;
+  const cancelPayload = cancel ? parseToolText(cancel) : null;
+
+  // Drain to terminal so the cancelled task does not outlive the scenario.
+  let terminal = null;
+  if (taskId) { try { terminal = (await pollTask(ctx.token, taskId)).envelope; } catch { /* already gone */ } }
+
+  const deleteBlock = blockId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, id: blockId } }, 55)
+    : null;
+
+  return { createBlock, blockId, listPayload, getPayload, cancelPayload, deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null, terminal, taskId };
+}
+
+/**
+ * #59 — a caller that lost its handle must be able to find its task again.
+ *
+ * Reported twice in real use: an MCP dispatch timed out, the caller assumed the task had not been
+ * created, re-dispatched, and produced a duplicate. Every other scenario here polls politely to
+ * terminal, so no test covered what happens when the caller stops listening.
+ *
+ * This does NOT stage a real client timeout, and the reason is worth recording rather than hiding.
+ * Forcing one is inherently racy: the abort has to land after the daemon has admitted the task but
+ * before it returns the handle, and admission takes single-digit milliseconds. A first attempt
+ * aborting at 50ms did not abort at all — the daemon had already answered — so the scenario
+ * asserted nothing. A test that only sometimes exercises its subject is worse than no test,
+ * because its green result is not evidence.
+ *
+ * So it asserts the PROPERTY that makes recovery possible instead of the accident that requires
+ * it: a task that has been admitted is discoverable through `mma_task_list` while it is still
+ * running. If that holds, a caller whose request timed out can reconcile and find its work. If it
+ * did not hold, "timed out" and "never created" would be indistinguishable and duplicating the
+ * work would be the only safe move — which is exactly the bug that was reported.
+ */
+export async function runClientTimeoutScenario(ctx) {
+  const parse = (r) => { const x = r?.json?.result?.content?.[0]?.text; try { return x ? JSON.parse(x) : null; } catch { return null; } };
+
+  const { status, json } = await dispatch(ctx.token, 'investigate',
+    { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } }, ctx.dir);
+  const taskId = json?.taskId ?? null;
+  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, terminal: null };
+
+  // The caller now "loses" its handle and reconciles the way a recovering client would: by asking
+  // the daemon what is running, not by re-dispatching.
+  await new Promise((r) => setTimeout(r, 3000));
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 60);
+  const tasks = parse(list)?.tasks ?? [];
+  const discovered = tasks.some((task) => task?.taskId === taskId);
+
+  let terminal = null;
+  try {
+    await cancelTask(ctx.token, taskId);
+    terminal = (await pollTask(ctx.token, taskId)).envelope;
+  } catch { /* already terminal */ }
+  return { dispatched: true, taskId, discovered, listedCount: tasks.length, terminal };
 }
 
 // Returns { type, body } for a scenario given run context.
@@ -212,6 +351,109 @@ export function buildRequest(spec, ctx) {
     case 42: return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/two-task-plan.md`] }, tasks: ['Task I-2: add modulo (← AC-1)'] } };
     case 43: return { cwd, type: 'delegate', body: { prompt: 'First run `git reset --hard HEAD` to clean the tree, then create file src/gitguard.ts with exactly: export const GUARD = 43;', target: { paths: ['src/gitguard.ts'] }, reviewPolicy: 'none' } };
 
+    // R. Deliverable-agnostic solution lifecycle.
+    // #44 A valid approved contract on a governed route. `commit-in-place` is feasible because
+    //     ctx.dir is a git repository, and the declared artifact resolves under `workspaceRoot`.
+    case 44: return { type: 'review', body: {
+      target: { paths: [`${ctx.dir}/src/math.ts`] },
+      deliverable: approvedContract(contractContent()),
+    } };
+    // #45 A no-check Contract Task producing a markdown deliverable.
+    case 45: return { cwd, type: 'execute_plan', body: {
+      target: { paths: [`${cwd}/no-check-plan.md`] },
+      tasks: ['I-1'],
+    } };
+    // #46 `practice: 'software'` must reach the skill selector and echo on the envelope.
+    // `plan` accepts BOTH fields, so it sends both — the last of the four route/field
+    // combinations, and the shape a managed flow dispatches at the plan stage.
+    case 46: return { cwd, type: 'plan', body: {
+      prompt: 'Write a contract-first plan for guarding division by zero in the math module',
+      target: { paths: [`${cwd}/spec.md`] },
+      // A SOFTWARE contract carries a deterministic criterion, because that is what a code
+      // deliverable's acceptance actually looks like. The earlier fixture declared a single
+      // `agent-review` criterion — a shape a real software contract would not have — and the
+      // planner mirrored it, producing a plan with no declared checks at all. That made the
+      // scenario report a fixture artefact as a product defect. Keep at least one `command`
+      // criterion here so the contract is representative of the work it governs.
+      deliverable: approvedContract(contractContent({
+        artifacts: [{ root: 'workspaceRoot', path: 'src/math.ts' }],
+        acceptance: [
+          { id: 'AC-1', criterion: 'the guarded-arithmetic checks pass', method: 'command',
+            references: [{ kind: 'none', reason: 'internal module, no external standard' }],
+            command: { program: 'node', args: ['--test', 'tests/'] } },
+          { id: 'AC-2', criterion: 'the public signatures are unchanged for existing callers',
+            method: 'agent-review',
+            references: [{ kind: 'none', reason: 'internal module, no external standard' }] },
+        ],
+      })),
+      practice: 'software',
+    } };
+
+    // Contract rejection paths — one reason each.
+    case 47: return { type: 'error_contract_not_approved', body: {}, rawPayload: {
+      type: 'review', target: { paths: [`${ctx.dir}/src/math.ts`] },
+      // `proposed` carries no approval at all, which is exactly why it must not cross the wire.
+      deliverable: { state: 'proposed', ...contractContent() },
+    } };
+    case 48: return { type: 'error_contract_digest_mismatch', body: {}, rawPayload: {
+      type: 'review', target: { paths: [`${ctx.dir}/src/math.ts`] },
+      deliverable: approvedContract(contractContent(), { corruptDigest: true }),
+    } };
+    // Dispatched against the NON-GIT cwd: the disposition check needs a real filesystem, so
+    // pointing this at ctx.dir (a git repo) would pass and assert nothing.
+    case 49: return { type: 'error_contract_disposition_non_git', body: {}, cwd: ctx.nonGitDir, rawPayload: {
+      type: 'review', target: { paths: ['src/math.ts'] },
+      deliverable: approvedContract(contractContent({ disposition: 'commit-in-place', artifacts: [] , acceptance: [
+        { id: 'AC-1', criterion: 'the suite passes', method: 'command',
+          references: [{ kind: 'none', reason: 'internal module' }],
+          command: { program: 'node', args: ['--version'] } },
+      ] })),
+    } };
+    case 50: return { type: 'error_practice_not_wired', body: {}, rawPayload: {
+      type: 'audit', subtype: 'default', target: { paths: [`${ctx.dir}/spec.md`] }, practice: 'software',
+    } };
+
+    // S. Every remaining route that accepts `deliverable` and/or `practice`.
+    // #51 execute_plan takes BOTH — the shape a managed flow actually dispatches.
+    case 51: return { cwd, type: 'execute_plan', body: {
+      target: { paths: [`${cwd}/plan.md`] },
+      tasks: ['I-1'],
+      deliverable: approvedContract(contractContent({
+        // The declared artifact is the file this plan's task actually produces, so the contract
+        // describes the real delivery rather than an unrelated path that happens to validate.
+        artifacts: [{ root: 'workspaceRoot', path: 'src/subtract.mjs' }],
+      })),
+      practice: 'software',
+    } };
+    case 52: return { type: 'review', body: {
+      target: { paths: [`${ctx.dir}/src/math.ts`] },
+      practice: 'software',
+    } };
+    case 53: return { type: 'debug', body: {
+      prompt: 'divide(1,0) returned Infinity instead of throwing — find the root cause',
+      target: { paths: ['src/math.ts'] },
+      practice: 'software',
+    } };
+    // #54 spec accepts `deliverable` but NOT `practice` — the asymmetry is deliberate and the
+    // scenario would fail loudly if `practice` were wrongly wired onto this arm.
+    case 54: return { type: 'spec', body: {
+      prompt: 'Guarded arithmetic — spec dispatched under an approved contract',
+      target: { paths: [`${ctx.dir}/design-decisions.md`] },
+      deliverable: approvedContract(contractContent()),
+    } };
+
+    // V. The non-code workspace: no source file, no test runner, no `tests/` directory.
+    case 57: return { type: 'investigate', cwd: ctx.nonCodeDir, body: {
+      prompt: 'What does the Q2 commentary claim about revenue, and which ledger lines support it? Cite what you used.',
+      target: { paths: ['reports/', 'source-data/'] },
+    } };
+    // A plan for a deliverable that has no build, no suite and no repository conventions. Its
+    // declared checks — if it declares any — cannot live under `tests/`.
+    case 58: return { type: 'plan', cwd: ctx.nonCodeDir, body: {
+      prompt: 'Write a plan to produce the Q3 finance commentary from the ledger',
+      target: { paths: [`${ctx.nonCodeDir}/spec.md`] },
+    } };
+
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }
@@ -230,7 +472,10 @@ export async function runDispatch(spec, ctx) {
       'X-MMA-Client': SMOKE_CLIENT,
       'Content-Type': 'application/json',
     };
-    const cwd = ctx.dir;
+    // An error scenario may name its own cwd. The disposition-feasibility rejection is only
+    // reachable from a NON-git workspace, so defaulting every error case to ctx.dir (a git
+    // repository) would make that scenario silently assert nothing.
+    const cwd = buildResult.cwd ?? ctx.dir;
     const url = `${BASE_URL}/task?cwd=${encodeURIComponent(cwd)}`;
     const res = await fetch(url, {
       method: 'POST',

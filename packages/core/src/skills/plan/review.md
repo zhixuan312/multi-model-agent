@@ -17,9 +17,9 @@ re-output unchanged.
 1. Read the plan file the implementer wrote.
 2. Read the spec from the Original Task context.
 3. **Complete any unfinished scaffold.** If a task still holds a `<!-- enrich -->` slot, write its full
-   technical AC + Contract + acceptance tests (per the same rules the implementer follows) — as a
-   CONTRACT, never as implementation code — so **zero `<!-- enrich` markers remain**. A half-scaffolded
-   plan is finished here, not rejected.
+   technical AC + Contract + any warranted checks (per the same rules the implementer follows) — as a
+   CONTRACT, never as implementation code or final deliverable content — so **zero `<!-- enrich`
+   markers remain**. A half-scaffolded plan is finished here, not rejected.
 4. Apply each check below.
 5. Your FINAL message must be a single ```json fenced block — nothing else.
 
@@ -29,10 +29,10 @@ re-output unchanged.
    `## Phase N — <name>: <what works at the end>` build stages (level-2 `##` headings — the plan-stage
    renderer groups tasks by them; fix any `#`/`###` phase heading), sequenced so each phase leaves a
    working increment. Add the "what works at the end" line to any phase missing it; regroup a flat task
-   list into phases. Task headings must be `### Task I-N:` (level-3, roman-numbered), and `**Files:**`
-   must be a multi-line `- Create:/Modify:/Test:` bullet list with backticked paths (not a single
-   inline line) so each task's files render — convert any inline Files line to bullets. The plan must
-   not reference any non-MMA methodology skill; MMA executes its own plans via mma-execute-plan.
+   list into phases. Task headings must be `### Task I-N:` (level-3, roman-numbered), and each task
+   heading must be followed by one `**Output:**` line and one `**Dependencies:**` line (not a Files
+   bullet list) — convert any old-style Files block into these two lines. The plan must not reference
+   any non-MMA methodology skill; MMA executes its own plans via mma-execute-plan.
 2. **Human-sensible granularity.** Each phase holds a sensible handful of tasks (roughly 2–6) and each
    task is a unit an engineer could finish in a sitting. Split a mega-task; merge trivially-fragmented
    ones. Not a hundred micro-tasks, not two epics.
@@ -40,15 +40,19 @@ re-output unchanged.
    human-readable technical acceptance criterion; every spec AC maps to at least one task. Add a missing
    technical AC or traceability link.
 4. **Contract completeness.** Every task has all five Contract bullets in order (`Inputs / Request:`,
-   `Outputs / Response:`, `Data mapping:`, `Errors:`, `Behavior / invariants:`), an
-   `Acceptance tests (plan-authored` section, and the exact `**Implementation:** left to the executor`
-   sentence. Fix any missing bullet or section.
-5. **No implementation code.** A task's `Implementation` section contains no code — only the
-   left-to-the-executor sentence. The only code in a task is its acceptance tests. Remove leaked code.
-6. **Acceptance tests are executable and safe.** Each test file is one `Path:` (a new dedicated file
-   matching a `Files: Test:` entry) + one fenced source block + one `Run:` command that is a
-   whitespace-delimited argv with no shell metacharacters. Fix wrong paths and malformed commands
-   against Phase-A ground truth.
+   `Outputs / Response:`, `Data mapping:`, `Errors:`, `Behavior / invariants:`), and the exact
+   `**Plan boundary:** final deliverable content is not in this plan.` closing line. A task MAY also
+   have a `Checks (plan-authored` section when its technical AC admits a deterministic check — that
+   section is optional, never required; do not add a fake check to a task that has none. Fix any missing
+   bullet or closing line.
+5. **No implementation code and no final deliverable content.** A task's body contains no code and no
+   drafted deliverable content — only the Contract, the optional Checks section, and the boundary
+   sentence. The only code in a task is a declared check's source. Remove leaked code or content.
+6. **Declared checks are executable and safe.** Each declared check is one `Check:` (a new dedicated
+   destination path, never the task's own `**Output:**` path) + one fenced source block + one `Run:`
+   command that is a whitespace-delimited argv with no shell metacharacters. Fix wrong paths and
+   malformed commands against Phase-A ground truth. Do not invent a check for a task the implementer
+   correctly left uncheckable.
 
 Do NOT enforce verbatim-code fidelity or step/file caps — this plan is contract-first by design.
 

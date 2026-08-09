@@ -10,6 +10,8 @@ Evaluate the spec against 9 criteria sequentially, flagging every place where li
 
 For partial specs, audit only the components that are present. A component is "present" if and only if the document contains a top-level `## <label>` heading exactly matching one of the canonical component labels. Derive scope solely from the set of canonical `##` headings found in the document. You must not emit a finding solely because a canonical top-level component is absent.
 
+A canonical component label may appear either as its current neutral displayed label (e.g. `Approach, Method & Structure`) or as its historical identifier heading (e.g. `Technical Design`) — both name the same component; treat either form as present, and never flag the older heading text itself as a defect.
+
 **Completion test:** when your audit's fixes have been applied, would a downstream worker that reads only this spec, executes it literally, and asks no clarifying questions produce the right outcome?
 
 ## Context

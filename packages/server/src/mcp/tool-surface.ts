@@ -150,9 +150,10 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'mma_task_get',
     description:
-      'Get the current state of an MMA task. Running tasks return identity (type, subtype, '
-      + 'cwd) plus progress (phase, elapsed, runningHeadline, cancellationRequested); terminal '
-      + 'tasks return the full result envelope. Terminal results survive daemon restarts.',
+      'Get the current state of an MMA task. Running tasks return identity (type, subtype '
+      + '[audit only], practice [plan/execute_plan/review/debug only], cwd) plus progress '
+      + '(phase, elapsed, runningHeadline, cancellationRequested); terminal tasks return the '
+      + 'full result envelope. Terminal results survive daemon restarts.',
     inputSchema: {
       type: 'object',
       properties: {

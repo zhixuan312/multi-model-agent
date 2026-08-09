@@ -31,18 +31,19 @@ async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: str
 
 const TASK_TITLE = 'Task I-1: reject invalid dispatch';
 
-/** Build a valid frozen Contract Task section body (everything after the heading line
- *  up to and including the "**Implementation:**" sentinel). Each `overrides` entry lets
- *  a test corrupt exactly one clause to exercise a specific malformed-plan branch. */
+/** Build a valid Contract Task section body (everything after the heading line up to and
+ *  including the "**Plan boundary:**" sentinel). Each `overrides` entry lets a test corrupt
+ *  exactly one clause to exercise a specific malformed-plan branch. */
 function contractTaskLines(testPath: string, overrides: Partial<{
-  filesLine: string;
+  outputLine: string;
+  dependenciesLine: string;
   bullets: string[];
-  acceptanceHeading: string;
+  checksHeading: string;
   pathLine: string;
   fenceOpen: string;
   fenceClose: string;
   runLine: string;
-  implementationSentinel: string;
+  boundarySentinel: string;
 }> = {}): string[] {
   const bullets = overrides.bullets ?? [
     'Inputs / Request: a valid request',
@@ -54,13 +55,14 @@ function contractTaskLines(testPath: string, overrides: Partial<{
   const lines = [
     `### ${TASK_TITLE}`,
     '',
-    overrides.filesLine ?? `**Files:** Test: ${testPath}`,
+    overrides.outputLine ?? `**Output:** ${testPath}`,
+    overrides.dependenciesLine ?? '**Dependencies:** none',
     '',
     ...bullets,
     '',
-    overrides.acceptanceHeading ?? 'Acceptance tests (plan-authored):',
+    overrides.checksHeading ?? 'Checks (plan-authored):',
     '',
-    overrides.pathLine ?? `Path: \`${testPath}\``,
+    overrides.pathLine ?? `Check: \`${testPath}\``,
     overrides.fenceOpen ?? '```ts',
     "it('passes', () => { expect(1).toBe(1); });",
   ];
@@ -68,7 +70,7 @@ function contractTaskLines(testPath: string, overrides: Partial<{
   lines.push(
     overrides.runLine ?? 'Run: `true`',
     '',
-    overrides.implementationSentinel ?? '**Implementation:** left to the executor — no code in the plan.',
+    overrides.boundarySentinel ?? '**Plan boundary:** final deliverable content is not in this plan.',
     '',
   );
   return lines;
@@ -175,21 +177,51 @@ describe('execute_plan contract-first dispatch validation', () => {
     expect(opens).toBe(0);
   });
 
-  it('rejects an acceptance test Path not declared in Files: ... Test: as malformed-plan', async () => {
-    const planText = ['# Plan', '', ...contractTaskLines('tests/unified/declared.test.ts', {
-      pathLine: 'Path: `tests/unified/different.test.ts`',
-    })].join('\n');
+  it('rejects a Checks heading that names no check entries as malformed-plan', async () => {
+    const planText = [
+      '# Plan', '',
+      `### ${TASK_TITLE}`, '',
+      '**Output:** out/x',
+      '**Dependencies:** none', '',
+      'Inputs / Request: a valid request',
+      'Outputs / Response: a valid response',
+      'Data mapping: none',
+      'Errors: none',
+      'Behavior / invariants: none', '',
+      'Checks (plan-authored):', '',
+      '**Plan boundary:** final deliverable content is not in this plan.', '',
+    ].join('\n');
     const { env, opens } = await runExecutePlan(planText);
     expect((env.task as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');
     expect(opens).toBe(0);
   });
 
-  it('rejects duplicate acceptance-test paths in Files: ... Test: as malformed-plan', async () => {
+  it('rejects duplicate check paths declared within one task as malformed-plan', async () => {
     const testPath = 'tests/unified/dup.test.ts';
-    const planText = ['# Plan', '', ...contractTaskLines(testPath, {
-      filesLine: `**Files:** Test: ${testPath}, ${testPath}`,
-    })].join('\n');
+    const planText = [
+      '# Plan', '',
+      `### ${TASK_TITLE}`, '',
+      `**Output:** ${testPath}`,
+      '**Dependencies:** none', '',
+      'Inputs / Request: a valid request',
+      'Outputs / Response: a valid response',
+      'Data mapping: none',
+      'Errors: none',
+      'Behavior / invariants: none', '',
+      'Checks (plan-authored):', '',
+      `Check: \`${testPath}\``,
+      '```ts',
+      "it('passes', () => { expect(1).toBe(1); });",
+      '```',
+      'Run: `true`', '',
+      `Check: \`${testPath}\``,
+      '```ts',
+      "it('passes', () => { expect(1).toBe(1); });",
+      '```',
+      'Run: `true`', '',
+      '**Plan boundary:** final deliverable content is not in this plan.', '',
+    ].join('\n');
     const { env, opens } = await runExecutePlan(planText);
     expect((env.task as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');

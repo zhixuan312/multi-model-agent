@@ -2,44 +2,153 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+// The digest is imported from the BUILT core package on purpose. `canonicalContractDigest`
+// is the one named serialisation algorithm every component computes identically, so a
+// hand-rolled copy in this harness could only ever agree with itself — a digest bug would
+// then pass the smoke while breaking every real caller. Importing the shipped function means
+// an approval this harness builds is byte-identical to one Forge builds.
+import { canonicalContractDigest } from '../../packages/core/dist/index.js';
 
 export const SENTINEL = 'SMOKE-REQ-7f3a2c'; // unique string asserted in dispatch #4
+
+/**
+ * Build an ApprovedContract from its digest-bearing content.
+ *
+ * `state` and `contractApproval` are deliberately EXCLUDED from the digest by
+ * `canonicalContractDigest`, so the approval is computed over `content` alone and then
+ * attached. Pass `corruptDigest: true` to get a well-formed contract whose approval does
+ * NOT match its content — the INV-7 rejection path.
+ */
+export function approvedContract(content, { corruptDigest = false } = {}) {
+  const contractDigest = corruptDigest ? `sha256:${'0'.repeat(64)}` : canonicalContractDigest(content);
+  return {
+    state: 'approved',
+    ...content,
+    contractApproval: {
+      contractDigest,
+      approvedBy: 'full-smoke harness',
+      approvedAt: '2026-08-09T00:00:00Z',
+    },
+  };
+}
+
+/** The contract content the deliverable scenarios agree on. `over` replaces any field, so a
+ *  rejection scenario states only the one field that makes it invalid. */
+export function contractContent(over = {}) {
+  return {
+    kind: 'quarterly finance report',
+    audience: 'the finance review committee',
+    artifacts: [{ root: 'workspaceRoot', path: 'src/math.ts' }],
+    acceptance: [
+      {
+        id: 'AC-1',
+        criterion: 'every arithmetic function guards invalid input before returning',
+        method: 'agent-review',
+        references: [{ kind: 'none', reason: 'no external standard governs this internal module' }],
+      },
+    ],
+    disposition: 'commit-in-place',
+    ...over,
+  };
+}
 
 const BT = '`';
 const F = '```';
 
 // Build a contract-first Contract Task plan (the format execute_plan's parseContractPlan requires:
-// `### Task I-N:`, multi-line **Files:** with Test:, five Contract bullets, an Acceptance tests block
-// with Path/fenced-source/Run, and the frozen Implementation sentence). The acceptance test uses
-// Node's built-in test runner (`node --test`) against a NEW `.mjs` file the executor creates — so it
-// runs with zero deps and no TS loader, and passes once the trivial implementation exists.
+// `### Task I-N:`, single-line **Output:**/**Dependencies:** metadata, five Contract bullets, an
+// OPTIONAL Checks block with Check/fenced-source/Run, and the frozen Plan boundary sentinel). The
+// declared check uses Node's built-in test runner (`node --test`) against a NEW `.mjs` file the
+// executor creates — so it runs with zero deps and no TS loader, and passes once the trivial
+// implementation exists.
 function contractPlan(title, header, implPath, testPath, testSrc) {
   return [
     `# ${header}`, '',
     `> **Execution:** implement task-by-task with the mma-execute-plan worker.`, '',
-    '## Phase 1 — Implement: the new function exists and its test passes', '',
+    '## Phase 1 — Implement: the new function exists and its check passes', '',
     `### Task I-1: ${title}`, '',
-    '**Files:**',
-    `- Create: ${BT}${implPath}${BT}`,
-    `- Test: ${BT}${testPath}${BT}`, '',
-    `**Technical acceptance criteria** (← AC-1): ${title} — the function exists and its acceptance test passes.`, '',
+    `**Output:** ${BT}${implPath}${BT}`,
+    '**Dependencies:** none', '',
+    `**Technical acceptance criteria** (← AC-1): ${title} — the function exists and its declared check passes.`, '',
     '**Contract:**',
-    '- Inputs / Request: the arguments named in the test.',
-    '- Outputs / Response: the value the test asserts.',
+    '- Inputs / Request: the arguments named in the check.',
+    '- Outputs / Response: the value the check asserts.',
     '- Data mapping: result computed directly from the inputs.',
     '- Errors: none required.',
     '- Behavior / invariants: pure; no side effects.', '',
-    // Authored in the mma-plan GENERATOR shape (bulleted `- Path:`/`- Run:`, indented fence, trailing
+    // Authored in the mma-plan GENERATOR shape (bulleted `- Check:`/`- Run:`, indented fence, trailing
     // prose) — NOT the column-0 form — so the smoke exercises the format real plans actually have. The
     // validator tolerates + dedents this; testing only the column-0 form is what let B-317's malformed-
     // plan regression ship.
-    '**Acceptance tests (plan-authored — the executable form of the technical AC).**',
-    `- Path: ${BT}${testPath}${BT}`,
+    '**Checks (plan-authored — the executable form of the technical AC).**',
+    `- Check: ${BT}${testPath}${BT}`,
     `  ${F}js`,
     testSrc.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n'),
     `  ${F}`,
     `- Run: ${BT}node --test ${testPath}${BT}  Expected: PASS once implemented`, '',
-    '**Implementation:** left to the executor — no code in the plan.', '',
+    '**Plan boundary:** final deliverable content is not in this plan.', '',
+  ].join('\n');
+}
+
+/**
+ * A NON-CODE workspace, deliberately unlike every other fixture in this harness.
+ *
+ * Every other fixture repository here is the same shape: `math.ts`, `spec.md`, `plan.md`. That
+ * uniformity is a blind spot, not a convenience. A fixture we generate from our own conventions
+ * cannot falsify those conventions — which is exactly how two reported defects survived the gate:
+ * `execute_plan` demanded checks under a JavaScript `tests/` directory, and the plan parser broke
+ * on a blockquote, because no fixture ever presented anything else.
+ *
+ * This workspace contains NO source file, NO test runner and NO `tests/` directory. It is a
+ * folder of documents and data, which is what a finance or policy deliverable actually looks
+ * like. A route that silently assumes a code project fails here and passes everywhere else.
+ */
+export function createNonCodeProject() {
+  const dir = mkdtempSync(join(tmpdir(), 'mma-smoke-noncode-'));
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' });
+  git('init', '-q'); git('config', 'user.email', 's@s'); git('config', 'user.name', 's');
+
+  mkdirSync(join(dir, 'source-data'));
+  mkdirSync(join(dir, 'reports'));
+  writeFileSync(join(dir, 'source-data', 'ledger-q3.csv'),
+    'account,quarter,amount\nrevenue,Q3,124500\ncost-of-sales,Q3,71200\noperating-expense,Q3,38900\n');
+  writeFileSync(join(dir, 'reports', 'q2-commentary.md'),
+    `# Q2 commentary\n\nRevenue rose against Q1. ${SENTINEL}: every figure quoted in commentary must tie to the ledger.\n`);
+  writeFileSync(join(dir, 'spec.md'),
+    `# Spec — quarterly finance commentary\n\nRequirement ${SENTINEL}: every figure quoted in the commentary must tie to a line in source-data/ledger-q3.csv.\n`);
+  git('add', '.'); git('commit', '-qm', 'seed non-code workspace');
+  return { dir };
+}
+
+/**
+ * A Contract Task that declares NO deterministic check.
+ *
+ * This is the central new behaviour of the deliverable-neutral grammar: a task whose
+ * technical acceptance criterion no human can express as a command (a written section, a
+ * design decision, a document a person must read) declares no Checks block at all, parses to
+ * `acceptanceTests: []`, and is NOT an error. The previous grammar could not express it —
+ * `extractDeclaredTestPaths()` raised `malformed-plan` whenever the text `Test:` was absent,
+ * which is precisely what blocked every non-code deliverable.
+ *
+ * The declared output is a MARKDOWN document rather than source, so the scenario also proves
+ * the execution path never assumes the deliverable is code.
+ */
+function noCheckContractPlan(header, outputPath) {
+  return [
+    `# ${header}`, '',
+    `> **Execution:** implement task-by-task with the mma-execute-plan worker.`, '',
+    '## Phase 1 — Write the note: a reader can see what changed and why', '',
+    '### Task I-1: write the release note (← AC-1)', '',
+    `**Output:** ${BT}${outputPath}${BT}`,
+    '**Dependencies:** none', '',
+    '**Technical acceptance criteria** (← AC-1): the note names the change and states why it was made, in prose a non-engineer can read. No deterministic check applies — a person reads it.', '',
+    '**Contract:**',
+    '- Inputs / Request: the arithmetic module in src/math.ts.',
+    '- Outputs / Response: a short markdown note at the declared output path.',
+    '- Data mapping: each described change maps to a function in src/math.ts.',
+    '- Errors: a note that names no function fails review.',
+    '- Behavior / invariants: prose only; the note changes no source file.', '',
+    '**Plan boundary:** final deliverable content is not in this plan.', '',
   ].join('\n');
 }
 
@@ -163,6 +272,10 @@ export function createWriteRepo(scenarioId, { dirty = false, precommitGate = tru
     `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
   writeFileSync(join(dir, 'plan.md'),
     contractPlan('add subtract', 'Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest));
+  // A plan whose single task declares NO deterministic check — legal only under the
+  // deliverable-neutral grammar, and the shape every non-code deliverable needs.
+  writeFileSync(join(dir, 'no-check-plan.md'),
+    noCheckContractPlan('No-check Plan', 'docs/release-note.md'));
   // A two-task plan for the partial-selection scenario: selecting by ID must run ONLY task I-2.
   writeFileSync(join(dir, 'two-task-plan.md'),
     contractPlan('add subtract', 'Two-task Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest)

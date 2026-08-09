@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SPEC_COMPONENTS } from './spec-components.js';
+import { approvedContractSchema } from './deliverable-contract.js';
 
 const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
@@ -29,6 +30,35 @@ const commonFields = {
   reviewPolicy: reviewPolicySchema.optional(),
   sessionIds: sessionIdsSchema,
   contextBlockIds: z.array(z.string()).max(2).optional(),
+};
+
+/**
+ * `deliverable` — the optional approved Deliverable Contract, wired only onto `spec`,
+ * `plan`, `execute_plan`, and `review` (the SDLC routes a contract governs). Every other
+ * task type omits this field entirely, so it cannot appear on their input.
+ *
+ * `approvedContractSchema` requires `state: 'approved'` and a digest-matched
+ * `contractApproval` (INV-7) — a non-approved state or a digest mismatch is rejected here,
+ * at the Zod layer, with a field-specific issue under `deliverable`. What this schema
+ * cannot check — realpath containment of artifact/command paths and git-repo disposition
+ * feasibility — needs the filesystem and the task cwd, so it is validated at the server
+ * boundary (`packages/server/src/application/deliverable-contract-validator.ts`) after this
+ * schema passes. Omitting `deliverable` stays valid: an unmanaged direct call carries none.
+ */
+const deliverableField = {
+  deliverable: approvedContractSchema.optional(),
+};
+
+/**
+ * `practice` — the optional technique selector, wired only onto `plan`, `execute_plan`,
+ * `review`, and `debug`. It picks HOW to do the work (currently only the retained
+ * `'software'` code technique); it does not classify WHAT the deliverable is. `audit`
+ * keeps its own `subtype` field (which criteria set examines the artifact) — the two
+ * fields mean different things and neither is renamed into the other. Omitting
+ * `practice` loads the generic, deliverable-neutral implementer.
+ */
+const practiceField = {
+  practice: z.literal('software').optional(),
 };
 
 const journalRecordEntrySchema = z.object({
@@ -102,6 +132,8 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     type: z.literal('review'),
     prompt: z.string().optional(),
     target: targetSchema,
+    ...deliverableField,
+    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -109,6 +141,7 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     type: z.literal('debug'),
     prompt: z.string().min(1),
     target: z.object({ paths: z.array(z.string().min(1)).min(1) }).optional(),
+    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -141,6 +174,8 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     prompt: z.string().optional(),
     target: z.object({ paths: z.array(z.string().min(1)).length(1) }),
     tasks: z.array(z.string()).default([]),
+    ...deliverableField,
+    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -159,6 +194,7 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     target: targetSchema,
     outputPath: z.string().optional(),
     components: z.array(z.enum(SPEC_COMPONENTS)).optional(),
+    ...deliverableField,
     ...commonFields,
   }).strict(),
 
@@ -167,6 +203,8 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     prompt: z.string().min(1),
     target: targetSchema,
     outputPath: z.string().optional(),
+    ...deliverableField,
+    ...practiceField,
     ...commonFields,
   }).strict(),
 ]));

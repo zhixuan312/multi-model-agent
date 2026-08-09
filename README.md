@@ -13,6 +13,8 @@
 
 Delegate the labor, keep the judgment. Your flagship model stays on architecture and decisions — mechanical work runs on a fleet of cheaper agents, in parallel, for **up to 97% less per task**.
 
+multi-model-agent is the engine behind MMA's **solution development lifecycle** — explore, spec, plan, execute, verify — a general professional practice, not something software invented; software is one optional technique this engine supports, not the definition of the lifecycle. The caller owns the workflow: this package is the stateless labor and cross-agent review layer underneath it, usable directly or through Forge, the team mode.
+
 A local daemon for Claude Code, Claude Desktop, Codex, Cursor, VS Code, opencode, Windsurf, and Antigravity — reached over MCP. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
 *(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md).)*
@@ -339,7 +341,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 |---|---|
 | `mma-brainstorm` | Requirement interview — name the destination → grill the 8 spec components one decision at a time, resolving mechanical questions via workers and putting only real decisions to the user → dispatch `mma-spec`. Consumes an `exploration.md` from `mma-explore` when present. |
 | `mma-spec` | Write a formal specification from structured design decisions. Output follows the 8-component spec standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
-| `mma-plan` | Write a contract-first, human-executable plan from a spec file. Output is phased (`## Phase N`, `### Task I-N:`) with `**Files:**` blocks, a Contract + technical acceptance criterion per task, and plan-authored acceptance tests — no implementation code. |
+| `mma-plan` | Write a contract-first, human-executable plan from a spec file. Output is phased (`## Phase N`, `### Task I-N:`) with `**Output:**`/`**Dependencies:**` lines, a Contract + technical acceptance criterion per task, and a plan-authored deterministic check when one applies — no implementation code or final deliverable content. |
 
 ### Work-delegation skills
 
@@ -538,7 +540,9 @@ are thin prompts that route to MCP tools, never to a hand-built HTTP call. All 1
 produces the answer on one tier, a refiner verifies and improves it on the other (both output the same
 JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from
 structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task
-a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a
+a Contract, plus a plan-authored deterministic check where the acceptance criterion admits one, and
+no implementation code. A criterion no machine can settle (a written section, a design decision, a
+figure a person must eyeball) declares no check; that is a valid task, not a defective one. The `orchestrate` type is a
 session-persistent orchestrator (no refiner, no commit, cwd-only sandbox — can write files) for
 multi-phase frontend workflows. Write types (`delegate`, `execute_plan`) edit the caller's checkout IN
 PLACE on whatever branch it already has checked out and the engine commits there — it never creates a
@@ -552,6 +556,16 @@ The same runtime is also reachable over REST (`POST /task`, `GET /task/:id`, …
 programmatic callers — see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).
 It is not part of the agent-facing surface: no packaged skill, command, or plugin instructs an agent to
 construct an HTTP request.
+
+`spec`, `plan`, `execute_plan`, and `review` optionally carry a `deliverable`: an approved **Deliverable
+Contract** — `kind` (a free-form label the agent proposes and the human confirms), `audience`,
+declared `artifacts`, `acceptance` criteria (each with an explicit verification method — `command`,
+`agent-review`, or `human`), and a `disposition` (`pr`, `commit-in-place`, or `deliver-file`) — bound to
+a digest that matches its content, so a human approval can never be silently applied to different
+content. The contract classifies nothing: `kind` is free-form, not drawn from a registry, and the
+engine itself picks no technique — `practice` (currently only `software`) is a separate, optional,
+caller-chosen field. See [docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
+for the full validation model.
 
 ### MCP endpoint
 

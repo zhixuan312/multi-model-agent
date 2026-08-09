@@ -437,20 +437,28 @@ export class CorpusIndex {
       `INSERT INTO records (id, path, title, body, mtime_ms, content_hash, topic, status, adapter_meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertFts = this.db.prepare(`INSERT INTO records_fts (id, title, body) VALUES (?, ?, ?)`);
-    this.db.exec('BEGIN');
+
+    // Same two-phase split as `syncIncremental`, for the same reason: read and decode every
+    // file with NO transaction held, then write under an explicitly acquired write lock.
+    // `rebuild` is not only a maintenance path — `syncIncremental` delegates to it whenever
+    // the schema is invalid, so a concurrent recall reaches this code too.
+    const loadedRecords: StoredRecord[] = [];
+    for (const relPath of files) {
+      // Tolerate a single unreadable/undecodable EXISTING file: skip-and-warn
+      // so one malformed source file can't crash the whole index rebuild.
+      try {
+        loadedRecords.push(await this.loadFile(adapter, relPath));
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] skipping unreadable/undecodable record ${relPath}: ${(error as Error).message}`,
+        );
+      }
+    }
+
+    this.db.exec('BEGIN IMMEDIATE');
+    let inTransaction = true;
     try {
-      for (const relPath of files) {
-        // Tolerate a single unreadable/undecodable EXISTING file: skip-and-warn
-        // so one malformed source file can't crash the whole index rebuild.
-        let loaded: StoredRecord;
-        try {
-          loaded = await this.loadFile(adapter, relPath);
-        } catch (error) {
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] skipping unreadable/undecodable record ${relPath}: ${(error as Error).message}`,
-          );
-          continue;
-        }
+      for (const loaded of loadedRecords) {
         insertRecord.run(
           loaded.id,
           loaded.path,
@@ -465,8 +473,17 @@ export class CorpusIndex {
         insertFts.run(loaded.id, loaded.title, loaded.body);
       }
       this.db.exec('COMMIT');
+      inTransaction = false;
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      // Roll back only when a transaction is genuinely open — a ROLLBACK with none active
+      // throws a second error that would mask the first.
+      if (inTransaction) {
+        try {
+          this.db.exec('ROLLBACK');
+        } catch {
+          // no active transaction — keep the original error.
+        }
+      }
       throw error;
     }
   }
@@ -476,6 +493,30 @@ export class CorpusIndex {
    * whose mtime AND content hash differ from the stored row are re-decoded and
    * upserted; files that vanished are dropped. Cheap enough to run before
    * every retrieval.
+   *
+   * CONCURRENCY. Two phases, and the split is load-bearing rather than stylistic.
+   *
+   * Phase 1 reads, hashes and decodes every candidate file while holding NO database
+   * transaction. Phase 2 opens `BEGIN IMMEDIATE` and applies the already-computed changes,
+   * so the write lock is held for the duration of a few prepared statements instead of for
+   * the duration of reading the corpus.
+   *
+   * The earlier version did all of that inside one deferred `BEGIN`, which produced a real
+   * crash: two concurrent `journal_recall` legs both ran this sync, and the loser died with
+   * `runner_crash`. Two separate faults combined.
+   *
+   *  - The write lock was held across every `readFile`, so the contention window grew with
+   *    the corpus rather than staying at write time. `PRAGMA busy_timeout = 5000` cannot
+   *    absorb a window that scales.
+   *  - A DEFERRED transaction takes a read lock first and must UPGRADE to a write lock at
+   *    its first write. SQLite fails that upgrade with `SQLITE_BUSY` immediately and does
+   *    NOT apply `busy_timeout`, because waiting while already holding a read lock could
+   *    deadlock two upgraders against each other. `BEGIN IMMEDIATE` takes the write lock up
+   *    front, which is the case `busy_timeout` does retry.
+   *
+   * Callers therefore no longer need to serialise journal access to stay alive. Serialising
+   * remains harmless, and is still worthwhile for write-heavy callers, but concurrent
+   * READERS must not crash — recall is the common path and runs on every flow.
    */
   async syncIncremental(): Promise<void> {
     const adapter = this.adapter;
@@ -498,49 +539,93 @@ export class CorpusIndex {
     const files = await adapter.listFiles();
     const seenPaths = new Set<string>();
 
-    this.db.exec('BEGIN');
-    try {
-      for (const relPath of files) {
-        seenPaths.add(relPath);
-        const fullPath = join(this.root, relPath);
-        const st = await stat(fullPath);
-        const prior = existing.get(relPath);
-        if (prior && prior.mtimeMs === st.mtimeMs) continue; // unchanged by mtime
+    // ---- Phase 1: all filesystem work, NO transaction held. ----
+    const mtimeRefreshes: Array<{ path: string; mtimeMs: number }> = [];
+    const upserts: Array<{ priorId: string | null; loaded: StoredRecord }> = [];
 
-        const raw = await readFile(fullPath, 'utf8');
-        const contentHash = createHash('sha256').update(raw).digest('hex');
-        if (prior && prior.contentHash === contentHash) {
-          // Content identical, only mtime drifted — refresh mtime, skip re-decode.
-          this.db.prepare('UPDATE records SET mtime_ms = ? WHERE path = ?').run(st.mtimeMs, relPath);
-          continue;
-        }
-        // Tolerate a single unreadable/undecodable EXISTING file: skip-and-warn
-        // so one malformed source file can't crash the incremental sync.
-        let loaded: StoredRecord;
-        try {
-          const record = await adapter.decode(relPath, raw);
-          loaded = { ...record, mtimeMs: st.mtimeMs, contentHash };
-        } catch (error) {
-          console.warn(
-            `[corpus-engine:${adapter.corpusId}] skipping unreadable/undecodable record ${relPath}: ${(error as Error).message}`,
-          );
-          continue;
-        }
-        // A record whose id changed for the same path (rare) leaves behind a
-        // stale row under the old id — delete it explicitly before upserting.
-        if (prior && prior.id !== loaded.id) this.deleteRecord(prior.id);
+    for (const relPath of files) {
+      seenPaths.add(relPath);
+      const fullPath = join(this.root, relPath);
+      const st = await stat(fullPath);
+      const prior = existing.get(relPath);
+      if (prior && prior.mtimeMs === st.mtimeMs) continue; // unchanged by mtime
+
+      const raw = await readFile(fullPath, 'utf8');
+      const contentHash = createHash('sha256').update(raw).digest('hex');
+      if (prior && prior.contentHash === contentHash) {
+        // Content identical, only mtime drifted — refresh mtime, skip re-decode.
+        mtimeRefreshes.push({ path: relPath, mtimeMs: st.mtimeMs });
+        continue;
+      }
+      // Tolerate a single unreadable/undecodable EXISTING file: skip-and-warn
+      // so one malformed source file can't crash the incremental sync.
+      let loaded: StoredRecord;
+      try {
+        const record = await adapter.decode(relPath, raw);
+        loaded = { ...record, mtimeMs: st.mtimeMs, contentHash };
+      } catch (error) {
+        console.warn(
+          `[corpus-engine:${adapter.corpusId}] skipping unreadable/undecodable record ${relPath}: ${(error as Error).message}`,
+        );
+        continue;
+      }
+      // A record whose id changed for the same path (rare) leaves behind a
+      // stale row under the old id — delete it explicitly before upserting.
+      upserts.push({ priorId: prior && prior.id !== loaded.id ? prior.id : null, loaded });
+    }
+
+    // Nothing changed: do not take a write lock at all. This is the common case on the
+    // recall path, so an unnecessary lock here would serialise every concurrent reader
+    // for no benefit.
+    // Delete ONLY rows this sync saw in its own opening snapshot (`existing`) and then confirmed
+    // gone from disk. Reading the live table here instead would delete a row a CONCURRENT sync
+    // legitimately inserted while this one was doing file I/O: that row is absent from `seenPaths`,
+    // because `seenPaths` was fixed before the other sync's file existed, so a live read would
+    // classify a brand-new record as a disappeared one and drop it.
+    //
+    // Moving the I/O out of the transaction is what opened that window — the single-transaction
+    // version serialised these calls, at the cost of the crash this split repairs. Restricting the
+    // deletion set to the opening snapshot closes the window without giving the lock back.
+    // Never queue an id that an upsert is about to relocate. A record's id is stable while its
+    // FILENAME can change — the journal names files `<id>-<slug>.md`, so editing a title renames
+    // the file and keeps the id. The old path is absent from `seenPaths` (that file is gone), so it
+    // would be queued for deletion; the upsert then relocates the SAME id to the new path via
+    // `ON CONFLICT(id) DO UPDATE SET path = ...`, and the deletion that follows would remove the
+    // row that was just correctly moved. The record would vanish from the index while its file sat
+    // on disk. It self-heals on the next sync, but every recall in between silently omits it.
+    const relocatedIds = new Set(upserts.map(({ loaded }) => loaded.id));
+    const deletions = [...existing.entries()]
+      .filter(([path, prior]) => !seenPaths.has(path) && !relocatedIds.has(prior.id))
+      .map(([, prior]) => prior.id);
+    if (mtimeRefreshes.length === 0 && upserts.length === 0 && deletions.length === 0) return;
+
+    // ---- Phase 2: writes only, under an explicitly acquired write lock. ----
+    // `BEGIN IMMEDIATE`, never a deferred `BEGIN`: a deferred transaction would have to
+    // upgrade its read lock at the first write, and SQLite fails that upgrade with
+    // SQLITE_BUSY without honouring `busy_timeout`.
+    this.db.exec('BEGIN IMMEDIATE');
+    let inTransaction = true;
+    try {
+      const refreshMtime = this.db.prepare('UPDATE records SET mtime_ms = ? WHERE path = ?');
+      for (const { path, mtimeMs } of mtimeRefreshes) refreshMtime.run(mtimeMs, path);
+      for (const { priorId, loaded } of upserts) {
+        if (priorId) this.deleteRecord(priorId);
         this.upsertRecord(loaded);
       }
-
-      // Drop rows whose file disappeared.
-      const currentRows = this.db.prepare('SELECT id, path FROM records').all() as Array<Record<string, unknown>>;
-      for (const row of currentRows) {
-        const path = asString(row.path);
-        if (!seenPaths.has(path)) this.deleteRecord(asString(row.id));
-      }
+      for (const id of deletions) this.deleteRecord(id);
       this.db.exec('COMMIT');
+      inTransaction = false;
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      // Roll back only when a transaction is genuinely open. A failed COMMIT may already
+      // have ended it, and `ROLLBACK` without an active transaction throws a SECOND error
+      // that would mask the first — the one that says what actually went wrong.
+      if (inTransaction) {
+        try {
+          this.db.exec('ROLLBACK');
+        } catch {
+          // no active transaction to roll back — keep the original error.
+        }
+      }
       throw error;
     }
   }

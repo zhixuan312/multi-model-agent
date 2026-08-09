@@ -54,3 +54,5 @@ never edit, skip, or route around such a test. Judge the task on its Contract an
 could actually execute, and name the unverifiable ones in `notes` so the caller can run them
 outside the sandbox. Conflating "unverifiable here" with "failed" has repeatedly reported correct,
 complete work as broken.
+
+**Deliverable-specific technique:** code-specific execution technique is available through the `practice: 'software'` executor asset.

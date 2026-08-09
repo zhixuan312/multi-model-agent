@@ -146,7 +146,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes them to the
 |---|---|---|
 | `mma-brainstorm` | *(orchestrator)* | Requirement interview — name the destination → grill the 8 components → confirmed decisions → dispatch `mma-spec` |
 | `mma-spec` | `spec` | Write a formal spec from structured design decisions |
-| `mma-plan` | `plan` | Write a contract-first, human-executable plan from a spec file (Contract + plan-authored acceptance tests, no impl code) |
+| `mma-plan` | `plan` | Write a contract-first, human-executable plan from a spec file (Contract + a plan-authored check where the criterion admits one, no impl code) |
 
 ### Work-delegation skills
 

@@ -34,6 +34,7 @@ export { parsePlanHeadings, matchTasks, normalizeHeading, MatchError, type PlanH
 export {
   ContractPlanError,
   parseContractPlan,
+  ACCEPTED_CHECK_ROOTS,
   assertSafeAcceptanceTestPaths,
   materializeAcceptanceTests,
   rematerializeAcceptanceTests,
@@ -107,8 +108,63 @@ export type { TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from
 export { TASK_TYPES, TYPE_REGISTRY, getTypeConfig, oppositeAgent } from './unified/type-registry.js';
 export type { TaskType, TypeConfig, TargetAcceptance } from './unified/type-registry.js';
 export { WRITING_STYLE_BLOCK } from './unified/writing-style-block.js';
-export { SPEC_COMPONENTS, resolveComponents } from './unified/spec-components.js';
-export type { SpecComponent } from './unified/spec-components.js';
+export {
+  SPEC_COMPONENTS,
+  resolveComponents,
+  SPEC_COMPONENT_CATALOG,
+  resolveComponentHeading,
+} from './unified/spec-components.js';
+export type { SpecComponent, SpecComponentCatalogEntry } from './unified/spec-components.js';
+// Verification evidence: the shape of what was checked, and the named `subjectDigest`
+// algorithm. Exported because closure depends on this package and Forge computing the SAME
+// digest for the same output — a second implementation could only ever agree with itself.
+export {
+  canonicalSubjectDigest,
+  isClosingRecord,
+  acceptanceClosed,
+} from './unified/verification.js';
+export type {
+  VerificationSubject,
+  VerificationOutcome,
+  VerificationRecord,
+  VerificationFile,
+} from './unified/verification.js';
+// The single canonical-JSON serialisation both digests are built on.
+export { canonicalDigest, canonicalizeValue, compareByCodePoint } from './unified/canonical-json.js';
+// Deliverable Contract: shared types, canonical digest, and command execution bounds.
+// See packages/core/src/unified/deliverable-contract.ts for the algorithm this digest
+// implements and why it is deliberately filesystem-free.
+export {
+  VERIFICATION_METHODS,
+  DISPOSITIONS,
+  DEFAULT_COMMAND_TIMEOUT_MS,
+  MAX_COMMAND_TIMEOUT_MS,
+  MAX_CAPTURED_OUTPUT_BYTES,
+  canonicalContractDigest,
+  normalizeArtifactPath,
+  draftContractSchema,
+  proposedContractSchema,
+  approvedContractSchema,
+  declaredArtifactSchema,
+  declaredReferenceSchema,
+  resolvedReferenceSchema,
+  commandCheckSchema,
+  deliverableAcceptanceSchema,
+  contractApprovalSchema,
+} from './unified/deliverable-contract.js';
+export type {
+  VerificationMethod,
+  Disposition,
+  DraftContract,
+  ProposedContract,
+  ApprovedContract,
+  DeclaredArtifact,
+  DeclaredReference,
+  ResolvedReference,
+  CommandCheck,
+  DeliverableAcceptance,
+  ContractApproval,
+} from './unified/deliverable-contract.js';
 export { taskInputSchema } from './unified/task-input-schema.js';
 export type { TaskInput } from './unified/task-input-schema.js';
 export { loadSkill } from './unified/skill-loader.js';

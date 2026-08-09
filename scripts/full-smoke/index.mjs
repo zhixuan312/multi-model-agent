@@ -22,14 +22,16 @@ function keepWorkspaceClean(dir) {
     execFileSync('git', ['-C', dir, 'commit', '--no-verify', '-qm', 'smoke-harness: commit leftover uncommitted changes'], { stdio: 'ignore' });
   } catch { /* best-effort */ }
 }
-import { createProject, createWriteRepo } from './fixtures.mjs';
+import { createProject, createWriteRepo, createNonCodeProject } from './fixtures.mjs';
+import { SPEC_COMPONENT_CATALOG } from '../../packages/core/dist/index.js';
 import { SCENARIOS, ENGINE_COMMIT_TYPES } from './config.mjs';
-import { runDispatch, pollTask, runCancelScenario, runMcpScenario } from './dispatch.mjs';
+import { runDispatch, pollTask, runCancelScenario, runMcpScenario, runMcpContractScenario, runMcpToolsScenario, runClientTimeoutScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
+import { startAvailabilityProbe } from './availability.mjs';
 
 const argv = process.argv.slice(2);
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
@@ -67,6 +69,8 @@ const seenIds = new Set();
 let totalCostUSD = 0;
 let expectedEmits = 0;
 let backendSummary = null;
+let availabilityProbe = null;
+let availability = null;
 
 // ── Run a single scenario to completion and record results ──
 async function runScenario(spec, ctx, log) {
@@ -95,6 +99,42 @@ async function runScenario(spec, ctx, log) {
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
       log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      return;
+    }
+
+    // A client that abandons its request mid-flight must still be able to find the task.
+    if (spec.kind === 'client-timeout') {
+      const res = await runClientTimeoutScenario(ctx);
+      const rec = normalize(spec, { response: res.terminal });
+      rec.clientTimeout = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  reconcile  → taskId=${res.taskId} discoverable=${res.discovered}`);
+      return;
+    }
+
+    // MCP carrying the two new request fields — the transport must honour them, not relay a task.
+    if (spec.kind === 'mcp-contract') {
+      const queueBefore = queueLineCount();
+      const res = await runMcpContractScenario(ctx);
+      const settleUntil = Date.now() + 15000;
+      while (queueLineCount() <= queueBefore && Date.now() < settleUntil) await sleep(300);
+      const rec = normalize(spec, { response: res.envelope, queue: collectQueue(queueBefore) });
+      rec.mcpContract = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.task?.status}`);
+      return;
+    }
+
+    // The remaining MCP tools, driven as a host would drive them.
+    if (spec.kind === 'mcp-tools') {
+      const res = await runMcpToolsScenario(ctx);
+      const rec = normalize(spec, { response: res.terminal });
+      rec.mcpTools = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  mcp-tools  → block=${res.blockId ? 'ok' : 'MISSING'} taskId=${res.taskId}`);
       return;
     }
 
@@ -266,6 +306,76 @@ async function runScenario(spec, ctx, log) {
             ? `${landed.length}/${fc.length} reported artifact(s) present on disk`
             : `NONE of the ${fc.length} reported artifact(s) exist on disk — output silently dropped: ${fc.join(', ')}`,
         });
+
+        // Neutral component labels. The eight spec component IDENTIFIERS are unchanged and
+        // still parser-matched, but three of them now render a deliverable-neutral display
+        // label, so a finance report is not asked for "Technical Design". The emitted heading
+        // is what a downstream parser and a human both read, so it is checked on the real
+        // artifact rather than on the catalog constant — a catalog assertion would only prove
+        // the constant agrees with itself.
+        //
+        // Scoped to full spec runs: #29 requests an explicit component SUBSET that excludes
+        // these three, so requiring them there would fail a scenario that is behaving
+        // correctly. Reported NA (never PASS) when no spec artifact could be read, so a
+        // missing file cannot masquerade as a pass.
+        // Software rigor at the ACCEPTANCE-CRITERIA level, asserted on the produced plan.
+        //
+        // The deliverable-neutral grammar makes the Checks section OPTIONAL, which is correct
+        // for a claim no machine can settle. For CODE that permission must not become an
+        // escape hatch: `practice: 'software'` states that virtually every technical AC admits
+        // a deterministic check, so a software plan that declares none has quietly dropped the
+        // discipline the release promised to preserve. Prose in `implement-software.md` cannot
+        // prove that; only the emitted plan can.
+        //
+        // Three properties, because they fail independently: a plan can trace to spec ACs and
+        // still declare no check, declare checks and trace to nothing, or do both and never
+        // close with a suite-level gate.
+        if (spec.type === 'plan' && spec.practice === 'software') {
+          const planFile = landed[0];
+          let body = null;
+          try { body = readFileSync(existsSync(planFile) ? planFile : join(ctx.dir, planFile), 'utf8'); } catch { /* unreadable */ }
+          const hasChecks = body !== null && body.includes('Checks (plan-authored');
+          const hasAcTrace = body !== null && /←\s*AC-/.test(body);
+          const hasSuiteGate = body !== null && /full-suite gate/i.test(body);
+          checks.push({
+            checkId: 'software-plan-declares-checks',
+            status: body === null ? 'NA' : (hasChecks ? 'PASS' : 'FAIL'),
+            detail: body === null
+              ? 'plan artifact unreadable — software rigor not verified'
+              : `declaredChecks=${hasChecks} (a software plan with no declared check has dropped the AC-level check discipline)`,
+          });
+          checks.push({
+            checkId: 'software-plan-traces-to-spec-ac',
+            status: body === null ? 'NA' : (hasAcTrace ? 'PASS' : 'FAIL'),
+            detail: `acTraceability=${hasAcTrace} (every task must cite the spec AC it delivers)`,
+          });
+          checks.push({
+            checkId: 'software-plan-closes-with-suite-gate',
+            status: body === null ? 'NA' : (hasSuiteGate ? 'PASS' : 'WARN'),
+            detail: `fullSuiteGate=${hasSuiteGate} (per-task checks do not prove the suite still passes)`,
+          });
+        }
+
+        if (spec.type === 'spec' && !spec.subsetComponents) {
+          const specFile = landed[0];
+          let body = null;
+          try { body = readFileSync(existsSync(specFile) ? specFile : join(ctx.dir, specFile), 'utf8'); } catch { /* unreadable */ }
+          // Both lists are DERIVED from the shipped catalog, never restated here (AC-5.4).
+          // A hand-written copy could only agree with itself: if a display label changed, this
+          // check would keep asserting the old one and pass while the product emitted the new.
+          const renamed = SPEC_COMPONENT_CATALOG.filter((entry) => entry.displayLabel !== entry.id);
+          const RETIRED = renamed.map((entry) => `## ${entry.id}`);
+          const NEUTRAL = renamed.map((entry) => entry.displayLabel);
+          const present = body === null ? [] : NEUTRAL.filter((label) => body.includes(label));
+          const retired = body === null ? [] : RETIRED.filter((heading) => body.includes(heading));
+          checks.push({
+            checkId: 'neutral-component-labels',
+            status: body === null ? 'NA' : (present.length > 0 && retired.length === 0 ? 'PASS' : 'FAIL'),
+            detail: body === null
+              ? 'spec artifact unreadable — label rendering not verified'
+              : `neutral=[${present.join(', ')}] retiredHeadings=[${retired.join(', ')}]`,
+          });
+        }
       }
     }
 
@@ -300,6 +410,7 @@ try {
   // One isolated repo per engine-commit scenario, each on its own caller-created branch. The
   // engine commits the submitted cwd IN PLACE, so scenarios sharing a checkout would sweep each
   // other's files into their commits — and this is also what lets them run in parallel.
+  ctx.nonCodeDir = createNonCodeProject().dir;
   ctx.writeRepos = {};
   for (const spec of SCENARIOS) {
     if (!ENGINE_COMMIT_TYPES.has(spec.type) || spec.nonGitCwd) continue;
@@ -380,6 +491,22 @@ try {
       [41],          // execute_plan: partial selection by task ID
       [42],          // execute_plan: partial selection by full heading
       [43],          // worker git denial
+      [44],          // deliverable contract: valid approved contract accepted
+      [45],          // execute_plan: Contract Task with NO declared check
+      [46],          // plan: practice=software reaches the skill selector
+      [47],          // error: contract not approved
+      [48],          // error: contract digest mismatch
+      [49],          // error: commit-in-place disposition in a non-git workspace
+      [50],          // error: practice not wired to audit
+      [51],          // execute_plan carrying BOTH deliverable and practice
+      [52],          // review + practice
+      [53],          // debug + practice
+      [54],          // spec + deliverable (spec takes no practice)
+      [55],          // MCP transport carrying deliverable + practice
+      [56],          // the remaining MCP tools: list, get, cancel, context-block create/delete
+      [57],          // investigate a NON-CODE workspace (documents + data, no source)
+      [58],          // plan a NON-CODE deliverable (no build, no suite, no tests/)
+      [59],          // a client that abandons the request must still be able to reconcile
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
@@ -411,6 +538,12 @@ try {
 
     const totalCount = 1 + phase2Threads.reduce((n, t) => n + filterThread(t).length, 0);
     log(`Full-pipeline smoke — ${totalCount} scenarios (2 phases, parallel)`);
+
+    // Availability, measured for the WHOLE run. Every other check in this harness measures an
+    // outcome; none measured whether the daemon stayed answerable while producing it. A daemon
+    // that stalls its HTTP layer still lets separate-process workers finish, so an outcome-only
+    // gate reports all-green through an outage a caller would certainly notice.
+    availabilityProbe = startAvailabilityProbe({ token: ctx.token });
 
     // Phase 1: context-blocks
     const phase1 = scenarios.find(s => s.id === 1);
@@ -458,6 +591,9 @@ try {
   }
 } finally {
   if (ctx.bgScan) clearInterval(ctx.bgScan);
+  // Stop BEFORE teardown: teardown may stop or restart the daemon, and an outage it causes on
+  // purpose is not a product defect.
+  if (availabilityProbe) availability = await availabilityProbe.stop();
   await teardown(ctx);
 }
 
@@ -466,6 +602,6 @@ const exitCode = report(records, checksByScenario, {
   mode: opts.skipBackend ? 'REDUCED (--skip-backend)' : 'FULL',
   strict: opts.strict, totalCostUSD,
   backend: backendSummary, queueEventCount: seenIds.size, expectedRows: expectedEmits,
-  waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved,
+  waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved, availability,
 });
 process.exit(exitCode);

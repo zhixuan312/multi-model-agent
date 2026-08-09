@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { SCHEMA_VERSION, configuredMainModel, configuredWorkerModels } from './config.mjs';
 import { SMOKE_CLIENT } from './http.mjs';
+// The component catalog is defined ONCE, in the core package (AC-5.4). A second copy here could
+// only ever agree with itself: if the catalog changed, this harness would keep asserting the old
+// identifiers and report a passing spec while the product emitted something else.
+import { SPEC_COMPONENTS } from '../../packages/core/dist/index.js';
+const CANON = SPEC_COMPONENTS;
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
 
@@ -118,7 +123,6 @@ function checkQuality(type, subtype, r, subsetComponents) {
         return ['FAIL', `specPath not under .mma/specs/: ${specPath}`];
       }
       const sections = specSummary?.sections ?? [];
-      const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
       if (subsetComponents) {
         // Subset spec: pass iff sections equals exactly the requested set in canonical order.
         const want = CANON.filter(c => subsetComponents.includes(c));
@@ -149,6 +153,25 @@ function checkQuality(type, subtype, r, subsetComponents) {
   }
 }
 
+/**
+ * The message fragment each contract-rejection scenario must produce, keyed by scenario type.
+ *
+ * These are deliberately the ENGINE's own wording rather than a paraphrase. If a message is
+ * reworded the smoke fails loudly, which is correct: the text is what a caller reads to fix
+ * their contract, so changing it is a caller-visible change that deserves a deliberate edit
+ * here. A looser assertion (any 400) would pass even when the wrong invariant fired.
+ */
+const CONTRACT_REJECTION_REASON = {
+  // Only `state: 'approved'` crosses the wire — Zod reports the failed literal.
+  error_contract_not_approved: 'expected "approved"',
+  // INV-7: the approval must cover THIS content.
+  error_contract_digest_mismatch: 'contractApproval.contractDigest does not match the canonical digest',
+  // INV-3, and only reachable with a real non-git workspace on disk.
+  error_contract_disposition_non_git: 'requires the workspace root to be a git repository',
+  // `practice` is wired to four routes; `audit` is not one of them.
+  error_practice_not_wired: 'Unrecognized key',
+};
+
 export function verify(rec) {
   const out = [];
   const { response: r, diagnostics: d, queue: q, backend: b, expect: e } = rec;
@@ -162,6 +185,31 @@ export function verify(rec) {
     const hasError = json && (json.error || json.message || json.code);
     out.push(C('error-body', hasError ? 'PASS' : 'WARN',
       `body=${JSON.stringify(json).slice(0, 200)}`));
+
+    // A 400 alone does not prove the RIGHT invariant rejected the request — any typo in a
+    // rejection fixture also yields 400. Each contract scenario therefore names the message
+    // fragment its own invariant produces, and asserts the response actually contains it.
+    // `CONTRACT_REJECTION_REASON` is keyed by scenario type, so a scenario without an entry
+    // keeps the generic checks above and nothing here.
+    const wantedReason = CONTRACT_REJECTION_REASON[e.type];
+    if (wantedReason) {
+      // Field-specific errors must land UNDER `deliverable` (or as a form-level unrecognized
+      // key), never as a bare form error — a caller fixes what the field path points at.
+      const details = json?.error?.details?.fieldErrors ?? {};
+      const deliverableErrors = Array.isArray(details?.fieldErrors?.deliverable) ? details.fieldErrors.deliverable : [];
+      const formErrors = Array.isArray(details?.formErrors) ? details.formErrors : [];
+      // Match against the RAW message strings, never against `JSON.stringify(body)`. Several
+      // engine messages quote a literal (`expected "approved"`), and stringifying the body
+      // escapes those quotes, so a substring search over the serialised form fails on a
+      // message that is in fact present — a false failure that hides the real signal.
+      const messages = [...deliverableErrors, ...formErrors, json?.error?.message ?? ''];
+      out.push(C('contract-rejection-reason',
+        messages.some((m) => String(m).includes(wantedReason)) ? 'PASS' : 'FAIL',
+        `want=${JSON.stringify(wantedReason)} messages=${JSON.stringify(messages).slice(0, 260)}`));
+      out.push(C('contract-error-is-field-specific',
+        deliverableErrors.length > 0 || formErrors.length > 0 ? 'PASS' : 'FAIL',
+        `deliverableErrors=${deliverableErrors.length} formErrors=${formErrors.length}`));
+    }
     return out;
   }
 
@@ -207,6 +255,62 @@ export function verify(rec) {
     out.push(C('layered-200',
       JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task'])
         ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
+    return out;
+  }
+
+  // ─── A caller that lost its handle (#59) ───
+  if (e.kind === 'client-timeout') {
+    const c = rec.clientTimeout ?? {};
+    out.push(C('inflight-dispatch-admitted', c.dispatched ? 'PASS' : 'FAIL',
+      `dispatched=${c.dispatched} taskId=${c.taskId}`));
+    // The load-bearing assertion. Without it, a timed-out caller cannot tell "created" from
+    // "not created", and re-dispatching — duplicating the work — is the only safe move.
+    out.push(C('inflight-task-discoverable', c.discovered ? 'PASS' : 'FAIL',
+      `the running task ${c.discovered ? 'was' : 'was NOT'} listed among ${c.listedCount} live tasks — `
+      + `a caller that lost its handle must be able to reconcile instead of re-dispatching`));
+    return out;
+  }
+
+  // ─── MCP carrying the new request fields (#55) ───
+  //     The generated MCP request schema comes from the same Zod union REST validates with, so
+  //     these assertions catch a generation bug or an adapter that strips unknown keys — either
+  //     of which would leave a contract accepted over REST and rejected over MCP.
+  if (e.kind === 'mcp-contract') {
+    const m = rec.mcpContract ?? {};
+    const toolText = JSON.stringify(m.schema?.json?.result ?? {});
+    out.push(C('mcp-schema-exposes-deliverable', toolText.includes('deliverable') ? 'PASS' : 'FAIL',
+      'the generated mma_run schema must advertise the contract field'));
+    out.push(C('mcp-schema-exposes-practice', toolText.includes('practice') ? 'PASS' : 'FAIL',
+      'the generated mma_run schema must advertise the practice field'));
+    // A taskId proves the adapter ACCEPTED both fields: a rejection returns a tool error instead.
+    out.push(C('mcp-contract-accepted', m.taskId ? 'PASS' : 'FAIL',
+      m.taskId ? `taskId=${m.taskId}` : `no taskId — payload=${JSON.stringify(m.runPayload).slice(0, 220)}`));
+    out.push(C('mcp-practice-echoed', r?.task?.practice === 'software' ? 'PASS' : 'FAIL',
+      `task.practice=${r?.task?.practice} (must survive the MCP path exactly as it does over REST)`));
+    out.push(C('mcp-terminal-clean', r?.task?.status && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    return out;
+  }
+
+  // ─── The remaining MCP tools (#56) ───
+  //     `mma_run` and `mma_task_wait` are covered by #40; these four had never been driven over
+  //     MCP at all, so a tool that threw on every call would have failed no scenario.
+  if (e.kind === 'mcp-tools') {
+    const m = rec.mcpTools ?? {};
+    out.push(C('mcp-context-block-create', m.blockId ? 'PASS' : 'FAIL', `blockId=${m.blockId}`));
+    const listed = Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks : (Array.isArray(m.listPayload) ? m.listPayload : null);
+    out.push(C('mcp-task-list', listed !== null ? 'PASS' : 'FAIL',
+      `tasks=${listed ? listed.length : 'not an array'} — the tool must return a task collection`));
+    out.push(C('mcp-task-get', m.getPayload?.taskId === m.taskId ? 'PASS' : 'FAIL',
+      `returned taskId=${m.getPayload?.taskId} want=${m.taskId}`));
+    // Cancellation is REQUESTED, so either acknowledgement shape is correct; what must not happen
+    // is the tool failing to answer at all.
+    out.push(C('mcp-task-cancel', m.cancelPayload !== null && m.cancelPayload !== undefined ? 'PASS' : 'FAIL',
+      `ack=${JSON.stringify(m.cancelPayload)}`));
+    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.task?.status) ? 'PASS' : 'WARN',
+      `terminal status=${m.terminal?.task?.status}`));
+    out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
+      `delete=${JSON.stringify(m.deleteBlock)}`));
     return out;
   }
 
@@ -690,7 +794,6 @@ export function verify(rec) {
   if (e.type === 'spec') {
     const specSummary = r?.output?.summary;
     const sections = specSummary?.sections ?? [];
-    const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
     if (e.subsetComponents) {
       // Expected = the requested labels in canonical order (regardless of request order).
       const want = CANON.filter(c => e.subsetComponents.includes(c));
@@ -734,12 +837,34 @@ export function verify(rec) {
     // attribution lives on each event, not the envelope. Reading it off the wrong
     // level yields undefined everywhere, which would report NA forever — a check
     // that never runs looks exactly like a check that always passes.
+    // The queue is sampled by LINE-COUNT WINDOW, and a wire event carries `eventId`, `route` and
+    // `client` but deliberately NO task id — telemetry is not task-correlated. So this sample
+    // cannot separate the harness's own events from those of any other client using the same
+    // daemon during the window. That distinction changes what a non-matching client MEANS:
+    //
+    //   - no SMOKE_CLIENT event at all  → FAIL. Attribution genuinely did not survive the path,
+    //     which is the defect this check exists for (a silent collapse to `other`).
+    //   - SMOKE_CLIENT present, plus a foreign client → the sample is CONTAMINATED. The harness
+    //     cannot tell a collapsed event of its own from a legitimate event of the other client,
+    //     so it has not learned whether attribution held. Report that as unsettled, not as a
+    //     defect: "another client shared this daemon" and "attribution is broken" are different
+    //     facts, and reporting the first as the second sends a reader hunting a bug that is not
+    //     there. This cost a full 50-scenario run on 2026-08-09.
+    //   - only SMOKE_CLIENT → PASS.
     const clients = [...new Set(
       q.records.flatMap((r) => (Array.isArray(r.events) ? r.events : [])).map((e) => e.client).filter(Boolean),
     )];
-    const attributed = clients.length > 0 && clients.every((c) => c === SMOKE_CLIENT);
-    out.push(C('client-attribution', clients.length === 0 ? 'NA' : (attributed ? 'PASS' : 'FAIL'),
-      `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
+    const foreign = clients.filter((c) => c !== SMOKE_CLIENT);
+    const mineSeen = clients.includes(SMOKE_CLIENT);
+    const status = clients.length === 0 ? 'NA'
+      : !mineSeen ? 'FAIL'
+        : foreign.length > 0 ? 'WARN'
+          : 'PASS';
+    out.push(C('client-attribution', status,
+      status === 'WARN'
+        ? `UNSETTLED — another client shared this daemon during the window: foreign=[${foreign.join(', ')}]. `
+          + `smoke:full needs exclusive use of the daemon; re-run with nothing else dispatching to it.`
+        : `client=[${clients.join(', ')}] want=${SMOKE_CLIENT}`));
 
     // The cost baseline must be the CONFIGURED main tier on every event. The
     // defect this replaces: with no per-call model claim, the runtime fell back
@@ -763,5 +888,56 @@ export function verify(rec) {
         : (mainModels.some((m) => workerModels.includes(m)) ? 'FAIL' : 'PASS'),
       `mainModel=[${mainModels.join(', ')}] workerTiers=[${workerModels.join(', ')}]`));
   }
+
+  // ─── Deliverable-agnostic lifecycle (#44, #45, #46) ───
+
+  // #44 — a digest-matched ApprovedContract must be ACCEPTED, not merely well-formed.
+  // Acceptance is only proven by a task that reached a terminal envelope: a contract rejected
+  // at either validation layer never gets a taskId at all, and a rejection AFTER admission
+  // would surface as a terminal `error`. Both failure modes are covered by asserting the
+  // terminal envelope carries no error.
+  if (e.deliverableContract) {
+    const terminal = typeof r?.task?.status === 'string';
+    out.push(C('contract-accepted', terminal && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    // The contract governs the work; it must not leak into the task identity. `deliverable`
+    // is an input, and echoing it back would make an approval look like task state.
+    out.push(C('contract-not-echoed-as-identity',
+      r?.task?.deliverable === undefined ? 'PASS' : 'FAIL',
+      `task.deliverable=${JSON.stringify(r?.task?.deliverable)}`));
+  }
+
+  // #45 — a Contract Task with NO declared check must parse, run, and commit.
+  // The precise regression this guards: the previous grammar raised `malformed-plan` before
+  // any worker started whenever `Test:` was absent, so the task failed terminally. Asserting
+  // "not malformed-plan" is therefore the load-bearing half; the declared output landing in
+  // the engine-measured commit proves the run was real rather than an empty success.
+  if (e.noCheckPlan) {
+    const code = r?.error?.code ?? null;
+    out.push(C('no-check-plan-parsed', code !== 'malformed-plan' && code !== 'unsupported-legacy-plan'
+      ? 'PASS' : 'FAIL', `errorCode=${code}`));
+    const files = r?.output?.filesChanged ?? [];
+    out.push(C('no-check-output-committed',
+      files.some((f) => String(f).endsWith('docs/release-note.md')) ? 'PASS' : 'FAIL',
+      `filesChanged=${JSON.stringify(files)}`));
+    // A task with no declared check must still reach a real terminal status rather than being
+    // reported done with nothing scored.
+    out.push(C('no-check-terminal-status',
+      ['done', 'done_with_concerns'].includes(r?.task?.status) ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status}`));
+  }
+
+  // #46 — `practice` must survive the wire and reach the skill selector.
+  // `task.practice` on the terminal envelope is the only caller-visible evidence that the
+  // field was honoured rather than dropped: `loadSkill()` receives the same string, so an
+  // echoed value and a loaded `implement-software.md` succeed or fail together.
+  if (e.practice) {
+    out.push(C('practice-echoed', r?.task?.practice === e.practice ? 'PASS' : 'FAIL',
+      `task.practice=${r?.task?.practice} want=${e.practice}`));
+    // `practice` and `subtype` answer different questions and must never both appear.
+    out.push(C('practice-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
+      `task.subtype=${r?.task?.subtype}`));
+  }
+
   return out;
 }

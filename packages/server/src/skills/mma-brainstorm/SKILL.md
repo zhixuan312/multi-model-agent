@@ -95,16 +95,28 @@ spec components below. Mark each:
 - **Ambiguous** — said, but vague / contradictory / incomplete. Queue a focused question.
 - **Missing** — not addressed. Queue it.
 
-**The 8 spec components (the canonical spec standard):**
+**The 8 spec components (the canonical spec standard — identifiers below; `mma-spec` writes
+`Technical Design` as `## Approach, Method & Structure`, `Testing Plan` as `## Verification
+Plan`, and `User Stories & Tasks` as `## Stakeholders & Work` in the spec file, since not every
+deliverable is software):**
 
 1. **Context** — background: who, what, why
 2. **Problem** — one clear problem statement + business impact
 3. **Goals & Requirements** — numbered goals, functional requirements, scope (in/out), constraints, success metrics
 4. **Alternatives** — driving factors, 2-3 options with tradeoffs, comparison + decision records with rationale
-5. **Technical Design** — current state → proposed architecture → interfaces → impact
-6. **Testing Plan** — layered test strategy
+5. **Technical Design** — how the result will be produced, for THIS kind and audience: current state → proposed approach → interfaces/contracts → impact. Not assumed to be software — a statistical methodology, a node graph, or a document structure reads the same way.
+6. **Testing Plan** — the verification points: what will be checked, by which method, against which reference
 7. **Risks & Mitigations** — risk table + mitigation plan, failure handling
-8. **User Stories & Tasks** — user stories with acceptance criteria (numbered AC-N.N, testable)
+8. **User Stories & Tasks** — who needs what from the deliverable and the work that implies, with acceptance criteria (numbered AC-N.N, testable) — not necessarily agile story format
+
+**The interview also grills toward the deliverable contract, not only the eight components.**
+Every open decision you record should let `mma-spec` propose `kind`, `audience`, `artifacts`,
+`acceptance` (with an explicit verification method per criterion — `command` where a deterministic
+check honestly settles the claim, `agent-review` for delegable analytical judgement, `human` where
+authority or accountability is required — never a fixed ranking, and `agent-review` is never
+presented as stronger than `human`), and `disposition`. The user is never required to arrive with
+these already formalized: `mma-spec` proposes them in plain language from the decisions you hand
+it, and the user confirms or corrects the proposal afterward.
 
 ### Phase 2: Grill — one decision at a time
 

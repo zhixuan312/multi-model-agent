@@ -19,7 +19,7 @@ version: "0.0.0-unreleased"
 
 Turn a raw braindump into a grounded, written **exploration.md**. The user dumps everything they
 know; you fan that brief out into parallel delegated tasks across three types — `mma-investigate`
-(internal codebase), `mma-research` (external sources), and `mma-journal-recall` (what this project
+(internal project material), `mma-research` (external sources), and `mma-journal-recall` (what this project
 already learned/decided, from the `.mma/journal/` graph) — and **you** synthesise their results
 into one artifact on disk. The number of tasks under each type is sized to the braindump (see
 Phase 2), not fixed at one-per-type.
@@ -66,7 +66,7 @@ Read the braindump and **size the fan-out to what it actually contains** — the
 type is driven by the number of distinct questions, **never a fixed one-per-type**. `investigate`
 is the dominant type; `research` and `recall` are usually lighter. Reasonable ranges:
 
-- **`investigate` — 1–8**, one task per distinct **repo, module, or subsystem** the idea touches.
+- **`investigate` — 1–8**, one task per distinct **project area, source collection, or subsystem** the idea touches.
   Most ideas land at 2–5; a broad cross-cutting one reaches ~8. This is the bulk of the fan-out.
 - **`research` — 0–3**, one task per distinct **external question**. Use **0** when the work is
   purely internal (a refactor with no prior-art question); 1–2 is typical when external practice matters.
@@ -93,8 +93,8 @@ unless a type is genuinely inapplicable (see How to run).
 Dispatch **every** task from the Phase 2 plan (all N + M + K, plus any user additions) in ONE
 message (parallel tool use) — not one call per type, one call per question:
 
-1. `mma-investigate` (1–8) — internal codebase research, **one dispatch per distinct repo/area/subsystem**.
-   - You MAY skip this type entirely only if the idea is unambiguously greenfield (no codebase
+1. `mma-investigate` (1–8) — internal project-material research, **one dispatch per distinct project area, source collection, or subsystem**.
+   - You MAY skip this type entirely only if the idea is unambiguously greenfield (no existing project material
      touch-points exist). When in doubt, run it.
 2. `mma-research` (0–3) — external multi-source research, **one dispatch per distinct external question**.
    Zero is fine when nothing external applies.
@@ -162,7 +162,7 @@ The braindump distilled — who / what / why, the intent and problem framing.
 What exists today, synthesised. Anchored in the internal leg plus any prior-learning that describes
 what the project already built or tried.
 
-### Findings — Internal (codebase)
+### Findings — Internal (project material)
 From mma-investigate. Each: a claim + a `file:LINE` citation pulled from the finding's evidence.
 
 ### Findings — External (prior art)
@@ -177,9 +177,26 @@ this" signal survives. Use `(no prior learning)` when the leg returned nothing.
 3–5 ranked candidate directions — alternatives-style, the same shape as the spec's `Alternatives`
 component, so a downstream spec can lift them almost verbatim. **This exploration is read by business,
 product, and engineering** — write each direction so a non-engineer can weigh it: plain English,
-value first. Each direction:
+value first.
+
+Each direction proposes a **resolution shape** — the kind of action it takes, not a document genre
+or a profession. There are six shapes: **build** (create something new), **change** (modify
+something that already exists), **configure** (adjust settings or behavior without new
+construction), **document/analysis** (produce a written analysis, report, or record),
+**process/decision** (a decision, policy, or procedural change with no artifact to build), and
+**no-change** (recommend leaving the current state as is, with the reasoning behind it).
+
+If the braindump names a target deliverable explicitly, every direction may resolve to that named
+deliverable. If it does not name one, the directions as a set MUST span **at least two distinct**
+resolution shapes — three directions that only vary the proposed build (three ways to build the
+same kind of thing) are not divergent and fail the exploration review. A non-software problem may
+resolve just as validly through "change the process" or "no change is needed" as through "build
+something."
+
+Each direction:
 
 - **Title** + one-paragraph summary in plain language.
+- **Resolution shape** — one of the six shapes above.
 - **What it buys us** — the business value / user outcome this direction delivers, and roughly what it costs.
 - **Key tradeoff** — what you give up to get its upside.
 - **Backing citations** — at least one internal, external, or prior-learning cite (or the matching
@@ -239,6 +256,12 @@ valuable signal before design. Always run it; handle empty with `(no prior learn
 
 ❌ **Padding to hit 5 directions.** One direction with high-confidence citations beats five watery
 ones. Stop at the natural number of distinct directions in the data.
+
+❌ **Directions that only vary the proposed build.** Three directions that differ only in
+implementation detail (three ways to build the same feature) are not divergent — they fail the
+exploration review when no deliverable was named. **Fix:** vary the resolution shape too — weigh
+whether the problem could resolve via a process change, a configuration change, or no change at
+all, not only new construction.
 
 ❌ **Auto-running mma-brainstorm.** Explore ends at the written file + a soft suggestion. Chaining is
 the user's call (or `/mma-flow`'s).

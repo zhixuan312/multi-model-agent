@@ -1,8 +1,14 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 43 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 50 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
+//   - the deliverable-agnostic solution lifecycle: a digest-matched ApprovedContract
+//     accepted on a governed route, a Contract Task that declares NO deterministic check
+//     (the shape every non-code deliverable needs), `practice: 'software'` reaching the
+//     skill selector, neutral spec component labels on the emitted artifact, and the four
+//     contract rejection paths (unapproved state, digest mismatch, disposition
+//     infeasibility at the filesystem boundary, and the field not being wired everywhere).
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
 //     context-blocks control op — every dispatchable route is exercised.
@@ -310,4 +316,88 @@ export const SCENARIOS = [
   { id: 41, type: 'execute_plan', tier: 'standard', kind: 'write', selectById: true, emits: 1 },
   { id: 42, type: 'execute_plan', tier: 'standard', kind: 'write', selectByHeading: true, emits: 1 },
   { id: 43, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', gitAttempt: true, emits: 1 },
+
+  // R. Deliverable-agnostic solution lifecycle — the release that made MMA's lifecycle
+  //    deliverable-neutral. Everything below exercises surface that did not exist before it,
+  //    so a regression in any of it would otherwise reach a caller unreported.
+  //
+  //    #44 the HAPPY path for the Deliverable Contract: a digest-matched `ApprovedContract`
+  //        crosses the wire on a governed route, passes core Zod validation AND the
+  //        filesystem-aware boundary validator, and the task runs to a terminal envelope.
+  //        Without this, every contract assertion in the suite would be a rejection — proving
+  //        only that the engine says no, never that it says yes to a valid contract.
+  //    #45 a Contract Task that declares NO deterministic check, producing a MARKDOWN
+  //        deliverable. The old grammar raised `malformed-plan` whenever `Test:` was absent,
+  //        which is the single fault that blocked every non-code deliverable. The task must
+  //        parse, execute, and commit its declared output.
+  //    #46 `practice: 'software'` on a governed route. The field selects the retained code
+  //        technique WITHOUT classifying the deliverable, and the runtime echoes it back on
+  //        the terminal envelope as `task.practice` — the observable that proves the request
+  //        reached the skill selector rather than being silently dropped.
+  { id: 44, type: 'review', tier: 'complex', kind: 'read', deliverableContract: true, emits: 1 },
+  { id: 45, type: 'execute_plan', tier: 'standard', kind: 'write', noCheckPlan: true, emits: 1 },
+  { id: 46, type: 'plan', tier: 'complex', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
+
+  //    Contract REJECTION paths. Each states exactly one reason to reject, so a failure names
+  //    the broken invariant instead of "the contract was bad". All four are pure validation —
+  //    no provider session opens, so they cost nothing and can never flake on a model.
+  //    #47 INV-7 at the state gate: only `approved` crosses the wire; `proposed` must not.
+  //    #48 INV-7 at the digest gate: a well-formed contract whose approval covers different
+  //        content. This is the one that stops an approval being reused after an edit.
+  //    #49 INV-3 at the SERVER boundary, not in core: `commit-in-place` needs a git repository.
+  //        Core cannot see a filesystem, so only a real non-git cwd exercises this path.
+  //    #50 the field is not universal: `practice` is wired to four routes and `audit` is not
+  //        one of them. A strict schema must reject the unknown key rather than ignore it.
+  { id: 47, type: 'error_contract_not_approved', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 48, type: 'error_contract_digest_mismatch', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 49, type: 'error_contract_disposition_non_git', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 50, type: 'error_practice_not_wired', kind: 'error', expectStatus: 400, emits: 0 },
+
+  // S. Per-ROUTE coverage of the two new request fields.
+  //
+  //    `deliverable` is accepted on four routes and `practice` on four, and each arm opts in
+  //    INDIVIDUALLY in a strict discriminated union. Testing one route per field proves the field
+  //    works somewhere, not that it works where a caller will actually send it — a missing opt-in
+  //    on a single arm is invisible until that route is used. #44 and #46 covered `review` and
+  //    `plan`; these cover every remaining accepting route with a real dispatch.
+  //
+  //    Where a route accepts BOTH fields they are sent together, because that is how a managed
+  //    flow dispatches: one approved contract governing the work, one persisted practice selecting
+  //    the technique. Sending them separately would test a combination no caller produces.
+  { id: 51, type: 'execute_plan', tier: 'standard', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
+  { id: 52, type: 'review', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
+  { id: 53, type: 'debug', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
+  { id: 54, type: 'spec', tier: 'complex', kind: 'write', deliverableContract: true, emits: 1 },
+
+  //    T. The MCP transport must honour BOTH fields, not merely relay a task.
+  //       #40 proves the adapter runs a task and matches REST. It sends neither new field, so the
+  //       generated MCP request schema could omit them — or the adapter could drop them — while
+  //       #40 stayed green. MCP is a first-class transport, so a contract rejected there but
+  //       accepted over REST would be a silent split-brain between the two surfaces.
+  { id: 55, type: 'review', tier: 'complex', kind: 'mcp-contract', deliverableContract: true, practice: 'software', emits: 1 },
+
+  //    U. The rest of the MCP tool surface. `mma_run` and `mma_task_wait` are exercised by #40;
+  //       the remaining tools have never been driven over MCP at all — only their REST
+  //       equivalents. A tool that throws on every call would not fail any existing scenario.
+  { id: 56, type: 'investigate', tier: 'standard', kind: 'mcp-tools', emits: 0 },
+
+  //    V. A workspace that is NOT our shape.
+  //       Every other fixture here is `math.ts` + markdown, so any assumption baked into the
+  //       product is also baked into the fixture, and a fixture cannot falsify the conventions it
+  //       was generated from. That is precisely how two reported defects survived this gate: a
+  //       check path forced under a JavaScript `tests/`, and a parser that broke on a blockquote.
+  //       These two run against a folder of documents and data with NO source file, NO test runner
+  //       and NO `tests/` directory — what a finance or policy deliverable actually looks like.
+  //       A route that silently assumes a code project fails here and passes everywhere else.
+  { id: 57, type: 'investigate', tier: 'complex', kind: 'read', nonCodeWorkspace: true, emits: 1 },
+  { id: 58, type: 'plan', tier: 'complex', kind: 'write', nonCodeWorkspace: true, emits: 1 },
+
+  //    W. A client that gives up before the daemon answers.
+  //       Reported twice in real use: an MCP dispatch timed out and the task had in fact been
+  //       created, so re-dispatching produced a duplicate. Every scenario here polls politely to
+  //       terminal, so no test ever staged a transport failure and this path was never covered.
+  //       The property that makes recovery possible is not that the timeout stops happening — it
+  //       is that an admitted task remains DISCOVERABLE afterwards, so a caller can reconcile
+  //       instead of guessing. That is what this asserts.
+  { id: 59, type: 'investigate', tier: 'standard', kind: 'client-timeout', emits: 0 },
 ];

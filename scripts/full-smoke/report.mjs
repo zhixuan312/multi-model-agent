@@ -38,6 +38,25 @@ export function report(records, checksByScenario, meta) {
   lines.push(`local telemetry (queue): ${GLYPH[localOK ? 'PASS' : 'WARN']} ${qCount}/${exp} wire records sampled${exact ? ' (all)' : ` (≥${floor} required; up to ${slack} may race the 5-min flush/rewrite window — verify exact backend landing with --wait-flush)`}`);
   if (!localOK) { warns++; gaps.push(`WARN  local-telemetry: only ${qCount}/${exp} wire records sampled — below the ${floor} floor; telemetry may not be flowing (rerun with --wait-flush to verify backend landing in events_raw)`); }
 
+  // Availability across the whole run. This is a RUN-LEVEL property, not a per-scenario one:
+  // a daemon that stalls its HTTP layer still lets separate-process workers finish, so every
+  // scenario can pass while the service was unreachable. Reported next to telemetry because both
+  // answer "was the daemon healthy while working", which no per-scenario check can see.
+  if (meta.availability) {
+    const a = meta.availability;
+    lines.push(`daemon availability: ${GLYPH[a.status] ?? '—'} ${a.detail}`);
+    if (a.status === 'FAIL') {
+      hardFail++;
+      gaps.push(`FAIL  availability: the daemon was unreachable for ${a.longestOutageMs}ms during the run `
+        + `(${a.failures}/${a.probes} probes unanswered). Workers keep running through an HTTP wedge, so `
+        + `scenario outcomes cannot detect this — look for synchronous work on the daemon event loop.`);
+    } else if (a.status === 'WARN') {
+      warns++;
+      gaps.push(`WARN  availability: slowest /health ${a.slowestMs}ms, longest outage ${a.longestOutageMs}ms — `
+        + `the daemon stalled but callers probably survived it.`);
+    }
+  }
+
   if (meta.backend) {
     const matched = meta.backend.matched?.length ?? 0;
     const queried = meta.backend.queried ?? 0;
