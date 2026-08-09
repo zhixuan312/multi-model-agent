@@ -540,7 +540,9 @@ are thin prompts that route to MCP tools, never to a hand-built HTTP call. All 1
 produces the answer on one tier, a refiner verifies and improves it on the other (both output the same
 JSON schema). The `spec` type writes a formal specification (a human-alignment contract) from
 structured decisions; the `plan` type writes a contract-first, human-executable phased plan — each task
-a Contract plus plan-authored acceptance tests, no implementation code. The `orchestrate` type is a
+a Contract, plus a plan-authored deterministic check where the acceptance criterion admits one, and
+no implementation code. A criterion no machine can settle (a written section, a design decision, a
+figure a person must eyeball) declares no check; that is a valid task, not a defective one. The `orchestrate` type is a
 session-persistent orchestrator (no refiner, no commit, cwd-only sandbox — can write files) for
 multi-phase frontend workflows. Write types (`delegate`, `execute_plan`) edit the caller's checkout IN
 PLACE on whatever branch it already has checked out and the engine commits there — it never creates a
