@@ -88,15 +88,25 @@ export function canonicalSubjectDigest(subject: VerificationSubject): string {
       // Total order, not merely a grouping. Without the final tie-breaker, two entries sharing a
       // repositoryId compare equal, a stable sort preserves the CALLER's order, and two callers
       // listing the same subject differently would digest it differently.
-      .sort((a, b) => compareByCodePoint(a.repositoryId, b.repositoryId) || compareByCodePoint(a.commit, b.commit));
+      // Sort on the NFC-NORMALISED form. `canonicalDigest` normalises string values afterwards, so
+      // sorting on the raw text lets the same subject order differently depending on its spelling:
+      // 'e'+U+0301 sorts BEFORE 'f', while the precomposed 'é' (U+00E9) sorts AFTER it. Two callers
+      // holding the same subject in different Unicode forms would then digest it differently, and
+      // valid evidence would read as stale. macOS produces NFD filenames, so this is ordinary input.
+      .sort((a, b) => compareByCodePoint(a.repositoryId.normalize('NFC'), b.repositoryId.normalize('NFC'))
+        || compareByCodePoint(a.commit.normalize('NFC'), b.commit.normalize('NFC')));
     return canonicalDigest({ type: 'git', repositories });
   }
   const artifacts = [...subject.artifacts]
     .map((entry) => ({ root: entry.root, path: entry.path, digest: entry.digest }))
     // Total order: `digest` is the final tie-breaker, so two entries with the same (root, path)
     // but different content still sort deterministically instead of keeping input order.
-    .sort((a, b) => compareByCodePoint(a.root, b.root) || compareByCodePoint(a.path, b.path)
-      || compareByCodePoint(a.digest, b.digest));
+    // Same reason as the git branch: order on the normalised form, because the values are
+    // normalised before they are digested. `digest` remains the final tie-breaker so the order is
+    // total even for two entries sharing a (root, path).
+    .sort((a, b) => compareByCodePoint(a.root.normalize('NFC'), b.root.normalize('NFC'))
+      || compareByCodePoint(a.path.normalize('NFC'), b.path.normalize('NFC'))
+      || compareByCodePoint(a.digest.normalize('NFC'), b.digest.normalize('NFC')));
   return canonicalDigest({ type: 'files', artifacts });
 }
 

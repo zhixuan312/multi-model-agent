@@ -66,7 +66,13 @@ export function canonicalizeValue(value: unknown): unknown {
       }
     }
 
-    const canonical: Record<string, unknown> = {};
+    // `Object.create(null)`, NOT `{}`. On a plain object literal, assigning the key `__proto__`
+    // goes through Object.prototype's inherited setter instead of creating an own property: a
+    // primitive value is silently discarded, an object value reassigns the prototype. Either way
+    // `JSON.stringify` never emits the key, so `JSON.parse('{"__proto__":1}')` digested the same
+    // as `{}` — the identical silent-drop collision this function was just fixed for. A
+    // null-prototype object has no such inherited setter.
+    const canonical: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     for (const { original, normalized } of pairs) {
       canonical[normalized] = canonicalizeValue(source[original]);
     }

@@ -127,6 +127,64 @@ describe('concurrent syncIncremental', () => {
   });
 });
 
+describe('a concurrent sync must not delete another sync\'s new record', () => {
+  it('keeps a row inserted after this sync took its snapshot', async () => {
+    // Second-review finding, and a regression the FIRST fix introduced. Moving the file I/O out of
+    // the transaction removed the serialisation that used to make this safe.
+    //
+    // The interleaving must be exact, so it is CONTROLLED rather than raced. `syncIncremental`
+    // reads its `existing` snapshot from the table, THEN calls `listFiles()`. Gating A's
+    // `listFiles` lets B insert a brand-new row in between. A's snapshot therefore predates that
+    // row, and A's own file listing does not contain it either.
+    //
+    // A deletion set derived from a LIVE table read would see the row, not find it in `seenPaths`,
+    // and delete it. Deriving deletions from A's OWN snapshot means a row A never saw cannot be
+    // deleted by A. An earlier version of this test had B finish before A began, which is a
+    // different situation entirely — there A legitimately sees a row for a file its adapter does
+    // not list — and it proved nothing about the race.
+    const root = await mkdtemp(join(tmpdir(), 'mma-sync-race-'));
+    try {
+      const files = await seedCorpus(root, 6);
+      const newFile = 'note-late.txt';
+
+      let releaseListFiles: () => void = () => {};
+      const gate = new Promise<void>((resolve) => { releaseListFiles = resolve; });
+      // `rebuild()` calls `listFiles()` too, so gating EVERY call would deadlock the setup before
+      // the interesting part ran. Only the sync's call is gated.
+      let listCalls = 0;
+      const gatedAdapter = {
+        ...plainAdapter(root, files),
+        listFiles: async () => { listCalls += 1; if (listCalls > 1) await gate; return [...files]; },
+      };
+
+      const a = await CorpusIndex.open({ root, adapter: gatedAdapter });
+      await a.rebuild();
+
+      // A starts: it reads `existing` from the table, then blocks inside listFiles.
+      const aSync = a.syncIncremental();
+      await new Promise((r) => setTimeout(r, 50));
+
+      // B now writes and indexes a brand-new file, entirely inside A's window.
+      await writeFile(join(root, newFile), 'a record written by the other sync');
+      const b = await CorpusIndex.open({ root, adapter: plainAdapter(root, [...files, newFile]) });
+      await b.syncIncremental();
+      expect(b.allRecords().some((r) => r.id === newFile)).toBe(true);
+
+      // A proceeds and commits its own writes.
+      releaseListFiles();
+      await aSync;
+
+      const c = await CorpusIndex.open({ root, adapter: plainAdapter(root, [...files, newFile]) });
+      expect(
+        c.allRecords().some((r) => r.id === newFile),
+        "A deleted a record it never saw, written by a concurrent sync",
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('the two structural properties a refactor must not undo', () => {
   const source = () => readFileSync('packages/core/src/journal/engine/index-store.ts', 'utf8');
 

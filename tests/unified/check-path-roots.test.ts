@@ -53,6 +53,20 @@ describe('accepted check roots', () => {
     }
   });
 
+  it('accepts the Java layout its own documentation cites', async () => {
+    // Second-review finding: the doc comment justified the widening by citing Java's
+    // `src/test/java`, but the root list held only top-level names, so that exact path was still
+    // rejected. A caller following the code's own stated guidance would still have been forced
+    // back to `delegate` — the workaround the change existed to remove.
+    const repo = await mkdtemp(join(tmpdir(), 'mma-check-java-'));
+    try {
+      await expect(assertSafeAcceptanceTestPaths(snapshot('src/test/java/FooTest.java'), repo))
+        .resolves.toBeUndefined();
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
   it('names every permitted root when it rejects, so the author can fix it immediately', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'mma-check-reject-'));
     try {

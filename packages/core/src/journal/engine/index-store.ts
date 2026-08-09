@@ -577,10 +577,18 @@ export class CorpusIndex {
     // Nothing changed: do not take a write lock at all. This is the common case on the
     // recall path, so an unnecessary lock here would serialise every concurrent reader
     // for no benefit.
-    const currentRows = this.db.prepare('SELECT id, path FROM records').all() as Array<Record<string, unknown>>;
-    const deletions = currentRows
-      .filter((row) => !seenPaths.has(asString(row.path)))
-      .map((row) => asString(row.id));
+    // Delete ONLY rows this sync saw in its own opening snapshot (`existing`) and then confirmed
+    // gone from disk. Reading the live table here instead would delete a row a CONCURRENT sync
+    // legitimately inserted while this one was doing file I/O: that row is absent from `seenPaths`,
+    // because `seenPaths` was fixed before the other sync's file existed, so a live read would
+    // classify a brand-new record as a disappeared one and drop it.
+    //
+    // Moving the I/O out of the transaction is what opened that window — the single-transaction
+    // version serialised these calls, at the cost of the crash this split repairs. Restricting the
+    // deletion set to the opening snapshot closes the window without giving the lock back.
+    const deletions = [...existing.entries()]
+      .filter(([path]) => !seenPaths.has(path))
+      .map(([, prior]) => prior.id);
     if (mtimeRefreshes.length === 0 && upserts.length === 0 && deletions.length === 0) return;
 
     // ---- Phase 2: writes only, under an explicitly acquired write lock. ----

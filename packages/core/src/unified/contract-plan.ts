@@ -347,7 +347,7 @@ async function assertNoSymlinkAncestors(testsRoot: string, absTargetPath: string
  * an existing file (`test-path-collision`). Widening the set of permitted roots changes none of
  * those properties.
  */
-export const ACCEPTED_CHECK_ROOTS = ['tests', 'test', 'spec', 'specs', 'checks', '__tests__'] as const;
+export const ACCEPTED_CHECK_ROOTS = ['tests', 'test', 'spec', 'specs', 'checks', '__tests__', 'src/test'] as const;
 
 export async function assertSafeAcceptanceTestPaths(snapshot: ContractPlanSnapshot, repositoryRoot: string): Promise<void> {
   for (const test of collectUniqueTests(snapshot)) {

@@ -49,6 +49,57 @@ describe('the NFC key defect must never return', () => {
   });
 });
 
+describe('the __proto__ key must not vanish', () => {
+  // Second-review finding. `JSON.parse('{"__proto__":1}')` creates a REAL own-enumerable property,
+  // so `Object.keys` returns it — but assigning that key on a plain object literal goes through
+  // Object.prototype's inherited setter instead of creating an own property, and
+  // `JSON.stringify` then never emits it. The same silent-drop collision as the NFC bug, for one
+  // specific key spelling. Fixed by building the canonical object with `Object.create(null)`.
+  const protoObj = () => JSON.parse('{"__proto__":1}');
+
+  it('does not collide with an empty object', () => {
+    expect(canonicalDigest(protoObj())).not.toBe(canonicalDigest({}));
+  });
+
+  it('distinguishes two different values under the key', () => {
+    expect(canonicalDigest(JSON.parse('{"__proto__":1}')))
+      .not.toBe(canonicalDigest(JSON.parse('{"__proto__":2}')));
+  });
+
+  it('survives at depth, inside a nested object and inside an array', () => {
+    expect(canonicalDigest(JSON.parse('{"a":{"__proto__":1}}')))
+      .not.toBe(canonicalDigest(JSON.parse('{"a":{}}')));
+    expect(canonicalDigest(JSON.parse('{"a":[{"__proto__":1}]}')))
+      .not.toBe(canonicalDigest(JSON.parse('{"a":[{}]}')));
+  });
+});
+
+describe('subject ordering uses the normalised form', () => {
+  // Second-review finding. The entries were sorted on RAW text while their VALUES are normalised
+  // afterwards, so the same subject spelled NFD or NFC could order differently and digest
+  // differently — valid evidence would read as stale. macOS produces NFD filenames.
+  const NFD = 'e\u0301';
+  const NFC = '\u00e9';
+
+  it('the two spellings really do sort on opposite sides of an ASCII neighbour', () => {
+    // If this ever stops holding, the test below proves nothing.
+    expect(NFD < 'f').toBe(true);
+    expect(NFC < 'f').toBe(false);
+  });
+
+  it('a file subject digests the same whichever spelling the caller holds', () => {
+    const mid = { root: 'r', path: 'f', digest: 'd2' };
+    expect(canonicalSubjectDigest({ type: 'files', artifacts: [{ root: 'r', path: NFD, digest: 'd1' }, mid] }))
+      .toBe(canonicalSubjectDigest({ type: 'files', artifacts: [{ root: 'r', path: NFC, digest: 'd1' }, mid] }));
+  });
+
+  it('a git subject digests the same whichever spelling the caller holds', () => {
+    const mid = { repositoryId: 'f', commit: 'c2' };
+    expect(canonicalSubjectDigest({ type: 'git', repositories: [{ repositoryId: NFD, commit: 'c1' }, mid] }))
+      .toBe(canonicalSubjectDigest({ type: 'git', repositories: [{ repositoryId: NFC, commit: 'c1' }, mid] }));
+  });
+});
+
 describe('frozen digests — change these only when changing the algorithm on purpose', () => {
   it('digests a fixed contract to a fixed value', () => {
     const content = {
