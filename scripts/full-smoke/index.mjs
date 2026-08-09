@@ -31,6 +31,7 @@ import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
+import { startAvailabilityProbe } from './availability.mjs';
 
 const argv = process.argv.slice(2);
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
@@ -68,6 +69,8 @@ const seenIds = new Set();
 let totalCostUSD = 0;
 let expectedEmits = 0;
 let backendSummary = null;
+let availabilityProbe = null;
+let availability = null;
 
 // ── Run a single scenario to completion and record results ──
 async function runScenario(spec, ctx, log) {
@@ -521,6 +524,12 @@ try {
     const totalCount = 1 + phase2Threads.reduce((n, t) => n + filterThread(t).length, 0);
     log(`Full-pipeline smoke — ${totalCount} scenarios (2 phases, parallel)`);
 
+    // Availability, measured for the WHOLE run. Every other check in this harness measures an
+    // outcome; none measured whether the daemon stayed answerable while producing it. A daemon
+    // that stalls its HTTP layer still lets separate-process workers finish, so an outcome-only
+    // gate reports all-green through an outage a caller would certainly notice.
+    availabilityProbe = startAvailabilityProbe({ token: ctx.token });
+
     // Phase 1: context-blocks
     const phase1 = scenarios.find(s => s.id === 1);
     if (phase1 && (!opts.only || opts.only.has('1'))) {
@@ -567,6 +576,9 @@ try {
   }
 } finally {
   if (ctx.bgScan) clearInterval(ctx.bgScan);
+  // Stop BEFORE teardown: teardown may stop or restart the daemon, and an outage it causes on
+  // purpose is not a product defect.
+  if (availabilityProbe) availability = await availabilityProbe.stop();
   await teardown(ctx);
 }
 
@@ -575,6 +587,6 @@ const exitCode = report(records, checksByScenario, {
   mode: opts.skipBackend ? 'REDUCED (--skip-backend)' : 'FULL',
   strict: opts.strict, totalCostUSD,
   backend: backendSummary, queueEventCount: seenIds.size, expectedRows: expectedEmits,
-  waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved,
+  waitFlush: opts.waitFlush, dbApproved: ctx.dbApproved, availability,
 });
 process.exit(exitCode);
