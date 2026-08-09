@@ -57,6 +57,7 @@ is not available in this session, run `mma clients`.
 | `target.inline` | string | no | Inline code snippet to review |
 | `target.paths` | string[] | no | Files to review |
 | `contextBlockIds` | string[] | no | IDs from `mma:context-blocks` (max 2) — useful for design docs the reviewer should validate against |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (caller tracing, error paths, security sinks, schema conformance, test adequacy). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma:flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 
 Exactly one of `target.inline` or `target.paths` must be provided (not both).
 

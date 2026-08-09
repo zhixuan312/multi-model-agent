@@ -55,6 +55,7 @@ is not available in this session, run `mma clients`.
 | `prompt` | string | yes | What is broken (one sentence; concrete symptom, min 1 char) |
 | `target.paths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma:context-blocks` (max 2) — e.g. error logs, traces |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (stack-trace reading, bisection, test isolation, reproduction of a failing test). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma:flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 
 > Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 

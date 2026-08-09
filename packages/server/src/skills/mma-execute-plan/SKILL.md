@@ -67,6 +67,7 @@ is not available in this session, run `mma clients`.
 | `tasks` | string[] | no | Task selectors matching plan headings. Empty or omitted = run all tasks in the plan |
 | `target.paths` | string[] | yes | EXACTLY one entry: the plan markdown file |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — the right place for source files referenced by the plan |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (caller tracing, error paths, security sinks, schema conformance, test adequacy). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma-flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 
 @include _shared/review-policy.md
 

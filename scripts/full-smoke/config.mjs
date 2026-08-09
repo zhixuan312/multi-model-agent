@@ -1,8 +1,14 @@
 // Full-pipeline smoke — pinned constants. All values confirmed against the codebase
 // (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
 //
-// Comprehensive product release gate: 43 scenarios, each testing a DISTINCT product
+// Comprehensive product release gate: 50 scenarios, each testing a DISTINCT product
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
+//   - the deliverable-agnostic solution lifecycle: a digest-matched ApprovedContract
+//     accepted on a governed route, a Contract Task that declares NO deterministic check
+//     (the shape every non-code deliverable needs), `practice: 'software'` reaching the
+//     skill selector, neutral spec component labels on the emitted artifact, and the four
+//     contract rejection paths (unapproved state, digest mismatch, disposition
+//     infeasibility at the filesystem boundary, and the field not being wired everywhere).
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
 //     context-blocks control op — every dispatchable route is exercised.
@@ -310,4 +316,40 @@ export const SCENARIOS = [
   { id: 41, type: 'execute_plan', tier: 'standard', kind: 'write', selectById: true, emits: 1 },
   { id: 42, type: 'execute_plan', tier: 'standard', kind: 'write', selectByHeading: true, emits: 1 },
   { id: 43, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', gitAttempt: true, emits: 1 },
+
+  // R. Deliverable-agnostic solution lifecycle — the release that made MMA's lifecycle
+  //    deliverable-neutral. Everything below exercises surface that did not exist before it,
+  //    so a regression in any of it would otherwise reach a caller unreported.
+  //
+  //    #44 the HAPPY path for the Deliverable Contract: a digest-matched `ApprovedContract`
+  //        crosses the wire on a governed route, passes core Zod validation AND the
+  //        filesystem-aware boundary validator, and the task runs to a terminal envelope.
+  //        Without this, every contract assertion in the suite would be a rejection — proving
+  //        only that the engine says no, never that it says yes to a valid contract.
+  //    #45 a Contract Task that declares NO deterministic check, producing a MARKDOWN
+  //        deliverable. The old grammar raised `malformed-plan` whenever `Test:` was absent,
+  //        which is the single fault that blocked every non-code deliverable. The task must
+  //        parse, execute, and commit its declared output.
+  //    #46 `practice: 'software'` on a governed route. The field selects the retained code
+  //        technique WITHOUT classifying the deliverable, and the runtime echoes it back on
+  //        the terminal envelope as `task.practice` — the observable that proves the request
+  //        reached the skill selector rather than being silently dropped.
+  { id: 44, type: 'review', tier: 'complex', kind: 'read', deliverableContract: true, emits: 1 },
+  { id: 45, type: 'execute_plan', tier: 'standard', kind: 'write', noCheckPlan: true, emits: 1 },
+  { id: 46, type: 'plan', tier: 'complex', kind: 'write', practice: 'software', emits: 1 },
+
+  //    Contract REJECTION paths. Each states exactly one reason to reject, so a failure names
+  //    the broken invariant instead of "the contract was bad". All four are pure validation —
+  //    no provider session opens, so they cost nothing and can never flake on a model.
+  //    #47 INV-7 at the state gate: only `approved` crosses the wire; `proposed` must not.
+  //    #48 INV-7 at the digest gate: a well-formed contract whose approval covers different
+  //        content. This is the one that stops an approval being reused after an edit.
+  //    #49 INV-3 at the SERVER boundary, not in core: `commit-in-place` needs a git repository.
+  //        Core cannot see a filesystem, so only a real non-git cwd exercises this path.
+  //    #50 the field is not universal: `practice` is wired to four routes and `audit` is not
+  //        one of them. A strict schema must reject the unknown key rather than ignore it.
+  { id: 47, type: 'error_contract_not_approved', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 48, type: 'error_contract_digest_mismatch', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 49, type: 'error_contract_disposition_non_git', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 50, type: 'error_practice_not_wired', kind: 'error', expectStatus: 400, emits: 0 },
 ];

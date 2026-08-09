@@ -149,6 +149,25 @@ function checkQuality(type, subtype, r, subsetComponents) {
   }
 }
 
+/**
+ * The message fragment each contract-rejection scenario must produce, keyed by scenario type.
+ *
+ * These are deliberately the ENGINE's own wording rather than a paraphrase. If a message is
+ * reworded the smoke fails loudly, which is correct: the text is what a caller reads to fix
+ * their contract, so changing it is a caller-visible change that deserves a deliberate edit
+ * here. A looser assertion (any 400) would pass even when the wrong invariant fired.
+ */
+const CONTRACT_REJECTION_REASON = {
+  // Only `state: 'approved'` crosses the wire — Zod reports the failed literal.
+  error_contract_not_approved: 'expected "approved"',
+  // INV-7: the approval must cover THIS content.
+  error_contract_digest_mismatch: 'contractApproval.contractDigest does not match the canonical digest',
+  // INV-3, and only reachable with a real non-git workspace on disk.
+  error_contract_disposition_non_git: 'requires the workspace root to be a git repository',
+  // `practice` is wired to four routes; `audit` is not one of them.
+  error_practice_not_wired: 'Unrecognized key',
+};
+
 export function verify(rec) {
   const out = [];
   const { response: r, diagnostics: d, queue: q, backend: b, expect: e } = rec;
@@ -162,6 +181,31 @@ export function verify(rec) {
     const hasError = json && (json.error || json.message || json.code);
     out.push(C('error-body', hasError ? 'PASS' : 'WARN',
       `body=${JSON.stringify(json).slice(0, 200)}`));
+
+    // A 400 alone does not prove the RIGHT invariant rejected the request — any typo in a
+    // rejection fixture also yields 400. Each contract scenario therefore names the message
+    // fragment its own invariant produces, and asserts the response actually contains it.
+    // `CONTRACT_REJECTION_REASON` is keyed by scenario type, so a scenario without an entry
+    // keeps the generic checks above and nothing here.
+    const wantedReason = CONTRACT_REJECTION_REASON[e.type];
+    if (wantedReason) {
+      // Field-specific errors must land UNDER `deliverable` (or as a form-level unrecognized
+      // key), never as a bare form error — a caller fixes what the field path points at.
+      const details = json?.error?.details?.fieldErrors ?? {};
+      const deliverableErrors = Array.isArray(details?.fieldErrors?.deliverable) ? details.fieldErrors.deliverable : [];
+      const formErrors = Array.isArray(details?.formErrors) ? details.formErrors : [];
+      // Match against the RAW message strings, never against `JSON.stringify(body)`. Several
+      // engine messages quote a literal (`expected "approved"`), and stringifying the body
+      // escapes those quotes, so a substring search over the serialised form fails on a
+      // message that is in fact present — a false failure that hides the real signal.
+      const messages = [...deliverableErrors, ...formErrors, json?.error?.message ?? ''];
+      out.push(C('contract-rejection-reason',
+        messages.some((m) => String(m).includes(wantedReason)) ? 'PASS' : 'FAIL',
+        `want=${JSON.stringify(wantedReason)} messages=${JSON.stringify(messages).slice(0, 260)}`));
+      out.push(C('contract-error-is-field-specific',
+        deliverableErrors.length > 0 || formErrors.length > 0 ? 'PASS' : 'FAIL',
+        `deliverableErrors=${deliverableErrors.length} formErrors=${formErrors.length}`));
+    }
     return out;
   }
 
@@ -763,5 +807,56 @@ export function verify(rec) {
         : (mainModels.some((m) => workerModels.includes(m)) ? 'FAIL' : 'PASS'),
       `mainModel=[${mainModels.join(', ')}] workerTiers=[${workerModels.join(', ')}]`));
   }
+
+  // ─── Deliverable-agnostic lifecycle (#44, #45, #46) ───
+
+  // #44 — a digest-matched ApprovedContract must be ACCEPTED, not merely well-formed.
+  // Acceptance is only proven by a task that reached a terminal envelope: a contract rejected
+  // at either validation layer never gets a taskId at all, and a rejection AFTER admission
+  // would surface as a terminal `error`. Both failure modes are covered by asserting the
+  // terminal envelope carries no error.
+  if (e.deliverableContract) {
+    const terminal = typeof r?.task?.status === 'string';
+    out.push(C('contract-accepted', terminal && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    // The contract governs the work; it must not leak into the task identity. `deliverable`
+    // is an input, and echoing it back would make an approval look like task state.
+    out.push(C('contract-not-echoed-as-identity',
+      r?.task?.deliverable === undefined ? 'PASS' : 'FAIL',
+      `task.deliverable=${JSON.stringify(r?.task?.deliverable)}`));
+  }
+
+  // #45 — a Contract Task with NO declared check must parse, run, and commit.
+  // The precise regression this guards: the previous grammar raised `malformed-plan` before
+  // any worker started whenever `Test:` was absent, so the task failed terminally. Asserting
+  // "not malformed-plan" is therefore the load-bearing half; the declared output landing in
+  // the engine-measured commit proves the run was real rather than an empty success.
+  if (e.noCheckPlan) {
+    const code = r?.error?.code ?? null;
+    out.push(C('no-check-plan-parsed', code !== 'malformed-plan' && code !== 'unsupported-legacy-plan'
+      ? 'PASS' : 'FAIL', `errorCode=${code}`));
+    const files = r?.output?.filesChanged ?? [];
+    out.push(C('no-check-output-committed',
+      files.some((f) => String(f).endsWith('docs/release-note.md')) ? 'PASS' : 'FAIL',
+      `filesChanged=${JSON.stringify(files)}`));
+    // A task with no declared check must still reach a real terminal status rather than being
+    // reported done with nothing scored.
+    out.push(C('no-check-terminal-status',
+      ['done', 'done_with_concerns'].includes(r?.task?.status) ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status}`));
+  }
+
+  // #46 — `practice` must survive the wire and reach the skill selector.
+  // `task.practice` on the terminal envelope is the only caller-visible evidence that the
+  // field was honoured rather than dropped: `loadSkill()` receives the same string, so an
+  // echoed value and a loaded `implement-software.md` succeed or fail together.
+  if (e.practice) {
+    out.push(C('practice-echoed', r?.task?.practice === e.practice ? 'PASS' : 'FAIL',
+      `task.practice=${r?.task?.practice} want=${e.practice}`));
+    // `practice` and `subtype` answer different questions and must never both appear.
+    out.push(C('practice-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
+      `task.subtype=${r?.task?.subtype}`));
+  }
+
   return out;
 }

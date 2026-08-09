@@ -41,7 +41,19 @@ describe('skill validity', () => {
       // closure, and bounded non-progress in the doc rather than summarising
       // them, because a summary is not something an implementer can build
       // from or an auditor can check (see the spec's LOCATE matrix section).
-      const LINE_BUDGET = { 'mma-flow': 700 };
+      // Bumped 700 → 780 to close two acceptance criteria whose caller-side half
+      // was missing while their engine-side half shipped, which is precisely the
+      // gap a line budget must not be allowed to enforce:
+      //   - AC-6.2 (second clause): a flow's persisted `routing.practice` drives
+      //     EVERY dispatch. Without it the four `implement-software.md` assets
+      //     shipped unreachable — no caller surface named the field — so software
+      //     technique was preserved in the file and lost in the flow.
+      //   - AC-3.7 (execution half): the declared bounds every acceptance command
+      //     runs under, and the `failed` vs `error` + `errorKind` distinction. The
+      //     constants were exported and applied nowhere.
+      // Both are operational contracts a caller executes, so they belong in the
+      // stage that runs them, not in a summary elsewhere.
+      const LINE_BUDGET = { 'mma-flow': 780 };
       const budget = LINE_BUDGET[dir] ?? 320;
       expect(content.split('\n').length).toBeLessThanOrEqual(budget);
     });

@@ -50,6 +50,7 @@ is not available in this session, run `mma clients`.
 | `target.inline` | string | alternative | Spec content pasted directly. When using inline, `outputPath` is **required** |
 | `outputPath` | string | conditional | Where to write the plan (relative to cwd, must not contain `..` or be absolute). Required when `target.inline` is used. When omitted with `target.paths`, the default **inherits the spec's dated stem** → `.mma/plans/<spec-stem>.md` (the first `YYYY-MM-DD-`-prefixed input; no double-date), so the plan shares the exploration/spec stem. An undated source falls back to `.mma/plans/<today>-<basename>.md`. |
 | `reviewPolicy` | `"reviewed"` \| `"none"` | no | Whether the plan gets a reviewer pass. Default `"reviewed"` |
+| `practice` | `"software"` | no | Selects the retained CODE technique for this dispatch (caller tracing, error paths, security sinks, schema conformance, test adequacy). Set it when code-level technique is required — not merely when the artifact is code: an n8n workflow or Terraform module often needs it, a report or specification does not. Omitted = the deliverable-neutral implementer. The engine NEVER infers it. Inside `/mma-flow`, read the one persisted `routing.practice` value so every stage of a flow routes identically. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) for additional context |
 
 Inline mode — `outputPath` is required because no basename can be derived:

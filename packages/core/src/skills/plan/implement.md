@@ -50,13 +50,16 @@ executing the plan would build Phase 1, see it work, then Phase 2, and so on. Wr
 ### Divide and conquer — human-executable granularity
 
 Size the decomposition so a human could execute it:
-- A phase holds a **sensible handful of tasks** (roughly 2–6), each a unit an engineer could complete
-  in one sitting.
-- **Not** one epic exploded into a hundred trivial tasks. **Not** a whole feature crammed into two
-  mega-tasks. Find the natural divide-and-conquer a tech lead would recognize.
-- Each task is one coherent, independently verifiable piece of its phase — one endpoint, one mapping,
-  one module — within a single repository/package.
+- A phase holds a **sensible handful of tasks** (roughly 2–6), each a unit one competent person could
+  complete in one sitting.
+- **Not** one large goal exploded into a hundred trivial tasks. **Not** a whole deliverable crammed
+  into two mega-tasks. Find the natural divide-and-conquer an experienced practitioner in the
+  declared `kind` would recognise.
+- Each task is one coherent, independently verifiable piece of its phase — one section, one mapping,
+  one component, one reconciliation — within a single work area.
 - Order tasks and phases by dependency: if B needs what A creates, A comes first.
+- End each phase at a point a person can actually review: a phase boundary the reader cannot inspect
+  is a boundary that buys nothing.
 
 ### The Contract Task shape
 
@@ -143,10 +146,20 @@ it in addition to, not instead of, the guidance above.
 
 Work in this order (guidance for producing a good document, not a rigid ritual):
 
-1. **Ground truth.** Read the spec; explore the codebase (tech stack, test runner, import style,
-   patterns, build/run commands); verify every path and symbol the spec references exists at HEAD.
-   Record discrepancies as reconciliation notes in the plan header — a contract that names a wrong path
-   makes the executor fail.
+1. **Ground truth.** Read the spec, then examine the ACTUAL source material the declared `kind`
+   depends on — whatever that is: existing documents, data sources, configurations, standards, prior
+   deliverables, or a codebase. Verify that every path, figure, symbol, or source the spec references
+   really exists and says what the spec claims. Record discrepancies as reconciliation notes in the
+   plan header — a contract that names a source which does not exist, or misreads one that does,
+   makes the executor fail. Assume no test suite, no build step and no repository unless you have
+   confirmed the deliverable actually has them.
+
+   **State the production method.** Before writing tasks, name in prose the ordered method this
+   specific deliverable will be produced by, and then let the phases follow it. A finance report might
+   reconcile source figures, then compute, then write commentary, keeping facts, calculations,
+   assumptions and interpretation separated. A policy memorandum might establish the evidence base,
+   then the options, then the recommendation. Name the method you chose and why it fits this
+   deliverable — a plan whose phases follow no stated method is a list, not a method.
 2. **Skeleton in one write.** Write the header — frontmatter (`version: 1` + `updated_at`), the title,
    a one-line **execution note** (`> **Execution:** implement task-by-task with the mma-execute-plan
    worker (the MMA autonomous executor); each task's declared checks gate its commit.`), then Goal,

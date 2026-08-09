@@ -2,8 +2,55 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+// The digest is imported from the BUILT core package on purpose. `canonicalContractDigest`
+// is the one named serialisation algorithm every component computes identically, so a
+// hand-rolled copy in this harness could only ever agree with itself — a digest bug would
+// then pass the smoke while breaking every real caller. Importing the shipped function means
+// an approval this harness builds is byte-identical to one Forge builds.
+import { canonicalContractDigest } from '../../packages/core/dist/index.js';
 
 export const SENTINEL = 'SMOKE-REQ-7f3a2c'; // unique string asserted in dispatch #4
+
+/**
+ * Build an ApprovedContract from its digest-bearing content.
+ *
+ * `state` and `contractApproval` are deliberately EXCLUDED from the digest by
+ * `canonicalContractDigest`, so the approval is computed over `content` alone and then
+ * attached. Pass `corruptDigest: true` to get a well-formed contract whose approval does
+ * NOT match its content — the INV-7 rejection path.
+ */
+export function approvedContract(content, { corruptDigest = false } = {}) {
+  const contractDigest = corruptDigest ? `sha256:${'0'.repeat(64)}` : canonicalContractDigest(content);
+  return {
+    state: 'approved',
+    ...content,
+    contractApproval: {
+      contractDigest,
+      approvedBy: 'full-smoke harness',
+      approvedAt: '2026-08-09T00:00:00Z',
+    },
+  };
+}
+
+/** The contract content the deliverable scenarios agree on. `over` replaces any field, so a
+ *  rejection scenario states only the one field that makes it invalid. */
+export function contractContent(over = {}) {
+  return {
+    kind: 'quarterly finance report',
+    audience: 'the finance review committee',
+    artifacts: [{ root: 'workspaceRoot', path: 'src/math.ts' }],
+    acceptance: [
+      {
+        id: 'AC-1',
+        criterion: 'every arithmetic function guards invalid input before returning',
+        method: 'agent-review',
+        references: [{ kind: 'none', reason: 'no external standard governs this internal module' }],
+      },
+    ],
+    disposition: 'commit-in-place',
+    ...over,
+  };
+}
 
 const BT = '`';
 const F = '```';
@@ -39,6 +86,38 @@ function contractPlan(title, header, implPath, testPath, testSrc) {
     testSrc.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n'),
     `  ${F}`,
     `- Run: ${BT}node --test ${testPath}${BT}  Expected: PASS once implemented`, '',
+    '**Plan boundary:** final deliverable content is not in this plan.', '',
+  ].join('\n');
+}
+
+/**
+ * A Contract Task that declares NO deterministic check.
+ *
+ * This is the central new behaviour of the deliverable-neutral grammar: a task whose
+ * technical acceptance criterion no human can express as a command (a written section, a
+ * design decision, a document a person must read) declares no Checks block at all, parses to
+ * `acceptanceTests: []`, and is NOT an error. The previous grammar could not express it —
+ * `extractDeclaredTestPaths()` raised `malformed-plan` whenever the text `Test:` was absent,
+ * which is precisely what blocked every non-code deliverable.
+ *
+ * The declared output is a MARKDOWN document rather than source, so the scenario also proves
+ * the execution path never assumes the deliverable is code.
+ */
+function noCheckContractPlan(header, outputPath) {
+  return [
+    `# ${header}`, '',
+    `> **Execution:** implement task-by-task with the mma-execute-plan worker.`, '',
+    '## Phase 1 — Write the note: a reader can see what changed and why', '',
+    '### Task I-1: write the release note (← AC-1)', '',
+    `**Output:** ${BT}${outputPath}${BT}`,
+    '**Dependencies:** none', '',
+    '**Technical acceptance criteria** (← AC-1): the note names the change and states why it was made, in prose a non-engineer can read. No deterministic check applies — a person reads it.', '',
+    '**Contract:**',
+    '- Inputs / Request: the arithmetic module in src/math.ts.',
+    '- Outputs / Response: a short markdown note at the declared output path.',
+    '- Data mapping: each described change maps to a function in src/math.ts.',
+    '- Errors: a note that names no function fails review.',
+    '- Behavior / invariants: prose only; the note changes no source file.', '',
     '**Plan boundary:** final deliverable content is not in this plan.', '',
   ].join('\n');
 }
@@ -163,6 +242,10 @@ export function createWriteRepo(scenarioId, { dirty = false, precommitGate = tru
     `# Spec\n\nRequirement ${SENTINEL}: every arithmetic function must guard invalid inputs (e.g. division by zero).\n`);
   writeFileSync(join(dir, 'plan.md'),
     contractPlan('add subtract', 'Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest));
+  // A plan whose single task declares NO deterministic check — legal only under the
+  // deliverable-neutral grammar, and the shape every non-code deliverable needs.
+  writeFileSync(join(dir, 'no-check-plan.md'),
+    noCheckContractPlan('No-check Plan', 'docs/release-note.md'));
   // A two-task plan for the partial-selection scenario: selecting by ID must run ONLY task I-2.
   writeFileSync(join(dir, 'two-task-plan.md'),
     contractPlan('add subtract', 'Two-task Plan', 'src/subtract.mjs', 'tests/subtract.test.mjs', subtractTest)

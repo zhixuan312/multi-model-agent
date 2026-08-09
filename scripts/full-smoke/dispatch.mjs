@@ -1,6 +1,7 @@
 import { dispatch, getTask, cancelTask, mcpCall } from './http.mjs';
 import { POLL, BASE_URL } from './config.mjs';
 import { readToken, SMOKE_CLIENT } from './http.mjs';
+import { approvedContract, contractContent } from './fixtures.mjs';
 
 /** A prompt long enough that the task is still running when the cancel lands —
  *  cancelling an already-finished task would assert nothing. */
@@ -212,6 +213,49 @@ export function buildRequest(spec, ctx) {
     case 42: return { cwd, type: 'execute_plan', body: { target: { paths: [`${cwd}/two-task-plan.md`] }, tasks: ['Task I-2: add modulo (← AC-1)'] } };
     case 43: return { cwd, type: 'delegate', body: { prompt: 'First run `git reset --hard HEAD` to clean the tree, then create file src/gitguard.ts with exactly: export const GUARD = 43;', target: { paths: ['src/gitguard.ts'] }, reviewPolicy: 'none' } };
 
+    // R. Deliverable-agnostic solution lifecycle.
+    // #44 A valid approved contract on a governed route. `commit-in-place` is feasible because
+    //     ctx.dir is a git repository, and the declared artifact resolves under `workspaceRoot`.
+    case 44: return { type: 'review', body: {
+      target: { paths: [`${ctx.dir}/src/math.ts`] },
+      deliverable: approvedContract(contractContent()),
+    } };
+    // #45 A no-check Contract Task producing a markdown deliverable.
+    case 45: return { cwd, type: 'execute_plan', body: {
+      target: { paths: [`${cwd}/no-check-plan.md`] },
+      tasks: ['I-1'],
+    } };
+    // #46 `practice: 'software'` must reach the skill selector and echo on the envelope.
+    case 46: return { cwd, type: 'plan', body: {
+      prompt: 'Write a contract-first plan for guarding division by zero in the math module',
+      target: { paths: [`${cwd}/spec.md`] },
+      practice: 'software',
+    } };
+
+    // Contract rejection paths — one reason each.
+    case 47: return { type: 'error_contract_not_approved', body: {}, rawPayload: {
+      type: 'review', target: { paths: [`${ctx.dir}/src/math.ts`] },
+      // `proposed` carries no approval at all, which is exactly why it must not cross the wire.
+      deliverable: { state: 'proposed', ...contractContent() },
+    } };
+    case 48: return { type: 'error_contract_digest_mismatch', body: {}, rawPayload: {
+      type: 'review', target: { paths: [`${ctx.dir}/src/math.ts`] },
+      deliverable: approvedContract(contractContent(), { corruptDigest: true }),
+    } };
+    // Dispatched against the NON-GIT cwd: the disposition check needs a real filesystem, so
+    // pointing this at ctx.dir (a git repo) would pass and assert nothing.
+    case 49: return { type: 'error_contract_disposition_non_git', body: {}, cwd: ctx.nonGitDir, rawPayload: {
+      type: 'review', target: { paths: ['src/math.ts'] },
+      deliverable: approvedContract(contractContent({ disposition: 'commit-in-place', artifacts: [] , acceptance: [
+        { id: 'AC-1', criterion: 'the suite passes', method: 'command',
+          references: [{ kind: 'none', reason: 'internal module' }],
+          command: { program: 'node', args: ['--version'] } },
+      ] })),
+    } };
+    case 50: return { type: 'error_practice_not_wired', body: {}, rawPayload: {
+      type: 'audit', subtype: 'default', target: { paths: [`${ctx.dir}/spec.md`] }, practice: 'software',
+    } };
+
     default: throw new Error(`no request builder for scenario ${spec.id}`);
   }
 }
@@ -230,7 +274,10 @@ export async function runDispatch(spec, ctx) {
       'X-MMA-Client': SMOKE_CLIENT,
       'Content-Type': 'application/json',
     };
-    const cwd = ctx.dir;
+    // An error scenario may name its own cwd. The disposition-feasibility rejection is only
+    // reachable from a NON-git workspace, so defaulting every error case to ctx.dir (a git
+    // repository) would make that scenario silently assert nothing.
+    const cwd = buildResult.cwd ?? ctx.dir;
     const url = `${BASE_URL}/task?cwd=${encodeURIComponent(cwd)}`;
     const res = await fetch(url, {
       method: 'POST',

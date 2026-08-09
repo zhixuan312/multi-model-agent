@@ -266,6 +266,72 @@ async function runScenario(spec, ctx, log) {
             ? `${landed.length}/${fc.length} reported artifact(s) present on disk`
             : `NONE of the ${fc.length} reported artifact(s) exist on disk — output silently dropped: ${fc.join(', ')}`,
         });
+
+        // Neutral component labels. The eight spec component IDENTIFIERS are unchanged and
+        // still parser-matched, but three of them now render a deliverable-neutral display
+        // label, so a finance report is not asked for "Technical Design". The emitted heading
+        // is what a downstream parser and a human both read, so it is checked on the real
+        // artifact rather than on the catalog constant — a catalog assertion would only prove
+        // the constant agrees with itself.
+        //
+        // Scoped to full spec runs: #29 requests an explicit component SUBSET that excludes
+        // these three, so requiring them there would fail a scenario that is behaving
+        // correctly. Reported NA (never PASS) when no spec artifact could be read, so a
+        // missing file cannot masquerade as a pass.
+        // Software rigor at the ACCEPTANCE-CRITERIA level, asserted on the produced plan.
+        //
+        // The deliverable-neutral grammar makes the Checks section OPTIONAL, which is correct
+        // for a claim no machine can settle. For CODE that permission must not become an
+        // escape hatch: `practice: 'software'` states that virtually every technical AC admits
+        // a deterministic check, so a software plan that declares none has quietly dropped the
+        // discipline the release promised to preserve. Prose in `implement-software.md` cannot
+        // prove that; only the emitted plan can.
+        //
+        // Three properties, because they fail independently: a plan can trace to spec ACs and
+        // still declare no check, declare checks and trace to nothing, or do both and never
+        // close with a suite-level gate.
+        if (spec.type === 'plan' && spec.practice === 'software') {
+          const planFile = landed[0];
+          let body = null;
+          try { body = readFileSync(existsSync(planFile) ? planFile : join(ctx.dir, planFile), 'utf8'); } catch { /* unreadable */ }
+          const hasChecks = body !== null && body.includes('Checks (plan-authored');
+          const hasAcTrace = body !== null && /←\s*AC-/.test(body);
+          const hasSuiteGate = body !== null && /full-suite gate/i.test(body);
+          checks.push({
+            checkId: 'software-plan-declares-checks',
+            status: body === null ? 'NA' : (hasChecks ? 'PASS' : 'FAIL'),
+            detail: body === null
+              ? 'plan artifact unreadable — software rigor not verified'
+              : `declaredChecks=${hasChecks} (a software plan with no declared check has dropped the AC-level check discipline)`,
+          });
+          checks.push({
+            checkId: 'software-plan-traces-to-spec-ac',
+            status: body === null ? 'NA' : (hasAcTrace ? 'PASS' : 'FAIL'),
+            detail: `acTraceability=${hasAcTrace} (every task must cite the spec AC it delivers)`,
+          });
+          checks.push({
+            checkId: 'software-plan-closes-with-suite-gate',
+            status: body === null ? 'NA' : (hasSuiteGate ? 'PASS' : 'WARN'),
+            detail: `fullSuiteGate=${hasSuiteGate} (per-task checks do not prove the suite still passes)`,
+          });
+        }
+
+        if (spec.type === 'spec' && !spec.subsetComponents) {
+          const specFile = landed[0];
+          let body = null;
+          try { body = readFileSync(existsSync(specFile) ? specFile : join(ctx.dir, specFile), 'utf8'); } catch { /* unreadable */ }
+          const RETIRED = ['## Technical Design', '## Testing Plan', '## User Stories & Tasks'];
+          const NEUTRAL = ['Approach, Method & Structure', 'Verification Plan', 'Stakeholders & Work'];
+          const present = body === null ? [] : NEUTRAL.filter((label) => body.includes(label));
+          const retired = body === null ? [] : RETIRED.filter((heading) => body.includes(heading));
+          checks.push({
+            checkId: 'neutral-component-labels',
+            status: body === null ? 'NA' : (present.length > 0 && retired.length === 0 ? 'PASS' : 'FAIL'),
+            detail: body === null
+              ? 'spec artifact unreadable — label rendering not verified'
+              : `neutral=[${present.join(', ')}] retiredHeadings=[${retired.join(', ')}]`,
+          });
+        }
       }
     }
 
@@ -380,6 +446,13 @@ try {
       [41],          // execute_plan: partial selection by task ID
       [42],          // execute_plan: partial selection by full heading
       [43],          // worker git denial
+      [44],          // deliverable contract: valid approved contract accepted
+      [45],          // execute_plan: Contract Task with NO declared check
+      [46],          // plan: practice=software reaches the skill selector
+      [47],          // error: contract not approved
+      [48],          // error: contract digest mismatch
+      [49],          // error: commit-in-place disposition in a non-git workspace
+      [50],          // error: practice not wired to audit
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
