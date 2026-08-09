@@ -9,15 +9,15 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch a spec file to a complex worker that writes a **contract-first** implementation plan. The worker reads the spec, explores the target material (a codebase, or a non-code deliverable such as a report format or workflow configuration), verifies ground truth at HEAD, then produces ordered **Contract Tasks** — each a contract (inputs, outputs, data mapping, errors, invariants) plus complete **plan-authored acceptance tests** and NO implementation code. The reviewer verifies every path and symbol against the real target material.
+Dispatch a spec file to a complex worker that writes a **contract-first** implementation plan. The worker reads the spec, explores the target material (a codebase, or a non-code deliverable such as a report format or workflow configuration), verifies ground truth at HEAD, then produces ordered **Contract Tasks** — each declares its output and dependencies and states a contract (inputs, outputs, data mapping, errors, invariants), plus a **plan-authored deterministic check** when the task's technical acceptance criterion admits one. No task contains implementation code or final deliverable content. The reviewer verifies every path and symbol against the real target material.
 
-**Core principle:** The spec defines WHAT to build. The plan defines the *contract* for each unit of work and the executable tests that pin it — then a capable executor implements freely against that contract. The plan does not dictate implementation code; the acceptance tests are the contract's teeth.
+**Core principle:** The spec defines WHAT to build. The plan defines the *contract* for each unit of work — and, where a pass/fail check is possible, the executable check that pins it — then a capable executor implements freely against that contract. The plan does not dictate implementation code or deliverable content; a declared check is the contract's teeth, and not every task can have one.
 
 ## When to Use
 
 **Use when:**
 - A spec file exists on disk (written by `mma-spec`, `mma-brainstorm`, or manually)
-- You want a contract-first plan of Contract Tasks with plan-authored acceptance tests
+- You want a contract-first plan of Contract Tasks, each with a deterministic check when one applies
 - The plan will be executed via `mma-execute-plan`
 
 **Don't use when:**
@@ -123,11 +123,12 @@ The terminal envelope's `output.summary` contains:
 The plan file follows this structure:
 - **Phases:** sequential build stages (`## Phase N — <name>: <what works at the end>`), each a
   working increment a human could verify, holding a sensible handful of tasks (roughly 2–6).
-- **Contract Tasks:** each task (`### Task I-N: <title>`) carries a contract (inputs, outputs, data
-  mapping, errors, behavior/invariants), a technical acceptance criterion traced to a business AC,
-  and complete **plan-authored acceptance tests** — but no implementation code. The task's contract
-  and tests are deliverable-neutral: they apply the same way whether the task builds code, produces
-  a document, or configures a workflow.
+- **Contract Tasks:** each task (`### Task I-N: <title>`) declares its output and dependencies,
+  carries a contract (inputs, outputs, data mapping, errors, behavior/invariants), and states a
+  technical acceptance criterion traced to a business AC. When that criterion admits a deterministic
+  pass/fail check, the task also carries a complete **plan-authored check** — but never implementation
+  code or the deliverable's own content. The task's contract is deliverable-neutral: it applies the
+  same way whether the task builds code, produces a document, or configures a workflow.
 - **Full-suite gate:** the commands/checks that must pass at every task boundary.
 
 ## Natural next step

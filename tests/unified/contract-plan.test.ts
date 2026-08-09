@@ -32,61 +32,83 @@ describe('example', () => {
 });`;
 
 const VALID_PLAN = `
-### Task I-1: Parse and validate frozen Contract Tasks (AC-1.1)
+### Task I-1: Parse and validate deliverable-neutral Contract Tasks (AC-1.1)
 
-**Files:** Modify: ${BT}packages/core/src/unified/example.ts${BT} — Test: ${BT}tests/unified/example.test.ts${BT}
+**Output:** ${BT}packages/core/src/unified/example.ts${BT}
+**Dependencies:** none
 
-Inputs / Request: A markdown string containing one frozen Contract Task section.
+Inputs / Request: A markdown string containing one Contract Task section.
 
 Outputs / Response: A ContractPlanSnapshot with one parsed task.
 
-Data mapping: The Files: ... Test: path maps one-to-one to the Path: acceptance-test entry.
+Data mapping: Each declared check's Check: path maps one-to-one to its parsed acceptance test.
 
 Errors: Throws ContractPlanError for any structural violation.
 
 Behavior / invariants: Parsing is pure and returns an immutable, frozen snapshot.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/example.test.ts${BT}
+Check: ${BT}tests/unified/example.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/example.test.ts${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
-// The exact shape the `mma-plan` generator authors (plan/implement.md): a multi-line **Files:** bullet
-// list, and each acceptance test as `- Path:` / an INDENTED fenced source block / `- Run: … Expected:
-// PASS once implemented`. This is a generator↔validator round-trip guard — the format mismatch that
-// made 100% of execute_plan dispatches fail `malformed-plan` shipped precisely because no test parsed
-// a realistically-generated plan (the fixtures were all column-0).
+// The exact shape the `mma-plan` generator authors (plan/implement.md): `**Output:**` /
+// `**Dependencies:**` metadata lines, and each declared check as `- Check:` / an INDENTED fenced
+// source block / `- Run: … Expected: PASS once implemented`. This is a generator↔validator
+// round-trip guard — the format mismatch that made 100% of execute_plan dispatches fail
+// `malformed-plan` shipped precisely because no test parsed a realistically-generated plan (the
+// fixtures were all column-0).
 const GENERATED_STYLE_PLAN = `
-### Task I-1: Parse and validate frozen Contract Tasks (AC-1.1)
+### Task I-1: Parse and validate deliverable-neutral Contract Tasks (AC-1.1)
 
-**Files:**
-- Modify: ${BT}packages/core/src/unified/example.ts${BT}
-- Test: ${BT}tests/unified/example.test.ts${BT}
+**Output:** ${BT}packages/core/src/unified/example.ts${BT}
+**Dependencies:** none
 
-Inputs / Request: A markdown string containing one frozen Contract Task section.
+Inputs / Request: A markdown string containing one Contract Task section.
 
 Outputs / Response: A ContractPlanSnapshot with one parsed task.
 
-Data mapping: The Files: ... Test: path maps one-to-one to the Path: acceptance-test entry.
+Data mapping: Each declared check's Check: path maps one-to-one to its parsed acceptance test.
 
 Errors: Throws ContractPlanError for any structural violation.
 
 Behavior / invariants: Parsing is pure and returns an immutable, frozen snapshot.
 
-**Acceptance tests (plan-authored — the executable form of the technical AC).**
-- Path: ${BT}tests/unified/example.test.ts${BT}
+**Checks (plan-authored — the executable form of the technical AC).**
+- Check: ${BT}tests/unified/example.test.ts${BT}
   ${FENCE}ts
 ${EXAMPLE_SOURCE.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n')}
   ${FENCE}
 - Run: ${BT}pnpm vitest run tests/unified/example.test.ts${BT}  Expected: PASS once implemented
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
+`;
+
+// A task that declares no deterministic check at all — the new grammar's core addition. Absence
+// of a Checks section is not an error; it simply means acceptanceTests: [].
+const NO_CHECK_PLAN = `
+### Task I-1: Prepare report (AC-1.1)
+
+**Output:** ${BT}out/report.pdf${BT}
+**Dependencies:** approved figures
+
+Inputs / Request: reconciled figures.
+
+Outputs / Response: report file.
+
+Data mapping: figures to tables.
+
+Errors: missing figure blocks task.
+
+Behavior / invariants: preserve approved values.
+
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
 const LEGACY_PLAN = `
@@ -106,7 +128,8 @@ Test the schema.
 const MISSING_INPUTS_BULLET_PLAN = `
 ### Task I-2: A task missing its Inputs bullet (AC-2.5)
 
-**Files:** Test: ${BT}tests/unified/missing-bullet.test.ts${BT}
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
 
 Outputs / Response: Something.
 
@@ -116,21 +139,21 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/missing-bullet.test.ts${BT}
+Check: ${BT}tests/unified/missing-bullet.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/missing-bullet.test.ts${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
-const PATH_NOT_DECLARED_PLAN = `
-### Task I-3: A Path not declared in Files Test (AC-1.5)
+const MISSING_OUTPUT_PLAN = `
+### Task I-2: A task missing its Output field (AC-2.5)
 
-**Files:** Test: ${BT}tests/unified/declared.test.ts${BT}
+**Dependencies:** none
 
 Inputs / Request: Something.
 
@@ -142,21 +165,49 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Plan boundary:** final deliverable content is not in this plan.
+`;
 
-Path: ${BT}tests/unified/undeclared.test.ts${BT}
-${FENCE}ts
-${EXAMPLE_SOURCE}
-${FENCE}
-Run: ${BT}pnpm vitest run tests/unified/undeclared.test.ts${BT}
+const MISSING_DEPENDENCIES_PLAN = `
+### Task I-2: A task missing its Dependencies field (AC-2.5)
 
-**Implementation:** left to the executor — no code in the plan.
+**Output:** ${BT}out/x${BT}
+
+Inputs / Request: Something.
+
+Outputs / Response: Something.
+
+Data mapping: Something.
+
+Errors: Something.
+
+Behavior / invariants: Something.
+
+**Plan boundary:** final deliverable content is not in this plan.
+`;
+
+const MISSING_BOUNDARY_PLAN = `
+### Task I-2: A task missing its Plan boundary sentinel (AC-2.5)
+
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
+
+Inputs / Request: Something.
+
+Outputs / Response: Something.
+
+Data mapping: Something.
+
+Errors: Something.
+
+Behavior / invariants: Something.
 `;
 
 const DUPLICATE_PATH_PLAN = `
-### Task I-4: Duplicate acceptance test paths (AC-1.5)
+### Task I-4: Duplicate check paths (AC-1.5)
 
-**Files:** Test: ${BT}tests/unified/dup.test.ts${BT}, ${BT}tests/unified/dup2.test.ts${BT}
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
 
 Inputs / Request: Something.
 
@@ -168,28 +219,29 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/dup.test.ts${BT}
+Check: ${BT}tests/unified/dup.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/dup.test.ts${BT}
 
-Path: ${BT}tests/unified/dup.test.ts${BT}
+Check: ${BT}tests/unified/dup.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/dup.test.ts${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
 const CROSS_TASK_DUPLICATE_PATH_PLAN = `${VALID_PLAN}
 
 ### Task I-7: A second task reusing the first task's path (AC-1.5)
 
-**Files:** Test: ${BT}tests/unified/example.test.ts${BT}
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
 
 Inputs / Request: Something.
 
@@ -201,21 +253,22 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/example.test.ts${BT}
+Check: ${BT}tests/unified/example.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/example.test.ts${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
 const UNCLOSED_FENCE_PLAN = `
 ### Task I-5: Unclosed fenced source block (AC-1.3)
 
-**Files:** Test: ${BT}tests/unified/unclosed.test.ts${BT}
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
 
 Inputs / Request: Something.
 
@@ -227,20 +280,21 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/unclosed.test.ts${BT}
+Check: ${BT}tests/unified/unclosed.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 Run: ${BT}pnpm vitest run tests/unified/unclosed.test.ts${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
 const UNSAFE_RUN_COMMAND_PLAN = `
 ### Task I-6: A Run command with shell metacharacters (AC-1.3)
 
-**Files:** Test: ${BT}tests/unified/unsafe-run.test.ts${BT}
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
 
 Inputs / Request: Something.
 
@@ -252,15 +306,36 @@ Errors: Something.
 
 Behavior / invariants: Something.
 
-**Acceptance tests (plan-authored — pipeline-owned)**
+**Checks (plan-authored — pipeline-owned)**
 
-Path: ${BT}tests/unified/unsafe-run.test.ts${BT}
+Check: ${BT}tests/unified/unsafe-run.test.ts${BT}
 ${FENCE}ts
 ${EXAMPLE_SOURCE}
 ${FENCE}
 Run: ${BT}pnpm vitest run tests/unified/unsafe-run.test.ts && rm -rf /${BT}
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
+`;
+
+const EMPTY_CHECKS_SECTION_PLAN = `
+### Task I-8: A Checks heading with no entries (AC-1.3)
+
+**Output:** ${BT}out/x${BT}
+**Dependencies:** none
+
+Inputs / Request: Something.
+
+Outputs / Response: Something.
+
+Data mapping: Something.
+
+Errors: Something.
+
+Behavior / invariants: Something.
+
+**Checks (plan-authored — pipeline-owned)**
+
+**Plan boundary:** final deliverable content is not in this plan.
 `;
 
 function expectContractPlanError(fn: () => unknown, code: ContractPlanError['code']) {
@@ -275,12 +350,14 @@ function expectContractPlanError(fn: () => unknown, code: ContractPlanError['cod
 }
 
 describe('parseContractPlan', () => {
-  it('parses one valid frozen Contract Task', () => {
+  it('parses one valid Contract Task with a declared check', () => {
     const snapshot = parseContractPlan(VALID_PLAN);
 
     expect(snapshot.tasks.length).toBe(1);
     const task = snapshot.tasks[0]!;
-    expect(task.title).toBe('Task I-1: Parse and validate frozen Contract Tasks (AC-1.1)');
+    expect(task.title).toBe('Task I-1: Parse and validate deliverable-neutral Contract Tasks (AC-1.1)');
+    expect(task.output).toBe('`packages/core/src/unified/example.ts`');
+    expect(task.dependencies).toBe('none');
     expect(task.acceptanceTests.length).toBe(1);
     expect(task.acceptanceTests[0]).toEqual({
       path: 'tests/unified/example.test.ts',
@@ -294,7 +371,7 @@ describe('parseContractPlan', () => {
     expect(snapshot.tasks[0]!.acceptanceTests[0]!.source).toBe(EXAMPLE_SOURCE);
   });
 
-  it('parses a plan authored in the mma-plan generator format (bulleted Files/Path/Run, indented fence, trailing prose)', () => {
+  it('parses a plan authored in the mma-plan generator format (bulleted Check/Run, indented fence, trailing prose)', () => {
     const snapshot = parseContractPlan(GENERATED_STYLE_PLAN);
     expect(snapshot.tasks.length).toBe(1);
     const at = snapshot.tasks[0]!.acceptanceTests[0]!;
@@ -306,22 +383,20 @@ describe('parseContractPlan', () => {
     expect(at.source).toBe(EXAMPLE_SOURCE);
   });
 
-  it('accepts the Forge-style multi-line **Files:** bullet list (not just the inline form)', () => {
-    // Forge renders task files from a multi-line `**Files:**\n- Create/Test: \`path\`` list; the
-    // executor parser must accept that same shape so one plan loads in Forge AND runs here.
-    const multiline = VALID_PLAN.replace(
-      /\*\*Files:\*\*.*/,
-      '**Files:**\n- Modify: ' + BT + 'packages/core/src/unified/example.ts' + BT + '\n- Test: ' + BT + 'tests/unified/example.test.ts' + BT,
-    );
-    const snapshot = parseContractPlan(multiline);
+  it('accepts a task that declares no deterministic check at all', () => {
+    const snapshot = parseContractPlan(NO_CHECK_PLAN);
     expect(snapshot.tasks.length).toBe(1);
-    expect(snapshot.tasks[0]!.acceptanceTests[0]!.path).toBe('tests/unified/example.test.ts');
+    const task = snapshot.tasks[0]!;
+    expect(task.id).toBe('I-1');
+    expect(task.output).toBe('`out/report.pdf`');
+    expect(task.dependencies).toBe('approved figures');
+    expect(task.acceptanceTests).toEqual([]);
   });
 
   it('tolerates a human-facing Technical acceptance criteria line before the Contract', () => {
     // The human-executable plan template adds a "**Technical acceptance criteria**" line between
-    // **Files:** and the Contract bullets. It is for humans; the parser must ignore it and still
-    // extract the same contract + acceptance test.
+    // the Output/Dependencies metadata and the Contract bullets. It is for humans; the parser
+    // must ignore it and still extract the same contract + acceptance test.
     const withTechAc = VALID_PLAN.replace(
       '\nInputs / Request:',
       '\n**Technical acceptance criteria** (← AC-1.1): Given a valid markdown task, one snapshot is returned.\n\nInputs / Request:',
@@ -347,7 +422,7 @@ describe('parseContractPlan', () => {
     expect(Object.isFrozen(snapshot.tasks[0]!.acceptanceTests[0])).toBe(true);
   });
 
-  it('rejects a legacy plan with no frozen Task sections as unsupported-legacy-plan', () => {
+  it('rejects a legacy plan with no Task sections as unsupported-legacy-plan', () => {
     expectContractPlanError(() => parseContractPlan(LEGACY_PLAN), 'unsupported-legacy-plan');
   });
 
@@ -355,15 +430,23 @@ describe('parseContractPlan', () => {
     expectContractPlanError(() => parseContractPlan(MISSING_INPUTS_BULLET_PLAN), 'malformed-plan');
   });
 
-  it('rejects a Path: absent from the Files: ... Test: field as malformed-plan', () => {
-    expectContractPlanError(() => parseContractPlan(PATH_NOT_DECLARED_PLAN), 'malformed-plan');
+  it('rejects a task missing its "**Output:**" declaration as malformed-plan', () => {
+    expectContractPlanError(() => parseContractPlan(MISSING_OUTPUT_PLAN), 'malformed-plan');
   });
 
-  it('rejects duplicate acceptance test paths as malformed-plan', () => {
+  it('rejects a task missing its "**Dependencies:**" declaration as malformed-plan', () => {
+    expectContractPlanError(() => parseContractPlan(MISSING_DEPENDENCIES_PLAN), 'malformed-plan');
+  });
+
+  it('rejects a task missing the "**Plan boundary:**" sentinel as malformed-plan', () => {
+    expectContractPlanError(() => parseContractPlan(MISSING_BOUNDARY_PLAN), 'malformed-plan');
+  });
+
+  it('rejects duplicate check paths within one task as malformed-plan', () => {
     expectContractPlanError(() => parseContractPlan(DUPLICATE_PATH_PLAN), 'malformed-plan');
   });
 
-  it('rejects acceptance test paths duplicated across Contract Tasks as malformed-plan', () => {
+  it('rejects check paths duplicated across Contract Tasks as malformed-plan', () => {
     expectContractPlanError(() => parseContractPlan(CROSS_TASK_DUPLICATE_PATH_PLAN), 'malformed-plan');
   });
 
@@ -373,6 +456,10 @@ describe('parseContractPlan', () => {
 
   it('rejects a Run: command containing shell metacharacters as malformed-plan', () => {
     expectContractPlanError(() => parseContractPlan(UNSAFE_RUN_COMMAND_PLAN), 'malformed-plan');
+  });
+
+  it('rejects a Checks heading that names no check entries as malformed-plan', () => {
+    expectContractPlanError(() => parseContractPlan(EMPTY_CHECKS_SECTION_PLAN), 'malformed-plan');
   });
 });
 
@@ -385,6 +472,8 @@ describe('assertSafeAcceptanceTestPaths', () => {
       tasks: [
         {
           title: 'Task I-9: safety fixture',
+          output: 'out/x',
+          dependencies: 'none',
           contract: {
             inputsRequest: '',
             outputsResponse: '',
@@ -460,6 +549,8 @@ describe('materializeAcceptanceTests / rematerializeAcceptanceTests', () => {
       tasks: [
         {
           title: 'Task I-10: materialize fixture',
+          output: 'out/x',
+          dependencies: 'none',
           contract: {
             inputsRequest: '',
             outputsResponse: '',

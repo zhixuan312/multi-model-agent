@@ -67,10 +67,10 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       ].join(' ');
     case 'execute_plan':
       return [
-        'You have satisfied every dispatched Contract Task\'s Contract (Inputs/Request, Outputs/Response, Data mapping, Errors, Behavior/invariants) and made its plan-authored Acceptance tests pass.',
-        'The plan-authored Acceptance tests were already materialized in your workspace at their declared paths; you implemented against them and did not create, move, modify, weaken, delete, or overwrite them.',
+        'You have satisfied every dispatched Contract Task\'s Contract (Inputs/Request, Outputs/Response, Data mapping, Errors, Behavior/invariants) and made its plan-authored checks, if any, pass.',
+        'Any plan-authored checks were already materialized in your workspace at their declared paths; you implemented against them and did not create, move, modify, weaken, delete, or overwrite them. A task with no declared check still needed its Contract satisfied in full.',
         'You chose your own implementation approach to satisfy the contract — the plan contains no implementation code, so there is nothing to copy verbatim.',
-        'If a contract defect (including an authored test that contradicts the contract) blocked you, you reported it by name instead of silently working around it or weakening the test.',
+        'If a contract defect (including an authored check that contradicts the contract) blocked you, you reported it by name instead of silently working around it or weakening the check.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'journal_record':
@@ -100,13 +100,13 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       ].join(' ');
     case 'plan':
       return [
-        'You have read the spec and explored the codebase to discover ground truth at HEAD.',
+        'You have read the spec and explored the target material to discover ground truth at HEAD.',
         'You have written a complete plan file with Goal/Architecture/Tech Stack header and File Structure section.',
-        'Every task is a frozen Contract Task: a numbered "### Task <roman>-<n>:" heading with an inline "**Files:** ... Test:" field naming its plan-authored acceptance-test path(s).',
+        'Every task is a deliverable-neutral Contract Task: a numbered "### Task <roman>-<n>:" heading followed by a "**Output:**" line and a "**Dependencies:**" line — never an implementation-file list.',
         'Every task states all five Contract bullets, in order: Inputs / Request, Outputs / Response, Data mapping, Errors, Behavior / invariants.',
-        'Every task has an "Acceptance tests (plan-authored" block with, for each declared path, exactly one Path:, one complete fenced source block, and one Run: command containing no shell metacharacters.',
-        'Every task ends with the exact line "**Implementation:** left to the executor — no code in the plan." — you do not write implementation code in the plan.',
-        'Every file path was verified against the codebase.',
+        'A task MAY declare a "Checks (plan-authored" block ONLY when its technical AC admits a deterministic check, with, for each declared check, exactly one Check:, one complete fenced source block, and one Run: command containing no shell metacharacters; a task with no deterministic check declares no Checks block at all, and that is not an error.',
+        'Every task ends with the exact line "**Plan boundary:** final deliverable content is not in this plan." — you do not write implementation code or final deliverable content in the plan.',
+        'Every path was verified against the target material.',
         'You have produced the required JSON output block.',
       ].join(' ');
     case 'orchestrate':

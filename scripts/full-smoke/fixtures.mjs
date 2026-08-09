@@ -9,37 +9,37 @@ const BT = '`';
 const F = '```';
 
 // Build a contract-first Contract Task plan (the format execute_plan's parseContractPlan requires:
-// `### Task I-N:`, multi-line **Files:** with Test:, five Contract bullets, an Acceptance tests block
-// with Path/fenced-source/Run, and the frozen Implementation sentence). The acceptance test uses
-// Node's built-in test runner (`node --test`) against a NEW `.mjs` file the executor creates — so it
-// runs with zero deps and no TS loader, and passes once the trivial implementation exists.
+// `### Task I-N:`, single-line **Output:**/**Dependencies:** metadata, five Contract bullets, an
+// OPTIONAL Checks block with Check/fenced-source/Run, and the frozen Plan boundary sentinel). The
+// declared check uses Node's built-in test runner (`node --test`) against a NEW `.mjs` file the
+// executor creates — so it runs with zero deps and no TS loader, and passes once the trivial
+// implementation exists.
 function contractPlan(title, header, implPath, testPath, testSrc) {
   return [
     `# ${header}`, '',
     `> **Execution:** implement task-by-task with the mma-execute-plan worker.`, '',
-    '## Phase 1 — Implement: the new function exists and its test passes', '',
+    '## Phase 1 — Implement: the new function exists and its check passes', '',
     `### Task I-1: ${title}`, '',
-    '**Files:**',
-    `- Create: ${BT}${implPath}${BT}`,
-    `- Test: ${BT}${testPath}${BT}`, '',
-    `**Technical acceptance criteria** (← AC-1): ${title} — the function exists and its acceptance test passes.`, '',
+    `**Output:** ${BT}${implPath}${BT}`,
+    '**Dependencies:** none', '',
+    `**Technical acceptance criteria** (← AC-1): ${title} — the function exists and its declared check passes.`, '',
     '**Contract:**',
-    '- Inputs / Request: the arguments named in the test.',
-    '- Outputs / Response: the value the test asserts.',
+    '- Inputs / Request: the arguments named in the check.',
+    '- Outputs / Response: the value the check asserts.',
     '- Data mapping: result computed directly from the inputs.',
     '- Errors: none required.',
     '- Behavior / invariants: pure; no side effects.', '',
-    // Authored in the mma-plan GENERATOR shape (bulleted `- Path:`/`- Run:`, indented fence, trailing
+    // Authored in the mma-plan GENERATOR shape (bulleted `- Check:`/`- Run:`, indented fence, trailing
     // prose) — NOT the column-0 form — so the smoke exercises the format real plans actually have. The
     // validator tolerates + dedents this; testing only the column-0 form is what let B-317's malformed-
     // plan regression ship.
-    '**Acceptance tests (plan-authored — the executable form of the technical AC).**',
-    `- Path: ${BT}${testPath}${BT}`,
+    '**Checks (plan-authored — the executable form of the technical AC).**',
+    `- Check: ${BT}${testPath}${BT}`,
     `  ${F}js`,
     testSrc.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n'),
     `  ${F}`,
     `- Run: ${BT}node --test ${testPath}${BT}  Expected: PASS once implemented`, '',
-    '**Implementation:** left to the executor — no code in the plan.', '',
+    '**Plan boundary:** final deliverable content is not in this plan.', '',
   ].join('\n');
 }
 

@@ -341,7 +341,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 |---|---|
 | `mma-brainstorm` | Requirement interview — name the destination → grill the 8 spec components one decision at a time, resolving mechanical questions via workers and putting only real decisions to the user → dispatch `mma-spec`. Consumes an `exploration.md` from `mma-explore` when present. |
 | `mma-spec` | Write a formal specification from structured design decisions. Output follows the 8-component spec standard (`## Context`, `## Problem`, `## Goals & Requirements`, `## Alternatives`, `## Technical Design`, `## Testing Plan`, `## Risks & Mitigations`, `## User Stories & Tasks`). |
-| `mma-plan` | Write a contract-first, human-executable plan from a spec file. Output is phased (`## Phase N`, `### Task I-N:`) with `**Files:**` blocks, a Contract + technical acceptance criterion per task, and plan-authored acceptance tests — no implementation code. |
+| `mma-plan` | Write a contract-first, human-executable plan from a spec file. Output is phased (`## Phase N`, `### Task I-N:`) with `**Output:**`/`**Dependencies:**` lines, a Contract + technical acceptance criterion per task, and a plan-authored deterministic check when one applies — no implementation code or final deliverable content. |
 
 ### Work-delegation skills
 

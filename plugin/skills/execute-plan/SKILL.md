@@ -15,8 +15,8 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 ## Contract-first execution (what the worker does)
 
-- The plan must be a contract-first plan (frozen Contract Task format). A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
-- The pipeline validates and materializes each task's plan-authored acceptance tests, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
+- The plan must be a contract-first, deliverable-neutral Contract Task plan. A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
+- A task's deterministic check is OPTIONAL — a task with no check is not an error, and its Contract alone defines what "done" means. The pipeline validates and materializes any task's plan-authored checks, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
 - **Completion is REPORTED, not gated.** `completionPercent` is derived from the reviewer's
   per-task verdicts (`round(done / dispatched * 100)`), and a shortfall names the outstanding task
   ids. A task reported not-done, an unresolvable reviewer report, or failing acceptance tests all

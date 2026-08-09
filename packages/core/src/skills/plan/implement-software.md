@@ -22,11 +22,13 @@ author present. If a human could not follow it to the end, it is not done.
 ## What the plan must express
 
 The spec defines WHAT to build and WHY (business acceptance criteria). You define HOW it is built — as
-**phases** (build stages), each holding **tasks**, each task carrying a **contract** + a **technical
-acceptance criterion** + **plan-authored acceptance tests**, and **no implementation code**. A capable
-executor implements freely against the contract; the pipeline re-materializes your acceptance tests
-from the plan before scoring, so your tests are the contract's teeth. If a contract is ambiguous or a
-test is wrong, the executor reports failure rather than guessing — so make both precise.
+**phases** (build stages), each holding **tasks**, each task carrying an **output declaration**, its
+**dependencies**, a **contract**, a **technical acceptance criterion**, and — because the deliverable is
+code, virtually every task's technical AC admits one — **plan-authored checks**. A task never contains
+implementation code; only a declared check's test code is code you write. A capable executor implements
+freely against the contract; the pipeline re-materializes your declared checks from the plan before
+scoring, so a declared check is the contract's teeth. If a contract is ambiguous or a check is wrong,
+the executor reports failure rather than guessing — so make both precise.
 
 ### Phases — the build story
 
@@ -57,15 +59,15 @@ Size the decomposition so a human could execute it:
 ### The Contract Task shape
 
 Each task MUST follow this exact structure (tasks are numbered `### Task I-N:` — roman-numeral N —
-regardless of phase, so the executor can select them):
+regardless of phase, so the executor can select them). No task carries final deliverable content —
+`**Output:**` names WHAT the task produces (the source path or module the executor will create or
+change), never a diff or a code snippet:
 
 ```markdown
 ### Task I-N: <Contract name> (← AC-X.X, AC-Y.Y)
 
-**Files:**
-- Create: `<impl path>`
-- Modify: `<impl path>`
-- Test: `<new dedicated test path>`
+**Output:** <the path or module this task creates or changes>
+**Dependencies:** <what this task depends on — other task ids, approved inputs, or "none">
 
 **Technical acceptance criteria** (← AC-X.X): <one human-readable, testable statement of what "done"
 means for this task — the engineering translation of the cited business AC. e.g. "Given a request with
@@ -76,54 +78,54 @@ a valid id, the endpoint returns 200 with section-1 populated from System A.">
 - Outputs / Response: <shape, types>
 - Data mapping: <field-by-field: response.X <- source.Y via <transform>>
 - Errors: <condition -> error contract>
-- Behavior / invariants: <ordering, idempotency, side effects>
+- Behavior / invariants: <ordering, idempotency, side effects — including every existing caller this
+  task's signature change touches>
 
-**Acceptance tests (plan-authored — the executable form of the technical AC).** For EACH test file,
-exactly one `Path:` (matching a `Files: Test:` entry, a NEW dedicated file) paired with exactly one
-fenced source block and one `Run:` command:
-- Path: `<new dedicated test file path>`
+**Checks (plan-authored — the executable form of the technical AC).** Because the deliverable is code,
+virtually every task's technical AC admits a deterministic check — include this section unless the task
+genuinely has none. For EACH declared check, exactly one `Check:` (a NEW dedicated destination path)
+paired with exactly one fenced source block and one `Run:` command:
+- Check: `<new dedicated check file path>`
   \`\`\`<lang>
-  <complete test code that asserts the technical AC — you write this>
+  <complete check code that asserts the technical AC — you write this>
   \`\`\`
-- Run: `<test command>`  Expected: PASS once implemented
+- Run: `<check command>`  Expected: PASS once implemented
 
-**Implementation:** left to the executor — no code in the plan.
+**Plan boundary:** final deliverable content is not in this plan.
 ```
 
-The five Contract bullets appear in exactly this order and label text. The only code you write is the
-acceptance tests.
+The five Contract bullets appear in exactly this order and label text. The only code you write is a
+declared check's source. The Contract's own bullets — not a separate file list — are where every path
+and symbol the task touches is named and verified against HEAD.
 
 ### Format — required heading & file conventions
 
-The plan file is parsed by the SDLC plan-stage renderer to display phases, tasks, and files. Use
-these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the file list):
+The plan file is parsed by the SDLC plan-stage renderer to display phases, tasks, and outputs. Use
+these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the output line):
 - **Phase headings are level-2** — `## Phase N — <name>: <what works at the end>`. Not `#`, not `###`.
   The renderer groups tasks by the `##` heading above them; a `#` phase heading is invisible.
 - **Task headings are level-3, roman-numbered** — `### Task I-N: <title> (← AC-X.X)`. The `I-N`
   (roman-`I` + `-N`) is required by the executor and accepted by the renderer.
-- **`**Files:**` is a multi-line bullet list**, each path wrapped in backticks, with exactly one
-  `- Test:` line:
+- **`**Output:**` and `**Dependencies:**` are each one line**, immediately after the heading:
   ```markdown
-  **Files:**
-  - Create: `src/foo.ts`
-  - Modify: `src/bar.ts`
-  - Test: `tests/foo.test.ts`
+  **Output:** `src/subtract.ts`
+  **Dependencies:** none
   ```
-  The renderer reads the `- ` bullets to show each task's file list; a single inline
-  `**Files:** … Test: …` line renders with no files. Keep the `- Test:` path identical to the `Path:`
-  in the acceptance-tests block below.
+  Keep any declared check's `Check:` path a NEW dedicated test file — never the path named in
+  `**Output:**`, which is the source file itself, not a check artifact.
 
 ## Constraints
 
-1. **No implementation code in the plan.** A task's `Implementation` section is exactly
-   `**Implementation:** left to the executor — no code in the plan.`
+1. **No implementation code and no final deliverable content in the plan.** A task's closing line is
+   exactly `**Plan boundary:** final deliverable content is not in this plan.`
 2. **Business AC → technical AC, traced.** Every task cites the spec business AC(s) it delivers
    (`← AC-N.N`) and states its own technical acceptance criterion. Every spec AC maps to at least one
    task.
 3. **Every path is exact**, verified against ground truth at HEAD. No guessed paths.
 4. **Every `Run:` command** uses the project's real test runner and is a whitespace-delimited argv with
    **no shell metacharacters** (`| & ; < > $ \` ( )` or quotes).
-5. **Each acceptance-test `Path:` is a NEW dedicated test file** matching a `Files: Test:` entry.
+5. **Each declared check's `Check:` path is a NEW dedicated test file** — never the task's own
+   `**Output:**` path.
 6. **Human-executable phases and granularity** as above.
 7. **Conditional tasks** depending on an external prerequisite are marked BLOCKED with the unblocking
    condition.
@@ -161,19 +163,21 @@ Work in this order (guidance for producing a good document, not a rigid ritual):
    makes the executor fail.
 2. **Skeleton in one write.** Write the header — frontmatter (`version: 1` + `updated_at`), the title,
    a one-line **execution note** (`> **Execution:** implement task-by-task with the mma-execute-plan
-   worker (the MMA autonomous executor); each task's acceptance tests gate its commit.`), then Goal,
+   worker (the MMA autonomous executor); each task's declared checks gate its commit.`), then Goal,
    Architecture, Tech Stack, Ground truth at HEAD, File Structure — followed by the phase headings each
-   with their "what works at the end" line, and every task heading with its `**Files:**` block and
-   `← AC` refs, leaving each task's body as a single `<!-- enrich -->` slot. Do NOT reference any
-   non-MMA methodology skill — MMA executes its own plans via mma-execute-plan.
-3. **Fill each task** one at a time (technical AC + Contract + acceptance tests), in dependency order,
+   with their "what works at the end" line, and every task heading with its `**Output:**` /
+   `**Dependencies:**` lines and `← AC` refs, leaving each task's body as a single `<!-- enrich -->`
+   slot. Do NOT reference any non-MMA methodology skill — MMA executes its own plans via
+   mma-execute-plan.
+3. **Fill each task** one at a time (technical AC + Contract + declared checks), in dependency order,
    until zero `<!-- enrich` markers remain. For code tasks, check each Contract against the Code-technique
    depth list above before moving to the next task.
 4. **Close** with a Full-suite gate (test/build/lint, expected PASS) and a Spec-coverage traceability
    table mapping every spec AC to its task(s).
 5. **Self-check** against the completion test: could a human execute every phase to the working
-   solution? Does each task have a technical AC traced to a business AC, a contract, and executable
-   tests? No implementation code leaked? Is the granularity human-sensible?
+   solution? Does each task have a technical AC traced to a business AC, a contract, and an executable
+   check? No implementation code or final deliverable content leaked? Is the granularity
+   human-sensible?
 
 ## Output
 

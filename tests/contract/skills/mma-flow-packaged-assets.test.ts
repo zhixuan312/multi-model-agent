@@ -27,7 +27,7 @@ const CHANGED: Record<string, string[]> = {
   'mma-explore': ['multi-repo mode', 'parent workspace', '.mma/explorations'],
   'mma-brainstorm': ['involved repo', 'parent workspace'],
   'mma-spec': ['parent workspace owns the spec output in multi-repo mode', 'one shared spec feeds per-repo plans'],
-  'mma-plan': ['one repo', 'exactly one repo', 'shared spec', '.mma/plans/<stem>--<repo-slug>.md', 'Contract Task', 'plan-authored acceptance tests'],
+  'mma-plan': ['one repo', 'exactly one repo', 'shared spec', '.mma/plans/<stem>--<repo-slug>.md', 'Contract Task', 'plan-authored'],
   'mma-journal-record': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
   'mma-journal-recall': ['parent', 'journal', 'topic = <repo-slug>', 'lowercase-kebab'],
   // Ratchet updated deliberately: this previously required the phrase "no worktree", which
