@@ -182,6 +182,20 @@ describe('acceptance closure (AC-4.5)', () => {
     expect(isClosingRecord(wrongMethod, { id: 'AC-1', method: 'human' }, digest)).toBe(false);
   });
 
+  it('evidence filed under the wrong key does not close the criterion', () => {
+    // The record is looked up BY criterion id, but its own `id` is authored by the caller — this
+    // file is written by Forge or by an agent following the mma-flow skill, never by the engine.
+    // A copy-paste that files AC-2's result under the key "AC-1" would otherwise close AC-1 with
+    // a result that was never about AC-1. Found by a pre-release review, not by the suite.
+    const misfiled = record({
+      id: 'AC-2',
+      subjectDigest: digest,
+      outcome: { status: 'passed', method: 'command', exitCode: 0, outputDigest: 'sha256:o' },
+    });
+    expect(isClosingRecord(misfiled, { id: 'AC-1', method: 'command' }, digest)).toBe(false);
+    expect(acceptanceClosed([{ id: 'AC-1', method: 'command' }], { 'AC-1': misfiled }, digest)).toBe(false);
+  });
+
   it('a missing record does not close, and closure needs EVERY criterion', () => {
     const records = {
       'AC-1': record({ id: 'AC-1', subjectDigest: digest, outcome: { status: 'passed', method: 'command', exitCode: 0, outputDigest: 'sha256:o' } }),

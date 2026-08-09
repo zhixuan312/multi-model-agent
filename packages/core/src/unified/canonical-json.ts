@@ -42,12 +42,33 @@ export function canonicalizeValue(value: unknown): unknown {
   if (typeof value === 'string') return value.normalize('NFC');
   if (Array.isArray(value)) return value.map(canonicalizeValue);
   if (value !== null && typeof value === 'object') {
-    const sortedKeys = Object.keys(value as Record<string, unknown>)
-      .map((key) => key.normalize('NFC'))
-      .sort(compareByCodePoint);
+    const source = value as Record<string, unknown>;
+    // Keep each ORIGINAL key beside its normalised form. Sorting and emitting use the normalised
+    // key; READING the value must use the original one.
+    //
+    // Reading through the normalised key is a silent hash collision, and it was a real defect
+    // here. For a key that is not already NFC — `'e' + U+0301`, which is exactly what macOS
+    // filenames produce — the normalised lookup misses, the value comes back `undefined`, and
+    // `JSON.stringify` drops the property entirely. `{'é': 1}` then digested identically to `{}`,
+    // and to `{'é': 999}`. Two different documents, one digest, no error.
+    const pairs = Object.keys(source).map((original) => ({ original, normalized: original.normalize('NFC') }));
+    pairs.sort((a, b) => compareByCodePoint(a.normalized, b.normalized));
+
+    // Two distinct original keys can normalise to the same string. Picking either one silently is
+    // a quieter form of the same bug — the digest would depend on key insertion order — so this
+    // refuses rather than guesses. A caller hitting it has genuinely ambiguous data.
+    for (let i = 1; i < pairs.length; i += 1) {
+      if (pairs[i]!.normalized === pairs[i - 1]!.normalized) {
+        throw new Error(
+          `canonical JSON: keys ${JSON.stringify(pairs[i - 1]!.original)} and ${JSON.stringify(pairs[i]!.original)} `
+          + 'are distinct but identical after NFC normalisation, so no canonical order exists',
+        );
+      }
+    }
+
     const canonical: Record<string, unknown> = {};
-    for (const key of sortedKeys) {
-      canonical[key] = canonicalizeValue((value as Record<string, unknown>)[key]);
+    for (const { original, normalized } of pairs) {
+      canonical[normalized] = canonicalizeValue(source[original]);
     }
     return canonical;
   }

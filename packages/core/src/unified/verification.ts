@@ -85,12 +85,18 @@ export function canonicalSubjectDigest(subject: VerificationSubject): string {
   if (subject.type === 'git') {
     const repositories = [...subject.repositories]
       .map((entry) => ({ repositoryId: entry.repositoryId, commit: entry.commit }))
-      .sort((a, b) => compareByCodePoint(a.repositoryId, b.repositoryId));
+      // Total order, not merely a grouping. Without the final tie-breaker, two entries sharing a
+      // repositoryId compare equal, a stable sort preserves the CALLER's order, and two callers
+      // listing the same subject differently would digest it differently.
+      .sort((a, b) => compareByCodePoint(a.repositoryId, b.repositoryId) || compareByCodePoint(a.commit, b.commit));
     return canonicalDigest({ type: 'git', repositories });
   }
   const artifacts = [...subject.artifacts]
     .map((entry) => ({ root: entry.root, path: entry.path, digest: entry.digest }))
-    .sort((a, b) => compareByCodePoint(a.root, b.root) || compareByCodePoint(a.path, b.path));
+    // Total order: `digest` is the final tie-breaker, so two entries with the same (root, path)
+    // but different content still sort deterministically instead of keeping input order.
+    .sort((a, b) => compareByCodePoint(a.root, b.root) || compareByCodePoint(a.path, b.path)
+      || compareByCodePoint(a.digest, b.digest));
   return canonicalDigest({ type: 'files', artifacts });
 }
 
@@ -114,6 +120,11 @@ export function isClosingRecord(
   currentSubjectDigest: string,
 ): boolean {
   if (!record) return false;
+  // The record is looked up BY criterion id, but its own `id` is authored by the caller — this
+  // file is written by Forge or by an agent following the mma-flow skill, and the engine never
+  // writes it. A copy-paste that files AC-2's evidence under the key "AC-1" would otherwise close
+  // AC-1 using a result that was never about AC-1. Nothing else validates this, so check it here.
+  if (record.id !== criterion.id) return false;
   if (record.subjectDigest !== currentSubjectDigest) return false;
   if (record.outcome.method !== criterion.method) return false;
   switch (criterion.method) {
