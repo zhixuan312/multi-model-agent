@@ -196,8 +196,12 @@ Work in this order (guidance for producing a good document, not a rigid ritual):
    mma-execute-plan.
 3. **Fill each task** one at a time (technical AC + Contract + any declared checks), in dependency
    order, until zero `<!-- enrich` markers remain.
-4. **Close** with a Full-suite gate (test/build/lint, expected PASS) and a Spec-coverage traceability
-   table mapping every spec AC to its task(s).
+4. **Close** with a whole-deliverable gate and a Spec-coverage traceability table mapping every spec
+   AC to its task(s). The gate is whatever checks the FINISHED deliverable as a whole, rather than
+   task by task — for a code project that is the test/build/lint suite; for a report it is the
+   assembled document checked against the full acceptance set; for a configuration it is the
+   end-to-end run. State the gate this deliverable actually has. Do not name a test suite, a build
+   or a linter unless you confirmed in step 1 that the deliverable has them.
 5. **Self-check** against the completion test: could a human execute every phase to the working
    solution? Does each task have a technical AC traced to a business AC, a contract, and (where a
    deterministic check is possible) an executable check? No implementation code or final deliverable

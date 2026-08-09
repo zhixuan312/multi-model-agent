@@ -39,6 +39,19 @@ describe('AC-6.8 — the generic plan implementer assumes no code project', () =
   it('requires phases to end where a person can review', () => {
     expect(generic().toLowerCase()).toContain('a person can actually review');
   });
+
+  it('does not mandate a test/build/lint gate the deliverable may not have', () => {
+    // The contradiction this guards: the same file told the writer to assume no test suite, build
+    // or repository, and then to close every plan with a "Full-suite gate (test/build/lint)". A
+    // finance report has none of those, so the closing step silently reimposed the software
+    // assumption the rest of the file had just removed.
+    const body = generic();
+    expect(body).not.toContain('Full-suite gate (test/build/lint, expected PASS)');
+    // A whole-deliverable gate is still REQUIRED — per-task checks never prove the assembled
+    // result is sound. Only its form is left to the deliverable.
+    expect(body).toContain('whole-deliverable gate');
+    expect(body.toLowerCase()).toContain('unless you confirmed in step 1');
+  });
 });
 
 describe('AC-6.9 — the plan states its chosen production method', () => {

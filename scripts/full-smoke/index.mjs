@@ -23,6 +23,7 @@ function keepWorkspaceClean(dir) {
   } catch { /* best-effort */ }
 }
 import { createProject, createWriteRepo } from './fixtures.mjs';
+import { SPEC_COMPONENT_CATALOG } from '../../packages/core/dist/index.js';
 import { SCENARIOS, ENGINE_COMMIT_TYPES } from './config.mjs';
 import { runDispatch, pollTask, runCancelScenario, runMcpScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
@@ -320,8 +321,12 @@ async function runScenario(spec, ctx, log) {
           const specFile = landed[0];
           let body = null;
           try { body = readFileSync(existsSync(specFile) ? specFile : join(ctx.dir, specFile), 'utf8'); } catch { /* unreadable */ }
-          const RETIRED = ['## Technical Design', '## Testing Plan', '## User Stories & Tasks'];
-          const NEUTRAL = ['Approach, Method & Structure', 'Verification Plan', 'Stakeholders & Work'];
+          // Both lists are DERIVED from the shipped catalog, never restated here (AC-5.4).
+          // A hand-written copy could only agree with itself: if a display label changed, this
+          // check would keep asserting the old one and pass while the product emitted the new.
+          const renamed = SPEC_COMPONENT_CATALOG.filter((entry) => entry.displayLabel !== entry.id);
+          const RETIRED = renamed.map((entry) => `## ${entry.id}`);
+          const NEUTRAL = renamed.map((entry) => entry.displayLabel);
           const present = body === null ? [] : NEUTRAL.filter((label) => body.includes(label));
           const retired = body === null ? [] : RETIRED.filter((heading) => body.includes(heading));
           checks.push({

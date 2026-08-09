@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { SCHEMA_VERSION, configuredMainModel, configuredWorkerModels } from './config.mjs';
 import { SMOKE_CLIENT } from './http.mjs';
+// The component catalog is defined ONCE, in the core package (AC-5.4). A second copy here could
+// only ever agree with itself: if the catalog changed, this harness would keep asserting the old
+// identifiers and report a passing spec while the product emitted something else.
+import { SPEC_COMPONENTS } from '../../packages/core/dist/index.js';
+const CANON = SPEC_COMPONENTS;
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
 
@@ -118,7 +123,6 @@ function checkQuality(type, subtype, r, subsetComponents) {
         return ['FAIL', `specPath not under .mma/specs/: ${specPath}`];
       }
       const sections = specSummary?.sections ?? [];
-      const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
       if (subsetComponents) {
         // Subset spec: pass iff sections equals exactly the requested set in canonical order.
         const want = CANON.filter(c => subsetComponents.includes(c));
@@ -734,7 +738,6 @@ export function verify(rec) {
   if (e.type === 'spec') {
     const specSummary = r?.output?.summary;
     const sections = specSummary?.sections ?? [];
-    const CANON = ['Context', 'Problem', 'Goals & Requirements', 'Alternatives', 'Technical Design', 'Testing Plan', 'Risks & Mitigations', 'User Stories & Tasks'];
     if (e.subsetComponents) {
       // Expected = the requested labels in canonical order (regardless of request order).
       const want = CANON.filter(c => e.subsetComponents.includes(c));
