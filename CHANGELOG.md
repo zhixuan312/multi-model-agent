@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.7.0] - 2026-08-09
+
+Five defects reported from real use are fixed, and MMA's lifecycle stops assuming the deliverable is
+source code in a git repository. `SCHEMA_VERSION` stays at **6**.
+
+**BREAKING — existing plan files stop parsing.** The Contract Task grammar is replaced. A task now
+declares `**Output:**`, `**Dependencies:**`, the five Contract bullets, an OPTIONAL `Checks` block,
+and the closing `**Plan boundary:**` line. The former `**Files:**` list, the
+`Acceptance tests (plan-authored` marker and the implementation sentinel are gone, with no
+compatibility path. Any plan written under the old grammar fails with `malformed-plan` before any
+worker starts. **Re-generate affected plans with `mma-plan`; do not hand-edit them.**
+
+### Fixed — reported from real use
+
+- **Concurrent `journal_recall` crashed on the journal index.** Two recall legs both synced the
+  index; the loser died with `runner_crash`. The write lock was held across every file read, and the
+  transaction was deferred, so SQLite failed the lock upgrade without honouring `busy_timeout`. Both
+  index paths now read and decode with no transaction held, then write under `BEGIN IMMEDIATE`, and
+  take no lock at all when nothing changed. Reproduced before the fix at 10.4 seconds of contention.
+- **The daemon wedged at the HTTP layer while workers kept running.** Same root cause: journal
+  syncing runs inside the daemon, and `node:sqlite` is synchronous, so a lock wait blocked the event
+  loop. Fixing the lock removes the stall.
+- **An MCP dispatch that timed out had in fact created the task.** Also the same root cause. A task
+  that has been admitted stays discoverable through `mma_task_list`, so a caller that lost its
+  handle can reconcile instead of re-dispatching and duplicating work.
+- **`execute_plan` rejected a plan whose check was not under `tests/`.** A declared check may now sit
+  under `tests`, `test`, `spec`, `specs`, `checks` or `__tests__`, and the rejection message names
+  all six. Confinement is unchanged: relative paths only, no traversal, no symlink crossing, and no
+  overwriting an existing file.
+- **`execute_plan` rejected a plan when a blockquote split a `**Files:**` block.** The new grammar
+  states each metadata field on one line, so there is no multi-line block for prose to split.
+
+### Added — a solution lifecycle, not only a software lifecycle
+
+- **The Deliverable Contract.** `spec`, `plan`, `execute_plan` and `review` accept an approved
+  contract carrying `kind`, `audience`, `artifacts`, `acceptance` and `disposition`. Only an
+  `approved`, digest-matched contract crosses the wire, and both REST and MCP reject an invalid one
+  before any provider session opens.
+- **A task may declare no deterministic check.** A criterion no machine can settle — a written
+  section, a design decision, a figure a person must read — declares none, and that is a valid task.
+- **`practice: 'software'` selects the retained code technique** on `plan`, `execute_plan`, `review`
+  and `debug`. Omitting it loads the deliverable-neutral implementer. The engine never infers it.
+- **Neutral spec component labels.** `Technical Design` renders as "Approach, Method & Structure",
+  `Testing Plan` as "Verification Plan", `User Stories & Tasks` as "Stakeholders & Work". The eight
+  identifiers are unchanged, so no existing project breaks.
+- **Shared verification model.** `VerificationSubject`, `VerificationRecord` and the named
+  `canonicalSubjectDigest` algorithm ship from `@zhixuan92/multi-model-agent-core`, so any component
+  computes the same digest for the same output.
+
+### Scope of the competence claim — read this before relying on it
+
+The deliverable-neutral path is **route-verified, not practitioner-verified.** Automated coverage
+proves that a non-code flow RUNS: the routes accept a non-code workspace, the contract validates,
+plans decompose without assuming a build or a test suite. It does not prove that the output is work a
+finance analyst, an automation engineer or a policy owner would accept.
+
+The specification requires blind evaluation of three golden journeys by named practitioners
+(FR-16a / AC-11.3). **That evaluation has not happened**, and it is deliberately deferred rather than
+quietly skipped: this team holds authority in software and does not hold it in those fields, and
+evaluating our own output would not be independent. Treat non-code use as capable and unproven, and
+report what you find.
+
+Forge is not part of this release. The engine has no dependency on it.
+
 ## [6.6.0] - 2026-08-08
 
 Two breaking changes: `agents.main` becomes a required config tier and takes over the cost baseline,
