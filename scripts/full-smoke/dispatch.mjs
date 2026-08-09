@@ -108,6 +108,101 @@ export async function runMcpScenario(ctx) {
   return { init, tools, resourceList, resourceRead, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
 }
 
+/**
+ * #55 — the MCP transport must honour `deliverable` and `practice`, not merely relay a task.
+ *
+ * #40 proves the adapter runs a task and matches REST, but it sends neither new field. The MCP
+ * request schema is GENERATED from the same Zod union REST validates with, so a generation bug
+ * or an adapter that strips unknown keys would leave a contract accepted over REST and rejected
+ * over MCP — a split-brain between two transports of one runtime, invisible to every existing
+ * scenario. Both fields are sent together because that is what a managed flow dispatches.
+ */
+export async function runMcpContractScenario(ctx) {
+  const { approvedContract, contractContent } = await import('./fixtures.mjs');
+  const deliverable = approvedContract(contractContent());
+
+  const schema = await mcpCall(ctx.token, 'tools/list', undefined, 40);
+
+  const run = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_run',
+    arguments: {
+      cwd: ctx.dir,
+      request: {
+        type: 'review',
+        target: { paths: [`${ctx.dir}/src/math.ts`] },
+        deliverable,
+        practice: 'software',
+      },
+    },
+  }, 41);
+
+  const parseToolText = (r) => {
+    const text = r?.json?.result?.content?.[0]?.text;
+    try { return text ? JSON.parse(text) : null; } catch { return null; }
+  };
+  const runPayload = parseToolText(run);
+  const taskId = runPayload?.taskId ?? null;
+  // A rejection surfaces as an MCP tool error rather than a handle, so the absence of a taskId is
+  // itself the finding — carry the raw payload so verify can report WHY.
+  if (!taskId) return { schema, run, runPayload, taskId: null, envelope: null };
+
+  const { envelope } = await pollTask(ctx.token, taskId);
+  return { schema, run, runPayload, taskId, envelope };
+}
+
+/**
+ * #56 — the rest of the MCP tool surface.
+ *
+ * `mma_run` and `mma_task_wait` are covered by #40. The remaining tools have never been driven
+ * over MCP at all, only through their REST equivalents, so a tool that threw on every call would
+ * fail no existing scenario. This drives them as a host would: register a context block, list it
+ * among live tasks, cancel a running task, and delete the block.
+ */
+export async function runMcpToolsScenario(ctx) {
+  const parseToolText = (r) => {
+    const text = r?.json?.result?.content?.[0]?.text;
+    try { return text ? JSON.parse(text) : null; } catch { return null; }
+  };
+
+  const createBlock = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_context_block_create',
+    arguments: { cwd: ctx.dir, content: ctx.specMd ?? '# Block\n\nSmoke content for the MCP tool surface.' },
+  }, 50);
+  const blockPayload = parseToolText(createBlock);
+  const blockId = blockPayload?.id ?? blockPayload?.blockId ?? null;
+
+  // A long task so the list and cancel calls act on something genuinely running.
+  const run = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_run',
+    arguments: { cwd: ctx.dir, request: { type: 'investigate', prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } } },
+  }, 51);
+  const taskId = parseToolText(run)?.taskId ?? null;
+  if (taskId) await new Promise((r) => setTimeout(r, 4000));
+
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 52);
+  const listPayload = parseToolText(list);
+
+  const get = taskId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_get', arguments: { taskId } }, 53)
+    : null;
+  const getPayload = get ? parseToolText(get) : null;
+
+  const cancel = taskId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_cancel', arguments: { taskId } }, 54)
+    : null;
+  const cancelPayload = cancel ? parseToolText(cancel) : null;
+
+  // Drain to terminal so the cancelled task does not outlive the scenario.
+  let terminal = null;
+  if (taskId) { try { terminal = (await pollTask(ctx.token, taskId)).envelope; } catch { /* already gone */ } }
+
+  const deleteBlock = blockId
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, id: blockId } }, 55)
+    : null;
+
+  return { createBlock, blockId, listPayload, getPayload, cancelPayload, deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null, terminal, taskId };
+}
+
 // Returns { type, body } for a scenario given run context.
 export function buildRequest(spec, ctx) {
   // Engine-commit scenarios each get their OWN repo, on their own caller-created branch. They
@@ -226,9 +321,28 @@ export function buildRequest(spec, ctx) {
       tasks: ['I-1'],
     } };
     // #46 `practice: 'software'` must reach the skill selector and echo on the envelope.
+    // `plan` accepts BOTH fields, so it sends both — the last of the four route/field
+    // combinations, and the shape a managed flow dispatches at the plan stage.
     case 46: return { cwd, type: 'plan', body: {
       prompt: 'Write a contract-first plan for guarding division by zero in the math module',
       target: { paths: [`${cwd}/spec.md`] },
+      // A SOFTWARE contract carries a deterministic criterion, because that is what a code
+      // deliverable's acceptance actually looks like. The earlier fixture declared a single
+      // `agent-review` criterion — a shape a real software contract would not have — and the
+      // planner mirrored it, producing a plan with no declared checks at all. That made the
+      // scenario report a fixture artefact as a product defect. Keep at least one `command`
+      // criterion here so the contract is representative of the work it governs.
+      deliverable: approvedContract(contractContent({
+        artifacts: [{ root: 'workspaceRoot', path: 'src/math.ts' }],
+        acceptance: [
+          { id: 'AC-1', criterion: 'the guarded-arithmetic checks pass', method: 'command',
+            references: [{ kind: 'none', reason: 'internal module, no external standard' }],
+            command: { program: 'node', args: ['--test', 'tests/'] } },
+          { id: 'AC-2', criterion: 'the public signatures are unchanged for existing callers',
+            method: 'agent-review',
+            references: [{ kind: 'none', reason: 'internal module, no external standard' }] },
+        ],
+      })),
       practice: 'software',
     } };
 
@@ -254,6 +368,35 @@ export function buildRequest(spec, ctx) {
     } };
     case 50: return { type: 'error_practice_not_wired', body: {}, rawPayload: {
       type: 'audit', subtype: 'default', target: { paths: [`${ctx.dir}/spec.md`] }, practice: 'software',
+    } };
+
+    // S. Every remaining route that accepts `deliverable` and/or `practice`.
+    // #51 execute_plan takes BOTH — the shape a managed flow actually dispatches.
+    case 51: return { cwd, type: 'execute_plan', body: {
+      target: { paths: [`${cwd}/plan.md`] },
+      tasks: ['I-1'],
+      deliverable: approvedContract(contractContent({
+        // The declared artifact is the file this plan's task actually produces, so the contract
+        // describes the real delivery rather than an unrelated path that happens to validate.
+        artifacts: [{ root: 'workspaceRoot', path: 'src/subtract.mjs' }],
+      })),
+      practice: 'software',
+    } };
+    case 52: return { type: 'review', body: {
+      target: { paths: [`${ctx.dir}/src/math.ts`] },
+      practice: 'software',
+    } };
+    case 53: return { type: 'debug', body: {
+      prompt: 'divide(1,0) returned Infinity instead of throwing — find the root cause',
+      target: { paths: ['src/math.ts'] },
+      practice: 'software',
+    } };
+    // #54 spec accepts `deliverable` but NOT `practice` — the asymmetry is deliberate and the
+    // scenario would fail loudly if `practice` were wrongly wired onto this arm.
+    case 54: return { type: 'spec', body: {
+      prompt: 'Guarded arithmetic — spec dispatched under an approved contract',
+      target: { paths: [`${ctx.dir}/design-decisions.md`] },
+      deliverable: approvedContract(contractContent()),
     } };
 
     default: throw new Error(`no request builder for scenario ${spec.id}`);

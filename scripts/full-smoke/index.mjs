@@ -25,7 +25,7 @@ function keepWorkspaceClean(dir) {
 import { createProject, createWriteRepo } from './fixtures.mjs';
 import { SPEC_COMPONENT_CATALOG } from '../../packages/core/dist/index.js';
 import { SCENARIOS, ENGINE_COMMIT_TYPES } from './config.mjs';
-import { runDispatch, pollTask, runCancelScenario, runMcpScenario } from './dispatch.mjs';
+import { runDispatch, pollTask, runCancelScenario, runMcpScenario, runMcpContractScenario, runMcpToolsScenario } from './dispatch.mjs';
 import { collectResponse, collectDiagnostics, collectQueue, collectBackend, queueLineCount, allQueueEventIds } from './collectors.mjs';
 import { normalize } from './normalize.mjs';
 import { verify } from './verify.mjs';
@@ -96,6 +96,31 @@ async function runScenario(spec, ctx, log) {
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
       log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      return;
+    }
+
+    // MCP carrying the two new request fields — the transport must honour them, not relay a task.
+    if (spec.kind === 'mcp-contract') {
+      const queueBefore = queueLineCount();
+      const res = await runMcpContractScenario(ctx);
+      const settleUntil = Date.now() + 15000;
+      while (queueLineCount() <= queueBefore && Date.now() < settleUntil) await sleep(300);
+      const rec = normalize(spec, { response: res.envelope, queue: collectQueue(queueBefore) });
+      rec.mcpContract = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.task?.status}`);
+      return;
+    }
+
+    // The remaining MCP tools, driven as a host would drive them.
+    if (spec.kind === 'mcp-tools') {
+      const res = await runMcpToolsScenario(ctx);
+      const rec = normalize(spec, { response: res.terminal });
+      rec.mcpTools = res;
+      records.push(rec);
+      checksByScenario[spec.id] = verify(rec);
+      log(`#${spec.id}  mcp-tools  → block=${res.blockId ? 'ok' : 'MISSING'} taskId=${res.taskId}`);
       return;
     }
 
@@ -458,6 +483,12 @@ try {
       [48],          // error: contract digest mismatch
       [49],          // error: commit-in-place disposition in a non-git workspace
       [50],          // error: practice not wired to audit
+      [51],          // execute_plan carrying BOTH deliverable and practice
+      [52],          // review + practice
+      [53],          // debug + practice
+      [54],          // spec + deliverable (spec takes no practice)
+      [55],          // MCP transport carrying deliverable + practice
+      [56],          // the remaining MCP tools: list, get, cancel, context-block create/delete
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario

@@ -336,7 +336,7 @@ export const SCENARIOS = [
   //        reached the skill selector rather than being silently dropped.
   { id: 44, type: 'review', tier: 'complex', kind: 'read', deliverableContract: true, emits: 1 },
   { id: 45, type: 'execute_plan', tier: 'standard', kind: 'write', noCheckPlan: true, emits: 1 },
-  { id: 46, type: 'plan', tier: 'complex', kind: 'write', practice: 'software', emits: 1 },
+  { id: 46, type: 'plan', tier: 'complex', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
 
   //    Contract REJECTION paths. Each states exactly one reason to reject, so a failure names
   //    the broken invariant instead of "the contract was bad". All four are pure validation —
@@ -352,4 +352,32 @@ export const SCENARIOS = [
   { id: 48, type: 'error_contract_digest_mismatch', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 49, type: 'error_contract_disposition_non_git', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 50, type: 'error_practice_not_wired', kind: 'error', expectStatus: 400, emits: 0 },
+
+  // S. Per-ROUTE coverage of the two new request fields.
+  //
+  //    `deliverable` is accepted on four routes and `practice` on four, and each arm opts in
+  //    INDIVIDUALLY in a strict discriminated union. Testing one route per field proves the field
+  //    works somewhere, not that it works where a caller will actually send it — a missing opt-in
+  //    on a single arm is invisible until that route is used. #44 and #46 covered `review` and
+  //    `plan`; these cover every remaining accepting route with a real dispatch.
+  //
+  //    Where a route accepts BOTH fields they are sent together, because that is how a managed
+  //    flow dispatches: one approved contract governing the work, one persisted practice selecting
+  //    the technique. Sending them separately would test a combination no caller produces.
+  { id: 51, type: 'execute_plan', tier: 'standard', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
+  { id: 52, type: 'review', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
+  { id: 53, type: 'debug', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
+  { id: 54, type: 'spec', tier: 'complex', kind: 'write', deliverableContract: true, emits: 1 },
+
+  //    T. The MCP transport must honour BOTH fields, not merely relay a task.
+  //       #40 proves the adapter runs a task and matches REST. It sends neither new field, so the
+  //       generated MCP request schema could omit them — or the adapter could drop them — while
+  //       #40 stayed green. MCP is a first-class transport, so a contract rejected there but
+  //       accepted over REST would be a silent split-brain between the two surfaces.
+  { id: 55, type: 'review', tier: 'complex', kind: 'mcp-contract', deliverableContract: true, practice: 'software', emits: 1 },
+
+  //    U. The rest of the MCP tool surface. `mma_run` and `mma_task_wait` are exercised by #40;
+  //       the remaining tools have never been driven over MCP at all — only their REST
+  //       equivalents. A tool that throws on every call would not fail any existing scenario.
+  { id: 56, type: 'investigate', tier: 'standard', kind: 'mcp-tools', emits: 0 },
 ];

@@ -112,6 +112,26 @@ it as the only one will quietly drop the claims it cannot express:
 `agent-review` is never a substitute for `human`. A claim needing accountability stays `human` even
 when a model could produce a confident opinion.
 
+**"The project has no test runner" is not a reason to declare no check.** For code, the absence of a
+configured test script is not the absence of a way to verify. Every mainstream language ships a
+runner that needs no project setup — `node --test` for JavaScript, `python -m unittest`, `go test`,
+`cargo test` — and a declared check may use one. Observed in a real run: given a repository with two
+source files and no `package.json`, one plan declared checks that ran under `node --test`, and a
+later plan on the identical input declared none, reasoning that "no project command can provide an
+expected PASS". The first answer was right. Before you conclude a code task admits no deterministic
+check, name the runner you considered and why it cannot settle the claim. "The project does not
+configure one" is not such a reason.
+
+**The contract's acceptance set does NOT replace your task checks — this matters most here.** When
+the request carries an approved deliverable contract, its `acceptance` entries describe the FINISHED
+DELIVERABLE and carry methods chosen at the spec stage. Your task-level technical ACs are a
+different level. A contract criterion verified by `agent-review` or `human` says nothing about
+whether a given code task admits a deterministic check, and for code it almost always does. A
+software plan that declares NO checks because the contract's criteria were `agent-review` has
+dropped the discipline this asset exists to preserve. Observed in a real run: the same spec planned
+WITHOUT a contract produced two declared checks across three tasks, and WITH one produced zero.
+Decide each task on its own merits, every time.
+
 and symbol the task touches is named and verified against HEAD.
 
 ### Format — required heading & file conventions
@@ -138,8 +158,17 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
    (`← AC-N.N`) and states its own technical acceptance criterion. Every spec AC maps to at least one
    task.
 3. **Every path is exact**, verified against ground truth at HEAD. No guessed paths.
-4. **Every `Run:` command** uses the project's real test runner and is a whitespace-delimited argv with
-   **no shell metacharacters** (`| & ; < > $ \` ( )` or quotes).
+4. **Every `Run:` command** uses the project's real test runner — or, when the project configures
+   none, the language's built-in runner (`node --test`, `python -m unittest`, `go test`) — and is a
+   whitespace-delimited argv with **no shell metacharacters** (`| & ; < > $ \` ( )` or quotes).
+   A project without a configured test script still admits deterministic checks.
+4a. **A supplied deliverable contract never shapes the plan's decomposition or its checks.** The
+   contract states what the FINISHED deliverable must be true of; the plan states how to get there.
+   Its `acceptance` entries do not set the number of tasks, and their methods do not set your
+   task-level verification. Observed in a real run on identical input: without a contract the plan
+   had two tasks and two declared checks; with a contract carrying one `agent-review` criterion it
+   collapsed to one task and zero checks. Decompose the work on its merits, then decide each task's
+   check on its own merits.
 5. **Each declared check's `Check:` path is a NEW dedicated test file** — never the task's own
    `**Output:**` path.
 6. **Human-executable phases and granularity** as above.

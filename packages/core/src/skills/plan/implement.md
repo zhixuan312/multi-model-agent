@@ -116,6 +116,14 @@ write, decide which method proves it and say so in the AC's own wording:
 | needs analysis that can be delegated and evidenced (does the section follow from the data? is this consistent with the source?) | `agent-review` | no Check; state what the reviewer must compare against |
 | needs authority or accountability (a professional sign-off, a decision only a named person may make) | `human` | no Check; name WHO must decide, and what they are deciding |
 
+**The contract's acceptance set does NOT replace your task checks.** When the request carries an
+approved deliverable contract, its `acceptance` entries are criteria about the FINISHED DELIVERABLE,
+with their own methods chosen at the spec stage. Your task-level technical ACs are a different
+level: they say what each step must achieve on the way there. A contract criterion verified by
+`agent-review` or `human` says nothing about whether an individual task admits a deterministic
+check — decide each task on its own merits. Treating the contract's methods as the plan's methods
+silently removes every check from the plan, which is a real failure this project has observed.
+
 Two rules that decide the hard cases:
 
 - **Choose by what the claim requires, not by what is convenient.** There is no ranking, and

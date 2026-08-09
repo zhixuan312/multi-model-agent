@@ -258,6 +258,49 @@ export function verify(rec) {
     return out;
   }
 
+  // ─── MCP carrying the new request fields (#55) ───
+  //     The generated MCP request schema comes from the same Zod union REST validates with, so
+  //     these assertions catch a generation bug or an adapter that strips unknown keys — either
+  //     of which would leave a contract accepted over REST and rejected over MCP.
+  if (e.kind === 'mcp-contract') {
+    const m = rec.mcpContract ?? {};
+    const toolText = JSON.stringify(m.schema?.json?.result ?? {});
+    out.push(C('mcp-schema-exposes-deliverable', toolText.includes('deliverable') ? 'PASS' : 'FAIL',
+      'the generated mma_run schema must advertise the contract field'));
+    out.push(C('mcp-schema-exposes-practice', toolText.includes('practice') ? 'PASS' : 'FAIL',
+      'the generated mma_run schema must advertise the practice field'));
+    // A taskId proves the adapter ACCEPTED both fields: a rejection returns a tool error instead.
+    out.push(C('mcp-contract-accepted', m.taskId ? 'PASS' : 'FAIL',
+      m.taskId ? `taskId=${m.taskId}` : `no taskId — payload=${JSON.stringify(m.runPayload).slice(0, 220)}`));
+    out.push(C('mcp-practice-echoed', r?.task?.practice === 'software' ? 'PASS' : 'FAIL',
+      `task.practice=${r?.task?.practice} (must survive the MCP path exactly as it does over REST)`));
+    out.push(C('mcp-terminal-clean', r?.task?.status && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    return out;
+  }
+
+  // ─── The remaining MCP tools (#56) ───
+  //     `mma_run` and `mma_task_wait` are covered by #40; these four had never been driven over
+  //     MCP at all, so a tool that threw on every call would have failed no scenario.
+  if (e.kind === 'mcp-tools') {
+    const m = rec.mcpTools ?? {};
+    out.push(C('mcp-context-block-create', m.blockId ? 'PASS' : 'FAIL', `blockId=${m.blockId}`));
+    const listed = Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks : (Array.isArray(m.listPayload) ? m.listPayload : null);
+    out.push(C('mcp-task-list', listed !== null ? 'PASS' : 'FAIL',
+      `tasks=${listed ? listed.length : 'not an array'} — the tool must return a task collection`));
+    out.push(C('mcp-task-get', m.getPayload?.taskId === m.taskId ? 'PASS' : 'FAIL',
+      `returned taskId=${m.getPayload?.taskId} want=${m.taskId}`));
+    // Cancellation is REQUESTED, so either acknowledgement shape is correct; what must not happen
+    // is the tool failing to answer at all.
+    out.push(C('mcp-task-cancel', m.cancelPayload !== null && m.cancelPayload !== undefined ? 'PASS' : 'FAIL',
+      `ack=${JSON.stringify(m.cancelPayload)}`));
+    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.task?.status) ? 'PASS' : 'WARN',
+      `terminal status=${m.terminal?.task?.status}`));
+    out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
+      `delete=${JSON.stringify(m.deleteBlock)}`));
+    return out;
+  }
+
   // ─── MCP adapter (#40): POST /mcp, second transport over the SAME runtime ───
   if (e.kind === 'mcp') {
     const m = rec.mcp ?? {};
