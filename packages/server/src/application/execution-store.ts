@@ -90,6 +90,16 @@ export class ExecutionStore {
     this.db = new DatabaseSync(opts.dbPath);
     this.ttlMs = opts.ttlMs;
     this.db.exec('PRAGMA journal_mode = WAL');
+    // Wait for a contended lock instead of failing instantly. Without this, SQLite's default
+    // busy timeout is ZERO: the first concurrent writer to arrive gets SQLITE_BUSY immediately.
+    //
+    // Two daemons genuinely overlap on this file. `mma restart` starts the replacement while the
+    // outgoing daemon is still draining in-flight requests, and boot reconciliation reads and
+    // writes the same table. A zero timeout turns that ordinary overlap into a failed admission —
+    // and admission is the one write that must not be lost, because the contract of this store is
+    // that a handle returned to a caller always survives. The journal index has waited 5000 ms
+    // since it was written; this store simply never gained the same setting.
+    this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS executions (
         id TEXT PRIMARY KEY,
