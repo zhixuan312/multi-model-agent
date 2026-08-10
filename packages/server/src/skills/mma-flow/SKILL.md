@@ -3,6 +3,7 @@ name: mma-flow
 description: "Claude Code command: /mma-flow — MMA-native solution delivery playbook (pr, commit-in-place, or deliver-file) that resumes from durable artifacts"
 when_to_use: "User explicitly invokes /mma-flow. This is a Claude Code command, not an auto-matched skill."
 version: "0.0.0-unreleased"
+disable-model-invocation: true
 ---
 
 # /mma-flow
