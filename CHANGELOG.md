@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.8.0] - 2026-08-10
+
+A new Claude Code command, `/mma:tldr`, and a fix to how the two existing commands declare
+themselves. `SCHEMA_VERSION` stays at **6**. No engine, wire, or task-type change.
+
+### Added
+
+- **`/mma:tldr` — a reader utility command.** It turns the previous assistant message, or a
+  supplied file, URL, or text, into a short decision brief you can read in about three minutes:
+  a TLDR of at most 80 words, key points numbered and ranked by decision impact, and the topics it
+  left out. It runs entirely in your session — no worker, no HTTP route, no task type. Install it
+  standalone as `/mma-tldr` or through the plugin as `/mma:tldr`.
+
+  It does two jobs, not one: it compresses a long source, and it explains a difficult one. You never
+  say which — the command works that out. A short, dense paragraph produces a **longer** result,
+  because defining terms and separating ideas costs words.
+
+  What makes it safer than an ordinary summary is one rule: **compress the explanation, never the
+  qualification.** A summary keeps the claims and drops the conditions, so you finish reading more
+  confident and less correct. This command may drop a whole low-priority point, but it names the
+  topic when it does, and it never keeps a claim while deleting the condition that makes the claim
+  accurate. It reports partial source access instead of implying it read everything, labels
+  background it added, writes "The source appears to assume…" rather than presenting an inference as
+  the source's own claim, and never executes instructions found inside a source it was asked to
+  explain.
+
+  Output follows the source's language, so a Chinese source produces a Chinese result. An explicitly
+  named language overrides that, then the language you wrote the instruction in.
+
+- **`_shared/writing-style.md`** — a compact plain-English writing standard, guided by ASD-STE100
+  Simplified Technical English as guidance rather than formal compliance. `/mma:tldr` includes it.
+
+### Fixed
+
+- **The packaged commands now enforce manual invocation.** `/mma-flow` and `/mma-breakout` both
+  declared "not an auto-matched skill" in their `when_to_use` field, which is descriptive prose and
+  enforces nothing — the agent could invoke either from intent matching. Both now carry
+  `disable-model-invocation: true`, and a contract test plus the release smoke gate assert the key
+  for every packaged command. An accidental `/mma-flow` would have run a full SDLC playbook.
+
+- **A packaged skill that calls no MMA tool no longer has to claim a recovery path.** The
+  `mma clients` line tells you what to run when an MMA MCP tool is missing from the session. The
+  rule applied to every skill, including one that dispatches nothing and therefore has nothing to
+  recover. The rule now applies only to skills that name an MMA tool, and the inverse is asserted
+  too: a skill calling no MMA tool must not claim the recovery path. Both the contract test and the
+  release smoke gate carry the same rule.
+
 ## [6.7.0] - 2026-08-09
 
 Five defects reported from real use are fixed, and MMA's lifecycle stops assuming the deliverable is

@@ -13,6 +13,7 @@ interface Frontmatter {
   description: string;
   when_to_use: string;
   version: string;
+  'disable-model-invocation'?: string;
 }
 
 function parseFrontmatter(md: string): Frontmatter {
@@ -57,7 +58,14 @@ const ACTIONABLE_SKILLS = [
   'mma-investigate',
   'mma-research',
   'mma-spec',
+  'mma-tldr',
 ];
+
+// Commands are explicitly invoked via /name. They are never auto-matched by
+// intent, so the "Use when" description convention does not apply to them, and
+// each one must carry the frontmatter key that actually enforces manual
+// invocation. `when_to_use` is descriptive prose and enforces nothing.
+const COMMANDS = ['mma-flow', 'mma-breakout', 'mma-tldr'];
 
 describe('contract: skill manifest surface', () => {
   const allSkillDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -81,10 +89,25 @@ describe('contract: skill manifest surface', () => {
         expect(fm.version).toMatch(/^(\d+\.\d+\.\d+|0\.0\.0-unreleased)/);
       });
 
+      it('a command enforces manual invocation, and a skill does not disable it', () => {
+        if (COMMANDS.includes(skillName)) {
+          expect(
+            fm['disable-model-invocation'],
+            `${skillName} is a command: it must set disable-model-invocation: true. `
+              + 'when_to_use is prose and enforces nothing, so without this key the agent '
+              + 'may invoke the command automatically from intent matching.',
+          ).toBe('true');
+          return;
+        }
+        expect(
+          fm['disable-model-invocation'],
+          `${skillName} is an auto-matched skill and must stay model-invokable`,
+        ).toBeUndefined();
+      });
+
       it('description starts with "Use when" or "Use first" (skill-discovery convention)', () => {
         // Commands (e.g. mma-flow) are explicitly invoked via /name, not auto-matched
         // by intent — the "Use when" convention does not apply to them.
-        const COMMANDS = ['mma-flow', 'mma-breakout'];
         if (COMMANDS.includes(skillName)) return;
 
         expect(

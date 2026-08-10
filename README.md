@@ -114,7 +114,7 @@ mma plugin build --target=agent-plugin      # -> ~/.mma/plugin-agent-plugin
 ```
 
 That emits an [Agent Plugins 1.0](https://agent-plugins.org/specification) package — root
-`plugin.json`, the same 16 skills, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
+`plugin.json`, the same 16 skills and 3 commands, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
 so no token is ever written into the package. Codex, Cursor and VS Code read this format directly;
 Claude Code does not, and keeps its own package (`mma plugin build`, the default target). Both are
 generated from the same skills — the payload never forks.
@@ -183,7 +183,7 @@ Claude Code users can install the skills **and** the MCP server in a single step
 /plugin install mma@multi-model-agent
 ```
 
-That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 2 SDLC commands (`/mma:flow`, `/mma:breakout`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 3 commands (`/mma:flow`, `/mma:breakout`, `/mma:tldr`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
 > **The plugin supersedes standalone skills automatically.** Standalone (`mma sync-skills`) is the default, but the plugin is a strict superset — skills *plus* the SDLC commands *plus* the MCP server. So once the plugin is installed, `mma sync-skills` retires the standalone Claude Code copies and pins that client off, keeping exactly one install path. Without this you'd have two copies of every skill (`/mma-audit` **and** `/mma:audit`) with near-identical descriptions, and Claude would pick between them arbitrarily.
 >
@@ -371,6 +371,7 @@ Skills are the surface your AI client sees. `mma sync-skills` writes the table b
 |---|---|---|
 | `/mma-flow` | Type `/mma-flow` in Claude Code | Self-locating SDLC playbook — detects which stage the project is at (idea → spec → plan → execute → verify → review → green), confirms the design freeze, then runs the autonomous Build chain to committed code. |
 | `/mma-breakout` | Type `/mma-breakout` in Claude Code | Claude Code-only interactive expert-persona breakout — spawns a named breakout teammate, keeps deep dialogue in direct `@name` conversation isolated from the main thread, then closes with one confirmed journal batch. |
+| `/mma-tldr` | Type `/mma-tldr` in Claude Code | Reader utility — turns the previous assistant message, or a supplied file, URL, or text, into a short decision brief readable in about three minutes: a TLDR, key points ranked by decision impact with source references, and the topics it left out. Keeps every qualification attached to a claim it keeps. Output follows the source's language. |
 
 ### Two generic usage samples
 
@@ -621,19 +622,17 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 
 ## What's new
 
-- **`agents.main` is now required, and it is the cost baseline.** Add the tier to your config before
-  upgrading — the daemon refuses to start without it and names what is missing. Every run is priced
-  against the model you declared, never against a worker tier. Before this change mma guessed the
-  baseline when a caller sent none, and the guess was one of the two models that had just run the
-  task, so the per-task headline could report a negative saving for a run that saved money. The
-  `mainModel` parameter and the `X-MMA-Main-Model` header are gone.
-- **The code index has been removed.** `investigate` no longer starts with a pre-built list of
-  candidate files, and `mma search` is gone. Measured against its own absence, the index made no
-  difference on questions that name a symbol — plain `rg` already finds those — and it found the
-  right file for 33% of questions phrased as sentences, against 25% for a worker that picks a
-  keyword and greps. No measurement ever showed it improved answer quality. The journal index keeps
-  every gain: record and recall stay at about 0.31 ms with unchanged retrieval quality. See the
-  CHANGELOG for the full reasoning.
+- **New command: `/mma:tldr`.** Turns the previous assistant message, or a file, URL, or pasted
+  text, into a short decision brief you can read in about three minutes — a TLDR of at most 80
+  words, key points ranked by decision impact with source references, and the topics it left out.
+  It runs in your session; no worker, no task type. It compresses a long source and explains a
+  difficult one, and you never say which. Its one safety rule: compress the explanation, never the
+  qualification — a summary that keeps the claims and drops the conditions leaves you more confident
+  and less correct. Output follows the source's language.
+- **`/mma-flow` and `/mma-breakout` now enforce manual invocation.** Both declared "not an
+  auto-matched skill" in prose that enforced nothing, so the agent could fire either from intent
+  matching. Both now set `disable-model-invocation: true`. Typing the command works exactly as
+  before; an accidental `/mma-flow` no longer runs a full SDLC playbook on its own.
 
 ## License
 

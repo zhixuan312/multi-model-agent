@@ -3,6 +3,7 @@ name: mma-breakout
 description: "Claude Code command: /mma-breakout — spawn a named expert breakout teammate, keep the deep dialogue isolated, and close with one confirmed journal batch"
 when_to_use: "User explicitly invokes /mma-breakout. This is a Claude Code command, not an auto-matched skill."
 version: "0.0.0-unreleased"
+disable-model-invocation: true
 ---
 
 # /mma-breakout

@@ -73,6 +73,7 @@ digraph picker {
 | `mma:brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma:spec` |
 | `/mma:flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma:flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge. Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
 | `/mma:breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma:breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |
+| `/mma:tldr` | **Command (Claude Code only)** — Reader utility invoked via `/mma:tldr`. Turns the previous assistant message, or a supplied file, URL, or text, into a short decision brief: TLDR, key points ranked by decision impact, and named omitted topics. Never routed automatically — the reader is the only one who knows they did not understand. |
 | `mma:spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma:plan` | Write a contract-first implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma:execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |

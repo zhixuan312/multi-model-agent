@@ -28,7 +28,18 @@ describe('contract: MCP-only packaged client surface', () => {
       if (file.endsWith('/SKILL.md')) {
         const name = content.match(/^name:\s*([^\n\r]+)/m)?.[1]?.trim();
         expect(name, file).toBe(file.split('/').at(-2));
-        expect(content, file).toContain('mma clients');
+        // `mma clients` is the recovery path when an MMA MCP tool is missing from
+        // the session. A skill that calls no MMA tool has nothing to recover, so
+        // requiring the line would force meaningless text into it. The exemption
+        // is self-enforcing: it holds only while the skill names no MMA tool, so
+        // adding a dispatch to an exempt skill fails here.
+        if (/\bmma_(run|task_get|task_wait|task_cancel|task_list|context_block_)/.test(content)) {
+          expect(content, `${file} calls an MMA tool, so it must name the mma clients recovery path`)
+            .toContain('mma clients');
+        } else {
+          expect(content, `${file} names no MMA tool, so it must not claim a recovery path`)
+            .not.toContain('mma clients');
+        }
       }
     }
     const output = join(process.cwd(), '.mma', 'tmp-plugin-contract');

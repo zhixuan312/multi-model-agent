@@ -34,8 +34,9 @@ function writeFakeSkill(root: string, name: string, version: string): void {
 function makeFakeSkillsRoot(): string {
   const root = mkdtempSync(path.join(tmpdir(), 'mma-breakout-skills-'));
   for (const skill of SUPPORTED_SKILLS) writeFakeSkill(root, skill, '4.0.2');
-  writeFakeSkill(root, 'mma-flow', '4.0.2');
-  writeFakeSkill(root, 'mma-breakout', '4.0.2');
+  // Derived, not hard-coded: sync-skills fails when a packaged command has no
+  // SKILL.md, so a literal list here goes stale the moment a command is added.
+  for (const command of SUPPORTED_COMMANDS) writeFakeSkill(root, command, '4.0.2');
   return root;
 }
 
