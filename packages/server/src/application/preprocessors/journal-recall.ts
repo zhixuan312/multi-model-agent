@@ -12,9 +12,14 @@ export const journalRecallPreprocessor: Preprocessor = async ({ cwd, payload }) 
   const indexStore = await JournalIndexStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
   try {
     await indexStore.ensureHealthy();
-    (payload as Record<string, unknown>).candidates = await searchCandidatesForRecall(indexStore, {
+    const result = await searchCandidatesForRecall(indexStore, {
       prompt: jrPayload.prompt, topic: jrPayload.topic, includeHistory,
     });
+    (payload as Record<string, unknown>).candidates = result.candidates;
+    // Coverage travels with the payload: the worker states what it could not
+    // see rather than presenting a budget-trimmed set as the whole match.
+    (payload as Record<string, unknown>).candidatesWithheld = result.withheld;
+    (payload as Record<string, unknown>).candidatesTotalRanked = result.totalRanked;
     (payload as Record<string, unknown>).includeHistory = includeHistory;
   } finally {
     // Close the WAL connection so no lock leaks per request.

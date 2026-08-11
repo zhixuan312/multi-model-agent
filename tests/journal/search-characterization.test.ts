@@ -22,7 +22,7 @@ it('pins current node IDs and order for fixed recall queries', async () => {
   const root = await corpus();
   const store = await JournalIndexStore.open({ journalRoot: root });
   await store.rebuildIndex();
-  await expect(searchCandidatesForRecall(store, { prompt: 'index refresh retrieval', topic: 'engine', includeHistory: false }).then((rows) => rows.map((row) => row.nodeId))).resolves.toEqual(['0001', '0003']);
-  await expect(searchCandidatesForRecall(store, { prompt: 'refresh', topic: 'engine', includeHistory: true }).then((rows) => rows.map((row) => row.nodeId))).resolves.toEqual(['0001', '0002']);
+  await expect(searchCandidatesForRecall(store, { prompt: 'index refresh retrieval', topic: 'engine', includeHistory: false }).then((r) => r.candidates.map((row) => row.nodeId))).resolves.toEqual(['0001', '0003']);
+  await expect(searchCandidatesForRecall(store, { prompt: 'refresh', topic: 'engine', includeHistory: true }).then((r) => r.candidates.map((row) => row.nodeId))).resolves.toEqual(['0001', '0002']);
   store.close();
 });

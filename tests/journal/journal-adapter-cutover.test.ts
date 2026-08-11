@@ -11,7 +11,7 @@ it('serves the unchanged journal search API from the corpus-neutral engine', asy
   await store.rebuildIndex();
   expect((await store.inspectSchema()).tables).toEqual(expect.arrayContaining(['records', 'records_fts']));
   expect((await store.inspectSchema()).tables).not.toContain('documents');
-  await expect(searchCandidatesForRecall(store, { prompt: 'engine health', topic: 'journal', includeHistory: false }).then((rows) => rows.map((row) => row.nodeId))).resolves.toEqual(['0001']);
+  await expect(searchCandidatesForRecall(store, { prompt: 'engine health', topic: 'journal', includeHistory: false }).then((r) => r.candidates.map((row) => row.nodeId))).resolves.toEqual(['0001']);
   store.close();
 });
 

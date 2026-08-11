@@ -204,7 +204,9 @@ async function runEngine(queries: FrozenQuery[], seed: number, count: number): P
   const apPerQuery: number[] = [];
   for (const q of queries) {
     const recordCands = await searchCandidatesForRecord(store, { prompt: q.prompt, topic: q.topic });
-    const recallCands = await searchCandidatesForRecall(store, { prompt: q.prompt, topic: q.topic, includeHistory: false });
+    // Recall returns the budgeted preview set plus its coverage counters; the
+    // benchmark measures the candidates the worker would actually receive.
+    const recallCands = (await searchCandidatesForRecall(store, { prompt: q.prompt, topic: q.topic, includeHistory: false })).candidates;
     recordTokenTotal += recordCands
       .slice(0, TOP_K)
       .reduce((sum, c) => sum + estimateTokens(candidateInjectedText(c)), 0);
@@ -266,7 +268,7 @@ async function runEngine(queries: FrozenQuery[], seed: number, count: number): P
 async function captureEngineOrdering(store: JournalIndexStore, queries: FrozenQuery[]): Promise<string[][]> {
   const out: string[][] = [];
   for (const q of queries) {
-    const cands = await searchCandidatesForRecall(store, { prompt: q.prompt, topic: q.topic, includeHistory: false });
+    const cands = (await searchCandidatesForRecall(store, { prompt: q.prompt, topic: q.topic, includeHistory: false })).candidates;
     out.push(cands.map((c) => c.nodeId));
   }
   return out;

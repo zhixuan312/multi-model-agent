@@ -386,10 +386,24 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // tier was dead (unreachable proxy, auth rejection, crashed CLI). Fail
     // terminally, carrying the real turn so callers see the provider's
     // usage/duration/errorCode as evidence.
-    if (implTurn.turns === 0 && implTurn.output.trim() === '') {
-      const code = implTurn.errorCode ?? 'implementer_no_output';
+    //
+    // Second arm — a REJECTED request. The provider errored and billed nothing:
+    // every usage counter is zero, so the model never generated a token. Some
+    // runners surface the rejection as the turn's text, which slipped past the
+    // first arm (output is non-empty) and let a provider error string travel
+    // onward as the task's answer on a `done` task. Zero total usage is what
+    // separates this from `sdk_max_turns` or `sdk_max_budget`, where the model
+    // did real work before hitting a ceiling and the partial output is worth
+    // reviewing.
+    const totalUsage = implTurn.usage.inputTokens + implTurn.usage.outputTokens
+      + implTurn.usage.cachedReadTokens + implTurn.usage.cachedNonReadTokens;
+    const rejectedUnbilled = implTurn.terminationReason === 'error' && totalUsage === 0;
+    if ((implTurn.turns === 0 && implTurn.output.trim() === '') || rejectedUnbilled) {
+      const code = implTurn.errorCode ?? (rejectedUnbilled ? 'implementer_request_rejected' : 'implementer_no_output');
       const message = implTurn.errorMessage
-        ?? 'Implementer session produced no output (0 turns); the tier may be unreachable or misconfigured';
+        ?? (rejectedUnbilled
+          ? 'The provider rejected the request before generating anything (zero tokens billed)'
+          : 'Implementer session produced no output (0 turns); the tier may be unreachable or misconfigured');
       return {
         status: 'failed',
         implementerOutput: '',

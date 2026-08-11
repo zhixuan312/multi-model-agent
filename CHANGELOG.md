@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.9.0] - 2026-08-11
+
+Journal recall gets three fixes that only appear at scale, and the daemon stops freezing while it
+builds an index. `SCHEMA_VERSION` stays at **6**. No wire or task-type change.
+
+Measured on a 5000-node, 39 MB corpus throughout — the scale this release exists to support.
+
+### Fixed
+
+- **A question phrased in ordinary English could return nothing.** Retrieval keeps a
+  "rarest-first" prefix of a query's words so the match set stays bounded as a corpus grows, and it
+  measures rarity by how many documents contain a word. A word in **zero** documents is therefore
+  the rarest of all. Words like `tell`, `me`, and `about` filled the whole kept prefix, each adding
+  nothing to the running total, and the one word that would have matched was then measured against
+  the ceiling alone and dropped. The surviving pattern matched nothing.
+
+  On a 5000-node corpus, `claims` returned 200 ranked candidates and
+  `tell me all about claims routing and what spec is impacted` returned **zero**. It got worse as a
+  journal grew, because a real word's document count crosses the ceiling sooner — a small corpus
+  never shows it. Words that match no document are now dropped before rarity ranking, so the rarest
+  word that *can* match always survives. Same query, same corpus, after the fix: **149 candidates in
+  10 ms**.
+
+- **A rejected request could arrive as the answer.** When a provider refuses a request outright —
+  the prompt exceeds the model's input limit, a credential is rejected — it bills nothing and
+  generates nothing, and some runners hand that refusal back as the turn's text. Non-empty text
+  walked past the dead-implementer check, went to review, and the task reported `done` with the
+  provider's error string sitting in the answer field. A caller reading only `output.summary` could
+  not tell it from a real answer. A turn that terminated in error having billed **zero** tokens is
+  now a terminal failure and never reaches the reviewer. Zero total usage is what separates a
+  refusal from `sdk_max_turns` or `sdk_max_budget`, where the model did real work first and its
+  partial output is still worth reviewing — that case is unchanged and explicitly covered by a test.
+
+- **Building an index froze the daemon.** `node:sqlite` is synchronous, so a rebuild's write loop
+  held the event loop for its entire duration. Measured on 5000 nodes, that was a single unbroken
+  block of **3781 ms** during which the daemon answered nothing, health probes included — a caller
+  experiences a dead process, not a slow one. The rebuild and incremental-sync write loops now yield
+  every 100 rows. Max block falls to **167 ms**; the whole rebuild costs about 13% more wall clock.
+  The transaction stays open across each yield, so the index remains all-or-nothing.
+
+### Changed
+
+- **Recall previews are budgeted, and say what they withheld.** The assembled candidate set is
+  bounded to roughly 30k tokens regardless of corpus size, and the frontmatter `description` is
+  clipped like the snippet already was. This is a budget, not a relevance cap: previews are cheap so
+  the budget admits hundreds, and when it does bind, the number of ranked candidates dropped travels
+  with the payload so the answer can state its own coverage. Silent truncation is the one outcome it
+  cannot produce.
+
+- **The recall worker may open a node it is citing.** Previously it was given a 240-character
+  snippet per candidate and forbidden to read files, so even the most decisive node was judged from
+  a fragment. It may now read the `nodePath` of a candidate it is about to cite as critical or high.
+  Depth comes from targeted reads rather than a larger prompt. Scanning the journal directory is
+  still forbidden — the engine has already ranked the corpus.
+
+### Breaking
+
+- **`searchCandidatesForRecall` returns an object, not an array.** It now resolves to
+  `{ candidates, withheld, totalRanked }` so a caller cannot mistake a budget-trimmed set for a
+  complete one. Callers reading the result directly must use `.candidates`. This affects
+  `@zhixuan92/multi-model-agent-core` consumers only; `searchCandidatesForRecord` and
+  `searchCandidatesForRecordBatch` are unchanged.
+
+### Release gating
+
+- `npm run smoke:full` gains a **journal retrieval gate** in preflight. Recall is the one route
+  whose quality fails silently — a broken retriever returns a confident, well-formed answer built
+  from the wrong candidates, and every response-shape check still passes. The gate runs the built
+  engine against a synthetic corpus and asserts that a natural-language question does not return
+  zero while a bare term returns results, that the payload stays bounded, that
+  `kept + withheld == totalRanked`, and that an empty result means the corpus is empty of the query.
+  It is deterministic and costs no tokens.
+
 ## [6.8.0] - 2026-08-10
 
 A new Claude Code command, `/mma:tldr`, and a fix to how the two existing commands declare

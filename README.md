@@ -622,17 +622,25 @@ The daemon advertises this as the `io.modelcontextprotocol/ui` extension plus on
 
 ## What's new
 
+- **Journal recall works at scale.** A question phrased in ordinary English could return nothing on
+  a large journal: retrieval ranks a query's words rarest-first, and a word appearing in **zero**
+  documents counts as the rarest of all, so `tell`, `me`, and `about` crowded out the one word that
+  would have matched. On a 5000-node corpus, `claims` returned 200 candidates while
+  `tell me all about claims routing and what spec is impacted` returned zero. Words matching no
+  document are now dropped before ranking — same query, **149 candidates in 10 ms**. Recall previews
+  are also budgeted to about 30k tokens regardless of corpus size, and report how many candidates
+  were withheld so an answer can state its own coverage.
+- **A rejected request no longer arrives as an answer.** When a provider refuses a request outright
+  it bills nothing and generates nothing, but some runners return the refusal as the turn's text —
+  which then reached callers as a `done` task whose answer was the provider's error string. A turn
+  that errored having billed zero tokens is now a terminal failure and never reaches the reviewer.
+- **Building an index no longer freezes the daemon.** `node:sqlite` is synchronous, so a 5000-node
+  rebuild blocked the event loop for 3.8 seconds in one stretch — health probes included. The write
+  loops now yield every 100 rows, cutting the longest block to 167 ms.
 - **New command: `/mma:tldr`.** Turns the previous assistant message, or a file, URL, or pasted
   text, into a short decision brief you can read in about three minutes — a TLDR of at most 80
   words, key points ranked by decision impact with source references, and the topics it left out.
-  It runs in your session; no worker, no task type. It compresses a long source and explains a
-  difficult one, and you never say which. Its one safety rule: compress the explanation, never the
-  qualification — a summary that keeps the claims and drops the conditions leaves you more confident
-  and less correct. Output follows the source's language.
-- **`/mma-flow` and `/mma-breakout` now enforce manual invocation.** Both declared "not an
-  auto-matched skill" in prose that enforced nothing, so the agent could fire either from intent
-  matching. Both now set `disable-model-invocation: true`. Typing the command works exactly as
-  before; an accidental `/mma-flow` no longer runs a full SDLC playbook on its own.
+  Its one safety rule: compress the explanation, never the qualification.
 
 ## License
 
