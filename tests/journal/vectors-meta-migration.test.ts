@@ -14,6 +14,6 @@ it('rebuilds a same-version legacy database that still contains vectors_meta', a
   const store = await JournalIndexStore.open({ journalRoot: root });
   await store.ensureHealthy();
   expect((await store.inspectSchema()).tables).not.toContain('vectors_meta');
-  await expect(searchCandidatesForRecall(store, { prompt: 'migration', topic: 'journal', includeHistory: false }).then((rows) => rows.map((row) => row.nodeId))).resolves.toEqual(['0001']);
+  await expect(searchCandidatesForRecall(store, { prompt: 'migration', topic: 'journal', includeHistory: false }).then((r) => r.candidates.map((row) => row.nodeId))).resolves.toEqual(['0001']);
   store.close();
 });

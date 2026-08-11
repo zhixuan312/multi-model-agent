@@ -265,6 +265,105 @@ function pluginSurfaceGate() {
  * symlinked layout would report the real repo path and the gate would silently
  * test nothing. The copy is ~2.7 MB and takes well under a second.
  */
+/**
+ * Journal retrieval release gate. Recall is the one route whose quality fails
+ * SILENTLY: a broken retriever returns a confident, well-formed answer built
+ * from the wrong candidates — or from none — and every response-shape check in
+ * verify.mjs still passes. So the invariants are asserted here, directly
+ * against the built engine, rather than inferred from a dispatched answer.
+ *
+ * Deterministic and free: no daemon, no provider, no tokens.
+ */
+async function journalRetrievalGate() {
+  const adapter = join(REPO_ROOT, 'packages', 'core', 'dist', 'journal', 'adapters', 'journal-adapter.js');
+  if (!existsSync(adapter)) {
+    throw new AbortError('journal-retrieval', `no built engine at ${adapter}`,
+      'run `npm run build` before the smoke');
+  }
+  const { JournalIndexStore, searchCandidatesForRecall } = await import(pathToFileURL(adapter).href);
+
+  const root = join(tmpdir(), `mma-smoke-recall-${process.pid}-${Date.now()}`);
+  const nodes = join(root, '.mma', 'journal', 'nodes');
+  mkdirSync(nodes, { recursive: true });
+  try {
+    // Every node carries the subject term, so its document frequency alone
+    // exceeds the narrowing ceiling — the condition under which a query made
+    // of ordinary English words used to collapse to zero results.
+    const description = 'claims routing spec verify config build review data '.repeat(40);
+    for (let i = 1; i <= 300; i++) {
+      const id = String(i).padStart(4, '0');
+      writeFileSync(join(nodes, `${id}-n.md`), [
+        '---', `id: "${id}"`, `title: "Node ${id} claims routing spec verify"`,
+        'type: "decision"', 'topic: "smoke-corpus"', 'status: "adopted"',
+        `description: "${description}"`, 'timestamp: "2026-01-06T00:00:00Z"',
+        'tags:', '  - retrieval', 'links: []', 'supersededBy: null', 'source: "Execute"',
+        '---', '', 'claims routing spec verify config build review data model service',
+      ].join('\n'), 'utf8');
+    }
+
+    const store = await JournalIndexStore.open({ journalRoot: join(root, '.mma', 'journal') });
+    try {
+      const bare = await searchCandidatesForRecall(store, { prompt: 'claims', includeHistory: false });
+      if (bare.candidates.length === 0) {
+        throw new AbortError('journal-retrieval', 'a bare subject term matched nothing',
+          'retrieval is broken at its simplest case — check lexical indexing before anything else');
+      }
+
+      // The regression that matters most. Words absent from the corpus sort as
+      // "rarest" by document frequency; if they are allowed into the kept
+      // prefix they crowd out the one word that would have matched, and a
+      // natural question silently returns nothing. It worsens as a corpus
+      // grows, so a small dev journal will not reveal it.
+      const asked = await searchCandidatesForRecall(store, {
+        prompt: 'tell me all about claims routing and what spec is impacted',
+        includeHistory: false,
+      });
+      if (asked.candidates.length === 0) {
+        throw new AbortError('journal-retrieval',
+          'a natural-language question returned zero candidates while a bare term returned results',
+          'zero-document-frequency tokens must be dropped before rarity narrowing (index-store.ts narrowedMatchPattern)');
+      }
+
+      // The payload must not scale with the corpus, and nothing may vanish
+      // without the count travelling alongside it.
+      const bytes = JSON.stringify(asked.candidates).length;
+      if (bytes > 150_000) {
+        throw new AbortError('journal-retrieval', `recall payload was ${bytes} bytes`,
+          'the preview budget must bound the assembled candidate set (journal-adapter.ts RECALL_PREVIEW_BUDGET_BYTES)');
+      }
+      if (asked.candidates.length + asked.withheld !== asked.totalRanked) {
+        throw new AbortError('journal-retrieval',
+          `coverage does not balance: kept=${asked.candidates.length} withheld=${asked.withheld} ranked=${asked.totalRanked}`,
+          'every ranked candidate must be either returned or counted as withheld — silent truncation is the failure this prevents');
+      }
+
+      // An empty result must mean the corpus has nothing, never that narrowing
+      // ate the query.
+      const nonsense = await searchCandidatesForRecall(store, { prompt: 'xylophones quokkas', includeHistory: false });
+      if (nonsense.candidates.length !== 0) {
+        throw new AbortError('journal-retrieval', 'a query matching nothing returned candidates',
+          'retrieval must not invent matches');
+      }
+    } finally {
+      store.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+
+  // The worker's depth comes from opening the nodes it cites. Without this
+  // instruction it reasons from 240-character snippets and the answer quality
+  // silently drops, with no shape check able to notice.
+  const recallSkill = join(REPO_ROOT, 'packages', 'core', 'src', 'skills', 'journal_recall', 'implement.md');
+  const skillText = existsSync(recallSkill) ? readFileSync(recallSkill, 'utf8') : '';
+  for (const marker of ['open that candidate\'s `nodePath` and read the node', 'candidatesWithheld']) {
+    if (!skillText.includes(marker)) {
+      throw new AbortError('journal-retrieval', `journal_recall implement.md missing marker: ${marker}`,
+        'the recall worker must be told to read a cited candidate\'s node, and to state its coverage when candidates were withheld');
+    }
+  }
+}
+
 function packagedLayoutGate() {
   const dist = join(REPO_ROOT, 'packages', 'server', 'dist');
   if (!existsSync(dist)) {
@@ -940,6 +1039,10 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
 
   // Skill-surface release gate (design→explore/brainstorm split intact).
   skillSurfaceGate();
+
+  // Journal retrieval release gate: recall fails silently, so its invariants
+  // are asserted against the built engine rather than read off an answer.
+  await journalRetrievalGate();
 
   // Plugin-surface release gate: the committed marketplace artifact is fresh,
   // correctly namespaced, and carries no secret.

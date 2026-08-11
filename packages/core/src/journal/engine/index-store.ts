@@ -40,6 +40,27 @@ const REQUIRED_TABLES = ['records', 'records_fts'];
 const NARROW_FANOUT_MARGIN = 1;
 
 /**
+ * Rows written between yields during an index rebuild.
+ *
+ * `node:sqlite` is synchronous, so a rebuild's write loop holds the event loop
+ * for as long as it runs. Measured on a 5000-node corpus, an unbroken loop
+ * blocked for 3.8 seconds in one contiguous region — the daemon served nothing
+ * for that whole time, health probes included, and a caller sees a stalled
+ * process rather than a slow one.
+ *
+ * At the measured ~0.76ms per row, 100 rows is roughly 75ms of block between
+ * yields: short enough that a request waits rather than times out, and coarse
+ * enough that the yields themselves cost nothing measurable against a rebuild
+ * already dominated by file I/O.
+ */
+const REBUILD_YIELD_EVERY = 100;
+
+/** Hand the event loop one turn so pending I/O callbacks can run. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
  * Tables owned by the deleted pre-engine journal store
  * (`packages/core/src/journal/index-store.ts`, removed in Task I-5). A
  * database file carrying any of these is explicitly stale, independent of
@@ -458,6 +479,7 @@ export class CorpusIndex {
     this.db.exec('BEGIN IMMEDIATE');
     let inTransaction = true;
     try {
+      let written = 0;
       for (const loaded of loadedRecords) {
         insertRecord.run(
           loaded.id,
@@ -471,6 +493,14 @@ export class CorpusIndex {
           loaded.adapterMeta ?? null,
         );
         insertFts.run(loaded.id, loaded.title, loaded.body);
+        // `node:sqlite` is SYNCHRONOUS, so an unbroken write loop holds the
+        // event loop for its whole duration. Measured on a 5000-node corpus,
+        // this loop blocked for 3.8s in ONE contiguous region — the daemon
+        // answers nothing during it, health probes included. Yielding between
+        // batches turns that into short blocks the daemon can serve between.
+        // The transaction stays open across the yield: the write lock is held
+        // either way, and WAL readers never block on it.
+        if (++written % REBUILD_YIELD_EVERY === 0) await yieldToEventLoop();
       }
       this.db.exec('COMMIT');
       inTransaction = false;
@@ -606,13 +636,25 @@ export class CorpusIndex {
     this.db.exec('BEGIN IMMEDIATE');
     let inTransaction = true;
     try {
+      // Same reason as `rebuild`: these loops are synchronous SQLite, so an
+      // unbroken run holds the event loop for its whole duration. An
+      // incremental sync is usually small, but a first sync after a bulk
+      // import is not, and it reaches this code from the recall path.
+      let written = 0;
       const refreshMtime = this.db.prepare('UPDATE records SET mtime_ms = ? WHERE path = ?');
-      for (const { path, mtimeMs } of mtimeRefreshes) refreshMtime.run(mtimeMs, path);
+      for (const { path, mtimeMs } of mtimeRefreshes) {
+        refreshMtime.run(mtimeMs, path);
+        if (++written % REBUILD_YIELD_EVERY === 0) await yieldToEventLoop();
+      }
       for (const { priorId, loaded } of upserts) {
         if (priorId) this.deleteRecord(priorId);
         this.upsertRecord(loaded);
+        if (++written % REBUILD_YIELD_EVERY === 0) await yieldToEventLoop();
       }
-      for (const id of deletions) this.deleteRecord(id);
+      for (const id of deletions) {
+        this.deleteRecord(id);
+        if (++written % REBUILD_YIELD_EVERY === 0) await yieldToEventLoop();
+      }
       this.db.exec('COMMIT');
       inTransaction = false;
     } catch (error) {
@@ -853,9 +895,26 @@ export class CorpusIndex {
     if (tokens.length <= 1) return fullPattern;
     if (this.unscopedMatchCount(fullPattern) <= limit) return fullPattern;
 
+    // Drop tokens no document contains BEFORE ranking by rarity. Document
+    // frequency treats a token in zero documents as the rarest of all, so an
+    // ordinary English question ("tell me about X") spends the whole kept
+    // prefix on words the corpus has never seen: each adds 0 to `sum`, so they
+    // are all admitted, and the first real token is then measured against the
+    // ceiling alone and breaks the loop. The pattern that survives matches
+    // nothing, and the query returns zero — worse the larger the corpus gets,
+    // because a real token's count grows past the ceiling sooner.
+    //
+    // A zero-frequency token can never add a row to an OR match, so removing
+    // it changes no result except this one, and guarantees the rarest token
+    // that CAN match is always kept.
     const byRarity = tokens
       .map((token) => ({ token, n: this.unscopedMatchCount(`"${token}"`) }))
+      .filter((entry) => entry.n > 0)
       .sort((a, b) => a.n - b.n);
+
+    // Nothing in the query matches anything. Return the full pattern so the
+    // empty result comes from the corpus, not from narrowing.
+    if (byRarity.length === 0) return fullPattern;
 
     const ceiling = limit * NARROW_FANOUT_MARGIN;
     let sum = 0;

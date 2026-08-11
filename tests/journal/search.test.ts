@@ -104,9 +104,9 @@ describe('journal search', () => {
     const store = await JournalIndexStore.open({ journalRoot: root });
     await store.rebuildIndex();
     const normal = await searchCandidatesForRecall(store, { prompt: 'current retrieval answer', topic: 'journal-engine', includeHistory: false });
-    expect(normal.some((candidate) => candidate.nodeId === '0002')).toBe(false);
+    expect(normal.candidates.some((candidate) => candidate.nodeId === '0002')).toBe(false);
     const history = await searchCandidatesForRecall(store, { prompt: 'current retrieval answer', topic: 'journal-engine', includeHistory: true });
-    expect(history.some((candidate) => candidate.nodeId === '0002')).toBe(true);
+    expect(history.candidates.some((candidate) => candidate.nodeId === '0002')).toBe(true);
   });
 
   it('skips a genuinely malformed node during rebuildIndex and still indexes the good ones', async () => {

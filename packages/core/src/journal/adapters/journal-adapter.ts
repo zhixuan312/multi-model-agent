@@ -399,6 +399,66 @@ export interface JournalCandidate {
 const SNIPPET_MAX = 240;
 
 /**
+ * Max length of the preview `description`. Frontmatter `description` is meant
+ * to be one line, but nothing enforces that, and an unbounded field multiplied
+ * by the candidate count is what pushes an assembled recall prompt past a
+ * model's input limit. Bounded here for the same reason {@link SNIPPET_MAX}
+ * bounds the excerpt — the worker reads the node itself when it needs the
+ * whole thing.
+ */
+const DESCRIPTION_MAX = 300;
+
+/**
+ * Byte budget for the assembled candidate previews handed to a recall worker,
+ * roughly 30k tokens at 4 bytes per token.
+ *
+ * This is a budget, NOT a relevance cap. Previews are deliberately cheap so
+ * the budget admits hundreds of them: the worker selects from a wide field and
+ * then OPENS the nodes it judges relevant (`nodePath` is on every candidate,
+ * and `journal_recall` runs read-only), so depth comes from targeted reads
+ * rather than from a larger prompt. A fixed top-K would instead drop relevant
+ * nodes before the worker ever sees they exist.
+ *
+ * When the budget does bind, the count of dropped candidates travels with the
+ * payload so the answer can state its own coverage. Silent truncation is the
+ * one outcome this must never produce.
+ */
+const RECALL_PREVIEW_BUDGET_BYTES = 120_000;
+
+/** Recall retrieval result: previews that fit the budget, plus what did not. */
+export interface RecallCandidateSet {
+  candidates: JournalCandidate[];
+  /** Ranked candidates dropped by {@link RECALL_PREVIEW_BUDGET_BYTES}. 0 when all fit. */
+  withheld: number;
+  /** Total ranked candidates before the budget was applied. */
+  totalRanked: number;
+}
+
+/** Trim a preview field to `max`, marking the cut so the worker knows to read the node. */
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * Fill the preview budget best-first. Ranking already sorted by fused score, so
+ * dropping from the tail drops the least relevant candidates — and the caller
+ * is told how many, never left to assume the set was complete.
+ */
+function applyPreviewBudget(ranked: JournalCandidate[], budgetBytes: number): RecallCandidateSet {
+  const kept: JournalCandidate[] = [];
+  let used = 0;
+  for (const candidate of ranked) {
+    const cost = JSON.stringify(candidate).length;
+    // Always admit the top candidate: a single oversized node must not produce
+    // an empty answer.
+    if (kept.length > 0 && used + cost > budgetBytes) break;
+    kept.push(candidate);
+    used += cost;
+  }
+  return { candidates: kept, withheld: ranked.length - kept.length, totalRanked: ranked.length };
+}
+
+/**
  * A {@link JournalCandidate} before its body-derived `snippet` is attached —
  * every candidate field ranking can produce from metadata alone. `search()`
  * builds this list first, then fetches `body` for exactly these surviving
@@ -653,18 +713,25 @@ async function search(
   const bodyById = store.documentsBodyByIds(metas.map((meta) => meta.nodeId));
   return metas.map((meta) => ({
     ...meta,
+    description: clip(meta.description, DESCRIPTION_MAX),
     snippet: makeSnippet(meta.title, meta.description, bodyById.get(meta.nodeId) ?? ''),
   }));
 }
 
+/**
+ * Recall retrieval. Returns previews bounded by
+ * {@link RECALL_PREVIEW_BUDGET_BYTES} plus the count of ranked candidates the
+ * budget dropped, so a caller can never mistake a trimmed set for a complete
+ * one. Ranking is unchanged; only the assembled payload is bounded.
+ */
 export async function searchCandidatesForRecall(
   store: JournalIndexStore,
   input: { prompt: string; topic?: string; includeHistory: boolean },
-): Promise<JournalCandidate[]> {
+): Promise<RecallCandidateSet> {
   await store.ensureHealthy();
   // Cheap count-based freshness gate — skips the O(N) stat sweep in steady state.
   await store.ensureFresh();
-  return search(store, input);
+  return applyPreviewBudget(await search(store, input), RECALL_PREVIEW_BUDGET_BYTES);
 }
 
 export async function searchCandidatesForRecord(
