@@ -203,11 +203,15 @@ export interface RunInitiativeMigrationsResult {
  * Creates or upgrades `<stateDir>/initiatives.db` to {@link INITIATIVE_SCHEMA_VERSION}.
  *
  * First creation (no prior file at `dbPath`) never backs up — there is nothing
- * to protect. Every call against an already-existing file backs it up first,
- * verifies the backup (exists, exact pre-change byte length), and only then
- * opens a connection and applies the pending migrations. A backup failure
- * throws {@link MigrationBackupFailedError} before any schema change — the
- * original database is left untouched and no partial upgrade can occur.
+ * to protect. An existing file is backed up ONLY when at least one migration is
+ * pending (an up-to-date database opens with no backup, so routine opens do not
+ * grow the state directory). Before the copy, the WAL is checkpointed
+ * (`PRAGMA wal_checkpoint(TRUNCATE)`) so committed data still sitting in the
+ * `-wal` sidecar after an unclean shutdown is folded into the main file the
+ * backup copies. The backup is then verified (exists, exact pre-change byte
+ * length) before any schema change. A backup failure throws
+ * {@link MigrationBackupFailedError} before any schema change — the original
+ * database is left untouched and no partial upgrade can occur.
  */
 export function runInitiativeMigrations(opts: RunInitiativeMigrationsOptions): RunInitiativeMigrationsResult {
   const { dbPath } = opts;
@@ -220,23 +224,38 @@ export function runInitiativeMigrations(opts: RunInitiativeMigrationsOptions): R
   let backupPath: string | null = null;
 
   if (existedBeforeOpen) {
-    backupPath = `${dbPath}.bak-${randomUUID()}`;
-    const copy = opts.copyBackup ?? defaultCopyBackup;
-    let sourceSize: number;
+    // Read the installed version and checkpoint the WAL on a short-lived
+    // connection BEFORE deciding on (and taking) a backup.
+    let currentVersion: number;
+    const inspect = new DatabaseSync(dbPath);
     try {
-      sourceSize = statSync(dbPath).size;
-      copy(dbPath, backupPath);
-      if (!existsSync(backupPath) || statSync(backupPath).size !== sourceSize) {
-        throw new Error('backup is missing or differs from the pre-change byte length');
+      inspect.exec('PRAGMA busy_timeout = 5000;');
+      currentVersion = readSchemaVersion(inspect);
+      inspect.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    } finally {
+      inspect.close();
+    }
+
+    const pending = MIGRATIONS.filter((migration) => migration.version > currentVersion);
+    if (pending.length > 0) {
+      backupPath = `${dbPath}.bak-${randomUUID()}`;
+      const copy = opts.copyBackup ?? defaultCopyBackup;
+      let sourceSize: number;
+      try {
+        sourceSize = statSync(dbPath).size;
+        copy(dbPath, backupPath);
+        if (!existsSync(backupPath) || statSync(backupPath).size !== sourceSize) {
+          throw new Error('backup is missing or differs from the pre-change byte length');
+        }
+      } catch (error) {
+        throw new MigrationBackupFailedError({
+          database_path: dbPath,
+          backup_path: backupPath,
+          message: `migration_backup_failed: backup of ${dbPath} at ${backupPath} could not be copied and verified: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
       }
-    } catch (error) {
-      throw new MigrationBackupFailedError({
-        database_path: dbPath,
-        backup_path: backupPath,
-        message: `migration_backup_failed: backup of ${dbPath} at ${backupPath} could not be copied and verified: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      });
     }
   }
 

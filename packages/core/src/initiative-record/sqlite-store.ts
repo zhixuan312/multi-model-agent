@@ -202,9 +202,34 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-/** The idempotency identity's canonical request hash (FR-8): operation + business input + mutation control, excluding provenance. */
-function computeRequestHash(operation: string, input: unknown, expectedRevision: number): string {
-  const canonical = JSON.stringify(canonicalize({ operation, input, expected_revision: expectedRevision }));
+/**
+ * The idempotency identity's canonical request hash (FR-8): operation +
+ * business input + mutation control + the five CALLER-OWNED provenance fields.
+ * The two ADAPTER-STAMPED fields (`interface`, `timestamp`) are excluded —
+ * adapters stamp a fresh server timestamp on every call, so including them
+ * would make every legitimate retry a hash mismatch. Including the caller
+ * fields means a replay under a different claimed identity (actor, authorizer,
+ * source) is rejected as `invalid_request` instead of silently returning a
+ * result attributed to someone else.
+ */
+function computeRequestHash(
+  operation: string,
+  input: unknown,
+  expectedRevision: number,
+  provenance: { actor_type: string; actor_id: string; initiated_by: string; authorized_by: string; source: string },
+): string {
+  const canonical = JSON.stringify(
+    canonicalize({
+      operation,
+      input,
+      expected_revision: expectedRevision,
+      actor_type: provenance.actor_type,
+      actor_id: provenance.actor_id,
+      initiated_by: provenance.initiated_by,
+      authorized_by: provenance.authorized_by,
+      source: provenance.source,
+    }),
+  );
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -273,7 +298,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new InvalidRequestError({ field_errors: fieldErrorsFromIssues(parsed.error.issues) });
     }
     const request = parsed.data;
-    const requestHash = computeRequestHash(request.operation, request.input, request.expected_revision);
+    const requestHash = computeRequestHash(request.operation, request.input, request.expected_revision, request.provenance);
 
     this.db.exec('BEGIN IMMEDIATE');
     try {

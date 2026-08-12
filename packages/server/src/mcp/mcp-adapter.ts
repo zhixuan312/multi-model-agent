@@ -348,7 +348,9 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
  * HTTP calls (Task I-6) ever sees it — never a second store/runtime.
  */
 function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: Record<string, unknown>): ToolResult {
-  let body: Record<string, unknown> = { operation, ...args };
+  // `operation` last: the tool name is the trusted operation selector, so a
+  // caller-supplied `args.operation` must never override it.
+  let body: Record<string, unknown> = { ...args, operation };
   if ((INITIATIVE_MUTATING_OPERATIONS as ReadonlySet<string>).has(operation)) {
     const provenance = args.provenance;
     if (typeof provenance === 'object' && provenance !== null) {

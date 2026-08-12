@@ -65,6 +65,13 @@ export interface InitiativeRepository {
    */
   execute(request: InitiativeMutationRequest): InitiativeRecordEntity;
 
+  /**
+   * Installation-wide append-only event log, newest-last, optionally filtered
+   * by `initiative_id`. Part of the repository contract because the resume
+   * assembler's `events` window reads the installation-wide log (Task I-5).
+   */
+  listEvents(filter?: { initiative_id?: string }): Event[];
+
   /** `product_get` — throws `not_found` for an unknown `uuid` or `slug`. */
   getProduct(lookup: { uuid?: string; slug?: string }): Product;
   /** `product_list` — ordered `createdAt` ascending, then `uuid` ascending. */

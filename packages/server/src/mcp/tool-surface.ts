@@ -186,6 +186,19 @@ function initiativeToolInputSchema(operation: InitiativeOperation): Record<strin
   const properties = { ...(full.properties as Record<string, unknown> | undefined) };
   delete properties.operation;
   const required = ((full.required as string[] | undefined) ?? []).filter((key) => key !== 'operation');
+  // The adapter stamps `provenance.interface` and `provenance.timestamp` on
+  // every mutation, discarding caller input — so the advertised schema must
+  // not declare them caller-required.
+  const provenance = properties.provenance as Record<string, unknown> | undefined;
+  if (provenance && typeof provenance === 'object') {
+    const provProperties = { ...(provenance.properties as Record<string, unknown> | undefined) };
+    delete provProperties.interface;
+    delete provProperties.timestamp;
+    const provRequired = ((provenance.required as string[] | undefined) ?? []).filter(
+      (key) => key !== 'interface' && key !== 'timestamp',
+    );
+    properties.provenance = { ...provenance, properties: provProperties, required: provRequired };
+  }
   return { ...full, properties, required };
 }
 
