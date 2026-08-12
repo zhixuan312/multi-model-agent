@@ -45,6 +45,17 @@ describe('B6 review regressions', () => {
       expect(list.isError).toBeFalsy();
       const products = JSON.parse((list.content as Array<{ text: string }>)[0]!.text) as Array<{ slug: string }>;
       expect(products.some((product) => product.slug === 'smuggled')).toBe(false);
+
+      // Advertised mutation schemas never declare the adapter-stamped
+      // provenance fields as caller-required.
+      const tools = (await client.listTools()).tools;
+      const createTool = tools.find((tool) => tool.name === 'mma_product_create');
+      expect(createTool).toBeDefined();
+      const provSchema = (createTool!.inputSchema as { properties?: Record<string, { required?: string[] }> })
+        .properties?.provenance;
+      expect(provSchema).toBeDefined();
+      expect(provSchema!.required ?? []).not.toContain('interface');
+      expect(provSchema!.required ?? []).not.toContain('timestamp');
     } finally {
       await client.close();
       await h.close();
@@ -63,6 +74,39 @@ describe('B6 review regressions', () => {
       const backups = readdirSync(dir).filter((name) => name.includes('.bak-'));
       expect(backups).toHaveLength(0);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a migration backup contains committed rows that were still sitting in the WAL sidecar', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { runInitiativeMigrations } = await import('../../packages/core/src/initiative-record/index.js');
+    const dir = mkdtempSync(join(tmpdir(), 'mma-b6-wal-backup-'));
+    const dbPath = join(dir, 'initiatives.db');
+    // Seed a WAL-mode database at an OLDER schema version whose committed row
+    // lives only in the -wal sidecar: the writer connection stays OPEN across
+    // the migration run, so its close-time checkpoint never happens first —
+    // the same shape as a process that died before closing cleanly.
+    const writer = new DatabaseSync(dbPath);
+    try {
+      writer.exec('PRAGMA journal_mode = WAL;');
+      writer.exec('CREATE TABLE legacy_rows (id INTEGER PRIMARY KEY, value TEXT NOT NULL);');
+      writer.exec("INSERT INTO legacy_rows (value) VALUES ('survives-backup');");
+      writer.exec('PRAGMA user_version = 0;');
+      expect(existsSync(`${dbPath}-wal`)).toBe(true);
+      const result = runInitiativeMigrations({ dbPath });
+      expect(result.backup_path).toBeDefined();
+      const backup = new DatabaseSync(result.backup_path!);
+      try {
+        const row = backup
+          .prepare('SELECT value FROM legacy_rows WHERE value = ?')
+          .get('survives-backup') as { value: string } | undefined;
+        expect(row?.value).toBe('survives-backup');
+      } finally {
+        backup.close();
+      }
+    } finally {
+      writer.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });

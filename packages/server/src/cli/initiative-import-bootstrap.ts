@@ -237,9 +237,11 @@ export async function runInitiativesImportBootstrap(deps: ImportBootstrapDeps): 
   const provenance = bootstrapProvenance(now);
 
   // 1. Workspace resolution.
-  // 0. Stem must be a plain file stem — never a path. A separator or dot
-  // segment would let the joins below escape the workspace's `.mma/` stores.
-  if (/[/\\]/.test(deps.stem) || deps.stem === '.' || deps.stem === '..' || deps.stem.includes('..')) {
+  // 0. Stem must be a plain file stem — never a path. Separators (or a bare
+  // dot segment) would let the joins below escape the workspace's `.mma/`
+  // stores; an inner '..' in an otherwise plain filename cannot traverse and
+  // stays allowed.
+  if (/[/\\]/.test(deps.stem) || deps.stem === '.' || deps.stem === '..') {
     stderr(`invalid stem: ${deps.stem}\n`);
     return 1;
   }
