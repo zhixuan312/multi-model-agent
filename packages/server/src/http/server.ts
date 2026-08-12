@@ -254,11 +254,18 @@ export async function startServer(
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
       const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore });
-      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore };
+      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime };
       const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
       router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
+
+      // POST /initiatives — the single HTTP adapter for the complete frozen
+      // Initiative operation table, over the SAME `initiativeRuntime` opened
+      // unconditionally above. Behind the standard bearer-auth/loopback
+      // pipeline like every other route; not added to any auth exemption set.
+      const { buildInitiativeHandler } = await import('./handlers/initiative-record.js');
+      router.register('POST', '/initiatives', buildInitiativeHandler(deps));
 
       // MCP adapter — a second transport over the SAME runtime (single daemon
       // owns all live executions). Bearer auth + loopback apply like any route.

@@ -131,6 +131,15 @@ export async function handleRequest(
     try {
       parsedBody = JSON.parse(rawBody.toString('utf8'));
     } catch {
+      // Initiative Record's public contract treats every malformed request
+      // body as the typed `invalid_request` error. Preserve the established
+      // `invalid_json` response for all pre-existing routes.
+      if (pathname === '/initiatives') {
+        sendError(res, 400, 'invalid_request', 'Request body is not valid JSON', {
+          field_errors: { body: ['Request body is not valid JSON'] },
+        });
+        return;
+      }
       sendError(res, 400, 'invalid_json', 'Request body is not valid JSON');
       return;
     }
