@@ -54,12 +54,15 @@ import type {
   Initiative,
   InitiativeRecordEntity,
   InitiativeRelation,
+  InitiativeStatus,
   InitiativeWorkspaceLink,
   Product,
   Resource,
   Task,
+  TaskStatus,
   Workspace,
 } from './types.js';
+import type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
 
 export interface InitiativeRecordStorePragmas {
   journal_mode: string;
@@ -93,6 +96,75 @@ interface ArtifactRefRow {
   description: string;
   created_at: string;
   updated_at: string;
+  revision: number;
+}
+
+/** Raw `products` table row shape (snake_case columns — internal only). */
+interface ProductRow {
+  uuid: string;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `workspaces` table row shape (snake_case columns — internal only). */
+interface WorkspaceRow {
+  uuid: string;
+  product_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `resources` table row shape (snake_case columns — internal only). */
+interface ResourceRow {
+  uuid: string;
+  workspace_id: string;
+  type: string;
+  canonical_locator: string;
+  local_path: string | null;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `tasks` table row shape (snake_case columns — internal only). */
+interface TaskRow {
+  uuid: string;
+  initiative_id: string;
+  title: string;
+  goal: string;
+  status: Task['status'];
+  outcome: Task['outcome'];
+  workspace_ids: string;
+  resource_ids: string;
+  execution_refs: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `initiative_workspace_links` table row shape (snake_case columns — internal only). */
+interface LinkRow {
+  initiative_id: string;
+  workspace_id: string;
+  role: InitiativeWorkspaceLink['role'];
+  created_at: string;
+  revision: number;
+}
+
+/** Raw `initiative_relations` table row shape (snake_case columns — internal only). */
+interface RelationRow {
+  from_id: string;
+  to_id: string;
+  type: InitiativeRelation['type'];
+  created_at: string;
   revision: number;
 }
 
@@ -136,7 +208,7 @@ function computeRequestHash(operation: string, input: unknown, expectedRevision:
   return createHash('sha256').update(canonical).digest('hex');
 }
 
-export class InitiativeRecordStore {
+export class InitiativeRecordStore implements InitiativeRepository {
   private closed = false;
 
   private constructor(private readonly db: DatabaseSync) {}
@@ -257,6 +329,200 @@ export class InitiativeRecordStore {
     return rows.map(mapEventRow);
   }
 
+  // ---------------------------------------------------------------------
+  // Read operations (Task I-4) — one method per frozen get/list operation,
+  // plus the joined read methods `initiative_resume` (Task I-5) composes
+  // from. Every `get*` throws typed `not_found` for an unknown lookup.
+  // ---------------------------------------------------------------------
+
+  /** `product_get` — `uuid` or `slug`. */
+  getProduct(lookup: { uuid?: string; slug?: string }): Product {
+    const row = lookup.uuid
+      ? (this.db.prepare(`SELECT * FROM products WHERE uuid = ?`).get(lookup.uuid) as ProductRow | undefined)
+      : lookup.slug
+        ? (this.db.prepare(`SELECT * FROM products WHERE slug = ?`).get(lookup.slug) as ProductRow | undefined)
+        : undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Product', lookup: lookup.uuid ?? lookup.slug ?? '' });
+    }
+    return mapProductRow(row);
+  }
+
+  /** `product_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listProducts(): Product[] {
+    const rows = this.db.prepare(`SELECT * FROM products ORDER BY created_at ASC, uuid ASC`).all() as unknown as ProductRow[];
+    return rows.map(mapProductRow);
+  }
+
+  /** `workspace_get` — `uuid`. */
+  getWorkspace(lookup: { uuid: string }): Workspace {
+    const row = this.db.prepare(`SELECT * FROM workspaces WHERE uuid = ?`).get(lookup.uuid) as WorkspaceRow | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Workspace', lookup: lookup.uuid });
+    }
+    return mapWorkspaceRow(row);
+  }
+
+  /** `workspace_list` — optionally scoped to one Product; ordered `createdAt` ascending, then `uuid` ascending. */
+  listWorkspaces(filter: { product_id?: string } = {}): Workspace[] {
+    const rows = (
+      filter.product_id
+        ? this.db.prepare(`SELECT * FROM workspaces WHERE product_id = ? ORDER BY created_at ASC, uuid ASC`).all(filter.product_id)
+        : this.db.prepare(`SELECT * FROM workspaces ORDER BY created_at ASC, uuid ASC`).all()
+    ) as unknown as WorkspaceRow[];
+    return rows.map(mapWorkspaceRow);
+  }
+
+  /** `resource_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listResources(filter: { workspace_id: string }): Resource[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM resources WHERE workspace_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.workspace_id) as unknown as ResourceRow[];
+    return rows.map(mapResourceRow);
+  }
+
+  /** `initiative_get` — `uuid` or `human_key`; both resolve the same record. */
+  getInitiative(lookup: { uuid?: string; human_key?: string }): Initiative {
+    const row = this.findInitiativeRow(lookup.uuid, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapInitiativeRow(row);
+  }
+
+  /** `initiative_list` — optionally scoped by Product and/or status; ordered `createdAt` descending, then `uuid` ascending. */
+  listInitiatives(filter: { product_id?: string; status?: InitiativeStatus } = {}): Initiative[] {
+    const clauses: string[] = [];
+    const params: string[] = [];
+    if (filter.product_id) {
+      clauses.push('product_id = ?');
+      params.push(filter.product_id);
+    }
+    if (filter.status) {
+      clauses.push('status = ?');
+      params.push(filter.status);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const rows = this.db
+      .prepare(`SELECT * FROM initiatives ${where} ORDER BY created_at DESC, uuid ASC`)
+      .all(...params) as unknown as InitiativeRow[];
+    return rows.map(mapInitiativeRow);
+  }
+
+  /** `initiative_relations` — relations involving the Initiative in either direction; direction is preserved. */
+  listInitiativeRelations(filter: { initiative_id: string }): InitiativeRelation[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM initiative_relations WHERE from_id = ? OR to_id = ? ORDER BY created_at ASC, from_id ASC, to_id ASC, type ASC`,
+      )
+      .all(filter.initiative_id, filter.initiative_id) as unknown as RelationRow[];
+    return rows.map(mapRelationRow);
+  }
+
+  /** Resume join: each relation involving the Initiative paired with the *other* Initiative it names. */
+  getRelatedInitiatives(initiativeId: string): RelatedInitiativeRead[] {
+    const relations = this.listInitiativeRelations({ initiative_id: initiativeId });
+    const results = relations.map((relation) => {
+      const otherId = relation.from_id === initiativeId ? relation.to_id : relation.from_id;
+      const row = this.findInitiativeRow(otherId, undefined);
+      if (!row) {
+        throw new NotFoundError({ entity_type: 'Initiative', lookup: otherId });
+      }
+      return { relation, initiative: mapInitiativeRow(row) };
+    });
+    return results.sort((a, b) => compareCreatedAtThenUuid(a.initiative, b.initiative));
+  }
+
+  /** Resume join: the Initiative's Workspace links, each joined with its Workspace and that Workspace's Resources. */
+  getInitiativeWorkspaceLinks(initiativeId: string): InitiativeWorkspaceLinkRead[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM initiative_workspace_links WHERE initiative_id = ?`)
+      .all(initiativeId) as unknown as LinkRow[];
+    const results = rows.map((row) => {
+      const workspaceRow = this.db.prepare(`SELECT * FROM workspaces WHERE uuid = ?`).get(row.workspace_id) as
+        | WorkspaceRow
+        | undefined;
+      if (!workspaceRow) {
+        throw new NotFoundError({ entity_type: 'Workspace', lookup: row.workspace_id });
+      }
+      const workspace = mapWorkspaceRow(workspaceRow);
+      return { role: row.role, workspace, resources: this.listResources({ workspace_id: workspace.uuid }) };
+    });
+    return results.sort((a, b) => compareCreatedAtThenUuid(a.workspace, b.workspace));
+  }
+
+  /** `initiative_task_get` — `uuid`. */
+  getInitiativeTask(lookup: { uuid: string }): Task {
+    const row = this.db.prepare(`SELECT * FROM tasks WHERE uuid = ?`).get(lookup.uuid) as TaskRow | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Task', lookup: lookup.uuid });
+    }
+    return mapTaskRow(row);
+  }
+
+  /** `initiative_task_list` — non-terminal Tasks first, then terminal Tasks; each group by `createdAt` ascending, then `uuid` ascending. */
+  listInitiativeTasks(filter: { initiative_id: string }): Task[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM tasks WHERE initiative_id = ?
+         ORDER BY CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END ASC, created_at ASC, uuid ASC`,
+      )
+      .all(filter.initiative_id) as unknown as TaskRow[];
+    return rows.map(mapTaskRow);
+  }
+
+  /** Resume join: Task counts by status for the Initiative — every `TaskStatus` key present, defaulting to `0`. */
+  countInitiativeTasksByStatus(initiativeId: string): Record<TaskStatus, number> {
+    const counts: Record<TaskStatus, number> = {
+      open: 0,
+      claimed: 0,
+      in_progress: 0,
+      blocked: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+    const rows = this.db
+      .prepare(`SELECT status, COUNT(*) AS count FROM tasks WHERE initiative_id = ? GROUP BY status`)
+      .all(initiativeId) as Array<{ status: TaskStatus; count: number }>;
+    for (const row of rows) {
+      counts[row.status] = Number(row.count);
+    }
+    return counts;
+  }
+
+  /** `artifact_get` — `uuid`. */
+  getArtifact(lookup: { uuid: string }): ArtifactRef {
+    const row = this.db.prepare(`SELECT * FROM artifact_refs WHERE uuid = ?`).get(lookup.uuid) as ArtifactRefRow | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'ArtifactRef', lookup: lookup.uuid });
+    }
+    return mapArtifactRefRow(row);
+  }
+
+  /** Resume join: the Initiative's ArtifactRefs, ordered by `createdAt` ascending, then `uuid` ascending. */
+  listInitiativeArtifacts(initiativeId: string): ArtifactRef[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM artifact_refs WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(initiativeId) as unknown as ArtifactRefRow[];
+    return rows.map(mapArtifactRefRow);
+  }
+
+  /** Resume join: the newest `limit` Events for the Initiative, ordered by `event_sequence` descending. */
+  listRecentEvents(filter: { initiative_id: string; limit: number }): Event[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM events WHERE initiative_id = ? ORDER BY event_sequence DESC LIMIT ?`)
+      .all(filter.initiative_id, filter.limit) as unknown as EventRow[];
+    return rows.map(mapEventRow);
+  }
+
+  /** Resume join: the total Event count for the Initiative (independent of any `event_limit` window). */
+  countInitiativeEvents(initiativeId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM events WHERE initiative_id = ?`).get(initiativeId) as
+      | { count?: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  }
+
   /** Dispatches one validated mutating request to its write handler. Runs inside the caller's open transaction. */
   private applyMutation(request: InitiativeMutationRequest): InitiativeRecordEntity {
     switch (request.operation) {
@@ -296,6 +562,32 @@ export class InitiativeRecordStore {
         entity_id: '',
         expected_revision: expectedRevision,
         actual_revision: 0,
+      });
+    }
+  }
+
+  /** Throws typed `invalid_request` (a "duplicate identity write") if a row already exists in `table` matching every `columns` entry. */
+  private requireUnique(table: string, columns: Record<string, string>, entityType: string, identityLabel: string): void {
+    const keys = Object.keys(columns);
+    const where = keys.map((key) => `${key} = ?`).join(' AND ');
+    const row = this.db.prepare(`SELECT 1 FROM ${table} WHERE ${where} LIMIT 1`).get(...keys.map((key) => columns[key])) as
+      | Record<string, unknown>
+      | undefined;
+    if (row) {
+      throw new InvalidRequestError({
+        field_errors: { [identityLabel]: ['already in use'] },
+        message: `invalid_request: ${entityType} with ${identityLabel} ${JSON.stringify(columns)} already exists`,
+      });
+    }
+  }
+
+  /** Throws typed `invalid_request` (a "foreign-key failure") if `uuid` is not a row in `table`. */
+  private requireExists(table: string, uuid: string, field: string, entityType: string): void {
+    const row = this.db.prepare(`SELECT 1 FROM ${table} WHERE uuid = ? LIMIT 1`).get(uuid) as Record<string, unknown> | undefined;
+    if (!row) {
+      throw new InvalidRequestError({
+        field_errors: { [field]: [`references a nonexistent ${entityType}`] },
+        message: `invalid_request: ${field} ${uuid} does not reference an existing ${entityType}`,
       });
     }
   }
@@ -361,6 +653,7 @@ export class InitiativeRecordStore {
 
   private mutateProductCreate(input: ProductCreateInput, expectedRevision: number, provenance: ProvenanceInput): Product {
     this.requireCreateRevision(expectedRevision, 'Product');
+    this.requireUnique('products', { slug: input.slug }, 'Product', 'slug');
     const uuid = randomUUID();
     const now = provenance.timestamp;
     this.db
@@ -384,6 +677,8 @@ export class InitiativeRecordStore {
     provenance: ProvenanceInput,
   ): Workspace {
     this.requireCreateRevision(expectedRevision, 'Workspace');
+    this.requireExists('products', input.product_id, 'product_id', 'Product');
+    this.requireUnique('workspaces', { product_id: input.product_id, slug: input.slug }, 'Workspace', 'slug');
     const uuid = randomUUID();
     const now = provenance.timestamp;
     this.db
@@ -418,6 +713,13 @@ export class InitiativeRecordStore {
     provenance: ProvenanceInput,
   ): Resource {
     this.requireCreateRevision(expectedRevision, 'Resource');
+    this.requireExists('workspaces', input.workspace_id, 'workspace_id', 'Workspace');
+    this.requireUnique(
+      'resources',
+      { workspace_id: input.workspace_id, canonical_locator: input.canonical_locator },
+      'Resource',
+      'canonical_locator',
+    );
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const localPath = input.local_path ?? null;
@@ -454,6 +756,7 @@ export class InitiativeRecordStore {
     provenance: ProvenanceInput,
   ): Initiative {
     this.requireCreateRevision(expectedRevision, 'Initiative');
+    this.requireExists('products', input.product_id, 'product_id', 'Product');
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const humanKey = this.allocateInitiativeHumanKey();
@@ -549,6 +852,12 @@ export class InitiativeRecordStore {
     if (workspace.product_id !== initiative.product_id) {
       throw new CrossProductWorkspaceLinkError({ initiative_id: input.initiative_id, workspace_id: input.workspace_id });
     }
+    this.requireUnique(
+      'initiative_workspace_links',
+      { initiative_id: input.initiative_id, workspace_id: input.workspace_id, role: input.role },
+      'InitiativeWorkspaceLink',
+      'role',
+    );
     const now = provenance.timestamp;
     this.db
       .prepare(
@@ -585,6 +894,12 @@ export class InitiativeRecordStore {
     if (!this.findInitiativeRow(input.to_id, undefined)) {
       throw new NotFoundError({ entity_type: 'Initiative', lookup: input.to_id });
     }
+    this.requireUnique(
+      'initiative_relations',
+      { from_id: input.from_id, to_id: input.to_id, type: input.type },
+      'InitiativeRelation',
+      'type',
+    );
     const now = provenance.timestamp;
     this.db
       .prepare(`INSERT INTO initiative_relations (from_id, to_id, type, created_at, revision) VALUES (?, ?, ?, ?, 0)`)
@@ -787,4 +1102,119 @@ function mapEventRow(row: EventRow): Event {
     timestamp: row.timestamp,
     source: row.source,
   };
+}
+
+/** Maps one raw `products` row to the public `Product` shape. */
+function mapProductRow(row: ProductRow): Product {
+  return {
+    uuid: row.uuid,
+    name: row.name,
+    slug: row.slug,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `workspaces` row to the public `Workspace` shape. */
+function mapWorkspaceRow(row: WorkspaceRow): Workspace {
+  return {
+    uuid: row.uuid,
+    product_id: row.product_id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `resources` row to the public `Resource` shape. */
+function mapResourceRow(row: ResourceRow): Resource {
+  return {
+    uuid: row.uuid,
+    workspace_id: row.workspace_id,
+    type: row.type,
+    canonical_locator: row.canonical_locator,
+    local_path: row.local_path,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `initiatives` row to the public `Initiative` shape. */
+function mapInitiativeRow(row: InitiativeRow): Initiative {
+  return {
+    uuid: row.uuid,
+    human_key: row.human_key,
+    product_id: row.product_id,
+    title: row.title,
+    goal: row.goal,
+    status: row.status,
+    outcome: row.outcome,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `tasks` row to the public `Task` shape, parsing the JSON list columns. */
+function mapTaskRow(row: TaskRow): Task {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    title: row.title,
+    goal: row.goal,
+    status: row.status,
+    outcome: row.outcome,
+    workspace_ids: JSON.parse(row.workspace_ids) as string[],
+    resource_ids: JSON.parse(row.resource_ids) as string[],
+    executionRefs: JSON.parse(row.execution_refs ?? '[]') as string[],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `artifact_refs` row to the public `ArtifactRef` shape. */
+function mapArtifactRefRow(row: ArtifactRefRow): ArtifactRef {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    storage_mode: row.storage_mode,
+    path_or_uri: row.path_or_uri,
+    content_hash: row.content_hash,
+    media_type: row.media_type,
+    version: row.version,
+    produced_by_task: row.produced_by_task,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `initiative_relations` row to the public `InitiativeRelation` shape, preserving direction. */
+function mapRelationRow(row: RelationRow): InitiativeRelation {
+  return {
+    from_id: row.from_id,
+    to_id: row.to_id,
+    type: row.type,
+    createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** The pinned resume-collection tie-breaker: `createdAt` ascending, then `uuid` ascending. */
+function compareCreatedAtThenUuid(a: { createdAt: string; uuid: string }, b: { createdAt: string; uuid: string }): number {
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt < b.createdAt ? -1 : 1;
+  }
+  if (a.uuid !== b.uuid) {
+    return a.uuid < b.uuid ? -1 : 1;
+  }
+  return 0;
 }

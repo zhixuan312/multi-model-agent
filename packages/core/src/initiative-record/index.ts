@@ -9,7 +9,7 @@
 export * from './types.js';
 export * from './schemas.js';
 export * from './errors.js';
-export type { InitiativeRepository } from './repository.js';
+export type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
 export { InitiativeRecordStore } from './sqlite-store.js';
 export type { InitiativeRecordStorePragmas } from './sqlite-store.js';
 export { runInitiativeMigrations, INITIATIVE_SCHEMA_VERSION } from './migrations.js';
