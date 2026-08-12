@@ -196,3 +196,39 @@ export type {
 } from './journal/index.js';
 export { TaskRegistry } from './unified/task-registry.js';
 export type { TaskEntry, TaskState } from './unified/task-registry.js';
+
+// Initiative Record — Phase A0 kernel (see .mma/specs/2026-08-12-mma-next-initiative-engine.md, SPEC-001)
+export {
+  initiativeOperationRequestSchema,
+  initiativeResumeRequestSchema,
+  initiativeLookupSchema,
+  provenanceSchema,
+  INITIATIVE_OPERATIONS,
+  INITIATIVE_EVENT_TYPES,
+  RevisionConflictError,
+  CrossProductWorkspaceLinkError,
+  NotFoundError as InitiativeNotFoundError,
+  InvalidRequestError as InitiativeInvalidRequestError,
+  MigrationBackupFailedError,
+  isInitiativeError,
+} from './initiative-record/index.js';
+export type {
+  Product,
+  Workspace,
+  Resource,
+  Initiative,
+  InitiativeWorkspaceLink,
+  InitiativeRelation,
+  Task,
+  ArtifactRef,
+  Event,
+  InitiativeResumeRequest,
+  InitiativeResumeResponse,
+  InitiativeOperation,
+  InitiativeOperationRequest,
+  Provenance as InitiativeProvenance,
+  MutationControl as InitiativeMutationControl,
+  InitiativeError,
+  InitiativeErrorCode,
+  InitiativeRepository,
+} from './initiative-record/index.js';
