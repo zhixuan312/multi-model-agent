@@ -66,7 +66,7 @@ describe('initiatives import-bootstrap', () => {
       expect(blocked.exitCode).toBe(1);
       expect(blocked.stderr).toBe('bootstrap precondition failed: initiative table is not empty and MMA-INIT-001 does not exist\n');
       const check = InitiativeRecordStore.open({ dbPath: join(stateDir, 'initiatives.db') });
-      try { expect(check.listEvents({})).toHaveLength(eventsBefore); expect(check.getInitiative({ human_key: 'MMA-INIT-001' })).toBeNull(); } finally { check.close(); }
+      try { expect(check.listEvents({})).toHaveLength(eventsBefore); expect(() => check.getInitiative({ human_key: 'MMA-INIT-001' })).toThrow(/not_found/); } finally { check.close(); }
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });
