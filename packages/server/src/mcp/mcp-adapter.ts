@@ -23,10 +23,20 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { taskInputSchema, type TaskRegistry, type ApprovedContract } from '@zhixuan92/multi-model-agent-core';
+import {
+  taskInputSchema,
+  type TaskRegistry,
+  type ApprovedContract,
+  RevisionConflictError,
+  CrossProductWorkspaceLinkError,
+  InitiativeNotFoundError,
+  InitiativeInvalidRequestError,
+  MigrationBackupFailedError,
+} from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
+import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
 import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
@@ -42,6 +52,8 @@ import {
   type DeliveryMode,
   type McpCapabilities,
   DELIVERY_MODES,
+  INITIATIVE_MUTATING_OPERATIONS,
+  INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME,
 } from './tool-surface.js';
 import {
   getExecutionArtifact,
@@ -63,6 +75,10 @@ export interface McpAdapterDeps {
   runtime: ExecutionRuntime;
   taskRegistry: TaskRegistry;
   store: ExecutionStore;
+  /** The SAME `InitiativeRecordRuntime` `POST /initiatives` (Task I-6) calls
+   *  into — the `mma_<operation>` Initiative tools below are a second thin
+   *  transport over it, never a second store/runtime. */
+  initiativeRuntime: InitiativeRecordRuntime;
   serverVersion: string;
   /** Resolved ONCE at daemon start (see `http/server.ts`); read here for both the
    *  `Server` constructor and the `server/discover` handler so they cannot disagree. */
@@ -290,6 +306,82 @@ function handleContextBlockDelete(deps: McpAdapterDeps, args: Record<string, unk
   return jsonResult({ ok: true });
 }
 
+/**
+ * Maps a runtime-thrown typed Initiative error onto the MCP tool error result —
+ * the same typed-error union `http/handlers/initiative-record.ts` maps onto an
+ * HTTP status, translated to MCP's `{ code, message, ...details }` shape
+ * instead. Anything else (an unclassified storage failure) falls through to
+ * `internal_error`, mirroring HTTP's 500 fallback.
+ */
+function initiativeErrorToMcp(err: unknown): ToolResult {
+  if (err instanceof RevisionConflictError) {
+    return errorResult(err.code, err.message, {
+      entity_type: err.entity_type,
+      entity_id: err.entity_id,
+      expected_revision: err.expected_revision,
+      actual_revision: err.actual_revision,
+    });
+  }
+  if (err instanceof CrossProductWorkspaceLinkError) {
+    return errorResult(err.code, err.message, { initiative_id: err.initiative_id, workspace_id: err.workspace_id });
+  }
+  if (err instanceof InitiativeNotFoundError) {
+    return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
+  }
+  if (err instanceof InitiativeInvalidRequestError) {
+    return errorResult(err.code, err.message, { field_errors: err.field_errors });
+  }
+  if (err instanceof MigrationBackupFailedError) {
+    return errorResult(err.code, err.message, { database_path: err.database_path, backup_path: err.backup_path });
+  }
+  return errorResult('internal_error', err instanceof Error ? err.message : 'Unexpected error');
+}
+
+/**
+ * `mma_<operation>` for every frozen Initiative operation except
+ * `initiative_resume` (its own dedicated handler below). `operation` is the
+ * literal the tool name already selected — the caller's `args` never repeat
+ * it (see `initiativeToolInputSchema` in tool-surface.ts, which strips
+ * `operation` from the advertised schema). For a mutating operation, the
+ * caller supplies provenance; this adapter overwrites `interface: 'mcp'` and
+ * the server timestamp before the SAME `InitiativeRecordRuntime.execute()`
+ * HTTP calls (Task I-6) ever sees it — never a second store/runtime.
+ */
+function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: Record<string, unknown>): ToolResult {
+  let body: Record<string, unknown> = { operation, ...args };
+  if ((INITIATIVE_MUTATING_OPERATIONS as ReadonlySet<string>).has(operation)) {
+    const provenance = args.provenance;
+    if (typeof provenance === 'object' && provenance !== null) {
+      body = {
+        ...body,
+        provenance: { ...(provenance as Record<string, unknown>), interface: 'mcp', timestamp: new Date().toISOString() },
+      };
+    }
+    // A missing/malformed `provenance` is left as-is: the runtime's own Zod
+    // validation reports the resulting `invalid_request`, same as HTTP does
+    // via `stampHttpProvenance`.
+  }
+  try {
+    return jsonResult(deps.initiativeRuntime.execute(body));
+  } catch (err) {
+    return initiativeErrorToMcp(err);
+  }
+}
+
+/**
+ * `mma_initiative_resume` — delegates straight to the runtime's dedicated
+ * single-call assembly method (Task I-4/I-6). Same request shape and
+ * behavior as HTTP's `operation: 'initiative_resume'` branch, which also
+ * skips `execute()` entirely for this operation.
+ */
+function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  try {
+    return jsonResult(deps.initiativeRuntime.initiativeResume(args));
+  } catch (err) {
+    return initiativeErrorToMcp(err);
+  }
+}
+
 /** Build a fresh SDK server wired to the shared runtime. One per request —
  *  the protocol core is stateless; all durable state lives in the runtime. */
 export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): Server {
@@ -366,7 +458,16 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined, declaredClient);
-    switch (request.params.name) {
+    const toolName = request.params.name;
+
+    // Initiative tools: 21 near-identical `mma_<operation>` dispatches over the
+    // frozen operation table, checked before the fixed-name switch below rather
+    // than added to it as 21 more `case` labels for the same handler body.
+    if (toolName === 'mma_initiative_resume') return handleInitiativeResume(deps, args);
+    const initiativeOperation = INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME.get(toolName);
+    if (initiativeOperation) return handleInitiativeExecute(deps, initiativeOperation, args);
+
+    switch (toolName) {
       case 'mma_run':
         return handleRun(deps, args, clientName);
       case 'mma_task_get': {

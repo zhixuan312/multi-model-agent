@@ -285,6 +285,10 @@ export async function startServer(
         runtime,
         taskRegistry,
         store: executionStore,
+        // Same open InitiativeRecordRuntime `POST /initiatives` (Task I-6) uses —
+        // the `mma_<operation>` Initiative tools (Task I-7) are a second thin
+        // transport over it, never a second store/runtime.
+        initiativeRuntime,
         serverVersion: SERVER_VERSION,
         capabilities,
         projectRegistry,

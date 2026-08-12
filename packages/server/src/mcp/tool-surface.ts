@@ -10,7 +10,13 @@
 // never a hand-written second schema that could drift.
 
 import { z } from 'zod';
-import { taskInputSchema } from '@zhixuan92/multi-model-agent-core';
+import {
+  taskInputSchema,
+  initiativeOperationRequestSchema,
+  initiativeResumeRequestSchema,
+  INITIATIVE_OPERATIONS,
+  type InitiativeOperation,
+} from '@zhixuan92/multi-model-agent-core';
 import { EXECUTION_RESOURCE_URI } from './execution-artifact.js';
 
 /*
@@ -114,6 +120,137 @@ interface McpToolDefinition {
    *  tool whose result is meant to be rendered by an MCP-App-capable host. */
   _meta?: Record<string, unknown>;
 }
+
+// ---------------------------------------------------------------------------
+// Initiative Record — one `mma_<operation>` tool per frozen operation
+// (SPEC-001 "Interfaces / contracts"; see initiative-record-runtime.ts for the
+// shared runtime every adapter — HTTP, MCP, CLI — calls into). The `operation`
+// selector every other transport carries in its request body is carried here
+// by the TOOL NAME instead: the discriminant is dropped from each tool's
+// `inputSchema` (the adapter injects the literal before validating), so a
+// caller never supplies it twice.
+//
+// Every JSON Schema below is generated from the actual member of
+// `initiativeOperationRequestSchema` — the SAME discriminated union
+// `InitiativeRecordRuntime.execute()` validates against (Task I-6) — never a
+// hand-written second copy of the Product/Workspace/Initiative/Task/ArtifactRef
+// field rules.
+
+/** The nine operations whose envelope carries `MutationControl`
+ *  (`expected_revision`, optional `idempotency_key`, `provenance`) — the exact
+ *  set `schemas.ts`'s private `mutating()` builder wraps. Read here so the MCP
+ *  adapter knows which calls need adapter-owned provenance stamped
+ *  (`interface: 'mcp'`, server timestamp) before dispatch. */
+export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>([
+  'product_create',
+  'workspace_create',
+  'resource_register',
+  'initiative_create',
+  'initiative_status',
+  'initiative_link_workspace',
+  'initiative_relate',
+  'initiative_task_create',
+  'artifact_register',
+]);
+
+/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT
+ *  `initiative_resume` (its own dedicated tool/handler — see below). Built
+ *  from the frozen `INITIATIVE_OPERATIONS` list so a tool name can never name
+ *  an operation `execute()` does not also recognise. */
+export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
+  INITIATIVE_OPERATIONS
+    .filter((operation) => operation !== 'initiative_resume')
+    .map((operation) => [`mma_${operation}`, operation] as const),
+);
+
+const initiativeOperationSchemaMembers = initiativeOperationRequestSchema.options as readonly z.ZodTypeAny[];
+
+/** Looks up the exact `initiativeOperationRequestSchema` member for one
+ *  operation — the literal schema `execute()` validates a matching request
+ *  body against. */
+function initiativeOperationSchemaFor(operation: InitiativeOperation): z.ZodTypeAny {
+  const match = initiativeOperationSchemaMembers.find(
+    (member) => (member as z.ZodObject<{ operation: z.ZodLiteral<string> }>).shape.operation.value === operation,
+  );
+  if (!match) throw new Error(`no initiativeOperationRequestSchema member for operation: ${operation}`);
+  return match;
+}
+
+/** JSON Schema for one `mma_<operation>` tool's arguments: the matching
+ *  `initiativeOperationRequestSchema` member, minus the `operation` field
+ *  (redundant — the tool name already selects it; the adapter injects the
+ *  literal before validating the real request). */
+function initiativeToolInputSchema(operation: InitiativeOperation): Record<string, unknown> {
+  const full = z.toJSONSchema(initiativeOperationSchemaFor(operation)) as Record<string, unknown>;
+  delete full.$schema;
+  const properties = { ...(full.properties as Record<string, unknown> | undefined) };
+  delete properties.operation;
+  const required = ((full.required as string[] | undefined) ?? []).filter((key) => key !== 'operation');
+  return { ...full, properties, required };
+}
+
+const initiativeResumeInputSchema: Record<string, unknown> = (() => {
+  const schema = z.toJSONSchema(initiativeResumeRequestSchema) as Record<string, unknown>;
+  delete schema.$schema;
+  return schema;
+})();
+
+/** Human-facing description per Initiative operation. Mutating ones name their
+ *  `MutationControl` requirement; the adapter always overwrites
+ *  `provenance.interface`/`provenance.timestamp` regardless of caller input. */
+const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
+  product_create:
+    'Create a Product, the top-level container Workspaces and Initiatives attach to. Mutating: pass '
+    + 'expected_revision (0 for a new Product) and provenance; the server overwrites provenance.interface/timestamp.',
+  product_get: 'Look up a Product by uuid or slug (exactly one).',
+  product_list: 'List every Product.',
+  workspace_create:
+    'Create a Workspace under a Product, e.g. a repo boundary Resources and Initiatives attach to. Mutating: pass '
+    + 'expected_revision and provenance.',
+  workspace_get: 'Look up a Workspace by uuid.',
+  workspace_list: 'List Workspaces, optionally filtered to one Product.',
+  resource_register:
+    'Register a Resource (e.g. a git repository) under a Workspace. Mutating: pass expected_revision and provenance.',
+  resource_list: 'List the Resources registered under a Workspace.',
+  initiative_create:
+    'Create an Initiative: a durable, resumable unit of product work with a title, goal, and status. Mutating: pass '
+    + 'expected_revision and provenance.',
+  initiative_get: 'Look up an Initiative by uuid or human_key (e.g. MMA-INIT-001).',
+  initiative_list: 'List Initiatives, optionally filtered by product_id and/or status.',
+  initiative_status:
+    "Change an Initiative's status/outcome (open with null outcome, or closed with one non-null outcome). "
+    + 'Mutating: pass expected_revision and provenance.',
+  initiative_link_workspace:
+    'Link an Initiative to a Workspace with a role (consumes/references/modifies/creates/delivers_to); the '
+    + "Workspace must belong to the Initiative's own Product. Mutating: pass expected_revision and provenance.",
+  initiative_relate:
+    'Relate two Initiatives (depends_on/blocks/supersedes/related_to). Mutating: pass expected_revision and provenance.',
+  initiative_relations: "List an Initiative's relations to other Initiatives.",
+  initiative_task_create:
+    'Create a Task under an Initiative, optionally scoped to Workspaces/Resources and linked execution refs. '
+    + 'Mutating: pass expected_revision and provenance.',
+  initiative_task_get: 'Look up an Initiative Task by uuid.',
+  initiative_task_list: 'List the Tasks under an Initiative.',
+  artifact_register:
+    'Register an ArtifactRef (managed or external) produced for or consumed by an Initiative. Mutating: pass '
+    + 'expected_revision and provenance.',
+  artifact_get: 'Look up an ArtifactRef by uuid.',
+  initiative_resume:
+    'Assemble the complete continuation payload for one Initiative in a single call: the Initiative, its Product, '
+    + 'linked Workspaces and their Resources, related Initiatives, Tasks, ArtifactRefs, the most recent Events '
+    + '(event_limit, default 20, max 100), and summary counts. Use this to resume work on an Initiative from a '
+    + 'fresh session without a handover document.',
+};
+
+/** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
+ *  AC-2.1). `initiative_resume` uses its own request shape (no `operation`/
+ *  `input` envelope — see `initiativeResumeRequestSchema`); every other
+ *  operation uses the matching `initiativeOperationRequestSchema` member. */
+const INITIATIVE_MCP_TOOLS: McpToolDefinition[] = INITIATIVE_OPERATIONS.map((operation) => ({
+  name: `mma_${operation}`,
+  description: INITIATIVE_TOOL_DESCRIPTIONS[operation],
+  inputSchema: operation === 'initiative_resume' ? initiativeResumeInputSchema : initiativeToolInputSchema(operation),
+}));
 
 export const MCP_TOOLS: McpToolDefinition[] = [
   {
@@ -277,4 +414,5 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  ...INITIATIVE_MCP_TOOLS,
 ];

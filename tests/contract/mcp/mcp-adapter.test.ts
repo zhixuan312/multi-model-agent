@@ -11,7 +11,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
-import { TASK_TYPES, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+import { TASK_TYPES, INITIATIVE_OPERATIONS, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+
+/** Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
+ *  alongside the original seven. Derived from the same frozen operation list
+ *  the tool surface itself is built from, so this assertion tracks the real
+ *  contract rather than a hand-copied name list. */
+const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) => `mma_${operation}`);
 
 async function mcpClient(h: HarnessHandle): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
@@ -42,7 +48,7 @@ describe('contract: MCP adapter', () => {
     } finally { await h.close(); }
   });
 
-  it('lists exactly the seven tools; mma_run request schema is generated from the task union', async () => {
+  it('lists the seven original tools plus one mma_<operation> per frozen Initiative operation; mma_run request schema is generated from the task union', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
@@ -50,7 +56,8 @@ describe('contract: MCP adapter', () => {
       expect(tools.map((t) => t.name).sort()).toEqual([
         'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
         'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
-      ]);
+        ...INITIATIVE_TOOL_NAMES,
+      ].sort());
 
       const run = tools.find((t) => t.name === 'mma_run')!;
       const schema = run.inputSchema as {
