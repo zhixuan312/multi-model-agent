@@ -31,7 +31,7 @@ export class RevisionConflictError extends Error {
   }) {
     super(
       params.message ??
-        `Revision conflict for ${params.entity_type} ${params.entity_id}: expected ${params.expected_revision}, actual ${params.actual_revision}`,
+        `revision_conflict: ${params.entity_type} ${params.entity_id}: expected ${params.expected_revision}, actual ${params.actual_revision}`,
     );
     this.name = 'RevisionConflictError';
     this.entity_type = params.entity_type;
@@ -50,7 +50,7 @@ export class CrossProductWorkspaceLinkError extends Error {
   constructor(params: { initiative_id: string; workspace_id: string; message?: string }) {
     super(
       params.message ??
-        `Initiative ${params.initiative_id} may not link to Workspace ${params.workspace_id}: different Product`,
+        `cross_product_workspace_link: Initiative ${params.initiative_id} may not link to Workspace ${params.workspace_id}: different Product`,
     );
     this.name = 'CrossProductWorkspaceLinkError';
     this.initiative_id = params.initiative_id;
@@ -65,7 +65,7 @@ export class NotFoundError extends Error {
   readonly lookup: string;
 
   constructor(params: { entity_type: string; lookup: string; message?: string }) {
-    super(params.message ?? `${params.entity_type} not found: ${params.lookup}`);
+    super(params.message ?? `not_found: ${params.entity_type} not found: ${params.lookup}`);
     this.name = 'NotFoundError';
     this.entity_type = params.entity_type;
     this.lookup = params.lookup;
@@ -81,7 +81,7 @@ export class InvalidRequestError extends Error {
   readonly field_errors: Record<string, string[]>;
 
   constructor(params: { field_errors: Record<string, string[]>; message?: string }) {
-    super(params.message ?? 'Invalid request');
+    super(params.message ?? 'invalid_request: Invalid request');
     this.name = 'InvalidRequestError';
     this.field_errors = params.field_errors;
   }

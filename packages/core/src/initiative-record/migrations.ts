@@ -266,7 +266,7 @@ function readSchemaVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined;
   const version = row?.user_version;
   const supportedVersions = new Set([0, ...MIGRATIONS.map((migration) => migration.version)]);
-  if (!Number.isSafeInteger(version) || !supportedVersions.has(version)) {
+  if (version === undefined || !Number.isSafeInteger(version) || !supportedVersions.has(version)) {
     throw new Error(`invalid stored migration metadata: unsupported schema version ${String(version)}`);
   }
   return version;

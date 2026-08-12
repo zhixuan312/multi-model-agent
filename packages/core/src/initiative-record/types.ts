@@ -182,6 +182,17 @@ export interface Event {
   source: string;
 }
 
+/** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
+export type InitiativeRecordEntity =
+  | Product
+  | Workspace
+  | Resource
+  | Initiative
+  | InitiativeWorkspaceLink
+  | InitiativeRelation
+  | Task
+  | ArtifactRef;
+
 /** `initiative_resume` request — exactly one of `uuid` or `human_key`. */
 export interface InitiativeResumeRequest {
   initiative: { uuid?: string; human_key?: string };

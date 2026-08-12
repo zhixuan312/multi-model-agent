@@ -283,6 +283,25 @@ export type ArtifactGetInput = z.infer<typeof artifactGetInputSchema>;
  * (FR-3). A transport-agnostic dispatcher validates a wire body against this
  * schema and routes on `operation`.
  */
+/**
+ * The mutating subset of the frozen operation set as its own discriminated-union
+ * request envelope. `InitiativeRecordStore.execute()` (Task I-3) validates against
+ * exactly this schema — it is the sole entry point for every mutable operation, so
+ * it never accepts a read-only operation shape.
+ */
+export const initiativeMutationRequestSchema = z.discriminatedUnion('operation', [
+  mutating('product_create', productCreateInputSchema),
+  mutating('workspace_create', workspaceCreateInputSchema),
+  mutating('resource_register', resourceRegisterInputSchema),
+  mutating('initiative_create', initiativeCreateInputSchema),
+  mutating('initiative_status', initiativeStatusInputSchema),
+  mutating('initiative_link_workspace', initiativeLinkWorkspaceInputSchema),
+  mutating('initiative_relate', initiativeRelateInputSchema),
+  mutating('initiative_task_create', initiativeTaskCreateInputSchema),
+  mutating('artifact_register', artifactRegisterInputSchema),
+]);
+export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
+
 export const initiativeOperationRequestSchema = z.discriminatedUnion('operation', [
   mutating('product_create', productCreateInputSchema),
   readOnly('product_get', productLookupInputSchema),
