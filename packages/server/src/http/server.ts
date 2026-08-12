@@ -21,6 +21,7 @@ import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import { expandHome } from '../expand-home.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
+import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
@@ -58,6 +59,9 @@ export interface RunningServer {
   taskRegistry: TaskRegistry;
   /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
   projectRegistry: ProjectRegistry;
+  /** Shared InitiativeRecordRuntime over `<stateDir>/initiatives.db` — the one
+   *  application service Group 001B's HTTP, MCP, and CLI adapters depend on. */
+  initiativeRuntime: InitiativeRecordRuntime;
   /** Wall-clock ms when the server finished starting (Date.now()). Used for uptimeMs in /status. */
   serverStartedAt: number;
 }
@@ -134,6 +138,13 @@ export async function startServer(
     dbPath: join(expandHome(config.server.stateDir), 'executions.db'),
     ttlMs: config.server.limits.batchTtlMs,
   });
+
+  // Shared Initiative Record runtime — a SEPARATE database (`initiatives.db`)
+  // and lifecycle from `executionStore`/`executions.db` above. Opened
+  // unconditionally (like executionStore) so it is ready before Group 001B's
+  // HTTP/MCP adapters are wired, regardless of whether agent config is present.
+  const { InitiativeRecordRuntime } = await import('../application/initiative-record-runtime.js');
+  const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir: config.server.stateDir });
 
   // Boot reconciliation — BEFORE the listener accepts requests: fence worker
   // process groups that survived a dead daemon, then mark their executions
@@ -328,9 +339,11 @@ export async function startServer(
     stop: async () => {
       await listener.stop();
       executionStore.close();
+      initiativeRuntime.close();
     },
     taskRegistry,
     projectRegistry,
+    initiativeRuntime,
     serverStartedAt,
   };
 }

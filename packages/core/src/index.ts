@@ -200,6 +200,7 @@ export type { TaskEntry, TaskState } from './unified/task-registry.js';
 // Initiative Record — Phase A0 kernel (see .mma/specs/2026-08-12-mma-next-initiative-engine.md, SPEC-001)
 export {
   initiativeOperationRequestSchema,
+  initiativeMutationRequestSchema,
   initiativeResumeRequestSchema,
   initiativeLookupSchema,
   provenanceSchema,
@@ -211,6 +212,8 @@ export {
   InvalidRequestError as InitiativeInvalidRequestError,
   MigrationBackupFailedError,
   isInitiativeError,
+  fieldErrorsFromIssues as initiativeFieldErrorsFromIssues,
+  InitiativeRecordStore,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -220,12 +223,15 @@ export type {
   InitiativeWorkspaceLink,
   InitiativeRelation,
   Task,
+  TaskStatus,
   ArtifactRef,
   Event,
   InitiativeResumeRequest,
   InitiativeResumeResponse,
   InitiativeOperation,
   InitiativeOperationRequest,
+  InitiativeMutationRequest,
+  InitiativeRecordEntity,
   Provenance as InitiativeProvenance,
   MutationControl as InitiativeMutationControl,
   InitiativeError,
