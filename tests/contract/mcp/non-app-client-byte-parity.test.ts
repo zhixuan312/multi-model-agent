@@ -4,6 +4,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 import { __setExecutionArtifactOverrideForTests } from '../../../packages/server/src/mcp/execution-artifact.js';
+import { INITIATIVE_OPERATIONS } from '@zhixuan92/multi-model-agent-core';
+
+// Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
+// alongside the original seven.
+const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) => `mma_${operation}`);
 
 async function runOnce(h: HarnessHandle): Promise<string> {
   const client = new Client({ name: 'byte-parity', version: '0.0.0' });
@@ -46,7 +51,7 @@ describe('contract: non-App-client byte parity', () => {
     expect(withAppJson).toBe(withoutAppJson);
   });
 
-  it('the seven tool names and mma_run generated schema are unchanged regardless of capability branch', async () => {
+  it('the seven original tool names plus the Initiative tools and mma_run generated schema are unchanged regardless of capability branch', async () => {
     __setExecutionArtifactOverrideForTests({ available: true, html: '<html>real bundle</html>' });
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = new Client({ name: 'schema-parity', version: '0.0.0' });
@@ -56,7 +61,8 @@ describe('contract: non-App-client byte parity', () => {
       expect(tools.map((t) => t.name).sort()).toEqual([
         'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
         'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
-      ]);
+        ...INITIATIVE_TOOL_NAMES,
+      ].sort());
       const run = tools.find((t) => t.name === 'mma_run')!;
       expect(run.inputSchema).toMatchObject({ required: ['cwd', 'request'], type: 'object' });
     } finally { await client.close(); await h.close(); }

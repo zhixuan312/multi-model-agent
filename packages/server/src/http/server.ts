@@ -21,6 +21,7 @@ import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import { expandHome } from '../expand-home.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
+import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
 import { handleRequest } from './request-pipeline.js';
 import { getRecorder } from '../telemetry/recorder.js';
 
@@ -58,6 +59,9 @@ export interface RunningServer {
   taskRegistry: TaskRegistry;
   /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
   projectRegistry: ProjectRegistry;
+  /** Shared InitiativeRecordRuntime over `<stateDir>/initiatives.db` — the one
+   *  application service Group 001B's HTTP, MCP, and CLI adapters depend on. */
+  initiativeRuntime: InitiativeRecordRuntime;
   /** Wall-clock ms when the server finished starting (Date.now()). Used for uptimeMs in /status. */
   serverStartedAt: number;
 }
@@ -134,6 +138,13 @@ export async function startServer(
     dbPath: join(expandHome(config.server.stateDir), 'executions.db'),
     ttlMs: config.server.limits.batchTtlMs,
   });
+
+  // Shared Initiative Record runtime — a SEPARATE database (`initiatives.db`)
+  // and lifecycle from `executionStore`/`executions.db` above. Opened
+  // unconditionally (like executionStore) so it is ready before Group 001B's
+  // HTTP/MCP adapters are wired, regardless of whether agent config is present.
+  const { InitiativeRecordRuntime } = await import('../application/initiative-record-runtime.js');
+  const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir: config.server.stateDir });
 
   // Boot reconciliation — BEFORE the listener accepts requests: fence worker
   // process groups that survived a dead daemon, then mark their executions
@@ -243,11 +254,18 @@ export async function startServer(
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
       const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore });
-      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore };
+      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime };
       const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
       router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
+
+      // POST /initiatives — the single HTTP adapter for the complete frozen
+      // Initiative operation table, over the SAME `initiativeRuntime` opened
+      // unconditionally above. Behind the standard bearer-auth/loopback
+      // pipeline like every other route; not added to any auth exemption set.
+      const { buildInitiativeHandler } = await import('./handlers/initiative-record.js');
+      router.register('POST', '/initiatives', buildInitiativeHandler(deps));
 
       // MCP adapter — a second transport over the SAME runtime (single daemon
       // owns all live executions). Bearer auth + loopback apply like any route.
@@ -267,6 +285,10 @@ export async function startServer(
         runtime,
         taskRegistry,
         store: executionStore,
+        // Same open InitiativeRecordRuntime `POST /initiatives` (Task I-6) uses —
+        // the `mma_<operation>` Initiative tools (Task I-7) are a second thin
+        // transport over it, never a second store/runtime.
+        initiativeRuntime,
         serverVersion: SERVER_VERSION,
         capabilities,
         projectRegistry,
@@ -328,9 +350,11 @@ export async function startServer(
     stop: async () => {
       await listener.stop();
       executionStore.close();
+      initiativeRuntime.close();
     },
     taskRegistry,
     projectRegistry,
+    initiativeRuntime,
     serverStartedAt,
   };
 }

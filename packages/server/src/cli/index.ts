@@ -55,6 +55,7 @@ import { runMcpBridge, bufferedLines } from './mcp.js';
 import { removeClientRegistration } from '../provisioning/writers/registry.js';
 import { CLIENT_CAPABILITIES } from '../provisioning/capability-registry.js';
 import { runClientsCommand, runMcpInstallCommand, McpInstallCliError } from './clients.js';
+import { runInitiativesImportBootstrap } from './initiative-import-bootstrap.js';
 import type { DeclaredClientRoster } from '../provisioning/roster.js';
 
 /**
@@ -140,7 +141,7 @@ async function buildLifecycleDeps(
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config', 'batch', 'client', 'package-manager', 'previous-version'],
+    string: ['config', 'batch', 'client', 'package-manager', 'previous-version', 'stem'],
     boolean: [
       'help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'log',
       'regenerate-catalog', 'now', 'no-install', 'post-install', 'offline',
@@ -266,6 +267,8 @@ Commands:
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
   journal reindex  Rebuild .mma/journal/index.db from markdown nodes (--regenerate-catalog to also rewrite index.md)
+  initiatives import-bootstrap --stem <stem>
+                   Assisted MMA-INIT-001 bootstrap import of one .mma/ flow stem (idempotent)
 
 Update / lifecycle options:
   --no-install          update: skip the package install (you manage the package yourself)
@@ -705,6 +708,29 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         regenerateCatalog: opts['regenerate-catalog'] === true,
         stdout,
         stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'initiatives': {
+      const nested = positional[1] ?? '';
+      if (nested !== 'import-bootstrap') {
+        stderr(`mma initiatives: unknown subcommand "${nested}" — expected "import-bootstrap"\n`);
+        exit(1);
+        break;
+      }
+      const stem = typeof opts['stem'] === 'string' ? opts['stem'] : undefined;
+      if (!stem) {
+        stderr(`mma initiatives import-bootstrap: --stem <stem> is required\n`);
+        exit(1);
+        break;
+      }
+      const code = await runInitiativesImportBootstrap({
+        cwd: deps.cwd?.() ?? process.cwd(),
+        stem,
+        loadConfig: () => loadConfig(configArg, deps),
+        stdout: deps.stdout,
+        stderr: deps.stderr,
       });
       exit(code);
       break;
