@@ -28,11 +28,14 @@ describe('Lifecycle reads', () => {
     } finally { seed.close(); }
     const runtime = InitiativeRecordRuntime.open({ stateDir: dir });
     try {
+      // Full row content, not COUNT(*): a gate read that UPDATED a row in place
+      // (touching initiatives.updated_at, rewriting a phase_records row) leaves every
+      // count identical, so counts alone cannot prove FR-8 purity.
       const snapshotCounts = (db: DatabaseSync) => ({
-        phase_records: (db.prepare('SELECT COUNT(*) AS count FROM phase_records').get() as { count: number }).count,
-        events: (db.prepare('SELECT COUNT(*) AS count FROM events').get() as { count: number }).count,
-        initiatives: (db.prepare('SELECT COUNT(*) AS count FROM initiatives').get() as { count: number }).count,
-        lifecycle_contracts: (db.prepare('SELECT COUNT(*) AS count FROM lifecycle_contracts').get() as { count: number }).count,
+        phase_records: JSON.stringify(db.prepare('SELECT * FROM phase_records ORDER BY initiative_id, phase').all()),
+        events: JSON.stringify(db.prepare('SELECT * FROM events ORDER BY event_sequence').all()),
+        initiatives: JSON.stringify(db.prepare('SELECT * FROM initiatives ORDER BY uuid').all()),
+        lifecycle_contracts: JSON.stringify(db.prepare('SELECT * FROM lifecycle_contracts ORDER BY id').all()),
       });
       const beforeDb = new DatabaseSync(dbPath);
       const before = snapshotCounts(beforeDb);
