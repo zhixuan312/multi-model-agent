@@ -37,6 +37,8 @@ import {
   TaskNotClaimableError,
   TaskClaimConflictError,
   InvalidTaskTransitionError,
+  InvalidPhaseTransitionError,
+  UnknownLifecycleContractError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -366,6 +368,17 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
       to_status: err.to_status,
     });
   }
+  if (err instanceof InvalidPhaseTransitionError) {
+    return errorResult(err.code, err.message, {
+      initiative_id: err.initiative_id,
+      phase: err.phase,
+      source_state: err.source_state,
+      target_state: err.target_state,
+    });
+  }
+  if (err instanceof UnknownLifecycleContractError) {
+    return errorResult(err.code, err.message, { lifecycle_contract: err.lifecycle_contract });
+  }
   if (err instanceof InitiativeNotFoundError) {
     return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
   }
@@ -379,8 +392,9 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
 }
 
 /**
- * `mma_<operation>` for every frozen Initiative operation except
- * `initiative_resume` (its own dedicated handler below). `operation` is the
+ * `mma_<operation>` for every frozen Initiative operation except the two
+ * dedicated reads — `initiative_resume` and `initiative_gate_status` (each
+ * has its own dedicated handler below). `operation` is the
  * literal the tool name already selected — the caller's `args` never repeat
  * it (see `initiativeToolInputSchema` in tool-surface.ts, which strips
  * `operation` from the advertised schema). For a mutating operation, the
@@ -420,6 +434,24 @@ function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: 
 function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
   try {
     return jsonResult(deps.initiativeRuntime.initiativeResume(args));
+  } catch (err) {
+    return initiativeErrorToMcp(err);
+  }
+}
+
+/**
+ * `mma_initiative_gate_status` — the second dedicated read (Task I-5, SPEC-004
+ * FR-9), alongside `mma_initiative_resume` above. Its advertised tool schema
+ * is generated from the `initiative_gate_status` member of
+ * `initiativeOperationRequestSchema` (same as every mutating tool), so its
+ * wire arguments carry the ordinary `{ input: { initiative } }` shape rather
+ * than `initiative_resume`'s flat one — this adapter unwraps `args.input`
+ * (the Initiative lookup) and hands ONLY that to the dedicated runtime
+ * method, never `execute()`.
+ */
+function handleInitiativeGateStatus(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  try {
+    return jsonResult(deps.initiativeRuntime.initiativeGateStatus(args.input));
   } catch (err) {
     return initiativeErrorToMcp(err);
   }
@@ -503,10 +535,11 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
     const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined, declaredClient);
     const toolName = request.params.name;
 
-    // Initiative tools: 21 near-identical `mma_<operation>` dispatches over the
+    // Initiative tools: near-identical `mma_<operation>` dispatches over the
     // frozen operation table, checked before the fixed-name switch below rather
-    // than added to it as 21 more `case` labels for the same handler body.
+    // than added to it as more `case` labels for the same handler body.
     if (toolName === 'mma_initiative_resume') return handleInitiativeResume(deps, args);
+    if (toolName === 'mma_initiative_gate_status') return handleInitiativeGateStatus(deps, args);
     const initiativeOperation = INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME.get(toolName);
     if (initiativeOperation) return handleInitiativeExecute(deps, initiativeOperation, args);
 

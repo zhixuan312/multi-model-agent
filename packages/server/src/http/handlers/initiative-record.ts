@@ -23,6 +23,8 @@ import {
   TaskNotClaimableError,
   TaskClaimConflictError,
   InvalidTaskTransitionError,
+  InvalidPhaseTransitionError,
+  UnknownLifecycleContractError,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -111,6 +113,27 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       details: { task_id: err.task_id, from_status: err.from_status, to_status: err.to_status },
     };
   }
+  if (err instanceof InvalidPhaseTransitionError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: {
+        initiative_id: err.initiative_id,
+        phase: err.phase,
+        source_state: err.source_state,
+        target_state: err.target_state,
+      },
+    };
+  }
+  if (err instanceof UnknownLifecycleContractError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { lifecycle_contract: err.lifecycle_contract },
+    };
+  }
   if (err instanceof InitiativeNotFoundError) {
     return {
       status: 404,
@@ -148,6 +171,19 @@ export function buildInitiativeHandler(deps: HandlerDeps): RawHandler {
         // the runtime, which validates strictly against that shape.
         const { operation: _op, ...resumeRequest } = body as Record<string, unknown>;
         const result = deps.initiativeRuntime.initiativeResume(resumeRequest);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      if (operation === 'initiative_gate_status') {
+        // `initiative_gate_status` (Task I-5, SPEC-004 FR-9): the second dedicated
+        // read, alongside `initiative_resume` above. Unlike `initiative_resume`
+        // its wire body is the ordinary `{ operation, input }` envelope (the same
+        // shape every other operation uses, so the MCP tool schema stays
+        // generated) — this adapter unwraps `input` (the Initiative lookup) and
+        // hands ONLY that to the dedicated runtime method, never `execute()`.
+        const input = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).input : undefined;
+        const result = deps.initiativeRuntime.initiativeGateStatus(input);
         sendJson(res, 200, result);
         return;
       }

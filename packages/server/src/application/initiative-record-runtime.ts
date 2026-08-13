@@ -14,10 +14,12 @@ import {
   InitiativeRecordStore,
   initiativeOperationRequestSchema,
   initiativeResumeRequestSchema,
+  initiativeGateStatusInputSchema,
   initiativeFieldErrorsFromIssues,
   InitiativeInvalidRequestError,
   type InitiativeRecordEntity,
   type InitiativeResumeResponse,
+  type LifecycleResumeBlock,
 } from '@zhixuan92/multi-model-agent-core';
 import { expandHome } from '../expand-home.js';
 
@@ -73,6 +75,16 @@ const EXECUTE_OPERATIONS = new Set([
   'verification_record',
   'verification_get',
   'verification_list',
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-7): the six phase/focus/contract
+  // mutations. `initiative_gate_status` is excluded — it is the second dedicated
+  // read (Task I-4), served by `initiativeGateStatus()` below, same as
+  // `initiative_resume`.
+  'initiative_phase_enter',
+  'initiative_phase_satisfy',
+  'initiative_phase_reopen',
+  'initiative_phase_skip',
+  'initiative_focus_set',
+  'initiative_set_lifecycle_contract',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -98,15 +110,19 @@ export class InitiativeRecordRuntime {
 
   /**
    * Validates `rawRequest` against the frozen operation envelope and
-   * dispatches every operation except `initiative_resume` (use
-   * {@link initiativeResume} for that): mutating operations go through the
-   * store's single transactional `execute()`; read operations call the
-   * matching one-per-operation store method. Throws `invalid_request` before
-   * any store call for a malformed body, an unknown operation, or a request
-   * naming `initiative_resume`. Every other typed error (`not_found`,
-   * `revision_conflict`, `cross_product_workspace_link`, and — for the Phase
-   * A1 operations added by SPEC-002 — `cross_initiative_evidence_link` and
-   * `cross_initiative_verification`) passes through unchanged from the store.
+   * dispatches every operation except the two dedicated reads,
+   * `initiative_resume` (use {@link initiativeResume}) and
+   * `initiative_gate_status` (use {@link initiativeGateStatus}), each of
+   * which is a server-side assembly of several joined store reads rather
+   * than a single store call: mutating operations go through the store's
+   * single transactional `execute()`; read operations call the matching
+   * one-per-operation store method. Throws `invalid_request` before any
+   * store call for a malformed body, an unknown operation, or a request
+   * naming one of the two dedicated reads. Every other typed error
+   * (`not_found`, `revision_conflict`, `cross_product_workspace_link`, and —
+   * for the Phase A1 operations added by SPEC-002 —
+   * `cross_initiative_evidence_link` and `cross_initiative_verification`)
+   * passes through unchanged from the store.
    */
   execute(rawRequest: unknown): InitiativeRecordEntity | InitiativeRecordEntity[] {
     const parsed = initiativeOperationRequestSchema.safeParse(rawRequest);
@@ -117,7 +133,11 @@ export class InitiativeRecordRuntime {
 
     if (!EXECUTE_OPERATIONS.has(request.operation)) {
       throw new InitiativeInvalidRequestError({
-        field_errors: { operation: ['initiative_resume is not a valid execute() operation; call initiativeResume() instead'] },
+        field_errors: {
+          operation: [
+            `${request.operation} is not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead`,
+          ],
+        },
       });
     }
 
@@ -146,6 +166,16 @@ export class InitiativeRecordRuntime {
       case 'risk_add':
       case 'risk_status':
       case 'verification_record':
+      // SPEC-004 Lifecycle Engine mutations (FR-2 through FR-7): each is one
+      // transactional `store.execute()` call, same pattern as every mutation
+      // above — the store computes the transition/gate rules; this runtime
+      // never does.
+      case 'initiative_phase_enter':
+      case 'initiative_phase_satisfy':
+      case 'initiative_phase_reopen':
+      case 'initiative_phase_skip':
+      case 'initiative_focus_set':
+      case 'initiative_set_lifecycle_contract':
         return this.store.execute(request);
 
       case 'product_get':
@@ -200,12 +230,14 @@ export class InitiativeRecordRuntime {
       case 'verification_list':
         return this.store.listVerificationRuns(request.input);
 
-      // `initiative_resume` is excluded above by EXECUTE_OPERATIONS; this
-      // branch is unreachable but keeps the switch exhaustive under `request`'s
-      // full discriminated-union type.
+      // `initiative_resume` and `initiative_gate_status` are excluded above
+      // by EXECUTE_OPERATIONS; this branch is unreachable but keeps the
+      // switch exhaustive under `request`'s full discriminated-union type.
       default:
         throw new InitiativeInvalidRequestError({
-          field_errors: { operation: ['initiative_resume is not a valid execute() operation; call initiativeResume() instead'] },
+          field_errors: {
+            operation: ['not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead'],
+          },
         });
     }
   }
@@ -255,6 +287,11 @@ export class InitiativeRecordRuntime {
     const risks = this.store.getResumeRisks(initiative.uuid);
     const evidence = this.store.listEvidence({ initiative_id: initiative.uuid });
     const verification = this.store.getLatestVerificationRuns(initiative.uuid);
+    // SPEC-004 Lifecycle Engine (Task I-4): the additive lifecycle block,
+    // assembled by the store from the same synthesized six-phase overlay and
+    // live gate evaluator `initiativeGateStatus` below reuses — one shared
+    // read helper, not two divergent implementations.
+    const lifecycle = this.store.getLifecycleResumeBlock({ uuid: initiative.uuid });
 
     const response: InitiativeResumeResponse = {
       initiative,
@@ -269,6 +306,7 @@ export class InitiativeRecordRuntime {
       risks,
       evidence,
       verification,
+      lifecycle,
       counts: {
         workspaces: workspaces.length,
         resources: resourceCount,
@@ -287,5 +325,24 @@ export class InitiativeRecordRuntime {
       },
     };
     return response;
+  }
+
+  /**
+   * `initiative_gate_status` (Task I-4, SPEC-004 FR-9): the dedicated
+   * read-only lifecycle method, outside the mutation dispatcher exactly like
+   * {@link initiativeResume}. Validates `rawRequest` against the Task I-1
+   * strict `initiativeGateStatusInputSchema` (a bare Initiative lookup — no
+   * mutation controls, no caller provenance, no caller-selected event
+   * limit), then returns the SAME `LifecycleResumeBlock` `initiativeResume`
+   * embeds, assembled by the store's one shared read helper. Throws
+   * `invalid_request` for a malformed lookup before any store call; throws
+   * `not_found` for an unknown Initiative. Performs no write.
+   */
+  initiativeGateStatus(rawRequest: unknown): LifecycleResumeBlock {
+    const parsed = initiativeGateStatusInputSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+    }
+    return this.store.getLifecycleResumeBlock(parsed.data.initiative);
   }
 }

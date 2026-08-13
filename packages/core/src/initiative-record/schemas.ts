@@ -21,6 +21,17 @@ const nonEmptyString = z.string().min(1);
 /** Exact `MMA-INIT-<n>` pattern (FR-6), including the pinned bootstrap key `MMA-INIT-001`. */
 const humanKeySchema = z.string().regex(/^MMA-INIT-\d+$/, 'must match MMA-INIT-<n>');
 
+// --- SPEC-004 Lifecycle Engine primitives (FR-5) ----------------------------
+
+/** The six frozen phases (FR-1). */
+const phaseSchema = z.enum(['discover', 'refine', 'design', 'execute', 'verify', 'deliver']);
+/** `<name>@<version>`, version >= 1, no leading zero (FR-5). */
+const lifecycleContractIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]*@[1-9][0-9]*$/, 'must match <name>@<version>, e.g. default-sdl@1');
+/** snake_case Establishment key (FR-5). */
+const establishmentKeySchema = z.string().regex(/^[a-z][a-z0-9_]*$/, 'must match snake_case establishment key');
+
 export const provenanceSchema = z
   .object({
     actor_type: z.enum(['human', 'agent', 'system']),
@@ -150,6 +161,12 @@ export const initiativeCreateInputSchema = z
     goal: nonEmptyString,
     status: initiativeStatusSchema,
     outcome: initiativeOutcomeSchema,
+    /**
+     * SPEC-004 FR-7: a registered contract id, or omitted — never `null` at create time (`null`
+     * is reserved for the later `initiative_set_lifecycle_contract` clearing mutation). Omitted
+     * defaults the new Initiative to `'default-sdl@1'`.
+     */
+    lifecycle_contract: lifecycleContractIdSchema.optional(),
   })
   .strict()
   .superRefine(refineStatusOutcomePairing);
@@ -211,6 +228,59 @@ export type InitiativeRelateInput = z.infer<typeof initiativeRelateInputSchema>;
 
 export const initiativeRelationsInputSchema = z.object({ initiative_id: uuidSchema }).strict();
 export type InitiativeRelationsInput = z.infer<typeof initiativeRelationsInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-004 Lifecycle Engine — phase/focus mutations, contract reference, and
+// the advisory gate read (FR-2 through FR-9). Every lifecycle request
+// identifies the Initiative through the same `{ uuid?, human_key? }` lookup
+// selector as every other Initiative-scoped operation, nested under
+// `initiative` (frozen "Interfaces / contracts" shape) rather than the flat
+// top-level `uuid`/`human_key` fields older operations use.
+// ---------------------------------------------------------------------------
+
+export const initiativePhaseEnterInputSchema = z
+  .object({ initiative: initiativeLookupSchema, phase: phaseSchema })
+  .strict();
+export type InitiativePhaseEnterInput = z.infer<typeof initiativePhaseEnterInputSchema>;
+
+/** `asserted` is optional; omitted normalizes to `[]` at the store (FR-2, "Interfaces / contracts"). */
+export const initiativePhaseSatisfyInputSchema = z
+  .object({
+    initiative: initiativeLookupSchema,
+    phase: phaseSchema,
+    asserted: z
+      .array(establishmentKeySchema)
+      .optional()
+      .refine((asserted) => asserted === undefined || new Set(asserted).size === asserted.length, {
+        message: 'must not contain duplicate establishment keys',
+      }),
+  })
+  .strict();
+export type InitiativePhaseSatisfyInput = z.infer<typeof initiativePhaseSatisfyInputSchema>;
+
+export const initiativePhaseReopenInputSchema = z
+  .object({ initiative: initiativeLookupSchema, phase: phaseSchema, reason: nonEmptyString })
+  .strict();
+export type InitiativePhaseReopenInput = z.infer<typeof initiativePhaseReopenInputSchema>;
+
+export const initiativePhaseSkipInputSchema = z
+  .object({ initiative: initiativeLookupSchema, phase: phaseSchema, reason: nonEmptyString })
+  .strict();
+export type InitiativePhaseSkipInput = z.infer<typeof initiativePhaseSkipInputSchema>;
+
+export const initiativeFocusSetInputSchema = z
+  .object({ initiative: initiativeLookupSchema, phase: phaseSchema })
+  .strict();
+export type InitiativeFocusSetInput = z.infer<typeof initiativeFocusSetInputSchema>;
+
+/** `lifecycle_contract: null` clears the reference (FR-7); a non-null value must be a registered id. */
+export const initiativeSetLifecycleContractInputSchema = z
+  .object({ initiative: initiativeLookupSchema, lifecycle_contract: lifecycleContractIdSchema.nullable() })
+  .strict();
+export type InitiativeSetLifecycleContractInput = z.infer<typeof initiativeSetLifecycleContractInputSchema>;
+
+export const initiativeGateStatusInputSchema = z.object({ initiative: initiativeLookupSchema }).strict();
+export type InitiativeGateStatusInput = z.infer<typeof initiativeGateStatusInputSchema>;
 
 // ---------------------------------------------------------------------------
 // Task
@@ -599,6 +669,13 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('risk_add', riskAddInputSchema),
   mutating('risk_status', riskStatusInputSchema),
   mutating('verification_record', verificationRecordInputSchema),
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-7).
+  mutating('initiative_phase_enter', initiativePhaseEnterInputSchema),
+  mutating('initiative_phase_satisfy', initiativePhaseSatisfyInputSchema),
+  mutating('initiative_phase_reopen', initiativePhaseReopenInputSchema),
+  mutating('initiative_phase_skip', initiativePhaseSkipInputSchema),
+  mutating('initiative_focus_set', initiativeFocusSetInputSchema),
+  mutating('initiative_set_lifecycle_contract', initiativeSetLifecycleContractInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -663,5 +740,14 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   mutating('verification_record', verificationRecordInputSchema),
   readOnly('verification_get', verificationGetInputSchema),
   readOnly('verification_list', verificationListInputSchema),
+
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-9).
+  mutating('initiative_phase_enter', initiativePhaseEnterInputSchema),
+  mutating('initiative_phase_satisfy', initiativePhaseSatisfyInputSchema),
+  mutating('initiative_phase_reopen', initiativePhaseReopenInputSchema),
+  mutating('initiative_phase_skip', initiativePhaseSkipInputSchema),
+  mutating('initiative_focus_set', initiativeFocusSetInputSchema),
+  mutating('initiative_set_lifecycle_contract', initiativeSetLifecycleContractInputSchema),
+  readOnly('initiative_gate_status', initiativeGateStatusInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

@@ -151,13 +151,14 @@ export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>(
   ),
 );
 
-/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT
- *  `initiative_resume` (its own dedicated tool/handler — see below). Built
- *  from the frozen `INITIATIVE_OPERATIONS` list so a tool name can never name
- *  an operation `execute()` does not also recognise. */
+/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT the two
+ *  dedicated reads with their own tool/handler — `initiative_resume` and
+ *  `initiative_gate_status` (Task I-5, see below). Built from the frozen
+ *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation
+ *  `execute()` does not also recognise. */
 export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
   INITIATIVE_OPERATIONS
-    .filter((operation) => operation !== 'initiative_resume')
+    .filter((operation) => operation !== 'initiative_resume' && operation !== 'initiative_gate_status')
     .map((operation) => [`mma_${operation}`, operation] as const),
 );
 
@@ -309,6 +310,34 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + 'expected_revision and provenance.',
   verification_get: 'Look up a VerificationRun by uuid.',
   verification_list: 'List the VerificationRuns for one AcceptanceCriterion, or for an Initiative as a whole.',
+  // SPEC-004 Lifecycle Engine — advisory phase/focus/contract tracking (FR-2 through FR-9). The
+  // engine records and reports; it never enforces a transition, gate colour, or workflow order.
+  initiative_phase_enter:
+    'Enter a lifecycle phase (discover/refine/design/execute/verify/deliver), moving its Phase '
+    + 'Record to active (from not_started/reopened/skipped/satisfied only). Mutating: pass '
+    + 'expected_revision and provenance.',
+  initiative_phase_satisfy:
+    'Satisfy a lifecycle phase (active|reopened -> satisfied), optionally asserting manual '
+    + 'Establishment keys from the Initiative\'s Lifecycle Contract. Records a gate snapshot '
+    + 'that includes this call\'s own assertions; a red gate does not block the transition. '
+    + 'Mutating: pass expected_revision and provenance.',
+  initiative_phase_reopen:
+    'Reopen a satisfied or skipped lifecycle phase back to reopened, with a required reason; '
+    + 'voids prior manual gate assertions for that phase. Mutating: pass expected_revision and provenance.',
+  initiative_phase_skip:
+    'Skip a not_started or active lifecycle phase, with a required reason. Mutating: pass '
+    + 'expected_revision and provenance.',
+  initiative_focus_set:
+    "Set the Initiative's current focus phase (advisory only — does not affect any Phase "
+    + 'Record state). Mutating: pass expected_revision and provenance.',
+  initiative_set_lifecycle_contract:
+    "Set or clear (null) the Initiative's Lifecycle Contract reference; a non-null id must "
+    + 'already be registered (unknown_lifecycle_contract otherwise). Mutating: pass '
+    + 'expected_revision and provenance.',
+  initiative_gate_status:
+    'Read the live, advisory lifecycle block for an Initiative: focus phase, contract id, all '
+    + 'six phases with their Phase Record state and freshly computed gate, and recent lifecycle '
+    + 'Events. Never written to storage.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,

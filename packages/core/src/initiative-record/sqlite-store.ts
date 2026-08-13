@@ -31,13 +31,16 @@ import {
   CrossInitiativeVerificationError,
   CrossProductWorkspaceLinkError,
   fieldErrorsFromIssues,
+  InvalidPhaseTransitionError,
   InvalidRequestError,
   InvalidTaskTransitionError,
   NotFoundError,
   RevisionConflictError,
   TaskClaimConflictError,
   TaskNotClaimableError,
+  UnknownLifecycleContractError,
 } from './errors.js';
+import { evaluateLifecycleGate } from './lifecycle-gates.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
   initiativeMutationRequestSchema,
@@ -48,9 +51,15 @@ import {
   type EvidenceAddInput,
   type EvidenceLinkInput,
   type InitiativeCreateInput,
+  type InitiativeFocusSetInput,
   type InitiativeLinkWorkspaceInput,
   type InitiativeMutationRequest,
+  type InitiativePhaseEnterInput,
+  type InitiativePhaseReopenInput,
+  type InitiativePhaseSatisfyInput,
+  type InitiativePhaseSkipInput,
   type InitiativeRelateInput,
+  type InitiativeSetLifecycleContractInput,
   type InitiativeStatusInput,
   type InitiativeTaskClaimInput,
   type InitiativeTaskCompleteInput,
@@ -67,6 +76,8 @@ import {
   type WorkspaceCreateInput,
 } from './schemas.js';
 import {
+  DEFAULT_LIFECYCLE_CONTRACT_ID,
+  LIFECYCLE_PHASES,
   VERIFICATION_NON_TERMINAL_STATES,
   VERIFICATION_STALE_ELIGIBLE_STATES,
   VERIFICATION_STATES,
@@ -77,11 +88,17 @@ import {
   type Evidence,
   type EvidenceLink,
   type EvidenceLinkTargetType,
+  type GateStatus,
   type Initiative,
   type InitiativeRecordEntity,
   type InitiativeRelation,
   type InitiativeStatus,
   type InitiativeWorkspaceLink,
+  type LifecycleContract,
+  type LifecycleResumeBlock,
+  type Phase,
+  type PhaseRecord,
+  type PhaseRecordState,
   type Product,
   type Requirement,
   type Resource,
@@ -117,6 +134,10 @@ interface InitiativeRow {
   created_at: string;
   updated_at: string;
   revision: number;
+  /** NEW in schema version 4 (SPEC-004 Lifecycle Engine) — `null` for a legacy or unfocused Initiative. */
+  focus_phase: Phase | null;
+  /** NEW in schema version 4 (SPEC-004 Lifecycle Engine) — `null` for a legacy Initiative or a caller-cleared reference. */
+  lifecycle_contract: string | null;
 }
 
 /** Raw `artifact_refs` table row shape (snake_case columns — internal only). */
@@ -1052,6 +1073,19 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateRiskStatus(request.input, request.expected_revision, request.provenance);
       case 'verification_record':
         return this.mutateVerificationRecord(request.input, request.expected_revision, request.provenance);
+      // SPEC-004 Lifecycle Engine (FR-2 through FR-7).
+      case 'initiative_phase_enter':
+        return this.mutateInitiativePhaseEnter(request.input, request.expected_revision, request.provenance);
+      case 'initiative_phase_satisfy':
+        return this.mutateInitiativePhaseSatisfy(request.input, request.expected_revision, request.provenance);
+      case 'initiative_phase_reopen':
+        return this.mutateInitiativePhaseReopen(request.input, request.expected_revision, request.provenance);
+      case 'initiative_phase_skip':
+        return this.mutateInitiativePhaseSkip(request.input, request.expected_revision, request.provenance);
+      case 'initiative_focus_set':
+        return this.mutateInitiativeFocusSet(request.input, request.expected_revision, request.provenance);
+      case 'initiative_set_lifecycle_contract':
+        return this.mutateInitiativeSetLifecycleContract(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -1381,14 +1415,22 @@ export class InitiativeRecordStore implements InitiativeRepository {
   ): Initiative {
     this.requireCreateRevision(expectedRevision, 'Initiative');
     this.requireExists('products', input.product_id, 'product_id', 'Product');
+    // SPEC-004 FR-7: omitted `lifecycle_contract` defaults to the seeded built-in contract; an
+    // explicit id must already be registered (never `null` here — `null` is reserved for the
+    // later `initiative_set_lifecycle_contract` clearing mutation, and Zod already rejects it).
+    const lifecycleContract = input.lifecycle_contract ?? DEFAULT_LIFECYCLE_CONTRACT_ID;
+    const contractRow = this.db.prepare(`SELECT 1 FROM lifecycle_contracts WHERE id = ?`).get(lifecycleContract);
+    if (!contractRow) {
+      throw new UnknownLifecycleContractError({ lifecycle_contract: lifecycleContract });
+    }
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const humanKey = this.allocateInitiativeHumanKey();
     this.db
       .prepare(
-        `INSERT INTO initiatives (uuid, human_key, product_id, title, goal, status, outcome, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO initiatives (uuid, human_key, product_id, title, goal, status, outcome, created_at, updated_at, revision, focus_phase, lifecycle_contract) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)`,
       )
-      .run(uuid, humanKey, input.product_id, input.title, input.goal, input.status, input.outcome, now, now);
+      .run(uuid, humanKey, input.product_id, input.title, input.goal, input.status, input.outcome, now, now, lifecycleContract);
     const initiative: Initiative = {
       uuid,
       human_key: humanKey,
@@ -1400,6 +1442,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: now,
       updatedAt: now,
       revision: 0,
+      focus_phase: null,
+      lifecycle_contract: lifecycleContract,
     };
     this.writeEvent({
       entity_type: 'Initiative',
@@ -1445,6 +1489,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: row.created_at,
       updatedAt: now,
       revision: nextRevision,
+      focus_phase: row.focus_phase,
+      lifecycle_contract: row.lifecycle_contract,
     };
     this.writeEvent({
       entity_type: 'Initiative',
@@ -2478,6 +2524,462 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return risk;
   }
 
+  // ---------------------------------------------------------------------
+  // SPEC-004 Lifecycle Engine — phase/focus mutations and the contract
+  // reference mutation (Task I-2, FR-2 through FR-7). Every mutation below
+  // runs under the SAME Initiative aggregate revision, idempotency,
+  // provenance, Event, and rollback discipline as every other operation in
+  // `execute()`: a phase transition or focus/contract change increments the
+  // Initiative's own `revision` exactly once and appends exactly one
+  // Initiative Event, whether or not `initiatives.focus_phase` or
+  // `initiatives.lifecycle_contract` itself changed. An illegal source state
+  // throws BEFORE any write — no phase row, Initiative revision, or Event
+  // survives a rejected transition. A gate's colour is never consulted by a
+  // transition legality check: advisory gates never veto a caller-authorized
+  // mutation (FR-8).
+  // ---------------------------------------------------------------------
+
+  /** Legal source `PhaseRecordState`s for each phase mutation (SPEC-004 "Data model" transition table). */
+  private static readonly PHASE_ENTER_LEGAL_SOURCES: readonly PhaseRecordState[] = [
+    'not_started',
+    'reopened',
+    'skipped',
+    'satisfied',
+  ];
+  private static readonly PHASE_SATISFY_LEGAL_SOURCES: readonly PhaseRecordState[] = ['active', 'reopened'];
+  private static readonly PHASE_REOPEN_LEGAL_SOURCES: readonly PhaseRecordState[] = ['satisfied', 'skipped'];
+  private static readonly PHASE_SKIP_LEGAL_SOURCES: readonly PhaseRecordState[] = ['not_started', 'active'];
+
+  /**
+   * Resolves the Initiative through the lookup selector and enforces its `expected_revision`
+   * (preserving `not_found` and `revision_conflict` exactly like every other operation),
+   * exactly like the SPEC-003 task operations' own selector resolution. Every lifecycle
+   * mutation shares this one entry point.
+   */
+  private requireInitiativeForLifecycle(
+    lookup: { uuid?: string; human_key?: string },
+    expectedRevision: number,
+  ): InitiativeRow {
+    const row = this.findInitiativeRow(lookup.uuid, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    if (row.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Initiative',
+        entity_id: row.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: row.revision,
+      });
+    }
+    return row;
+  }
+
+  /**
+   * The shared six-phase overlay helper (SPEC-004 "Data model"): the single source of
+   * synthesized `not_started` defaults for both mutations (here) and later reads (Task I-4).
+   * It starts with every canonical phase, then overlays persisted phase records for this
+   * Initiative. Callers select the phase they need from the complete overlay.
+   */
+  private getPhaseStates(initiativeId: string): Record<Phase, PhaseRecordState> {
+    const states = Object.fromEntries(LIFECYCLE_PHASES.map((phase) => [phase, 'not_started'])) as Record<
+      Phase,
+      PhaseRecordState
+    >;
+    const rows = this.db
+      .prepare(`SELECT phase, state FROM phase_records WHERE initiative_id = ?`)
+      .all(initiativeId) as Array<{ phase: string; state: string }>;
+    for (const row of rows) {
+      if (!LIFECYCLE_PHASES.includes(row.phase as Phase)) {
+        throw new InvalidRequestError({
+          field_errors: { phase_records: [`contains unknown phase '${row.phase}' for Initiative ${initiativeId}`] },
+          message: `invalid_request: corrupted phase_records row contains unknown phase '${row.phase}'`,
+        });
+      }
+      if (!['not_started', 'active', 'satisfied', 'reopened', 'skipped'].includes(row.state)) {
+        throw new InvalidRequestError({
+          field_errors: { phase_records: [`contains unknown state '${row.state}' for phase '${row.phase}'`] },
+          message: `invalid_request: corrupted phase_records row contains unknown state '${row.state}'`,
+        });
+      }
+      states[row.phase as Phase] = row.state as PhaseRecordState;
+    }
+    return states;
+  }
+
+  /** Writes (inserting or updating) exactly one `phase_records` row for `(initiative_id, phase)`. */
+  private upsertPhaseRecord(initiativeId: string, phase: Phase, state: PhaseRecordState): void {
+    this.db
+      .prepare(
+        `INSERT INTO phase_records (initiative_id, phase, state) VALUES (?, ?, ?)
+         ON CONFLICT(initiative_id, phase) DO UPDATE SET state = excluded.state`,
+      )
+      .run(initiativeId, phase, state);
+  }
+
+  /** Increments the Initiative aggregate's own `revision` exactly once and stamps `updated_at`. Returns the new revision. */
+  private bumpInitiativeRevision(row: InitiativeRow, now: string): number {
+    const nextRevision = row.revision + 1;
+    this.db.prepare(`UPDATE initiatives SET updated_at = ?, revision = ? WHERE uuid = ?`).run(now, nextRevision, row.uuid);
+    return nextRevision;
+  }
+
+  /** Loads and parses a registered Lifecycle Contract's `definition_json`. Throws `unknown_lifecycle_contract` for an unregistered id. */
+  private getLifecycleContractOrThrow(id: string): LifecycleContract {
+    const row = this.db.prepare(`SELECT definition_json FROM lifecycle_contracts WHERE id = ?`).get(id) as
+      | { definition_json?: string }
+      | undefined;
+    if (!row || row.definition_json === undefined) {
+      throw new UnknownLifecycleContractError({ lifecycle_contract: id });
+    }
+    try {
+      return JSON.parse(row.definition_json) as LifecycleContract;
+    } catch {
+      throw new InvalidRequestError({
+        field_errors: { lifecycle_contract: [`registered contract '${id}' has malformed stored definition JSON`] },
+        message: `invalid_request: lifecycle contract '${id}' has malformed stored definition JSON`,
+      });
+    }
+  }
+
+  /**
+   * Validates `initiative_phase_satisfy`'s `asserted` keys against the SELECTED contract's
+   * phase Establishments (SPEC-004 "Data model"): every key must be one of that phase's
+   * required Establishment keys; a `null` contract accepts only an empty list. Duplicate
+   * keys are already rejected by Task I-1's Zod schema before this runs.
+   */
+  private validateAssertedKeys(asserted: readonly string[], contract: LifecycleContract | null, phase: Phase): void {
+    if (!contract) {
+      if (asserted.length > 0) {
+        throw new InvalidRequestError({
+          field_errors: { asserted: ["must be empty: this Initiative's lifecycle_contract is null"] },
+          message: 'invalid_request: asserted keys require an Initiative with a non-null lifecycle_contract',
+        });
+      }
+      return;
+    }
+    const validKeys = new Set((contract.phases[phase]?.required ?? []).map((establishment) => establishment.key));
+    for (const key of asserted) {
+      if (!validKeys.has(key)) {
+        throw new InvalidRequestError({
+          field_errors: { asserted: [`unknown establishment key '${key}' for phase '${phase}'`] },
+          message: `invalid_request: asserted key ${key} is not a required Establishment of phase ${phase} in contract ${contract.id}`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Evaluates the live advisory gate for `phase` (Task I-3's pure evaluator, called with
+   * already-read live record data — this module remains the only database owner). When
+   * `prospectiveSatisfyAsserted` is supplied, a not-yet-persisted `phase_satisfied` Event at
+   * the current mutation's own future `event_sequence` is appended first, so the current
+   * request's own (already-validated) assertions count toward its own snapshot (SPEC-004
+   * "Data model" — "computed AFTER counting the current request's asserted keys as valid").
+   */
+  private evaluateGate(
+    initiativeId: string,
+    phase: Phase,
+    contract: LifecycleContract | null,
+    prospectiveSatisfyAsserted?: readonly string[],
+  ): GateStatus {
+    const requirements = this.listRequirements({ initiative_id: initiativeId });
+    const acceptanceCriteria = this.listAcceptanceCriteria({ initiative_id: initiativeId });
+    const decisions = this.listDecisions({ initiative_id: initiativeId });
+    const events = this.listEvents({ initiative_id: initiativeId });
+    const effectiveEvents =
+      prospectiveSatisfyAsserted !== undefined
+        ? [...events, this.buildProspectiveSatisfiedEvent(initiativeId, phase, prospectiveSatisfyAsserted)]
+        : events;
+    return evaluateLifecycleGate({ contract, phase, requirements, acceptanceCriteria, decisions, events: effectiveEvents });
+  }
+
+  /** A not-yet-persisted `phase_satisfied` Event standing in for the current mutation's own future Event, for snapshot purposes only. Never written to `events`. */
+  private buildProspectiveSatisfiedEvent(initiativeId: string, phase: Phase, asserted: readonly string[]): Event {
+    return {
+      event_sequence: this.nextEventSequence(),
+      entity_type: 'Initiative',
+      entity_id: initiativeId,
+      initiative_id: initiativeId,
+      event_type: 'phase_satisfied',
+      payload: { phase, previous_state: 'active', new_state: 'satisfied', asserted: [...asserted], gate_snapshot: null },
+      actor_type: 'system',
+      actor_id: 'lifecycle-gate-evaluator',
+      interface: 'internal',
+      initiated_by: 'lifecycle-gate-evaluator',
+      authorized_by: 'lifecycle-gate-evaluator',
+      timestamp: '1970-01-01T00:00:00.000Z',
+      source: 'internal',
+    };
+  }
+
+  /**
+   * `initiative_phase_enter` (SPEC-004 "Data model" transition table): `not_started |
+   * reopened | skipped | satisfied -> active`. No `gate_snapshot` — that field is frozen to
+   * `phase_satisfied` and `focus_changed` only (`INITIATIVE_EVENT_PAYLOAD_KEYS`).
+   */
+  private mutateInitiativePhaseEnter(
+    input: InitiativePhaseEnterInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): PhaseRecord {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    const previousState = this.getPhaseStates(row.uuid)[input.phase];
+    if (!InitiativeRecordStore.PHASE_ENTER_LEGAL_SOURCES.includes(previousState)) {
+      throw new InvalidPhaseTransitionError({
+        initiative_id: row.uuid,
+        phase: input.phase,
+        source_state: previousState,
+        target_state: 'active',
+      });
+    }
+    this.upsertPhaseRecord(row.uuid, input.phase, 'active');
+    this.bumpInitiativeRevision(row, provenance.timestamp);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'phase_entered',
+      payload: { phase: input.phase, previous_state: previousState, new_state: 'active' },
+      provenance,
+    });
+    return { initiative_id: row.uuid, phase: input.phase, state: 'active' };
+  }
+
+  /**
+   * `initiative_phase_satisfy` (SPEC-004 "Data model" transition table): `active | reopened
+   * -> satisfied`. Validates `asserted` (optional; normalizes to `[]`) against the selected
+   * contract's phase Establishments BEFORE the snapshot calculation and the Event write, then
+   * computes `gate_snapshot` counting this request's own assertions as valid. `asserted` and
+   * `gate_snapshot` are always recorded on the Event, whichever colour the gate reads.
+   */
+  private mutateInitiativePhaseSatisfy(
+    input: InitiativePhaseSatisfyInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): PhaseRecord {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    const previousState = this.getPhaseStates(row.uuid)[input.phase];
+    if (!InitiativeRecordStore.PHASE_SATISFY_LEGAL_SOURCES.includes(previousState)) {
+      throw new InvalidPhaseTransitionError({
+        initiative_id: row.uuid,
+        phase: input.phase,
+        source_state: previousState,
+        target_state: 'satisfied',
+      });
+    }
+    const asserted = input.asserted ?? [];
+    const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    this.validateAssertedKeys(asserted, contract, input.phase);
+    const gateSnapshot = this.evaluateGate(row.uuid, input.phase, contract, asserted);
+    this.upsertPhaseRecord(row.uuid, input.phase, 'satisfied');
+    this.bumpInitiativeRevision(row, provenance.timestamp);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'phase_satisfied',
+      payload: {
+        phase: input.phase,
+        previous_state: previousState,
+        new_state: 'satisfied',
+        asserted,
+        gate_snapshot: gateSnapshot,
+      },
+      provenance,
+    });
+    return { initiative_id: row.uuid, phase: input.phase, state: 'satisfied' };
+  }
+
+  /**
+   * `initiative_phase_reopen` (SPEC-004 "Data model" transition table): `satisfied | skipped
+   * -> reopened`. `reason` is already validated non-empty by Task I-1's Zod schema before
+   * this method runs.
+   */
+  private mutateInitiativePhaseReopen(
+    input: InitiativePhaseReopenInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): PhaseRecord {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    const previousState = this.getPhaseStates(row.uuid)[input.phase];
+    if (!InitiativeRecordStore.PHASE_REOPEN_LEGAL_SOURCES.includes(previousState)) {
+      throw new InvalidPhaseTransitionError({
+        initiative_id: row.uuid,
+        phase: input.phase,
+        source_state: previousState,
+        target_state: 'reopened',
+      });
+    }
+    this.upsertPhaseRecord(row.uuid, input.phase, 'reopened');
+    this.bumpInitiativeRevision(row, provenance.timestamp);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'phase_reopened',
+      payload: { phase: input.phase, previous_state: previousState, new_state: 'reopened', reason: input.reason },
+      provenance,
+    });
+    return { initiative_id: row.uuid, phase: input.phase, state: 'reopened' };
+  }
+
+  /**
+   * `initiative_phase_skip` (SPEC-004 "Data model" transition table): `not_started | active
+   * -> skipped`. `reason` is already validated non-empty by Task I-1's Zod schema before this
+   * method runs.
+   */
+  private mutateInitiativePhaseSkip(
+    input: InitiativePhaseSkipInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): PhaseRecord {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    const previousState = this.getPhaseStates(row.uuid)[input.phase];
+    if (!InitiativeRecordStore.PHASE_SKIP_LEGAL_SOURCES.includes(previousState)) {
+      throw new InvalidPhaseTransitionError({
+        initiative_id: row.uuid,
+        phase: input.phase,
+        source_state: previousState,
+        target_state: 'skipped',
+      });
+    }
+    this.upsertPhaseRecord(row.uuid, input.phase, 'skipped');
+    this.bumpInitiativeRevision(row, provenance.timestamp);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'phase_skipped',
+      payload: { phase: input.phase, previous_state: previousState, new_state: 'skipped', reason: input.reason },
+      provenance,
+    });
+    return { initiative_id: row.uuid, phase: input.phase, state: 'skipped' };
+  }
+
+  /**
+   * `initiative_focus_set` (SPEC-004 "Data model"): any current Phase Record state is
+   * always a legal source — focus is caller-declared attention, not a workflow gate. Records
+   * the live gate for the target phase AT MUTATION TIME (no prospective Event — this
+   * mutation writes no Phase Record).
+   */
+  private mutateInitiativeFocusSet(
+    input: InitiativeFocusSetInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Initiative {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    const previousFocusPhase = row.focus_phase;
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE initiatives SET focus_phase = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.phase, now, nextRevision, row.uuid);
+    const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    const gateSnapshot = this.evaluateGate(row.uuid, input.phase, contract);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'focus_changed',
+      payload: {
+        phase: input.phase,
+        previous_focus_phase: previousFocusPhase,
+        new_focus_phase: input.phase,
+        gate_snapshot: gateSnapshot,
+      },
+      provenance,
+    });
+    const updatedRow = this.findInitiativeRow(row.uuid, undefined)!;
+    return mapInitiativeRow(updatedRow);
+  }
+
+  /**
+   * `initiative_set_lifecycle_contract` (SPEC-004 FR-7): a non-null `lifecycle_contract` must
+   * already be registered (`unknown_lifecycle_contract` otherwise); `null` clears the
+   * reference. Always legal regardless of any Phase Record state.
+   */
+  private mutateInitiativeSetLifecycleContract(
+    input: InitiativeSetLifecycleContractInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Initiative {
+    const row = this.requireInitiativeForLifecycle(input.initiative, expectedRevision);
+    if (input.lifecycle_contract !== null) {
+      const exists = this.db.prepare(`SELECT 1 FROM lifecycle_contracts WHERE id = ?`).get(input.lifecycle_contract);
+      if (!exists) {
+        throw new UnknownLifecycleContractError({ lifecycle_contract: input.lifecycle_contract });
+      }
+    }
+    const previousContract = row.lifecycle_contract;
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE initiatives SET lifecycle_contract = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.lifecycle_contract, now, nextRevision, row.uuid);
+    this.writeEvent({
+      entity_type: 'Initiative',
+      entity_id: row.uuid,
+      initiative_id: row.uuid,
+      event_type: 'lifecycle_contract_set',
+      payload: { previous_lifecycle_contract: previousContract, new_lifecycle_contract: input.lifecycle_contract },
+      provenance,
+    });
+    const updatedRow = this.findInitiativeRow(row.uuid, undefined)!;
+    return mapInitiativeRow(updatedRow);
+  }
+
+  /** Bounded window for `LifecycleResumeBlock.recent_lifecycle_events` (Task I-4, SPEC-004 "Data model" — no caller-selected limit exists for this read; the store fixes an internal policy instead). */
+  private static readonly LIFECYCLE_EVENTS_WINDOW = 20;
+
+  /** The exact lifecycle Event types surfaced in `recent_lifecycle_events` — every other Initiative Event type (e.g. `task_completed`, `requirement_added`) is excluded, matching `INITIATIVE_EVENT_TYPES`'s SPEC-004 entries. */
+  private static readonly LIFECYCLE_EVENT_TYPES: ReadonlySet<string> = new Set([
+    'phase_entered',
+    'phase_satisfied',
+    'phase_reopened',
+    'phase_skipped',
+    'focus_changed',
+    'lifecycle_contract_set',
+  ]);
+
+  /**
+   * Assembles the additive `LifecycleResumeBlock` `initiative_resume` and the dedicated
+   * `initiative_gate_status` read both return (Task I-4, FR-9, FR-13). Resolves the
+   * Initiative through the same lookup selector as every other read (throws `not_found` for
+   * an unknown lookup, exactly like {@link getInitiative}); overlays the shared six-phase
+   * state via {@link getPhaseStates} (the single source of synthesized `not_started`
+   * defaults, reused unchanged from Task I-2); evaluates one fresh, unpersisted gate per
+   * phase with {@link evaluateGate} (no prospective assertion — this is a read, never a
+   * mutation); and returns the newest Initiative-scoped lifecycle Events bounded by the
+   * internal fixed window. Performs no write of any kind — every value comes from an
+   * already-implemented Task I-2/I-3 read helper.
+   */
+  getLifecycleResumeBlock(lookup: { uuid?: string; human_key?: string }): LifecycleResumeBlock {
+    const row = this.findInitiativeRow(lookup.uuid, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    const phaseStates = this.getPhaseStates(row.uuid);
+    const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    const phases = LIFECYCLE_PHASES.map((phase) => ({
+      phase,
+      state: phaseStates[phase],
+      gate: this.evaluateGate(row.uuid, phase, contract),
+    }));
+    const lifecycleEvents = this.listEvents({ initiative_id: row.uuid }).filter((event) =>
+      InitiativeRecordStore.LIFECYCLE_EVENT_TYPES.has(event.event_type),
+    );
+    const recentLifecycleEvents = [...lifecycleEvents]
+      .reverse()
+      .slice(0, InitiativeRecordStore.LIFECYCLE_EVENTS_WINDOW);
+    return {
+      focus_phase: row.focus_phase,
+      contract: row.lifecycle_contract,
+      phases,
+      recent_lifecycle_events: recentLifecycleEvents,
+    };
+  }
+
   /** Closes the store's own `DatabaseSync` connection. Idempotent. */
   close(): void {
     if (this.closed) return;
@@ -2559,6 +3061,8 @@ function mapInitiativeRow(row: InitiativeRow): Initiative {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: Number(row.revision),
+    focus_phase: row.focus_phase,
+    lifecycle_contract: row.lifecycle_contract,
   };
 }
 
