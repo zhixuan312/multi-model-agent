@@ -39,11 +39,13 @@ import {
   TaskClaimConflictError,
   TaskNotClaimableError,
   UnknownLifecycleContractError,
+  UnknownMethodError,
 } from './errors.js';
 import { evaluateLifecycleGate } from './lifecycle-gates.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
   initiativeMutationRequestSchema,
+  methodDeclarationSchema,
   type AcceptanceCriterionAddInput,
   type ArtifactRegisterInput,
   type DecisionRecordInput,
@@ -96,6 +98,7 @@ import {
   type InitiativeWorkspaceLink,
   type LifecycleContract,
   type LifecycleResumeBlock,
+  type MethodDeclaration,
   type Phase,
   type PhaseRecord,
   type PhaseRecordState,
@@ -566,6 +569,71 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new NotFoundError({ entity_type: 'VerificationRun', lookup: lookup.uuid });
     }
     return mapVerificationRunRow(row);
+  }
+
+  // ---------------------------------------------------------------------
+  // SPEC-005 Method Registry reads (Task I-2, ← AC-1.3). `methods` is seeded
+  // once by migration 5 (`INSERT OR IGNORE`, exactly the nine frozen
+  // built-in declarations) and never written by any runtime path — these
+  // two reads are the store's only access to that table. `method_get` and
+  // `method_list` dispatch through `execute()`'s read map is Task I-3's
+  // scope; this task only makes the reads themselves true.
+  // ---------------------------------------------------------------------
+
+  /** `method_get` — `id`. Throws `unknown_method` for an unregistered identifier. */
+  getMethod(lookup: { id: string }): MethodDeclaration {
+    return this.getMethodOrThrow(lookup.id);
+  }
+
+  /** `method_list` — every registered declaration, in stable ascending identifier order. */
+  listMethods(): MethodDeclaration[] {
+    const rows = this.db.prepare(`SELECT id, definition_json FROM methods ORDER BY id ASC`).all() as unknown as Array<{
+      id: string;
+      definition_json: string;
+    }>;
+    return rows.map((row) => this.parseMethodDeclaration(row.id, row.definition_json));
+  }
+
+  /** Loads a registered Method's `definition_json`. Throws `unknown_method` for an unregistered id. */
+  private getMethodOrThrow(id: string): MethodDeclaration {
+    const row = this.db.prepare(`SELECT definition_json FROM methods WHERE id = ?`).get(id) as
+      | { definition_json?: string }
+      | undefined;
+    if (!row || row.definition_json === undefined) {
+      throw new UnknownMethodError({ method: id });
+    }
+    return this.parseMethodDeclaration(id, row.definition_json);
+  }
+
+  /**
+   * Parses and strictly re-validates a stored Method's `definition_json` against
+   * {@link methodDeclarationSchema} rather than trusting the stored bytes as-is — a store read
+   * never returns a partial or malformed declaration. Malformed JSON or a shape that fails the
+   * strict schema throws `invalid_request`; both are store-corruption conditions that cannot
+   * occur through any caller-visible write path (there is no Method write path), so this only
+   * guards against a directly edited or otherwise corrupted `initiatives.db`.
+   */
+  private parseMethodDeclaration(id: string, definitionJson: string): MethodDeclaration {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(definitionJson);
+    } catch {
+      throw new InvalidRequestError({
+        field_errors: { method: [`registered Method '${id}' has malformed stored definition JSON`] },
+        message: `invalid_request: Method '${id}' has malformed stored definition JSON`,
+      });
+    }
+    const result = methodDeclarationSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new InvalidRequestError({ field_errors: fieldErrorsFromIssues(result.error.issues) });
+    }
+    if (result.data.id !== id) {
+      throw new InvalidRequestError({
+        field_errors: { method: [`registered Method row '${id}' does not match declaration id '${result.data.id}'`] },
+        message: `invalid_request: Method row '${id}' does not match its stored declaration id`,
+      });
+    }
+    return result.data;
   }
 
   // ---------------------------------------------------------------------
