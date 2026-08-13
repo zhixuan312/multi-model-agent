@@ -232,6 +232,7 @@ export {
   initiativeFocusSetInputSchema,
   initiativeSetLifecycleContractInputSchema,
   initiativeGateStatusInputSchema,
+  evaluateLifecycleGate,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -285,4 +286,5 @@ export type {
   InitiativeFocusSetInput,
   InitiativeSetLifecycleContractInput,
   InitiativeGateStatusInput,
+  EvaluateLifecycleGateInput,
 } from './initiative-record/index.js';

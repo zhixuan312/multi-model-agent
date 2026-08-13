@@ -2663,9 +2663,6 @@ export class InitiativeRecordStore implements InitiativeRepository {
     contract: LifecycleContract | null,
     prospectiveSatisfyAsserted?: readonly string[],
   ): GateStatus {
-    if (!contract) {
-      return { status: 'green', missing: [], note: 'No lifecycle contract is set.' };
-    }
     const requirements = this.listRequirements({ initiative_id: initiativeId });
     const acceptanceCriteria = this.listAcceptanceCriteria({ initiative_id: initiativeId });
     const decisions = this.listDecisions({ initiative_id: initiativeId });

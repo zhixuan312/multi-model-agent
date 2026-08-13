@@ -31,6 +31,8 @@
 export * from './types.js';
 export * from './schemas.js';
 export * from './errors.js';
+export { evaluateLifecycleGate } from './lifecycle-gates.js';
+export type { EvaluateLifecycleGateInput } from './lifecycle-gates.js';
 export type {
   InitiativeRepository,
   InitiativeWorkspaceLinkRead,
