@@ -414,7 +414,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: 'mma_execution_get',
     description:
       'Get the current state of an MMA execution. Running executions return identity (type, subtype '
-      + '[audit only], practice [plan/execute_plan/review/debug only], cwd) plus progress '
+      + '[audit only], cwd) plus progress '
       + '(phase, elapsed, runningHeadline, cancellationRequested); terminal executions return the '
       + 'full result envelope. Terminal results survive daemon restarts.',
     inputSchema: {

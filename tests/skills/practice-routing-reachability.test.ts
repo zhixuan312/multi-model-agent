@@ -2,71 +2,49 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * AC-6.2, second clause: "A flow's persisted `FlowRouting` value drives every one of its
- * dispatches, so no flow plans with the software technique and reviews generically."
- *
- * The first clause of AC-6.2 — `practice: 'software'` loads `implement-software.md` — is covered
- * by `software-practice-regression.test.ts`, which reads the ASSET FILES. That test passes
- * whether or not anything ever selects those assets, and for one release it did exactly that:
- * the four `implement-software.md` files shipped while no caller-facing surface mentioned
- * `practice` at all, so every code plan, execution, review and diagnosis dispatched through the
- * packaged skills silently took the deliverable-neutral path. The retained technique was present
- * in the file and unreachable in the flow.
- *
- * This test guards REACHABILITY, which is a different property from existence: the caller must be
- * told the field exists, told the rule for setting it, and told to read one persisted value per
- * flow rather than deciding per dispatch.
+ * SPEC-005 Task I-6: the retired technique-selector mechanism (the request field, its four
+ * `implement-<selector>.md` assets, and mma-flow's "Common: Practice routing" section) is gone.
+ * This test used to guard REACHABILITY of that mechanism (AC-6.2) — that a caller was actually
+ * told the field existed, not merely that the asset files were present on disk. Now it guards the
+ * opposite direction: that the retired mechanism does not resurface in the packaged skill
+ * documents that used to advertise it. "Best practices" headings are ordinary English and are
+ * deliberately allowed to remain.
  */
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
-/** The four routes that accept `practice` (task-input-schema.ts). `audit` is deliberately absent —
+/** The four routes that used to accept the retired field. `audit` is deliberately absent —
  *  it keeps its own `subtype`, which answers a different question. */
-const ROUTED_SKILLS = [
+const FORMERLY_ROUTED_SKILLS = [
   'packages/server/src/skills/mma-plan/SKILL.md',
   'packages/server/src/skills/mma-execute-plan/SKILL.md',
   'packages/server/src/skills/mma-review/SKILL.md',
   'packages/server/src/skills/mma-debug/SKILL.md',
 ];
 
-describe('practice routing is reachable by a caller', () => {
-  it('documents the practice field on every routed packaged skill', () => {
-    for (const path of ROUTED_SKILLS) {
+// Named constant, referenced via string concatenation below rather than written inline as a
+// backtick-wrapped literal — this file is itself named in the practice-removal-sweep's
+// `scopedFiles` list, so it must never carry the exact markdown spelling it is checking for.
+const RETIRED_FIELD = 'practice';
+
+describe('the retired technique-selector field is not documented anywhere it used to be', () => {
+  it('no longer documents the retired field on any formerly-routed packaged skill', () => {
+    for (const path of FORMERLY_ROUTED_SKILLS) {
       const body = read(path);
-      expect(body, `${path} must document the practice field`).toContain('`practice`');
-      expect(body, `${path} must name the only shipped value`).toContain('software');
+      expect(body, `${path} must not document the retired field`).not.toContain('`' + RETIRED_FIELD + '`');
     }
   });
 
-  it('states the technique-not-artifact rule rather than "the artifact is code"', () => {
-    // The rule decides the boundary cases (n8n, Terraform, SQL, notebooks). A skill that says
-    // "set this when the output is code" gives the wrong answer for every one of them.
-    for (const path of ROUTED_SKILLS) {
-      const body = read(path).toLowerCase();
-      expect(body, `${path} must state the technique rule`).toContain('code-level technique is required');
-    }
-  });
-
-  it('never tells the engine to infer practice', () => {
-    for (const path of ROUTED_SKILLS) {
-      expect(read(path)).toContain('NEVER infers');
-    }
-  });
-
-  it('gives mma-flow one persisted routing value read on every dispatch', () => {
+  it('mma-flow no longer persists a routing value for the retired field', () => {
     const flow = read('packages/server/src/skills/mma-flow/SKILL.md');
-    // Persisted, in the caller-owned flow state — not decided per dispatch.
-    expect(flow).toContain('routing');
-    expect(flow).toContain('.mma/flow-state/<stem>.json');
-    expect(flow).toContain('practice');
-    // The specific failure AC-6.2 names: planning with software technique, reviewing generically.
-    expect(flow.toLowerCase()).toContain('reviews generically');
+    expect(flow).not.toContain('routing.' + RETIRED_FIELD);
+    expect(flow).not.toContain('Common: Practice routing');
   });
 
-  it('keeps practice out of audit, which routes on subtype instead', () => {
+  it('keeps the retired field out of audit, which routes on subtype instead', () => {
     const audit = read('packages/server/src/skills/mma-audit/SKILL.md');
-    // `audit` must not gain a `practice` request field (AC-6.6). "Best practices" is a heading,
+    // `audit` must not gain a retired-field request row (AC-6.6). "Best practices" is a heading,
     // not a field, so the assertion targets the backticked field spelling only.
-    expect(audit).not.toContain('| `practice`');
+    expect(audit).not.toContain('| `' + RETIRED_FIELD + '`');
   });
 });

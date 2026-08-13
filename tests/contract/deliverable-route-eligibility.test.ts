@@ -7,13 +7,13 @@ import { taskInputSchema, canonicalContractDigest } from '@zhixuan92/multi-model
  * The task-input union is a STRICT discriminated union, so each arm must opt in to
  * `deliverable` individually. A missing `...deliverableField` on one arm is therefore a silent
  * per-route defect: the other three arms keep working, and only that one route rejects a valid
- * contract as an unrecognised key. `practice` eligibility already has this shape of test
- * (`practice-routing-contract.test.ts`, all four routes plus the `audit` rejection); the
- * equivalent for `deliverable` was asserted for `plan` alone, which left three accepting routes
- * and every rejecting route unlocked.
+ * contract as an unrecognised key. The retired technique-selector field's eligibility used to
+ * have this shape of test (all four routes plus the `audit` rejection); the equivalent for
+ * `deliverable` was asserted for `plan` alone, which left three accepting routes and every
+ * rejecting route unlocked.
  *
- * The two lists differ on purpose and the difference is load-bearing: `debug` routes on
- * `practice` but never carries a contract, because diagnosis is not a delivery stage.
+ * The two lists differ on purpose and the difference is load-bearing: `debug` never carries a
+ * contract, because diagnosis is not a delivery stage.
  */
 
 const CONTENT = {
@@ -56,7 +56,7 @@ const BODY: Record<string, Record<string, unknown>> = {
 
 /** The four SDLC routes a contract governs (task-input-schema.ts). */
 const ACCEPTS = ['spec', 'plan', 'execute_plan', 'review'];
-/** Every other route, including `debug` — which takes `practice` but never a contract. */
+/** Every other route, including `debug` — never a contract. */
 const REJECTS = ['debug', 'investigate', 'audit', 'delegate', 'research'];
 
 describe('deliverable eligibility per route', () => {

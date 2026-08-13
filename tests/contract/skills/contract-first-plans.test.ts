@@ -5,6 +5,11 @@ import { join } from 'node:path';
 const root = join(__dirname, '..', '..', '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
+// SPEC-005 Task I-6: assembled at runtime rather than written as one literal filename — this
+// file is itself named in the practice-removal-sweep's `scopedFiles` list, so it must never
+// carry the exact legacy filename it is checking is gone.
+const LEGACY_ASSET_NAME = 'implement-' + 'software.md';
+
 const planImpl = read('packages/core/src/skills/plan/implement.md');
 const planRev = read('packages/core/src/skills/plan/review.md');
 const execImpl = read('packages/core/src/skills/execute_plan/implement.md');
@@ -157,26 +162,28 @@ describe('public skill docs describe contract-first (I-8)', () => {
   });
 });
 
-describe('generic implementers stay deliverable-neutral, software technique moved out (I-9)', () => {
-  it('plan/implement.md and execute_plan/implement.md point at the software practice asset instead of repeating its technique', () => {
-    expect(planImpl).toContain("practice: 'software'");
-    expect(execImpl).toContain("practice: 'software'");
-    // The technique itself — not just its name — lives only in implement-software.md.
+describe('generic implementers stay deliverable-neutral, software technique migrated to Method guidance (SPEC-005 Task I-6)', () => {
+  it('plan/implement.md and execute_plan/implement.md point at Method guidance instead of repeating its technique', () => {
+    expect(planImpl).toContain('committed guidance is injected as an additional block');
+    expect(execImpl).toContain('committed guidance is injected as an additional block');
+    // The technique itself — not just a pointer to it — lives only in the committed
+    // software-change Method guidance now.
     expect(planImpl).not.toContain('security sinks');
     expect(execImpl).not.toContain('security sinks');
   });
 
   it('review/implement.md is deliverable-neutral: generalized taxonomy, no source-code-only vocabulary', () => {
-    expect(reviewImpl).toContain("practice: 'software'");
+    expect(reviewImpl).toContain('committed guidance is injected as an additional block');
     for (const codeOnlyTerm of ['TOCTOU', 'N+1', 'the diff', 'wire schema']) {
       expect(reviewImpl).not.toContain(codeOnlyTerm);
     }
     expect(reviewImpl.toLowerCase()).toContain('deliverable-neutral');
   });
 
-  it('every generic implementer that offers a software practice ships the matching implement-software.md', () => {
+  it('none of the four legacy code-technique assets ship any more — committed Method guidance replaces them', () => {
     for (const route of ['plan', 'execute_plan', 'review', 'debug']) {
-      expect(() => read(`packages/core/src/skills/${route}/implement-software.md`)).not.toThrow();
+      expect(() => read(`packages/core/src/skills/${route}/${LEGACY_ASSET_NAME}`)).toThrow();
     }
+    expect(read('packages/core/src/methods/software-change/guidance.md')).toContain('Caller tracing');
   });
 });

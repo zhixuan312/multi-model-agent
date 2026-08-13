@@ -99,9 +99,9 @@ Findings that fail any check should be downgraded or dropped. However, partial-e
 
 ### Deliverable-specific technique
 
-This diagnosis is deliverable-neutral by default. When the caller's deliverable is code, deeper
-code-specific technique is available through the `practice: 'software'` diagnostic asset — use it in
-addition to, not instead of, the five angles above.
+This diagnosis is deliverable-neutral by default. When the caller or linked Task names a registered
+Method (e.g. `software-change@1`), its committed guidance is injected as an additional block —
+use it in addition to, not instead of, the five angles above.
 
 ## Output
 

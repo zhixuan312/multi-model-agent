@@ -141,41 +141,12 @@ function subtypeOf(input: TaskInput): string | null {
 }
 
 /**
- * The `practice` a task input carries, or `null`.
- *
- * Only `plan`, `execute_plan`, `review`, and `debug` can declare one (the input
- * schema is strict), and only when the caller explicitly asked for it — the engine
- * never infers `practice` from the workspace, the cwd's git state, or artifact
- * extensions. Read the same way `subtypeOf` reads `subtype`, for the same reason:
- * one reader keeps a running task and its terminal envelope in agreement by
- * construction.
- */
-function practiceOf(input: TaskInput): string | null {
-  const value = (input as Record<string, unknown>).practice;
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-/**
- * The skill-loader key for this task, or `undefined`.
- *
- * `audit` selects its criteria set via `subtype`; `plan`/`execute_plan`/`review`/
- * `debug` select a technique via `practice`. The schema's strict discriminated
- * union guarantees at most one of the two fields is ever present on a given input,
- * so reading "whichever field the arm carries" is unambiguous. `loadSkill()` takes
- * a plain string and does its own `implement-<key>.md` filename selection — this
- * function only decides what string (if any) to hand it.
- */
-function skillSelectorOf(input: TaskInput): string | undefined {
-  return subtypeOf(input) ?? practiceOf(input) ?? undefined;
-}
-
-/**
  * The explicit request `method` a task input carries, or `null` (SPEC-005).
  *
  * Every one of the twelve `TASK_TYPES` arms accepts `method?: string` (shared
  * `commonFields`), and `taskInputSchema` already rejects a malformed value at the wire
  * boundary — what reaches here is always `undefined` or a syntactically valid identifier.
- * Read the same way `subtypeOf`/`practiceOf` read their fields, for the same reason: one
+ * Read the same way `subtypeOf` reads its field, for the same reason: one
  * reader, so resolution, the running registry, and the terminal envelope never disagree
  * about what the caller asked for.
  */
@@ -473,7 +444,7 @@ export class ExecutionRuntime {
 
     let skills: SkillPair;
     try {
-      skills = await loadSkill(input.type, SKILLS_DIR, skillSelectorOf(input));
+      skills = await loadSkill(input.type, SKILLS_DIR, subtypeOf(input) ?? undefined);
     } catch (err) {
       return { ok: false, error: { kind: 'skill_load_failed', message: err instanceof Error ? err.message : 'Skill load failed' } };
     }
@@ -509,7 +480,7 @@ export class ExecutionRuntime {
     // ever ran (e.g. the transition call below throws, or the process dies before it runs at all);
     // `InitiativeLinker`'s replay is made tolerant of exactly that (see `initiative-linker.ts`).
     try {
-      deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), practiceOf(input), resolvedMethodId);
+      deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), resolvedMethodId);
       deps.store.admit(executionId, input.type, cwd, process.pid, linkage, resolvedMethodId);
     } catch (err) {
       // The Task transition has not run yet (validation only reads `initiatives.db`) — nothing on
@@ -594,7 +565,7 @@ export class ExecutionRuntime {
     readerFacing: boolean;
     /** The resolved Method identifier (SPEC-005), or `null`. Recorded verbatim into the
      *  terminal `execution` envelope — ALWAYS present there as `string | null`, never
-     *  omitted, unlike `subtype`/`practice`. */
+     *  omitted, unlike `subtype`. */
     method: string | null;
     /** Committed guidance for `method`, or `null` when no Method resolved. Passed straight
      *  through to `runTwoPhasePipeline`, which injects it as one identical block into both
@@ -778,15 +749,11 @@ export class ExecutionRuntime {
           executionId: executionId,
           type: input.type,
           // No `type === 'audit'` gate: the strict input schema already limits
-          // `subtype` to audit and `practice` to plan/execute_plan/review/debug, so
-          // a type-based gate here would only restate the schema while giving the
-          // terminal envelope a second rule the running snapshot did not share.
-          // Two separate fields, never both present on the same execution: `subtype`
-          // picks WHAT is examined (audit's criteria set), `practice` picks HOW to
-          // do the work (the retained software technique).
+          // `subtype` to audit, so a type-based gate here would only restate the
+          // schema while giving the terminal envelope a second rule the running
+          // snapshot did not share.
           ...(subtypeOf(input) !== null ? { subtype: subtypeOf(input) } : {}),
-          ...(practiceOf(input) !== null ? { practice: practiceOf(input) } : {}),
-          // Unlike `subtype`/`practice`, ALWAYS present as `string | null` — never omitted.
+          // Unlike `subtype`, ALWAYS present as `string | null` — never omitted.
           // Method resolution applies uniformly across every task type (SPEC-005), so a
           // consumer must be able to tell "resolved to null" from "field absent."
           method: run.method,

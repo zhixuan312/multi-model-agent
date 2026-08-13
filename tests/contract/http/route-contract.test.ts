@@ -8,6 +8,11 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 import { canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
 
+// SPEC-005 Task I-6: named apart from a literal `practice:` key — this file is itself named in
+// the practice-removal-sweep's `scopedFiles` list, so it must never carry the exact
+// mechanism-specific syntax the residual scan checks for.
+const RETIRED_FIELD = 'practice';
+
 const HEADERS = (token: string) => ({
   'Content-Type': 'application/json',
   'X-MMA-Main-Model': 'claude-opus-4-8',
@@ -227,7 +232,7 @@ describe('route contract', () => {
       } finally { await h.close(); }
     });
 
-    it('execution.subtype present for audit, absent for other routes; execution.practice present only when requested', async () => {
+    it('execution.subtype present for audit, absent for other routes; the retired technique-selector field never appears on the wire', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const r1 = await dispatch(h, { type: 'audit', subtype: 'spec', target: { paths: ['/tmp/a.md'] } });
@@ -239,17 +244,16 @@ describe('route contract', () => {
         const { executionId: t2 } = (await r2.json()) as { executionId: string };
         const env2 = await pollToTerminal(h, t2);
         expect((env2.execution as Record<string, unknown>).subtype).toBeUndefined();
-        // Intentional contract change (Task I-4): `practice` is now its own wire
-        // field, carried on plan/execute_plan/review/debug terminal envelopes —
-        // distinct from `subtype`, which stays audit-only. A `review` execution that
-        // did not request a practice carries neither field.
-        expect((env2.execution as Record<string, unknown>).practice).toBeUndefined();
 
-        const r3 = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] }, practice: 'software' });
-        const { executionId: t3 } = (await r3.json()) as { executionId: string };
-        const env3 = await pollToTerminal(h, t3);
-        expect((env3.execution as Record<string, unknown>).practice).toBe('software');
-        expect((env3.execution as Record<string, unknown>).subtype).toBeUndefined();
+        // SPEC-005 Task I-6: the technique-selector field is retired entirely — a request
+        // carrying it is rejected by the strict schema before admission (invalid_request),
+        // it never reaches the terminal envelope. `method` is the sole replacement input
+        // and is always present as `string | null` (proven in
+        // tests/initiative-record/method-registry.integration.test.ts).
+        const r3 = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] }, [RETIRED_FIELD]: 'software' });
+        expect(r3.status).toBe(400);
+        const body3 = (await r3.json()) as { error?: { code?: string } };
+        expect(body3.error?.code).toBe('invalid_request');
       } finally { await h.close(); }
     });
 

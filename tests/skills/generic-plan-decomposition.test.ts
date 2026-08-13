@@ -4,21 +4,21 @@ import { readFileSync } from 'node:fs';
 /**
  * AC-6.8 and AC-6.9 — the GENERIC plan implementer.
  *
- * These two criteria are the other half of the release's central move. AC-6.2 asks that software
- * technique stay reachable behind `practice`; AC-6.8 and AC-6.9 ask that what remains in the
- * generic file actually serve a non-software deliverable. Moving the code technique OUT is not the
- * same as making the remainder neutral: the generic file kept telling every worker to "explore the
- * codebase (tech stack, test runner, import style, build/run commands)" and to size tasks as "one
- * endpoint, one mapping, one module within a single repository/package", which is a software
- * instruction handed to someone writing a finance report.
+ * These two criteria are the other half of the release's central move. AC-6.8 and AC-6.9 ask
+ * that the generic file actually serve a non-software deliverable. The generic file used to tell
+ * every worker to "explore the codebase (tech stack, test runner, import style, build/run
+ * commands)" and to size tasks as "one endpoint, one mapping, one module within a single
+ * repository/package", which is a software instruction handed to someone writing a finance
+ * report.
  *
- * Nothing is lost for software work, because `plan/implement-software.md` carries the codebase
- * ground-truth step and the module-level granularity itself — a `practice: 'software'` dispatch
- * loads that file INSTEAD of this one.
+ * SPEC-005 Task I-6 retired the legacy code-technique asset that used to carry the codebase
+ * ground-truth step and module-level granularity for software work; that content is not migrated
+ * elsewhere (the committed `software-change@1` Method guidance is deliverable-generic caller-tracing
+ * discipline, not plan-specific granularity), so the third describe block this file used to carry
+ * (asserting the legacy asset retained that content) is retired along with it.
  */
 
 const generic = () => readFileSync('packages/core/src/skills/plan/implement.md', 'utf8');
-const software = () => readFileSync('packages/core/src/skills/plan/implement-software.md', 'utf8');
 
 describe('AC-6.8 — the generic plan implementer assumes no code project', () => {
   it('does not send every worker to explore a codebase for ground truth', () => {
@@ -60,13 +60,5 @@ describe('AC-6.9 — the plan states its chosen production method', () => {
     expect(body).toContain('State the production method');
     // The AC names this exact example: facts / calculations / assumptions / interpretation kept apart.
     expect(body.toLowerCase()).toContain('assumptions and interpretation separated');
-  });
-});
-
-describe('the software path keeps everything the generic path gave up', () => {
-  it('retains codebase ground truth and code-unit granularity', () => {
-    const body = software();
-    expect(body).toContain('explore the codebase');
-    expect(body).toContain('within a single repository/package');
   });
 });

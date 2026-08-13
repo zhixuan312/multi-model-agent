@@ -394,14 +394,15 @@ describe('ExecutionRuntime', () => {
   });
 
   /**
-   * AC-6.6 regression: the engine must NEVER infer `practice` from the workspace —
-   * not from the presence of `.git`, not from source-file extensions in the cwd.
-   * `cwd` here is a real git repository containing a TypeScript source file, which
-   * is exactly the shape an inference heuristic would key off. The task requests
-   * no `practice`, so it must still load the generic `implement.md`, never a
-   * software-specific asset it inferred on its own.
+   * AC-6.6 regression (SPEC-005 Task I-6: the retired technique-selector field and its
+   * inference-avoidance guarantee now apply to `method`): the engine must NEVER infer a
+   * technique from the workspace — not from the presence of `.git`, not from source-file
+   * extensions in the cwd. `cwd` here is a real git repository containing a TypeScript source
+   * file, which is exactly the shape an inference heuristic would key off. The task requests no
+   * `method`, so it must still load the generic `implement.md` and resolve no Method, never a
+   * software-specific asset or guidance it inferred on its own.
    */
-  it('never infers practice from a git-repo cwd full of source files — omitted practice loads the generic implementer', async () => {
+  it('never infers a Method from a git-repo cwd full of source files — omitted method loads the generic implementer', async () => {
     execFileSync('git', ['init', '-q'], { cwd });
     execFileSync('git', ['config', 'user.email', 't@t'], { cwd });
     execFileSync('git', ['config', 'user.name', 't'], { cwd });
@@ -443,9 +444,9 @@ describe('ExecutionRuntime', () => {
     expect(capturedPrompts[0]).toContain(genericImplementer);
 
     const entry = executionRegistry.get(executionId)!;
-    expect(entry.practice).toBeNull();
+    expect(entry.method).toBeNull();
     const terminalExecution = (entry.result as { execution: Record<string, unknown> }).execution;
-    expect(terminalExecution.practice).toBeUndefined();
+    expect(terminalExecution.method).toBeNull();
   });
 
   /**

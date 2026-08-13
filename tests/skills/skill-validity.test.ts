@@ -44,10 +44,11 @@ describe('skill validity', () => {
       // Bumped 700 → 780 to close two acceptance criteria whose caller-side half
       // was missing while their engine-side half shipped, which is precisely the
       // gap a line budget must not be allowed to enforce:
-      //   - AC-6.2 (second clause): a flow's persisted `routing.practice` drives
-      //     EVERY dispatch. Without it the four `implement-software.md` assets
-      //     shipped unreachable — no caller surface named the field — so software
-      //     technique was preserved in the file and lost in the flow.
+      //   - AC-6.2 (second clause, since retired — SPEC-005 Task I-6): a flow's
+      //     persisted technique-routing field used to drive EVERY dispatch.
+      //     Without it, the retired legacy code-technique assets shipped
+      //     unreachable — no caller surface named the field — so the technique
+      //     was preserved in the file and lost in the flow.
       //   - AC-3.7 (execution half): the declared bounds every acceptance command
       //     runs under, and the `failed` vs `error` + `errorKind` distinction. The
       //     constants were exported and applied nowhere.

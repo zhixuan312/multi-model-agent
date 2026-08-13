@@ -167,9 +167,9 @@ VALID — do NOT downgrade them as "speculation about untouched material."
 
 ### Deliverable-specific technique
 
-This taxonomy is deliverable-neutral by default. When the caller's deliverable is code, deeper
-code-specific technique is available through the `practice: 'software'` review asset — use it in
-addition to, not instead of, the taxonomy above.
+This taxonomy is deliverable-neutral by default. When the caller or linked Task names a registered
+Method (e.g. `software-change@1`), its committed guidance is injected as an additional block — use
+it in addition to, not instead of, the taxonomy above.
 
 ## Output
 
