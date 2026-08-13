@@ -74,6 +74,9 @@ interface ExecutionRecord {
   id: string;
   type: string;
   cwd: string;
+  /** Resolved Method captured atomically with admission; retained through crashes before a
+   *  terminal envelope exists. */
+  method: string | null;
   state: StoredExecutionState;
   createdAt: number;
   updatedAt: number;
@@ -96,6 +99,7 @@ interface Row {
   id: string;
   type: string;
   cwd: string;
+  method: string | null;
   state: string;
   created_at: number;
   updated_at: number;
@@ -112,6 +116,7 @@ function toRecord(r: Row): ExecutionRecord {
     id: r.id,
     type: r.type,
     cwd: r.cwd,
+    method: r.method,
     state: r.state as StoredExecutionState,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -154,6 +159,7 @@ export class ExecutionStore {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         cwd TEXT NOT NULL,
+        method TEXT,
         state TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -173,6 +179,9 @@ export class ExecutionStore {
     const executionColumns = this.db.prepare('PRAGMA table_info(executions)').all() as Array<{ name: string }>;
     if (!executionColumns.some((column) => column.name === 'linkage_json')) {
       this.db.exec('ALTER TABLE executions ADD COLUMN linkage_json TEXT');
+    }
+    if (!executionColumns.some((column) => column.name === 'method')) {
+      this.db.exec('ALTER TABLE executions ADD COLUMN method TEXT');
     }
     // Outbox: exactly one row per LINKED execution, written in the same transaction as its
     // terminal CAS (see `terminalize`). No retention/deletion behavior — Task I-5's
@@ -203,13 +212,13 @@ export class ExecutionStore {
    *  crash window where a Task mutation lands in `initiatives.db` but the pending row in
    *  `executions.db` never learns about it, so `terminalize()`'s outbox insert (gated on
    *  `linkage_json`) never fires and the Task is stranded with nothing left to reopen it. */
-  admit(id: string, type: string, cwd: string, daemonPid: number, linkage?: ExecutionLinkage): void {
+  admit(id: string, type: string, cwd: string, daemonPid: number, linkage?: ExecutionLinkage, method: string | null = null): void {
     if (this.closed) return;
     const now = Date.now();
     this.db.prepare(`
-      INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid, linkage_json)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
-    `).run(id, type, cwd, now, now, daemonPid, linkage ? JSON.stringify(linkage) : null);
+      INSERT INTO executions (id, type, cwd, method, state, created_at, updated_at, daemon_pid, linkage_json)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+    `).run(id, type, cwd, method, now, now, daemonPid, linkage ? JSON.stringify(linkage) : null);
   }
 
   /** Record the detached worker's process-group leader pid (codex). Only

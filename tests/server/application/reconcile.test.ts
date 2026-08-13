@@ -56,6 +56,14 @@ describe('reconcileOnBoot', () => {
     expect(envelope.error.message).toMatch(/Submit the task again/);
   });
 
+  it('keeps the resolved Method in the crash-recovery terminal envelope', () => {
+    store.admit('stale-method', 'execute_plan', '/repo', DEAD_PID, undefined, 'software-change@1');
+    reconcileOnBoot(store, process.pid);
+
+    const envelope = JSON.parse(store.get('stale-method')!.resultJson!);
+    expect(envelope.execution.method).toBe('software-change@1');
+  });
+
   it('leaves pending executions of a LIVE daemon alone', () => {
     // Owned by this very process — alive by definition, and not ours to touch
     // when reconciling as a different (fake) daemon pid.

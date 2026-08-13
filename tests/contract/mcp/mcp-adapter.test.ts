@@ -184,7 +184,7 @@ describe('contract: MCP adapter', () => {
       // Identity travels with every reference to the execution, cancel included — otherwise
       // "which one did I just cancel?" is unanswerable from the transcript.
       expect(cancel).toEqual({
-        executionId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String), method: null,
         status: 'running', cancellationRequested: true,
       });
 
@@ -198,7 +198,7 @@ describe('contract: MCP adapter', () => {
       // Idempotent: repeat cancel reports the terminal state.
       const again = parseText(await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId } }));
       expect(again).toEqual({
-        executionId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String), method: null,
         status: 'cancelled', alreadyTerminal: true,
       });
     } finally { await client.close(); await h.close(); }

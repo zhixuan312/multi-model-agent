@@ -240,6 +240,10 @@ export {
   methodListInputSchema,
   initiativeTaskSetMethodInputSchema,
   METHOD_ID_PATTERN,
+  // Committed Method procedure guidance resolver (Task I-2 contract: "available to the
+  // server runtime through a core export"). `ExecutionRuntime` (Task I-4) is its first
+  // caller outside the initiative-record package itself.
+  loadMethodGuidance,
 } from './initiative-record/index.js';
 export type {
   Product,

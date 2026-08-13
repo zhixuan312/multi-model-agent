@@ -21,6 +21,13 @@ export interface ExecutionEntry {
    *  here for the same reason `subtype` is — so a running task is as self-describing
    *  as its terminal envelope. */
   practice: string | null;
+  /** The resolved Method identifier (SPEC-005), or `null` when no Method applies. Unlike
+   *  `subtype`/`practice` (which are OMITTED from the wire shape when absent), `method` is
+   *  always present as `string | null` — see `executionIdentity()` in
+   *  `packages/server/src/application/task-identity.ts`, which mirrors this field into the
+   *  running snapshot the same way, and the terminal `execution` envelope built in
+   *  `execution-runtime.ts`. */
+  method: string | null;
   result: unknown;
   runningHeadline: string | null;
   /**
@@ -86,10 +93,10 @@ export class ExecutionRegistry {
     }
   }
 
-  register(executionId: string, cwd: string, tool: string, subtype: string | null, practice: string | null = null): void {
+  register(executionId: string, cwd: string, tool: string, subtype: string | null, practice: string | null = null, method: string | null = null): void {
     this.evictExpired(Date.now());
     this.entries.set(executionId, {
-      executionId, cwd, tool, subtype, practice,
+      executionId, cwd, tool, subtype, practice, method,
       state: 'pending',
       result: null,
       runningHeadline: null,

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SPEC_COMPONENTS } from './spec-components.js';
 import { approvedContractSchema } from './deliverable-contract.js';
+import { METHOD_ID_PATTERN } from '../initiative-record/types.js';
 
 const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
@@ -50,12 +51,24 @@ const initiativeLinkageSchema = z.object({
   authorized_by: z.string().min(1),
 }).strict();
 
+/**
+ * `method` — the optional registered Method identifier (SPEC-005), wired onto every
+ * `commonFields` arm (all twelve task types, AC-1.7). Syntactically validated here against
+ * the frozen `<name>@<version>` shape shared with the Initiative Record's own
+ * `methodIdSchema` — a malformed value is rejected at THIS Zod layer as `invalid_request`,
+ * before `ExecutionRuntime.submit()` ever runs. Whether the identifier names a REGISTERED
+ * Method is a store lookup this schema cannot perform; that resolves to `unknown_method` at
+ * the application layer, after linked-Task validation (see `execution-runtime.ts`).
+ */
+const methodIdSchema = z.string().regex(METHOD_ID_PATTERN, 'must match <name>@<version>, e.g. software-change@1');
+
 const commonFields = {
   agentTier: agentTierSchema.optional(),
   reviewPolicy: reviewPolicySchema.optional(),
   sessionIds: sessionIdsSchema,
   contextBlockIds: z.array(z.string()).max(2).optional(),
   initiative: initiativeLinkageSchema.optional(),
+  method: methodIdSchema.optional(),
 };
 
 /**
@@ -106,6 +119,7 @@ const LEGACY_JOURNAL_RECORD_KEYS = new Set([
   'reviewPolicy',
   'sessionIds',
   'contextBlockIds',
+  'method',
 ]);
 
 /** Boundary normalization: a legacy single-record `journal_record` body
@@ -134,6 +148,7 @@ function normalizeLegacyJournalRecordInput(input: unknown): unknown {
     ...(value.reviewPolicy !== undefined ? { reviewPolicy: value.reviewPolicy } : {}),
     ...(value.sessionIds !== undefined ? { sessionIds: value.sessionIds } : {}),
     ...(value.contextBlockIds !== undefined ? { contextBlockIds: value.contextBlockIds } : {}),
+    ...(value.method !== undefined ? { method: value.method } : {}),
   };
 }
 

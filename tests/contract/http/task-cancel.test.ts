@@ -86,7 +86,7 @@ describe('contract: DELETE /execution/:executionId', () => {
       // Identity rides along on the cancel acknowledgement too — the same fields the MCP
       // wire returns, since both call executionIdentity().
       expect(body).toEqual({
-        executionId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String), method: null,
         status: 'running', cancellationRequested: true,
       });
 

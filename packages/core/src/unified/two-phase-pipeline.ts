@@ -54,6 +54,13 @@ export interface PipelineInput {
   readerFacing: boolean;
   implementerSkill: string;
   reviewerSkill: string;
+  /** Committed procedure guidance for the resolved Method (SPEC-005), or `undefined`/`null`
+   *  when no Method resolved for this execution. Injected as ONE identical block into both
+   *  the implementer and the reviewer prompt, alongside the existing writing-style and
+   *  search-hygiene blocks — never route-specific, never selected by `type` or `subtype`.
+   *  Omitting it (the common case) must leave both generic prompts byte-identical to the
+   *  pre-Method baseline. */
+  methodGuidance?: string | null;
   taskPayload: string;
   implementerProvider: Provider;
   reviewerProvider: Provider;
@@ -357,7 +364,12 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     // Injected for BOTH phases: a refiner verifying citations searches the
     // codebase just as hard as the implementer that produced them.
     const hygiene = `\n\n${SEARCH_HYGIENE_BLOCK}\n`;
-    const implPrompt = `${stylePrefix}${input.implementerSkill}${hygiene}${workspaceNotice}${priorContext}\n\n---\n\n## Task\n\n${effectivePayload}`;
+    // SPEC-005: one shared Method-guidance block, byte-identical in both prompts, placed
+    // beside the writing-style/search-hygiene blocks. Empty string (not injected at all) when
+    // no Method resolved — this is what keeps a Method-less generic prompt byte-identical to
+    // the pre-Method baseline.
+    const methodBlock = input.methodGuidance ? `\n\n${input.methodGuidance}\n` : '';
+    const implPrompt = `${stylePrefix}${input.implementerSkill}${hygiene}${methodBlock}${workspaceNotice}${priorContext}\n\n---\n\n## Task\n\n${effectivePayload}`;
     const implTurn = await implSession.send(implPrompt, {
       ...(input.implementerGoal && { goalCondition: input.implementerGoal }),
     });
@@ -501,7 +513,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
 
     const completenessSection = buildCompletenessSection(input);
     const taskSection = `\n\n## Original Task\n\n${effectivePayload}`;
-    const revPrompt = `${stylePrefix}${input.reviewerSkill}${hygiene}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(effectiveOutput)}`;
+    const revPrompt = `${stylePrefix}${input.reviewerSkill}${hygiene}${methodBlock}${completenessSection}${taskSection}\n\n---\n\n## Implementer Output\n\n${extractStructuredBlock(effectiveOutput)}`;
     const revTurn = await revSession.send(revPrompt, {
       ...(input.reviewerGoal && { goalCondition: input.reviewerGoal }),
     });

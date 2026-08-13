@@ -96,6 +96,7 @@ export function reconcileOnBoot(
         retryable: true,
       },
       'interrupted',
+      record.method,
     );
     if (store.interrupt(record.id, JSON.stringify(envelope))) interrupted += 1;
   }

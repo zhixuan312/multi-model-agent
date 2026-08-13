@@ -32,6 +32,11 @@ interface ExecutionIdentity {
    *  requested one, matching the terminal envelope's `execution.practice`. Its own field
    *  — `subtype` stays audit-only, `practice` never appears alongside it. */
   practice?: string;
+  /** The resolved Method identifier (SPEC-005), matching the terminal envelope's
+   *  `execution.method`. Unlike `subtype`/`practice`, ALWAYS present as `string | null` —
+   *  never omitted — because Method resolution applies uniformly across every task type,
+   *  not to a type-specific subset. */
+  method: string | null;
   cwd: string;
 }
 
@@ -41,6 +46,7 @@ export function executionIdentity(entry: ExecutionEntry): ExecutionIdentity {
     type: entry.tool,
     ...(entry.subtype !== null ? { subtype: entry.subtype } : {}),
     ...(entry.practice !== null ? { practice: entry.practice } : {}),
+    method: entry.method,
     cwd: entry.cwd,
   };
 }
