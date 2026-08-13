@@ -5,9 +5,9 @@ import { runMcpBridge } from '../../packages/server/src/cli/mcp.js';
  * The bridge must forward frames CONCURRENTLY.
  *
  * It used to process stdin strictly one frame at a time. That is fine until a call
- * legitimately blocks: `mma_task_wait` holds its response for up to 55s server-side, and a
+ * legitimately blocks: `mma_execution_wait` holds its response for up to 55s server-side, and a
  * sequential bridge made every LATER frame wait behind it — including the execution App's
- * own `mma_task_get` polls. The App's per-poll timeout then fired and it rendered
+ * own `mma_execution_get` polls. The App's per-poll timeout then fired and it rendered
  * "update failed — showing last known state" while the daemon was perfectly healthy. The
  * long-poll starved the very monitor that exists to show progress during long polls.
  *
@@ -41,7 +41,7 @@ describe('mma mcp bridge — concurrent frame forwarding', () => {
     const order: number[] = [];
     const stdout: string[] = [];
 
-    // Frame 1 blocks (the long mma_task_wait); frames 2 and 3 are quick polls.
+    // Frame 1 blocks (the long mma_execution_wait); frames 2 and 3 are quick polls.
     const code = await runMcpBridge({
       daemonUrl: 'http://127.0.0.1:7337',
       env: { MMA_AUTH_TOKEN: 'SENTINEL' },

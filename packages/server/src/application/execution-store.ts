@@ -3,7 +3,7 @@
 // previously-active executions are reconciled to `interrupted` on boot.
 // Execution is never resumed — the caller retries with a NEW task.
 //
-// The in-memory TaskRegistry stays the hot-path index for live entries; this
+// The in-memory ExecutionRegistry stays the hot-path index for live entries; this
 // store is the durable record behind it. State machine (CAS-enforced in SQL —
 // a terminal row is never overwritten):
 //
@@ -79,7 +79,7 @@ interface ExecutionRecord {
   /** Terminal rows are pruned once now > expiresAt (mirrors the registry TTL). */
   expiresAt: number | null;
   cancellationRequestedAt: number | null;
-  /** Terminal result envelope (JSON), exactly what GET /task/:id returns. */
+  /** Terminal result envelope (JSON), exactly what GET /execution/:id returns. */
   resultJson: string | null;
   /** Pid of the daemon that owns/owned this execution — reconciliation only
    *  touches rows whose owning daemon is no longer alive. */

@@ -35,7 +35,7 @@ describe('reconcileOnBoot', () => {
     const r = store.get('stale-1')!;
     expect(r.state).toBe('interrupted');
     const envelope = JSON.parse(r.resultJson!);
-    expect(envelope.task.status).toBe('interrupted');
+    expect(envelope.execution.status).toBe('interrupted');
     expect(envelope.error.code).toBe('daemon_restarted');
     expect(envelope.error.retryable).toBe(true);
     expect(envelope.error.message).toMatch(/Submit the task again/);

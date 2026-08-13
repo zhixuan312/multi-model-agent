@@ -16,7 +16,7 @@ Requires Node >= 22. ESM only.
 
 ```ts
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
-import { runTwoPhasePipeline, loadSkill, TaskRegistry } from '@zhixuan92/multi-model-agent-core';
+import { runTwoPhasePipeline, loadSkill, ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
 
 const config = await loadConfigFromFile();
 ```

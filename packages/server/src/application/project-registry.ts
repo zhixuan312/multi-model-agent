@@ -11,7 +11,7 @@ interface ProjectRegistryOptions {
   cap: number;
   onProjectCreated?: (cwd: string) => void;
   /** Returns true when the project at this canonical cwd has in-flight work and
-   *  must not be evicted. Wired to `TaskRegistry.countActive(cwd) > 0` in
+   *  must not be evicted. Wired to `ExecutionRegistry.countActive(cwd) > 0` in
    *  production — `pendingReservations` is NOT a reliable busy signal because it
    *  is cancelled at dispatch, before the async task runs. */
   isBusy?: (canonicalCwd: string) => boolean;

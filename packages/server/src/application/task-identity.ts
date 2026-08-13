@@ -1,43 +1,43 @@
 /**
- * The one place a live task describes itself, shared by both wires.
+ * The one place a live execution describes itself, shared by both wires.
  *
- * A task handle used to be an opaque UUID: `mma_run` returned `{ taskId }`, and every
- * poll answered with a phase name (`implementing` | `reviewing`) that reads the same for
- * a spec, a review and an investigation. The type was known from the moment of admission
- * — `TaskEntry.tool`, set by `TaskRegistry.register` — and was read on the way out ONLY
- * to decide whether to attach `totalTasks`. Identity was in hand and thrown away.
+ * An execution handle used to be an opaque UUID: `mma_run` returned `{ executionId }`, and
+ * every poll answered with a phase name (`implementing` | `reviewing`) that reads the
+ * same for a spec, a review and an investigation. The type was known from the moment of
+ * admission — `ExecutionEntry.tool`, set by `ExecutionRegistry.register` — and was read on the way
+ * out ONLY to decide whether to attach `totalTasks`. Identity was in hand and thrown away.
  *
  * `runningSnapshot` previously existed as two hand-maintained copies (mcp-adapter.ts and
- * http/handlers/unified-task.ts). They drifted — MCP omitted `phaseElapsedMs` for a while,
- * so "one contract, two wires" was untrue in practice. Both wires now call these
+ * http/handlers/unified-execution.ts). They drifted — MCP omitted `phaseElapsedMs` for a
+ * while, so "one contract, two wires" was untrue in practice. Both wires now call these
  * functions, which is why identity cannot drift back apart.
  */
 
-import type { TaskEntry } from '@zhixuan92/multi-model-agent-core';
+import type { ExecutionEntry } from '@zhixuan92/multi-model-agent-core';
 
 /**
- * Who this task is, independent of how far along it is. Carried on the admission
+ * Who this execution is, independent of how far along it is. Carried on the admission
  * response AND on every poll: an agent scanning back through a transcript reads the
- * handle where it was returned, not where the task was submitted.
+ * handle where it was returned, not where the execution was submitted.
  *
  * `cwd` earns its place on a multi-repo workspace, where four sibling checkouts run the
  * same task types and the path is the only thing distinguishing them.
  */
-interface TaskIdentity {
-  taskId: string;
+interface ExecutionIdentity {
+  executionId: string;
   type: string;
-  /** Present only for `audit`, matching the terminal envelope's `task.subtype`. */
+  /** Present only for `audit`, matching the terminal envelope's `execution.subtype`. */
   subtype?: string;
   /** Present only for `plan` | `execute_plan` | `review` | `debug` when the caller
-   *  requested one, matching the terminal envelope's `task.practice`. Its own field
+   *  requested one, matching the terminal envelope's `execution.practice`. Its own field
    *  — `subtype` stays audit-only, `practice` never appears alongside it. */
   practice?: string;
   cwd: string;
 }
 
-export function taskIdentity(entry: TaskEntry): TaskIdentity {
+export function executionIdentity(entry: ExecutionEntry): ExecutionIdentity {
   return {
-    taskId: entry.taskId,
+    executionId: entry.executionId,
     type: entry.tool,
     ...(entry.subtype !== null ? { subtype: entry.subtype } : {}),
     ...(entry.practice !== null ? { practice: entry.practice } : {}),
@@ -71,7 +71,7 @@ const ACTIVITY_BUCKETS = 34;
  * live. A zero count is real information — it is the worker being quiet, not missing data.
  */
 export function bucketActivity(
-  entry: TaskEntry | undefined,
+  entry: ExecutionEntry | undefined,
   now = Date.now(),
 ): { counts: number[]; phases: Array<1 | 2> } | null {
   // An evicted or unknown entry simply has no shape to draw — that is a normal outcome for a
@@ -97,9 +97,9 @@ export function bucketActivity(
   return { counts, phases };
 }
 
-export function buildRunningSnapshot(entry: TaskEntry, now = Date.now()): Record<string, unknown> {
+export function buildRunningSnapshot(entry: ExecutionEntry, now = Date.now()): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {
-    ...taskIdentity(entry),
+    ...executionIdentity(entry),
     status: 'running',
     phase: entry.phase ?? 'implementing',
     elapsedMs: now - entry.startedAt,

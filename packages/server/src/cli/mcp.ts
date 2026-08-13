@@ -15,7 +15,7 @@
  *   3. Resolve a bearer token (env → token file → default token path).
  *   4. Read stdio JSON-RPC frames; each valid frame becomes exactly one
  *      authenticated POST to the pinned `/mcp` endpoint, dispatched
- *      CONCURRENTLY so a long-blocking call (mma_task_wait) cannot starve
+ *      CONCURRENTLY so a long-blocking call (mma_execution_wait) cannot starve
  *      later frames such as the execution App's polls. The
  *      endpoint always replies as SSE (`event: message\ndata: {json}\n\n`);
  *      this module unwraps that to a single bare JSON line on stdout.
@@ -407,8 +407,8 @@ export async function runMcpBridge(deps: McpBridgeDeps): Promise<number> {
   // preserve arrival order.
   //
   // Serializing them was a real, user-visible bug rather than a missed optimisation. A single
-  // `mma_task_wait` legitimately blocks for up to 55s server-side; with a sequential loop it
-  // also blocked every LATER frame, including the execution App's own `mma_task_get` polls.
+  // `mma_execution_wait` legitimately blocks for up to 55s server-side; with a sequential loop it
+  // also blocked every LATER frame, including the execution App's own `mma_execution_get` polls.
   // The App's per-poll timeout then fired and it displayed "update failed" while the daemon
   // was perfectly healthy — the long-poll starved the very monitor that exists to show
   // progress during long polls. Observed on Claude Desktop.

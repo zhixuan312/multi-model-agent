@@ -194,8 +194,8 @@ export type {
   ApplyRecordInput,
   ApplyRecordResult,
 } from './journal/index.js';
-export { TaskRegistry } from './unified/task-registry.js';
-export type { TaskEntry, TaskState } from './unified/task-registry.js';
+export { ExecutionRegistry } from './unified/task-registry.js';
+export type { ExecutionEntry, ExecutionState } from './unified/task-registry.js';
 
 // Initiative Record — Phase A0 kernel (see .mma/specs/2026-08-12-mma-next-initiative-engine.md, SPEC-001)
 export {

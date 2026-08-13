@@ -56,7 +56,7 @@ const outboxPayloadSchema = z
 type OutboxPayload = z.infer<typeof outboxPayloadSchema>;
 
 /** The five terminal outcomes a linked Execution can reach, normalized from the outbox row's
- *  `state` plus (for `state: 'complete'`) the terminal envelope's own `task.status`. */
+ *  `state` plus (for `state: 'complete'`) the terminal envelope's own `execution.status`. */
 export type ExecutionOutcomeStatus = 'completed' | 'done_with_concerns' | 'failed' | 'cancelled' | 'interrupted';
 
 /**
@@ -85,11 +85,11 @@ export function terminalTaskUpdate(
 
 /** Normalizes an outbox row's `state` into the five-way `ExecutionOutcomeStatus`. Only
  *  `state: 'complete'` is ambiguous — the pipeline's own success-with-concerns distinction
- *  lives in the terminal envelope's `task.status`, never in the outbox `state` column (which
+ *  lives in the terminal envelope's `execution.status`, never in the outbox `state` column (which
  *  only ever distinguishes complete/failed/cancelled/interrupted). */
 function deriveOutcomeStatus(state: OutboxPayload['state'], envelope: unknown): ExecutionOutcomeStatus {
   if (state !== 'complete') return state;
-  const raw = (envelope as { task?: { status?: unknown } } | null)?.task?.status;
+  const raw = (envelope as { execution?: { status?: unknown } } | null)?.execution?.status;
   return raw === 'done_with_concerns' ? 'done_with_concerns' : 'completed';
 }
 

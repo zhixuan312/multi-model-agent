@@ -9,9 +9,9 @@ import {
 /**
  * A long-poll cannot outlive the deadline the CLIENT enforces on the request carrying it.
  *
- * `mma_task_wait` advertised `capped at 240000` while typical MCP hosts abort a tool call
+ * `mma_execution_wait` advertised `capped at 240000` while typical MCP hosts abort a tool call
  * after ~60s. On Claude Desktop the model read that ceiling, asked for it, and got
- * `-32001 Request timed out` — no snapshot, no taskId context, no sign the task was still
+ * `-32001 Request timed out` — no snapshot, no executionId context, no sign the execution was still
  * running perfectly well. The schema was inviting a request the transport could never
  * deliver.
  *
@@ -19,7 +19,7 @@ import {
  * typical MCP client tool timeouts"); the wait ceiling simply disagreed with it. These tests
  * bind the two together so they cannot drift apart again.
  */
-describe('contract: mma_task_wait timeout bounds fit inside client request deadlines', () => {
+describe('contract: mma_execution_wait timeout bounds fit inside client request deadlines', () => {
   it('caps the advertised wait at the same bound as the inline wait', () => {
     expect(WAIT_CAP_MS).toBe(INLINE_WAIT_CAP_MS);
   });
@@ -39,7 +39,7 @@ describe('contract: mma_task_wait timeout bounds fit inside client request deadl
    * snapshot, not a schema violation.
    */
   it('documents the ceiling WITHOUT enforcing it, so large requests clamp instead of failing', () => {
-    const wait = MCP_TOOLS.find((t) => t.name === 'mma_task_wait');
+    const wait = MCP_TOOLS.find((t) => t.name === 'mma_execution_wait');
     expect(wait).toBeDefined();
     const timeout = (wait!.inputSchema as {
       properties: { timeoutMs: { maximum?: number; minimum?: number; description: string } };
@@ -52,7 +52,7 @@ describe('contract: mma_task_wait timeout bounds fit inside client request deadl
   });
 
   it('tells the model a timeout is not a failure, so it re-waits instead of giving up', () => {
-    const wait = MCP_TOOLS.find((t) => t.name === 'mma_task_wait')!;
+    const wait = MCP_TOOLS.find((t) => t.name === 'mma_execution_wait')!;
     expect(wait.description).toMatch(/not an error|NOT an error/i);
     expect(wait.description).toMatch(/call again/i);
   });
@@ -91,20 +91,20 @@ describe('contract: an over-large wait is clamped, not rejected', () => {
       });
       const handle = JSON.parse(
         ((started.content as Array<{ text: string }>)[0]!).text
-      ) as { taskId?: string };
+      ) as { executionId?: string };
       // Assert rather than skip. An early `return` here made this test pass even with the
       // rejecting schema restored — it never reached the call it exists to make. A missing
-      // taskId from mode:'handle' is itself a failure, not a reason to opt out.
-      expect(handle.taskId, 'mode:handle must return a taskId to wait on').toBeTruthy();
+      // executionId from mode:'handle' is itself a failure, not a reason to opt out.
+      expect(handle.executionId, 'mode:handle must return an executionId to wait on').toBeTruthy();
 
       const waited = await client.callTool({
-        name: 'mma_task_wait',
-        arguments: { taskId: handle.taskId, timeoutMs: 300_000 },
+        name: 'mma_execution_wait',
+        arguments: { executionId: handle.executionId, timeoutMs: 300_000 },
       });
       expect(waited.isError, 'an over-large wait must not be an error').toBeFalsy();
       const payload = JSON.parse(((waited.content as Array<{ text: string }>)[0]!).text) as
         Record<string, unknown>;
-      expect(payload.taskId ?? (payload.task as { taskId?: string })?.taskId).toBe(handle.taskId);
+      expect(payload.executionId ?? (payload.execution as { executionId?: string })?.executionId).toBe(handle.executionId);
     } finally {
       await client.close();
       await h.close();

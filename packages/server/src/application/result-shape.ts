@@ -11,22 +11,24 @@ export function tryParseJson(raw: string): unknown {
 
 /**
  * Build a terminal FAILED result that is shape-consistent with the success/pipeline
- * envelope (task, output, execution, metrics, raw, error). Every terminal 200 — success
- * or failure — must have these six keys so callers detect failure uniformly via `error`
- * (the contract documented in _shared/response-shape.md). Used for pre-dispatch/async
- * validation failures and runner crashes, which would otherwise store a bare
+ * envelope (execution, output, metrics, raw, error). Every terminal 200 — success or
+ * failure — must have these five top-level keys so callers detect failure uniformly via
+ * `error` (the contract documented in _shared/response-shape.md). Used for pre-dispatch/
+ * async validation failures and runner crashes, which would otherwise store a bare
  * { code, message } that has no `error` field for callers to check.
  */
 export function buildErrorEnvelope(
-  taskId: string,
+  executionId: string,
   type: TaskType,
   error: { code: string; message: string } & Record<string, unknown>,
   status: 'failed' | 'cancelled' | 'interrupted' = 'failed',
 ): Record<string, unknown> {
   return {
-    task: { taskId, type, status },
+    execution: {
+      executionId: executionId, type, status,
+      sessions: { implementer: null, reviewer: null }, worktree: null, dirtyAtDispatch: false,
+    },
     output: { summary: null, filesChanged: [], contextBlockId: null, reviewerNote: null },
-    execution: { sessions: { implementer: null, reviewer: null }, worktree: null, dirtyAtDispatch: false },
     metrics: {
       totalDurationMs: 0,
       totalCostUsd: 0,

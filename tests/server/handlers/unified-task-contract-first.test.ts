@@ -14,14 +14,14 @@ const HEADERS = (token: string) => ({
 });
 
 async function dispatch(h: { baseUrl: string; token: string }, cwd: string, body: object) {
-  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+  return fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
     method: 'POST', headers: HEADERS(h.token), body: JSON.stringify(body),
   });
 }
 
-async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: string): Promise<Record<string, unknown>> {
+async function pollToTerminal(h: { baseUrl: string; token: string }, executionId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 300; i++) {
-    const res = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: HEADERS(h.token) });
+    const res = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: HEADERS(h.token) });
     if (res.status === 200) return (await res.json()) as Record<string, unknown>;
     if (res.status !== 202) throw new Error(`Unexpected ${res.status}`);
     await new Promise((r) => setTimeout(r, 20));
@@ -87,7 +87,7 @@ async function writePlan(dir: string, text: string): Promise<string> {
 }
 
 interface DispatchOutcome {
-  taskId: string;
+  executionId: string;
   env: Record<string, unknown>;
   opens: number;
 }
@@ -110,9 +110,9 @@ async function runExecutePlan(planText: string, tasksSelector: string[] = []): P
   try {
     const res = await dispatch(h, tmp, { type: 'execute_plan', target: { paths: ['plan.md'] }, tasks: tasksSelector });
     expect(res.status).toBe(202);
-    const { taskId } = (await res.json()) as { taskId: string };
-    const env = await pollToTerminal(h, taskId);
-    return { taskId, env, opens };
+    const { executionId } = (await res.json()) as { executionId: string };
+    const env = await pollToTerminal(h, executionId);
+    return { executionId, env, opens };
   } finally {
     await h.close();
     await rm(tmp, { recursive: true, force: true });
@@ -140,9 +140,9 @@ describe('execute_plan contract-first dispatch validation', () => {
     try {
       const res = await dispatch(h, tmp, { type: 'execute_plan', target: { paths: ['plan.md'] } });
       expect(res.status).toBe(202);
-      const { taskId } = (await res.json()) as { taskId: string };
-      const env = await pollToTerminal(h, taskId);
-      expect((env.task as Record<string, unknown>).status).not.toBe('failed');
+      const { executionId } = (await res.json()) as { executionId: string };
+      const env = await pollToTerminal(h, executionId);
+      expect((env.execution as Record<string, unknown>).status).not.toBe('failed');
       expect(opens).toBeGreaterThan(0);
       // The reviewer prompt gets the Dispatched Tasks completeness section, naming
       // this Contract Task by its exact title selected from parseContractPlan.
@@ -156,7 +156,7 @@ describe('execute_plan contract-first dispatch validation', () => {
   it('rejects a legacy (non-frozen) plan as unsupported-legacy-plan before any session opens', async () => {
     const legacyPlan = '# Legacy plan\n\n### Task 1: legacy heading\n\n- [ ] Step 1: do something\n';
     const { env, opens } = await runExecutePlan(legacyPlan);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('unsupported-legacy-plan');
     expect(opens).toBe(0);
   });
@@ -172,7 +172,7 @@ describe('execute_plan contract-first dispatch validation', () => {
       ],
     })].join('\n');
     const { env, opens } = await runExecutePlan(planText);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');
     expect(opens).toBe(0);
   });
@@ -192,7 +192,7 @@ describe('execute_plan contract-first dispatch validation', () => {
       '**Plan boundary:** final deliverable content is not in this plan.', '',
     ].join('\n');
     const { env, opens } = await runExecutePlan(planText);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');
     expect(opens).toBe(0);
   });
@@ -223,7 +223,7 @@ describe('execute_plan contract-first dispatch validation', () => {
       '**Plan boundary:** final deliverable content is not in this plan.', '',
     ].join('\n');
     const { env, opens } = await runExecutePlan(planText);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');
     expect(opens).toBe(0);
   });
@@ -233,7 +233,7 @@ describe('execute_plan contract-first dispatch validation', () => {
       fenceClose: '',
     })].join('\n');
     const { env, opens } = await runExecutePlan(planText);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('malformed-plan');
     expect(opens).toBe(0);
   });
@@ -256,9 +256,9 @@ describe('execute_plan contract-first dispatch validation', () => {
     });
     try {
       const res = await dispatch(h, tmp, { type: 'execute_plan', target: { paths: ['plan.md'] } });
-      const { taskId } = (await res.json()) as { taskId: string };
-      const env = await pollToTerminal(h, taskId);
-      expect((env.task as Record<string, unknown>).status).toBe('failed');
+      const { executionId } = (await res.json()) as { executionId: string };
+      const env = await pollToTerminal(h, executionId);
+      expect((env.execution as Record<string, unknown>).status).toBe('failed');
       expect((env.error as Record<string, unknown>).code).toBe('test-path-collision');
       expect(opens).toBe(0);
       const afterBytes = await readFile(existingAbs, 'utf8');
@@ -272,7 +272,7 @@ describe('execute_plan contract-first dispatch validation', () => {
   it('rejects an acceptance-test path with a traversal segment as unsafe-test-path', async () => {
     const planText = ['# Plan', '', ...contractTaskLines('tests/unified/../escape.test.ts')].join('\n');
     const { env, opens } = await runExecutePlan(planText);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('unsafe-test-path');
     expect(opens).toBe(0);
   });
@@ -295,9 +295,9 @@ describe('execute_plan contract-first dispatch validation', () => {
     });
     try {
       const res = await dispatch(h, tmp, { type: 'execute_plan', target: { paths: ['plan.md'] } });
-      const { taskId } = (await res.json()) as { taskId: string };
-      const env = await pollToTerminal(h, taskId);
-      expect((env.task as Record<string, unknown>).status).toBe('failed');
+      const { executionId } = (await res.json()) as { executionId: string };
+      const env = await pollToTerminal(h, executionId);
+      expect((env.execution as Record<string, unknown>).status).toBe('failed');
       expect((env.error as Record<string, unknown>).code).toBe('unsafe-test-path');
       expect(opens).toBe(0);
     } finally {
@@ -309,7 +309,7 @@ describe('execute_plan contract-first dispatch validation', () => {
   it('fails a dispatch requesting an unknown task selector without opening a provider session', async () => {
     const planText = validPlanText('tests/unified/selector.test.ts');
     const { env, opens } = await runExecutePlan(planText, ['Task I-99: does not exist']);
-    expect((env.task as Record<string, unknown>).status).toBe('failed');
+    expect((env.execution as Record<string, unknown>).status).toBe('failed');
     expect((env.error as Record<string, unknown>).code).toBe('no_match');
     expect(opens).toBe(0);
   });
@@ -342,9 +342,9 @@ describe('execute_plan contract-first dispatch validation', () => {
     });
     try {
       const res = await dispatch(h, tmp, { type: 'execute_plan', target: { paths: ['plan.md'] } });
-      const { taskId } = (await res.json()) as { taskId: string };
-      const env = await pollToTerminal(h, taskId);
-      expect((env.task as Record<string, unknown>).status).not.toBe('failed');
+      const { executionId } = (await res.json()) as { executionId: string };
+      const env = await pollToTerminal(h, executionId);
+      expect((env.execution as Record<string, unknown>).status).not.toBe('failed');
     } finally {
       await h.close();
       await rm(tmp, { recursive: true, force: true });

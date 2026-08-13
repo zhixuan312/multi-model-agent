@@ -12,7 +12,7 @@ type PlainLogEntry = Extract<BusMessage, { type: 'plain' }>['entry'];
  * exposes as `runningHeadline`.
  *
  * That field has been readable on both wires since Flow 1 and has never once been populated —
- * `TaskRegistry.setHeadline` had zero production callers — so every consumer, including the
+ * `ExecutionRegistry.setHeadline` had zero production callers — so every consumer, including the
  * Claude Desktop execution monitor, has only ever shown a phase name and a clock. A task
  * spends minutes in `implementing`, during which "implementing" says nothing about whether it
  * is reading files, running tests, or stuck.

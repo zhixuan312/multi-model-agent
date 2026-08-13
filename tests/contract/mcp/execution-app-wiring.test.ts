@@ -22,7 +22,7 @@ function installMockApp() {
     ontoolresult: undefined as ((v: unknown) => void) | undefined,
     callServerTool: vi.fn(() =>
       Promise.resolve({ content: [{ type: 'text', text: JSON.stringify({
-        taskId: 'task-1', status: 'running', phase: 'execute', elapsedMs: 2000, phaseElapsedMs: 500, startedAt: '2026-01-01T00:00:00.000Z',
+        executionId: 'task-1', status: 'running', phase: 'execute', elapsedMs: 2000, phaseElapsedMs: 500, startedAt: '2026-01-01T00:00:00.000Z',
       }) }] })
     ),
   };
@@ -31,24 +31,24 @@ function installMockApp() {
 }
 
 const runningEnvelope = { content: [{ type: 'text', text: JSON.stringify({
-  taskId: 'task-1', status: 'running', phase: 'queue', elapsedMs: 0, phaseElapsedMs: 0, startedAt: '2026-01-01T00:00:00.000Z',
+  executionId: 'task-1', status: 'running', phase: 'queue', elapsedMs: 0, phaseElapsedMs: 0, startedAt: '2026-01-01T00:00:00.000Z',
 }) }] };
 const alreadyTerminalEnvelope = { content: [{ type: 'text', text: JSON.stringify({
-  task: { taskId: 't-inline', status: 'done' }, metrics: { totalCostUsd: 0.01, savedVsMainCostUsd: 0.02 }, output: { summary: 'short task, ran inline' },
+  execution: { executionId: 't-inline', status: 'done' }, metrics: { totalCostUsd: 0.01, savedVsMainCostUsd: 0.02 }, output: { summary: 'short task, ran inline' },
 }) }] };
 
 describe('contract: execution App bootstrap wiring', () => {
   beforeEach(() => { document.body.innerHTML = '<main id="app"></main>'; vi.resetModules(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('connects, then polls mma_task_get with the taskId from the initiating running result', async () => {
+  it('connects, then polls mma_execution_get with the executionId from the initiating running result', async () => {
     const { app } = installMockApp();
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     expect(app.connect).toHaveBeenCalledTimes(1);
     app.ontoolresult?.(runningEnvelope);
     await Promise.resolve();
-    expect(callsOf(app)).toContainEqual({ name: 'mma_task_get', arguments: { taskId: 'task-1' } });
+    expect(callsOf(app)).toContainEqual({ name: 'mma_execution_get', arguments: { executionId: 'task-1' } });
   });
 
   it('renders an already-terminal initiating result immediately and never calls callServerTool', async () => {
@@ -89,18 +89,18 @@ describe('contract: execution App bootstrap wiring', () => {
     app.ontoolresult?.(runningEnvelope);
     await vi.advanceTimersByTimeAsync(0);
     const button = document.querySelector('button') as HTMLButtonElement;
-    app.callServerTool.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ taskId: 'task-1', status: 'running', cancellationRequested: true }) }] });
+    app.callServerTool.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ executionId: 'task-1', status: 'running', cancellationRequested: true }) }] });
     button.click();
     await Promise.resolve();
-    expect(button.disabled).toBe(true); // resolution of mma_task_cancel alone does not re-enable it
-    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({ taskId: 'task-1', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z', cancellationRequested: true }) }] });
+    expect(button.disabled).toBe(true); // resolution of mma_execution_cancel alone does not re-enable it
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({ executionId: 'task-1', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z', cancellationRequested: true }) }] });
     expect(document.body.textContent).toMatch(/cancelling/i);
   });
 
   /**
    * A malformed FIRST delivery must not permanently disable the monitor.
    *
-   * The initiating branch is what extracts the taskId and starts the poll loop; every later
+   * The initiating branch is what extracts the executionId and starts the poll loop; every later
    * delivery takes the update path, which does neither. So if the "we've been initiated"
    * latch is set before the payload is known to be good, one unparseable first message leaves
    * the App alive but inert — connected, rendering, and polling nothing, forever. It is a
@@ -119,7 +119,7 @@ describe('contract: execution App bootstrap wiring', () => {
 
     app.ontoolresult?.(runningEnvelope);
     await Promise.resolve();
-    expect(callsOf(app)).toContainEqual({ name: 'mma_task_get', arguments: { taskId: 'task-1' } });
+    expect(callsOf(app)).toContainEqual({ name: 'mma_execution_get', arguments: { executionId: 'task-1' } });
   });
 
   /**
@@ -155,7 +155,7 @@ describe('contract: execution App bootstrap wiring', () => {
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 'task-1', status: 'running', elapsedMs: 0, phaseElapsedMs: 0,
+      executionId: 'task-1', status: 'running', elapsedMs: 0, phaseElapsedMs: 0,
     }) }] });
     await Promise.resolve();
     // A dangling "Phase:" with nothing after it is the FIRST thing a user sees on a new run,
@@ -174,7 +174,7 @@ describe('contract: execution App bootstrap wiring', () => {
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 'task-1', type: 'audit', subtype: 'plan', status: 'running',
+      executionId: 'task-1', type: 'audit', subtype: 'plan', status: 'running',
       phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
     }) }] });
     await Promise.resolve();
@@ -186,7 +186,7 @@ describe('contract: execution App bootstrap wiring', () => {
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
+      executionId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1000, phaseElapsedMs: 1000,
     }) }] });
     await Promise.resolve();
     expect(document.querySelector('h2')?.textContent).toBe('running');
@@ -197,7 +197,7 @@ describe('contract: execution App bootstrap wiring', () => {
     await import('../../../packages/server/src/ui/execution/entry.js');
     await Promise.resolve();
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1_847_293, phaseElapsedMs: 7065,
+      executionId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 1_847_293, phaseElapsedMs: 7065,
     }) }] });
     await Promise.resolve();
     const text = document.body.textContent ?? '';
@@ -229,7 +229,7 @@ describe('contract: terminal view reports run stats, not results', () => {
 
   /** Shaped from a real terminal envelope pulled out of the execution store. */
   const realish = {
-    task: { taskId: 't1', status: 'done' },
+    execution: { executionId: 't1', status: 'done' },
     metrics: {
       totalDurationMs: 505782,
       totalCostUsd: 2.08677645,
@@ -282,7 +282,7 @@ describe('contract: terminal view reports run stats, not results', () => {
 
   it('renders a bare error envelope without empty rows or placeholders', async () => {
     const text = await renderTerminal({
-      task: { taskId: 't1', status: 'failed' },
+      execution: { executionId: 't1', status: 'failed' },
       metrics: { totalDurationMs: 0, totalCostUsd: 0, implementer: null, reviewer: null, totalUsage: null, savedVsMainCostUsd: null },
       output: { summary: null, filesChanged: [] },
     });
@@ -295,7 +295,7 @@ describe('contract: terminal view reports run stats, not results', () => {
 
   it('formats money for reading, not raw floats', async () => {
     const text = await renderTerminal({
-      task: { taskId: 't1', status: 'done' },
+      execution: { executionId: 't1', status: 'done' },
       metrics: { totalCostUsd: 0.0021 },
     });
     expect(text).toContain('$0.0021'); // sub-cent amounts stay meaningful

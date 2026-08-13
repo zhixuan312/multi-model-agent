@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  *     ship undetected — the test would pass by never running the code it exists to check.
  */
 
-const ALLOWED_TOOLS = ['mma_task_get', 'mma_task_cancel'];
+const ALLOWED_TOOLS = ['mma_execution_get', 'mma_execution_cancel'];
 
 function installMockAppFullCycle() {
   const app = {
@@ -28,10 +28,10 @@ function installMockAppFullCycle() {
     ontoolresult: undefined as ((v: unknown) => void) | undefined,
     callServerTool: vi.fn()
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
-        taskId: 't1', status: 'running', phase: 'execute', elapsedMs: 10, phaseElapsedMs: 10, startedAt: '2026-01-01T00:00:00.000Z',
+        executionId: 't1', status: 'running', phase: 'execute', elapsedMs: 10, phaseElapsedMs: 10, startedAt: '2026-01-01T00:00:00.000Z',
       }) }] })
       .mockResolvedValue({ content: [{ type: 'text', text: JSON.stringify({
-        task: { taskId: 't1', status: 'done' }, metrics: { totalCostUsd: 0.1, savedVsMainCostUsd: 0.2 }, output: { summary: 'ok' },
+        execution: { executionId: 't1', status: 'done' }, metrics: { totalCostUsd: 0.1, savedVsMainCostUsd: 0.2 }, output: { summary: 'ok' },
       }) }] }),
   };
   (window as unknown as { __MMA_CREATE_APP__: () => typeof app }).__MMA_CREATE_APP__ = () => app;
@@ -116,7 +116,7 @@ describe('contract: execution App credential and network safety (AC-3.5)', () =>
     await Promise.resolve();
 
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 't1', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z',
+      executionId: 't1', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z',
     }) }] });
     await Promise.resolve();
     await Promise.resolve();
@@ -131,8 +131,8 @@ describe('contract: execution App credential and network safety (AC-3.5)', () =>
 
     // The cancel path RAN — not merely "some call happened".
     const calls = app.callServerTool.mock.calls.map(([c]) => c as { name: string; arguments: Record<string, unknown> });
-    expect(calls).toContainEqual({ name: 'mma_task_cancel', arguments: { taskId: 't1' } });
-    expect(calls.some((c) => c.name === 'mma_task_get')).toBe(true);
+    expect(calls).toContainEqual({ name: 'mma_execution_cancel', arguments: { executionId: 't1' } });
+    expect(calls.some((c) => c.name === 'mma_execution_get')).toBe(true);
 
     // …and nothing outside the brokered channel was used.
     for (const [name, spy] of Object.entries(egress)) {

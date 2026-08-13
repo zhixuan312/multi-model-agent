@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { readServerVersion } from '../server-version.js';
 import type { ServerConfig, RunnableConfig, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { assertRunnable } from '@zhixuan92/multi-model-agent-core';
-import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
+import type { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
@@ -55,8 +55,8 @@ export interface RunningServer {
   /** The resolved address the server is bound to. Used by CLI to log the actual listen address. */
   serverAddress: string | null;
   stop(): Promise<void>;
-  /** Shared TaskRegistry — exposed for testing and introspection handlers. */
-  taskRegistry: TaskRegistry;
+  /** Shared ExecutionRegistry — exposed for testing and introspection handlers. */
+  executionRegistry: ExecutionRegistry;
   /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
   projectRegistry: ProjectRegistry;
   /** Shared InitiativeRecordRuntime over `<stateDir>/initiatives.db` — the one
@@ -74,15 +74,15 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/task',
+  '/execution',
   '/context-blocks',
 ]);
 
 /** Routes that require the X-MMA-Client header, so wire telemetry's `client`
  *  column is never anonymous for a billed run. Tool routes need it; the
- *  introspection / task-polling / context-block utility routes do not. */
+ *  introspection / execution-polling / context-block utility routes do not. */
 const CLIENT_REQUIRED_PATHS = new Set([
-  '/task',
+  '/execution',
 ]);
 
 /**
@@ -122,7 +122,7 @@ export async function startServer(
   const router = new RouteDispatcher<RawHandler>();
 
   // ── Create shared registries + durable execution store ────────────────────
-  const { TaskRegistry } = await import('@zhixuan92/multi-model-agent-core');
+  const { ExecutionRegistry } = await import('@zhixuan92/multi-model-agent-core');
   const { ProjectRegistry } = await import('../application/project-registry.js');
   const { ExecutionStore } = await import('../application/execution-store.js');
   const { reconcileOnBoot } = await import('../application/reconcile.js');
@@ -130,7 +130,7 @@ export async function startServer(
   // batchTtlMs bounds how long terminal task entries (with their full result
   // envelope) are retained for polling before eviction — prevents unbounded
   // growth of the task registry on a long-running server.
-  const taskRegistry = new TaskRegistry({ ttlMs: config.server.limits.batchTtlMs });
+  const executionRegistry = new ExecutionRegistry({ ttlMs: config.server.limits.batchTtlMs });
 
   // Durable execution records: task IDs + terminal results survive a restart;
   // the same TTL governs both the in-memory entries and the persistent rows.
@@ -196,7 +196,7 @@ export async function startServer(
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
     // A project with active tasks must never be evicted to make room at cap.
-    isBusy: (cwd) => taskRegistry.countActive(cwd) > 0,
+    isBusy: (cwd) => executionRegistry.countActive(cwd) > 0,
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.
@@ -226,7 +226,7 @@ export async function startServer(
   // Register control handlers
   await registerControlHandlers(router, config, projectRegistry);
 
-  // Register unified task handler (POST /task, GET /task/:taskId)
+  // Register unified execution handler (POST /execution, GET /execution/:executionId)
   {
     const multiModelConfig = extractMultiModelConfig(config);
 
@@ -261,12 +261,12 @@ export async function startServer(
       bus.subscribe(new WorkerPidRecorder(executionStore));
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
-      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore, initiativeLinker, initiativeRuntime });
-      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
-      const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
-      router.register('POST', '/task', buildUnifiedTaskHandler(deps));
-      router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));
-      router.register('DELETE', '/task/:taskId', buildTaskCancelHandler(deps));
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, executionRegistry, projectRegistry, store: executionStore, initiativeLinker, initiativeRuntime });
+      const deps: HandlerDeps = { runtime, executionRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
+      const { buildUnifiedExecutionHandler, buildExecutionPollHandler, buildExecutionCancelHandler } = await import('./handlers/unified-execution.js');
+      router.register('POST', '/execution', buildUnifiedExecutionHandler(deps));
+      router.register('GET', '/execution/:executionId', buildExecutionPollHandler(deps));
+      router.register('DELETE', '/execution/:executionId', buildExecutionCancelHandler(deps));
 
       // POST /initiatives — the single HTTP adapter for the complete frozen
       // Initiative operation table, over the SAME `initiativeRuntime` opened
@@ -291,7 +291,7 @@ export async function startServer(
       }
       const mcpDeps = {
         runtime,
-        taskRegistry,
+        executionRegistry,
         store: executionStore,
         // Same open InitiativeRecordRuntime `POST /initiatives` (Task I-6) uses —
         // the `mma_<operation>` Initiative tools (Task I-7) are a second thin
@@ -305,13 +305,13 @@ export async function startServer(
       };
       router.register('POST', '/mcp', (req, res, _params, ctx) => handleMcpRequest(mcpDeps, req, res, ctx.body));
     } else {
-      router.register('POST', '/task', (_req, res) => {
+      router.register('POST', '/execution', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
-      router.register('GET', '/task/:taskId', (_req, res) => {
+      router.register('GET', '/execution/:executionId', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
-      router.register('DELETE', '/task/:taskId', (_req, res) => {
+      router.register('DELETE', '/execution/:executionId', (_req, res) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mma.config.json');
       });
     }
@@ -327,7 +327,7 @@ export async function startServer(
   // GET /status — operator introspection (registered after registries are ready)
   const { buildStatusHandler } = await import('./handlers/introspection/status.js');
   router.register('GET', '/status', buildStatusHandler({
-    taskRegistry,
+    executionRegistry,
     projectRegistry,
     serverStartedAt,
     bind: config.server.bind,
@@ -360,7 +360,7 @@ export async function startServer(
       executionStore.close();
       initiativeRuntime.close();
     },
-    taskRegistry,
+    executionRegistry,
     projectRegistry,
     initiativeRuntime,
     serverStartedAt,

@@ -74,7 +74,7 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
     }
   });
 
-  it('the served bytes execute for real: connect, deliver a running result, poll mma_task_get (AC-1.7)', async () => {
+  it('the served bytes execute for real: connect, deliver a running result, poll mma_execution_get (AC-1.7)', async () => {
     const html = readFileSync(artifactPath, 'utf8');
     const script = html.match(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
     expect(script).toBeTruthy();
@@ -102,7 +102,7 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
       ontoolresult: undefined as ((v: unknown) => void) | undefined,
       callServerTool: vi.fn(() =>
         Promise.resolve({ content: [{ type: 'text', text: JSON.stringify({
-          taskId: 'from-run', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z',
+          executionId: 'from-run', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z',
         }) }] })
       ),
     };
@@ -110,7 +110,7 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
     (dom.window as unknown as { eval(source: string): unknown }).eval(evaluatable);
 
     app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
-      taskId: 'from-run', status: 'running', phase: 'queue', elapsedMs: 0, phaseElapsedMs: 0, startedAt: '2026-01-01T00:00:00.000Z',
+      executionId: 'from-run', status: 'running', phase: 'queue', elapsedMs: 0, phaseElapsedMs: 0, startedAt: '2026-01-01T00:00:00.000Z',
     }) }] });
     await new Promise((r) => setTimeout(r, 0));
 
@@ -119,6 +119,6 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
     const calls = app.callServerTool.mock.calls.map(
       ([c]) => c as { name: string; arguments: Record<string, unknown> }
     );
-    expect(calls).toContainEqual({ name: 'mma_task_get', arguments: { taskId: 'from-run' } });
+    expect(calls).toContainEqual({ name: 'mma_execution_get', arguments: { executionId: 'from-run' } });
   });
 });

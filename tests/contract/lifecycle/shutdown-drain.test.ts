@@ -28,7 +28,7 @@ describe('shutdown drain', () => {
     };
     try {
       // Sanity: dispatch works pre-drain.
-      const ok = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+      const ok = await fetch(`${server.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST', headers, body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(ok.status).toBe(202);
@@ -36,12 +36,12 @@ describe('shutdown drain', () => {
       // Flip drain flag — new dispatches must 503.
       setDraining(true);
       try {
-        const denied = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+        const denied = await fetch(`${server.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
           method: 'POST', headers, body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
         });
         expect(denied.status).toBe(503);
         const body = await denied.json() as { error?: string | { code?: string } };
-        // The startTestServer fetch adapter transforms /task error responses
+        // The startTestServer fetch adapter transforms /execution error responses
         // from { error: { code } } to { error: code } (a string).
         const code = typeof body.error === 'string' ? body.error : body.error?.code;
         expect(code).toBe('service_unavailable');

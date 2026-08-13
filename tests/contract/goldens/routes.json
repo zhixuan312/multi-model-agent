@@ -1,13 +1,13 @@
 [
   "DELETE /context-blocks/:blockId",
-  "DELETE /task/:taskId",
+  "DELETE /execution/:executionId",
   "GET /__routes",
   "GET /health",
   "GET /status",
-  "GET /task/:taskId",
+  "GET /execution/:executionId",
   "POST /configure-provider",
   "POST /context-blocks",
+  "POST /execution",
   "POST /initiatives",
-  "POST /mcp",
-  "POST /task"
+  "POST /mcp"
 ]

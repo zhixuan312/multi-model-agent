@@ -40,7 +40,7 @@ describe('reader-facing writing-style injection', () => {
       }),
     });
     try {
-      const response = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const response = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 
-async function dispatchAndPoll(h: { baseUrl: string; token: string }, body: object): Promise<{ taskId: string; polling: unknown; terminal: unknown }> {
-  const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+async function dispatchAndPoll(h: { baseUrl: string; token: string }, body: object): Promise<{ executionId: string; polling: unknown; terminal: unknown }> {
+  const dispatch = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -14,19 +14,19 @@ async function dispatchAndPoll(h: { baseUrl: string; token: string }, body: obje
     body: JSON.stringify(body),
   });
   expect(dispatch.status).toBe(202);
-  const { taskId } = (await dispatch.json()) as { taskId: string };
+  const { executionId } = (await dispatch.json()) as { executionId: string };
 
   let polling: unknown = null;
   for (let i = 0; i < 300; i++) {
-    const poll = await fetch(`${h.baseUrl}/task/${taskId}`, {
+    const poll = await fetch(`${h.baseUrl}/execution/${executionId}`, {
       headers: { 'X-MMA-Main-Model': 'claude-opus-4-8', 'X-MMA-Client': 'claude-code', Authorization: `Bearer ${h.token}` },
     });
-    if (poll.status === 200) return { taskId, polling, terminal: await poll.json() };
+    if (poll.status === 200) return { executionId, polling, terminal: await poll.json() };
     if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status}`);
     if (!polling) polling = await poll.json();
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(`poll timeout ${taskId}`);
+  throw new Error(`poll timeout ${executionId}`);
 }
 
 describe('metrics contract', () => {

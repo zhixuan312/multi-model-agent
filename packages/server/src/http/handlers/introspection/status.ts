@@ -3,14 +3,14 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
-import type { TaskRegistry } from '@zhixuan92/multi-model-agent-core';
+import type { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../../application/project-registry.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { resolveConfiguredAuthMode } from '@zhixuan92/multi-model-agent-core';
 import { deriveSkillManifestInfo } from '../../../skill-install/skill-drift.js';
 
 interface StatusHandlerDeps {
-  taskRegistry: TaskRegistry;
+  executionRegistry: ExecutionRegistry;
   projectRegistry: ProjectRegistry;
   serverStartedAt: number;
   bind: string;
@@ -30,7 +30,7 @@ interface StatusHandlerDeps {
 export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
   return (_req: IncomingMessage, res: ServerResponse) => {
     const {
-      taskRegistry,
+      executionRegistry,
       projectRegistry,
       serverStartedAt,
       bind,
@@ -67,7 +67,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     }[] = [];
 
     for (const [, pc] of projectRegistry.entries()) {
-      const pcActiveTasks = taskRegistry.countActive(pc.cwd);
+      const pcActiveTasks = executionRegistry.countActive(pc.cwd);
 
       projects.push({
         cwd: pc.cwd,
@@ -79,8 +79,8 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     }
 
     // ── Task lists ───────────────────────────────────────────────────────────
-    const inflight = taskRegistry.allInFlight().map(entry => ({
-      taskId: entry.taskId,
+    const inflight = executionRegistry.allInFlight().map(entry => ({
+      executionId: entry.executionId,
       tool: entry.tool,
       cwd: entry.cwd,
       startedAt: entry.startedAt,

@@ -13,14 +13,14 @@ const HEADERS = (token: string) => ({
 });
 
 async function postTaskCwd(h: { baseUrl: string; token: string }, cwd: string, body: object) {
-  const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+  const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
     method: 'POST',
     headers: HEADERS(h.token),
     body: JSON.stringify(body),
   });
-  const receipt = await res.json() as { taskId: string };
+  const receipt = await res.json() as { executionId: string };
   for (let i = 0; i < 100; i += 1) {
-    const poll = await fetch(`${h.baseUrl}/task/${receipt.taskId}`, { headers: HEADERS(h.token) });
+    const poll = await fetch(`${h.baseUrl}/execution/${receipt.executionId}`, { headers: HEADERS(h.token) });
     if (poll.status === 200) return poll.json() as Promise<Record<string, unknown>>;
   }
   throw new Error('timed out');
@@ -76,7 +76,7 @@ describe('journal engine routes', () => {
     const h = await boot({ provider, cwd });
     try {
       const env = await postTaskCwd(h, cwd, { type: 'journal_record', records: [{ prompt: 'A', topic: 'journal-engine' }] });
-      expect((env.task as { status: string }).status).toBe('done');
+      expect((env.execution as { status: string }).status).toBe('done');
       expect(opened).toBe(1);
     } finally {
       await h.close();
@@ -117,7 +117,7 @@ describe('journal engine routes', () => {
         records: [{ prompt: 'A', topic: 'journal-engine' }, { prompt: 'B', topic: 'journal-engine' }],
       });
       // Task completes with the documented per-record shape, not a crashed task.
-      expect((env.task as { status: string }).status).not.toBe('failed');
+      expect((env.execution as { status: string }).status).not.toBe('failed');
       expect(env.error).toBeNull();
       const applied = JSON.parse((env.raw as { implementer: string }).implementer) as {
         recorded: unknown[]; failed: Array<{ learning: string; reason: string }>;
@@ -144,7 +144,7 @@ describe('journal engine routes', () => {
     const h = await boot({ provider, cwd });
     try {
       const env = await postTaskCwd(h, cwd, { type: 'journal_record', records: [{ prompt: 'First learning', topic: 'journal-engine' }] });
-      expect((env.task as { status: string }).status).toBe('done');
+      expect((env.execution as { status: string }).status).toBe('done');
       expect(env.error).toBeNull();
       const nodes = await readdir(join(cwd, '.mma', 'journal', 'nodes'));
       expect(nodes.some((file) => file.startsWith('0001-'))).toBe(true);
@@ -161,7 +161,7 @@ describe('journal engine routes', () => {
     const h = await boot({ provider, cwd });
     try {
       const env = await postTaskCwd(h, cwd, { type: 'journal_recall', prompt: 'anything at all', reviewPolicy: 'none' });
-      expect((env.task as { status: string }).status).not.toBe('failed');
+      expect((env.execution as { status: string }).status).not.toBe('failed');
       expect(env.error).toBeNull();
       expect((env.execution as { worktree: unknown }).worktree).toBeNull();
     } finally {

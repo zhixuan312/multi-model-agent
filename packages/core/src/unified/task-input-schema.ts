@@ -30,7 +30,7 @@ const targetSchema = z.object({
  * (SPEC-003 Task I-6). When present, `ExecutionRuntime.submit()` resolves the selected
  * Initiative and Task, checks Task membership and Task state (`open | claimed` only), checks
  * claim ownership for a claimed Task, and performs the Task's `open|claimed -> in_progress`
- * transition — all BEFORE any execution handle (`TaskRegistry.register` /
+ * transition — all BEFORE any execution handle (`ExecutionRegistry.register` /
  * `ExecutionStore.admit`) or provider session exists. Available on every task type: linked
  * admission is a general execution-dispatch capability, not one route's concern. Mirrors
  * `ExecutionLinkage` in `packages/server/src/application/execution-store.ts` and the outbox's

@@ -27,7 +27,7 @@ describe('Initiative MCP contract (supplement — fixed syntax)', () => {
       ]));
       // Existing tools stay intact (AC-2.1's "existing seven MCP tools keep their behavior").
       expect(names).toEqual(expect.arrayContaining([
-        'mma_run', 'mma_task_get', 'mma_task_list', 'mma_task_wait', 'mma_task_cancel',
+        'mma_run', 'mma_execution_get', 'mma_execution_list', 'mma_execution_wait', 'mma_execution_cancel',
         'mma_context_block_create', 'mma_context_block_delete',
       ]));
 

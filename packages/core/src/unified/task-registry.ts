@@ -1,12 +1,12 @@
 /** In-memory lifecycle states. `interrupted` additionally exists in the
  *  persistent ExecutionStore for executions found dead after a daemon restart —
  *  a live registry never holds it (nothing survives in memory to interrupt). */
-export type TaskState = 'pending' | 'complete' | 'failed' | 'cancelled';
+export type ExecutionState = 'pending' | 'complete' | 'failed' | 'cancelled';
 
-export interface TaskEntry {
-  taskId: string;
+export interface ExecutionEntry {
+  executionId: string;
   cwd: string;
-  state: TaskState;
+  state: ExecutionState;
   tool: string;
   /** `audit`'s criteria set (`plan` | `spec` | `skill` | `default`), null for every
    *  other type. Carried so a running audit is as self-describing on the wire as it
@@ -41,20 +41,20 @@ export interface TaskEntry {
   phase: 'implementing' | 'reviewing' | null;
   phaseStartedAt: number | null;
   totalTasks: number | null;
-  /** Set when a caller requested cancellation (DELETE /task/:id). A flag, not a
-   *  state: the entry stays `pending` until the runner confirms termination and
-   *  the terminal CAS decides between cancelled and a completed/failed that won
-   *  the race. */
+  /** Set when a caller requested cancellation (DELETE /execution/:id). A flag,
+   *  not a state: the entry stays `pending` until the runner confirms
+   *  termination and the terminal CAS decides between cancelled and a
+   *  completed/failed that won the race. */
   cancellationRequestedAt: number | null;
 }
 
-function isTerminal(state: TaskState): boolean {
+function isTerminal(state: ExecutionState): boolean {
   return state === 'complete' || state === 'failed' || state === 'cancelled';
 }
 
 /** Default retention for terminal task entries (1h) — matches
  *  DEFAULT_SERVER_LIMITS.batchTtlMs. Long enough that any caller has retrieved
- *  the result via GET /task/:id well before eviction. */
+ *  the result via GET /execution/:id well before eviction. */
 const DEFAULT_TASK_TTL_MS = 3_600_000;
 
 /**
@@ -66,8 +66,8 @@ const DEFAULT_TASK_TTL_MS = 3_600_000;
  */
 const MAX_ACTIVITY_SAMPLES = 600;
 
-export class TaskRegistry {
-  private entries = new Map<string, TaskEntry>();
+export class ExecutionRegistry {
+  private entries = new Map<string, ExecutionEntry>();
   private readonly ttlMs: number;
 
   constructor(opts: { ttlMs?: number } = {}) {
@@ -86,10 +86,10 @@ export class TaskRegistry {
     }
   }
 
-  register(taskId: string, cwd: string, tool: string, subtype: string | null, practice: string | null = null): void {
+  register(executionId: string, cwd: string, tool: string, subtype: string | null, practice: string | null = null): void {
     this.evictExpired(Date.now());
-    this.entries.set(taskId, {
-      taskId, cwd, tool, subtype, practice,
+    this.entries.set(executionId, {
+      executionId, cwd, tool, subtype, practice,
       state: 'pending',
       result: null,
       runningHeadline: null,
@@ -103,20 +103,20 @@ export class TaskRegistry {
     });
   }
 
-  get(taskId: string): TaskEntry | undefined {
-    return this.entries.get(taskId);
+  get(executionId: string): ExecutionEntry | undefined {
+    return this.entries.get(executionId);
   }
 
-  complete(taskId: string, result: unknown): void {
-    const e = this.entries.get(taskId);
+  complete(executionId: string, result: unknown): void {
+    const e = this.entries.get(executionId);
     if (!e || isTerminal(e.state)) return;
     e.state = 'complete';
     e.result = result;
     e.terminalAt = Date.now();
   }
 
-  fail(taskId: string, result: unknown): void {
-    const e = this.entries.get(taskId);
+  fail(executionId: string, result: unknown): void {
+    const e = this.entries.get(executionId);
     if (!e || isTerminal(e.state)) return;
     e.state = 'failed';
     e.result = result;
@@ -126,8 +126,8 @@ export class TaskRegistry {
   /** Terminal transition to `cancelled`. Same CAS discipline as complete/fail:
    *  a task that already reached a terminal state is never overwritten — if
    *  completion won the race against cancellation, completed stands. */
-  cancel(taskId: string, result: unknown): void {
-    const e = this.entries.get(taskId);
+  cancel(executionId: string, result: unknown): void {
+    const e = this.entries.get(executionId);
     if (!e || isTerminal(e.state)) return;
     e.state = 'cancelled';
     e.result = result;
@@ -137,23 +137,23 @@ export class TaskRegistry {
   /** Record a cancellation request on a non-terminal task. Returns the outcome
    *  the caller reports: 'requested' (flag set now or already set — idempotent),
    *  'terminal' (too late; entry carries the final state), or 'not_found'. */
-  requestCancel(taskId: string): { outcome: 'requested' | 'terminal' | 'not_found'; entry?: TaskEntry } {
-    const e = this.entries.get(taskId);
+  requestCancel(executionId: string): { outcome: 'requested' | 'terminal' | 'not_found'; entry?: ExecutionEntry } {
+    const e = this.entries.get(executionId);
     if (!e) return { outcome: 'not_found' };
     if (isTerminal(e.state)) return { outcome: 'terminal', entry: e };
     if (e.cancellationRequestedAt === null) e.cancellationRequestedAt = Date.now();
     return { outcome: 'requested', entry: e };
   }
 
-  setPhase(taskId: string, phase: 'implementing' | 'reviewing'): void {
-    const e = this.entries.get(taskId);
+  setPhase(executionId: string, phase: 'implementing' | 'reviewing'): void {
+    const e = this.entries.get(executionId);
     if (!e || isTerminal(e.state)) return;
     e.phase = phase;
     e.phaseStartedAt = Date.now();
   }
 
-  setHeadline(taskId: string, headline: string): void {
-    const e = this.entries.get(taskId);
+  setHeadline(executionId: string, headline: string): void {
+    const e = this.entries.get(executionId);
     if (e && !isTerminal(e.state)) e.runningHeadline = headline;
   }
 
@@ -165,8 +165,8 @@ export class TaskRegistry {
    * construction — an Act I sample can never appear after an Act II one, which is a sequence
    * the engine cannot actually produce.
    */
-  recordActivity(taskId: string, at: number = Date.now()): void {
-    const e = this.entries.get(taskId);
+  recordActivity(executionId: string, at: number = Date.now()): void {
+    const e = this.entries.get(executionId);
     if (!e || isTerminal(e.state)) return;
     e.activity.push({ at, phase: e.phase === 'reviewing' ? 2 : 1 });
     if (e.activity.length > MAX_ACTIVITY_SAMPLES) e.activity.shift();
@@ -180,12 +180,12 @@ export class TaskRegistry {
     return n;
   }
 
-  allInFlight(): TaskEntry[] {
+  allInFlight(): ExecutionEntry[] {
     return [...this.entries.values()].filter(e => !isTerminal(e.state));
   }
 
-  isTerminal(taskId: string): boolean {
-    const e = this.entries.get(taskId);
+  isTerminal(executionId: string): boolean {
+    const e = this.entries.get(executionId);
     return e ? isTerminal(e.state) : false;
   }
 }

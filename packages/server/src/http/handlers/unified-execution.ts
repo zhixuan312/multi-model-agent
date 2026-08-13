@@ -1,6 +1,6 @@
-// Unified task handlers — thin REST adapters over the application layer.
-// POST /task: validate the wire body (Zod) + build a CallerContext from the
-// request, then hand off to ExecutionRuntime.submit(). GET /task/:taskId:
+// Unified execution handlers — thin REST adapters over the application layer.
+// POST /execution: validate the wire body (Zod) + build a CallerContext from the
+// request, then hand off to ExecutionRuntime.submit(). GET /execution/:executionId:
 // shape the registry entry for polling. No type-specific logic lives here —
 // preprocessing, pipeline invocation and envelope construction are all owned
 // by packages/server/src/application/.
@@ -10,7 +10,7 @@ import type { HandlerDeps } from '../handler-deps.js';
 import { taskInputSchema, type ApprovedContract } from '@zhixuan92/multi-model-agent-core';
 import { sendJson, sendError } from '../errors.js';
 import type { SubmitError } from '../../application/execution-runtime.js';
-import { taskIdentity, buildRunningSnapshot } from '../../application/task-identity.js';
+import { executionIdentity, buildRunningSnapshot } from '../../application/task-identity.js';
 import { validateDeliverableContractBoundary } from '../../application/deliverable-contract-validator.js';
 
 /** Map an application-layer submit error onto the REST status/code contract. */
@@ -30,7 +30,7 @@ function submitErrorToHttp(error: SubmitError): { status: number; code: string; 
   }
 }
 
-export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
+export function buildUnifiedExecutionHandler(deps: HandlerDeps): RawHandler {
   return async (_req, res, _params, ctx) => {
     const parsed = taskInputSchema.safeParse(ctx.body);
     if (!parsed.success) {
@@ -69,40 +69,40 @@ export function buildUnifiedTaskHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
-    const admitted = deps.taskRegistry.get(outcome.taskId);
+    const admitted = deps.executionRegistry.get(outcome.executionId);
     sendJson(res, 202, {
-      ...(admitted ? taskIdentity(admitted) : { taskId: outcome.taskId, type: parsed.data.type }),
-      statusUrl: `/task/${outcome.taskId}`,
+      ...(admitted ? executionIdentity(admitted) : { executionId: outcome.executionId, type: parsed.data.type }),
+      statusUrl: `/execution/${outcome.executionId}`,
     });
   };
 }
 
-export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
+export function buildExecutionPollHandler(deps: HandlerDeps): RawHandler {
   return async (_req, res, params, _ctx) => {
-    const taskId = params.taskId;
-    if (!taskId) {
-      sendError(res, 400, 'missing_task_id', 'taskId required');
+    const executionId = params.executionId;
+    if (!executionId) {
+      sendError(res, 400, 'missing_execution_id', 'executionId required');
       return;
     }
 
-    const entry = deps.taskRegistry.get(taskId);
+    const entry = deps.executionRegistry.get(executionId);
     if (!entry) {
       // Durable fallback: terminal results survive a daemon restart (and
       // registry TTL eviction) in the ExecutionStore — including executions
       // reconciled to `interrupted` at boot, whose envelope tells the caller
       // to resubmit. Non-terminal store rows belong to another live daemon
       // and are not pollable here.
-      const record = deps.store.get(taskId);
+      const record = deps.store.get(executionId);
       if (record?.resultJson != null) {
         sendJson(res, 200, JSON.parse(record.resultJson));
         return;
       }
-      sendError(res, 404, 'not_found', `Task ${taskId} not found`);
+      sendError(res, 404, 'not_found', `Execution ${executionId} not found`);
       return;
     }
 
-    if (deps.taskRegistry.isTerminal(taskId)) {
-      sendJson(res, 200, entry.result ?? { ...taskIdentity(entry), status: entry.state, error: null });
+    if (deps.executionRegistry.isTerminal(executionId)) {
+      sendJson(res, 200, entry.result ?? { ...executionIdentity(entry), status: entry.state, error: null });
     } else {
       // Built by the SAME function the MCP adapter calls, not a second copy of the shape.
       // The two hand-maintained copies this replaces had already drifted once.
@@ -112,29 +112,29 @@ export function buildTaskPollHandler(deps: HandlerDeps): RawHandler {
 }
 
 /**
- * DELETE /task/:taskId — request cooperative cancellation. 202 means
- * REQUESTED, not stopped: the task stays `running` (with
+ * DELETE /execution/:executionId — request cooperative cancellation. 202 means
+ * REQUESTED, not stopped: the execution stays `running` (with
  * cancellationRequested: true on polls) until the runner confirms
  * termination, then reaches terminal `cancelled` — unless completion won the
  * race, in which case the completed/failed result stands. Idempotent.
  */
-export function buildTaskCancelHandler(deps: HandlerDeps): RawHandler {
+export function buildExecutionCancelHandler(deps: HandlerDeps): RawHandler {
   return async (_req, res, params, _ctx) => {
-    const taskId = params.taskId;
-    if (!taskId) {
-      sendError(res, 400, 'missing_task_id', 'taskId required');
+    const executionId = params.executionId;
+    if (!executionId) {
+      sendError(res, 400, 'missing_execution_id', 'executionId required');
       return;
     }
 
-    const result = deps.runtime.cancel(taskId);
+    const result = deps.runtime.cancel(executionId);
     if (result.outcome === 'not_found') {
-      sendError(res, 404, 'not_found', `Task ${taskId} not found`);
+      sendError(res, 404, 'not_found', `Execution ${executionId} not found`);
       return;
     }
     if (result.outcome === 'terminal') {
-      sendJson(res, 200, { ...taskIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
+      sendJson(res, 200, { ...executionIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
       return;
     }
-    sendJson(res, 202, { ...taskIdentity(result.entry), status: 'running', cancellationRequested: true });
+    sendJson(res, 202, { ...executionIdentity(result.entry), status: 'running', cancellationRequested: true });
   };
 }

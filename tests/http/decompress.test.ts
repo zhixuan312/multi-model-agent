@@ -102,7 +102,7 @@ describe('decompress pipeline integration', () => {
     try {
       const body = JSON.stringify({ type: 'review', target: { paths: ['/tmp/gzip-test.ts'] } });
       const compressed = gzipSync(Buffer.from(body));
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +122,7 @@ describe('decompress pipeline integration', () => {
   it('returns 400 for corrupt gzip body through HTTP', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +143,7 @@ describe('decompress pipeline integration', () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const body = JSON.stringify({ type: 'review', target: { paths: ['/tmp/br-test.ts'] } });
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -10,7 +10,7 @@ describe('contract: tool routes require the X-MMA-Client header', () => {
   it('returns 400 client_required when the header is missing', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,7 +30,7 @@ describe('contract: tool routes require the X-MMA-Client header', () => {
   it('returns 400 client_required for a value outside the canonical roster', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ describe('contract: tool routes require the X-MMA-Client header', () => {
   it('accepts the same request with only X-MMA-Client set — no model header needed', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

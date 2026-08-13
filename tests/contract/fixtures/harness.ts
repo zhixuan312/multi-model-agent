@@ -23,10 +23,10 @@ export interface HarnessOutboxRow {
 export interface HarnessHandle {
   baseUrl: string;
   token: string;
-  /** The running server's already-public TaskRegistry. Exposed for contract tests that
+  /** The running server's already-public ExecutionRegistry. Exposed for contract tests that
    *  need to seed non-terminal state (e.g. a running headline) deterministically —
    *  deliberately NOT a production endpoint. */
-  taskRegistry: RunningServer['taskRegistry'];
+  executionRegistry: RunningServer['executionRegistry'];
   /** Read-only list of `ExecutionStore` outbox rows with `consumed_at IS NULL` (SPEC-003 Task
    *  I-6), oldest first — for test assertions only. Opens its OWN short-lived SQLite connection
    *  to `<stateDir>/executions.db` (WAL mode, multi-reader safe) rather than reaching into the
@@ -166,7 +166,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     return {
       baseUrl: `http://127.0.0.1:${server.port}`,
       token,
-      taskRegistry: server.taskRegistry,
+      executionRegistry: server.executionRegistry,
       unconsumedOutbox,
       async restart(): Promise<HarnessHandle> {
         await server.stop();

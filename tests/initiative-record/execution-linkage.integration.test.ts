@@ -9,9 +9,9 @@ async function mutate(h: { baseUrl: string; token: string }, operation: string, 
   expect(response.status).toBe(200);
   return await response.json() as Record<string, unknown>;
 }
-async function terminal(h: { baseUrl: string; token: string }, taskId: string) {
+async function terminal(h: { baseUrl: string; token: string }, executionId: string) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const response = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: headers(h.token) });
+    const response = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: headers(h.token) });
     if (response.status === 200) return await response.json() as Record<string, unknown>;
     expect(response.status).toBe(202);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -27,23 +27,23 @@ describe('Execution linkage integration', () => {
       const initiative = await mutate(h, 'initiative_create', { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null }, 0);
       const task = await mutate(h, 'initiative_task_create', { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] }, 0);
       await mutate(h, 'initiative_task_claim', { uuid: task.uuid }, 0);
-      const conflicted = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-b' } }) });
+      const conflicted = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-b' } }) });
       expect(conflicted.status).toBe(400);
       expect(await conflicted.json()).toMatchObject({ error: { code: 'task_claim_conflict' } });
       expect(h.unconsumedOutbox()).toEqual([]);
-      const dispatch = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
+      const dispatch = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
       expect(dispatch.status).toBe(202);
-      const { taskId } = await dispatch.json() as { taskId: string };
-      await terminal(h, taskId);
+      const { executionId } = await dispatch.json() as { executionId: string };
+      await terminal(h, executionId);
       expect(h.unconsumedOutbox()).toHaveLength(1);
       const restarted = await h.restart();
       try {
         const resume = await fetch(`${restarted.baseUrl}/initiatives`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
         const record = await resume.json() as { tasks: Array<{ status: string; outcome: string | null; executionRefs: string[] }>; evidence: unknown[] };
-        expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded_with_concerns', executionRefs: [taskId] })]);
+        expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded_with_concerns', executionRefs: [executionId] })]);
         expect(record.evidence).toHaveLength(1);
         expect(restarted.unconsumedOutbox()).toEqual([]);
-        const invalid = await fetch(`${restarted.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
+        const invalid = await fetch(`${restarted.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
         expect(invalid.status).toBe(400);
         expect(await invalid.json()).toMatchObject({ error: { code: 'invalid_task_transition' } });
         expect(restarted.unconsumedOutbox()).toEqual([]);
