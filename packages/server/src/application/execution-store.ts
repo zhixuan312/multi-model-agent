@@ -21,6 +21,53 @@ import * as path from 'node:path';
 
 type StoredExecutionState = 'pending' | 'complete' | 'failed' | 'cancelled' | 'interrupted';
 
+/** Validated Initiative selector + Task reference + linkage authorization, supplied at
+ *  admission for a linked Execution. Persisted on the execution row so the terminal CAS can
+ *  read it back without the caller re-supplying it (and so it survives a daemon restart —
+ *  boot reconciliation's `interrupt()` call goes through the same terminal path). Shape mirrors
+ *  the Initiative selector union (`{ uuid }` or `{ human_key }`); kept structurally loose here
+ *  because the Zod-validated wire schema lives at the transport boundary (Task I-6), not in
+ *  this durable store. */
+export interface ExecutionLinkage {
+  initiative: { uuid: string } | { human_key: string };
+  task_uuid: string;
+  authorized_by: string;
+}
+
+/** One outbox row: durable proof that a linked terminal Execution needs an Initiative-side
+ *  replay (Task I-5's `InitiativeLinker`). `payload` bundles the linkage plus the terminal
+ *  envelope so replay never has to re-read `executions` for it. */
+export interface OutboxRecord {
+  executionId: string;
+  payload: unknown;
+  createdAt: number;
+  consumedAt: number | null;
+}
+
+interface OutboxRow {
+  execution_id: string;
+  payload: string;
+  created_at: number;
+  consumed_at: number | null;
+}
+
+/** Terminal envelopes are always `JSON.stringify`-produced by callers (never raw LLM text —
+ *  that extraction lives in `result-shape.ts#tryParseJson` and is a different concern). Falls
+ *  back to the raw string so a malformed caller-supplied value never aborts the terminal
+ *  transaction the outbox row is written inside. */
+function parseResultJson(raw: string): unknown {
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+function toOutboxRecord(r: OutboxRow): OutboxRecord {
+  return {
+    executionId: r.execution_id,
+    payload: JSON.parse(r.payload),
+    createdAt: r.created_at,
+    consumedAt: r.consumed_at,
+  };
+}
+
 interface ExecutionRecord {
   id: string;
   type: string;
@@ -113,20 +160,47 @@ export class ExecutionStore {
         cancellation_requested_at INTEGER,
         result_json TEXT,
         daemon_pid INTEGER NOT NULL,
-        worker_pid INTEGER
+        worker_pid INTEGER,
+        linkage_json TEXT
+      )
+    `);
+    // `CREATE TABLE IF NOT EXISTS` does not apply new columns to the database
+    // created by pre-outbox daemons. Keep this migration on the same schema-open
+    // path so an upgraded daemon can admit linked executions into its existing
+    // state directory.
+    const executionColumns = this.db.prepare('PRAGMA table_info(executions)').all() as Array<{ name: string }>;
+    if (!executionColumns.some((column) => column.name === 'linkage_json')) {
+      this.db.exec('ALTER TABLE executions ADD COLUMN linkage_json TEXT');
+    }
+    // Outbox: exactly one row per LINKED execution, written in the same transaction as its
+    // terminal CAS (see `terminalize`). No retention/deletion behavior — Task I-5's
+    // InitiativeLinker consumes rows via `listUnconsumedOutbox` / `markOutboxConsumed`.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        execution_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        consumed_at INTEGER
       )
     `);
   }
 
   /** Persist the admission record. Called BEFORE the handle is returned to the
-   *  caller, so a handle that exists is always a handle that survives. */
-  admit(id: string, type: string, cwd: string, daemonPid: number): void {
+   *  caller, so a handle that exists is always a handle that survives.
+   *
+   *  `linkage`, when supplied, marks this Execution as linked to an Initiative Task. It is
+   *  persisted here (not held in memory) so the terminal CAS in `terminalize` — reached later,
+   *  possibly after a daemon restart via boot reconciliation's `interrupt()` — can read it back
+   *  without the caller re-supplying it. Omitting it (the existing unlinked call shape) means
+   *  the terminal write for this execution creates no outbox row. */
+  admit(id: string, type: string, cwd: string, daemonPid: number, linkage?: ExecutionLinkage): void {
     if (this.closed) return;
     const now = Date.now();
     this.db.prepare(`
-      INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?)
-    `).run(id, type, cwd, now, now, daemonPid);
+      INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid, linkage_json)
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+    `).run(id, type, cwd, now, now, daemonPid, linkage ? JSON.stringify(linkage) : null);
   }
 
   /** Record the detached worker's process-group leader pid (codex). Only
@@ -150,16 +224,51 @@ export class ExecutionStore {
   }
 
   /** Terminal CAS: only a pending row transitions; a row that already reached
-   *  a terminal state is never overwritten (first writer wins). */
+   *  a terminal state is never overwritten (first writer wins).
+   *
+   *  Linked executions (admitted with `linkage`) get exactly one outbox row inserted in the
+   *  SAME transaction as the terminal update — a CAS that loses the race (row already terminal)
+   *  inserts none, and a SQLite failure rolls back both writes. Unlinked executions are
+   *  unaffected: no linkage_json means no outbox row, same result as before this table existed. */
   private terminalize(id: string, state: 'complete' | 'failed' | 'cancelled' | 'interrupted', resultJson: string): boolean {
     if (this.closed) return false;
     const now = Date.now();
-    const res = this.db.prepare(`
-      UPDATE executions
-      SET state = ?, result_json = ?, terminal_at = ?, expires_at = ?, updated_at = ?
-      WHERE id = ? AND state = 'pending'
-    `).run(state, resultJson, now, now + this.ttlMs, now, id);
-    return res.changes > 0;
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const pending = this.db.prepare(
+        `SELECT linkage_json FROM executions WHERE id = ? AND state = 'pending'`,
+      ).get(id) as { linkage_json: string | null } | undefined;
+
+      const res = this.db.prepare(`
+        UPDATE executions
+        SET state = ?, result_json = ?, terminal_at = ?, expires_at = ?, updated_at = ?
+        WHERE id = ? AND state = 'pending'
+      `).run(state, resultJson, now, now + this.ttlMs, now, id);
+      const won = res.changes > 0;
+
+      if (won && pending?.linkage_json) {
+        const payload = {
+          linkage: JSON.parse(pending.linkage_json) as ExecutionLinkage,
+          execution_id: id,
+          state,
+          terminal_envelope: parseResultJson(resultJson),
+        };
+        this.db.prepare(`
+          INSERT INTO outbox (execution_id, payload, created_at, consumed_at)
+          VALUES (?, ?, ?, NULL)
+        `).run(id, JSON.stringify(payload), now);
+      }
+
+      this.db.exec('COMMIT');
+      return won;
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {
+        // The transaction may already be aborted by the failure above — nothing more to undo.
+      }
+      throw error;
+    }
   }
 
   complete(id: string, resultJson: string): boolean { return this.terminalize(id, 'complete', resultJson); }
@@ -205,6 +314,27 @@ export class ExecutionStore {
       `SELECT * FROM executions WHERE state = 'interrupted' AND terminal_at >= ? ORDER BY terminal_at ASC`,
     ).all(since) as unknown as Row[];
     return rows.map(toRecord);
+  }
+
+  /** Outbox rows not yet consumed, oldest first. Task I-5's `InitiativeLinker` replays these —
+   *  at boot (after fencing) and after every later terminal write. No retention/deletion
+   *  behavior here: rows persist until `markOutboxConsumed` marks them, and are never pruned. */
+  listUnconsumedOutbox(): OutboxRecord[] {
+    if (this.closed) return [];
+    const rows = this.db.prepare(
+      `SELECT * FROM outbox WHERE consumed_at IS NULL ORDER BY created_at ASC`,
+    ).all() as unknown as OutboxRow[];
+    return rows.map(toOutboxRecord);
+  }
+
+  /** Conditional consumed marker: only an unconsumed row transitions (idempotent — a replay
+   *  that lands after another replay already marked it does nothing and returns false). */
+  markOutboxConsumed(executionId: string): boolean {
+    if (this.closed) return false;
+    const res = this.db.prepare(
+      `UPDATE outbox SET consumed_at = ? WHERE execution_id = ? AND consumed_at IS NULL`,
+    ).run(Date.now(), executionId);
+    return res.changes > 0;
   }
 
   /** Drop terminal rows past their retention TTL. Returns rows removed. */
