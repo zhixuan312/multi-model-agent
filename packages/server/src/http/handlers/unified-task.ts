@@ -22,6 +22,11 @@ function submitErrorToHttp(error: SubmitError): { status: number; code: string; 
       return { status: 500, code: 'skill_load_failed', message: error.message };
     case 'project_reservation':
       return { status: 503, code: error.code, message: error.message };
+    // SPEC-003 Task I-6: unknown Initiative / malformed membership / absent authorization all
+    // surface as invalid_request; a Task outside open|claimed as invalid_task_transition; a
+    // claimed Task with a mismatched authorized_by as task_claim_conflict — all HTTP 400.
+    case 'linked_admission':
+      return { status: 400, code: error.code, message: error.message };
   }
 }
 

@@ -6,11 +6,19 @@ import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFileSync, mkdtempSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
 import { startServer, type RunningServer } from '@zhixuan92/multi-model-agent/server';
 
 import { freezeClock } from './deterministic-clock.js';
+
+/** One `ExecutionStore` outbox row, as read directly off `<stateDir>/executions.db` by
+ *  `HarnessHandle.unconsumedOutbox()` (SPEC-003 Task I-6) — read-only, test-assertion shape. */
+export interface HarnessOutboxRow {
+  executionId: string;
+  consumedAt: number | null;
+}
 
 export interface HarnessHandle {
   baseUrl: string;
@@ -19,6 +27,18 @@ export interface HarnessHandle {
    *  need to seed non-terminal state (e.g. a running headline) deterministically —
    *  deliberately NOT a production endpoint. */
   taskRegistry: RunningServer['taskRegistry'];
+  /** Read-only list of `ExecutionStore` outbox rows with `consumed_at IS NULL` (SPEC-003 Task
+   *  I-6), oldest first — for test assertions only. Opens its OWN short-lived SQLite connection
+   *  to `<stateDir>/executions.db` (WAL mode, multi-reader safe) rather than reaching into the
+   *  running server's own connection, which this module never gets a handle to. */
+  unconsumedOutbox(): HarnessOutboxRow[];
+  /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
+   *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
+   *  replay) runs against the reopened stores (SPEC-003 Task I-6). Returns a NEW handle sharing
+   *  this one's token/state; the original handle's `close()` remains safe to call afterward
+   *  (every underlying stop/cleanup call is idempotent) but now targets an already-stopped
+   *  server. */
+  restart(): Promise<HarnessHandle>;
   close(): Promise<void>;
 }
 
@@ -29,6 +49,15 @@ export interface BootOptions {
    *  pollute the user's global mma-YYYY-MM-DD.jsonl. The observability
    *  fixture sets this to true so it can read emitted events back from disk. */
   diagnosticsLog?: boolean;
+  /** Test-only seam (SPEC-003 Task I-6): makes the in-process `InitiativeLinker`'s FIRST
+   *  consumption attempt after a terminal execution fail deterministically — the outbox row it
+   *  was replaying is left unconsumed, without corrupting the already-written terminal
+   *  execution result (that write landed independently, before replay ever runs). Implemented
+   *  by intercepting the running server's own `initiativeRuntime.execute()` — the exact call
+   *  `InitiativeLinker.replayRow()` makes as its first mutating step (`evidence_add` for the
+   *  `execution://<id>` locator) — and throwing once. A subsequent replay attempt (a later
+   *  terminal write, or boot reconciliation after `restart()`) is unaffected. Default false. */
+  failLinkerOnceAfterTerminal?: boolean;
 }
 
 function installLoopbackOnlyFetch(): void {
@@ -109,23 +138,79 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
       },
       autoUpdateSkills: false,
       // Isolated per-process state dir — server tests must never touch the
-      // developer's real ~/.mma/state (executions.db).
+      // developer's real ~/.mma/state (executions.db). Fixed for the life of this boot() call
+      // (including across restart()) so executions.db/initiatives.db persist across a restart.
       stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     },
   };
 
-  const server = await startServer(config, { driftReport: () => [] });
-  const baseUrl = `http://127.0.0.1:${server.port}`;
+  let server = await startServer(config, { driftReport: () => [] });
 
-  return {
-    baseUrl,
-    token,
-    taskRegistry: server.taskRegistry,
-    async close(): Promise<void> {
-      await server.stop();
-      __setCoreTestProviderOverride(null);
-      __setCoreTestProviderOverrideMap(null);
-      await unlink(tokenPath).catch(() => undefined);
-    },
+  if (opts.failLinkerOnceAfterTerminal) {
+    installFailOnceLinkerHook(server);
+  }
+
+  function unconsumedOutbox(): HarnessOutboxRow[] {
+    const db = new DatabaseSync(join(config.server.stateDir, 'executions.db'));
+    try {
+      const rows = db.prepare(
+        'SELECT execution_id, consumed_at FROM outbox WHERE consumed_at IS NULL ORDER BY created_at ASC',
+      ).all() as Array<{ execution_id: string; consumed_at: number | null }>;
+      return rows.map((row) => ({ executionId: row.execution_id, consumedAt: row.consumed_at }));
+    } finally {
+      db.close();
+    }
+  }
+
+  function buildHandle(): HarnessHandle {
+    return {
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      token,
+      taskRegistry: server.taskRegistry,
+      unconsumedOutbox,
+      async restart(): Promise<HarnessHandle> {
+        await server.stop();
+        // Reopens over the SAME `config` (same stateDir, same token file) — a fresh
+        // `initiativeLinker`/`initiativeRuntime`/`executionStore` triple, never the
+        // failLinkerOnceAfterTerminal hook installed above (that hook lives on THIS
+        // process's `initiativeRuntime` instance, discarded by `server.stop()`).
+        server = await startServer(config, { driftReport: () => [] });
+        return buildHandle();
+      },
+      async close(): Promise<void> {
+        await server.stop();
+        __setCoreTestProviderOverride(null);
+        __setCoreTestProviderOverrideMap(null);
+        await unlink(tokenPath).catch(() => undefined);
+      },
+    };
+  }
+
+  return buildHandle();
+}
+
+/**
+ * Test-only monkeypatch (SPEC-003 Task I-6, `BootOptions.failLinkerOnceAfterTerminal`): makes
+ * the running server's `InitiativeLinker` fail its first outbox-row replay attempt. Overrides
+ * the ONE `InitiativeRecordRuntime` instance `RunningServer.initiativeRuntime` exposes and
+ * `InitiativeLinker` (constructed in `http/server.ts` over that same instance) both hold — so
+ * intercepting `execute()` here is intercepting exactly what `InitiativeLinker.replayRow()`
+ * calls, without any production code needing a test seam. Scoped to the FIRST `evidence_add`
+ * call whose `locator` is an `execution://` URI — `replayRow()`'s own first mutating step —
+ * so a test's ordinary `/initiatives` traffic (product/initiative/task creation and claiming)
+ * is never affected.
+ */
+function installFailOnceLinkerHook(server: RunningServer): void {
+  const runtime = server.initiativeRuntime as unknown as { execute: (request: unknown) => unknown };
+  const originalExecute = runtime.execute.bind(server.initiativeRuntime);
+  let failed = false;
+  runtime.execute = (request: unknown): unknown => {
+    const op = (request as { operation?: unknown } | null)?.operation;
+    const locator = (request as { input?: { locator?: unknown } } | null)?.input?.locator;
+    if (!failed && op === 'evidence_add' && typeof locator === 'string' && locator.startsWith('execution://')) {
+      failed = true;
+      throw new Error('mma-test: forced InitiativeLinker replay failure (failLinkerOnceAfterTerminal)');
+    }
+    return originalExecute(request);
   };
 }

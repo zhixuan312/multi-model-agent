@@ -21,6 +21,8 @@ import {
   type TaskRegistry,
   type ProjectContext,
   type ResolvedAgent,
+  type Initiative,
+  type Task,
 } from '@zhixuan92/multi-model-agent-core';
 import { resolveRateCard, priceTokens } from '@zhixuan92/multi-model-agent-core/bounded-execution/cost-compute';
 import type { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
@@ -29,6 +31,7 @@ import type { CallerContext } from './caller-context.js';
 import { ExecutionScope } from './execution-scope.js';
 import type { ExecutionStore } from './execution-store.js';
 import type { InitiativeLinker } from './initiative-linker.js';
+import type { InitiativeRecordRuntime } from './initiative-record-runtime.js';
 import type { ProjectRegistry } from './project-registry.js';
 import type { TaskEntry } from '@zhixuan92/multi-model-agent-core';
 import { SKILLS_DIR } from './skills-dir.js';
@@ -52,6 +55,13 @@ interface ExecutionRuntimeDeps {
    *  call site (and every test that never admits a linkage) keeps working unchanged; an
    *  execution with no `ExecutionLinkage` never produces an outbox row to replay anyway. */
   initiativeLinker?: InitiativeLinker;
+  /** Shared Initiative Record application service (SPEC-003 Task I-6) — resolves the linked
+   *  Initiative/Task and performs the pre-admission Task transition for a request carrying
+   *  `input.initiative`. Optional so every existing unlinked-only `ExecutionRuntime`
+   *  construction (most unit tests, which never set `input.initiative`) keeps working
+   *  unchanged; a linked request against a runtime with none wired is rejected as an invalid
+   *  linked request before any handle or session is created — see `admitLinkedTask` below. */
+  initiativeRuntime?: InitiativeRecordRuntime;
   /** Injectable agent resolver — tests substitute mock providers; production
    *  uses the config-driven resolveAgent (same pattern as PipelineInput's
    *  runAcceptanceCommand). */
@@ -61,7 +71,34 @@ interface ExecutionRuntimeDeps {
 export type SubmitError =
   | { kind: 'agent_not_configured'; message: string }
   | { kind: 'skill_load_failed'; message: string }
-  | { kind: 'project_reservation'; code: string; message: string };
+  | { kind: 'project_reservation'; code: string; message: string }
+  /** SPEC-003 Task I-6 linked-admission rejection. `code` is one of the three typed Initiative
+   *  errors the Contract names: unknown Initiative / malformed membership / absent
+   *  authorization all surface as `invalid_request`; a Task outside `open | claimed` surfaces
+   *  as `invalid_task_transition`; a claimed Task with a mismatched `authorized_by` surfaces
+   *  as `task_claim_conflict`. Every one of these returns before any execution handle,
+   *  provider session, Task mutation, or outbox row exists. */
+  | { kind: 'linked_admission'; code: 'invalid_request' | 'invalid_task_transition' | 'task_claim_conflict'; message: string };
+
+/** The `input.initiative` shape `taskInputSchema` validates (SPEC-003 Task I-6) — structurally
+ *  identical to `ExecutionLinkage` (`execution-store.ts`) and the outbox's own
+ *  `linkagePayloadSchema` (`initiative-linker.ts`), so a validated linkage flows to
+ *  `ExecutionStore.admit()`'s fifth argument without a cast. */
+interface LinkedAdmissionInput {
+  initiative: { uuid: string } | { human_key: string };
+  task_uuid: string;
+  authorized_by: string;
+}
+
+/** The `initiative` linkage a task input carries, or `undefined`. Only present when the caller
+ *  explicitly opted into linked admission — the schema field is optional on every task type. */
+function linkageOf(input: TaskInput): LinkedAdmissionInput | undefined {
+  return (input as Record<string, unknown>).initiative as LinkedAdmissionInput | undefined;
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 type SubmitResult =
   | { ok: true; taskId: string }
@@ -156,6 +193,83 @@ export class ExecutionRuntime {
   }
 
   /**
+   * Linked admission (SPEC-003 Task I-6). Resolves the selected Initiative and the named Task,
+   * checks Task membership (the Task must belong to the resolved Initiative), checks Task state
+   * (`open | claimed` only — deliberately narrower than the store's own FR-9 transition matrix,
+   * which would separately permit e.g. `blocked -> in_progress`: only `open` and `claimed` are
+   * valid LINKED-ADMISSION starting states), checks claim ownership for a claimed Task, and —
+   * only once every check passes — performs the Task's `open|claimed -> in_progress` transition
+   * with `execution_ref: taskId` and system provenance. Every failure branch returns before the
+   * transition call, so no failed linked admission ever mutates `initiatives.db`.
+   */
+  private admitLinkedTask(taskId: string, linkage: LinkedAdmissionInput): { ok: true } | { ok: false; error: SubmitError } {
+    const runtime = this.deps.initiativeRuntime;
+    if (!runtime) {
+      return {
+        ok: false,
+        error: { kind: 'linked_admission', code: 'invalid_request', message: 'Linked admission is unavailable: no Initiative Record runtime configured' },
+      };
+    }
+
+    let initiative: Initiative;
+    try {
+      initiative = runtime.execute({ operation: 'initiative_get', input: linkage.initiative }) as Initiative;
+    } catch (err) {
+      return { ok: false, error: { kind: 'linked_admission', code: 'invalid_request', message: `Unknown Initiative: ${errMessage(err)}` } };
+    }
+
+    let task: Task;
+    try {
+      task = runtime.execute({ operation: 'initiative_task_get', input: { uuid: linkage.task_uuid } }) as Task;
+    } catch (err) {
+      return { ok: false, error: { kind: 'linked_admission', code: 'invalid_request', message: `Unknown Task: ${errMessage(err)}` } };
+    }
+
+    if (task.initiative_id !== initiative.uuid) {
+      return {
+        ok: false,
+        error: { kind: 'linked_admission', code: 'invalid_request', message: `Task ${task.uuid} does not belong to Initiative ${initiative.uuid}` },
+      };
+    }
+
+    if (task.status !== 'open' && task.status !== 'claimed') {
+      return {
+        ok: false,
+        error: { kind: 'linked_admission', code: 'invalid_task_transition', message: `Task ${task.uuid} cannot start a linked execution from status '${task.status}'` },
+      };
+    }
+
+    if (task.status === 'claimed' && task.claimed_by !== linkage.authorized_by) {
+      return {
+        ok: false,
+        error: { kind: 'linked_admission', code: 'task_claim_conflict', message: `Task ${task.uuid} is claimed by ${JSON.stringify(task.claimed_by)}, not ${linkage.authorized_by}` },
+      };
+    }
+
+    try {
+      runtime.execute({
+        operation: 'initiative_task_execution',
+        input: { uuid: task.uuid, execution_ref: taskId, transition: 'in_progress' },
+        expected_revision: task.revision,
+        idempotency_key: `admission:${taskId}`,
+        provenance: {
+          actor_type: 'system',
+          actor_id: 'engine:execution',
+          interface: 'system',
+          initiated_by: taskId,
+          authorized_by: linkage.authorized_by,
+          timestamp: new Date().toISOString(),
+          source: 'execution_admission',
+        },
+      });
+    } catch (err) {
+      return { ok: false, error: { kind: 'linked_admission', code: 'invalid_request', message: `Linked admission transition failed: ${errMessage(err)}` } };
+    }
+
+    return { ok: true };
+  }
+
+  /**
    * Request cooperative cancellation. 202-semantics: 'requested' means the
    * abort channel fired, not that the work already stopped — the task stays
    * `pending` (with cancellationRequestedAt set) until the runner confirms
@@ -219,13 +333,25 @@ export class ExecutionRuntime {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
+    // Linked admission (SPEC-003 Task I-6): resolve the selected Initiative and Task, check
+    // Task membership, Task state, and claim ownership, and perform the Task's
+    // `open|claimed -> in_progress` transition — all BEFORE the execution handle two lines
+    // below exists. Placed after agent/skill/project resolution (none of which mutate
+    // `initiatives.db`) so a linked request that fails THIS check leaves no execution handle,
+    // provider session, Task mutation, or outbox row, exactly as the Contract requires.
+    const taskId = randomUUID();
+    const linkage = linkageOf(input);
+    if (linkage) {
+      const linked = this.admitLinkedTask(taskId, linkage);
+      if (!linked.ok) return linked;
+    }
+
     // Register task in TaskRegistry AND persist the admission record — a
     // handle that exists is always a handle that survives a restart. The
     // scope (the live abort channel) is created here too, so a cancel that
     // lands before the async executor starts still aborts the execution.
-    const taskId = randomUUID();
     deps.taskRegistry.register(taskId, cwd, input.type, subtypeOf(input), practiceOf(input));
-    deps.store.admit(taskId, input.type, cwd, process.pid);
+    deps.store.admit(taskId, input.type, cwd, process.pid, linkage);
     const scope = new ExecutionScope(taskId);
     this.liveScopes.set(taskId, scope);
 
@@ -279,7 +405,7 @@ export class ExecutionRuntime {
     let { skills } = run;
     const contextBlockStore = pc.contextBlocks;
     const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
-    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, ...payload } = input as Record<string, unknown>;
+    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, initiative: _initiative, ...payload } = input as Record<string, unknown>;
 
     // Terminal cancelled path — shared by the pre-start check, the pipeline
     // aborted mapping, and the crash path when the abort raced an error.

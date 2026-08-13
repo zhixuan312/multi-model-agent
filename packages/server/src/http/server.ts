@@ -261,7 +261,7 @@ export async function startServer(
       bus.subscribe(new WorkerPidRecorder(executionStore));
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
-      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore, initiativeLinker });
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore, initiativeLinker, initiativeRuntime });
       const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
       const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
