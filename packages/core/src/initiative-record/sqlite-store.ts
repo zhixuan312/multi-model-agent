@@ -27,6 +27,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
   CrossProductWorkspaceLinkError,
   fieldErrorsFromIssues,
   InvalidRequestError,
@@ -41,6 +43,7 @@ import {
   type DecisionRecordInput,
   type DecisionSupersedeInput,
   type EvidenceAddInput,
+  type EvidenceLinkInput,
   type InitiativeCreateInput,
   type InitiativeLinkWorkspaceInput,
   type InitiativeMutationRequest,
@@ -53,28 +56,32 @@ import {
   type ResourceRegisterInput,
   type RiskAddInput,
   type RiskStatusInput,
+  type VerificationRecordInput,
   type WorkspaceCreateInput,
 } from './schemas.js';
-import type {
-  AcceptanceCriterion,
-  ArtifactRef,
-  Decision,
-  Event,
-  Evidence,
-  EvidenceLink,
-  Initiative,
-  InitiativeRecordEntity,
-  InitiativeRelation,
-  InitiativeStatus,
-  InitiativeWorkspaceLink,
-  Product,
-  Requirement,
-  Resource,
-  Risk,
-  Task,
-  TaskStatus,
-  VerificationRun,
-  Workspace,
+import {
+  VERIFICATION_NON_TERMINAL_STATES,
+  VERIFICATION_STALE_ELIGIBLE_STATES,
+  type AcceptanceCriterion,
+  type ArtifactRef,
+  type Decision,
+  type Event,
+  type Evidence,
+  type EvidenceLink,
+  type EvidenceLinkTargetType,
+  type Initiative,
+  type InitiativeRecordEntity,
+  type InitiativeRelation,
+  type InitiativeStatus,
+  type InitiativeWorkspaceLink,
+  type Product,
+  type Requirement,
+  type Resource,
+  type Risk,
+  type Task,
+  type TaskStatus,
+  type VerificationRun,
+  type Workspace,
 } from './types.js';
 import type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
 
@@ -424,6 +431,20 @@ export class InitiativeRecordStore implements InitiativeRepository {
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      // EvidenceLink's composite identity is an identity-level no-op. It must
+      // take precedence over idempotency replay so that a duplicate link is
+      // returned unchanged for any key, and so the no-op never creates an
+      // idempotency-result row.
+      if (request.operation === 'evidence_link') {
+        const existingLink = this.db
+          .prepare(`SELECT * FROM evidence_links WHERE evidence_id = ? AND target_type = ? AND target_id = ?`)
+          .get(request.input.evidence_id, request.input.target_type, request.input.target_id) as EvidenceLinkRow | undefined;
+        if (existingLink) {
+          this.db.exec('COMMIT');
+          return mapEvidenceLinkRow(existingLink);
+        }
+      }
+
       if (request.idempotency_key) {
         const existing = this.db
           .prepare(`SELECT request_hash, result_json FROM idempotency_results WHERE operation = ? AND idempotency_key = ?`)
@@ -477,12 +498,14 @@ export class InitiativeRecordStore implements InitiativeRepository {
   }
 
   // ---------------------------------------------------------------------
-  // Phase A1 reads needed to verify Task I-3's own mutations (SPEC-002).
-  // `getDecision` is implemented now because `decision_supersede`'s check
-  // reads the old Decision back to confirm `status: 'superseded'` and
-  // `superseded_by`. Every other Phase A1 read (Requirement, Acceptance
-  // Criterion, Evidence, Risk, VerificationRun, and all `list*`/count/resume
-  // joins) is Task I-5 scope, added alongside the read operations below.
+  // Phase A1 reads needed to verify Task I-3's and Task I-4's own mutations
+  // (SPEC-002). `getDecision` is implemented because `decision_supersede`'s
+  // check reads the old Decision back to confirm `status: 'superseded'` and
+  // `superseded_by`. `getVerificationRun` is implemented because Task I-4's
+  // own check verifies the system-driven `'stale'`/`'superseded'`
+  // transitions. Every other Phase A1 read (Requirement, Acceptance
+  // Criterion, Evidence, Risk, and all `list*`/count/resume joins) is Task
+  // I-5 scope, added alongside the read operations below.
   // ---------------------------------------------------------------------
 
   /** `decision_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
@@ -492,6 +515,17 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new NotFoundError({ entity_type: 'Decision', lookup: lookup.uuid ?? lookup.human_key ?? '' });
     }
     return mapDecisionRow(row);
+  }
+
+  /** `verification_get` — `uuid`. Throws `not_found`. */
+  getVerificationRun(lookup: { uuid: string }): VerificationRun {
+    const row = this.db.prepare(`SELECT * FROM verification_runs WHERE uuid = ?`).get(lookup.uuid) as
+      | VerificationRunRow
+      | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'VerificationRun', lookup: lookup.uuid });
+    }
+    return mapVerificationRunRow(row);
   }
 
   // ---------------------------------------------------------------------
@@ -715,10 +749,6 @@ export class InitiativeRecordStore implements InitiativeRepository {
       case 'artifact_register':
         return this.mutateArtifactRegister(request.input, request.expected_revision, request.provenance);
       // Phase A1 — professional record and verification ledger (SPEC-002 FR-3).
-      // `evidence_link` and `verification_record` remain unhandled here — they
-      // are Task I-4 scope (EvidenceLink integrity, immutable Verification Runs,
-      // and stale propagation). The switch is intentionally non-exhaustive until
-      // Task I-4 adds those two branches.
       case 'requirement_add':
         return this.mutateRequirementAdd(request.input, request.expected_revision, request.provenance);
       case 'acceptance_criterion_add':
@@ -729,16 +759,20 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateDecisionSupersede(request.input, request.expected_revision, request.provenance);
       case 'evidence_add':
         return this.mutateEvidenceAdd(request.input, request.expected_revision, request.provenance);
+      case 'evidence_link':
+        return this.mutateEvidenceLink(request.input, request.expected_revision, request.provenance);
       case 'risk_add':
         return this.mutateRiskAdd(request.input, request.expected_revision, request.provenance);
       case 'risk_status':
         return this.mutateRiskStatus(request.input, request.expected_revision, request.provenance);
+      case 'verification_record':
+        return this.mutateVerificationRecord(request.input, request.expected_revision, request.provenance);
       default: {
-        // NOT exhaustive until Task I-4 adds `evidence_link` and
-        // `verification_record` — see the comment above this switch's Phase A1
-        // cases. `request` is narrowed to those two operations' request types
-        // here, not `never`; this branch still throws the correct typed error
-        // for either at runtime.
+        // The switch above is exhaustive over `InitiativeMutationRequest`;
+        // `request` narrows to `never` here. This branch only guards a future
+        // union member added without a matching case — casting `never` to an
+        // object shape is always allowed, so this still throws the correct
+        // typed error at runtime instead of a type error at compile time.
         const unhandled = request as { operation: string };
         throw new InvalidRequestError({
           field_errors: { operation: ['unsupported mutation operation'] },
@@ -1624,7 +1658,222 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { uuid: existingRow.uuid, initiative_id: existingRow.initiative_id, locator: existingRow.locator },
       provenance,
     });
+    // Stale-evidence propagation (FR-11): only a CHANGED `content_hash` on an
+    // update propagates. An unchanged hash (including two updates that both
+    // set the same new hash) must change no VerificationRun and emit no
+    // `verification_stale` Event.
+    if (input.content_hash !== existingRow.content_hash) {
+      this.propagateEvidenceStale(existingRow.uuid, provenance);
+    }
     return evidence;
+  }
+
+  /**
+   * `evidence_link` (FR-8): creates the composite-identity EvidenceLink
+   * `(evidence_id, target_type, target_id)` after resolving the target's
+   * owning Initiative and confirming it matches the Evidence's Initiative. A
+   * duplicate composite identity is an identity-level no-op — it returns the
+   * existing record unchanged, writes no Event, and skips every check below
+   * (including the revision check), regardless of idempotency key.
+   */
+  private mutateEvidenceLink(input: EvidenceLinkInput, expectedRevision: number, provenance: ProvenanceInput): EvidenceLink {
+    const existingLink = this.db
+      .prepare(`SELECT * FROM evidence_links WHERE evidence_id = ? AND target_type = ? AND target_id = ?`)
+      .get(input.evidence_id, input.target_type, input.target_id) as EvidenceLinkRow | undefined;
+    if (existingLink) {
+      return mapEvidenceLinkRow(existingLink);
+    }
+
+    const evidenceRow = this.requireRow<EvidenceRow>('evidence', input.evidence_id, 'evidence_id', 'Evidence');
+    const targetInitiativeId = this.resolveEvidenceLinkTargetInitiativeId(input.target_type, input.target_id);
+    if (targetInitiativeId !== evidenceRow.initiative_id) {
+      throw new CrossInitiativeEvidenceLinkError({
+        evidence_id: input.evidence_id,
+        target_type: input.target_type,
+        target_id: input.target_id,
+      });
+    }
+    this.requireCreateRevision(expectedRevision, 'EvidenceLink');
+
+    const now = provenance.timestamp;
+    this.db
+      .prepare(`INSERT INTO evidence_links (evidence_id, target_type, target_id, created_at, revision) VALUES (?, ?, ?, ?, 0)`)
+      .run(input.evidence_id, input.target_type, input.target_id, now);
+    const link: EvidenceLink = {
+      evidence_id: input.evidence_id,
+      target_type: input.target_type,
+      target_id: input.target_id,
+      createdAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'EvidenceLink',
+      entity_id: `${input.evidence_id}:${input.target_type}:${input.target_id}`,
+      initiative_id: evidenceRow.initiative_id,
+      event_type: 'evidence_linked',
+      payload: { evidence_id: input.evidence_id, target_type: input.target_type, target_id: input.target_id },
+      provenance,
+    });
+    return link;
+  }
+
+  /** Resolves an EvidenceLink target's owning Initiative, throwing the existing typed `invalid_request` error for a nonexistent target (FR-8). */
+  private resolveEvidenceLinkTargetInitiativeId(targetType: EvidenceLinkTargetType, targetId: string): string {
+    switch (targetType) {
+      case 'requirement': {
+        const row = this.requireRow<RequirementRow>('requirements', targetId, 'target_id', 'Requirement');
+        return row.initiative_id;
+      }
+      case 'acceptance_criterion': {
+        const row = this.requireRow<AcceptanceCriterionRow>('acceptance_criteria', targetId, 'target_id', 'AcceptanceCriterion');
+        const requirementRow = this.requireRow<RequirementRow>(
+          'requirements',
+          row.requirement_id,
+          'requirement_id',
+          'Requirement',
+        );
+        return requirementRow.initiative_id;
+      }
+      case 'decision': {
+        const row = this.requireRow<DecisionRow>('decisions', targetId, 'target_id', 'Decision');
+        return row.initiative_id;
+      }
+      case 'verification_run': {
+        const row = this.requireRow<VerificationRunRow>('verification_runs', targetId, 'target_id', 'VerificationRun');
+        return row.initiative_id;
+      }
+      case 'task': {
+        const row = this.requireRow<TaskRow>('tasks', targetId, 'target_id', 'Task');
+        return row.initiative_id;
+      }
+    }
+  }
+
+  /**
+   * Stale-evidence propagation (FR-11): follows EvidenceLinks from the
+   * changed Evidence to `target_type: 'verification_run'`, changes only
+   * linked runs in `'pass'` or `'fail'` to `'stale'`, and emits one
+   * `verification_stale` Event per changed run. Runs inside the caller's
+   * `evidence_add` transaction — not a separate one. Changes no other record.
+   */
+  private propagateEvidenceStale(evidenceId: string, provenance: ProvenanceInput): void {
+    const linkRows = this.db
+      .prepare(`SELECT target_id FROM evidence_links WHERE evidence_id = ? AND target_type = 'verification_run'`)
+      .all(evidenceId) as Array<{ target_id: string }>;
+    if (linkRows.length === 0) {
+      return;
+    }
+    const staleEligiblePlaceholders = VERIFICATION_STALE_ELIGIBLE_STATES.map(() => '?').join(', ');
+    for (const linkRow of linkRows) {
+      const runRow = this.db
+        .prepare(`SELECT * FROM verification_runs WHERE uuid = ? AND state IN (${staleEligiblePlaceholders})`)
+        .get(linkRow.target_id, ...VERIFICATION_STALE_ELIGIBLE_STATES) as VerificationRunRow | undefined;
+      if (!runRow) {
+        continue;
+      }
+      const nextRevision = runRow.revision + 1;
+      this.db.prepare(`UPDATE verification_runs SET state = 'stale', revision = ? WHERE uuid = ?`).run(nextRevision, runRow.uuid);
+      this.writeEvent({
+        entity_type: 'VerificationRun',
+        entity_id: runRow.uuid,
+        initiative_id: runRow.initiative_id,
+        event_type: 'verification_stale',
+        payload: { uuid: runRow.uuid, acceptance_criterion_id: runRow.acceptance_criterion_id, evidence_uuid: evidenceId },
+        provenance,
+      });
+    }
+  }
+
+  /**
+   * `verification_record` (FR-10): creates a new immutable VerificationRun
+   * after confirming `acceptance_criterion_id` belongs (via its Requirement)
+   * to `initiative_id`. In the same transaction, changes every prior
+   * non-terminal run (the pinned `VERIFICATION_NON_TERMINAL_STATES` set —
+   * `'pending'`, `'pass'`, `'fail'`, `'blocked'`, `'needs_human_review'`) for
+   * the same Acceptance Criterion to `'superseded'`, emitting one
+   * `verification_superseded` Event per changed run. The terminal states
+   * (`'stale'`, `'not_applicable'`, `'superseded'`) never transition again.
+   */
+  private mutateVerificationRecord(
+    input: VerificationRecordInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): VerificationRun {
+    this.requireCreateRevision(expectedRevision, 'VerificationRun');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const criterionRow = this.requireRow<AcceptanceCriterionRow>(
+      'acceptance_criteria',
+      input.acceptance_criterion_id,
+      'acceptance_criterion_id',
+      'AcceptanceCriterion',
+    );
+    const requirementRow = this.requireRow<RequirementRow>(
+      'requirements',
+      criterionRow.requirement_id,
+      'requirement_id',
+      'Requirement',
+    );
+    if (requirementRow.initiative_id !== input.initiative_id) {
+      throw new CrossInitiativeVerificationError({
+        initiative_id: input.initiative_id,
+        acceptance_criterion_id: input.acceptance_criterion_id,
+      });
+    }
+
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    this.db
+      .prepare(
+        `INSERT INTO verification_runs (uuid, initiative_id, acceptance_criterion_id, method, state, detail, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(uuid, input.initiative_id, input.acceptance_criterion_id, input.method, input.state, input.detail, now);
+    const run: VerificationRun = {
+      uuid,
+      initiative_id: input.initiative_id,
+      acceptance_criterion_id: input.acceptance_criterion_id,
+      method: input.method,
+      state: input.state,
+      detail: input.detail,
+      createdAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'VerificationRun',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'verification_recorded',
+      payload: {
+        uuid,
+        initiative_id: input.initiative_id,
+        acceptance_criterion_id: input.acceptance_criterion_id,
+        method: input.method,
+        state: input.state,
+      },
+      provenance,
+    });
+
+    const nonTerminalPlaceholders = VERIFICATION_NON_TERMINAL_STATES.map(() => '?').join(', ');
+    const priorRows = this.db
+      .prepare(
+        `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? AND uuid != ? AND state IN (${nonTerminalPlaceholders})`,
+      )
+      .all(input.acceptance_criterion_id, uuid, ...VERIFICATION_NON_TERMINAL_STATES) as unknown as VerificationRunRow[];
+    for (const priorRow of priorRows) {
+      const nextRevision = priorRow.revision + 1;
+      this.db
+        .prepare(`UPDATE verification_runs SET state = 'superseded', revision = ? WHERE uuid = ?`)
+        .run(nextRevision, priorRow.uuid);
+      this.writeEvent({
+        entity_type: 'VerificationRun',
+        entity_id: priorRow.uuid,
+        initiative_id: priorRow.initiative_id,
+        event_type: 'verification_superseded',
+        payload: { uuid: priorRow.uuid, acceptance_criterion_id: priorRow.acceptance_criterion_id },
+        provenance,
+      });
+    }
+
+    return run;
   }
 
   private mutateRiskAdd(input: RiskAddInput, expectedRevision: number, provenance: ProvenanceInput): Risk {
@@ -1849,6 +2098,31 @@ function mapDecisionRow(row: DecisionRow): Decision {
     superseded_by: row.superseded_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `evidence_links` row to the public `EvidenceLink` shape (the sole Phase A1 record with no `uuid`). */
+function mapEvidenceLinkRow(row: EvidenceLinkRow): EvidenceLink {
+  return {
+    evidence_id: row.evidence_id,
+    target_type: row.target_type,
+    target_id: row.target_id,
+    createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `verification_runs` row to the public `VerificationRun` shape. */
+function mapVerificationRunRow(row: VerificationRunRow): VerificationRun {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    acceptance_criterion_id: row.acceptance_criterion_id,
+    method: row.method,
+    state: row.state,
+    detail: row.detail,
+    createdAt: row.created_at,
     revision: Number(row.revision),
   };
 }
