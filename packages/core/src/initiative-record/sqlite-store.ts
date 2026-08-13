@@ -49,17 +49,24 @@ import {
   type WorkspaceCreateInput,
 } from './schemas.js';
 import type {
+  AcceptanceCriterion,
   ArtifactRef,
+  Decision,
   Event,
+  Evidence,
+  EvidenceLink,
   Initiative,
   InitiativeRecordEntity,
   InitiativeRelation,
   InitiativeStatus,
   InitiativeWorkspaceLink,
   Product,
+  Requirement,
   Resource,
+  Risk,
   Task,
   TaskStatus,
+  VerificationRun,
   Workspace,
 } from './types.js';
 import type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
@@ -183,6 +190,114 @@ interface EventRow {
   authorized_by: string;
   timestamp: string;
   source: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase A1 raw row shapes (schema version 2, Task I-2). These mirror the
+// `requirements`, `acceptance_criteria`, `decisions`, `evidence`,
+// `evidence_links`, `risks`, and `verification_runs` tables added by
+// migration version 2 (`./migrations.js`). The public repository layer
+// (Task I-3/I-4/I-5) maps each row to the frozen public shape in `./types.js`;
+// these interfaces exist so that mapping is typed end to end, not `any`.
+// ---------------------------------------------------------------------------
+
+/** Raw `requirements` table row shape (snake_case columns — internal only). */
+interface RequirementRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  statement: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `acceptance_criteria` table row shape (snake_case columns — internal only). */
+interface AcceptanceCriterionRow {
+  uuid: string;
+  requirement_id: string;
+  human_key: string;
+  statement: string;
+  check_reference: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `decisions` table row shape (snake_case columns — internal only).
+ * `alternatives` is stored as a JSON-encoded array that maps losslessly to
+ * `string[]` — the underlying column format is an implementation detail, not
+ * part of the public contract.
+ */
+interface DecisionRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  title: string;
+  decision: string;
+  rationale: string;
+  alternatives: string;
+  status: Decision['status'];
+  superseded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `evidence` table row shape (snake_case columns — internal only). Unique on `(initiative_id, locator)`. */
+interface EvidenceRow {
+  uuid: string;
+  initiative_id: string;
+  kind: string;
+  locator: string;
+  content_hash: string | null;
+  summary: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `evidence_links` table row shape (snake_case columns — internal only).
+ * Identified by the composite `(evidence_id, target_type, target_id)`, the
+ * sole Phase A1 record with no UUID primary key.
+ */
+interface EvidenceLinkRow {
+  evidence_id: string;
+  target_type: EvidenceLink['target_type'];
+  target_id: string;
+  created_at: string;
+  revision: number;
+}
+
+/** Raw `risks` table row shape (snake_case columns — internal only). */
+interface RiskRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  statement: string;
+  severity: Risk['severity'];
+  status: Risk['status'];
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `verification_runs` table row shape (snake_case columns — internal
+ * only). Immutable once created, except the system-driven `state`
+ * transitions to `'stale'` (FR-11) and `'superseded'` (FR-10).
+ */
+interface VerificationRunRow {
+  uuid: string;
+  initiative_id: string;
+  acceptance_criterion_id: string;
+  method: VerificationRun['method'];
+  state: VerificationRun['state'];
+  detail: string;
+  created_at: string;
+  revision: number;
 }
 
 /** Deterministically orders object keys so the same logical value hashes the same way regardless of construction order. */
