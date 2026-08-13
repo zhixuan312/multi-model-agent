@@ -463,8 +463,8 @@ export interface InitiativeResumeResponse {
   evidence: Evidence[];
   /** Phase A1: one entry per Acceptance Criterion with any run, `latest` by `createdAt DESC, uuid DESC`. */
   verification: Array<{ acceptance_criterion_id: string; latest: VerificationRun }>;
-  /** SPEC-004: additive lifecycle block — focus phase, contract, six phase/gate entries, and recent lifecycle Events. */
-  lifecycle: LifecycleResumeBlock;
+  /** SPEC-004: additive lifecycle block — focus phase, contract, six phase/gate entries, and recent lifecycle Events. Optional until Task I-4 supplies it from the runtime; I-4 tightens it to required. */
+  lifecycle?: LifecycleResumeBlock;
   counts: {
     workspaces: number;
     resources: number;
