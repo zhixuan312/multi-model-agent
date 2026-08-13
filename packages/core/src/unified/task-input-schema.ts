@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SPEC_COMPONENTS } from './spec-components.js';
 import { approvedContractSchema } from './deliverable-contract.js';
+import { METHOD_ID_PATTERN } from '../initiative-record/types.js';
 
 const agentTierSchema = z.enum(['standard', 'complex', 'main']);
 const reviewPolicySchema = z.enum(['reviewed', 'none']);
@@ -50,12 +51,24 @@ const initiativeLinkageSchema = z.object({
   authorized_by: z.string().min(1),
 }).strict();
 
+/**
+ * `method` — the optional registered Method identifier (SPEC-005), wired onto every
+ * `commonFields` arm (all twelve task types, AC-1.7). Syntactically validated here against
+ * the frozen `<name>@<version>` shape shared with the Initiative Record's own
+ * `methodIdSchema` — a malformed value is rejected at THIS Zod layer as `invalid_request`,
+ * before `ExecutionRuntime.submit()` ever runs. Whether the identifier names a REGISTERED
+ * Method is a store lookup this schema cannot perform; that resolves to `unknown_method` at
+ * the application layer, after linked-Task validation (see `execution-runtime.ts`).
+ */
+const methodIdSchema = z.string().regex(METHOD_ID_PATTERN, 'must match <name>@<version>, e.g. software-change@1');
+
 const commonFields = {
   agentTier: agentTierSchema.optional(),
   reviewPolicy: reviewPolicySchema.optional(),
   sessionIds: sessionIdsSchema,
   contextBlockIds: z.array(z.string()).max(2).optional(),
   initiative: initiativeLinkageSchema.optional(),
+  method: methodIdSchema.optional(),
 };
 
 /**
@@ -73,18 +86,6 @@ const commonFields = {
  */
 const deliverableField = {
   deliverable: approvedContractSchema.optional(),
-};
-
-/**
- * `practice` — the optional technique selector, wired only onto `plan`, `execute_plan`,
- * `review`, and `debug`. It picks HOW to do the work (currently only the retained
- * `'software'` code technique); it does not classify WHAT the deliverable is. `audit`
- * keeps its own `subtype` field (which criteria set examines the artifact) — the two
- * fields mean different things and neither is renamed into the other. Omitting
- * `practice` loads the generic, deliverable-neutral implementer.
- */
-const practiceField = {
-  practice: z.literal('software').optional(),
 };
 
 const journalRecordEntrySchema = z.object({
@@ -106,6 +107,7 @@ const LEGACY_JOURNAL_RECORD_KEYS = new Set([
   'reviewPolicy',
   'sessionIds',
   'contextBlockIds',
+  'method',
 ]);
 
 /** Boundary normalization: a legacy single-record `journal_record` body
@@ -134,6 +136,7 @@ function normalizeLegacyJournalRecordInput(input: unknown): unknown {
     ...(value.reviewPolicy !== undefined ? { reviewPolicy: value.reviewPolicy } : {}),
     ...(value.sessionIds !== undefined ? { sessionIds: value.sessionIds } : {}),
     ...(value.contextBlockIds !== undefined ? { contextBlockIds: value.contextBlockIds } : {}),
+    ...(value.method !== undefined ? { method: value.method } : {}),
   };
 }
 
@@ -159,7 +162,6 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     prompt: z.string().optional(),
     target: targetSchema,
     ...deliverableField,
-    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -167,7 +169,6 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     type: z.literal('debug'),
     prompt: z.string().min(1),
     target: z.object({ paths: z.array(z.string().min(1)).min(1) }).optional(),
-    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -201,7 +202,6 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     target: z.object({ paths: z.array(z.string().min(1)).length(1) }),
     tasks: z.array(z.string()).default([]),
     ...deliverableField,
-    ...practiceField,
     ...commonFields,
   }).strict(),
 
@@ -230,7 +230,6 @@ export const taskInputSchema = z.preprocess(normalizeLegacyJournalRecordInput, z
     target: targetSchema,
     outputPath: z.string().optional(),
     ...deliverableField,
-    ...practiceField,
     ...commonFields,
   }).strict(),
 ]));

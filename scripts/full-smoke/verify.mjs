@@ -168,8 +168,11 @@ const CONTRACT_REJECTION_REASON = {
   error_contract_digest_mismatch: 'contractApproval.contractDigest does not match the canonical digest',
   // INV-3, and only reachable with a real non-git workspace on disk.
   error_contract_disposition_non_git: 'requires the workspace root to be a git repository',
-  // `practice` is wired to four routes; `audit` is not one of them.
-  error_practice_not_wired: 'Unrecognized key',
+  // `method` is wired to every route (unlike the retired field this replaces), so an
+  // unregistered-but-well-formed identifier fails at resolution rather than at schema shape —
+  // no `CONTRACT_REJECTION_REASON` entry here; `error_unknown_method` is asserted generically
+  // below (http-status + error-body), since the store's `unknown_method` error is a top-level
+  // `{ error: { code, message } }`, not a field-specific `deliverable`/form error.
 };
 
 export function verify(rec) {
@@ -185,6 +188,14 @@ export function verify(rec) {
     const hasError = json && (json.error || json.message || json.code);
     out.push(C('error-body', hasError ? 'PASS' : 'WARN',
       `body=${JSON.stringify(json).slice(0, 200)}`));
+
+    // #50 is a resolution regression, not merely a malformed request: the registered-field
+    // syntax must survive schema validation and reach the Method Registry's unknown-method
+    // branch. A generic 400 would also pass if `method` stopped being wired on this route.
+    if (e.type === 'error_unknown_method') {
+      out.push(C('unknown-method-code', json?.error?.code === 'unknown_method' ? 'PASS' : 'FAIL',
+        `error.code=${json?.error?.code}`));
+    }
 
     // A 400 alone does not prove the RIGHT invariant rejected the request — any typo in a
     // rejection fixture also yields 400. Each contract scenario therefore names the message
@@ -280,13 +291,13 @@ export function verify(rec) {
     const toolText = JSON.stringify(m.schema?.json?.result ?? {});
     out.push(C('mcp-schema-exposes-deliverable', toolText.includes('deliverable') ? 'PASS' : 'FAIL',
       'the generated mma_run schema must advertise the contract field'));
-    out.push(C('mcp-schema-exposes-practice', toolText.includes('practice') ? 'PASS' : 'FAIL',
-      'the generated mma_run schema must advertise the practice field'));
+    out.push(C('mcp-schema-exposes-method', toolText.includes('method') ? 'PASS' : 'FAIL',
+      'the generated mma_run schema must advertise the method field'));
     // A taskId proves the adapter ACCEPTED both fields: a rejection returns a tool error instead.
     out.push(C('mcp-contract-accepted', m.taskId ? 'PASS' : 'FAIL',
       m.taskId ? `taskId=${m.taskId}` : `no taskId — payload=${JSON.stringify(m.runPayload).slice(0, 220)}`));
-    out.push(C('mcp-practice-echoed', r?.task?.practice === 'software' ? 'PASS' : 'FAIL',
-      `task.practice=${r?.task?.practice} (must survive the MCP path exactly as it does over REST)`));
+    out.push(C('mcp-method-echoed', r?.task?.method === 'software-change@1' ? 'PASS' : 'FAIL',
+      `task.method=${r?.task?.method} (must survive the MCP path exactly as it does over REST)`));
     out.push(C('mcp-terminal-clean', r?.task?.status && !r?.error ? 'PASS' : 'FAIL',
       `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
     return out;
@@ -927,15 +938,15 @@ export function verify(rec) {
       `status=${r?.task?.status}`));
   }
 
-  // #46 — `practice` must survive the wire and reach the skill selector.
-  // `task.practice` on the terminal envelope is the only caller-visible evidence that the
-  // field was honoured rather than dropped: `loadSkill()` receives the same string, so an
-  // echoed value and a loaded `implement-software.md` succeed or fail together.
-  if (e.practice) {
-    out.push(C('practice-echoed', r?.task?.practice === e.practice ? 'PASS' : 'FAIL',
-      `task.practice=${r?.task?.practice} want=${e.practice}`));
-    // `practice` and `subtype` answer different questions and must never both appear.
-    out.push(C('practice-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
+  // #46 — `method` must survive the wire and reach Method resolution (SPEC-005 Method Registry).
+  // `task.method` on the terminal envelope is the only caller-visible evidence that the
+  // field was honoured rather than dropped: `resolveMethod()` receives the same identifier, so
+  // an echoed value and injected committed guidance succeed or fail together.
+  if (e.method) {
+    out.push(C('method-echoed', r?.task?.method === e.method ? 'PASS' : 'FAIL',
+      `task.method=${r?.task?.method} want=${e.method}`));
+    // `method` and `subtype` answer different questions and must never both appear.
+    out.push(C('method-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
       `task.subtype=${r?.task?.subtype}`));
   }
 

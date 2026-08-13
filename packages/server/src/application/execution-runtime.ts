@@ -12,8 +12,10 @@ import {
   getTypeConfig,
   oppositeAgent,
   loadSkill,
+  loadMethodGuidance,
   resolveAgent,
   runTwoPhasePipeline,
+  UnknownMethodError,
   type SkillPair,
   type TaskInput,
   type RunnableConfig,
@@ -81,7 +83,15 @@ export type SubmitError =
    *  as `invalid_task_transition`; a claimed Task with a mismatched `authorized_by` surfaces
    *  as `task_claim_conflict`. Every one of these returns before any execution handle,
    *  provider session, Task mutation, or outbox row exists. */
-  | { kind: 'linked_admission'; code: 'invalid_request' | 'invalid_task_transition' | 'task_claim_conflict'; message: string };
+  | { kind: 'linked_admission'; code: 'invalid_request' | 'invalid_task_transition' | 'task_claim_conflict'; message: string }
+  /** SPEC-005 Task I-4: an explicit, syntactically-valid request `method` does not name a
+   *  registered Method. Returned AFTER linked-Task validation succeeds (a bad linked Task
+   *  wins first) and BEFORE skill loading, prompt construction, pipeline start,
+   *  `ExecutionRegistry.register()`, `ExecutionStore.admit()`, or outbox writing — the same
+   *  no-durable-write-on-the-wrong-side guarantee `linked_admission` already holds. A
+   *  malformed `method` (wrong shape) never reaches here — `taskInputSchema` rejects it as
+   *  `invalid_request` at the wire boundary, before `submit()` runs at all. */
+  | { kind: 'unknown_method'; message: string };
 
 /** The `input.initiative` shape `taskInputSchema` validates (SPEC-003 Task I-6) — structurally
  *  identical to `ExecutionLinkage` (`execution-store.ts`) and the outbox's own
@@ -131,33 +141,24 @@ function subtypeOf(input: TaskInput): string | null {
 }
 
 /**
- * The `practice` a task input carries, or `null`.
+ * The explicit request `method` a task input carries, or `null` (SPEC-005).
  *
- * Only `plan`, `execute_plan`, `review`, and `debug` can declare one (the input
- * schema is strict), and only when the caller explicitly asked for it — the engine
- * never infers `practice` from the workspace, the cwd's git state, or artifact
- * extensions. Read the same way `subtypeOf` reads `subtype`, for the same reason:
- * one reader keeps a running task and its terminal envelope in agreement by
- * construction.
+ * Every one of the twelve `TASK_TYPES` arms accepts `method?: string` (shared
+ * `commonFields`), and `taskInputSchema` already rejects a malformed value at the wire
+ * boundary — what reaches here is always `undefined` or a syntactically valid identifier.
+ * Read the same way `subtypeOf` reads its field, for the same reason: one
+ * reader, so resolution, the running registry, and the terminal envelope never disagree
+ * about what the caller asked for.
  */
-function practiceOf(input: TaskInput): string | null {
-  const value = (input as Record<string, unknown>).practice;
+function methodOf(input: TaskInput): string | null {
+  const value = (input as Record<string, unknown>).method;
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/**
- * The skill-loader key for this task, or `undefined`.
- *
- * `audit` selects its criteria set via `subtype`; `plan`/`execute_plan`/`review`/
- * `debug` select a technique via `practice`. The schema's strict discriminated
- * union guarantees at most one of the two fields is ever present on a given input,
- * so reading "whichever field the arm carries" is unambiguous. `loadSkill()` takes
- * a plain string and does its own `implement-<key>.md` filename selection — this
- * function only decides what string (if any) to hand it.
- */
-function skillSelectorOf(input: TaskInput): string | undefined {
-  return subtypeOf(input) ?? practiceOf(input) ?? undefined;
-}
+/** Resolved Method precedence + guidance for one submission (SPEC-005 Task I-4, AC-1.7/AC-1.8). */
+type MethodResolution =
+  | { ok: true; methodId: string | null; guidance: string | null }
+  | { ok: false; error: SubmitError };
 
 export class ExecutionRuntime {
   /** Live abort channels, keyed by executionId. An entry exists from admission until
@@ -274,6 +275,54 @@ export class ExecutionRuntime {
   }
 
   /**
+   * Method resolution + guidance load (SPEC-005 Task I-4, AC-1.7/AC-1.8). Runs AFTER
+   * `validateLinkedTask` succeeds (a bad linked Task wins first — see the Errors contract) and
+   * BEFORE skill loading, prompt construction, pipeline start, `ExecutionRegistry.register()`,
+   * `ExecutionStore.admit()`, or outbox writing. Precedence: a non-null explicit request
+   * `method` wins; otherwise the linked Task's stored `method`; otherwise `null`. `null`
+   * resolves trivially — no store lookup, no guidance load, no prompt injection — which is
+   * what keeps a Method-less generic prompt byte-identical to the pre-Method baseline.
+   *
+   * A resolved, non-null identifier must be a REGISTERED Method (`UnknownMethodError` maps to
+   * `unknown_method`) with a committed guidance asset (a resolver failure maps to
+   * `skill_load_failed` — the contract's "fails cleanly ... never falls back to a route
+   * asset"). `taskInputSchema` already rejected a malformed `method` shape at the wire
+   * boundary, so the only failure reachable here for a syntactically valid identifier is
+   * "not registered" or "no committed guidance."
+   */
+  private resolveMethod(input: TaskInput, linkedTask: Task | null): MethodResolution {
+    const requested = methodOf(input);
+    const effective = requested ?? linkedTask?.method ?? null;
+    if (effective === null) return { ok: true, methodId: null, guidance: null };
+
+    const runtime = this.deps.initiativeRuntime;
+    if (!runtime) {
+      return {
+        ok: false,
+        error: { kind: 'unknown_method', message: `Method resolution is unavailable: no Initiative Record runtime configured` },
+      };
+    }
+
+    try {
+      runtime.execute({ operation: 'method_get', input: { id: effective } });
+    } catch (err) {
+      if (err instanceof UnknownMethodError) {
+        return { ok: false, error: { kind: 'unknown_method', message: err.message } };
+      }
+      throw err;
+    }
+
+    let guidance: string;
+    try {
+      guidance = loadMethodGuidance(effective);
+    } catch (err) {
+      return { ok: false, error: { kind: 'skill_load_failed', message: `Method guidance load failed for '${effective}': ${errMessage(err)}` } };
+    }
+
+    return { ok: true, methodId: effective, guidance };
+  }
+
+  /**
    * Linked-admission MUTATION phase (SPEC-003 B6 round-2 defect A). Performs the Task's
    * `open|claimed -> in_progress` transition with `execution_ref: executionId` and system
    * provenance — the ONE write `validateLinkedTask` above deliberately does not make. Called from
@@ -353,6 +402,37 @@ export class ExecutionRuntime {
     // caller explicitly asked for it; otherwise the deterministic invariants decide.
     const callerForcedReview = input.reviewPolicy === 'reviewed';
 
+    // SPEC-003 B6 round-2 defect A: linked-admission validation runs as a PURE READ-ONLY phase
+    // — `validateLinkedTask` — BEFORE the execution handle exists at all. A prior version ran
+    // that validation together with the Task-transition WRITE, downstream of
+    // `executionRegistry.register` / `store.admit`: every rejection (task_claim_conflict /
+    // invalid_task_transition / invalid_request) was still detected correctly, but only after a
+    // durable FAILED execution row had already been created for it — violating AC-1.9/AC-1.10
+    // ("No execution handle, provider session, or outbox row is created"). Validating first means
+    // a rejection here returns before register/admit ever runs.
+    //
+    // SPEC-005 Task I-4: this now ALSO runs before agent resolution, skill loading, and Method
+    // resolution — moved up from its previous position (after skill loading) so that a bad
+    // linked Task rejects before every one of those downstream side effects too, per the
+    // Architecture contract ("first validates a linked Task, then resolves ... Method, then
+    // loads generic route skills and Method guidance").
+    const linkage = linkageOf(input);
+    let linkedTask: Task | null = null;
+    if (linkage) {
+      const validated = this.validateLinkedTask(linkage);
+      if (!validated.ok) return validated;
+      linkedTask = validated.task;
+    }
+
+    // SPEC-005 Task I-4 (AC-1.7/AC-1.8): resolve the effective Method (explicit request, else
+    // the linked Task's, else null) and load its committed guidance — AFTER linked-Task
+    // validation, BEFORE skill loading, prompt construction, pipeline start,
+    // `ExecutionRegistry.register()`, `ExecutionStore.admit()`, or outbox writing. An unknown
+    // explicit Method rejects here, before any of those.
+    const methodResolution = this.resolveMethod(input, linkedTask);
+    if (!methodResolution.ok) return methodResolution;
+    const { methodId: resolvedMethodId, guidance: methodGuidance } = methodResolution;
+
     const resolve = deps.resolveAgentFn ?? resolveAgent;
     let implAgent: ResolvedAgent, revAgent: ResolvedAgent;
     try {
@@ -364,7 +444,7 @@ export class ExecutionRuntime {
 
     let skills: SkillPair;
     try {
-      skills = await loadSkill(input.type, SKILLS_DIR, skillSelectorOf(input));
+      skills = await loadSkill(input.type, SKILLS_DIR, subtypeOf(input) ?? undefined);
     } catch (err) {
       return { ok: false, error: { kind: 'skill_load_failed', message: err instanceof Error ? err.message : 'Skill load failed' } };
     }
@@ -376,22 +456,6 @@ export class ExecutionRuntime {
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
-
-    // SPEC-003 B6 round-2 defect A: linked-admission validation now runs as a PURE READ-ONLY
-    // phase — `validateLinkedTask` — BEFORE the execution handle exists at all. A prior version
-    // ran that validation together with the Task-transition WRITE, downstream of
-    // `executionRegistry.register` / `store.admit`: every rejection (task_claim_conflict /
-    // invalid_task_transition / invalid_request) was still detected correctly, but only after a
-    // durable FAILED execution row had already been created for it — violating AC-1.9/AC-1.10
-    // ("No execution handle, provider session, or outbox row is created"). Validating first means
-    // a rejection here returns before register/admit ever runs.
-    const linkage = linkageOf(input);
-    let linkedTask: Task | null = null;
-    if (linkage) {
-      const validated = this.validateLinkedTask(linkage);
-      if (!validated.ok) return validated;
-      linkedTask = validated.task;
-    }
 
     // Registering first (rather than running the Task transition first) sidesteps the ownership
     // question a failed register/admit would otherwise raise: compensating a stranded
@@ -416,8 +480,8 @@ export class ExecutionRuntime {
     // ever ran (e.g. the transition call below throws, or the process dies before it runs at all);
     // `InitiativeLinker`'s replay is made tolerant of exactly that (see `initiative-linker.ts`).
     try {
-      deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), practiceOf(input));
-      deps.store.admit(executionId, input.type, cwd, process.pid, linkage);
+      deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), resolvedMethodId);
+      deps.store.admit(executionId, input.type, cwd, process.pid, linkage, resolvedMethodId);
     } catch (err) {
       // The Task transition has not run yet (validation only reads `initiatives.db`) — nothing on
       // the Task side to compensate.
@@ -426,7 +490,7 @@ export class ExecutionRuntime {
         code: 'execution_admission_failed',
         message: `Execution admission failed${linkage ? '; linked Task was not transitioned' : ''}: ${errMessage(err)}`,
       };
-      const envelope = buildErrorEnvelope(executionId, input.type, { code: error.code, message: error.message });
+      const envelope = buildErrorEnvelope(executionId, input.type, { code: error.code, message: error.message }, 'failed', resolvedMethodId);
       deps.executionRegistry.fail(executionId, envelope);
       return { ok: false, error };
     }
@@ -443,7 +507,7 @@ export class ExecutionRuntime {
         // Task side ever changed), so replay promptly rather than leaving it for the next
         // unrelated terminal write or a restart to pick up.
         const code = committed.error.kind === 'linked_admission' ? committed.error.code : 'linked_admission_failed';
-        const envelope = buildErrorEnvelope(executionId, input.type, { code, message: committed.error.message });
+        const envelope = buildErrorEnvelope(executionId, input.type, { code, message: committed.error.message }, 'failed', resolvedMethodId);
         deps.executionRegistry.fail(executionId, envelope);
         deps.store.fail(executionId, JSON.stringify(envelope));
         this.replayLinkage();
@@ -469,6 +533,8 @@ export class ExecutionRuntime {
         writeRoute: typeConfig.writeRoute,
         sandbox: typeConfig.sandbox,
         readerFacing: typeConfig.readerFacing,
+        method: resolvedMethodId,
+        methodGuidance,
       });
     });
 
@@ -497,6 +563,14 @@ export class ExecutionRuntime {
     writeRoute: boolean;
     sandbox: 'read-only' | 'cwd-only';
     readerFacing: boolean;
+    /** The resolved Method identifier (SPEC-005), or `null`. Recorded verbatim into the
+     *  terminal `execution` envelope — ALWAYS present there as `string | null`, never
+     *  omitted, unlike `subtype`. */
+    method: string | null;
+    /** Committed guidance for `method`, or `null` when no Method resolved. Passed straight
+     *  through to `runTwoPhasePipeline`, which injects it as one identical block into both
+     *  worker prompts. */
+    methodGuidance: string | null;
   }): Promise<void> {
     const { deps } = this;
     const {
@@ -506,7 +580,7 @@ export class ExecutionRuntime {
     let { skills } = run;
     const contextBlockStore = pc.contextBlocks;
     const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
-    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, initiative: _initiative, ...payload } = input as Record<string, unknown>;
+    const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, initiative: _initiative, method: _method, ...payload } = input as Record<string, unknown>;
 
     // Terminal cancelled path — shared by the pre-start check, the pipeline
     // aborted mapping, and the crash path when the abort raced an error.
@@ -524,7 +598,7 @@ export class ExecutionRuntime {
       // Cancelled before the executor even started (cancel raced setImmediate):
       // finish immediately with zero provider sessions.
       if (scope.signal.aborted) {
-        finishCancelled(0, buildErrorEnvelope(executionId, input.type, { code: 'aborted', message: 'Execution cancelled by caller before it started' }, 'cancelled'));
+        finishCancelled(0, buildErrorEnvelope(executionId, input.type, { code: 'aborted', message: 'Execution cancelled by caller before it started' }, 'cancelled', run.method));
         return;
       }
       process.stderr.write(
@@ -551,7 +625,7 @@ export class ExecutionRuntime {
           });
         } catch (err) {
           if (err instanceof PreprocessFailure) {
-            const envelope = buildErrorEnvelope(executionId, input.type, { code: err.code, message: err.message });
+            const envelope = buildErrorEnvelope(executionId, input.type, { code: err.code, message: err.message }, 'failed', run.method);
             deps.executionRegistry.fail(executionId, envelope);
             deps.store.fail(executionId, JSON.stringify(envelope));
             this.replayLinkage();
@@ -623,6 +697,7 @@ export class ExecutionRuntime {
         bus: deps.bus,
         onPhaseChange,
         forceReview: callerForcedReview,
+        methodGuidance: run.methodGuidance,
         ...(pre.applyDecisions && { applyDecisions: pre.applyDecisions }),
         ...(pre.dispatchedTasks && { dispatchedTasks: pre.dispatchedTasks }),
         ...(pre.dispatchedContractTasks && { dispatchedContractTasks: pre.dispatchedContractTasks }),
@@ -674,14 +749,14 @@ export class ExecutionRuntime {
           executionId: executionId,
           type: input.type,
           // No `type === 'audit'` gate: the strict input schema already limits
-          // `subtype` to audit and `practice` to plan/execute_plan/review/debug, so
-          // a type-based gate here would only restate the schema while giving the
-          // terminal envelope a second rule the running snapshot did not share.
-          // Two separate fields, never both present on the same execution: `subtype`
-          // picks WHAT is examined (audit's criteria set), `practice` picks HOW to
-          // do the work (the retained software technique).
+          // `subtype` to audit, so a type-based gate here would only restate the
+          // schema while giving the terminal envelope a second rule the running
+          // snapshot did not share.
           ...(subtypeOf(input) !== null ? { subtype: subtypeOf(input) } : {}),
-          ...(practiceOf(input) !== null ? { practice: practiceOf(input) } : {}),
+          // Unlike `subtype`, ALWAYS present as `string | null` — never omitted.
+          // Method resolution applies uniformly across every task type (SPEC-005), so a
+          // consumer must be able to tell "resolved to null" from "field absent."
+          method: run.method,
           status: wasCancelled ? ('cancelled' as const) : result.status,
           sessions: {
             implementer: result.sessions.implementer.sessionId,
@@ -801,7 +876,7 @@ export class ExecutionRuntime {
       if (scope.signal.aborted) {
         // The abort raced an in-flight operation into an exception — the
         // caller's cancel is the real outcome, not a runner crash.
-        finishCancelled(durationMs, buildErrorEnvelope(executionId, input.type, { code: 'aborted', message: 'Execution cancelled by caller' }, 'cancelled'));
+        finishCancelled(durationMs, buildErrorEnvelope(executionId, input.type, { code: 'aborted', message: 'Execution cancelled by caller' }, 'cancelled', run.method));
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
@@ -811,7 +886,7 @@ export class ExecutionRuntime {
         message,
         ...(stack !== undefined && { stack }),
       };
-      const envelope = buildErrorEnvelope(executionId, input.type, errObj);
+      const envelope = buildErrorEnvelope(executionId, input.type, errObj, 'failed', run.method);
       deps.executionRegistry.fail(executionId, envelope);
       deps.store.fail(executionId, JSON.stringify(envelope));
       this.replayLinkage();

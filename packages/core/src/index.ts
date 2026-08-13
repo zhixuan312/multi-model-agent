@@ -233,6 +233,17 @@ export {
   initiativeSetLifecycleContractInputSchema,
   initiativeGateStatusInputSchema,
   evaluateLifecycleGate,
+  // SPEC-005 Method Registry (see .mma/specs/2026-08-13-spec-005-method-registry.md)
+  UnknownMethodError,
+  methodDeclarationSchema,
+  methodGetInputSchema,
+  methodListInputSchema,
+  initiativeTaskSetMethodInputSchema,
+  METHOD_ID_PATTERN,
+  // Committed Method procedure guidance resolver (Task I-2 contract: "available to the
+  // server runtime through a core export"). `ExecutionRuntime` (Task I-4) is its first
+  // caller outside the initiative-record package itself.
+  loadMethodGuidance,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -287,4 +298,10 @@ export type {
   InitiativeSetLifecycleContractInput,
   InitiativeGateStatusInput,
   EvaluateLifecycleGateInput,
+  // SPEC-005 Method Registry (see .mma/specs/2026-08-13-spec-005-method-registry.md)
+  MethodDeclaration,
+  MethodDeclarationInput,
+  MethodGetInput,
+  MethodListInput,
+  InitiativeTaskSetMethodInput,
 } from './initiative-record/index.js';

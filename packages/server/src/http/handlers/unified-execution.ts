@@ -29,6 +29,9 @@ function submitErrorToHttp(error: SubmitError): { status: number; code: string; 
     // claimed Task with a mismatched authorized_by as task_claim_conflict — all HTTP 400.
     case 'linked_admission':
       return { status: 400, code: error.code, message: error.message };
+    // SPEC-005 Task I-4: an explicit request Method that does not name a registered Method.
+    case 'unknown_method':
+      return { status: 400, code: 'unknown_method', message: error.message };
   }
 }
 

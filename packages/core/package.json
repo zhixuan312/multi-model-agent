@@ -24,7 +24,8 @@
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
   "files": [
     "dist",
-    "src/skills"
+    "src/skills",
+    "src/methods"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

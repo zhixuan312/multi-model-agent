@@ -30,6 +30,11 @@ describe('ExecutionStore', () => {
     expect(r.terminalAt).toBeNull();
   });
 
+  it('persists the resolved Method on the admission row before terminalization', () => {
+    store.admit('t1', 'review', '/repo', process.pid, undefined, 'software-change@1');
+    expect(store.get('t1')!.method).toBe('software-change@1');
+  });
+
   it('records survive reopening the database (restart survival)', () => {
     store.admit('t1', 'audit', '/repo', process.pid);
     store.complete('t1', '{"task":{"status":"done"}}');

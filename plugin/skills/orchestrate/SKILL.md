@@ -91,7 +91,6 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "practice": "<practice or absent>",
     "status": "completed | done_with_concerns | failed | cancelled",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
@@ -120,9 +119,7 @@ full envelope — these 5 top-level fields:
 `execution` is the ONE merged top-level section — there is no separate `task` section. It
 carries the execution's own identity (`executionId`, `type`, `status`) alongside what used to
 live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`). `subtype`
-(audit's criteria set) and `practice` (the retained software technique for
-plan/execute_plan/review/debug) are mutually exclusive and both optional — read them
-defensively.
+(audit's criteria set) is optional — read it defensively.
 
 ### How to read the envelope
 

@@ -20,6 +20,7 @@ import {
   type InitiativeRecordEntity,
   type InitiativeResumeResponse,
   type LifecycleResumeBlock,
+  type MethodDeclaration,
 } from '@zhixuan92/multi-model-agent-core';
 import { expandHome } from '../expand-home.js';
 
@@ -85,6 +86,11 @@ const EXECUTE_OPERATIONS = new Set([
   'initiative_phase_skip',
   'initiative_focus_set',
   'initiative_set_lifecycle_contract',
+  // SPEC-005 Method Registry (FR-9, FR-10): read-only `method_get`/`method_list` and the
+  // sole Task Method mutation `initiative_task_set_method`.
+  'method_get',
+  'method_list',
+  'initiative_task_set_method',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -124,7 +130,9 @@ export class InitiativeRecordRuntime {
    * `cross_initiative_evidence_link` and `cross_initiative_verification`)
    * passes through unchanged from the store.
    */
-  execute(rawRequest: unknown): InitiativeRecordEntity | InitiativeRecordEntity[] {
+  execute(
+    rawRequest: unknown,
+  ): InitiativeRecordEntity | InitiativeRecordEntity[] | MethodDeclaration | MethodDeclaration[] {
     const parsed = initiativeOperationRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
@@ -176,6 +184,9 @@ export class InitiativeRecordRuntime {
       case 'initiative_phase_skip':
       case 'initiative_focus_set':
       case 'initiative_set_lifecycle_contract':
+      // SPEC-005 Method Registry mutation (FR-5): same pattern as every mutation above — one
+      // transactional `store.execute()` call.
+      case 'initiative_task_set_method':
         return this.store.execute(request);
 
       case 'product_get':
@@ -229,6 +240,13 @@ export class InitiativeRecordRuntime {
         return this.store.getVerificationRun(request.input);
       case 'verification_list':
         return this.store.listVerificationRuns(request.input);
+
+      // SPEC-005 Method Registry reads (FR-9): one stable Task I-2 store read method each,
+      // same pattern as every read above.
+      case 'method_get':
+        return this.store.getMethod(request.input);
+      case 'method_list':
+        return this.store.listMethods();
 
       // `initiative_resume` and `initiative_gate_status` are excluded above
       // by EXECUTE_OPERATIONS; this branch is unreachable but keeps the

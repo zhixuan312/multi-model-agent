@@ -109,7 +109,7 @@ export async function runMcpScenario(ctx) {
 }
 
 /**
- * #55 — the MCP transport must honour `deliverable` and `practice`, not merely relay a task.
+ * #55 — the MCP transport must honour `deliverable` and `method`, not merely relay a task.
  *
  * #40 proves the adapter runs a task and matches REST, but it sends neither new field. The MCP
  * request schema is GENERATED from the same Zod union REST validates with, so a generation bug
@@ -131,7 +131,7 @@ export async function runMcpContractScenario(ctx) {
         type: 'review',
         target: { paths: [`${ctx.dir}/src/math.ts`] },
         deliverable,
-        practice: 'software',
+        method: 'software-change@1',
       },
     },
   }, 41);
@@ -363,7 +363,7 @@ export function buildRequest(spec, ctx) {
       target: { paths: [`${cwd}/no-check-plan.md`] },
       tasks: ['I-1'],
     } };
-    // #46 `practice: 'software'` must reach the skill selector and echo on the envelope.
+    // #46 `method: 'software-change@1'` must reach Method resolution and echo on the envelope.
     // `plan` accepts BOTH fields, so it sends both — the last of the four route/field
     // combinations, and the shape a managed flow dispatches at the plan stage.
     case 46: return { cwd, type: 'plan', body: {
@@ -386,7 +386,7 @@ export function buildRequest(spec, ctx) {
             references: [{ kind: 'none', reason: 'internal module, no external standard' }] },
         ],
       })),
-      practice: 'software',
+      method: 'software-change@1',
     } };
 
     // Contract rejection paths — one reason each.
@@ -409,11 +409,11 @@ export function buildRequest(spec, ctx) {
           command: { program: 'node', args: ['--version'] } },
       ] })),
     } };
-    case 50: return { type: 'error_practice_not_wired', body: {}, rawPayload: {
-      type: 'audit', subtype: 'default', target: { paths: [`${ctx.dir}/spec.md`] }, practice: 'software',
+    case 50: return { type: 'error_unknown_method', body: {}, rawPayload: {
+      type: 'audit', subtype: 'default', target: { paths: [`${ctx.dir}/spec.md`] }, method: 'no-such-method@1',
     } };
 
-    // S. Every remaining route that accepts `deliverable` and/or `practice`.
+    // S. Every remaining route that accepts `deliverable` and/or `method`.
     // #51 execute_plan takes BOTH — the shape a managed flow actually dispatches.
     case 51: return { cwd, type: 'execute_plan', body: {
       target: { paths: [`${cwd}/plan.md`] },
@@ -423,19 +423,19 @@ export function buildRequest(spec, ctx) {
         // describes the real delivery rather than an unrelated path that happens to validate.
         artifacts: [{ root: 'workspaceRoot', path: 'src/subtract.mjs' }],
       })),
-      practice: 'software',
+      method: 'software-change@1',
     } };
     case 52: return { type: 'review', body: {
       target: { paths: [`${ctx.dir}/src/math.ts`] },
-      practice: 'software',
+      method: 'software-change@1',
     } };
     case 53: return { type: 'debug', body: {
       prompt: 'divide(1,0) returned Infinity instead of throwing — find the root cause',
       target: { paths: ['src/math.ts'] },
-      practice: 'software',
+      method: 'software-change@1',
     } };
-    // #54 spec accepts `deliverable` but NOT `practice` — the asymmetry is deliberate and the
-    // scenario would fail loudly if `practice` were wrongly wired onto this arm.
+    // #54 spec accepts `deliverable` but this scenario omits `method` on purpose — `method` is
+    // wired to every route, so this only proves `deliverable` alone still dispatches cleanly.
     case 54: return { type: 'spec', body: {
       prompt: 'Guarded arithmetic — spec dispatched under an approved contract',
       target: { paths: [`${ctx.dir}/design-decisions.md`] },

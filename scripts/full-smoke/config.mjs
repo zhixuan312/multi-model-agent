@@ -5,10 +5,10 @@
 // capability — no duplicates, every scenario earns its place. Full functional coverage:
 //   - the deliverable-agnostic solution lifecycle: a digest-matched ApprovedContract
 //     accepted on a governed route, a Contract Task that declares NO deterministic check
-//     (the shape every non-code deliverable needs), `practice: 'software'` reaching the
-//     skill selector, neutral spec component labels on the emitted artifact, and the four
-//     contract rejection paths (unapproved state, digest mismatch, disposition
-//     infeasibility at the filesystem boundary, and the field not being wired everywhere).
+//     (the shape every non-code deliverable needs), `method: 'software-change@1'` reaching
+//     the skill selector, neutral spec component labels on the emitted artifact, and the
+//     four contract rejection paths (unapproved state, digest mismatch, disposition
+//     infeasibility at the filesystem boundary, and an unregistered Method identifier).
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
 //     context-blocks control op — every dispatchable route is exercised.
@@ -330,13 +330,14 @@ export const SCENARIOS = [
   //        deliverable. The old grammar raised `malformed-plan` whenever `Test:` was absent,
   //        which is the single fault that blocked every non-code deliverable. The task must
   //        parse, execute, and commit its declared output.
-  //    #46 `practice: 'software'` on a governed route. The field selects the retained code
-  //        technique WITHOUT classifying the deliverable, and the runtime echoes it back on
-  //        the terminal envelope as `task.practice` — the observable that proves the request
-  //        reached the skill selector rather than being silently dropped.
+  //    #46 `method: 'software-change@1'` on a governed route (SPEC-005 Method Registry). The
+  //        field selects a registered Method's committed guidance WITHOUT classifying the
+  //        deliverable, and the runtime echoes it back on the terminal envelope as
+  //        `task.method` — the observable that proves the request reached Method resolution
+  //        rather than being silently dropped.
   { id: 44, type: 'review', tier: 'complex', kind: 'read', deliverableContract: true, emits: 1 },
   { id: 45, type: 'execute_plan', tier: 'standard', kind: 'write', noCheckPlan: true, emits: 1 },
-  { id: 46, type: 'plan', tier: 'complex', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
+  { id: 46, type: 'plan', tier: 'complex', kind: 'write', deliverableContract: true, method: 'software-change@1', emits: 1 },
 
   //    Contract REJECTION paths. Each states exactly one reason to reject, so a failure names
   //    the broken invariant instead of "the contract was bad". All four are pure validation —
@@ -346,27 +347,31 @@ export const SCENARIOS = [
   //        content. This is the one that stops an approval being reused after an edit.
   //    #49 INV-3 at the SERVER boundary, not in core: `commit-in-place` needs a git repository.
   //        Core cannot see a filesystem, so only a real non-git cwd exercises this path.
-  //    #50 the field is not universal: `practice` is wired to four routes and `audit` is not
-  //        one of them. A strict schema must reject the unknown key rather than ignore it.
+  //    #50 an unregistered Method: a syntactically valid `<name>@<version>` identifier that
+  //        names no row in the `methods` table. `method` is wired to EVERY route (unlike the
+  //        retired field this replaces, which was wired to only four), so there is no
+  //        "field not wired" rejection left to exercise — what a strict schema still must
+  //        reject is a Method that never resolves, surfacing synchronously as HTTP 400
+  //        `unknown_method` before any execution handle exists.
   { id: 47, type: 'error_contract_not_approved', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 48, type: 'error_contract_digest_mismatch', kind: 'error', expectStatus: 400, emits: 0 },
   { id: 49, type: 'error_contract_disposition_non_git', kind: 'error', expectStatus: 400, emits: 0 },
-  { id: 50, type: 'error_practice_not_wired', kind: 'error', expectStatus: 400, emits: 0 },
+  { id: 50, type: 'error_unknown_method', kind: 'error', expectStatus: 400, emits: 0 },
 
   // S. Per-ROUTE coverage of the two new request fields.
   //
-  //    `deliverable` is accepted on four routes and `practice` on four, and each arm opts in
+  //    `deliverable` is accepted on four routes and `method` on all twelve, and each arm opts in
   //    INDIVIDUALLY in a strict discriminated union. Testing one route per field proves the field
   //    works somewhere, not that it works where a caller will actually send it — a missing opt-in
   //    on a single arm is invisible until that route is used. #44 and #46 covered `review` and
   //    `plan`; these cover every remaining accepting route with a real dispatch.
   //
   //    Where a route accepts BOTH fields they are sent together, because that is how a managed
-  //    flow dispatches: one approved contract governing the work, one persisted practice selecting
-  //    the technique. Sending them separately would test a combination no caller produces.
-  { id: 51, type: 'execute_plan', tier: 'standard', kind: 'write', deliverableContract: true, practice: 'software', emits: 1 },
-  { id: 52, type: 'review', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
-  { id: 53, type: 'debug', tier: 'complex', kind: 'read', practice: 'software', emits: 1 },
+  //    flow dispatches: one approved contract governing the work, one registered Method selecting
+  //    the procedure guidance. Sending them separately would test a combination no caller produces.
+  { id: 51, type: 'execute_plan', tier: 'standard', kind: 'write', deliverableContract: true, method: 'software-change@1', emits: 1 },
+  { id: 52, type: 'review', tier: 'complex', kind: 'read', method: 'software-change@1', emits: 1 },
+  { id: 53, type: 'debug', tier: 'complex', kind: 'read', method: 'software-change@1', emits: 1 },
   { id: 54, type: 'spec', tier: 'complex', kind: 'write', deliverableContract: true, emits: 1 },
 
   //    T. The MCP transport must honour BOTH fields, not merely relay a task.
@@ -374,7 +379,7 @@ export const SCENARIOS = [
   //       generated MCP request schema could omit them — or the adapter could drop them — while
   //       #40 stayed green. MCP is a first-class transport, so a contract rejected there but
   //       accepted over REST would be a silent split-brain between the two surfaces.
-  { id: 55, type: 'review', tier: 'complex', kind: 'mcp-contract', deliverableContract: true, practice: 'software', emits: 1 },
+  { id: 55, type: 'review', tier: 'complex', kind: 'mcp-contract', deliverableContract: true, method: 'software-change@1', emits: 1 },
 
   //    U. The rest of the MCP tool surface. `mma_run` and `mma_task_wait` are exercised by #40;
   //       the remaining tools have never been driven over MCP at all — only their REST

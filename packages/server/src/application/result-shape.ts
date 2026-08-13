@@ -22,10 +22,11 @@ export function buildErrorEnvelope(
   type: TaskType,
   error: { code: string; message: string } & Record<string, unknown>,
   status: 'failed' | 'cancelled' | 'interrupted' = 'failed',
+  method: string | null = null,
 ): Record<string, unknown> {
   return {
     execution: {
-      executionId: executionId, type, status,
+      executionId: executionId, type, method, status,
       sessions: { implementer: null, reviewer: null }, worktree: null, dirtyAtDispatch: false,
     },
     output: { summary: null, filesChanged: [], contextBlockId: null, reviewerNote: null },

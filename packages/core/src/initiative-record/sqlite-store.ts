@@ -39,11 +39,13 @@ import {
   TaskClaimConflictError,
   TaskNotClaimableError,
   UnknownLifecycleContractError,
+  UnknownMethodError,
 } from './errors.js';
 import { evaluateLifecycleGate } from './lifecycle-gates.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
   initiativeMutationRequestSchema,
+  methodDeclarationSchema,
   type AcceptanceCriterionAddInput,
   type ArtifactRegisterInput,
   type DecisionRecordInput,
@@ -66,6 +68,7 @@ import {
   type InitiativeTaskCreateInput,
   type InitiativeTaskExecutionInput,
   type InitiativeTaskReleaseInput,
+  type InitiativeTaskSetMethodInput,
   type ProductCreateInput,
   type ProvenanceInput,
   type RequirementAddInput,
@@ -96,6 +99,7 @@ import {
   type InitiativeWorkspaceLink,
   type LifecycleContract,
   type LifecycleResumeBlock,
+  type MethodDeclaration,
   type Phase,
   type PhaseRecord,
   type PhaseRecordState,
@@ -207,6 +211,8 @@ interface TaskRow {
   created_at: string;
   updated_at: string;
   revision: number;
+  /** NEW in schema version 5 (SPEC-005 Method Registry) — `null` for a legacy Task or one that never had a Method set. */
+  method: string | null;
 }
 
 /** Raw `initiative_workspace_links` table row shape (snake_case columns — internal only). */
@@ -564,6 +570,71 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new NotFoundError({ entity_type: 'VerificationRun', lookup: lookup.uuid });
     }
     return mapVerificationRunRow(row);
+  }
+
+  // ---------------------------------------------------------------------
+  // SPEC-005 Method Registry reads (Task I-2, ← AC-1.3). `methods` is seeded
+  // once by migration 5 (`INSERT OR IGNORE`, exactly the nine frozen
+  // built-in declarations) and never written by any runtime path — these
+  // two reads are the store's only access to that table. `method_get` and
+  // `method_list` dispatch through `execute()`'s read map is Task I-3's
+  // scope; this task only makes the reads themselves true.
+  // ---------------------------------------------------------------------
+
+  /** `method_get` — `id`. Throws `unknown_method` for an unregistered identifier. */
+  getMethod(lookup: { id: string }): MethodDeclaration {
+    return this.getMethodOrThrow(lookup.id);
+  }
+
+  /** `method_list` — every registered declaration, in stable ascending identifier order. */
+  listMethods(): MethodDeclaration[] {
+    const rows = this.db.prepare(`SELECT id, definition_json FROM methods ORDER BY id ASC`).all() as unknown as Array<{
+      id: string;
+      definition_json: string;
+    }>;
+    return rows.map((row) => this.parseMethodDeclaration(row.id, row.definition_json));
+  }
+
+  /** Loads a registered Method's `definition_json`. Throws `unknown_method` for an unregistered id. */
+  private getMethodOrThrow(id: string): MethodDeclaration {
+    const row = this.db.prepare(`SELECT definition_json FROM methods WHERE id = ?`).get(id) as
+      | { definition_json?: string }
+      | undefined;
+    if (!row || row.definition_json === undefined) {
+      throw new UnknownMethodError({ method: id });
+    }
+    return this.parseMethodDeclaration(id, row.definition_json);
+  }
+
+  /**
+   * Parses and strictly re-validates a stored Method's `definition_json` against
+   * {@link methodDeclarationSchema} rather than trusting the stored bytes as-is — a store read
+   * never returns a partial or malformed declaration. Malformed JSON or a shape that fails the
+   * strict schema throws `invalid_request`; both are store-corruption conditions that cannot
+   * occur through any caller-visible write path (there is no Method write path), so this only
+   * guards against a directly edited or otherwise corrupted `initiatives.db`.
+   */
+  private parseMethodDeclaration(id: string, definitionJson: string): MethodDeclaration {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(definitionJson);
+    } catch {
+      throw new InvalidRequestError({
+        field_errors: { method: [`registered Method '${id}' has malformed stored definition JSON`] },
+        message: `invalid_request: Method '${id}' has malformed stored definition JSON`,
+      });
+    }
+    const result = methodDeclarationSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new InvalidRequestError({ field_errors: fieldErrorsFromIssues(result.error.issues) });
+    }
+    if (result.data.id !== id) {
+      throw new InvalidRequestError({
+        field_errors: { method: [`registered Method row '${id}' does not match declaration id '${result.data.id}'`] },
+        message: `invalid_request: Method row '${id}' does not match its stored declaration id`,
+      });
+    }
+    return result.data;
   }
 
   // ---------------------------------------------------------------------
@@ -1086,6 +1157,9 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateInitiativeFocusSet(request.input, request.expected_revision, request.provenance);
       case 'initiative_set_lifecycle_contract':
         return this.mutateInitiativeSetLifecycleContract(request.input, request.expected_revision, request.provenance);
+      // SPEC-005 Method Registry (FR-5) — the sole Task Method mutation.
+      case 'initiative_task_set_method':
+        return this.mutateInitiativeTaskSetMethod(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -1601,12 +1675,19 @@ export class InitiativeRecordStore implements InitiativeRepository {
     if (!this.findInitiativeRow(input.initiative_id, undefined)) {
       throw new NotFoundError({ entity_type: 'Initiative', lookup: input.initiative_id });
     }
+    // SPEC-005 Method Registry (FR-5): a non-null `method` must already be registered —
+    // `getMethodOrThrow` throws `unknown_method` for anything else. `undefined` (omitted)
+    // maps to a stored `null`, never inferred from title/goal/workspaces.
+    const method = input.method ?? null;
+    if (method !== null) {
+      this.getMethodOrThrow(method);
+    }
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const executionRefs = input.executionRefs ?? [];
     this.db
       .prepare(
-        `INSERT INTO tasks (uuid, initiative_id, title, goal, status, outcome, workspace_ids, resource_ids, execution_refs, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO tasks (uuid, initiative_id, title, goal, status, outcome, workspace_ids, resource_ids, execution_refs, created_at, updated_at, revision, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       )
       .run(
         uuid,
@@ -1620,6 +1701,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
         JSON.stringify(executionRefs),
         now,
         now,
+        method,
       );
     const task: Task = {
       uuid,
@@ -1635,6 +1717,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: now,
       updatedAt: now,
       revision: 0,
+      method,
     };
     this.writeEvent({
       entity_type: 'Task',
@@ -1642,6 +1725,49 @@ export class InitiativeRecordStore implements InitiativeRepository {
       initiative_id: input.initiative_id,
       event_type: 'task_created',
       payload: { uuid, initiative_id: input.initiative_id, status: input.status },
+      provenance,
+    });
+    return task;
+  }
+
+  /**
+   * `initiative_task_set_method` (SPEC-005 FR-5): sets or clears (`null`) a Task's Method
+   * under the standard `expected_revision` compare-and-swap applied to the TASK row (not the
+   * Initiative row — `input.initiative` only scopes the lookup and confirms the Task belongs
+   * to that Initiative). A non-null `method` must already be registered — `getMethodOrThrow`
+   * throws `unknown_method` otherwise, before any write. Emits exactly one `task_method_set`
+   * Event per successful call; idempotency replay (handled by `execute()`) produces no second.
+   */
+  private mutateInitiativeTaskSetMethod(
+    input: InitiativeTaskSetMethodInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Task {
+    const initiativeRow = this.findInitiativeRow(input.initiative.uuid, input.initiative.human_key);
+    if (!initiativeRow) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: input.initiative.uuid ?? input.initiative.human_key ?? '' });
+    }
+    const row = this.requireTaskRow(input.task.uuid);
+    if (row.initiative_id !== initiativeRow.uuid) {
+      throw new NotFoundError({ entity_type: 'Task', lookup: input.task.uuid });
+    }
+    this.requireTaskRevision(row, expectedRevision);
+    if (input.method !== null) {
+      this.getMethodOrThrow(input.method);
+    }
+    const previousMethod = row.method ?? null;
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE tasks SET method = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.method, now, nextRevision, row.uuid);
+    const task: Task = { ...mapTaskRow(row), method: input.method, updatedAt: now, revision: nextRevision };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_method_set',
+      payload: { previous_method: previousMethod, new_method: input.method },
       provenance,
     });
     return task;
@@ -3082,6 +3208,7 @@ function mapTaskRow(row: TaskRow): Task {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: Number(row.revision),
+    method: row.method ?? null,
   };
 }
 

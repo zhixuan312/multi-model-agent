@@ -394,14 +394,15 @@ describe('ExecutionRuntime', () => {
   });
 
   /**
-   * AC-6.6 regression: the engine must NEVER infer `practice` from the workspace —
-   * not from the presence of `.git`, not from source-file extensions in the cwd.
-   * `cwd` here is a real git repository containing a TypeScript source file, which
-   * is exactly the shape an inference heuristic would key off. The task requests
-   * no `practice`, so it must still load the generic `implement.md`, never a
-   * software-specific asset it inferred on its own.
+   * AC-6.6 regression (SPEC-005 Task I-6: the retired technique-selector field and its
+   * inference-avoidance guarantee now apply to `method`): the engine must NEVER infer a
+   * technique from the workspace — not from the presence of `.git`, not from source-file
+   * extensions in the cwd. `cwd` here is a real git repository containing a TypeScript source
+   * file, which is exactly the shape an inference heuristic would key off. The task requests no
+   * `method`, so it must still load the generic `implement.md` and resolve no Method, never a
+   * software-specific asset or guidance it inferred on its own.
    */
-  it('never infers practice from a git-repo cwd full of source files — omitted practice loads the generic implementer', async () => {
+  it('never infers a Method from a git-repo cwd full of source files — omitted method loads the generic implementer', async () => {
     execFileSync('git', ['init', '-q'], { cwd });
     execFileSync('git', ['config', 'user.email', 't@t'], { cwd });
     execFileSync('git', ['config', 'user.name', 't'], { cwd });
@@ -438,14 +439,36 @@ describe('ExecutionRuntime', () => {
     const executionId = (outcome as { ok: true; executionId: string }).executionId;
     await waitTerminal(executionRegistry, executionId);
 
+    // AC-1.9 asks for BYTE-identity of the no-Method prompts against the pre-change generic
+    // prompts. Comparing against a LIVE re-read of the same file this assertion exists to guard
+    // would validate itself even if `implement.md`/`review.md` drifted — it could only ever prove
+    // "the prompt contains whatever the file currently says." `toMatchFileSnapshot` compares the
+    // live read against a COMMITTED fixture instead: an accidental future edit to either generic
+    // skill file changes what gets embedded in the prompt, and that drift now fails HERE, not
+    // silently downstream.
     const genericImplementer = readFileSync(join(SKILLS_DIR, 'debug', 'implement.md'), 'utf8');
+    await expect(genericImplementer).toMatchFileSnapshot('./__snapshots__/execution-runtime.no-method-generic-implementer.md');
     // The first send() is the implementer turn — its prompt embeds implementerSkill verbatim.
     expect(capturedPrompts[0]).toContain(genericImplementer);
 
+    const genericReviewer = readFileSync(join(SKILLS_DIR, 'debug', 'review.md'), 'utf8');
+    await expect(genericReviewer).toMatchFileSnapshot('./__snapshots__/execution-runtime.no-method-generic-reviewer.md');
+    // The second send() is the reviewer turn — its prompt embeds reviewerSkill verbatim.
+    expect(capturedPrompts[1]).toContain(genericReviewer);
+
+    // `toContain` above proves the generic skill text is PRESENT; it cannot prove nothing extra
+    // was added. A stray non-empty methodBlock injected alongside a null-resolved Method would
+    // satisfy every assertion so far. Assert its absence directly, in both phases: every guidance
+    // asset opens with an `# <Name> — Method guidance` heading, so that marker appearing at all
+    // means a block leaked into a prompt that resolved no Method.
+    for (const prompt of [capturedPrompts[0]!, capturedPrompts[1]!]) {
+      expect(prompt).not.toMatch(/^# .+ — Method guidance$/m);
+    }
+
     const entry = executionRegistry.get(executionId)!;
-    expect(entry.practice).toBeNull();
+    expect(entry.method).toBeNull();
     const terminalExecution = (entry.result as { execution: Record<string, unknown> }).execution;
-    expect(terminalExecution.practice).toBeUndefined();
+    expect(terminalExecution.method).toBeNull();
   });
 
   /**

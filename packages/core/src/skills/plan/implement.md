@@ -174,8 +174,8 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
 
 ### Deliverable-specific technique
 
-This guidance is deliverable-neutral by default. When the caller's deliverable is code, deeper
-code-specific planning technique is available through the `practice: 'software'` planning asset — use
+This guidance is deliverable-neutral by default. When the caller or linked Task names a registered
+Method (e.g. `software-change@1`), its committed guidance is injected as an additional block — use
 it in addition to, not instead of, the guidance above.
 
 ## How to write it

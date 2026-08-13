@@ -151,15 +151,35 @@ export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>(
   ),
 );
 
-/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT the two
- *  dedicated reads with their own tool/handler — `initiative_resume` and
- *  `initiative_gate_status` (Task I-5, see below). Built from the frozen
- *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation
- *  `execute()` does not also recognise. */
+/**
+ * SPEC-005 Method Registry (FR-10) freezes exactly these three tool names as
+ * `mma_initiative_<operation>` rather than the mechanical `mma_<operation>` every other
+ * operation below uses. `initiative_task_set_method` already starts with `initiative_`, so its
+ * frozen name is the deliberately double-prefixed `mma_initiative_initiative_task_set_method` —
+ * this is NOT a mistake to "correct" back to `mma_initiative_task_set_method`; the plan-authored
+ * transport contract test asserts the double-prefixed form by exact name.
+ */
+const INITIATIVE_TOOL_NAME_OVERRIDES: ReadonlySet<InitiativeOperation> = new Set([
+  'method_get',
+  'method_list',
+  'initiative_task_set_method',
+]);
+
+/** The advertised MCP tool name for one frozen Initiative operation: the standard
+ *  `mma_<operation>` derivation, except for the three SPEC-005 overrides above. */
+function initiativeToolName(operation: InitiativeOperation): string {
+  return INITIATIVE_TOOL_NAME_OVERRIDES.has(operation) ? `mma_initiative_${operation}` : `mma_${operation}`;
+}
+
+/** `mma_<operation>` (or the SPEC-005 `mma_initiative_<operation>` override) -> `<operation>`,
+ *  for every operation EXCEPT the two dedicated reads with their own tool/handler —
+ *  `initiative_resume` and `initiative_gate_status` (Task I-5, see below). Built from the frozen
+ *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation `execute()` does not
+ *  also recognise. */
 export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
   INITIATIVE_OPERATIONS
     .filter((operation) => operation !== 'initiative_resume' && operation !== 'initiative_gate_status')
-    .map((operation) => [`mma_${operation}`, operation] as const),
+    .map((operation) => [initiativeToolName(operation), operation] as const),
 );
 
 const initiativeOperationSchemaMembers = initiativeOperationRequestSchema.options as readonly z.ZodTypeAny[];
@@ -338,6 +358,14 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     'Read the live, advisory lifecycle block for an Initiative: focus phase, contract id, all '
     + 'six phases with their Phase Record state and freshly computed gate, and recent lifecycle '
     + 'Events. Never written to storage.',
+  // SPEC-005 Method Registry — registered reads and the sole Task Method mutation (FR-9, FR-10).
+  // No caller-accessible Method registration, update, or deletion tool exists.
+  method_get: 'Look up one registered Method declaration by its exact identifier (e.g. software-change@1).',
+  method_list: 'List every registered Method declaration, in stable identifier order.',
+  initiative_task_set_method:
+    "Set or clear (null) an Initiative Task's registered Method reference; a non-null value must "
+    + 'already be registered (unknown_method otherwise). Mutating: pass expected_revision '
+    + '(the Task revision) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
@@ -345,7 +373,7 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
  *  `input` envelope — see `initiativeResumeRequestSchema`); every other
  *  operation uses the matching `initiativeOperationRequestSchema` member. */
 const INITIATIVE_MCP_TOOLS: McpToolDefinition[] = INITIATIVE_OPERATIONS.map((operation) => ({
-  name: `mma_${operation}`,
+  name: initiativeToolName(operation),
   description: INITIATIVE_TOOL_DESCRIPTIONS[operation],
   inputSchema: operation === 'initiative_resume' ? initiativeResumeInputSchema : initiativeToolInputSchema(operation),
 }));
@@ -386,7 +414,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: 'mma_execution_get',
     description:
       'Get the current state of an MMA execution. Running executions return identity (type, subtype '
-      + '[audit only], practice [plan/execute_plan/review/debug only], cwd) plus progress '
+      + '[audit only], cwd) plus progress '
       + '(phase, elapsed, runningHeadline, cancellationRequested); terminal executions return the '
       + 'full result envelope. Terminal results survive daemon restarts.',
     inputSchema: {

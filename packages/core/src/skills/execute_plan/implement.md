@@ -55,4 +55,4 @@ could actually execute, and name the unverifiable ones in `notes` so the caller 
 outside the sandbox. Conflating "unverifiable here" with "failed" has repeatedly reported correct,
 complete work as broken.
 
-**Deliverable-specific technique:** code-specific execution technique is available through the `practice: 'software'` executor asset.
+**Deliverable-specific technique:** when the caller or linked Task names a registered Method (e.g. `software-change@1`), its committed guidance is injected as an additional block.

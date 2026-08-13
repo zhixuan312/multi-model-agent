@@ -701,53 +701,13 @@ All share one `<stem>` = `<date>-<slug>`, minted at D1 (see Common: Artifact ste
                                         id (Common: Acceptance closure); caller-owned, never
                                         written by the engine
 .mma/flow-state/<stem>.json            commitBaseline (per repository, permits explicit null) +
-                                        stageSkipped (Common: Clean start · Bounded non-progress) +
-                                        routing.practice (Common: Practice routing);
+                                        stageSkipped (Common: Clean start · Bounded non-progress);
                                         caller-owned, never written by the engine
 .mma/backlogs/<stem>.json              lazy; uncommitted (see Common: Never-halt)
 design/<stem>.md                       Forge durable design docs (only if that step runs)
 ```
 
 No server schema, task type, or HTTP route is added — `/mma:flow` is client-side.
-
-## Common: Practice routing   (B2, B5, B6, and any debug dispatch)
-
-`practice` selects the TECHNIQUE the worker brings. It does not classify the deliverable, and the
-engine never infers it — the caller declares it or the generic path runs. Omitting it is a real
-choice with a real cost: the retained code technique (caller tracing, error paths, security sinks,
-schema conformance, test adequacy; and for `debug`, stack-trace reading, bisection, test isolation,
-reproduction of a failing test) ships behind this field and is unreachable without it.
-
-**Decide once, at the first dispatch of the flow, and persist it.**
-
-```jsonc
-// .mma/flow-state/<stem>.json
-{ "routing": { "practice": "software" } }   // omit `practice` entirely for the generic path
-```
-
-**The rule.** Set `practice: 'software'` **when code-level planning, implementation, review or
-diagnosis technique is required** — NOT "when the artifact happens to be code". The distinction
-decides the boundary cases: an n8n workflow's artifact is configuration, but reviewing its retries,
-credential handling, idempotency and error paths needs software technique, so its flow sets
-`software`. Terraform, SQL, notebooks and mixed code-and-configuration work are judged the same way.
-A finance report, a policy memorandum or a written specification does not set it.
-
-**Read that one persisted value on EVERY dispatch** of `plan` (B2), `execute_plan` (B5), `review`
-(B6) and any `debug` dispatch, and send it verbatim:
-
-```jsonc
-{ "type": "plan", "practice": "software", "target": { "paths": ["..."] } }
-```
-
-Deciding per dispatch instead of reading the persisted value is the failure this section exists to
-prevent: a flow that plans with the software technique and then reviews generically produces a plan
-whose depth the review never checks, and nothing reports the mismatch. One flow, one value, every
-dispatch.
-
-`routing` sits OUTSIDE the contract digest and needs no approval — it is prompt routing, not an
-agreement about quality, so changing it never invalidates an approval. `audit` never accepts
-`practice`; it keeps its own `subtype`, which answers a different question (what is examined, not
-what technique is brought).
 
 ## Failure handling
 

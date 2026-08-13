@@ -16,8 +16,17 @@ import { TASK_TYPES, INITIATIVE_OPERATIONS, canonicalContractDigest } from '@zhi
 /** Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
  *  alongside the original seven. Derived from the same frozen operation list
  *  the tool surface itself is built from, so this assertion tracks the real
- *  contract rather than a hand-copied name list. */
-const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) => `mma_${operation}`);
+ *  contract rather than a hand-copied name list.
+ *
+ *  SPEC-005 Method Registry (Task I-3, FR-10) froze `method_get`, `method_list`, and
+ *  `initiative_task_set_method` as `mma_initiative_<operation>` rather than the mechanical
+ *  `mma_<operation>` every other operation uses — see tool-surface.ts's own
+ *  `INITIATIVE_TOOL_NAME_OVERRIDES`. Encoded independently here (not imported) so this
+ *  assertion still catches a real naming regression in the tool surface. */
+const INITIATIVE_TOOL_NAME_OVERRIDES = new Set(['method_get', 'method_list', 'initiative_task_set_method']);
+const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) =>
+  INITIATIVE_TOOL_NAME_OVERRIDES.has(operation) ? `mma_initiative_${operation}` : `mma_${operation}`,
+);
 
 async function mcpClient(h: HarnessHandle): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
@@ -175,7 +184,7 @@ describe('contract: MCP adapter', () => {
       // Identity travels with every reference to the execution, cancel included — otherwise
       // "which one did I just cancel?" is unanswerable from the transcript.
       expect(cancel).toEqual({
-        executionId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String), method: null,
         status: 'running', cancellationRequested: true,
       });
 
@@ -189,7 +198,7 @@ describe('contract: MCP adapter', () => {
       // Idempotent: repeat cancel reports the terminal state.
       const again = parseText(await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId } }));
       expect(again).toEqual({
-        executionId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String), method: null,
         status: 'cancelled', alreadyTerminal: true,
       });
     } finally { await client.close(); await h.close(); }

@@ -62,19 +62,19 @@ describe('contract: running progress parity', () => {
   });
 
   /**
-   * Intentional contract change (Task I-4): `practice` is a new wire field on the
-   * running payload, carried identically on both wires for `plan`/`execute_plan`/
-   * `review`/`debug` when the caller requested one. `investigate` above still
-   * carries neither `subtype` nor `practice` — this test covers the field the old
-   * subtype-absence assertion did not, using a `debug` task that DID request one.
+   * SPEC-005: `method` is a wire field on the running payload, carried identically on both
+   * wires for every task type — including when the caller requested a resolved Method.
+   * `investigate` above (no requested Method) still carries neither `subtype` nor a
+   * non-null `method` — this test covers the resolved-Method case, using a `debug` task
+   * that DID request one.
    */
-  it('carries a requested practice identically across both wires, alongside no subtype', async () => {
-    const x = await runningPayload(null, { type: 'debug', prompt: 'wait', practice: 'software' });
+  it('carries a requested method identically across both wires, alongside no subtype', async () => {
+    const x = await runningPayload(null, { type: 'debug', prompt: 'wait', method: 'software-change@1' });
     try {
       expect(x.rest.type).toBe('debug');
       expect(x.mcp.type).toBe('debug');
-      expect(x.rest.practice).toBe('software');
-      expect(x.mcp.practice).toBe('software');
+      expect(x.rest.method).toBe('software-change@1');
+      expect(x.mcp.method).toBe('software-change@1');
       expect(x.rest).not.toHaveProperty('subtype');
       expect(x.mcp).not.toHaveProperty('subtype');
       expect(new Set(Object.keys(x.mcp))).toEqual(new Set(Object.keys(x.rest)));

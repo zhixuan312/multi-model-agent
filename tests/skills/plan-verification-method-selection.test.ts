@@ -13,14 +13,14 @@ import { VERIFICATION_METHODS } from '@zhixuan92/multi-model-agent-core';
  * deliberately broader than testing. The claims that fall through are exactly the ones that most
  * need a named owner: professional sign-offs, judgement calls, anything a machine cannot settle.
  *
- * Both plan assets are checked. The generic asset needs it because most of its deliverables cannot
- * be settled by a command at all; the software asset needs it because `command` being the usual
- * answer there makes it the easiest place to forget the other two exist.
+ * The generic plan asset is checked. It needs this because most of its deliverables cannot be
+ * settled by a command at all. (The legacy software-specific plan asset that used to carry the
+ * same requirement was retired by SPEC-005 Task I-6 — the software technique now lives in the
+ * committed `software-change@1` Method guidance instead, which is out of scope for this AC.)
  */
 
 const PLAN_ASSETS = [
   'packages/core/src/skills/plan/implement.md',
-  'packages/core/src/skills/plan/implement-software.md',
 ];
 
 const read = (path: string) => readFileSync(path, 'utf8');

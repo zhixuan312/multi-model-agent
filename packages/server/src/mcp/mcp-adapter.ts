@@ -39,6 +39,7 @@ import {
   InvalidTaskTransitionError,
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
+  UnknownMethodError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -378,6 +379,9 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
   }
   if (err instanceof UnknownLifecycleContractError) {
     return errorResult(err.code, err.message, { lifecycle_contract: err.lifecycle_contract });
+  }
+  if (err instanceof UnknownMethodError) {
+    return errorResult(err.code, err.message, { method: err.method });
   }
   if (err instanceof InitiativeNotFoundError) {
     return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });

@@ -15,6 +15,7 @@
  * missing required values, and JSON-list values that are not string arrays (AC-1.2).
  */
 import { z } from 'zod';
+import { METHOD_ID_PATTERN } from './types.js';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyString = z.string().min(1);
@@ -31,6 +32,11 @@ const lifecycleContractIdSchema = z
   .regex(/^[a-z][a-z0-9-]*@[1-9][0-9]*$/, 'must match <name>@<version>, e.g. default-sdl@1');
 /** snake_case Establishment key (FR-5). */
 const establishmentKeySchema = z.string().regex(/^[a-z][a-z0-9_]*$/, 'must match snake_case establishment key');
+
+// --- SPEC-005 Method Registry primitives (FR-2) -----------------------------
+
+/** `<name>@<version>`, version >= 1, no leading zero (FR-2). */
+const methodIdSchema = z.string().regex(METHOD_ID_PATTERN, 'must match <name>@<version>, e.g. software-change@1');
 
 export const provenanceSchema = z
   .object({
@@ -300,6 +306,8 @@ export const initiativeTaskCreateInputSchema = z
     workspace_ids: z.array(uuidSchema),
     resource_ids: z.array(uuidSchema),
     executionRefs: z.array(z.string()).optional(),
+    /** SPEC-005 Method Registry: an optional registered Method identifier (FR-2). */
+    method: methodIdSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -358,6 +366,47 @@ export const initiativeTaskExecutionInputSchema = z
     }
   });
 export type InitiativeTaskExecutionInput = z.infer<typeof initiativeTaskExecutionInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-005 Method Registry — declaration shape and the sole Task Method
+// mutation (FR-1 through FR-4). No caller-visible Method write operation
+// exists: there is no `method_register`/`_update`/`_delete` schema anywhere
+// in this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates exactly the frozen declaration field set (FR-2): `id`, `name`, `version`,
+ * `purpose`, `required_inputs`, `expected_outputs`, and `verification_expectations`. No
+ * conditional, script, expression, or extension field is permitted (`.strict()`).
+ */
+export const methodDeclarationSchema = z
+  .object({
+    id: methodIdSchema,
+    name: nonEmptyString,
+    version: z.number().int().positive(),
+    purpose: nonEmptyString,
+    required_inputs: z.array(z.string()),
+    expected_outputs: z.array(z.string()),
+    verification_expectations: z.array(z.string()),
+  })
+  .strict();
+export type MethodDeclarationInput = z.infer<typeof methodDeclarationSchema>;
+
+export const methodGetInputSchema = z.object({ id: methodIdSchema }).strict();
+export type MethodGetInput = z.infer<typeof methodGetInputSchema>;
+
+export const methodListInputSchema = z.object({}).strict();
+export type MethodListInput = z.infer<typeof methodListInputSchema>;
+
+/** `method: null` clears the Task's Method reference; a non-null value must be a registered id. */
+export const initiativeTaskSetMethodInputSchema = z
+  .object({
+    initiative: initiativeLookupSchema,
+    task: z.object({ uuid: uuidSchema }).strict(),
+    method: methodIdSchema.nullable(),
+  })
+  .strict();
+export type InitiativeTaskSetMethodInput = z.infer<typeof initiativeTaskSetMethodInputSchema>;
 
 // ---------------------------------------------------------------------------
 // ArtifactRef
@@ -676,6 +725,8 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_phase_skip', initiativePhaseSkipInputSchema),
   mutating('initiative_focus_set', initiativeFocusSetInputSchema),
   mutating('initiative_set_lifecycle_contract', initiativeSetLifecycleContractInputSchema),
+  // SPEC-005 Method Registry (FR-4) — the sole Task Method mutation.
+  mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -749,5 +800,10 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   mutating('initiative_focus_set', initiativeFocusSetInputSchema),
   mutating('initiative_set_lifecycle_contract', initiativeSetLifecycleContractInputSchema),
   readOnly('initiative_gate_status', initiativeGateStatusInputSchema),
+
+  // SPEC-005 Method Registry (FR-1 through FR-4). No caller-visible Method write operation.
+  readOnly('method_get', methodGetInputSchema),
+  readOnly('method_list', methodListInputSchema),
+  mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

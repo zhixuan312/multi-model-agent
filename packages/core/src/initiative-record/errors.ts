@@ -19,7 +19,8 @@ export type InitiativeErrorCode =
   | 'task_claim_conflict'
   | 'invalid_task_transition'
   | 'invalid_phase_transition'
-  | 'unknown_lifecycle_contract';
+  | 'unknown_lifecycle_contract'
+  | 'unknown_method';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -246,7 +247,23 @@ export class UnknownLifecycleContractError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, and SPEC-004. */
+/**
+ * A syntactically valid but unregistered Method identifier — a request `method`, a Task
+ * `initiative_task_create.method`, or `initiative_task_set_method.method` names no row in
+ * `methods` (SPEC-005 FR-2, FR-3).
+ */
+export class UnknownMethodError extends Error {
+  readonly code = 'unknown_method' as const;
+  readonly method: string;
+
+  constructor(params: { method: string; message?: string }) {
+    super(params.message ?? `unknown_method: no registered Method '${params.method}'`);
+    this.name = 'UnknownMethodError';
+    this.method = params.method;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, and SPEC-005. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -259,7 +276,8 @@ export type InitiativeError =
   | TaskClaimConflictError
   | InvalidTaskTransitionError
   | InvalidPhaseTransitionError
-  | UnknownLifecycleContractError;
+  | UnknownLifecycleContractError
+  | UnknownMethodError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -274,6 +292,7 @@ const INITIATIVE_ERROR_CTORS = [
   InvalidTaskTransitionError,
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
+  UnknownMethodError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {
