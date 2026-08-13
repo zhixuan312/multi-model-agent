@@ -4,7 +4,7 @@ import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 
 /**
  * `runningHeadline` shipped readable on both wires in Flow 1 and was written by NOTHING —
- * `TaskRegistry.setHeadline` had zero production callers. Every progress view, including the
+ * `ExecutionRegistry.setHeadline` had zero production callers. Every progress view, including the
  * Claude Desktop execution monitor, therefore showed a phase name and a clock: a task sits in
  * `implementing` for minutes, and "implementing" does not distinguish reading files from
  * running tests from being stuck.

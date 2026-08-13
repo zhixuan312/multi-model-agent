@@ -16,9 +16,9 @@ Local HTTP service that fans out tool-using work to workers on different LLM pro
 **Transport: dispatch every `mma-*` skill through the `mma_run` MCP tool.** Pass `cwd` and the
 skill's request body (same task types, same fields) inside `request`. On hosts that support MCP
 Apps (Claude Desktop) `mma_run` renders a live execution monitor — phase and elapsed time updating
-in place, with a Cancel button, at no extra model turn. Poll with `mma_task_get`, block with
-`mma_task_wait`, cancel with `mma_task_cancel`. If the `mma_run` MCP tool is not available in this
-session, run `mma clients` to see how to connect it.
+in place, with a Cancel button, at no extra model turn. Poll with `mma_execution_get`, block with
+`mma_execution_wait`, cancel with `mma_execution_cancel`. If the `mma_run` MCP tool is not available
+in this session, run `mma clients` to see how to connect it.
 
 ## Skill map
 
@@ -194,8 +194,8 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 ## General flow
 
 1. Call the matching `mma-*` skill's `mma_run` dispatch → receive either the terminal envelope
-   inline (short tasks) or a `{ taskId, type, cwd }` handle.
-2. For a handle, poll with `mma_task_get` (or block with `mma_task_wait`) until terminal.
+   inline (short tasks) or a `{ executionId, type, cwd }` handle.
+2. For a handle, poll with `mma_execution_get` (or block with `mma_execution_wait`) until terminal.
 3. Read `output` / `error` from the layered terminal envelope.
 
 ## Common pitfalls

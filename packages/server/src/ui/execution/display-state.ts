@@ -15,7 +15,7 @@
  * The panel used to open with `Running / Phase: implementing`, which is the same two
  * words for every one of the twelve task types. With several panels on screen the only
  * thing telling them apart was an 8-char hex ref. `taskType` is present on every mode,
- * including terminal, where the envelope has always carried `task.type` and the panel
+ * including terminal, where the envelope has always carried `execution.type` and the panel
  * has always ignored it.
  */
 interface TaskLabel {
@@ -99,7 +99,7 @@ export type DisplayState = RunningDisplayState | CancellingDisplayState | Termin
 interface RunningSnapshotLike {
   activity?: unknown;
   activityPhases?: unknown;
-  taskId?: unknown;
+  executionId?: unknown;
   type?: unknown;
   subtype?: unknown;
   status?: unknown;
@@ -114,8 +114,10 @@ interface RunningSnapshotLike {
 interface StageLike { durationMs?: unknown; costUsd?: unknown }
 
 interface TerminalEnvelopeLike {
-  task?: { taskId?: unknown; type?: unknown; subtype?: unknown; status?: unknown };
-  execution?: { activity?: unknown; activityPhases?: unknown };
+  execution?: {
+    executionId?: unknown; type?: unknown; subtype?: unknown; status?: unknown;
+    activity?: unknown; activityPhases?: unknown;
+  };
   metrics?: {
     totalDurationMs?: unknown;
     totalCostUsd?: unknown;
@@ -133,17 +135,17 @@ interface TerminalEnvelopeLike {
 }
 
 /**
- * A payload is terminal when it carries a `task` object (the terminal envelope shape),
- * as opposed to a running/cancelling snapshot which carries a top-level `status` alongside
- * `taskId`/`phase`.
+ * A payload is terminal when it carries an `execution` object (the terminal envelope
+ * shape), as opposed to a running/cancelling snapshot which carries a top-level `status`
+ * alongside `executionId`/`phase` and no nested `execution` section.
  */
 function isTerminalPayload(payload: unknown): payload is TerminalEnvelopeLike {
   return (
     typeof payload === 'object' &&
     payload !== null &&
-    'task' in payload &&
-    typeof (payload as TerminalEnvelopeLike).task === 'object' &&
-    (payload as TerminalEnvelopeLike).task !== null
+    'execution' in payload &&
+    typeof (payload as TerminalEnvelopeLike).execution === 'object' &&
+    (payload as TerminalEnvelopeLike).execution !== null
   );
 }
 
@@ -175,8 +177,8 @@ function label(type: unknown, subtype: unknown): string | undefined {
   return typeof subtype === 'string' && subtype ? `${type} (${subtype})` : type;
 }
 
-function shortRef(taskId: unknown): string | undefined {
-  return typeof taskId === 'string' ? taskId.slice(0, 8) : undefined;
+function shortRef(executionId: unknown): string | undefined {
+  return typeof executionId === 'string' ? executionId.slice(0, 8) : undefined;
 }
 
 function stage(raw: StageLike | null | undefined): StageStat | undefined {
@@ -188,10 +190,10 @@ function stage(raw: StageLike | null | undefined): StageStat | undefined {
 }
 
 function deriveTerminal(payload: TerminalEnvelopeLike): TerminalDisplayState {
-  const taskType = label(payload.task?.type, payload.task?.subtype);
-  const taskRef = shortRef(payload.task?.taskId);
-  const rawType = typeof payload.task?.type === 'string' ? payload.task.type : undefined;
-  const status = String(payload.task?.status ?? '');
+  const taskType = label(payload.execution?.type, payload.execution?.subtype);
+  const taskRef = shortRef(payload.execution?.executionId);
+  const rawType = typeof payload.execution?.type === 'string' ? payload.execution.type : undefined;
+  const status = String(payload.execution?.status ?? '');
   const state: TerminalDisplayState = {
     mode: 'terminal',
     status,
@@ -239,7 +241,7 @@ function deriveRunningOrCancelling(
   const elapsedMs = typeof payload.elapsedMs === 'number' ? payload.elapsedMs : 0;
   const phaseElapsedMs = typeof payload.phaseElapsedMs === 'number' ? payload.phaseElapsedMs : 0;
 
-  const taskRef = shortRef(payload.taskId);
+  const taskRef = shortRef(payload.executionId);
   const taskType = label(payload.type, payload.subtype);
   const rawType = typeof payload.type === 'string' ? payload.type : undefined;
 
@@ -270,7 +272,7 @@ function deriveRunningOrCancelling(
 }
 
 /**
- * Derives the render state for a parsed `mma_run`/`mma_task_get` payload. Throws on a
+ * Derives the render state for a parsed `mma_run`/`mma_execution_get` payload. Throws on a
  * payload that is neither a terminal envelope nor a running/cancelling snapshot — callers
  * (`entry.ts`) catch that and retain the last-known-good state per the update-failed
  * invariant; this function itself stays pure and has no fallback branch of its own.

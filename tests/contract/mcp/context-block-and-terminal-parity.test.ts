@@ -22,14 +22,14 @@ describe('contract: MCP context blocks and terminal parity', () => {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+        'mma_execution_cancel', 'mma_execution_get', 'mma_execution_list', 'mma_execution_wait',
         ...INITIATIVE_TOOL_NAMES,
       ].sort());
       const created = parse(await client.callTool({ name: 'mma_context_block_create', arguments: { cwd: process.cwd(), content: 'shared' } }));
       expect(created.id).toEqual(expect.any(String));
       const run = parse(await client.callTool({ name: 'mma_run', arguments: { cwd: process.cwd(), mode: 'handle', request: { type: 'investigate', prompt: 'use context', contextBlockIds: [created.id] } } }));
-      const terminal = parse(await client.callTool({ name: 'mma_task_wait', arguments: { taskId: run.taskId, timeoutMs: 30_000 } }));
-      const rest = await fetch(`${harness.baseUrl}/task/${run.taskId}`, { headers: { Authorization: `Bearer ${harness.token}`, 'X-MMA-Client': 'codex', 'X-MMA-Main-Model': 'gpt-test' } });
+      const terminal = parse(await client.callTool({ name: 'mma_execution_wait', arguments: { executionId: run.executionId, timeoutMs: 30_000 } }));
+      const rest = await fetch(`${harness.baseUrl}/execution/${run.executionId}`, { headers: { Authorization: `Bearer ${harness.token}`, 'X-MMA-Client': 'codex', 'X-MMA-Main-Model': 'gpt-test' } });
       expect(await rest.json()).toEqual(terminal);
       expect(parse(await client.callTool({ name: 'mma_context_block_delete', arguments: { cwd: process.cwd(), blockId: created.id } }))).toEqual({ ok: true });
     } finally { await client.close(); await harness.close(); }

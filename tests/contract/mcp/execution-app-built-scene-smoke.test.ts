@@ -18,13 +18,13 @@ const artifactPath = resolve(process.cwd(), 'packages/server/dist/ui/execution.h
 
 /** Payloads shaped exactly like a real `investigate` run: poll, poll, terminal envelope. */
 const ACT_I = {
-  taskId: 'd423b24c', type: 'investigate', cwd: '/repo', status: 'running',
+  executionId: 'd423b24c', type: 'investigate', cwd: '/repo', status: 'running',
   phase: 'implementing', elapsedMs: 12_000, phaseElapsedMs: 12_000,
   runningHeadline: "Running sed -n '1,240p' /repo/scene.ts",
 };
 const ACT_II = { ...ACT_I, phase: 'reviewing', elapsedMs: 61_000, phaseElapsedMs: 13_000, runningHeadline: 'Read: …/scene.test.ts' };
 const TERMINAL = {
-  task: { taskId: 'd423b24c', type: 'investigate', status: 'done' },
+  execution: { executionId: 'd423b24c', type: 'investigate', status: 'done' },
   metrics: {
     totalDurationMs: 101_984, totalCostUsd: 0.4045074, savedVsMainCostUsd: 0.3073751,
     implementer: { durationMs: 45_069, costUsd: 0.1475505 },
@@ -117,7 +117,7 @@ describe('smoke: the built panel plays all three acts', () => {
     expect(text, 'the panel is a monitor, not a result viewer').not.toContain('SECRET-ANSWER-TEXT');
     expect(text).not.toMatch(/undefined|NaN/);
     expect(doc.querySelector('button'), 'nothing left to cancel').toBeNull();
-    expect(calls.every((c) => c === 'mma_task_get'), calls.join(',')).toBe(true);
+    expect(calls.every((c) => c === 'mma_execution_get'), calls.join(',')).toBe(true);
   });
 
   it('maps every terminal status onto its own tableau', async () => {
@@ -129,7 +129,7 @@ describe('smoke: the built panel plays all three acts', () => {
       ['interrupted', 'end-failed'],
       ['cancelled', 'end-cancelled'],
     ] as const) {
-      await send({ ...TERMINAL, task: { ...TERMINAL.task, status } });
+      await send({ ...TERMINAL, execution: { ...TERMINAL.execution, status } });
       expect(sceneClass(), `status ${status}`).toContain(expected);
     }
   });

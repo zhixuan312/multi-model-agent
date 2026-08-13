@@ -6,7 +6,7 @@ describe('request processing order', () => {
     const s = await startTestServer({ server: { limits: { maxBodyBytes: 100 } } });
     try {
       const big = 'x'.repeat(200);
-      const res = await fetch(`${s.url}/task?cwd=/tmp`, { method: 'POST', body: big });
+      const res = await fetch(`${s.url}/execution?cwd=/tmp`, { method: 'POST', body: big });
       expect(res.status).toBe(413);
       const body = await res.json();
       expect(body.error.code).toBe('payload_too_large');
@@ -30,8 +30,8 @@ describe('request processing order', () => {
   it('405 method_not_allowed with allowed methods in details', async () => {
     const s = await startTestServer();
     try {
-      // /task is registered for POST only; DELETE should get 405
-      const res = await fetch(`${s.url}/task`, {
+      // /execution is registered for POST only; DELETE should get 405
+      const res = await fetch(`${s.url}/execution`, {
         method: 'DELETE',
         headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
@@ -49,8 +49,8 @@ describe('request processing order', () => {
   it('401 unauthorized when bearer missing (after route match)', async () => {
     const s = await startTestServer();
     try {
-      // Small body (< limit); route exists (POST /task); no auth
-      const res = await fetch(`${s.url}/task`, {
+      // Small body (< limit); route exists (POST /execution); no auth
+      const res = await fetch(`${s.url}/execution`, {
         method: 'POST',
         body: '{}',
         headers: { 'content-type': 'application/json' },
@@ -66,7 +66,7 @@ describe('request processing order', () => {
   it('400 invalid_json after auth succeeds', async () => {
     const s = await startTestServer();
     try {
-      const res = await fetch(`${s.url}/task?cwd=/tmp`, {
+      const res = await fetch(`${s.url}/execution?cwd=/tmp`, {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",

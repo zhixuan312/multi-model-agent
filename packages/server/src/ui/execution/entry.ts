@@ -16,8 +16,8 @@ import { sceneSvg, sceneClass, type Act } from './scene.js';
  *   `connection-error` and starts no polling.
  * - The initiating `mma_run` result arrives via `app.ontoolresult`. If it is ALREADY
  *   TERMINAL, it is rendered immediately and NO poll loop starts (no `callServerTool`
- *   call, no Cancel button). Otherwise the taskId is extracted and the first
- *   `mma_task_get` poll fires immediately.
+ *   call, no Cancel button). Otherwise the executionId is extracted and the first
+ *   `mma_execution_get` poll fires immediately.
  * - Subsequent polls run every 2000ms after the previous one settles, with at most one
  *   in flight at a time, each bounded by a 10000ms timeout counted as one failure.
  * - Five consecutive failures/timeouts stop polling and render `stopped` naming the last
@@ -26,7 +26,7 @@ import { sceneSvg, sceneClass, type Act } from './scene.js';
  *   (not just the first) is treated as a fresh snapshot update.
  * - Cancel disables immediately on click and re-enables ONLY on a confirming
  *   `cancellationRequested` snapshot, a terminal envelope, or a defined cancel failure —
- *   never merely because the `mma_task_cancel` promise resolved.
+ *   never merely because the `mma_execution_cancel` promise resolved.
  */
 
 interface CallToolResult {
@@ -267,7 +267,7 @@ function renderDisplay(display: DisplayState): string {
 
   // ── row 3: meta. Anchored right so the task ref lines up with the table's right edge. ──
   if (display.taskRef) {
-    bits.push(`<div class="sub"><span class="l"></span><span class="r meta">task ${escapeHtml(display.taskRef)}</span></div>`);
+    bits.push(`<div class="sub"><span class="l"></span><span class="r meta">execution ${escapeHtml(display.taskRef)}</span></div>`);
   }
   return bits.join('');
 }
@@ -278,7 +278,7 @@ function bootstrap(): void {
   let currentView: ViewState = { kind: 'connecting' };
   let updateFailed = false;
   let cancelClickLock = false;
-  let taskId: string | null = null;
+  let executionId: string | null = null;
   let initiated = false;
   let stopped = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -368,7 +368,7 @@ function bootstrap(): void {
   }
 
   async function pollOnce(app: AppLike): Promise<void> {
-    if (stopped || taskId === null) {
+    if (stopped || executionId === null) {
       return;
     }
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -377,7 +377,7 @@ function bootstrap(): void {
     });
     try {
       const result = await Promise.race([
-        app.callServerTool({ name: 'mma_task_get', arguments: { taskId } }),
+        app.callServerTool({ name: 'mma_execution_get', arguments: { executionId } }),
         timeoutPromise,
       ]);
       clearTimeout(timeoutHandle);
@@ -410,7 +410,7 @@ function bootstrap(): void {
 
   async function onCancelClick(event: MouseEvent): Promise<void> {
     const button = event.currentTarget as HTMLButtonElement | null;
-    if (cancelClickLock || taskId === null) {
+    if (cancelClickLock || executionId === null) {
       return;
     }
     cancelClickLock = true;
@@ -418,7 +418,7 @@ function bootstrap(): void {
       button.disabled = true;
     }
     try {
-      await activeApp.callServerTool({ name: 'mma_task_cancel', arguments: { taskId } });
+      await activeApp.callServerTool({ name: 'mma_execution_cancel', arguments: { executionId } });
       // Resolution alone does NOT re-enable Cancel — only a confirming snapshot, a
       // terminal envelope, or a defined cancel failure (the catch branch below) does.
     } catch (err) {
@@ -433,7 +433,7 @@ function bootstrap(): void {
       const result = parseSnapshot(raw);
       if (!result) {
         // Do NOT latch `initiated` here. This branch is the only one that extracts the
-        // taskId and starts the poll loop; latching on a payload we failed to parse would
+        // executionId and starts the poll loop; latching on a payload we failed to parse would
         // route every later delivery to the update path, leaving the App connected,
         // rendering, and polling nothing — inert, with nothing thrown and no visible cause.
         updateFailed = true;
@@ -448,9 +448,9 @@ function bootstrap(): void {
       if (derived.mode === 'terminal') {
         return;
       }
-      const parsedTaskId = (parsed as Record<string, unknown>)['taskId'];
-      taskId = typeof parsedTaskId === 'string' ? parsedTaskId : null;
-      if (taskId !== null) {
+      const parsedExecutionId = (parsed as Record<string, unknown>)['executionId'];
+      executionId = typeof parsedExecutionId === 'string' ? parsedExecutionId : null;
+      if (executionId !== null) {
         void pollOnce(activeApp);
       }
       return;

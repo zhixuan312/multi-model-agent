@@ -20,6 +20,9 @@ import {
   MigrationBackupFailedError,
   CrossInitiativeEvidenceLinkError,
   CrossInitiativeVerificationError,
+  TaskNotClaimableError,
+  TaskClaimConflictError,
+  InvalidTaskTransitionError,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -82,6 +85,30 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       status: 409,
       code: err.code,
       message: err.message,
+    };
+  }
+  if (err instanceof TaskNotClaimableError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { task_id: err.task_id, status: err.status },
+    };
+  }
+  if (err instanceof TaskClaimConflictError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { task_id: err.task_id, claimed_by: err.claimed_by, authorized_by: err.authorized_by },
+    };
+  }
+  if (err instanceof InvalidTaskTransitionError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { task_id: err.task_id, from_status: err.from_status, to_status: err.to_status },
     };
   }
   if (err instanceof InitiativeNotFoundError) {

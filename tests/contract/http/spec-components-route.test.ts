@@ -10,16 +10,16 @@ const HEADERS = (token: string) => ({
 });
 
 async function dispatch(h: { baseUrl: string; token: string }, body: object) {
-  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+  return fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
     method: 'POST',
     headers: HEADERS(h.token),
     body: JSON.stringify(body),
   });
 }
 
-async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: string): Promise<Record<string, unknown>> {
+async function pollToTerminal(h: { baseUrl: string; token: string }, executionId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 300; i++) {
-    const res = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: HEADERS(h.token) });
+    const res = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: HEADERS(h.token) });
     if (res.status === 200) return (await res.json()) as Record<string, unknown>;
     if (res.status !== 202) throw new Error(`Unexpected ${res.status}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -81,8 +81,8 @@ describe('spec route component selection', () => {
         components: ['Technical Design', 'Context', 'Problem', 'Context'],
       });
       expect(res.status).toBe(202);
-      const { taskId } = await res.json();
-      const terminal = await pollToTerminal(h, taskId);
+      const { executionId } = await res.json();
+      const terminal = await pollToTerminal(h, executionId);
       expect((terminal.output as Record<string, unknown>).summary).toEqual(reviewerSummary);
       expect(prompts).toHaveLength(2);
       for (const prompt of prompts) {
@@ -143,8 +143,8 @@ describe('spec route component selection', () => {
 
         const res = await dispatch(h, body);
         expect(res.status).toBe(202);
-        const { taskId } = await res.json();
-        const terminal = await pollToTerminal(h, taskId);
+        const { executionId } = await res.json();
+        const terminal = await pollToTerminal(h, executionId);
         expect((terminal.output as Record<string, unknown>).summary).toEqual(fullSummary);
         for (const prompt of prompts) {
           expect(prompt).toContain(

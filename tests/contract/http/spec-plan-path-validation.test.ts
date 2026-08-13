@@ -10,16 +10,16 @@ const HEADERS = (token: string) => ({
 });
 
 async function dispatch(h: { baseUrl: string; token: string }, body: object) {
-  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+  return fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
     method: 'POST',
     headers: HEADERS(h.token),
     body: JSON.stringify(body),
   });
 }
 
-async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: string): Promise<Record<string, unknown>> {
+async function pollToTerminal(h: { baseUrl: string; token: string }, executionId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 300; i++) {
-    const res = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: HEADERS(h.token) });
+    const res = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: HEADERS(h.token) });
     if (res.status === 200) return (await res.json()) as Record<string, unknown>;
     if (res.status !== 202) throw new Error(`Unexpected ${res.status}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -40,13 +40,13 @@ describe('spec/plan target.paths resolution guard', () => {
         target: { paths: ['.mma/this-path-does-not-exist-9f3a2b.md'] },
       });
       expect(res.status).toBe(202);
-      const { taskId } = await res.json();
-      const terminal = await pollToTerminal(h, taskId);
-      // Async failures return the SAME 6-field envelope as any other terminal result,
+      const { executionId } = await res.json();
+      const terminal = await pollToTerminal(h, executionId);
+      // Async failures return the SAME 5-field envelope as any other terminal result,
       // with the failure in `error` (matches the documented env.error contract) — not a
       // bare { code, message } that callers can't detect via env.error.
-      expect(Object.keys(terminal).sort()).toEqual(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
-      expect((terminal.task as Record<string, unknown>).status).toBe('failed');
+      expect(Object.keys(terminal).sort()).toEqual(['error', 'execution', 'metrics', 'output', 'raw']);
+      expect((terminal.execution as Record<string, unknown>).status).toBe('failed');
       const err = terminal.error as Record<string, unknown>;
       expect(err.code).toBe('invalid_request');
       expect(err.message as string).toContain('this-path-does-not-exist-9f3a2b.md');

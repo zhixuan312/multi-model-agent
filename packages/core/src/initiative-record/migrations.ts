@@ -26,7 +26,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { MigrationBackupFailedError } from './errors.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 2;
+export const INITIATIVE_SCHEMA_VERSION = 3;
 
 interface Migration {
   version: number;
@@ -287,6 +287,19 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_verification_runs_acceptance_criterion_id ON verification_runs(acceptance_criterion_id);
         CREATE INDEX IF NOT EXISTS idx_verification_runs_initiative_id ON verification_runs(initiative_id);
       `);
+    },
+  },
+  {
+    // Version 3 — SPEC-003 Phase B Task claim data contract ("Data model",
+    // Task I-1). Additive only: the sole change is a nullable `claimed_by`
+    // column on the existing `tasks` table (no v1/v2 table, index, or column
+    // is reshaped, renamed, or dropped, and no other Initiative-record schema
+    // change is in scope). SQLite's `ALTER TABLE ... ADD COLUMN` with no
+    // `NOT NULL` clause and no explicit default backfills every existing row
+    // with `NULL`, which the public repository layer maps to `claimed_by: null`.
+    version: 3,
+    apply: (db) => {
+      db.exec(`ALTER TABLE tasks ADD COLUMN claimed_by TEXT;`);
     },
   },
 ];

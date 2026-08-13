@@ -33,16 +33,16 @@ describe('session cache invariant — one open per (task, tier)', () => {
       'Content-Type': 'application/json',
     };
     try {
-      const dispatch = await fetch(`${server.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+      const dispatch = await fetch(`${server.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(dispatch.status).toBe(202);
-      const { taskId } = (await dispatch.json()) as { taskId: string };
+      const { executionId } = (await dispatch.json()) as { executionId: string };
       // Poll to terminal.
       for (let i = 0; i < 200; i++) {
-        const r = await fetch(`${server.baseUrl}/task/${taskId}`, { headers });
+        const r = await fetch(`${server.baseUrl}/execution/${executionId}`, { headers });
         if (r.status === 200) break;
         await new Promise((res) => setTimeout(res, 50));
       }

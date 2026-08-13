@@ -32,8 +32,11 @@ import {
   CrossProductWorkspaceLinkError,
   fieldErrorsFromIssues,
   InvalidRequestError,
+  InvalidTaskTransitionError,
   NotFoundError,
   RevisionConflictError,
+  TaskClaimConflictError,
+  TaskNotClaimableError,
 } from './errors.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
@@ -49,7 +52,11 @@ import {
   type InitiativeMutationRequest,
   type InitiativeRelateInput,
   type InitiativeStatusInput,
+  type InitiativeTaskClaimInput,
+  type InitiativeTaskCompleteInput,
   type InitiativeTaskCreateInput,
+  type InitiativeTaskExecutionInput,
+  type InitiativeTaskReleaseInput,
   type ProductCreateInput,
   type ProvenanceInput,
   type RequirementAddInput,
@@ -171,6 +178,8 @@ interface TaskRow {
   goal: string;
   status: Task['status'];
   outcome: Task['outcome'];
+  /** NEW in schema version 3 (SPEC-003 Phase B) — `null` for a legacy or unclaimed Task. */
+  claimed_by: string | null;
   workspace_ids: string;
   resource_ids: string;
   execution_refs: string;
@@ -1013,6 +1022,15 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateInitiativeRelate(request.input, request.expected_revision, request.provenance);
       case 'initiative_task_create':
         return this.mutateInitiativeTaskCreate(request.input, request.expected_revision, request.provenance);
+      // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+      case 'initiative_task_claim':
+        return this.mutateInitiativeTaskClaim(request.input, request.expected_revision, request.provenance);
+      case 'initiative_task_release':
+        return this.mutateInitiativeTaskRelease(request.input, request.expected_revision, request.provenance);
+      case 'initiative_task_complete':
+        return this.mutateInitiativeTaskComplete(request.input, request.expected_revision, request.provenance);
+      case 'initiative_task_execution':
+        return this.mutateInitiativeTaskExecution(request.input, request.expected_revision, request.provenance);
       case 'artifact_register':
         return this.mutateArtifactRegister(request.input, request.expected_revision, request.provenance);
       // Phase A1 — professional record and verification ledger (SPEC-002 FR-3).
@@ -1564,6 +1582,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       goal: input.goal,
       status: input.status,
       outcome: input.outcome,
+      claimed_by: null,
       workspace_ids: input.workspace_ids,
       resource_ids: input.resource_ids,
       executionRefs,
@@ -1577,6 +1596,197 @@ export class InitiativeRecordStore implements InitiativeRepository {
       initiative_id: input.initiative_id,
       event_type: 'task_created',
       payload: { uuid, initiative_id: input.initiative_id, status: input.status },
+      provenance,
+    });
+    return task;
+  }
+
+  /** `uuid`-only Task lookup shared by the four claim/transition mutations below. Throws `not_found`. */
+  private requireTaskRow(uuid: string): TaskRow {
+    const row = this.db.prepare(`SELECT * FROM tasks WHERE uuid = ?`).get(uuid) as TaskRow | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Task', lookup: uuid });
+    }
+    return row;
+  }
+
+  private requireTaskRevision(row: TaskRow, expectedRevision: number): void {
+    if (row.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Task',
+        entity_id: row.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: row.revision,
+      });
+    }
+  }
+
+  /**
+   * `initiative_task_claim` (SPEC-003 FR-8, FR-9): `open → claimed` only,
+   * setting `claimed_by` to `provenance.actor_id`. Any other source status
+   * throws `task_not_claimable`.
+   */
+  private mutateInitiativeTaskClaim(input: InitiativeTaskClaimInput, expectedRevision: number, provenance: ProvenanceInput): Task {
+    const row = this.requireTaskRow(input.uuid);
+    this.requireTaskRevision(row, expectedRevision);
+    if (row.status !== 'open') {
+      throw new TaskNotClaimableError({ task_id: row.uuid, status: row.status });
+    }
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    const claimedBy = provenance.actor_id;
+    this.db
+      .prepare(`UPDATE tasks SET status = 'claimed', claimed_by = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(claimedBy, now, nextRevision, row.uuid);
+    const task: Task = { ...mapTaskRow(row), status: 'claimed', claimed_by: claimedBy, updatedAt: now, revision: nextRevision };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_claimed',
+      payload: { uuid: row.uuid, initiative_id: row.initiative_id, claimed_by: claimedBy },
+      provenance,
+    });
+    return task;
+  }
+
+  /**
+   * `initiative_task_release` (SPEC-003 FR-8, FR-9): `claimed | in_progress → open` only,
+   * resetting `claimed_by` to `null`. An ownership mismatch throws `task_claim_conflict`
+   * UNLESS `provenance.actor_type === 'human'` (the deliberate stale-claim override).
+   */
+  private mutateInitiativeTaskRelease(
+    input: InitiativeTaskReleaseInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Task {
+    const row = this.requireTaskRow(input.uuid);
+    this.requireTaskRevision(row, expectedRevision);
+    if (row.status !== 'claimed' && row.status !== 'in_progress') {
+      throw new InvalidTaskTransitionError({ task_id: row.uuid, from_status: row.status, to_status: 'open' });
+    }
+    if (row.claimed_by !== null && row.claimed_by !== provenance.authorized_by && provenance.actor_type !== 'human') {
+      throw new TaskClaimConflictError({ task_id: row.uuid, claimed_by: row.claimed_by, authorized_by: provenance.authorized_by });
+    }
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE tasks SET status = 'open', claimed_by = NULL, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(now, nextRevision, row.uuid);
+    const task: Task = { ...mapTaskRow(row), status: 'open', claimed_by: null, updatedAt: now, revision: nextRevision };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_released',
+      payload: { uuid: row.uuid, initiative_id: row.initiative_id },
+      provenance,
+    });
+    return task;
+  }
+
+  /**
+   * `initiative_task_complete` (SPEC-003 FR-8, FR-9): `claimed | in_progress → completed` only,
+   * requiring a non-null outcome (enforced by the input schema) and retaining the claimant.
+   * An ownership mismatch throws `task_claim_conflict` — release's human override does not apply here.
+   */
+  private mutateInitiativeTaskComplete(
+    input: InitiativeTaskCompleteInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Task {
+    const row = this.requireTaskRow(input.uuid);
+    this.requireTaskRevision(row, expectedRevision);
+    if (row.status !== 'claimed' && row.status !== 'in_progress') {
+      throw new InvalidTaskTransitionError({ task_id: row.uuid, from_status: row.status, to_status: 'completed' });
+    }
+    if (row.claimed_by !== null && row.claimed_by !== provenance.authorized_by) {
+      throw new TaskClaimConflictError({ task_id: row.uuid, claimed_by: row.claimed_by, authorized_by: provenance.authorized_by });
+    }
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE tasks SET status = 'completed', outcome = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.outcome, now, nextRevision, row.uuid);
+    const task: Task = { ...mapTaskRow(row), status: 'completed', outcome: input.outcome, updatedAt: now, revision: nextRevision };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_completed',
+      payload: { uuid: row.uuid, initiative_id: row.initiative_id, outcome: input.outcome },
+      provenance,
+    });
+    return task;
+  }
+
+  /**
+   * `initiative_task_execution` (SPEC-003 FR-8, FR-9): appends `execution_ref` once (idempotent
+   * append), and — unless the Task is already `completed` or `cancelled` — optionally applies one
+   * transition from the frozen FR-9 matrix (`TASK_EXECUTION_TRANSITIONS`); any unlisted (source →
+   * target) pair throws `invalid_task_transition`. The one ownership-gated transition,
+   * `claimed → in_progress`, requires `provenance.authorized_by === claimed_by` (same rule as FR-5
+   * admission) and otherwise throws `task_claim_conflict`. A `completed` transition's non-null
+   * outcome is enforced by the input schema.
+   */
+  private mutateInitiativeTaskExecution(
+    input: InitiativeTaskExecutionInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Task {
+    const row = this.requireTaskRow(input.uuid);
+    this.requireTaskRevision(row, expectedRevision);
+    if (row.status === 'completed' || row.status === 'cancelled') {
+      throw new InvalidTaskTransitionError({
+        task_id: row.uuid,
+        from_status: row.status,
+        to_status: input.transition ?? row.status,
+      });
+    }
+
+    const existingRefs = JSON.parse(row.execution_refs ?? '[]') as string[];
+    const nextRefs = existingRefs.includes(input.execution_ref) ? existingRefs : [...existingRefs, input.execution_ref];
+
+    let nextStatus: TaskStatus = row.status;
+    let nextOutcome = row.outcome;
+    if (input.transition) {
+      const permitted = TASK_EXECUTION_TRANSITIONS[row.status] ?? [];
+      if (!permitted.includes(input.transition)) {
+        throw new InvalidTaskTransitionError({ task_id: row.uuid, from_status: row.status, to_status: input.transition });
+      }
+      if (
+        row.status === 'claimed' &&
+        input.transition === 'in_progress' &&
+        row.claimed_by !== null &&
+        row.claimed_by !== provenance.authorized_by
+      ) {
+        throw new TaskClaimConflictError({ task_id: row.uuid, claimed_by: row.claimed_by, authorized_by: provenance.authorized_by });
+      }
+      nextStatus = input.transition;
+      if (input.transition === 'completed') {
+        nextOutcome = input.outcome ?? null;
+      }
+    }
+
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE tasks SET status = ?, outcome = ?, execution_refs = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(nextStatus, nextOutcome, JSON.stringify(nextRefs), now, nextRevision, row.uuid);
+    const task: Task = {
+      ...mapTaskRow(row),
+      status: nextStatus,
+      outcome: nextOutcome,
+      executionRefs: nextRefs,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_execution_recorded',
+      payload: { uuid: row.uuid, initiative_id: row.initiative_id, execution_ref: input.execution_ref },
       provenance,
     });
     return task;
@@ -2361,6 +2571,7 @@ function mapTaskRow(row: TaskRow): Task {
     goal: row.goal,
     status: row.status,
     outcome: row.outcome,
+    claimed_by: row.claimed_by ?? null,
     workspace_ids: JSON.parse(row.workspace_ids) as string[],
     resource_ids: JSON.parse(row.resource_ids) as string[],
     executionRefs: JSON.parse(row.execution_refs ?? '[]') as string[],
@@ -2369,6 +2580,19 @@ function mapTaskRow(row: TaskRow): Task {
     revision: Number(row.revision),
   };
 }
+
+/**
+ * `initiative_task_execution`'s optional-transition matrix (SPEC-003 FR-9, "Interfaces / contracts").
+ * Every (source status → listed target statuses) pair below is permitted; every unlisted pair —
+ * including any pair with a `completed` or `cancelled` source, which never appears as a key — is
+ * rejected as `invalid_task_transition`.
+ */
+const TASK_EXECUTION_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> = {
+  open: ['in_progress'],
+  claimed: ['in_progress'],
+  in_progress: ['blocked', 'open', 'completed'],
+  blocked: ['in_progress', 'open'],
+};
 
 /** Maps one raw `artifact_refs` row to the public `ArtifactRef` shape. */
 function mapArtifactRefRow(row: ArtifactRefRow): ArtifactRef {

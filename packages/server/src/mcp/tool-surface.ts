@@ -95,12 +95,12 @@ export const INLINE_AUTO_TYPES = new Set(['journal_recall', 'journal_record']);
 export const INLINE_WAIT_CAP_MS = 55_000;
 
 /**
- * Default + ceiling for mma_task_wait — the SAME bound as `INLINE_WAIT_CAP_MS`, and for the
+ * Default + ceiling for mma_execution_wait — the SAME bound as `INLINE_WAIT_CAP_MS`, and for the
  * same reason.
  *
  * The ceiling was 240s, four times the typical MCP client tool timeout. A long-poll cannot
  * outlive the deadline the CLIENT enforces on the request carrying it: the host kills the
- * JSON-RPC call and the caller sees `-32001 Request timed out` with no snapshot, no taskId
+ * JSON-RPC call and the caller sees `-32001 Request timed out` with no snapshot, no executionId
  * context, and no indication the work is still running fine. Observed on Claude Desktop —
  * the model read `capped at 240000` from this schema, asked for it, and got exactly that.
  *
@@ -242,6 +242,21 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + 'Mutating: pass expected_revision and provenance.',
   initiative_task_get: 'Look up an Initiative Task by uuid.',
   initiative_task_list: 'List the Tasks under an Initiative.',
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  initiative_task_claim:
+    "Claim an open Initiative Task, setting claimed_by to the caller's provenance.actor_id (open -> claimed "
+    + "only; any other status rejects task_not_claimable). Mutating: pass expected_revision and provenance.",
+  initiative_task_release:
+    'Release a claimed or in_progress Initiative Task back to open, clearing claimed_by (claimed|in_progress -> '
+    + 'open only). Only the claimant may release, except a human-provenance caller may release any claim. '
+    + 'Mutating: pass expected_revision and provenance.',
+  initiative_task_complete:
+    'Complete a claimed or in_progress Initiative Task with a required outcome (claimed|in_progress -> completed '
+    + 'only; only the claimant may complete). Mutating: pass expected_revision and provenance.',
+  initiative_task_execution:
+    'Record an execution_ref against an Initiative Task (appended once, idempotent) and optionally apply one '
+    + 'permitted status transition; rejected once the Task is completed or cancelled. Mutating: pass '
+    + 'expected_revision and provenance.',
   artifact_register:
     'Register an ArtifactRef (managed or external) produced for or consumed by an Initiative. Mutating: pass '
     + 'expected_revision and provenance.',
@@ -310,11 +325,11 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'mma_run',
     description:
-      'Run an MMA task (audit, investigate, delegate, execute_plan, review, debug, research, '
+      'Run an MMA execution (audit, investigate, delegate, execute_plan, review, debug, research, '
       + 'journal_recall, journal_record, orchestrate, spec, plan) on a cost-optimized worker '
-      + 'with cross-model review. Returns either the final result (short tasks) or a task '
-      + 'handle { taskId, type, cwd } to poll with mma_task_get / mma_task_wait and cancel '
-      + 'with mma_task_cancel. The runtime decides delivery unless `mode` forces it.',
+      + 'with cross-model review. Returns either the final result (short executions) or an execution '
+      + 'handle { executionId, type, cwd } to poll with mma_execution_get / mma_execution_wait and cancel '
+      + 'with mma_execution_cancel. The runtime decides delivery unless `mode` forces it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -327,7 +342,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
           type: 'string',
           enum: [...DELIVERY_MODES],
           description:
-            "Delivery preference. 'handle' always returns a taskId immediately; 'inline' waits "
+            "Delivery preference. 'handle' always returns an executionId immediately; 'inline' waits "
             + "for the result (downgraded to a handle if the task outlives the wait budget); "
             + "'auto' (default) inlines short task types and hands back a handle for long ones.",
         },
@@ -339,37 +354,37 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     _meta: { ui: { resourceUri: EXECUTION_RESOURCE_URI } },
   },
   {
-    name: 'mma_task_get',
+    name: 'mma_execution_get',
     description:
-      'Get the current state of an MMA task. Running tasks return identity (type, subtype '
+      'Get the current state of an MMA execution. Running executions return identity (type, subtype '
       + '[audit only], practice [plan/execute_plan/review/debug only], cwd) plus progress '
-      + '(phase, elapsed, runningHeadline, cancellationRequested); terminal tasks return the '
+      + '(phase, elapsed, runningHeadline, cancellationRequested); terminal executions return the '
       + 'full result envelope. Terminal results survive daemon restarts.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'Handle returned by mma_run.' },
+        executionId: { type: 'string', description: 'Handle returned by mma_run.' },
       },
-      required: ['taskId'],
+      required: ['executionId'],
       additionalProperties: false,
     },
   },
   {
-    name: 'mma_task_list',
+    name: 'mma_execution_list',
     description:
-      'List every MMA task currently in flight, oldest first — each with its type '
+      'List every MMA execution currently in flight, oldest first — each with its type '
       + '(spec, review, investigate, …), cwd, phase, elapsed time and current activity. Use '
-      + 'this to see what is running when you no longer hold a taskId, or to check what else '
-      + 'is competing for a project before dispatching. Finished tasks are not listed; fetch '
-      + 'those by id with mma_task_get.',
+      + 'this to see what is running when you no longer hold an executionId, or to check what else '
+      + 'is competing for a project before dispatching. Finished executions are not listed; fetch '
+      + 'those by id with mma_execution_get.',
     inputSchema: {
       type: 'object',
       properties: {
         cwd: {
           type: 'string',
           description:
-            'Absolute path. When given, lists only tasks running against that project; '
-            + 'omit to list every in-flight task on this daemon.',
+            'Absolute path. When given, lists only executions running against that project; '
+            + 'omit to list every in-flight execution on this daemon.',
         },
       },
       required: [],
@@ -377,16 +392,16 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
-    name: 'mma_task_wait',
+    name: 'mma_execution_wait',
     description:
-      'Block until an MMA task reaches a terminal state (or the timeout elapses), then '
-      + 'return the same payload as mma_task_get. A timeout is NOT an error and NOT a '
-      + 'failure of the task: it returns the current running snapshot, and the task keeps '
-      + 'going. To wait longer, call again with the same taskId.',
+      'Block until an MMA execution reaches a terminal state (or the timeout elapses), then '
+      + 'return the same payload as mma_execution_get. A timeout is NOT an error and NOT a '
+      + 'failure of the execution: it returns the current running snapshot, and the execution keeps '
+      + 'going. To wait longer, call again with the same executionId.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'Handle returned by mma_run.' },
+        executionId: { type: 'string', description: 'Handle returned by mma_run.' },
         timeoutMs: {
           type: 'integer',
           minimum: 1,
@@ -401,23 +416,23 @@ export const MCP_TOOLS: McpToolDefinition[] = [
             + `call can block before the client's own request deadline fires.`,
         },
       },
-      required: ['taskId'],
+      required: ['executionId'],
       additionalProperties: false,
     },
   },
   {
-    name: 'mma_task_cancel',
+    name: 'mma_execution_cancel',
     description:
-      'Request cooperative cancellation of a running MMA task. Cancellation is requested, '
-      + 'not instantaneous: the task keeps running until the worker confirms termination, then '
+      'Request cooperative cancellation of a running MMA execution. Cancellation is requested, '
+      + 'not instantaneous: the execution keeps running until the worker confirms termination, then '
       + 'reaches terminal cancelled — unless completion won the race, in which case the '
       + 'completed result stands. Idempotent.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'Handle returned by mma_run.' },
+        executionId: { type: 'string', description: 'Handle returned by mma_run.' },
       },
-      required: ['taskId'],
+      required: ['executionId'],
       additionalProperties: false,
     },
   },

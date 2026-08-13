@@ -55,7 +55,7 @@ describe('contract: MCP adapter', () => {
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
         'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-        'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+        'mma_execution_cancel', 'mma_execution_get', 'mma_execution_list', 'mma_execution_wait',
         ...INITIATIVE_TOOL_NAMES,
       ].sort());
 
@@ -80,7 +80,7 @@ describe('contract: MCP adapter', () => {
     } finally { await client.close(); await h.close(); }
   });
 
-  it('mma_run (handle) → mma_task_wait terminal envelope → REST sees the SAME execution', async () => {
+  it('mma_run (handle) → mma_execution_wait terminal envelope → REST sees the SAME execution', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
@@ -92,24 +92,24 @@ describe('contract: MCP adapter', () => {
         },
       }));
       expect(run.status).toBe('running');
-      const taskId = run.taskId as string;
-      expect(taskId).toBeTruthy();
+      const executionId = run.executionId as string;
+      expect(executionId).toBeTruthy();
 
       const terminal = parseText(await client.callTool({
-        name: 'mma_task_wait',
-        arguments: { taskId, timeoutMs: 30_000 },
+        name: 'mma_execution_wait',
+        arguments: { executionId, timeoutMs: 30_000 },
       }));
-      const task = terminal.task as { taskId: string; status: string };
-      expect(task.taskId).toBe(taskId);
-      expect(['done', 'done_with_concerns']).toContain(task.status);
+      const execution = terminal.execution as { executionId: string; status: string };
+      expect(execution.executionId).toBe(executionId);
+      expect(['done', 'done_with_concerns']).toContain(execution.status);
 
-      // mma_task_get returns the same terminal envelope.
-      const got = parseText(await client.callTool({ name: 'mma_task_get', arguments: { taskId } }));
+      // mma_execution_get returns the same terminal envelope.
+      const got = parseText(await client.callTool({ name: 'mma_execution_get', arguments: { executionId } }));
       expect(got).toEqual(terminal);
 
       // Cross-surface: the REST adapter serves the SAME execution — one
       // runtime, two transports, no duplicated state.
-      const rest = await fetch(`${h.baseUrl}/task/${taskId}`, {
+      const rest = await fetch(`${h.baseUrl}/execution/${executionId}`, {
         headers: {
           'X-MMA-Main-Model': 'claude-opus-4-8',
           'X-MMA-Client': 'claude-code',
@@ -155,12 +155,12 @@ describe('contract: MCP adapter', () => {
         name: 'mma_run',
         arguments: { cwd: process.cwd(), mode: 'handle', request: { type: 'investigate', prompt: 'x' } },
       }));
-      expect(run.taskId).toBeTruthy();
+      expect(run.executionId).toBeTruthy();
       expect(run.status).toBe('running');
     } finally { await client.close(); await h.close(); }
   });
 
-  it('mma_task_cancel drives a hanging execution to terminal cancelled', async () => {
+  it('mma_execution_cancel drives a hanging execution to terminal cancelled', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
@@ -168,28 +168,28 @@ describe('contract: MCP adapter', () => {
         name: 'mma_run',
         arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'hangs forever' } },
       }));
-      const taskId = run.taskId as string;
+      const executionId = run.executionId as string;
       await new Promise((r) => setTimeout(r, 50));
 
-      const cancel = parseText(await client.callTool({ name: 'mma_task_cancel', arguments: { taskId } }));
-      // Identity travels with every reference to the task, cancel included — otherwise
+      const cancel = parseText(await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId } }));
+      // Identity travels with every reference to the execution, cancel included — otherwise
       // "which one did I just cancel?" is unanswerable from the transcript.
       expect(cancel).toEqual({
-        taskId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String),
         status: 'running', cancellationRequested: true,
       });
 
       const terminal = parseText(await client.callTool({
-        name: 'mma_task_wait',
-        arguments: { taskId, timeoutMs: 30_000 },
+        name: 'mma_execution_wait',
+        arguments: { executionId, timeoutMs: 30_000 },
       }));
-      expect((terminal.task as { status: string }).status).toBe('cancelled');
+      expect((terminal.execution as { status: string }).status).toBe('cancelled');
       expect((terminal.error as { code: string }).code).toBe('aborted');
 
       // Idempotent: repeat cancel reports the terminal state.
-      const again = parseText(await client.callTool({ name: 'mma_task_cancel', arguments: { taskId } }));
+      const again = parseText(await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId } }));
       expect(again).toEqual({
-        taskId, type: 'investigate', cwd: expect.any(String),
+        executionId, type: 'investigate', cwd: expect.any(String),
         status: 'cancelled', alreadyTerminal: true,
       });
     } finally { await client.close(); await h.close(); }
@@ -200,7 +200,7 @@ describe('contract: MCP adapter', () => {
    * askable question was "what is THIS id doing?", which presumes the caller still has
    * the id — so a caller that lost track of a handle had no way back to it.
    */
-  it('mma_task_list names every in-flight task by type, and filters by project', async () => {
+  it('mma_execution_list names every in-flight task by type, and filters by project', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
@@ -209,29 +209,29 @@ describe('contract: MCP adapter', () => {
         arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'hangs forever' } },
       }));
 
-      const listed = parseText(await client.callTool({ name: 'mma_task_list', arguments: {} }));
+      const listed = parseText(await client.callTool({ name: 'mma_execution_list', arguments: {} }));
       expect(listed.count).toBe(1);
-      const [task] = listed.tasks as Array<Record<string, unknown>>;
-      expect(task).toMatchObject({
-        taskId: run.taskId, type: 'investigate', status: 'running', cwd: expect.any(String),
+      const [execution] = listed.executions as Array<Record<string, unknown>>;
+      expect(execution).toMatchObject({
+        executionId: run.executionId, type: 'investigate', status: 'running', cwd: expect.any(String),
       });
-      expect(task!.elapsedMs).toEqual(expect.any(Number));
+      expect(execution!.elapsedMs).toEqual(expect.any(Number));
 
       // Filtered to a real directory with nothing running: an empty list, not an error.
       const elsewhere = parseText(await client.callTool({
-        name: 'mma_task_list', arguments: { cwd: join(process.cwd(), 'packages') },
+        name: 'mma_execution_list', arguments: { cwd: join(process.cwd(), 'packages') },
       }));
-      expect(elsewhere).toEqual({ tasks: [], count: 0 });
+      expect(elsewhere).toEqual({ executions: [], count: 0 });
 
-      await client.callTool({ name: 'mma_task_cancel', arguments: { taskId: run.taskId } });
+      await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId: run.executionId } });
     } finally { await client.close(); await h.close(); }
   });
 
-  it('mma_task_get on an unknown id reports not_found as a tool error', async () => {
+  it('mma_execution_get on an unknown id reports not_found as a tool error', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);
     try {
-      const result = await client.callTool({ name: 'mma_task_get', arguments: { taskId: 'nope' } });
+      const result = await client.callTool({ name: 'mma_execution_get', arguments: { executionId: 'nope' } });
       expect(result.isError).toBe(true);
       expect((parseText(result).error as { code: string }).code).toBe('not_found');
     } finally { await client.close(); await h.close(); }

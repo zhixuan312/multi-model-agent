@@ -16,7 +16,7 @@ const HEADERS = (token: string) => ({
 });
 
 async function dispatchCwd(h: { baseUrl: string; token: string }, cwd: string, body: object) {
-  return fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(cwd)}`, {
+  return fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(cwd)}`, {
     method: 'POST', headers: HEADERS(h.token), body: JSON.stringify(body),
   });
 }
@@ -25,14 +25,14 @@ async function dispatch(h: { baseUrl: string; token: string }, body: object) {
   return dispatchCwd(h, process.cwd(), body);
 }
 
-async function poll202(h: { baseUrl: string; token: string }, taskId: string) {
-  const res = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: HEADERS(h.token) });
+async function poll202(h: { baseUrl: string; token: string }, executionId: string) {
+  const res = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: HEADERS(h.token) });
   return { status: res.status, body: await res.json(), contentType: res.headers.get('content-type') };
 }
 
-async function pollToTerminal(h: { baseUrl: string; token: string }, taskId: string): Promise<Record<string, unknown>> {
+async function pollToTerminal(h: { baseUrl: string; token: string }, executionId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 300; i++) {
-    const res = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: HEADERS(h.token) });
+    const res = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: HEADERS(h.token) });
     if (res.status === 200) return (await res.json()) as Record<string, unknown>;
     if (res.status !== 202) throw new Error(`Unexpected ${res.status}`);
     await new Promise((r) => setTimeout(r, 50));
@@ -66,8 +66,8 @@ describe('route contract', () => {
       try {
         const res = await dispatch(h, { type: 'journal_record', reviewPolicy: 'reviewed', prompt: 'A', topic: 'worker-runtime' });
         expect(res.status).toBe(202);
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
 
         expect(openCount).toBe(2);
         expect(prompts).toHaveLength(2);
@@ -79,7 +79,7 @@ describe('route contract', () => {
         const summary = (env.output as Record<string, unknown>).summary as { recorded: unknown[]; failed: unknown[] };
         expect(summary.recorded).toHaveLength(1);
         expect(summary.failed).toHaveLength(1);
-        expect((env.task as Record<string, unknown>).status).toBe('done');
+        expect((env.execution as Record<string, unknown>).status).toBe('done');
       } finally { await h.close(); }
     });
 
@@ -101,7 +101,7 @@ describe('route contract', () => {
       const seedHarness = await boot({ provider: mockProvider({ sequence: [{ output: seed }] }), cwd });
       try {
         const seedRes = await dispatchCwd(seedHarness, cwd, { type: 'journal_record', prompt: 'Seed learning', topic: 'worker-runtime' });
-        const { taskId: seedId } = (await seedRes.json()) as { taskId: string };
+        const { executionId: seedId } = (await seedRes.json()) as { executionId: string };
         await pollToTerminal(seedHarness, seedId);
       } finally { await seedHarness.close(); }
 
@@ -119,14 +119,14 @@ describe('route contract', () => {
       try {
         const res = await dispatchCwd(h, cwd, { type: 'journal_record', prompt: 'A', topic: 'worker-runtime' });
         expect(res.status).toBe(202);
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
 
         expect(openCount).toBe(1); // implementer only — reviewer skipped by passing invariants
         const summary = (env.output as Record<string, unknown>).summary as { recorded: unknown[]; failed: unknown[] };
         expect(summary.recorded).toHaveLength(1);
         expect(summary.failed).toHaveLength(0);
-        expect((env.task as Record<string, unknown>).status).toBe('done');
+        expect((env.execution as Record<string, unknown>).status).toBe('done');
       } finally { await h.close(); }
     });
 
@@ -151,46 +151,46 @@ describe('route contract', () => {
           records: [{ prompt: 'A', topic: 'worker-runtime' }, { prompt: 'B', topic: 'worker-runtime' }],
         });
         expect(res.status).toBe(202);
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
 
         expect(prompts[0]).toContain('"records": [');
         expect(prompts[1]).toContain('1. [record 1] worker-runtime :: A');
         expect(prompts[1]).toContain('2. [record 2] worker-runtime :: B');
-        expect((env.task as Record<string, unknown>).status).toBe('done_with_concerns');
+        expect((env.execution as Record<string, unknown>).status).toBe('done_with_concerns');
         expect(env.error).toBeNull();
       } finally { await h.close(); }
     });
   });
 
-  // ── Dispatch receipt (POST /task → 202) ──
+  // ── Dispatch receipt (POST /execution → 202) ──
 
-  describe('POST /task dispatch receipt', () => {
-    it('returns 202 with taskId and statusUrl', async () => {
+  describe('POST /execution dispatch receipt', () => {
+    it('returns 202 with executionId and statusUrl', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
         expect(res.status).toBe(202);
         const body = (await res.json()) as Record<string, unknown>;
-        expect(body.taskId).toBeTypeOf('string');
-        expect(body.statusUrl).toMatch(/^\/task\//);
+        expect(body.executionId).toBeTypeOf('string');
+        expect(body.statusUrl).toMatch(/^\/execution\//);
       } finally { await h.close(); }
     });
   });
 
   // ── Structured 202 polling ──
 
-  describe('GET /task/:taskId polling (202)', () => {
-    it('returns structured JSON with taskId, status, phase, elapsedMs, phaseElapsedMs, startedAt', async () => {
+  describe('GET /execution/:executionId polling (202)', () => {
+    it('returns structured JSON with executionId, status, phase, elapsedMs, phaseElapsedMs, startedAt', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const poll = await poll202(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const poll = await poll202(h, executionId);
         if (poll.status === 202) {
           expect(poll.contentType).toContain('application/json');
           const b = poll.body as Record<string, unknown>;
-          expect(b.taskId).toBe(taskId);
+          expect(b.executionId).toBe(executionId);
           expect(b.status).toBe('running');
           expect(b.phase).toBeTypeOf('string');
           expect(b.elapsedMs).toBeTypeOf('number');
@@ -203,53 +203,53 @@ describe('route contract', () => {
 
   // ── Layered 200 terminal shape ──
 
-  describe('GET /task/:taskId terminal (200)', () => {
-    it('has exactly: task, output, execution, metrics, raw, error', async () => {
+  describe('GET /execution/:executionId terminal (200)', () => {
+    it('has exactly: execution, output, metrics, raw, error', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
-        expect(Object.keys(env).sort()).toEqual(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
+        expect(Object.keys(env).sort()).toEqual(['error', 'execution', 'metrics', 'output', 'raw']);
       } finally { await h.close(); }
     });
 
-    it('task block has taskId, type, status', async () => {
+    it('execution block has executionId, type, status', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
-        const task = env.task as Record<string, unknown>;
-        expect(task.taskId).toBe(taskId);
-        expect(task.type).toBe('review');
-        expect(['done', 'done_with_concerns', 'failed']).toContain(task.status);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
+        const execution = env.execution as Record<string, unknown>;
+        expect(execution.executionId).toBe(executionId);
+        expect(execution.type).toBe('review');
+        expect(['done', 'done_with_concerns', 'failed']).toContain(execution.status);
       } finally { await h.close(); }
     });
 
-    it('task.subtype present for audit, absent for other routes; task.practice present only when requested', async () => {
+    it('execution.subtype present for audit, absent for other routes; execution.practice present only when requested', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const r1 = await dispatch(h, { type: 'audit', subtype: 'spec', target: { paths: ['/tmp/a.md'] } });
-        const { taskId: t1 } = (await r1.json()) as { taskId: string };
+        const { executionId: t1 } = (await r1.json()) as { executionId: string };
         const env1 = await pollToTerminal(h, t1);
-        expect((env1.task as Record<string, unknown>).subtype).toBe('spec');
+        expect((env1.execution as Record<string, unknown>).subtype).toBe('spec');
 
         const r2 = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId: t2 } = (await r2.json()) as { taskId: string };
+        const { executionId: t2 } = (await r2.json()) as { executionId: string };
         const env2 = await pollToTerminal(h, t2);
-        expect((env2.task as Record<string, unknown>).subtype).toBeUndefined();
+        expect((env2.execution as Record<string, unknown>).subtype).toBeUndefined();
         // Intentional contract change (Task I-4): `practice` is now its own wire
         // field, carried on plan/execute_plan/review/debug terminal envelopes —
-        // distinct from `subtype`, which stays audit-only. A `review` task that
+        // distinct from `subtype`, which stays audit-only. A `review` execution that
         // did not request a practice carries neither field.
-        expect((env2.task as Record<string, unknown>).practice).toBeUndefined();
+        expect((env2.execution as Record<string, unknown>).practice).toBeUndefined();
 
         const r3 = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] }, practice: 'software' });
-        const { taskId: t3 } = (await r3.json()) as { taskId: string };
+        const { executionId: t3 } = (await r3.json()) as { executionId: string };
         const env3 = await pollToTerminal(h, t3);
-        expect((env3.task as Record<string, unknown>).practice).toBe('software');
-        expect((env3.task as Record<string, unknown>).subtype).toBeUndefined();
+        expect((env3.execution as Record<string, unknown>).practice).toBe('software');
+        expect((env3.execution as Record<string, unknown>).subtype).toBeUndefined();
       } finally { await h.close(); }
     });
 
@@ -257,8 +257,8 @@ describe('route contract', () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         const out = env.output as Record<string, unknown>;
         expect(out).toHaveProperty('summary');
         expect(out).toHaveProperty('filesChanged');
@@ -270,8 +270,8 @@ describe('route contract', () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         const m = env.metrics as Record<string, unknown>;
         expect(m).toHaveProperty('totalUsage');
         const impl = m.implementer as Record<string, unknown>;
@@ -289,10 +289,10 @@ describe('route contract', () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
-        const task = env.task as Record<string, unknown>;
-        expect(['done', 'done_with_concerns']).toContain(task.status);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
+        const execution = env.execution as Record<string, unknown>;
+        expect(['done', 'done_with_concerns']).toContain(execution.status);
         expect(env.error).toBeNull();
       } finally { await h.close(); }
     });
@@ -301,8 +301,8 @@ describe('route contract', () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         expect((env.execution as Record<string, unknown>).worktree).toBeNull();
       } finally { await h.close(); }
     });
@@ -325,9 +325,9 @@ describe('route contract', () => {
       const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
-        expect((env.task as Record<string, unknown>).status).toBe('done_with_concerns');
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
+        expect((env.execution as Record<string, unknown>).status).toBe('done_with_concerns');
       } finally { await h.close(); }
     });
 
@@ -335,8 +335,8 @@ describe('route contract', () => {
       const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         expect(env.error).toBeNull();
       } finally { await h.close(); }
     });
@@ -345,8 +345,8 @@ describe('route contract', () => {
       const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         const summary = (env.output as Record<string, unknown>).summary as Record<string, unknown>;
         expect(summary).toMatchObject({ headline: 'IMPL_MARKER_9f' });
       } finally { await h.close(); }
@@ -356,8 +356,8 @@ describe('route contract', () => {
       const h = await boot({ provider: degradeProvider(), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         const note = (env.output as Record<string, unknown>).reviewerNote as Record<string, unknown> | null;
         expect(note).not.toBeNull();
         expect(note).toMatchObject({ code: 'reviewer_unavailable' });
@@ -377,8 +377,8 @@ describe('route contract', () => {
       const h = await boot({ provider: cleanProvider, cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         const out = env.output as Record<string, unknown>;
         expect(out).toHaveProperty('reviewerNote');
         expect(out.reviewerNote).toBeNull();
@@ -437,7 +437,7 @@ describe('route contract', () => {
       const tmp = await mkdtemp(join(tmpdir(), 'mma-shape-'));
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({ type: 'delegate', prompt: 'do something' }),
         });
@@ -454,13 +454,13 @@ describe('route contract', () => {
     });
   });
 
-  // ── Unknown taskId ──
+  // ── Unknown executionId ──
 
-  describe('unknown taskId', () => {
-    it('returns 404 for nonexistent taskId', async () => {
+  describe('unknown executionId', () => {
+    it('returns 404 for nonexistent executionId', async () => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
-        const res = await fetch(`${h.baseUrl}/task/00000000-0000-0000-0000-000000000000`, {
+        const res = await fetch(`${h.baseUrl}/execution/00000000-0000-0000-0000-000000000000`, {
           headers: HEADERS(h.token),
         });
         expect(res.status).toBe(404);
@@ -475,12 +475,12 @@ describe('route contract', () => {
       const tmp = await mkdtemp(join(tmpdir(), 'mma-nongit-'));   // no .git created
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({ type: 'delegate', prompt: 'touch a note' }),
         });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         expect((env.execution as Record<string, unknown>).worktree).toBeNull();
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
@@ -490,12 +490,12 @@ describe('route contract', () => {
       await writeFile(join(tmp, 'plan.md'), '# Plan\n\n### Task 1: noop\n\n- [ ] Step 1: do nothing\n');
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({ type: 'execute_plan', target: { paths: ['plan.md'] } }),
         });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
         expect((env.execution as Record<string, unknown>).worktree).toBeNull();
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
@@ -517,12 +517,12 @@ describe('route contract', () => {
 
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({ type: 'delegate', prompt: 'touch a note' }),
         });
-        const { taskId } = (await res.json()) as { taskId: string };
-        const env = await pollToTerminal(h, taskId);
+        const { executionId } = (await res.json()) as { executionId: string };
+        const env = await pollToTerminal(h, executionId);
 
         // The engine owns no worktree any more; the key stays present and null.
         const execution = env.execution as Record<string, unknown>;
@@ -560,7 +560,7 @@ describe('route contract', () => {
           acceptance: [{ id: 'review', criterion: 'Reviewed', method: 'human' as const, references: [{ kind: 'none', reason: 'Owner judgement' }] }],
         };
         const digest = canonicalContractDigest(contractContent);
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({
             type: 'plan', prompt: 'plan', target: { inline: 'spec' },
@@ -587,7 +587,7 @@ describe('route contract', () => {
           acceptance: [{ id: 'review', criterion: 'Reviewed', method: 'human' as const, references: [{ kind: 'none', reason: 'Owner judgement' }] }],
         };
         const digest = canonicalContractDigest(contractContent);
-        const res = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(tmp)}`, {
+        const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(tmp)}`, {
           method: 'POST', headers: HEADERS(h.token),
           body: JSON.stringify({
             type: 'plan', prompt: 'plan', target: { inline: 'spec' },

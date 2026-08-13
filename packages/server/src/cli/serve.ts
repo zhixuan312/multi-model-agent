@@ -359,7 +359,7 @@ export async function startServe(
     //    docstring, and never read, so every shutdown killed in-flight work
     //    immediately while claiming to drain it.
     const drainSessions = drainInFlightTasks(
-      running.taskRegistry,
+      running.executionRegistry,
       config.server.limits?.shutdownDrainMs ?? 0,
       stderr,
     );

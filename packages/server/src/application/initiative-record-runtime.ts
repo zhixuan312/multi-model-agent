@@ -43,6 +43,11 @@ const EXECUTE_OPERATIONS = new Set([
   'initiative_task_create',
   'initiative_task_get',
   'initiative_task_list',
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  'initiative_task_claim',
+  'initiative_task_release',
+  'initiative_task_complete',
+  'initiative_task_execution',
   'artifact_register',
   'artifact_get',
   // Phase A1 — professional record and verification ledger (SPEC-002 FR-3, FR-4).
@@ -125,6 +130,10 @@ export class InitiativeRecordRuntime {
       case 'initiative_link_workspace':
       case 'initiative_relate':
       case 'initiative_task_create':
+      case 'initiative_task_claim':
+      case 'initiative_task_release':
+      case 'initiative_task_complete':
+      case 'initiative_task_execution':
       case 'artifact_register':
       // Phase A1 mutations (SPEC-002 FR-3): each is one transactional
       // `store.execute()` call, same as every Phase A0 mutation above.

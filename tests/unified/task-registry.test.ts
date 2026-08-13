@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TaskRegistry } from '../../packages/core/src/unified/task-registry.js';
+import { ExecutionRegistry } from '../../packages/core/src/unified/task-registry.js';
 
-describe('TaskRegistry TTL eviction (server.limits.batchTtlMs)', () => {
+describe('ExecutionRegistry TTL eviction (server.limits.batchTtlMs)', () => {
   it('evicts terminal entries older than ttlMs on register; keeps in-flight + recent', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(0);
-      const reg = new TaskRegistry({ ttlMs: 1000 });
+      const reg = new ExecutionRegistry({ ttlMs: 1000 });
       reg.register('old', '/c', 'delegate');
       reg.complete('old', { ok: true });          // terminalAt = 0
       reg.register('inflight', '/c', 'delegate');  // pending, terminalAt = null
@@ -26,7 +26,7 @@ describe('TaskRegistry TTL eviction (server.limits.batchTtlMs)', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(0);
-      const reg = new TaskRegistry({ ttlMs: 10_000 });
+      const reg = new ExecutionRegistry({ ttlMs: 10_000 });
       reg.register('recent', '/c', 'delegate');
       reg.complete('recent', { ok: true });         // terminalAt = 0
       vi.setSystemTime(5000);                        // 5000 - 0 < 10000
@@ -38,9 +38,9 @@ describe('TaskRegistry TTL eviction (server.limits.batchTtlMs)', () => {
   });
 });
 
-describe('TaskRegistry', () => {
+describe('ExecutionRegistry', () => {
   it('registers a task as pending', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/cwd', 'delegate');
     const e = reg.get('t1');
     expect(e).toBeDefined();
@@ -49,7 +49,7 @@ describe('TaskRegistry', () => {
   });
 
   it('completes a task', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/cwd', 'delegate');
     reg.complete('t1', { status: 'done' });
     expect(reg.isTerminal('t1')).toBe(true);
@@ -57,25 +57,25 @@ describe('TaskRegistry', () => {
   });
 
   it('fails a task', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/cwd', 'delegate');
     reg.fail('t1', { error: 'boom' });
     expect(reg.isTerminal('t1')).toBe(true);
   });
 
   it('returns undefined for unknown task', () => {
-    expect(new TaskRegistry().get('nope')).toBeUndefined();
+    expect(new ExecutionRegistry().get('nope')).toBeUndefined();
   });
 
   it('updates running headline', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/cwd', 'delegate');
     reg.setHeadline('t1', 'Phase 1...');
     expect(reg.get('t1')!.runningHeadline).toBe('Phase 1...');
   });
 
   it('does not update headline on terminal task', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/cwd', 'delegate');
     reg.complete('t1', {});
     reg.setHeadline('t1', 'should not set');
@@ -83,7 +83,7 @@ describe('TaskRegistry', () => {
   });
 
   it('counts active tasks per cwd', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.register('t2', '/a', 'audit');
     reg.register('t3', '/b', 'delegate');
@@ -93,17 +93,17 @@ describe('TaskRegistry', () => {
   });
 
   it('allInFlight returns only pending tasks', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.register('t2', '/a', 'audit');
     reg.complete('t1', {});
     const inflight = reg.allInFlight();
     expect(inflight).toHaveLength(1);
-    expect(inflight[0].taskId).toBe('t2');
+    expect(inflight[0].executionId).toBe('t2');
   });
 
   it('idempotent complete', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.complete('t1', { first: true });
     reg.complete('t1', { second: true });
@@ -111,7 +111,7 @@ describe('TaskRegistry', () => {
   });
 
   it('initializes phase fields as null', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     const e = reg.get('t1')!;
     expect(e.phase).toBeNull();
@@ -120,7 +120,7 @@ describe('TaskRegistry', () => {
   });
 
   it('setPhase updates phase and phaseStartedAt', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.setPhase('t1', 'implementing');
     const e = reg.get('t1')!;
@@ -129,7 +129,7 @@ describe('TaskRegistry', () => {
   });
 
   it('setPhase transitions from implementing to reviewing', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.setPhase('t1', 'implementing');
     reg.setPhase('t1', 'reviewing');
@@ -137,7 +137,7 @@ describe('TaskRegistry', () => {
   });
 
   it('setPhase does not update terminal tasks', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/a', 'delegate');
     reg.complete('t1', {});
     reg.setPhase('t1', 'implementing');
@@ -152,9 +152,9 @@ describe('TaskRegistry', () => {
  * observe, so a re-mounted panel started blank, two viewers of the same task disagreed, and a
  * panel opened on a finished run showed nothing. A run's shape is a fact about the run.
  */
-describe('TaskRegistry activity history', () => {
+describe('ExecutionRegistry activity history', () => {
   it('stamps the phase at record time, so history can never go backwards', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/repo', 'spec', null);
     reg.recordActivity('t1', 1000);
     reg.setPhase('t1', 'reviewing');
@@ -165,7 +165,7 @@ describe('TaskRegistry activity history', () => {
   });
 
   it('is bounded, so a long run cannot grow it without limit', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/repo', 'spec', null);
     for (let i = 0; i < 900; i += 1) reg.recordActivity('t1', i);
     expect(reg.get('t1')!.activity.length).toBeLessThanOrEqual(600);
@@ -174,7 +174,7 @@ describe('TaskRegistry activity history', () => {
   });
 
   it('ignores activity on a task that has already finished', () => {
-    const reg = new TaskRegistry();
+    const reg = new ExecutionRegistry();
     reg.register('t1', '/repo', 'spec', null);
     reg.complete('t1', {});
     reg.recordActivity('t1');

@@ -55,8 +55,8 @@ export interface TestServerWithAgents {
   url: string;
   token: string;
   stop: () => Promise<void>;
-  /** Shared TaskRegistry — exposed for test helpers that need to inject state. */
-  taskRegistry: import('@zhixuan92/multi-model-agent-core').TaskRegistry;
+  /** Shared ExecutionRegistry — exposed for test helpers that need to inject state. */
+  executionRegistry: import('@zhixuan92/multi-model-agent-core').ExecutionRegistry;
   /** Shared ProjectRegistry — exposed for test helpers that need to access project state. */
   projectRegistry: import('../../packages/server/src/application/project-registry.js').ProjectRegistry;
 }
@@ -82,7 +82,7 @@ export async function startTestServerWithAgents(
     url: `http://127.0.0.1:${server.port}`,
     token: DEFAULT_TEST_TOKEN,
     stop: async () => { await server.stop(); },
-    taskRegistry: server.taskRegistry,
+    executionRegistry: server.executionRegistry,
     projectRegistry: server.projectRegistry,
   };
 }

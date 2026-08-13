@@ -4,7 +4,7 @@
 // auth and loopback enforcement as every other route.
 //
 // Stateless per the 2026-07-28 model: each request gets a fresh SDK Server +
-// StreamableHTTPServerTransport (no session id), and every MMA task handle is
+// StreamableHTTPServerTransport (no session id), and every MMA execution handle is
 // an explicit identifier the client passes back on each call — exactly the
 // pattern the protocol prescribes for state that spans requests.
 //
@@ -25,7 +25,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   taskInputSchema,
-  type TaskRegistry,
+  type ExecutionRegistry,
   type ApprovedContract,
   RevisionConflictError,
   CrossProductWorkspaceLinkError,
@@ -34,6 +34,9 @@ import {
   MigrationBackupFailedError,
   CrossInitiativeEvidenceLinkError,
   CrossInitiativeVerificationError,
+  TaskNotClaimableError,
+  TaskClaimConflictError,
+  InvalidTaskTransitionError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -41,7 +44,7 @@ import type { ProjectRegistry } from '../application/project-registry.js';
 import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
-import { taskIdentity, buildRunningSnapshot } from '../application/task-identity.js';
+import { executionIdentity, buildRunningSnapshot } from '../application/task-identity.js';
 import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
 import { resolveCallerIdentity } from '../http/middleware/caller-identity.js';
 import {
@@ -75,7 +78,7 @@ const DiscoverRequestSchema = z.object({
 
 export interface McpAdapterDeps {
   runtime: ExecutionRuntime;
-  taskRegistry: TaskRegistry;
+  executionRegistry: ExecutionRegistry;
   store: ExecutionStore;
   /** The SAME `InitiativeRecordRuntime` `POST /initiatives` (Task I-6) calls
    *  into — the `mma_<operation>` Initiative tools below are a second thin
@@ -147,26 +150,26 @@ function errorResult(code: string, message: string, extra?: Record<string, unkno
   };
 }
 
-/** Resolve a task's current payload: terminal envelope, running snapshot, or
+/** Resolve an execution's current payload: terminal envelope, running snapshot, or
  *  durable-store fallback (terminal results survive restarts). */
-function lookupTask(deps: McpAdapterDeps, taskId: string): ToolResult {
-  const entry = deps.taskRegistry.get(taskId);
+function lookupExecution(deps: McpAdapterDeps, executionId: string): ToolResult {
+  const entry = deps.executionRegistry.get(executionId);
   if (entry) {
-    if (deps.taskRegistry.isTerminal(taskId)) {
-      // The result envelope already names itself via `task.type`; the bare fallback
+    if (deps.executionRegistry.isTerminal(executionId)) {
+      // The result envelope already names itself via `execution.type`; the bare fallback
       // (a terminal entry with no stored result) has to be told who it is.
-      return jsonResult(entry.result ?? { ...taskIdentity(entry), status: entry.state, error: null });
+      return jsonResult(entry.result ?? { ...executionIdentity(entry), status: entry.state, error: null });
     }
     return jsonResult(buildRunningSnapshot(entry));
   }
-  const record = deps.store.get(taskId);
+  const record = deps.store.get(executionId);
   if (record?.resultJson != null) return jsonResult(JSON.parse(record.resultJson));
-  return errorResult('not_found', `Task ${taskId} not found`);
+  return errorResult('not_found', `Execution ${executionId} not found`);
 }
 
-async function waitForTerminal(deps: McpAdapterDeps, taskId: string, timeoutMs: number): Promise<void> {
+async function waitForTerminal(deps: McpAdapterDeps, executionId: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!deps.taskRegistry.isTerminal(taskId) && Date.now() < deadline) {
+  while (!deps.executionRegistry.isTerminal(executionId) && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 150));
   }
 }
@@ -204,46 +207,52 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
     projectRoot: cwdCheck.canonicalCwd,
   });
   if (!outcome.ok) {
-    const code = outcome.error.kind === 'project_reservation' ? outcome.error.code : outcome.error.kind;
+    // `project_reservation`, `linked_admission`, and `execution_admission` carry their own
+    // public typed code; every other SubmitError uses its discriminant as the wire code.
+    const code = outcome.error.kind === 'project_reservation'
+      || outcome.error.kind === 'linked_admission'
+      || outcome.error.kind === 'execution_admission'
+      ? outcome.error.code
+      : outcome.error.kind;
     return errorResult(code, outcome.error.message);
   }
-  const { taskId } = outcome;
+  const { executionId: executionId } = outcome;
 
   // Delivery: the runtime classified nothing here yet — type is the heuristic.
   // 'inline' is a preference, not a force: work that outlives the wait budget
   // is promoted to a handle rather than left to hit the client's tool timeout.
   const wantInline = mode === 'inline' || (mode === 'auto' && INLINE_AUTO_TYPES.has(parsed.data.type));
   if (wantInline) {
-    await waitForTerminal(deps, taskId, INLINE_WAIT_CAP_MS);
-    if (deps.taskRegistry.isTerminal(taskId)) return lookupTask(deps, taskId);
+    await waitForTerminal(deps, executionId, INLINE_WAIT_CAP_MS);
+    if (deps.executionRegistry.isTerminal(executionId)) return lookupExecution(deps, executionId);
   }
-  // The handle names the work it stands for. A bare `{ taskId }` forces the caller to
+  // The handle names the work it stands for. A bare `{ executionId }` forces the caller to
   // remember which of several in-flight dispatches a UUID belongs to — and an agent
   // re-reading its own transcript has only this line to go on.
-  const entry = deps.taskRegistry.get(taskId);
+  const entry = deps.executionRegistry.get(executionId);
   return jsonResult({
-    ...(entry ? taskIdentity(entry) : { taskId, type: parsed.data.type }),
+    ...(entry ? executionIdentity(entry) : { executionId, type: parsed.data.type }),
     status: 'running',
     // `mcpTool`, not `tool`: `tool` is what the registry calls the TASK type, and two
     // different meanings under one key is exactly the confusion this change removes.
-    poll: { mcpTool: 'mma_task_get', taskId },
-    ...(wantInline ? { note: 'task outlived the inline wait budget; poll for the result' } : {}),
+    poll: { mcpTool: 'mma_execution_get', executionId },
+    ...(wantInline ? { note: 'execution outlived the inline wait budget; poll for the result' } : {}),
   });
 }
 
 function handleCancel(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
-  const taskId = args.taskId;
-  if (typeof taskId !== 'string') return errorResult('invalid_request', 'taskId (string) is required');
-  const result = deps.runtime.cancel(taskId);
-  if (result.outcome === 'not_found') return errorResult('not_found', `Task ${taskId} not found`);
+  const executionId = args.executionId;
+  if (typeof executionId !== 'string') return errorResult('invalid_request', 'executionId (string) is required');
+  const result = deps.runtime.cancel(executionId);
+  if (result.outcome === 'not_found') return errorResult('not_found', `Execution ${executionId} not found`);
   if (result.outcome === 'terminal') {
-    return jsonResult({ ...taskIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
+    return jsonResult({ ...executionIdentity(result.entry), status: result.entry.state, alreadyTerminal: true });
   }
-  return jsonResult({ ...taskIdentity(result.entry), status: 'running', cancellationRequested: true });
+  return jsonResult({ ...executionIdentity(result.entry), status: 'running', cancellationRequested: true });
 }
 
 /**
- * Every task currently in flight, newest last.
+ * Every execution currently in flight, newest last.
  *
  * REST has always been able to answer this — `GET /status` returns the same entries — but
  * over MCP the only question askable was "what is THIS id doing?", which presumes the
@@ -262,11 +271,11 @@ function handleList(deps: McpAdapterDeps, args: Record<string, unknown>): ToolRe
     filter = check.canonicalCwd;
   }
   const now = Date.now();
-  const tasks = deps.taskRegistry.allInFlight()
+  const executions = deps.executionRegistry.allInFlight()
     .filter((entry) => filter === null || entry.cwd === filter)
     .sort((a, b) => a.startedAt - b.startedAt)
     .map((entry) => buildRunningSnapshot(entry, now));
-  return jsonResult({ tasks, count: tasks.length });
+  return jsonResult({ executions, count: executions.length });
 }
 
 /**
@@ -338,6 +347,23 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
     return errorResult(err.code, err.message, {
       initiative_id: err.initiative_id,
       acceptance_criterion_id: err.acceptance_criterion_id,
+    });
+  }
+  if (err instanceof TaskNotClaimableError) {
+    return errorResult(err.code, err.message, { task_id: err.task_id, status: err.status });
+  }
+  if (err instanceof TaskClaimConflictError) {
+    return errorResult(err.code, err.message, {
+      task_id: err.task_id,
+      claimed_by: err.claimed_by,
+      authorized_by: err.authorized_by,
+    });
+  }
+  if (err instanceof InvalidTaskTransitionError) {
+    return errorResult(err.code, err.message, {
+      task_id: err.task_id,
+      from_status: err.from_status,
+      to_status: err.to_status,
     });
   }
   if (err instanceof InitiativeNotFoundError) {
@@ -445,7 +471,7 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
         resources: [{
           uri: getExecutionResourceUri(),
           name: 'MMA execution monitor',
-          description: 'Live view of a running MMA task: phase, elapsed time, cancel control.',
+          description: 'Live view of a running MMA execution: phase, elapsed time, cancel control.',
           mimeType: EXECUTION_RESOURCE_MIME_TYPE,
         }],
       };
@@ -487,22 +513,22 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
     switch (toolName) {
       case 'mma_run':
         return handleRun(deps, args, clientName);
-      case 'mma_task_get': {
-        const taskId = args.taskId;
-        if (typeof taskId !== 'string') return errorResult('invalid_request', 'taskId (string) is required');
-        return lookupTask(deps, taskId);
+      case 'mma_execution_get': {
+        const executionId = args.executionId;
+        if (typeof executionId !== 'string') return errorResult('invalid_request', 'executionId (string) is required');
+        return lookupExecution(deps, executionId);
       }
-      case 'mma_task_wait': {
-        const taskId = args.taskId;
-        if (typeof taskId !== 'string') return errorResult('invalid_request', 'taskId (string) is required');
+      case 'mma_execution_wait': {
+        const executionId = args.executionId;
+        if (typeof executionId !== 'string') return errorResult('invalid_request', 'executionId (string) is required');
         const requested = typeof args.timeoutMs === 'number' ? args.timeoutMs : WAIT_DEFAULT_MS;
         const timeoutMs = Math.min(Math.max(1, requested), WAIT_CAP_MS);
-        await waitForTerminal(deps, taskId, timeoutMs);
-        return lookupTask(deps, taskId);
+        await waitForTerminal(deps, executionId, timeoutMs);
+        return lookupExecution(deps, executionId);
       }
-      case 'mma_task_list':
+      case 'mma_execution_list':
         return handleList(deps, args);
-      case 'mma_task_cancel':
+      case 'mma_execution_cancel':
         return handleCancel(deps, args);
       case 'mma_context_block_create':
         return handleContextBlockCreate(deps, args);

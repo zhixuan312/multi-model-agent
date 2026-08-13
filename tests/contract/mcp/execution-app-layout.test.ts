@@ -3,7 +3,7 @@
  * Contract: the panel's layout is ROWS, and the activity strip tells the truth about order.
  *
  * The card used to be two columns with a full-width control band bolted underneath, which left
- * the stage stretched to match a taller neighbour and the task id orphaned across a wide gap.
+ * the stage stretched to match a taller neighbour and the execution id orphaned across a wide gap.
  * Row one is now identical in all three acts and the results are a full-width table below it.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -53,7 +53,7 @@ const deliver = (
 };
 
 const running = (over: Record<string, unknown> = {}) => ({
-  taskId: 'task-1', type: 'spec', status: 'running', phase: 'implementing',
+  executionId: 'task-1', type: 'spec', status: 'running', phase: 'implementing',
   elapsedMs: 4000, phaseElapsedMs: 1000,
   // The activity series is supplied by the ENGINE — the panel renders it and accumulates
   // nothing of its own, so a fixture without it is a task that has done nothing yet.
@@ -78,7 +78,7 @@ describe('contract: panel layout is rows, and the stage never resizes', () => {
   it('keeps the SAME row-one structure in the terminal act, and adds a full-width table', async () => {
     const app = await boot();
     deliver(app, {
-      task: { taskId: 't1', type: 'spec', status: 'done' },
+      execution: { executionId: 't1', type: 'spec', status: 'done' },
       metrics: { totalDurationMs: 1000, totalCostUsd: 1 },
       output: { summary: null, filesChanged: [] },
     });
@@ -101,7 +101,7 @@ describe('contract: panel layout is rows, and the stage never resizes', () => {
 
   it('shows no stop control once the run is terminal', async () => {
     const app = await boot();
-    deliver(app, { task: { taskId: 't1', status: 'done' }, metrics: {}, output: {} });
+    deliver(app, { execution: { executionId: 't1', status: 'done' }, metrics: {}, output: {} });
     await Promise.resolve();
     expect(document.querySelector('button')).toBeNull();
   });
@@ -142,7 +142,7 @@ describe('contract: heading casing is consistent across every state', () => {
       expect(heading(), `heading was "${heading()}"`).toBe(heading().toLowerCase());
     }
     for (const status of ['done', 'done_with_concerns', 'failed', 'cancelled', 'interrupted']) {
-      deliver(app, { task: { taskId: 't1', type: 'spec', status }, metrics: {}, output: {} });
+      deliver(app, { execution: { executionId: 't1', type: 'spec', status }, metrics: {}, output: {} });
       await flush();
       expect(heading(), `heading was "${heading()}"`).toBe(heading().toLowerCase());
     }
@@ -151,7 +151,7 @@ describe('contract: heading casing is consistent across every state', () => {
   it('reads an underscored status as English without inventing new words', async () => {
     const app = await boot();
     deliver(app, {
-      task: { taskId: 't1', type: 'audit', subtype: 'plan', status: 'done_with_concerns' },
+      execution: { executionId: 't1', type: 'audit', subtype: 'plan', status: 'done_with_concerns' },
       metrics: {}, output: {},
     });
     await flush();
@@ -192,8 +192,10 @@ describe('contract: the strip is drawn from the engine, never accumulated locall
   it('carries the series through to the terminal envelope', async () => {
     const app = await boot();
     deliver(app, {
-      task: { taskId: 't1', type: 'spec', status: 'done' },
-      execution: { activity: [1, 2, 0, 4], activityPhases: [1, 1, 2, 2] },
+      execution: {
+        executionId: 't1', type: 'spec', status: 'done',
+        activity: [1, 2, 0, 4], activityPhases: [1, 1, 2, 2],
+      },
       metrics: { totalDurationMs: 1000 }, output: {},
     });
     await flush();

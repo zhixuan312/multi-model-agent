@@ -5,17 +5,17 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 async function runningPayload(headline: string | null, body: Record<string, unknown> = { type: 'investigate', prompt: 'wait' }) {
   const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
-  const response = await fetch(`${h.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, {
+  const response = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
     method: 'POST', headers: { Authorization: `Bearer ${h.token}`, 'X-MMA-Client': 'claude-code', 'X-MMA-Main-Model': 'test', 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const { taskId } = await response.json() as { taskId: string };
-  const registry = h.taskRegistry;
-  if (headline !== null) registry.setHeadline(taskId, headline);
-  const rest = await fetch(`${h.baseUrl}/task/${taskId}`, { headers: { Authorization: `Bearer ${h.token}`, 'X-MMA-Client': 'claude-code', 'X-MMA-Main-Model': 'test' } });
+  const { executionId } = await response.json() as { executionId: string };
+  const registry = h.executionRegistry;
+  if (headline !== null) registry.setHeadline(executionId, headline);
+  const rest = await fetch(`${h.baseUrl}/execution/${executionId}`, { headers: { Authorization: `Bearer ${h.token}`, 'X-MMA-Client': 'claude-code', 'X-MMA-Main-Model': 'test' } });
   const client = new Client({ name: 'parity', version: '0' });
   await client.connect(new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${h.token}` } } }));
-  const result = await client.callTool({ name: 'mma_task_get', arguments: { taskId } });
+  const result = await client.callTool({ name: 'mma_execution_get', arguments: { executionId } });
   // Narrow the SDK's union-typed content array first, matching the convention in
   // the existing tests/contract/mcp/ suite.
   const content = (result as { content: Array<{ type: 'text'; text: string }> }).content;

@@ -14,7 +14,10 @@ export type InitiativeErrorCode =
   | 'invalid_request'
   | 'migration_backup_failed'
   | 'cross_initiative_evidence_link'
-  | 'cross_initiative_verification';
+  | 'cross_initiative_verification'
+  | 'task_not_claimable'
+  | 'task_claim_conflict'
+  | 'invalid_task_transition';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -139,7 +142,67 @@ export class CrossInitiativeVerificationError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002. */
+/** A claim was attempted on a Task whose status is not `open` (SPEC-003 FR-9, AC-1.7). */
+export class TaskNotClaimableError extends Error {
+  readonly code = 'task_not_claimable' as const;
+  readonly task_id: string;
+  readonly status: string;
+
+  constructor(params: { task_id: string; status: string; message?: string }) {
+    super(
+      params.message ?? `task_not_claimable: Task ${params.task_id} cannot be claimed from status '${params.status}'`,
+    );
+    this.name = 'TaskNotClaimableError';
+    this.task_id = params.task_id;
+    this.status = params.status;
+  }
+}
+
+/**
+ * A `initiative_task_release`, `initiative_task_complete`, or ownership-gated
+ * `initiative_task_execution` transition was attempted by a caller other than
+ * the Task's claimant (SPEC-003 FR-9, AC-1.10). Release additionally exempts
+ * `provenance.actor_type: 'human'` — the store applies that override before
+ * throwing this error, never after.
+ */
+export class TaskClaimConflictError extends Error {
+  readonly code = 'task_claim_conflict' as const;
+  readonly task_id: string;
+  readonly claimed_by: string | null;
+  readonly authorized_by: string;
+
+  constructor(params: { task_id: string; claimed_by: string | null; authorized_by: string; message?: string }) {
+    super(
+      params.message ??
+        `task_claim_conflict: Task ${params.task_id} is claimed by ${JSON.stringify(params.claimed_by)}, not ${params.authorized_by}`,
+    );
+    this.name = 'TaskClaimConflictError';
+    this.task_id = params.task_id;
+    this.claimed_by = params.claimed_by;
+    this.authorized_by = params.authorized_by;
+  }
+}
+
+/** An unlisted Task status transition, or a `completed` transition missing a non-null outcome (SPEC-003 FR-9). */
+export class InvalidTaskTransitionError extends Error {
+  readonly code = 'invalid_task_transition' as const;
+  readonly task_id: string;
+  readonly from_status: string;
+  readonly to_status: string;
+
+  constructor(params: { task_id: string; from_status: string; to_status: string; message?: string }) {
+    super(
+      params.message ??
+        `invalid_task_transition: Task ${params.task_id} cannot transition from '${params.from_status}' to '${params.to_status}'`,
+    );
+    this.name = 'InvalidTaskTransitionError';
+    this.task_id = params.task_id;
+    this.from_status = params.from_status;
+    this.to_status = params.to_status;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002 and SPEC-003. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -147,7 +210,10 @@ export type InitiativeError =
   | InvalidRequestError
   | MigrationBackupFailedError
   | CrossInitiativeEvidenceLinkError
-  | CrossInitiativeVerificationError;
+  | CrossInitiativeVerificationError
+  | TaskNotClaimableError
+  | TaskClaimConflictError
+  | InvalidTaskTransitionError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -157,6 +223,9 @@ const INITIATIVE_ERROR_CTORS = [
   MigrationBackupFailedError,
   CrossInitiativeEvidenceLinkError,
   CrossInitiativeVerificationError,
+  TaskNotClaimableError,
+  TaskClaimConflictError,
+  InvalidTaskTransitionError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

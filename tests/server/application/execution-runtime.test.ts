@@ -9,12 +9,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExecutionRuntime } from '../../../packages/server/src/application/execution-runtime.js';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
+import { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
 import { SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
-import { TaskRegistry } from '../../../packages/core/src/unified/task-registry.js';
+import { ExecutionRegistry } from '../../../packages/core/src/unified/task-registry.js';
 import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
 import type { Provider, SessionOpts, Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
+
+/** Provenance for direct `InitiativeRecordRuntime.execute()` calls in the SPEC-003 B6 defect 3
+ *  regression below — bypasses the HTTP/MCP adapter's own provenance stamping, so any
+ *  non-empty `timestamp` is accepted by the schema as-is. */
+const provenance = {
+  actor_type: 'human' as const,
+  actor_id: 'host-a',
+  interface: 'test',
+  initiated_by: 'host-a',
+  authorized_by: 'host-a',
+  timestamp: 'ignored',
+  source: 'test',
+};
 
 function baseAgentsConfig(stateDir: string): MultiModelConfig {
   return {
@@ -74,10 +88,10 @@ function resolverFor(provider: Provider): (tier: AgentType, config: MultiModelCo
   return (tier) => ({ slot: tier, provider });
 }
 
-async function waitTerminal(taskRegistry: TaskRegistry, taskId: string): Promise<void> {
+async function waitTerminal(executionRegistry: ExecutionRegistry, executionId: string): Promise<void> {
   const deadline = Date.now() + 5_000;
-  while (!taskRegistry.isTerminal(taskId)) {
-    if (Date.now() > deadline) throw new Error(`task ${taskId} never reached terminal state`);
+  while (!executionRegistry.isTerminal(executionId)) {
+    if (Date.now() > deadline) throw new Error(`task ${executionId} never reached terminal state`);
     await new Promise((r) => setTimeout(r, 10));
   }
 }
@@ -85,7 +99,7 @@ async function waitTerminal(taskRegistry: TaskRegistry, taskId: string): Promise
 describe('ExecutionRuntime', () => {
   let cwd: string;
   let stateDir: string;
-  let taskRegistry: TaskRegistry;
+  let executionRegistry: ExecutionRegistry;
   let projectRegistry: ProjectRegistry;
   let store: ExecutionStore;
   let bus: EnvelopeBus;
@@ -94,7 +108,7 @@ describe('ExecutionRuntime', () => {
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'mma-exec-runtime-'));
     stateDir = mkdtempSync(join(tmpdir(), 'mma-exec-state-'));
-    taskRegistry = new TaskRegistry();
+    executionRegistry = new ExecutionRegistry();
     projectRegistry = new ProjectRegistry({ cap: 10 });
     store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 3_600_000 });
     bus = new EnvelopeBus();
@@ -117,7 +131,7 @@ describe('ExecutionRuntime', () => {
   it('releases context-block pins when the pipeline crashes (scope drain)', async () => {
     const { id, refcount } = registerBlock('reference material');
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(crashingProvider()),
     });
 
@@ -126,10 +140,10 @@ describe('ExecutionRuntime', () => {
       { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
 
-    await waitTerminal(taskRegistry, taskId);
-    const entry = taskRegistry.get(taskId)!;
+    await waitTerminal(executionRegistry, executionId);
+    const entry = executionRegistry.get(executionId)!;
     expect(entry.state).toBe('failed');
     expect((entry.result as { error: { code: string } }).error.code).toBe('runner_crash');
     // The crash path must still release the pin.
@@ -139,7 +153,7 @@ describe('ExecutionRuntime', () => {
   it('releases context-block pins on the normal completion path', async () => {
     const { id, refcount } = registerBlock('reference material');
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(workingProvider('an answer')),
     });
 
@@ -148,10 +162,10 @@ describe('ExecutionRuntime', () => {
       { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
 
-    await waitTerminal(taskRegistry, taskId);
-    const entry = taskRegistry.get(taskId)!;
+    await waitTerminal(executionRegistry, executionId);
+    const entry = executionRegistry.get(executionId)!;
     expect(entry.state).toBe('complete');
     expect(refcount()).toBe(0);
   });
@@ -177,7 +191,7 @@ describe('ExecutionRuntime', () => {
     config.agents!.complex.model = 'claude-sonnet-5';
     config.agents!.main.model = 'claude-opus-5';
     const runtime = new ExecutionRuntime({
-      config, bus, taskRegistry, projectRegistry, store,
+      config, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(workingProvider('an answer')),
     });
 
@@ -186,10 +200,10 @@ describe('ExecutionRuntime', () => {
       { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
 
-    await waitTerminal(taskRegistry, taskId);
-    const metrics = (taskRegistry.get(taskId)!.result as {
+    await waitTerminal(executionRegistry, executionId);
+    const metrics = (executionRegistry.get(executionId)!.result as {
       metrics: {
         mainEquivalentCostUsd: number | null;
         savedVsMainCostUsd: number | null;
@@ -221,7 +235,7 @@ describe('ExecutionRuntime', () => {
     const config = baseAgentsConfig(stateDir);
     config.agents!.main.model = 'some-unprofiled-local-model';
     const runtime = new ExecutionRuntime({
-      config, bus, taskRegistry, projectRegistry, store,
+      config, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(workingProvider('an answer')),
     });
 
@@ -229,9 +243,9 @@ describe('ExecutionRuntime', () => {
       { type: 'investigate', prompt: 'what is up' } as never,
       { clientName: 'claude-code', projectRoot: cwd },
     );
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
-    await waitTerminal(taskRegistry, taskId);
-    const metrics = (taskRegistry.get(taskId)!.result as {
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
+    await waitTerminal(executionRegistry, executionId);
+    const metrics = (executionRegistry.get(executionId)!.result as {
       metrics: { mainEquivalentCostUsd: number | null; savedVsMainCostUsd: number | null; totalCostUsd: number };
     }).metrics;
     expect(metrics.mainEquivalentCostUsd).toBeNull();
@@ -269,7 +283,7 @@ describe('ExecutionRuntime', () => {
 
   it('cancel() on a running execution reaches terminal cancelled in registry AND store', async () => {
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(abortAwareHangingProvider()),
     });
 
@@ -278,32 +292,32 @@ describe('ExecutionRuntime', () => {
       { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
 
     // Let the executor start and the implementer turn begin hanging.
     await new Promise((r) => setTimeout(r, 30));
-    expect(taskRegistry.isTerminal(taskId)).toBe(false);
+    expect(executionRegistry.isTerminal(executionId)).toBe(false);
 
-    const cancelRes = runtime.cancel(taskId);
+    const cancelRes = runtime.cancel(executionId);
     expect(cancelRes.outcome).toBe('requested');
     // The flag is visible while the runner winds down.
-    expect(taskRegistry.get(taskId)!.cancellationRequestedAt).not.toBeNull();
+    expect(executionRegistry.get(executionId)!.cancellationRequestedAt).not.toBeNull();
 
-    await waitTerminal(taskRegistry, taskId);
-    const entry = taskRegistry.get(taskId)!;
+    await waitTerminal(executionRegistry, executionId);
+    const entry = executionRegistry.get(executionId)!;
     expect(entry.state).toBe('cancelled');
-    const envelope = entry.result as { task: { status: string }; error: { code: string } };
-    expect(envelope.task.status).toBe('cancelled');
+    const envelope = entry.result as { execution: { status: string }; error: { code: string } };
+    expect(envelope.execution.status).toBe('cancelled');
     expect(envelope.error.code).toBe('aborted');
 
     // Durable mirror agrees.
-    const record = store.get(taskId)!;
+    const record = store.get(executionId)!;
     expect(record.state).toBe('cancelled');
     expect(record.cancellationRequestedAt).not.toBeNull();
-    expect(JSON.parse(record.resultJson!).task.status).toBe('cancelled');
+    expect(JSON.parse(record.resultJson!).execution.status).toBe('cancelled');
 
     // Idempotent: a second cancel reports the terminal state.
-    expect(runtime.cancel(taskId).outcome).toBe('terminal');
+    expect(runtime.cancel(executionId).outcome).toBe('terminal');
   });
 
   it('cancel() before the executor starts finishes cancelled with zero sessions', async () => {
@@ -321,7 +335,7 @@ describe('ExecutionRuntime', () => {
       },
     };
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(countingProvider),
     });
 
@@ -329,19 +343,19 @@ describe('ExecutionRuntime', () => {
       { type: 'investigate', prompt: 'q' } as never,
       { clientName: 'claude-code', projectRoot: cwd },
     );
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
     // Cancel in the same tick — before setImmediate runs the executor.
-    expect(runtime.cancel(taskId).outcome).toBe('requested');
+    expect(runtime.cancel(executionId).outcome).toBe('requested');
 
-    await waitTerminal(taskRegistry, taskId);
-    expect(taskRegistry.get(taskId)!.state).toBe('cancelled');
-    expect(store.get(taskId)!.state).toBe('cancelled');
+    await waitTerminal(executionRegistry, executionId);
+    expect(executionRegistry.get(executionId)!.state).toBe('cancelled');
+    expect(store.get(executionId)!.state).toBe('cancelled');
     expect(sessionsOpened).toBe(0);
   });
 
   it('cancel() on an unknown task reports not_found', () => {
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(workingProvider('x')),
     });
     expect(runtime.cancel('no-such-task').outcome).toBe('not_found');
@@ -349,27 +363,27 @@ describe('ExecutionRuntime', () => {
 
   it('completion wins the race against a late cancel (first writer wins)', async () => {
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(workingProvider('finished answer')),
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
       { clientName: 'claude-code', projectRoot: cwd },
     );
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
-    await waitTerminal(taskRegistry, taskId);
-    expect(taskRegistry.get(taskId)!.state).toBe('complete');
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
+    await waitTerminal(executionRegistry, executionId);
+    expect(executionRegistry.get(executionId)!.state).toBe('complete');
 
     // Cancel after completion: terminal state stands, store unchanged.
-    expect(runtime.cancel(taskId).outcome).toBe('terminal');
-    expect(taskRegistry.get(taskId)!.state).toBe('complete');
-    expect(store.get(taskId)!.state).toBe('complete');
+    expect(runtime.cancel(executionId).outcome).toBe('terminal');
+    expect(executionRegistry.get(executionId)!.state).toBe('complete');
+    expect(store.get(executionId)!.state).toBe('complete');
   });
 
   it('rejects submission when no agent can be resolved', async () => {
     const runtime = new ExecutionRuntime({
       config: { agents: undefined } as unknown as MultiModelConfig,
-      bus, taskRegistry, projectRegistry, store,
+      bus, executionRegistry, projectRegistry, store,
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
@@ -412,7 +426,7 @@ describe('ExecutionRuntime', () => {
     };
 
     const runtime = new ExecutionRuntime({
-      config: TEST_CONFIG, bus, taskRegistry, projectRegistry, store,
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
       resolveAgentFn: resolverFor(capturingProvider),
     });
 
@@ -421,16 +435,130 @@ describe('ExecutionRuntime', () => {
       { clientName: 'claude-code', projectRoot: cwd },
     );
     expect(outcome.ok).toBe(true);
-    const taskId = (outcome as { ok: true; taskId: string }).taskId;
-    await waitTerminal(taskRegistry, taskId);
+    const executionId = (outcome as { ok: true; executionId: string }).executionId;
+    await waitTerminal(executionRegistry, executionId);
 
     const genericImplementer = readFileSync(join(SKILLS_DIR, 'debug', 'implement.md'), 'utf8');
     // The first send() is the implementer turn — its prompt embeds implementerSkill verbatim.
     expect(capturedPrompts[0]).toContain(genericImplementer);
 
-    const entry = taskRegistry.get(taskId)!;
+    const entry = executionRegistry.get(executionId)!;
     expect(entry.practice).toBeNull();
-    const terminalTask = (entry.result as { task: Record<string, unknown> }).task;
-    expect(terminalTask.practice).toBeUndefined();
+    const terminalExecution = (entry.result as { execution: Record<string, unknown> }).execution;
+    expect(terminalExecution.practice).toBeUndefined();
+  });
+
+  /**
+   * SPEC-003 B6 defect 3 regression: `admitLinkedTask`'s Task transition used to run BEFORE
+   * `executionRegistry.register` / `store.admit` — a failure of either after a successful
+   * transition durably stranded the Task at `in_progress` with no backing execution. The fix
+   * reorders admission so the transition runs LAST, and compensates (fails the already-real
+   * handle as a unit) when the transition itself fails. Forces the transition's own mutating
+   * call to throw — every validation check `admitLinkedTask` runs before it has already passed
+   * (the Task exists, is `open`, and is unclaimed) — to exercise the compensation path, not a
+   * validation rejection (which never mutated `initiatives.db` even before this fix).
+   */
+  it('a Task-transition failure after admission fails the execution as a unit — no orphaned in_progress Task, no stuck pending execution', async () => {
+    const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir });
+    try {
+      const product = initiativeRuntime.execute({
+        operation: 'product_create', input: { name: 'MMA', slug: 'mma-defect3' }, expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const initiative = initiativeRuntime.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const task = initiativeRuntime.execute({
+        operation: 'initiative_task_create',
+        input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+
+      // Force ONLY the transition's mutating call to throw — every check before it (Initiative
+      // resolves, Task resolves, membership, `open` state, no claim to conflict on) still runs
+      // for real and still passes.
+      const originalExecute = initiativeRuntime.execute.bind(initiativeRuntime);
+      (initiativeRuntime as unknown as { execute: (request: unknown) => unknown }).execute = (request: unknown) => {
+        const op = (request as { operation?: unknown } | null)?.operation;
+        if (op === 'initiative_task_execution') throw new Error('simulated Task-transition failure');
+        return originalExecute(request as never);
+      };
+
+      const runtime = new ExecutionRuntime({
+        config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,
+        resolveAgentFn: resolverFor(workingProvider('done')),
+      });
+
+      const outcome = await runtime.submit(
+        {
+          type: 'investigate', prompt: 'q',
+          initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' },
+        } as never,
+        { clientName: 'claude-code', projectRoot: cwd },
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect((outcome as { ok: false; error: { kind: string } }).error.kind).toBe('linked_admission');
+
+      // No Task was left orphaned at `in_progress` — the failed transition never wrote anything,
+      // and nothing upstream of it (the checks above) mutates `initiatives.db` either.
+      const liveTask = originalExecute({ operation: 'initiative_task_get', input: { uuid: task.uuid } }) as { status: string };
+      expect(liveTask.status).toBe('open');
+
+      // No execution was left stuck `pending` forever either — the already-real handle
+      // (`register`/`admit` ran first and succeeded) was failed as a unit alongside the Task
+      // transition it was backing.
+      expect(executionRegistry.allInFlight()).toEqual([]);
+    } finally {
+      initiativeRuntime.close();
+    }
+  });
+
+  it('a durable admission failure is typed and leaves the linked Task open', async () => {
+    const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir });
+    try {
+      const product = initiativeRuntime.execute({
+        operation: 'product_create', input: { name: 'MMA', slug: 'mma-admit-fail' }, expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const initiative = initiativeRuntime.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const task = initiativeRuntime.execute({
+        operation: 'initiative_task_create',
+        input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+
+      // This reproduces the original orphan window at its actual failing operation: register
+      // succeeds, but durable `store.admit` throws before any Task transition is attempted.
+      const originalAdmit = store.admit.bind(store);
+      store.admit = () => { throw new Error('simulated durable admission failure'); };
+      const runtime = new ExecutionRuntime({
+        config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,
+        resolveAgentFn: resolverFor(workingProvider('done')),
+      });
+
+      const outcome = await runtime.submit(
+        {
+          type: 'investigate', prompt: 'q',
+          initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' },
+        } as never,
+        { clientName: 'claude-code', projectRoot: cwd },
+      );
+
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: { kind: 'execution_admission', code: 'execution_admission_failed' },
+      });
+      const liveTask = initiativeRuntime.execute({ operation: 'initiative_task_get', input: { uuid: task.uuid } }) as { status: string };
+      expect(liveTask.status).toBe('open');
+      expect(executionRegistry.allInFlight()).toEqual([]);
+      store.admit = originalAdmit;
+    } finally {
+      initiativeRuntime.close();
+    }
   });
 });
