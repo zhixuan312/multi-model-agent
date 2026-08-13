@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { boot } from '../contract/fixtures/harness.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 
-const headers = (token: string) => ({ 'Content-Type': 'application/json', 'X-MMA-Client': 'test', Authorization: `Bearer ${token}` });
+const headers = (token: string) => ({ 'Content-Type': 'application/json', 'X-MMA-Client': 'claude-code', Authorization: `Bearer ${token}` });
 const provenance = { actor_type: 'agent', actor_id: 'host-a', interface: 'ignored', initiated_by: 'host-a', authorized_by: 'host-a', timestamp: 'ignored', source: 'test' };
 async function mutate(h: { baseUrl: string; token: string }, operation: string, input: object, expected_revision: number) {
   const response = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation, input, expected_revision, provenance }) });
@@ -40,7 +40,7 @@ describe('Execution linkage integration', () => {
       try {
         const resume = await fetch(`${restarted.baseUrl}/initiatives`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
         const record = await resume.json() as { tasks: Array<{ status: string; outcome: string | null; executionRefs: string[] }>; evidence: unknown[] };
-        expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded', executionRefs: [taskId] })]);
+        expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded_with_concerns', executionRefs: [taskId] })]);
         expect(record.evidence).toHaveLength(1);
         expect(restarted.unconsumedOutbox()).toEqual([]);
         const invalid = await fetch(`${restarted.baseUrl}/task?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
