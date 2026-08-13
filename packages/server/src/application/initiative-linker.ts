@@ -24,11 +24,28 @@
 // crash anywhere from admission onward still produces this outbox row, even when that Task
 // transition never actually landed. `replayRow`'s Task-update step (below) is tolerant of exactly
 // that: it treats "the Task never entered `in_progress` for this execution" as nothing to undo.
+//
+// The guarantee this consumer actually makes: durable Evidence for every linked terminal
+// execution (Steps 1-4, unconditional), and the FR-9 Task mapping applied WHEN the live Task
+// record still admits it. It does not guarantee the Task mapping always lands — a Task's live
+// record is owned by whichever actor (human or another execution) mutates it last, and that
+// actor can complete, cancel, release, or reclaim the Task between this row's admission and its
+// replay. SPEC-003 B6 round-3: when the Task-update step's attempted mutation is rejected with a
+// SEMANTIC error (`invalid_task_transition` / `task_not_claimable` / `task_claim_conflict`), the
+// live record has moved on and no longer admits this historical outcome. The record is
+// authoritative, not this row: the divergence is logged and the row is consumed anyway — Steps
+// 1-4 already made the execution's own history durable, which is the outbox's real job, so
+// retrying a Task mutation the live record will never accept would only wedge the row forever.
+// Transient/unknown errors and `revision_conflict` are not semantic and keep the existing retry
+// behavior.
 
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   getTypeConfig,
+  InvalidTaskTransitionError,
+  TaskClaimConflictError,
+  TaskNotClaimableError,
   type Evidence,
   type Initiative,
   type Task,
@@ -153,6 +170,21 @@ function terminalEnvelopeHasCommit(envelope: unknown): boolean {
 function readPersistedCommitSha(envelope: unknown): string | null {
   const sha = (envelope as { output?: { commitSha?: unknown } } | null)?.output?.commitSha;
   return typeof sha === 'string' && sha.length > 0 ? sha : null;
+}
+
+/** SPEC-003 B6 round-3: the three typed errors that mean the Task's LIVE record no longer admits
+ *  the historical outcome this outbox row describes — another actor completed, cancelled,
+ *  released, or reclaimed the Task since `validateLinkedTask` read it. Anything else (a
+ *  transient failure, an unrecognized error, or `revision_conflict` — a genuine race this pass
+ *  or the next should retry against) is NOT semantic and must keep retrying as before. */
+function isSemanticTaskRejection(
+  err: unknown,
+): err is InvalidTaskTransitionError | TaskNotClaimableError | TaskClaimConflictError {
+  return (
+    err instanceof InvalidTaskTransitionError ||
+    err instanceof TaskNotClaimableError ||
+    err instanceof TaskClaimConflictError
+  );
 }
 
 /** System provenance for every write this consumer makes. `authorized_by` carries forward the
@@ -331,33 +363,46 @@ export class InitiativeLinker {
     if (terminalAlreadyApplied) {
       // Nothing to do — a prior replay attempt already applied the mapped terminal state, and
       // only `markOutboxConsumed` failed to land.
-    } else if (neverEnteredInProgress) {
-      // Reconciliation-complete, not a give-up state: append the ref (harmless, idempotent,
-      // always valid short of `completed`/`cancelled`) so the Task's history still names this
-      // execution, skip the FR-9 transition entirely, and consume the row with a logged note.
+      return;
+    }
+
+    // Branch selection is unchanged: ref-only append when the Task never entered `in_progress`
+    // for this execution (nothing to undo — the same "harmless, idempotent, always valid short
+    // of `completed`/`cancelled`" append as before), the full FR-9 transition otherwise. What's
+    // new (SPEC-003 B6 round-3) is the single catch below: whichever mutation this attempts, if
+    // the store rejects it SEMANTICALLY, the row is consumed instead of retried forever — see the
+    // module doc comment and `isSemanticTaskRejection`.
+    const attemptedInput = neverEnteredInProgress
+      ? { uuid: liveTask.uuid, execution_ref: executionId }
+      : { uuid: liveTask.uuid, execution_ref: executionId, transition, ...(outcome !== undefined && { outcome }) };
+    const idempotencyKey = neverEnteredInProgress
+      ? `outbox:${executionId}:task_execution_ref_only`
+      : `outbox:${executionId}:task_execution`;
+
+    try {
       this.runtime.execute({
         operation: 'initiative_task_execution',
-        input: { uuid: liveTask.uuid, execution_ref: executionId },
+        input: attemptedInput,
         expected_revision: liveTask.revision,
-        idempotency_key: `outbox:${executionId}:task_execution_ref_only`,
+        idempotency_key: idempotencyKey,
         provenance,
       });
+      if (neverEnteredInProgress) {
+        this.log(
+          `[mma] event=initiative_link_task_untouched ts=${new Date().toISOString()} outbox_id=${executionId} task=${liveTask.uuid} status=${liveTask.status} reason="Task never entered in_progress for this execution — nothing to undo, execution_ref recorded"`,
+        );
+      }
+    } catch (err) {
+      if (!isSemanticTaskRejection(err)) throw err;
+      // The live record has moved on since `validateLinkedTask` read it — another actor
+      // completed, cancelled, released, or reclaimed the Task — so the historical outcome this
+      // row describes no longer applies to it. Reconciliation-complete, not a give-up state: the
+      // Evidence steps above already made the execution's own history durable, so log the
+      // divergence and consume the row rather than retry a mutation the live record will never
+      // accept.
       this.log(
-        `[mma] event=initiative_link_task_untouched ts=${new Date().toISOString()} outbox_id=${executionId} task=${liveTask.uuid} status=${liveTask.status} reason="Task never entered in_progress for this execution — nothing to undo, execution_ref recorded"`,
+        `[mma] event=initiative_link_task_diverged ts=${new Date().toISOString()} outbox_id=${executionId} task=${liveTask.uuid} status=${liveTask.status} attempted_mutation=${JSON.stringify(attemptedInput)} error_code=${err.code} error="${err.message.replace(/"/g, '\\"')}"`,
       );
-    } else {
-      this.runtime.execute({
-        operation: 'initiative_task_execution',
-        input: {
-          uuid: liveTask.uuid,
-          execution_ref: executionId,
-          transition,
-          ...(outcome !== undefined && { outcome }),
-        },
-        expected_revision: liveTask.revision,
-        idempotency_key: `outbox:${executionId}:task_execution`,
-        provenance,
-      });
     }
   }
 
