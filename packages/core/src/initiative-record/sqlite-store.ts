@@ -68,6 +68,7 @@ import {
   type InitiativeTaskCreateInput,
   type InitiativeTaskExecutionInput,
   type InitiativeTaskReleaseInput,
+  type InitiativeTaskSetMethodInput,
   type ProductCreateInput,
   type ProvenanceInput,
   type RequirementAddInput,
@@ -1156,6 +1157,9 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateInitiativeFocusSet(request.input, request.expected_revision, request.provenance);
       case 'initiative_set_lifecycle_contract':
         return this.mutateInitiativeSetLifecycleContract(request.input, request.expected_revision, request.provenance);
+      // SPEC-005 Method Registry (FR-5) — the sole Task Method mutation.
+      case 'initiative_task_set_method':
+        return this.mutateInitiativeTaskSetMethod(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -1671,12 +1675,19 @@ export class InitiativeRecordStore implements InitiativeRepository {
     if (!this.findInitiativeRow(input.initiative_id, undefined)) {
       throw new NotFoundError({ entity_type: 'Initiative', lookup: input.initiative_id });
     }
+    // SPEC-005 Method Registry (FR-5): a non-null `method` must already be registered —
+    // `getMethodOrThrow` throws `unknown_method` for anything else. `undefined` (omitted)
+    // maps to a stored `null`, never inferred from title/goal/workspaces.
+    const method = input.method ?? null;
+    if (method !== null) {
+      this.getMethodOrThrow(method);
+    }
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const executionRefs = input.executionRefs ?? [];
     this.db
       .prepare(
-        `INSERT INTO tasks (uuid, initiative_id, title, goal, status, outcome, workspace_ids, resource_ids, execution_refs, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO tasks (uuid, initiative_id, title, goal, status, outcome, workspace_ids, resource_ids, execution_refs, created_at, updated_at, revision, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       )
       .run(
         uuid,
@@ -1690,6 +1701,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
         JSON.stringify(executionRefs),
         now,
         now,
+        method,
       );
     const task: Task = {
       uuid,
@@ -1705,10 +1717,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: now,
       updatedAt: now,
       revision: 0,
-      // SPEC-005 Method Registry: persistence of a requested `input.method` and registered-id
-      // validation are Task I-3's scope (`initiative_task_set_method` / create-time write path).
-      // This task only makes the data contract and the NULL-to-null read mapping true.
-      method: null,
+      method,
     };
     this.writeEvent({
       entity_type: 'Task',
@@ -1716,6 +1725,49 @@ export class InitiativeRecordStore implements InitiativeRepository {
       initiative_id: input.initiative_id,
       event_type: 'task_created',
       payload: { uuid, initiative_id: input.initiative_id, status: input.status },
+      provenance,
+    });
+    return task;
+  }
+
+  /**
+   * `initiative_task_set_method` (SPEC-005 FR-5): sets or clears (`null`) a Task's Method
+   * under the standard `expected_revision` compare-and-swap applied to the TASK row (not the
+   * Initiative row — `input.initiative` only scopes the lookup and confirms the Task belongs
+   * to that Initiative). A non-null `method` must already be registered — `getMethodOrThrow`
+   * throws `unknown_method` otherwise, before any write. Emits exactly one `task_method_set`
+   * Event per successful call; idempotency replay (handled by `execute()`) produces no second.
+   */
+  private mutateInitiativeTaskSetMethod(
+    input: InitiativeTaskSetMethodInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Task {
+    const initiativeRow = this.findInitiativeRow(input.initiative.uuid, input.initiative.human_key);
+    if (!initiativeRow) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: input.initiative.uuid ?? input.initiative.human_key ?? '' });
+    }
+    const row = this.requireTaskRow(input.task.uuid);
+    if (row.initiative_id !== initiativeRow.uuid) {
+      throw new NotFoundError({ entity_type: 'Task', lookup: input.task.uuid });
+    }
+    this.requireTaskRevision(row, expectedRevision);
+    if (input.method !== null) {
+      this.getMethodOrThrow(input.method);
+    }
+    const previousMethod = row.method ?? null;
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db
+      .prepare(`UPDATE tasks SET method = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.method, now, nextRevision, row.uuid);
+    const task: Task = { ...mapTaskRow(row), method: input.method, updatedAt: now, revision: nextRevision };
+    this.writeEvent({
+      entity_type: 'Task',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'task_method_set',
+      payload: { previous_method: previousMethod, new_method: input.method },
       provenance,
     });
     return task;

@@ -25,6 +25,7 @@ import {
   InvalidTaskTransitionError,
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
+  UnknownMethodError,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -132,6 +133,14 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       code: err.code,
       message: err.message,
       details: { lifecycle_contract: err.lifecycle_contract },
+    };
+  }
+  if (err instanceof UnknownMethodError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { method: err.method },
     };
   }
   if (err instanceof InitiativeNotFoundError) {

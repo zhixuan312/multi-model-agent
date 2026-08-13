@@ -8,7 +8,16 @@ import { INITIATIVE_OPERATIONS } from '@zhixuan92/multi-model-agent-core';
 
 // Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
 // alongside the original seven.
-const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) => `mma_${operation}`);
+//
+// SPEC-005 Method Registry (Task I-3, FR-10) froze `method_get`, `method_list`, and
+// `initiative_task_set_method` as `mma_initiative_<operation>` rather than the mechanical
+// `mma_<operation>` every other operation uses — see tool-surface.ts's own
+// `INITIATIVE_TOOL_NAME_OVERRIDES`. Encoded independently here (not imported) so this
+// assertion still catches a real naming regression in the tool surface.
+const INITIATIVE_TOOL_NAME_OVERRIDES = new Set(['method_get', 'method_list', 'initiative_task_set_method']);
+const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) =>
+  INITIATIVE_TOOL_NAME_OVERRIDES.has(operation) ? `mma_initiative_${operation}` : `mma_${operation}`,
+);
 
 async function runOnce(h: HarnessHandle): Promise<string> {
   const client = new Client({ name: 'byte-parity', version: '0.0.0' });
