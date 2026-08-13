@@ -24,9 +24,10 @@ import { dirname, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { MigrationBackupFailedError } from './errors.js';
+import { DEFAULT_LIFECYCLE_CONTRACT_ID, type LifecycleContract } from './types.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 3;
+export const INITIATIVE_SCHEMA_VERSION = 4;
 
 interface Migration {
   version: number;
@@ -302,7 +303,69 @@ const MIGRATIONS: Migration[] = [
       db.exec(`ALTER TABLE tasks ADD COLUMN claimed_by TEXT;`);
     },
   },
+  {
+    // Version 4 — SPEC-004 Lifecycle Engine data contract ("Data model", Task I-1). Additive
+    // only: nullable `initiatives.focus_phase`/`initiatives.lifecycle_contract` columns, the new
+    // `phase_records` and `lifecycle_contracts` tables, and one seeded immutable
+    // `default-sdl@1` row carrying the pinned six-phase definition. No v1/v2/v3 table, index, or
+    // column is reshaped, renamed, or dropped, and this migration inserts NO `phase_records`
+    // rows for any existing Initiative — every lifecycle read overlays six synthesized
+    // `not_started` defaults on top of whatever rows exist (Task I-4), never backfilling.
+    version: 4,
+    apply: (db) => {
+      db.exec(`
+        ALTER TABLE initiatives ADD COLUMN focus_phase TEXT;
+        ALTER TABLE initiatives ADD COLUMN lifecycle_contract TEXT;
+
+        CREATE TABLE IF NOT EXISTS phase_records (
+          initiative_id TEXT NOT NULL REFERENCES initiatives(uuid),
+          phase         TEXT NOT NULL,
+          state         TEXT NOT NULL,
+          PRIMARY KEY (initiative_id, phase)
+        );
+
+        CREATE TABLE IF NOT EXISTS lifecycle_contracts (
+          id              TEXT PRIMARY KEY,
+          definition_json TEXT NOT NULL,
+          is_builtin      INTEGER NOT NULL
+        );
+      `);
+      db.prepare(`INSERT OR IGNORE INTO lifecycle_contracts (id, definition_json, is_builtin) VALUES (?, ?, 1)`).run(
+        DEFAULT_SDL_CONTRACT.id,
+        JSON.stringify(DEFAULT_SDL_CONTRACT),
+      );
+    },
+  },
 ];
+
+/**
+ * The frozen `default-sdl@1` definition (SPEC-004 "Data model" — the pinned YAML). Seeded once
+ * by migration v4 as an immutable, built-in row; `execute` deliberately has no Requirement or
+ * Acceptance Criterion Establishment because SPEC-007's Delivery Contract validation, not this
+ * specification, owns Execute-phase gating.
+ */
+const DEFAULT_SDL_CONTRACT: LifecycleContract = {
+  id: DEFAULT_LIFECYCLE_CONTRACT_ID,
+  phases: {
+    discover: { required: [{ key: 'problem_framed', satisfier: 'manual' }] },
+    refine: {
+      required: [
+        { key: 'scoped_goal', satisfier: 'manual' },
+        { key: 'requirements_defined', satisfier: 'requirements_exist' },
+        { key: 'acceptance_criteria_defined', satisfier: 'acceptance_criteria_exist' },
+      ],
+    },
+    design: {
+      required: [
+        { key: 'design_artifact', satisfier: 'manual' },
+        { key: 'key_decisions_settled', satisfier: 'decisions_settled' },
+      ],
+    },
+    execute: { required: [] },
+    verify: { required: [{ key: 'acceptance_verified', satisfier: 'manual' }] },
+    deliver: { required: [{ key: 'delivery_confirmed', satisfier: 'manual' }] },
+  },
+};
 
 export interface RunInitiativeMigrationsOptions {
   /** Absolute path to `initiatives.db`. Never `executions.db`. */

@@ -13,6 +13,20 @@
  * typed errors, and the additive `initiatives.db` schema version 3 migration
  * — all re-exported through the wildcard exports below, no new export list
  * required.
+ *
+ * SPEC-004 Lifecycle Engine (Task I-1) extends this surface with the
+ * `Phase` / `PhaseRecordState` / `Satisfier` / `Establishment` / `PhaseRecord`
+ * / `LifecycleContract` / `GateEstablishmentResult` / `GateStatus` /
+ * `LifecycleResumeBlock` domain types, `Initiative.focus_phase` /
+ * `Initiative.lifecycle_contract`, the `initiative_phase_enter` /
+ * `_satisfy` / `_reopen` / `_skip` / `initiative_focus_set` /
+ * `initiative_set_lifecycle_contract` mutations and read-only
+ * `initiative_gate_status`, their `invalid_phase_transition` /
+ * `unknown_lifecycle_contract` typed errors, and the additive
+ * `initiatives.db` schema version 4 migration (seeded immutable
+ * `default-sdl@1`) — all re-exported through the wildcard exports below, no
+ * new export list required. Store BEHAVIOR (transitions, live gate
+ * evaluation) is Task I-2/I-3; this task is the data contract only.
  */
 export * from './types.js';
 export * from './schemas.js';

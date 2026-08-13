@@ -105,6 +105,10 @@ export interface Initiative {
   createdAt: string;
   updatedAt: string;
   revision: number;
+  /** Additive (SPEC-004 Lifecycle Engine, schema v4). `null` for every pre-v4 Initiative and for a new Initiative before `initiative_focus_set`. */
+  focus_phase: Phase | null;
+  /** Additive (SPEC-004 Lifecycle Engine, schema v4). `null` means no Lifecycle Contract applies (gates read green). New Initiatives default to `'default-sdl@1'` unless `initiative_create.lifecycle_contract` overrides it. */
+  lifecycle_contract: string | null;
 }
 
 /** Composite identity: `(initiative_id, workspace_id, role)`. */
@@ -342,6 +346,78 @@ export interface Event {
   source: string;
 }
 
+// ---------------------------------------------------------------------------
+// SPEC-004 Lifecycle Engine
+//
+// TRANSCRIPTION, not design: every shape below is frozen by
+// `.mma/specs/2026-08-13-spec-004-lifecycle-engine.md` (SPEC-004, "Interfaces
+// / contracts" and "Data model"). The engine records phase transitions and
+// evaluates advisory gates against the live record; it never enforces a
+// transition, gate colour, or workflow order on a caller (FR-1, FR-8).
+// ---------------------------------------------------------------------------
+
+/** The six frozen SDLC phases, in their canonical (and only legal `LifecycleResumeBlock.phases`) order. */
+export type Phase = 'discover' | 'refine' | 'design' | 'execute' | 'verify' | 'deliver';
+
+/** Canonical phase order — the exact order `LifecycleResumeBlock.phases` must use (FR-1, FR-13). */
+export const LIFECYCLE_PHASES: readonly Phase[] = ['discover', 'refine', 'design', 'execute', 'verify', 'deliver'];
+
+/**
+ * The seeded, immutable built-in Lifecycle Contract id (FR-5, FR-6). The v4 migration seeds its
+ * row; `initiative_create` defaults a new Initiative's `lifecycle_contract` to this id when the
+ * caller omits it (FR-7). Single source of truth so the migration and the store never drift.
+ */
+export const DEFAULT_LIFECYCLE_CONTRACT_ID = 'default-sdl@1' as const;
+
+/** A Phase Record's state machine (FR-2). Absent rows synthesize to `'not_started'`. */
+export type PhaseRecordState = 'not_started' | 'active' | 'satisfied' | 'reopened' | 'skipped';
+
+/** The closed, typed satisfier vocabulary (FR-5) — no conditions, scripts, or runtime-extensible types. */
+export type Satisfier = 'manual' | 'requirements_exist' | 'acceptance_criteria_exist' | 'decisions_settled';
+
+/** One required gate condition inside a `LifecycleContract` phase (FR-5). */
+export interface Establishment {
+  /** snake_case identifier — must match `^[a-z][a-z0-9_]*$`. */
+  key: string;
+  satisfier: Satisfier;
+}
+
+/** One Initiative's per-phase transition record; identity is `(initiative_id, phase)` (FR-2). */
+export interface PhaseRecord {
+  initiative_id: string;
+  phase: Phase;
+  state: PhaseRecordState;
+}
+
+/** A versioned, immutable Lifecycle Contract (FR-5). `id` matches `^[a-z][a-z0-9-]*@[1-9][0-9]*$`. */
+export interface LifecycleContract {
+  id: string;
+  phases: Record<Phase, { required: Establishment[] }>;
+}
+
+/** One Establishment's live gate evaluation result (FR-8). */
+export interface GateEstablishmentResult {
+  establishment: Establishment;
+  satisfied: boolean;
+  detail: string;
+}
+
+/** A phase's live, advisory, never-persisted gate result (FR-8). */
+export interface GateStatus {
+  status: 'green' | 'red';
+  missing: GateEstablishmentResult[];
+  note?: string;
+}
+
+/** The additive `initiative_resume`/`initiative_gate_status` lifecycle block (FR-9, FR-13). */
+export interface LifecycleResumeBlock {
+  focus_phase: Phase | null;
+  contract: string | null;
+  /** Exactly six entries, in `LIFECYCLE_PHASES` order. */
+  phases: Array<{ phase: Phase; state: PhaseRecordState; gate: GateStatus }>;
+  recent_lifecycle_events: Event[];
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product
@@ -358,7 +434,8 @@ export type InitiativeRecordEntity =
   | Evidence
   | EvidenceLink
   | Risk
-  | VerificationRun;
+  | VerificationRun
+  | PhaseRecord;
 
 /** `initiative_resume` request — exactly one of `uuid` or `human_key`. */
 export interface InitiativeResumeRequest {
@@ -386,6 +463,8 @@ export interface InitiativeResumeResponse {
   evidence: Evidence[];
   /** Phase A1: one entry per Acceptance Criterion with any run, `latest` by `createdAt DESC, uuid DESC`. */
   verification: Array<{ acceptance_criterion_id: string; latest: VerificationRun }>;
+  /** SPEC-004: additive lifecycle block — focus phase, contract, six phase/gate entries, and recent lifecycle Events. */
+  lifecycle: LifecycleResumeBlock;
   counts: {
     workspaces: number;
     resources: number;
@@ -456,6 +535,14 @@ export const INITIATIVE_OPERATIONS = [
   'verification_record',
   'verification_get',
   'verification_list',
+  // SPEC-004 Lifecycle Engine — phase/focus mutations, contract reference, and the advisory gate read (FR-2 through FR-9).
+  'initiative_phase_enter',
+  'initiative_phase_satisfy',
+  'initiative_phase_reopen',
+  'initiative_phase_skip',
+  'initiative_focus_set',
+  'initiative_set_lifecycle_contract',
+  'initiative_gate_status',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -493,6 +580,14 @@ export const INITIATIVE_EVENT_TYPES = {
   verification_superseded: 'verification_superseded',
   /** System-driven: a linked Evidence content-hash change staled a passing or failing run. */
   verification_stale: 'verification_stale',
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-7, "Data model" event table). `initiative_gate_status`
+  // is a read — it has no event-type mapping.
+  initiative_phase_enter: 'phase_entered',
+  initiative_phase_satisfy: 'phase_satisfied',
+  initiative_phase_reopen: 'phase_reopened',
+  initiative_phase_skip: 'phase_skipped',
+  initiative_focus_set: 'focus_changed',
+  initiative_set_lifecycle_contract: 'lifecycle_contract_set',
 } as const;
 
 /**
@@ -521,4 +616,12 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   task_released: ['uuid', 'initiative_id'],
   task_completed: ['uuid', 'initiative_id', 'outcome'],
   task_execution_recorded: ['uuid', 'initiative_id', 'execution_ref'],
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-7, "Data model" event table). `gate_snapshot` is
+  // mandatory on `phase_satisfied` and `focus_changed` and appears on NO other lifecycle event.
+  phase_entered: ['phase', 'previous_state', 'new_state'],
+  phase_satisfied: ['phase', 'previous_state', 'new_state', 'asserted', 'gate_snapshot'],
+  phase_reopened: ['phase', 'previous_state', 'new_state', 'reason'],
+  phase_skipped: ['phase', 'previous_state', 'new_state', 'reason'],
+  focus_changed: ['phase', 'previous_focus_phase', 'new_focus_phase', 'gate_snapshot'],
+  lifecycle_contract_set: ['previous_lifecycle_contract', 'new_lifecycle_contract'],
 } as const;

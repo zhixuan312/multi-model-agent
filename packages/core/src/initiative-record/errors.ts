@@ -17,7 +17,9 @@ export type InitiativeErrorCode =
   | 'cross_initiative_verification'
   | 'task_not_claimable'
   | 'task_claim_conflict'
-  | 'invalid_task_transition';
+  | 'invalid_task_transition'
+  | 'invalid_phase_transition'
+  | 'unknown_lifecycle_contract';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -202,7 +204,49 @@ export class InvalidTaskTransitionError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002 and SPEC-003. */
+/**
+ * An `initiative_phase_enter` / `_satisfy` / `_reopen` / `_skip` mutation named a source
+ * Phase Record state outside that operation's legal transition set (SPEC-004 FR-2, "Data
+ * model" transition table).
+ */
+export class InvalidPhaseTransitionError extends Error {
+  readonly code = 'invalid_phase_transition' as const;
+  readonly initiative_id: string;
+  readonly phase: string;
+  readonly source_state: string;
+  readonly target_state: string;
+
+  constructor(params: { initiative_id: string; phase: string; source_state: string; target_state: string; message?: string }) {
+    super(
+      params.message ??
+        `invalid_phase_transition: Initiative ${params.initiative_id} phase '${params.phase}' cannot transition from '${params.source_state}' to '${params.target_state}'`,
+    );
+    this.name = 'InvalidPhaseTransitionError';
+    this.initiative_id = params.initiative_id;
+    this.phase = params.phase;
+    this.source_state = params.source_state;
+    this.target_state = params.target_state;
+  }
+}
+
+/**
+ * `initiative_create` or `initiative_set_lifecycle_contract` named a non-null `lifecycle_contract`
+ * id with no matching row in `lifecycle_contracts` (SPEC-004 FR-7).
+ */
+export class UnknownLifecycleContractError extends Error {
+  readonly code = 'unknown_lifecycle_contract' as const;
+  readonly lifecycle_contract: string;
+
+  constructor(params: { lifecycle_contract: string; message?: string }) {
+    super(
+      params.message ?? `unknown_lifecycle_contract: no registered Lifecycle Contract '${params.lifecycle_contract}'`,
+    );
+    this.name = 'UnknownLifecycleContractError';
+    this.lifecycle_contract = params.lifecycle_contract;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, and SPEC-004. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -213,7 +257,9 @@ export type InitiativeError =
   | CrossInitiativeVerificationError
   | TaskNotClaimableError
   | TaskClaimConflictError
-  | InvalidTaskTransitionError;
+  | InvalidTaskTransitionError
+  | InvalidPhaseTransitionError
+  | UnknownLifecycleContractError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -226,6 +272,8 @@ const INITIATIVE_ERROR_CTORS = [
   TaskNotClaimableError,
   TaskClaimConflictError,
   InvalidTaskTransitionError,
+  InvalidPhaseTransitionError,
+  UnknownLifecycleContractError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

@@ -37,6 +37,7 @@ import {
   RevisionConflictError,
   TaskClaimConflictError,
   TaskNotClaimableError,
+  UnknownLifecycleContractError,
 } from './errors.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
@@ -67,6 +68,7 @@ import {
   type WorkspaceCreateInput,
 } from './schemas.js';
 import {
+  DEFAULT_LIFECYCLE_CONTRACT_ID,
   VERIFICATION_NON_TERMINAL_STATES,
   VERIFICATION_STALE_ELIGIBLE_STATES,
   VERIFICATION_STATES,
@@ -82,6 +84,7 @@ import {
   type InitiativeRelation,
   type InitiativeStatus,
   type InitiativeWorkspaceLink,
+  type Phase,
   type Product,
   type Requirement,
   type Resource,
@@ -117,6 +120,10 @@ interface InitiativeRow {
   created_at: string;
   updated_at: string;
   revision: number;
+  /** NEW in schema version 4 (SPEC-004 Lifecycle Engine) — `null` for a legacy or unfocused Initiative. */
+  focus_phase: Phase | null;
+  /** NEW in schema version 4 (SPEC-004 Lifecycle Engine) — `null` for a legacy Initiative or a caller-cleared reference. */
+  lifecycle_contract: string | null;
 }
 
 /** Raw `artifact_refs` table row shape (snake_case columns — internal only). */
@@ -1381,14 +1388,22 @@ export class InitiativeRecordStore implements InitiativeRepository {
   ): Initiative {
     this.requireCreateRevision(expectedRevision, 'Initiative');
     this.requireExists('products', input.product_id, 'product_id', 'Product');
+    // SPEC-004 FR-7: omitted `lifecycle_contract` defaults to the seeded built-in contract; an
+    // explicit id must already be registered (never `null` here — `null` is reserved for the
+    // later `initiative_set_lifecycle_contract` clearing mutation, and Zod already rejects it).
+    const lifecycleContract = input.lifecycle_contract ?? DEFAULT_LIFECYCLE_CONTRACT_ID;
+    const contractRow = this.db.prepare(`SELECT 1 FROM lifecycle_contracts WHERE id = ?`).get(lifecycleContract);
+    if (!contractRow) {
+      throw new UnknownLifecycleContractError({ lifecycle_contract: lifecycleContract });
+    }
     const uuid = randomUUID();
     const now = provenance.timestamp;
     const humanKey = this.allocateInitiativeHumanKey();
     this.db
       .prepare(
-        `INSERT INTO initiatives (uuid, human_key, product_id, title, goal, status, outcome, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO initiatives (uuid, human_key, product_id, title, goal, status, outcome, created_at, updated_at, revision, focus_phase, lifecycle_contract) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)`,
       )
-      .run(uuid, humanKey, input.product_id, input.title, input.goal, input.status, input.outcome, now, now);
+      .run(uuid, humanKey, input.product_id, input.title, input.goal, input.status, input.outcome, now, now, lifecycleContract);
     const initiative: Initiative = {
       uuid,
       human_key: humanKey,
@@ -1400,6 +1415,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: now,
       updatedAt: now,
       revision: 0,
+      focus_phase: null,
+      lifecycle_contract: lifecycleContract,
     };
     this.writeEvent({
       entity_type: 'Initiative',
@@ -1445,6 +1462,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: row.created_at,
       updatedAt: now,
       revision: nextRevision,
+      focus_phase: row.focus_phase,
+      lifecycle_contract: row.lifecycle_contract,
     };
     this.writeEvent({
       entity_type: 'Initiative',
@@ -2559,6 +2578,8 @@ function mapInitiativeRow(row: InitiativeRow): Initiative {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: Number(row.revision),
+    focus_phase: row.focus_phase,
+    lifecycle_contract: row.lifecycle_contract,
   };
 }
 
