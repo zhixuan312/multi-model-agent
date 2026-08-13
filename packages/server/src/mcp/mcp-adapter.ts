@@ -34,6 +34,9 @@ import {
   MigrationBackupFailedError,
   CrossInitiativeEvidenceLinkError,
   CrossInitiativeVerificationError,
+  TaskNotClaimableError,
+  TaskClaimConflictError,
+  InvalidTaskTransitionError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -338,6 +341,23 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
     return errorResult(err.code, err.message, {
       initiative_id: err.initiative_id,
       acceptance_criterion_id: err.acceptance_criterion_id,
+    });
+  }
+  if (err instanceof TaskNotClaimableError) {
+    return errorResult(err.code, err.message, { task_id: err.task_id, status: err.status });
+  }
+  if (err instanceof TaskClaimConflictError) {
+    return errorResult(err.code, err.message, {
+      task_id: err.task_id,
+      claimed_by: err.claimed_by,
+      authorized_by: err.authorized_by,
+    });
+  }
+  if (err instanceof InvalidTaskTransitionError) {
+    return errorResult(err.code, err.message, {
+      task_id: err.task_id,
+      from_status: err.from_status,
+      to_status: err.to_status,
     });
   }
   if (err instanceof InitiativeNotFoundError) {
