@@ -23,6 +23,7 @@ import type {
   InitiativeRelation,
   InitiativeResumeResponse,
   InitiativeWorkspaceLink,
+  LifecycleResumeBlock,
   Product,
   Requirement,
   Resource,
@@ -657,6 +658,98 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
   ];
   const events = [...eventsAscending].reverse();
 
+  // SPEC-004 Lifecycle Engine (Task I-4): this fixture performs NO phase or focus
+  // mutations, so every Phase Record synthesizes to `not_started` and the built-in
+  // `default-sdl@1` contract (the `initiative_create` default) evaluates each
+  // Establishment against the Phase A1 data seeded above — `requirements_exist` and
+  // `acceptance_criteria_exist` read satisfied (Requirements/Acceptance Criteria were
+  // seeded), `decisions_settled` reads unsatisfied (`decisionOpen` remains `'open'`),
+  // and every `manual` Establishment reads unsatisfied (no `initiative_phase_satisfy`
+  // call was ever made).
+  const expectedLifecycle: LifecycleResumeBlock = {
+    focus_phase: null,
+    contract: 'default-sdl@1',
+    phases: [
+      {
+        phase: 'discover',
+        state: 'not_started',
+        gate: {
+          status: 'red',
+          missing: [
+            {
+              establishment: { key: 'problem_framed', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'problem_framed' has not been asserted for this phase and contract.",
+            },
+          ],
+        },
+      },
+      {
+        phase: 'refine',
+        state: 'not_started',
+        gate: {
+          status: 'red',
+          missing: [
+            {
+              establishment: { key: 'scoped_goal', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'scoped_goal' has not been asserted for this phase and contract.",
+            },
+          ],
+        },
+      },
+      {
+        phase: 'design',
+        state: 'not_started',
+        gate: {
+          status: 'red',
+          missing: [
+            {
+              establishment: { key: 'design_artifact', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'design_artifact' has not been asserted for this phase and contract.",
+            },
+            {
+              establishment: { key: 'key_decisions_settled', satisfier: 'decisions_settled' },
+              satisfied: false,
+              detail: "Every recorded Decision must reach a non-'open' status (establishment 'key_decisions_settled').",
+            },
+          ],
+        },
+      },
+      { phase: 'execute', state: 'not_started', gate: { status: 'green', missing: [] } },
+      {
+        phase: 'verify',
+        state: 'not_started',
+        gate: {
+          status: 'red',
+          missing: [
+            {
+              establishment: { key: 'acceptance_verified', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'acceptance_verified' has not been asserted for this phase and contract.",
+            },
+          ],
+        },
+      },
+      {
+        phase: 'deliver',
+        state: 'not_started',
+        gate: {
+          status: 'red',
+          missing: [
+            {
+              establishment: { key: 'delivery_confirmed', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'delivery_confirmed' has not been asserted for this phase and contract.",
+            },
+          ],
+        },
+      },
+    ],
+    recent_lifecycle_events: [],
+  };
+
   const expectedResume: InitiativeResumeResponse = {
     initiative,
     product,
@@ -679,6 +772,7 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
       { acceptance_criterion_id: criterionOneA.uuid, latest: verificationOnePass },
       { acceptance_criterion_id: criterionOneB.uuid, latest: verificationTwoFail },
     ],
+    lifecycle: expectedLifecycle,
     counts: {
       workspaces: 2,
       resources: 3,

@@ -95,6 +95,7 @@ import {
   type InitiativeStatus,
   type InitiativeWorkspaceLink,
   type LifecycleContract,
+  type LifecycleResumeBlock,
   type Phase,
   type PhaseRecord,
   type PhaseRecordState,
@@ -2587,9 +2588,21 @@ export class InitiativeRecordStore implements InitiativeRepository {
     >;
     const rows = this.db
       .prepare(`SELECT phase, state FROM phase_records WHERE initiative_id = ?`)
-      .all(initiativeId) as Array<{ phase: Phase; state: PhaseRecordState }>;
+      .all(initiativeId) as Array<{ phase: string; state: string }>;
     for (const row of rows) {
-      states[row.phase] = row.state;
+      if (!LIFECYCLE_PHASES.includes(row.phase as Phase)) {
+        throw new InvalidRequestError({
+          field_errors: { phase_records: [`contains unknown phase '${row.phase}' for Initiative ${initiativeId}`] },
+          message: `invalid_request: corrupted phase_records row contains unknown phase '${row.phase}'`,
+        });
+      }
+      if (!['not_started', 'active', 'satisfied', 'reopened', 'skipped'].includes(row.state)) {
+        throw new InvalidRequestError({
+          field_errors: { phase_records: [`contains unknown state '${row.state}' for phase '${row.phase}'`] },
+          message: `invalid_request: corrupted phase_records row contains unknown state '${row.state}'`,
+        });
+      }
+      states[row.phase as Phase] = row.state as PhaseRecordState;
     }
     return states;
   }
@@ -2619,7 +2632,14 @@ export class InitiativeRecordStore implements InitiativeRepository {
     if (!row || row.definition_json === undefined) {
       throw new UnknownLifecycleContractError({ lifecycle_contract: id });
     }
-    return JSON.parse(row.definition_json) as LifecycleContract;
+    try {
+      return JSON.parse(row.definition_json) as LifecycleContract;
+    } catch {
+      throw new InvalidRequestError({
+        field_errors: { lifecycle_contract: [`registered contract '${id}' has malformed stored definition JSON`] },
+        message: `invalid_request: lifecycle contract '${id}' has malformed stored definition JSON`,
+      });
+    }
   }
 
   /**
@@ -2907,6 +2927,57 @@ export class InitiativeRecordStore implements InitiativeRepository {
     });
     const updatedRow = this.findInitiativeRow(row.uuid, undefined)!;
     return mapInitiativeRow(updatedRow);
+  }
+
+  /** Bounded window for `LifecycleResumeBlock.recent_lifecycle_events` (Task I-4, SPEC-004 "Data model" — no caller-selected limit exists for this read; the store fixes an internal policy instead). */
+  private static readonly LIFECYCLE_EVENTS_WINDOW = 20;
+
+  /** The exact lifecycle Event types surfaced in `recent_lifecycle_events` — every other Initiative Event type (e.g. `task_completed`, `requirement_added`) is excluded, matching `INITIATIVE_EVENT_TYPES`'s SPEC-004 entries. */
+  private static readonly LIFECYCLE_EVENT_TYPES: ReadonlySet<string> = new Set([
+    'phase_entered',
+    'phase_satisfied',
+    'phase_reopened',
+    'phase_skipped',
+    'focus_changed',
+    'lifecycle_contract_set',
+  ]);
+
+  /**
+   * Assembles the additive `LifecycleResumeBlock` `initiative_resume` and the dedicated
+   * `initiative_gate_status` read both return (Task I-4, FR-9, FR-13). Resolves the
+   * Initiative through the same lookup selector as every other read (throws `not_found` for
+   * an unknown lookup, exactly like {@link getInitiative}); overlays the shared six-phase
+   * state via {@link getPhaseStates} (the single source of synthesized `not_started`
+   * defaults, reused unchanged from Task I-2); evaluates one fresh, unpersisted gate per
+   * phase with {@link evaluateGate} (no prospective assertion — this is a read, never a
+   * mutation); and returns the newest Initiative-scoped lifecycle Events bounded by the
+   * internal fixed window. Performs no write of any kind — every value comes from an
+   * already-implemented Task I-2/I-3 read helper.
+   */
+  getLifecycleResumeBlock(lookup: { uuid?: string; human_key?: string }): LifecycleResumeBlock {
+    const row = this.findInitiativeRow(lookup.uuid, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Initiative', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    const phaseStates = this.getPhaseStates(row.uuid);
+    const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    const phases = LIFECYCLE_PHASES.map((phase) => ({
+      phase,
+      state: phaseStates[phase],
+      gate: this.evaluateGate(row.uuid, phase, contract),
+    }));
+    const lifecycleEvents = this.listEvents({ initiative_id: row.uuid }).filter((event) =>
+      InitiativeRecordStore.LIFECYCLE_EVENT_TYPES.has(event.event_type),
+    );
+    const recentLifecycleEvents = [...lifecycleEvents]
+      .reverse()
+      .slice(0, InitiativeRecordStore.LIFECYCLE_EVENTS_WINDOW);
+    return {
+      focus_phase: row.focus_phase,
+      contract: row.lifecycle_contract,
+      phases,
+      recent_lifecycle_events: recentLifecycleEvents,
+    };
   }
 
   /** Closes the store's own `DatabaseSync` connection. Idempotent. */
