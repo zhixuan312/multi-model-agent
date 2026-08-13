@@ -65,10 +65,10 @@ Call `mma_run` with:
 
 ## Response shapes
 
-`mma_run` returns either the terminal envelope inline (short tasks) or a `{ taskId, type, cwd }`
-handle for longer ones — poll with `mma_task_get`, block with `mma_task_wait`, cancel with
-`mma_task_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the tool
-call error shape.
+`mma_run` returns either the terminal envelope inline (short tasks) or a `{ executionId, type, cwd }`
+handle for longer ones — poll with `mma_execution_get`, block with `mma_execution_wait`, cancel with
+`mma_execution_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the
+tool call error shape.
 
 @include _shared/response-shape.md
 

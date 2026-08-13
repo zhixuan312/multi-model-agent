@@ -40,8 +40,9 @@ stage order, the wiring, and the flow-level policy (the **Common** blocks, inclu
 disposition-driven LOCATE matrix and the approval gate).
 
 Every worker dispatch calls the `mma_run` MCP tool with `cwd=<repo-root>`; poll with
-`mma_task_get` / `mma_task_wait` to a terminal result. If `mma_run` is not available in this
-session, run `mma clients`. "Main agent" = you, in-session; "worker" = a delegated MMA task.
+`mma_execution_get` / `mma_execution_wait` to a terminal result. If `mma_run` is not available in
+this session, run `mma clients`. "Main agent" = you, in-session; "worker" = a delegated MMA
+execution.
 
 ## Stages
 
@@ -634,6 +635,37 @@ One flow, one join key — the **stem** `<date>-<slug>`. `ls .mma/*/<stem>.*` an
   `.mma/flow-state/<stem>.json`, the verification file `.mma/verifications/<stem>.json`, and the
   branch `mma/<slug>`. On resume, LOCATE recovers all of these the same way — off disk, no
   server-persisted state.
+
+## Record Integration   (D1/D3, B2, B5, B6/B7, B10)
+
+The Initiative record (the shared `initiatives.db` reached through the `mma_initiative_*` MCP
+tools) SUPPLEMENTS this flow's caller-owned files — `.mma/verifications`, the backlog, contract
+`state` — it never replaces them. mma-flow keeps writing those files exactly as documented
+elsewhere in this skill; the Initiative record is an additional, durable, cross-repo view of the
+same work for humans and Forge to query.
+
+- **D1/D3** — Explore mints the artifact stem (Common: Artifact stem); Spec creates the
+  Initiative (`mma_initiative_create`, keyed by the stem) and links this flow's workspace
+  (`mma_initiative_link_workspace`) so every later record on this flow's Initiative resolves back
+  to the repo(s) it targets.
+- **B2** — Plan creates one durable Initiative Task per plan heading (`mma_initiative_task_create`),
+  one dispatch per repo exactly as Plan itself fans out (Common: Multi-repo) — the durable Task
+  ids are what B5's linkage and B6/B7's verification records point at.
+- **B5** — Execute sends Initiative linkage on every execution dispatch: the `mma_run` request
+  carries `initiative: { initiative: { uuid | human_key }, task_uuid, authorized_by }` so the
+  engine links the terminal execution back to its Initiative Task in the same transaction as the
+  terminal write — no separate call, no window where the two disagree.
+- **B6/B7** — Review and Verify write `verification_record` rows (`mma_verification_record`)
+  against the AcceptanceCriterion each checked, carrying the SAME `outcome.status` this flow
+  already persists to `.mma/verifications/<stem>.json` (Common: Acceptance closure) — the
+  Initiative record mirrors that evidence, it is not a second source of truth for it.
+- **B10** — Journal + close reports the Initiative's own status with `initiative_status`
+  (`mma_initiative_status`) once acceptance is closed, so the durable Initiative reflects the same
+  `done` this flow's terminal report carries.
+
+Caller-owned files remain authoritative for LOCATE and Common: Acceptance closure. The Initiative
+record supplements them for cross-repo/cross-session visibility and never substitutes for
+`.mma/verifications`, the backlog, or contract state.
 
 ## Data model
 

@@ -156,7 +156,7 @@ describe('buildPlugin', () => {
     }
     // response-shape.md is the surviving shared fragment; confirm it inlines correctly.
     const delegate = readFileSync(join(out, 'skills', 'delegate', 'SKILL.md'), 'utf8');
-    expect(delegate).toContain('mma_task_get / mma_task_wait — poll'); // _shared/response-shape.md inlined
+    expect(delegate).toContain('mma_execution_get / mma_execution_wait — poll'); // _shared/response-shape.md inlined
   });
 
   it('rebuild replaces generated trees so a removed skill cannot linger', () => {

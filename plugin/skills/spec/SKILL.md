@@ -109,34 +109,34 @@ Short tasks return the terminal envelope (below) inline, in the tool result. Lon
 tasks return a handle instead:
 
 ```json
-{ "taskId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
+{ "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `taskId` to poll with `mma_task_get` / `mma_task_wait`.
+Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
 
-### mma_task_get / mma_task_wait — poll
+### mma_execution_get / mma_execution_wait — poll
 
-A still-running task returns identity plus progress (`status: "running"`, `phase`, `elapsedMs`,
-`runningHeadline`, …) — not the shape below. A terminal task returns the full envelope — these
-6 top-level fields:
+A still-running execution returns identity plus progress (`status: "running"`, `phase`,
+`elapsedMs`, `runningHeadline`, …) — not the shape below. A terminal execution returns the
+full envelope — these 5 top-level fields:
 
 ```json
 {
-  "task": {
-    "taskId": "<uuid>",
+  "execution": {
+    "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed"
+    "practice": "<practice or absent>",
+    "status": "completed | done_with_concerns | failed | cancelled",
+    "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
+    "worktree": null,
+    "dirtyAtDispatch": false
   },
   "output": {
     "summary": { /* refiner JSON — shape varies by route, see below */ },
     "filesChanged": ["src/foo.ts", "src/bar.ts"],
     "contextBlockId": "<string or null>",
     "reviewerNote": null
-  },
-  "execution": {
-    "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
-    "worktree": null
   },
   "metrics": {
     "totalDurationMs": 12400,
@@ -151,6 +151,13 @@ A still-running task returns identity plus progress (`status: "running"`, `phase
   "error": null
 }
 ```
+
+`execution` is the ONE merged top-level section — there is no separate `task` section. It
+carries the execution's own identity (`executionId`, `type`, `status`) alongside what used to
+live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`). `subtype`
+(audit's criteria set) and `practice` (the retained software technique for
+plan/execute_plan/review/debug) are mutually exclusive and both optional — read them
+defensively.
 
 ### How to read the envelope
 
@@ -217,7 +224,7 @@ implementer output, still usable. Never discard the task on `reviewerNote` alone
 
 ### Tool call error
 
-A malformed or unresolvable call (bad `cwd`, unknown `taskId`, failed admission) surfaces as an
+A malformed or unresolvable call (bad `cwd`, unknown `executionId`, failed admission) surfaces as an
 MCP tool error rather than a terminal envelope — the tool result carries `isError: true` and this
 payload:
 
