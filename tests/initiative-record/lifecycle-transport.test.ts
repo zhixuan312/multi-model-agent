@@ -24,6 +24,31 @@ describe('Lifecycle transports', () => {
       const mcp = await client.callTool({ name: 'mma_initiative_set_lifecycle_contract', arguments: { input: { initiative: { uuid: initiative.uuid }, lifecycle_contract: 'missing@1' }, expected_revision: initiative.revision, provenance: { actor_type: 'agent', actor_id: 'a', initiated_by: 'a', authorized_by: 'a', source: 'test' } } });
       expect(mcp.isError).toBe(true);
       expect(JSON.parse(mcp.content[0]!.text)).toMatchObject({ error: { code: 'unknown_lifecycle_contract' } });
+
+      // FR-10: a successful lifecycle mutation's provenance.interface/timestamp is always
+      // adapter-owned, never caller-supplied — verify for BOTH transports by supplying a bogus
+      // `interface`/`timestamp` on the mutation request, then reading the resulting Event back
+      // through `initiative_resume` and asserting the adapter's own value won, not the caller's.
+      const callerTimestamp = '2000-01-01T00:00:00.000Z';
+      const bogusProvenance = { actor_type: 'agent', actor_id: 'a', interface: 'ignored', initiated_by: 'a', authorized_by: 'a', timestamp: callerTimestamp, source: 'test' };
+      const httpRequestStartedAt = Date.now();
+      const focusResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_focus_set', input: { initiative: { uuid: initiative.uuid }, phase: 'discover' }, expected_revision: initiative.revision, provenance: bogusProvenance }) });
+      expect(focusResponse.status).toBe(200);
+      const focused = await focusResponse.json() as { uuid: string; revision: number };
+      const mcpRequestStartedAt = Date.now();
+      const mcpEnter = await client.callTool({ name: 'mma_initiative_phase_enter', arguments: { input: { initiative: { uuid: initiative.uuid }, phase: 'refine' }, expected_revision: focused.revision, provenance: bogusProvenance } });
+      expect(mcpEnter.isError).toBeFalsy();
+      const resumeResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+      expect(resumeResponse.status).toBe(200);
+      const resumed = await resumeResponse.json() as { events: Array<{ event_type: string; interface: string; timestamp: string }> };
+      const focusChanged = resumed.events.find((e) => e.event_type === 'focus_changed');
+      const phaseEntered = resumed.events.find((e) => e.event_type === 'phase_entered');
+      expect(focusChanged).toMatchObject({ interface: 'http' });
+      expect(focusChanged?.timestamp).not.toBe(callerTimestamp);
+      expect(Date.parse(focusChanged?.timestamp ?? '')).toBeGreaterThanOrEqual(httpRequestStartedAt);
+      expect(phaseEntered).toMatchObject({ interface: 'mcp' });
+      expect(phaseEntered?.timestamp).not.toBe(callerTimestamp);
+      expect(Date.parse(phaseEntered?.timestamp ?? '')).toBeGreaterThanOrEqual(mcpRequestStartedAt);
     } finally { await client.close(); await h.close(); }
   });
 });

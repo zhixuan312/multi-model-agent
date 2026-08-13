@@ -10,6 +10,7 @@ import {
   initiativeOperationRequestSchema,
   runInitiativeMigrations,
 } from '../../packages/core/src/initiative-record/index.js';
+import { InitiativeRecordRuntime } from '../../packages/server/src/application/initiative-record-runtime.js';
 
 const provenance = { actor_type: 'agent', actor_id: 'planner', interface: 'test', initiated_by: 'planner', authorized_by: 'planner', timestamp: '2026-08-13T00:00:00.000Z', source: 'test' };
 
@@ -41,9 +42,21 @@ describe('Lifecycle data contract and v4 migration', () => {
       expect(upgraded.prepare("SELECT COUNT(*) AS count FROM phase_records WHERE initiative_id = ?").get(initiativeId)).toMatchObject({ count: 0 });
       expect(upgraded.prepare("SELECT id FROM lifecycle_contracts WHERE id = 'default-sdl@1'").get()).toEqual({ id: 'default-sdl@1' });
       upgraded.close();
-      expect(INITIATIVE_OPERATIONS).toEqual(expect.arrayContaining(['initiative_phase_enter', 'initiative_phase_satisfy', 'initiative_phase_reopen', 'initiative_phase_skip', 'initiative_focus_set', 'initiative_set_lifecycle_contract', 'initiative_gate_status']));
+      // Existing-data compatibility (spec success metric): the migrated (pre-existing) Initiative
+      // must read back correctly through the real runtime read path, not just the raw table.
+      const runtime = InitiativeRecordRuntime.open({ stateDir: dir });
+      try {
+        const lifecycle = runtime.initiativeGateStatus({ initiative: { uuid: initiativeId } });
+        expect(lifecycle).toMatchObject({ focus_phase: null });
+        expect(lifecycle.phases.map((entry) => [entry.phase, entry.state])).toEqual([['discover', 'not_started'], ['refine', 'not_started'], ['design', 'not_started'], ['execute', 'not_started'], ['verify', 'not_started'], ['deliver', 'not_started']]);
+      } finally { runtime.close(); }
+      expect(new Set(INITIATIVE_OPERATIONS)).toEqual(new Set(['product_create', 'product_get', 'product_list', 'workspace_create', 'workspace_get', 'workspace_list', 'resource_register', 'resource_list', 'initiative_create', 'initiative_get', 'initiative_list', 'initiative_status', 'initiative_resume', 'initiative_link_workspace', 'initiative_relate', 'initiative_relations', 'initiative_task_create', 'initiative_task_get', 'initiative_task_list', 'initiative_task_claim', 'initiative_task_release', 'initiative_task_complete', 'initiative_task_execution', 'artifact_register', 'artifact_get', 'requirement_add', 'requirement_get', 'requirement_list', 'acceptance_criterion_add', 'acceptance_criterion_get', 'acceptance_criterion_list', 'decision_record', 'decision_supersede', 'decision_get', 'decision_list', 'evidence_add', 'evidence_get', 'evidence_list', 'evidence_link', 'evidence_links_list', 'risk_add', 'risk_status', 'risk_get', 'risk_list', 'verification_record', 'verification_get', 'verification_list', 'initiative_phase_enter', 'initiative_phase_satisfy', 'initiative_phase_reopen', 'initiative_phase_skip', 'initiative_focus_set', 'initiative_set_lifecycle_contract', 'initiative_gate_status']));
+      expect(INITIATIVE_EVENT_PAYLOAD_KEYS.phase_entered).toEqual(['phase', 'previous_state', 'new_state']);
       expect(INITIATIVE_EVENT_PAYLOAD_KEYS.phase_satisfied).toEqual(['phase', 'previous_state', 'new_state', 'asserted', 'gate_snapshot']);
+      expect(INITIATIVE_EVENT_PAYLOAD_KEYS.phase_reopened).toEqual(['phase', 'previous_state', 'new_state', 'reason']);
+      expect(INITIATIVE_EVENT_PAYLOAD_KEYS.phase_skipped).toEqual(['phase', 'previous_state', 'new_state', 'reason']);
       expect(INITIATIVE_EVENT_PAYLOAD_KEYS.focus_changed).toEqual(['phase', 'previous_focus_phase', 'new_focus_phase', 'gate_snapshot']);
+      expect(INITIATIVE_EVENT_PAYLOAD_KEYS.lifecycle_contract_set).toEqual(['previous_lifecycle_contract', 'new_lifecycle_contract']);
       expect(initiativeOperationRequestSchema.safeParse({ operation: 'initiative_phase_satisfy', input: { initiative: { uuid: initiativeId }, phase: 'discover', asserted: ['problem_framed'] }, expected_revision: 0, provenance }).success).toBe(true);
       expect(initiativeOperationRequestSchema.safeParse({ operation: 'initiative_set_lifecycle_contract', input: { initiative: { uuid: initiativeId }, lifecycle_contract: 'Default@0' }, expected_revision: 0, provenance }).success).toBe(false);
     } finally { rmSync(dir, { recursive: true, force: true }); }

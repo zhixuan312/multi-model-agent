@@ -18,10 +18,17 @@ const event = (event_type: string, payload: Record<string, unknown>, sequence: n
 describe('Lifecycle gates', () => {
   it('evaluates all four satisfiers and keeps a null contract green', () => {
     expect(evaluateLifecycleGate({ contract: null, phase: 'discover', requirements: [], acceptanceCriteria: [], decisions: [], events: [] })).toEqual({ status: 'green', missing: [], note: 'No lifecycle contract is set.' });
-    expect(evaluateLifecycleGate({ contract, phase: 'refine', requirements: [], acceptanceCriteria: [], decisions: [], events: [] })).toMatchObject({ status: 'red', missing: [{ establishment: { key: 'requirements_defined' } }, { establishment: { key: 'acceptance_criteria_defined' } }] });
+    const refineRedResult = evaluateLifecycleGate({ contract, phase: 'refine', requirements: [], acceptanceCriteria: [], decisions: [], events: [] });
+    expect(refineRedResult).toMatchObject({ status: 'red', missing: [{ establishment: { key: 'requirements_defined' } }, { establishment: { key: 'acceptance_criteria_defined' } }] });
+    for (const missing of refineRedResult.missing) {
+      expect(missing.satisfied).toBe(false);
+      expect(missing.detail).toEqual(expect.any(String));
+      expect(missing.detail.length).toBeGreaterThan(0);
+    }
     expect(evaluateLifecycleGate({ contract, phase: 'refine', requirements: [{}], acceptanceCriteria: [{}], decisions: [], events: [] })).toMatchObject({ status: 'green', missing: [] });
     expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [{ status: 'open' }], events: [] })).toMatchObject({ status: 'red' });
     expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [{ status: 'decided' }], events: [] })).toMatchObject({ status: 'green' });
+    expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [], events: [] })).toMatchObject({ status: 'green' });
   });
 
   it('scopes manual assertions and voids them after both supported exits from satisfied', () => {

@@ -28,14 +28,20 @@ describe('Lifecycle reads', () => {
     } finally { seed.close(); }
     const runtime = InitiativeRecordRuntime.open({ stateDir: dir });
     try {
+      const snapshotCounts = (db: DatabaseSync) => ({
+        phase_records: (db.prepare('SELECT COUNT(*) AS count FROM phase_records').get() as { count: number }).count,
+        events: (db.prepare('SELECT COUNT(*) AS count FROM events').get() as { count: number }).count,
+        initiatives: (db.prepare('SELECT COUNT(*) AS count FROM initiatives').get() as { count: number }).count,
+        lifecycle_contracts: (db.prepare('SELECT COUNT(*) AS count FROM lifecycle_contracts').get() as { count: number }).count,
+      });
       const beforeDb = new DatabaseSync(dbPath);
-      const before = beforeDb.prepare('SELECT COUNT(*) AS count FROM phase_records').get() as { count: number };
+      const before = snapshotCounts(beforeDb);
       beforeDb.close();
       const lifecycle = runtime.initiativeGateStatus({ initiative: { uuid: initiativeUuid } });
       const afterDb = new DatabaseSync(dbPath);
-      const after = afterDb.prepare('SELECT COUNT(*) AS count FROM phase_records').get() as { count: number };
+      const after = snapshotCounts(afterDb);
       afterDb.close();
-      expect(after.count).toBe(before.count);
+      expect(after).toEqual(before);
       expect(lifecycle).toMatchObject({ focus_phase: null, contract: null });
       expect(lifecycle.phases.map((entry) => [entry.phase, entry.state])).toEqual([['discover', 'not_started'], ['refine', 'not_started'], ['design', 'not_started'], ['execute', 'not_started'], ['verify', 'not_started'], ['deliver', 'not_started']]);
       expect(lifecycle.phases.every((entry) => entry.gate.note === 'No lifecycle contract is set.')).toBe(true);
