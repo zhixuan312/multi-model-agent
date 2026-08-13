@@ -23,14 +23,16 @@ describe('Task claim schema migration', () => {
       const raw = new DatabaseSync(dbPath);
       raw.exec('ALTER TABLE tasks DROP COLUMN claimed_by');
       // `InitiativeRecordStore.open` above already ran every migration through the current
-      // INITIATIVE_SCHEMA_VERSION, including SPEC-004's v4 additions (Task I-1). Roll those back
-      // too before restaging as a v2 database, so the migrations invoked below genuinely re-apply
-      // v3 and v4 rather than hitting "duplicate column"/"table already exists" on a database that
-      // structurally already has them.
+      // INITIATIVE_SCHEMA_VERSION, including SPEC-004's v4 additions (Task I-1) and SPEC-005's
+      // v5 addition (Task I-1). Roll those back too before restaging as a v2 database, so the
+      // migrations invoked below genuinely re-apply v3, v4, and v5 rather than hitting "duplicate
+      // column"/"table already exists" on a database that structurally already has them.
       raw.exec('ALTER TABLE initiatives DROP COLUMN focus_phase');
       raw.exec('ALTER TABLE initiatives DROP COLUMN lifecycle_contract');
       raw.exec('DROP TABLE phase_records');
       raw.exec('DROP TABLE lifecycle_contracts');
+      raw.exec('ALTER TABLE tasks DROP COLUMN method');
+      raw.exec('DROP TABLE methods');
       raw.exec('PRAGMA user_version = 2');
       raw.close();
       runInitiativeMigrations({ dbPath });
@@ -38,9 +40,9 @@ describe('Task claim schema migration', () => {
       const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string; notnull: number }>;
       expect(columns.filter((column) => column.name === 'claimed_by').map(({ name, notnull }) => ({ name, notnull }))).toEqual([{ name: 'claimed_by', notnull: 0 }]);
       // A v2 database upgrades through every pending migration, landing on the current
-      // INITIATIVE_SCHEMA_VERSION (SPEC-004 Task I-1 added v4) rather than the v3 this check
+      // INITIATIVE_SCHEMA_VERSION (SPEC-005 Task I-1 added v5) rather than the v3 this check
       // originally pinned.
-      expect(Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(4);
+      expect(Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(5);
       db.close();
       const store = InitiativeRecordStore.open({ dbPath });
       try {

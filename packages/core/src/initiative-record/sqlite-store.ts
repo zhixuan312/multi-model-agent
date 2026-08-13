@@ -207,6 +207,8 @@ interface TaskRow {
   created_at: string;
   updated_at: string;
   revision: number;
+  /** NEW in schema version 5 (SPEC-005 Method Registry) — `null` for a legacy Task or one that never had a Method set. */
+  method: string | null;
 }
 
 /** Raw `initiative_workspace_links` table row shape (snake_case columns — internal only). */
@@ -1635,6 +1637,10 @@ export class InitiativeRecordStore implements InitiativeRepository {
       createdAt: now,
       updatedAt: now,
       revision: 0,
+      // SPEC-005 Method Registry: persistence of a requested `input.method` and registered-id
+      // validation are Task I-3's scope (`initiative_task_set_method` / create-time write path).
+      // This task only makes the data contract and the NULL-to-null read mapping true.
+      method: null,
     };
     this.writeEvent({
       entity_type: 'Task',
@@ -3082,6 +3088,7 @@ function mapTaskRow(row: TaskRow): Task {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: Number(row.revision),
+    method: row.method ?? null,
   };
 }
 

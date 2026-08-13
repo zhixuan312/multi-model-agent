@@ -27,6 +27,15 @@
  * `default-sdl@1`) — all re-exported through the wildcard exports below, no
  * new export list required. Store BEHAVIOR (transitions, live gate
  * evaluation) is Task I-2/I-3; this task is the data contract only.
+ *
+ * SPEC-005 Method Registry (Task I-1) extends this surface with `Task.method`,
+ * the `MethodDeclaration` domain type, the `method_get` / `method_list` /
+ * `initiative_task_set_method` operations, the `unknown_method` typed error,
+ * and the additive `initiatives.db` schema version 5 migration (seeded
+ * immutable nine-Method built-in catalog) — all re-exported through the
+ * wildcard exports below, no new export list required. Store BEHAVIOR
+ * (Method lookup, guidance resolution, Task Method persistence) is Task
+ * I-2/I-3; this task is the data contract only.
  */
 export * from './types.js';
 export * from './schemas.js';

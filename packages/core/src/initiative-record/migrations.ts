@@ -24,10 +24,10 @@ import { dirname, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { MigrationBackupFailedError } from './errors.js';
-import { DEFAULT_LIFECYCLE_CONTRACT_ID, type LifecycleContract } from './types.js';
+import { DEFAULT_LIFECYCLE_CONTRACT_ID, type LifecycleContract, type MethodDeclaration } from './types.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 4;
+export const INITIATIVE_SCHEMA_VERSION = 5;
 
 interface Migration {
   version: number;
@@ -335,6 +335,129 @@ const MIGRATIONS: Migration[] = [
         JSON.stringify(DEFAULT_SDL_CONTRACT),
       );
     },
+  },
+  {
+    // Version 5 — SPEC-005 Method Registry data contract ("Data model", Task I-1). Additive
+    // only: a nullable `tasks.method` column and the new `methods` table (frozen catalog,
+    // immutable — no update or delete path exists anywhere in this codebase). No v1-v4 table,
+    // index, or column is reshaped, renamed, or dropped, and this migration does NOT backfill
+    // `tasks.method` for any existing Task — every Task created before this migration, and
+    // every new Task that omits `method`, reads `method: null` until a caller explicitly sets
+    // one (Task I-3). `INSERT OR IGNORE` seeds exactly the nine frozen version-1 declarations
+    // pinned by SPEC-005 "Data model"; it makes a repeat migration run idempotent (there is no
+    // caller write path that could otherwise conflict).
+    version: 5,
+    apply: (db) => {
+      db.exec(`
+        ALTER TABLE tasks ADD COLUMN method TEXT;
+
+        CREATE TABLE IF NOT EXISTS methods (
+          id              TEXT PRIMARY KEY,
+          definition_json TEXT NOT NULL,
+          is_builtin      INTEGER NOT NULL
+        );
+      `);
+      const insert = db.prepare(`INSERT OR IGNORE INTO methods (id, definition_json, is_builtin) VALUES (?, ?, 1)`);
+      for (const method of BUILTIN_METHODS) {
+        insert.run(method.id, JSON.stringify(method));
+      }
+    },
+  },
+];
+
+/**
+ * The frozen, seeded built-in Method catalog (SPEC-005 "Data model" — the pinned table).
+ * Exactly these nine version-1 declarations exist; there is no caller-visible registration
+ * path. Procedure prose lives in the committed `packages/core/src/methods/<name>/guidance.md`
+ * assets (Task I-2), never in this declaration.
+ */
+const BUILTIN_METHODS: readonly MethodDeclaration[] = [
+  {
+    id: 'software-change@1',
+    name: 'Software change',
+    version: 1,
+    purpose: 'Change software safely to satisfy a defined need.',
+    required_inputs: ['source code', 'requested behavior', 'acceptance criteria'],
+    expected_outputs: ['changed source code', 'test evidence'],
+    verification_expectations: [
+      'caller tracing',
+      'error-path review',
+      'security-sink review',
+      'schema conformance',
+      'test adequacy',
+    ],
+  },
+  {
+    id: 'research@1',
+    name: 'Research',
+    version: 1,
+    purpose: 'Produce an evidence-based answer to a focused question.',
+    required_inputs: ['research question', 'source constraints'],
+    expected_outputs: ['findings', 'sources', 'limitations'],
+    verification_expectations: ['source relevance', 'claim support', 'limitation disclosure'],
+  },
+  {
+    id: 'solution-design@1',
+    name: 'Solution design',
+    version: 1,
+    purpose: 'Define a workable solution for a stated problem.',
+    required_inputs: ['problem statement', 'goals', 'constraints'],
+    expected_outputs: ['solution design', 'decision rationale', 'acceptance criteria'],
+    verification_expectations: ['goal coverage', 'constraint fit', 'decision traceability'],
+  },
+  {
+    id: 'architecture-review@1',
+    name: 'Architecture review',
+    version: 1,
+    purpose: 'Assess a system structure against required qualities and constraints.',
+    required_inputs: ['architecture description', 'quality goals', 'constraints'],
+    expected_outputs: ['review findings', 'risks', 'recommendations'],
+    verification_expectations: ['evidence-backed findings', 'trade-off analysis', 'scope coverage'],
+  },
+  {
+    id: 'workflow-design@1',
+    name: 'Workflow design',
+    version: 1,
+    purpose: 'Define an operational workflow that produces a required outcome.',
+    required_inputs: ['desired outcome', 'actors', 'constraints'],
+    expected_outputs: ['workflow definition', 'roles', 'control points'],
+    verification_expectations: ['step completeness', 'role clarity', 'failure handling'],
+  },
+  {
+    id: 'source-validation@1',
+    name: 'Source validation',
+    version: 1,
+    purpose: 'Assess whether a source is suitable for a stated use.',
+    required_inputs: ['source', 'intended use', 'validation criteria'],
+    expected_outputs: ['validation result', 'evidence', 'limitations'],
+    verification_expectations: ['provenance', 'relevance', 'currency', 'integrity'],
+  },
+  {
+    id: 'risk-analysis@1',
+    name: 'Risk analysis',
+    version: 1,
+    purpose: 'Identify and assess risks to a defined outcome.',
+    required_inputs: ['scope', 'objectives', 'available evidence'],
+    expected_outputs: ['risk register', 'likelihood', 'impact', 'mitigations'],
+    verification_expectations: ['risk coverage', 'evidence basis', 'mitigation ownership'],
+  },
+  {
+    id: 'technical-writing@1',
+    name: 'Technical writing',
+    version: 1,
+    purpose: 'Produce clear technical content for a defined audience.',
+    required_inputs: ['subject matter', 'audience', 'required format'],
+    expected_outputs: ['technical document', 'source references'],
+    verification_expectations: ['accuracy', 'audience fit', 'structural completeness'],
+  },
+  {
+    id: 'regulatory-assessment@1',
+    name: 'Regulatory assessment',
+    version: 1,
+    purpose: 'Assess stated facts against identified regulatory requirements.',
+    required_inputs: ['applicable requirements', 'facts', 'jurisdiction'],
+    expected_outputs: ['assessment', 'evidence', 'limitations'],
+    verification_expectations: ['requirement coverage', 'source currency', 'professional sign-off when required'],
   },
 ];
 

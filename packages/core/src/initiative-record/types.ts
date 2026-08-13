@@ -150,6 +150,8 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   revision: number;
+  /** Additive (SPEC-005 Method Registry, schema v5). `null` for every pre-v5 Task and for a new Task that omits `method`. A non-null value is a registered Method identifier. */
+  method: string | null;
 }
 
 /** Composite identity: `(initiative_id, path_or_uri)` — the sole Phase A0 create-or-update key. */
@@ -418,6 +420,35 @@ export interface LifecycleResumeBlock {
   recent_lifecycle_events: Event[];
 }
 
+// ---------------------------------------------------------------------------
+// SPEC-005 Method Registry
+//
+// TRANSCRIPTION, not design: every shape below is frozen by
+// `.mma/specs/2026-08-13-spec-005-method-registry.md` (SPEC-005, "Data
+// model" and "Interfaces / contracts"). A Method is the registered,
+// immutable definition of how a class of professional work is performed
+// (FR-1 through FR-4). The registry exposes no caller-visible write
+// operation — only the nine seeded built-in declarations ever exist.
+// ---------------------------------------------------------------------------
+
+/** A Method identifier: `<name>@<version>`, version >= 1, no leading zero (FR-2). */
+export const METHOD_ID_PATTERN = /^[a-z][a-z0-9-]*@[1-9][0-9]*$/;
+
+/**
+ * A registered, immutable Method declaration (FR-2, FR-3). Exactly these seven fields — no
+ * conditional, script, expression, or runtime-extensible field. Procedure prose lives in the
+ * committed guidance asset, not this declaration.
+ */
+export interface MethodDeclaration {
+  id: string;
+  name: string;
+  version: number;
+  purpose: string;
+  required_inputs: string[];
+  expected_outputs: string[];
+  verification_expectations: string[];
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product
@@ -543,6 +574,11 @@ export const INITIATIVE_OPERATIONS = [
   'initiative_focus_set',
   'initiative_set_lifecycle_contract',
   'initiative_gate_status',
+  // SPEC-005 Method Registry — registered reads and the sole Task Method mutation (FR-1
+  // through FR-4). No caller-visible Method write operation exists.
+  'method_get',
+  'method_list',
+  'initiative_task_set_method',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -588,6 +624,9 @@ export const INITIATIVE_EVENT_TYPES = {
   initiative_phase_skip: 'phase_skipped',
   initiative_focus_set: 'focus_changed',
   initiative_set_lifecycle_contract: 'lifecycle_contract_set',
+  // SPEC-005 Method Registry (FR-4, "Data model" event table). `method_get`/`method_list` are
+  // reads — they have no event-type mapping.
+  initiative_task_set_method: 'task_method_set',
 } as const;
 
 /**
@@ -624,4 +663,6 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   phase_skipped: ['phase', 'previous_state', 'new_state', 'reason'],
   focus_changed: ['phase', 'previous_focus_phase', 'new_focus_phase', 'gate_snapshot'],
   lifecycle_contract_set: ['previous_lifecycle_contract', 'new_lifecycle_contract'],
+  // SPEC-005 Method Registry (FR-4, "Interfaces / contracts").
+  task_method_set: ['previous_method', 'new_method'],
 } as const;
