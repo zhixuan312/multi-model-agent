@@ -14,7 +14,9 @@ const scopedFiles = [
   // a caller reads README.md/ARCHITECTURE.md and `smoke:full` dispatches these scripts for real.
   // Both stayed outside every earlier sweep, so both kept naming the retired field past removal;
   // scoping them here means the scan can never again pass while either drifts.
-  'scripts/full-smoke/config.mjs', 'scripts/full-smoke/dispatch.mjs', 'scripts/full-smoke/verify.mjs', 'README.md', 'docs/ARCHITECTURE.md',
+  // index.mjs holds the live Method gate condition itself — the thing this sweep exists to
+  // protect — so omitting it would leave the gate revertable without the scan noticing.
+  'scripts/full-smoke/config.mjs', 'scripts/full-smoke/dispatch.mjs', 'scripts/full-smoke/verify.mjs', 'scripts/full-smoke/index.mjs', 'README.md', 'docs/ARCHITECTURE.md',
 ];
 
 describe('practice removal sweep', () => {

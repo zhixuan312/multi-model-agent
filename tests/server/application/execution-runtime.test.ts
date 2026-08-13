@@ -456,6 +456,15 @@ describe('ExecutionRuntime', () => {
     // The second send() is the reviewer turn — its prompt embeds reviewerSkill verbatim.
     expect(capturedPrompts[1]).toContain(genericReviewer);
 
+    // `toContain` above proves the generic skill text is PRESENT; it cannot prove nothing extra
+    // was added. A stray non-empty methodBlock injected alongside a null-resolved Method would
+    // satisfy every assertion so far. Assert its absence directly, in both phases: every guidance
+    // asset opens with an `# <Name> — Method guidance` heading, so that marker appearing at all
+    // means a block leaked into a prompt that resolved no Method.
+    for (const prompt of [capturedPrompts[0]!, capturedPrompts[1]!]) {
+      expect(prompt).not.toMatch(/^# .+ — Method guidance$/m);
+    }
+
     const entry = executionRegistry.get(executionId)!;
     expect(entry.method).toBeNull();
     const terminalExecution = (entry.result as { execution: Record<string, unknown> }).execution;

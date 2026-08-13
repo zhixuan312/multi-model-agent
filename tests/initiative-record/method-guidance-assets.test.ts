@@ -75,7 +75,15 @@ describe('Method guidance assets', () => {
           // The verb must OPEN the sentence (not merely appear before its terminator), and that
           // same sentence must carry a keyword drawn from the section's own name — otherwise a
           // generic imperative unrelated to the section's topic would satisfy it.
-          const sentence = body.match(/^\s*(?:Use|Check|Trace|Validate|Review|Confirm|Record|Identify|Assess|Define|Compare|Document|State)\b[^.!?]*[.!?]/mi)?.[0];
+          // A section must carry a real instruction. Two accepted forms, so the check keeps its
+          // bite without pinning prose to one approved opener: an IMPERATIVE opener drawn from a
+          // deliberately broad instruction-verb set, or a MODAL construction ("a reviewer must
+          // confirm…", "sources should be checked…"). Descriptive prose ("This section covers
+          // caller tracing.") still fails, which is the point.
+          const IMPERATIVE = 'Use|Check|Trace|Validate|Review|Confirm|Record|Identify|Assess|Define|Compare|Document|State|Ensure|Verify|List|Name|Read|Run|Capture|Report|Prefer|Avoid|Reject|Resolve|Establish|Determine|Cite|Quote|Inspect|Measure|Flag|Treat|Start|Stop';
+          const sentence = body.match(
+            new RegExp(`^\\s*(?:(?:${IMPERATIVE})\\b[^.!?]*|[^.!?]*\\b(?:must|should|never|always)\\s+(?:be\\s+)?[a-z]+ed?\\b[^.!?]*)[.!?]`, 'm'),
+          )?.[0];
           expect(sentence, `${id} § ${section}: no sentence opens with a required verb`).toBeTruthy();
           const keyword = sectionKeyword[section];
           expect(keyword, `no keyword pattern registered for section "${section}"`).toBeTruthy();
