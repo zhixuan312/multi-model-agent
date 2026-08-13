@@ -667,6 +667,25 @@ Caller-owned files remain authoritative for LOCATE and Common: Acceptance closur
 record supplements them for cross-repo/cross-session visibility and never substitutes for
 `.mma/verifications`, the backlog, or contract state.
 
+**Lifecycle Engine mapping.** Six of this flow's stages also line up with the SPEC-004 Lifecycle
+Engine's advisory phase/focus operations (`mma_initiative_phase_enter`, `mma_initiative_phase_satisfy`,
+`mma_initiative_focus_set`) on that same Initiative:
+
+- `D1 → phase_enter(discover)`
+- `spec approval → phase_satisfy(refine)`
+- `plan approval → phase_satisfy(design)`
+- `B5 → focus_set(execute)`
+- `B7 → phase_satisfy(verify)`
+- `B10 → phase_satisfy(deliver) + focus_set(deliver)`
+
+Each mapping is a caller action against the Initiative record — mma:flow (or the main agent
+driving it) chooses to make the call, the same way it chooses every other Initiative write in
+this section. The Lifecycle Engine only records what happened and reports an advisory gate
+colour from it; it does not enforce this mapping, a transition sequence, the stage letters
+above, execution admission, or a green gate. A phase left un-entered, satisfied out of order, or
+never touched at all does not block any B-stage — LOCATE and Common: Approval remain the only
+gates that do.
+
 ## Data model
 
 All artifacts live under the **parent workspace**'s `.mma/` (the invocation cwd — the parent
