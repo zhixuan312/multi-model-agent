@@ -277,7 +277,7 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
   evidence_get: 'Look up Evidence by uuid, or by (initiative_id, locator) together.',
   evidence_list: 'List the Evidence recorded under an Initiative.',
   evidence_link:
-    'Link Evidence to a target record (a Requirement, AcceptanceCriterion, Decision, Risk, or VerificationRun) '
+    'Link Evidence to a target record (a Requirement, AcceptanceCriterion, Decision, VerificationRun, or Task) '
     + "within the Evidence's own Initiative. Mutating: pass expected_revision and provenance.",
   evidence_links_list:
     'List EvidenceLinks, either every link from one piece of Evidence or every link pointing at one target record.',
