@@ -75,6 +75,16 @@ const EXECUTE_OPERATIONS = new Set([
   'verification_record',
   'verification_get',
   'verification_list',
+  // SPEC-004 Lifecycle Engine (FR-2 through FR-7): the six phase/focus/contract
+  // mutations. `initiative_gate_status` is excluded — it is the second dedicated
+  // read (Task I-4), served by `initiativeGateStatus()` below, same as
+  // `initiative_resume`.
+  'initiative_phase_enter',
+  'initiative_phase_satisfy',
+  'initiative_phase_reopen',
+  'initiative_phase_skip',
+  'initiative_focus_set',
+  'initiative_set_lifecycle_contract',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -156,6 +166,16 @@ export class InitiativeRecordRuntime {
       case 'risk_add':
       case 'risk_status':
       case 'verification_record':
+      // SPEC-004 Lifecycle Engine mutations (FR-2 through FR-7): each is one
+      // transactional `store.execute()` call, same pattern as every mutation
+      // above — the store computes the transition/gate rules; this runtime
+      // never does.
+      case 'initiative_phase_enter':
+      case 'initiative_phase_satisfy':
+      case 'initiative_phase_reopen':
+      case 'initiative_phase_skip':
+      case 'initiative_focus_set':
+      case 'initiative_set_lifecycle_contract':
         return this.store.execute(request);
 
       case 'product_get':

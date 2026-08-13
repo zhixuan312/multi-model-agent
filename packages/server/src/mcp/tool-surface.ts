@@ -151,13 +151,14 @@ export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>(
   ),
 );
 
-/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT
- *  `initiative_resume` (its own dedicated tool/handler — see below). Built
- *  from the frozen `INITIATIVE_OPERATIONS` list so a tool name can never name
- *  an operation `execute()` does not also recognise. */
+/** `mma_<operation>` -> `<operation>`, for every operation EXCEPT the two
+ *  dedicated reads with their own tool/handler — `initiative_resume` and
+ *  `initiative_gate_status` (Task I-5, see below). Built from the frozen
+ *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation
+ *  `execute()` does not also recognise. */
 export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
   INITIATIVE_OPERATIONS
-    .filter((operation) => operation !== 'initiative_resume')
+    .filter((operation) => operation !== 'initiative_resume' && operation !== 'initiative_gate_status')
     .map((operation) => [`mma_${operation}`, operation] as const),
 );
 
