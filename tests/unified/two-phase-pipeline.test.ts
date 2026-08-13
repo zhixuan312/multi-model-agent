@@ -261,7 +261,38 @@ describe('runTwoPhasePipeline', () => {
     // Response-compatibility key stays present and permanently null.
     expect(result.worktree).toBeNull();
     expect(result.filesChangedFromGit).toEqual(['a.ts']);
+    // SPEC-003 B6 defect 2 — the commit-time SHA is carried on the result, exactly what
+    // `commitAll()` reported at the instant it committed.
+    expect(result.commitSha).toBe('new1');
     expect(result.status).toBe('done');
+  });
+
+  it('commitSha is null when the write route committed nothing (no drift with an unrelated pre-existing HEAD)', async () => {
+    vi.mocked(commitAll).mockResolvedValueOnce({ committed: false, head: 'base0', filesChanged: [] });
+    const impl = mockSession('{"status":"done","notes":"done"}');
+    const rev = mockSession('{"status":"done","notes":"reviewed"}');
+
+    const result = await runTwoPhasePipeline({
+      type: 'delegate',
+      readerFacing: false,
+      implementerSkill: '# Implement',
+      reviewerSkill: '# Review',
+      taskPayload: 'do X',
+      implementerProvider: mockProvider(impl),
+      reviewerProvider: mockProvider(rev),
+      implementerTier: 'standard',
+      reviewerTier: 'complex',
+      reviewPolicy: 'reviewed',
+      cwd: '/tmp/test',
+      sandboxPolicy: 'cwd-only',
+      writeRoute: true,
+      taskId: 'test-id',
+    });
+
+    // `commitAll()` still reports a `head` (the unchanged baseline) even when nothing was
+    // committed — `commitSha` must not be conflated with that pre-existing HEAD.
+    expect(result.filesChangedFromGit).toEqual([]);
+    expect(result.commitSha).toBeNull();
   });
 
   it('surfaces dirtyAtDispatch so a swept-in pre-existing change is visible', async () => {
@@ -309,6 +340,7 @@ describe('runTwoPhasePipeline', () => {
     expect(commitAll).not.toHaveBeenCalled();
     expect(result.worktree).toBeNull();
     expect(result.filesChangedFromGit).toBeNull();
+    expect(result.commitSha).toBeNull();
     expect(result.dirtyAtDispatch).toBe(false);
   });
 

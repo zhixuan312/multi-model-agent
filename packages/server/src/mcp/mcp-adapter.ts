@@ -207,10 +207,11 @@ async function handleRun(deps: McpAdapterDeps, args: Record<string, unknown>, cl
     projectRoot: cwdCheck.canonicalCwd,
   });
   if (!outcome.ok) {
-    // SPEC-003 Task I-6: `linked_admission`, like `project_reservation`, carries its own typed
-    // `code` (invalid_request | invalid_task_transition | task_claim_conflict) distinct from
-    // the SubmitError `kind` discriminant — everything else's `kind` IS its wire code.
-    const code = outcome.error.kind === 'project_reservation' || outcome.error.kind === 'linked_admission'
+    // `project_reservation`, `linked_admission`, and `execution_admission` carry their own
+    // public typed code; every other SubmitError uses its discriminant as the wire code.
+    const code = outcome.error.kind === 'project_reservation'
+      || outcome.error.kind === 'linked_admission'
+      || outcome.error.kind === 'execution_admission'
       ? outcome.error.code
       : outcome.error.kind;
     return errorResult(code, outcome.error.message);

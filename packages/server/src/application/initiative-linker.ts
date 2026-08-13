@@ -7,6 +7,11 @@
 // linked Task for each Evidence created, and the Task's execution/terminal transition. No
 // execution path writes `initiatives.db` directly — this is the ONLY writer.
 //
+// A row whose linkage carries no `task_uuid` (Initiative-only linkage, SPEC-003 B6 defect 1)
+// takes the separate `replayInitiativeOnlyRow` path: Evidence records directly against the
+// Initiative, no EvidenceLink (no representable target type), no Task registration or
+// transition.
+//
 // Every write step carries a stable `outbox:<executionId>:<step>` idempotency key, so a partial
 // failure (crash, revision conflict, a concurrent human claim) is always safe to retry:
 // `replayOutbox()` is invoked after every terminal execution write (`ExecutionRuntime`) AND at
@@ -15,11 +20,11 @@
 // status of `failed` — see `terminalTaskUpdate`.
 
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { z } from 'zod';
 import {
   getTypeConfig,
   type Evidence,
+  type Initiative,
   type Task,
   type TaskType,
   type InitiativeProvenance,
@@ -28,14 +33,17 @@ import type { ExecutionStore, OutboxRecord } from './execution-store.js';
 import type { InitiativeRecordRuntime } from './initiative-record-runtime.js';
 
 /** The outbox payload's `linkage` shape (mirrors `ExecutionLinkage` in `execution-store.ts`),
- *  Zod-validated here at the consumption boundary rather than trusted from the durable row. */
+ *  Zod-validated here at the consumption boundary rather than trusted from the durable row.
+ *  `task_uuid` is OPTIONAL (frozen interface, AC-1.1) — its absence marks Initiative-only
+ *  linkage, replayed by {@link InitiativeLinker.replayInitiativeOnlyRow} instead of the
+ *  Task-scoped path. */
 const linkagePayloadSchema = z
   .object({
     initiative: z.union([
       z.object({ uuid: z.string().uuid() }).strict(),
       z.object({ human_key: z.string().min(1) }).strict(),
     ]),
-    task_uuid: z.string().uuid(),
+    task_uuid: z.string().uuid().optional(),
     authorized_by: z.string().min(1),
   })
   .strict();
@@ -130,20 +138,15 @@ function terminalEnvelopeHasCommit(envelope: unknown): boolean {
   return Array.isArray(filesChanged) && filesChanged.length > 0;
 }
 
-/** Best-effort `git rev-parse HEAD` in `cwd`. Returns `null` for a non-git target, a target
- *  with no commits, or any other `git` failure — commit Evidence is skipped, never a reason to
- *  fail the whole row. */
-function resolveCommitSha(cwd: string): string | null {
-  try {
-    const out = execFileSync('git', ['-C', cwd, 'rev-parse', 'HEAD'], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const sha = out.trim();
-    return sha.length > 0 ? sha : null;
-  } catch {
-    return null;
-  }
+/** The commit-time SHA persisted on the terminal envelope (SPEC-003 B6 defect 2), read back at
+ *  replay time instead of re-derived from live git state. Live `git rev-parse HEAD` at replay
+ *  is wrong the moment a LATER commit lands in `cwd` before this row replays — this consumer
+ *  would then durably attribute that later, unrelated commit as evidence of THIS execution's
+ *  work. `output.commitSha` is the exact `CommitOutcome.head` the pipeline captured the instant
+ *  it committed (`two-phase-pipeline.ts`), so it never drifts with later git activity. */
+function readPersistedCommitSha(envelope: unknown): string | null {
+  const sha = (envelope as { output?: { commitSha?: unknown } } | null)?.output?.commitSha;
+  return typeof sha === 'string' && sha.length > 0 ? sha : null;
 }
 
 /** System provenance for every write this consumer makes. `authorized_by` carries forward the
@@ -210,13 +213,22 @@ export class InitiativeLinker {
     }
     const { linkage, execution_id: executionId, state, terminal_envelope: terminalEnvelope } = parsed.data;
     const provenance = systemProvenance(linkage.authorized_by);
+    const taskUuid = linkage.task_uuid;
+
+    // Initiative-only linkage (SPEC-003 B6 defect 1): no Task was named at admission, so there
+    // is no Task to scope writes to, check membership against, or transition. Replayed on its
+    // own path — every write below is scoped to the Initiative directly.
+    if (taskUuid === undefined) {
+      this.replayInitiativeOnlyRow(linkage.initiative, executionId, state, terminalEnvelope, provenance);
+      return;
+    }
 
     // Resolve the linked Task FIRST — every write below scopes to its `initiative_id`. A Task
     // that no longer exists fails the row loudly (typed `not_found`) rather than silently
     // orphaning Evidence under the wrong Initiative.
     const task = this.runtime.execute({
       operation: 'initiative_task_get',
-      input: { uuid: linkage.task_uuid },
+      input: { uuid: taskUuid },
     }) as Task;
 
     const status = deriveOutcomeStatus(state, terminalEnvelope);
@@ -257,7 +269,7 @@ export class InitiativeLinker {
     // route, or a pruned execution row all skip this pair without failing the row.
     const execution = this.store.get(executionId);
     const commitSha = execution && isWriteRouteType(execution.type) && terminalEnvelopeHasCommit(terminalEnvelope)
-      ? resolveCommitSha(execution.cwd)
+      ? readPersistedCommitSha(terminalEnvelope)
       : null;
     if (commitSha) {
       const commitEvidence = this.runtime.execute({
@@ -309,5 +321,74 @@ export class InitiativeLinker {
         provenance,
       });
     }
+  }
+
+  /**
+   * Initiative-only linkage replay (SPEC-003 B6 defect 1): no Task was named at admission, so
+   * this records execution-result Evidence (and, for a write route that landed a commit, commit
+   * Evidence) directly against the Initiative — no Task registration, no Task transition, because
+   * there is no Task.
+   *
+   * `evidence_link`'s `EvidenceLinkTargetType` union (`requirement | acceptance_criterion |
+   * decision | verification_run | task`) has no `'initiative'` member — an EvidenceLink from
+   * Initiative-scoped Evidence has no representable target, so BOTH link steps (`execution_link`,
+   * `commit_link`) are skipped here, deliberately, for every Initiative-only row. The Evidence
+   * itself is still created (`evidence_add` takes an `initiative_id` directly, independent of any
+   * Task), so the work is still durably recorded — just not additionally cross-linked.
+   */
+  private replayInitiativeOnlyRow(
+    initiativeSelector: OutboxPayload['linkage']['initiative'],
+    executionId: string,
+    state: OutboxPayload['state'],
+    terminalEnvelope: unknown,
+    provenance: InitiativeProvenance,
+  ): void {
+    const initiative = this.runtime.execute({
+      operation: 'initiative_get',
+      input: initiativeSelector,
+    }) as Initiative;
+
+    const status = deriveOutcomeStatus(state, terminalEnvelope);
+
+    // Step 1 — execution-result Evidence at execution://<executionId>, scoped to the Initiative
+    // directly. Same idempotency key shape as the Task-scoped path — stable across replays.
+    this.runtime.execute({
+      operation: 'evidence_add',
+      input: {
+        initiative_id: initiative.uuid,
+        kind: 'execution_result',
+        locator: `execution://${executionId}`,
+        content_hash: hashTerminalEnvelope(terminalEnvelope),
+        summary: buildExecutionSummary(status, terminalEnvelope),
+      },
+      expected_revision: 0,
+      idempotency_key: `outbox:${executionId}:execution_evidence`,
+      provenance,
+    });
+
+    // Step 2 (Task-scoped step 3/4's counterpart) — commit Evidence for a write-route Execution
+    // that actually landed a commit. Reads the persisted commit-time SHA off the terminal
+    // envelope (SPEC-003 B6 defect 2) — never live git state.
+    const execution = this.store.get(executionId);
+    const commitSha = execution && isWriteRouteType(execution.type) && terminalEnvelopeHasCommit(terminalEnvelope)
+      ? readPersistedCommitSha(terminalEnvelope)
+      : null;
+    if (commitSha) {
+      this.runtime.execute({
+        operation: 'evidence_add',
+        input: {
+          initiative_id: initiative.uuid,
+          kind: 'commit',
+          locator: `commit://${commitSha}`,
+          content_hash: commitSha,
+          summary: `commit ${commitSha} for execution ${executionId}`,
+        },
+        expected_revision: 0,
+        idempotency_key: `outbox:${executionId}:commit_evidence`,
+        provenance,
+      });
+    }
+
+    // No Task registration, no Task transition — there is no Task for an Initiative-only row.
   }
 }

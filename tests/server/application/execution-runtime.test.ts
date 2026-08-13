@@ -9,12 +9,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExecutionRuntime } from '../../../packages/server/src/application/execution-runtime.js';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
+import { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
 import { SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
 import { ExecutionRegistry } from '../../../packages/core/src/unified/task-registry.js';
 import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
 import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
 import type { Provider, SessionOpts, Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
+
+/** Provenance for direct `InitiativeRecordRuntime.execute()` calls in the SPEC-003 B6 defect 3
+ *  regression below — bypasses the HTTP/MCP adapter's own provenance stamping, so any
+ *  non-empty `timestamp` is accepted by the schema as-is. */
+const provenance = {
+  actor_type: 'human' as const,
+  actor_id: 'host-a',
+  interface: 'test',
+  initiated_by: 'host-a',
+  authorized_by: 'host-a',
+  timestamp: 'ignored',
+  source: 'test',
+};
 
 function baseAgentsConfig(stateDir: string): MultiModelConfig {
   return {
@@ -432,5 +446,119 @@ describe('ExecutionRuntime', () => {
     expect(entry.practice).toBeNull();
     const terminalExecution = (entry.result as { execution: Record<string, unknown> }).execution;
     expect(terminalExecution.practice).toBeUndefined();
+  });
+
+  /**
+   * SPEC-003 B6 defect 3 regression: `admitLinkedTask`'s Task transition used to run BEFORE
+   * `executionRegistry.register` / `store.admit` — a failure of either after a successful
+   * transition durably stranded the Task at `in_progress` with no backing execution. The fix
+   * reorders admission so the transition runs LAST, and compensates (fails the already-real
+   * handle as a unit) when the transition itself fails. Forces the transition's own mutating
+   * call to throw — every validation check `admitLinkedTask` runs before it has already passed
+   * (the Task exists, is `open`, and is unclaimed) — to exercise the compensation path, not a
+   * validation rejection (which never mutated `initiatives.db` even before this fix).
+   */
+  it('a Task-transition failure after admission fails the execution as a unit — no orphaned in_progress Task, no stuck pending execution', async () => {
+    const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir });
+    try {
+      const product = initiativeRuntime.execute({
+        operation: 'product_create', input: { name: 'MMA', slug: 'mma-defect3' }, expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const initiative = initiativeRuntime.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const task = initiativeRuntime.execute({
+        operation: 'initiative_task_create',
+        input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+
+      // Force ONLY the transition's mutating call to throw — every check before it (Initiative
+      // resolves, Task resolves, membership, `open` state, no claim to conflict on) still runs
+      // for real and still passes.
+      const originalExecute = initiativeRuntime.execute.bind(initiativeRuntime);
+      (initiativeRuntime as unknown as { execute: (request: unknown) => unknown }).execute = (request: unknown) => {
+        const op = (request as { operation?: unknown } | null)?.operation;
+        if (op === 'initiative_task_execution') throw new Error('simulated Task-transition failure');
+        return originalExecute(request as never);
+      };
+
+      const runtime = new ExecutionRuntime({
+        config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,
+        resolveAgentFn: resolverFor(workingProvider('done')),
+      });
+
+      const outcome = await runtime.submit(
+        {
+          type: 'investigate', prompt: 'q',
+          initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' },
+        } as never,
+        { clientName: 'claude-code', projectRoot: cwd },
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect((outcome as { ok: false; error: { kind: string } }).error.kind).toBe('linked_admission');
+
+      // No Task was left orphaned at `in_progress` — the failed transition never wrote anything,
+      // and nothing upstream of it (the checks above) mutates `initiatives.db` either.
+      const liveTask = originalExecute({ operation: 'initiative_task_get', input: { uuid: task.uuid } }) as { status: string };
+      expect(liveTask.status).toBe('open');
+
+      // No execution was left stuck `pending` forever either — the already-real handle
+      // (`register`/`admit` ran first and succeeded) was failed as a unit alongside the Task
+      // transition it was backing.
+      expect(executionRegistry.allInFlight()).toEqual([]);
+    } finally {
+      initiativeRuntime.close();
+    }
+  });
+
+  it('a durable admission failure is typed and leaves the linked Task open', async () => {
+    const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir });
+    try {
+      const product = initiativeRuntime.execute({
+        operation: 'product_create', input: { name: 'MMA', slug: 'mma-admit-fail' }, expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const initiative = initiativeRuntime.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const task = initiativeRuntime.execute({
+        operation: 'initiative_task_create',
+        input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+
+      // This reproduces the original orphan window at its actual failing operation: register
+      // succeeds, but durable `store.admit` throws before any Task transition is attempted.
+      const originalAdmit = store.admit.bind(store);
+      store.admit = () => { throw new Error('simulated durable admission failure'); };
+      const runtime = new ExecutionRuntime({
+        config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,
+        resolveAgentFn: resolverFor(workingProvider('done')),
+      });
+
+      const outcome = await runtime.submit(
+        {
+          type: 'investigate', prompt: 'q',
+          initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' },
+        } as never,
+        { clientName: 'claude-code', projectRoot: cwd },
+      );
+
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: { kind: 'execution_admission', code: 'execution_admission_failed' },
+      });
+      const liveTask = initiativeRuntime.execute({ operation: 'initiative_task_get', input: { uuid: task.uuid } }) as { status: string };
+      expect(liveTask.status).toBe('open');
+      expect(executionRegistry.allInFlight()).toEqual([]);
+      store.admit = originalAdmit;
+    } finally {
+      initiativeRuntime.close();
+    }
   });
 });

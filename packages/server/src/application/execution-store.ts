@@ -21,16 +21,18 @@ import * as path from 'node:path';
 
 type StoredExecutionState = 'pending' | 'complete' | 'failed' | 'cancelled' | 'interrupted';
 
-/** Validated Initiative selector + Task reference + linkage authorization, supplied at
+/** Validated Initiative selector + optional Task reference + linkage authorization, supplied at
  *  admission for a linked Execution. Persisted on the execution row so the terminal CAS can
  *  read it back without the caller re-supplying it (and so it survives a daemon restart —
  *  boot reconciliation's `interrupt()` call goes through the same terminal path). Shape mirrors
  *  the Initiative selector union (`{ uuid }` or `{ human_key }`); kept structurally loose here
  *  because the Zod-validated wire schema lives at the transport boundary (Task I-6), not in
- *  this durable store. */
+ *  this durable store. `task_uuid` is OPTIONAL (frozen interface, AC-1.1): its absence marks
+ *  Initiative-only linkage — there is no Task to scope writes to, check membership against, or
+ *  transition. */
 export interface ExecutionLinkage {
   initiative: { uuid: string } | { human_key: string };
-  task_uuid: string;
+  task_uuid?: string;
   authorized_by: string;
 }
 
@@ -201,6 +203,21 @@ export class ExecutionStore {
       INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid, linkage_json)
       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
     `).run(id, type, cwd, now, now, daemonPid, linkage ? JSON.stringify(linkage) : null);
+  }
+
+  /** Attaches a linkage to an already-admitted row (SPEC-003 B6 defect 3). Used when the Task
+   *  transition that authorizes a linked Execution runs AFTER `admit()`: admitting WITHOUT
+   *  linkage first means a `register`/`admit` failure has nothing to compensate on the Task side
+   *  (the transition hasn't run yet), and attaching linkage only once the transition itself
+   *  succeeds means a request whose transition fails terminalizes with no `linkage_json` — so
+   *  `terminalize()` produces no outbox row claiming a Task transition that never happened.
+   *  No-op on a row that already reached a terminal state. */
+  attachLinkage(id: string, linkage: ExecutionLinkage): void {
+    if (this.closed) return;
+    this.db.prepare(`
+      UPDATE executions SET linkage_json = ?, updated_at = ?
+      WHERE id = ? AND state = 'pending'
+    `).run(JSON.stringify(linkage), Date.now(), id);
   }
 
   /** Record the detached worker's process-group leader pid (codex). Only

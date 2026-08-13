@@ -72,6 +72,9 @@ export type SubmitError =
   | { kind: 'agent_not_configured'; message: string }
   | { kind: 'skill_load_failed'; message: string }
   | { kind: 'project_reservation'; code: string; message: string }
+  /** The in-memory registry and durable execution store could not both admit the execution.
+   *  In particular, a linked Task has NOT been transitioned when this is returned. */
+  | { kind: 'execution_admission'; code: 'execution_admission_failed'; message: string }
   /** SPEC-003 Task I-6 linked-admission rejection. `code` is one of the three typed Initiative
    *  errors the Contract names: unknown Initiative / malformed membership / absent
    *  authorization all surface as `invalid_request`; a Task outside `open | claimed` surfaces
@@ -83,10 +86,11 @@ export type SubmitError =
 /** The `input.initiative` shape `taskInputSchema` validates (SPEC-003 Task I-6) — structurally
  *  identical to `ExecutionLinkage` (`execution-store.ts`) and the outbox's own
  *  `linkagePayloadSchema` (`initiative-linker.ts`), so a validated linkage flows to
- *  `ExecutionStore.admit()`'s fifth argument without a cast. */
+ *  `ExecutionStore.admit()`'s fifth argument without a cast. `task_uuid` is OPTIONAL (frozen
+ *  interface, AC-1.1): its absence marks Initiative-only linkage — see `admitLinkedTask` below. */
 interface LinkedAdmissionInput {
   initiative: { uuid: string } | { human_key: string };
-  task_uuid: string;
+  task_uuid?: string;
   authorized_by: string;
 }
 
@@ -193,14 +197,20 @@ export class ExecutionRuntime {
   }
 
   /**
-   * Linked admission (SPEC-003 Task I-6). Resolves the selected Initiative and the named Task,
-   * checks Task membership (the Task must belong to the resolved Initiative), checks Task state
-   * (`open | claimed` only — deliberately narrower than the store's own FR-9 transition matrix,
-   * which would separately permit e.g. `blocked -> in_progress`: only `open` and `claimed` are
-   * valid LINKED-ADMISSION starting states), checks claim ownership for a claimed Task, and —
-   * only once every check passes — performs the Task's `open|claimed -> in_progress` transition
-   * with `execution_ref: executionId` and system provenance. Every failure branch returns before the
-   * transition call, so no failed linked admission ever mutates `initiatives.db`.
+   * Linked admission (SPEC-003 Task I-6). Resolves the selected Initiative and — when
+   * `linkage.task_uuid` is present — the named Task: checks Task membership (the Task must
+   * belong to the resolved Initiative), checks Task state (`open | claimed` only — deliberately
+   * narrower than the store's own FR-9 transition matrix, which would separately permit e.g.
+   * `blocked -> in_progress`: only `open` and `claimed` are valid LINKED-ADMISSION starting
+   * states), checks claim ownership for a claimed Task, and — only once every check passes —
+   * performs the Task's `open|claimed -> in_progress` transition with `execution_ref: executionId`
+   * and system provenance. Every failure branch returns before the transition call, so no failed
+   * linked admission ever mutates `initiatives.db`.
+   *
+   * `task_uuid` is OPTIONAL (frozen interface, AC-1.1). When omitted this is Initiative-only
+   * linkage: only the Initiative selector above is validated, and the method returns `{ ok: true
+   * }` immediately after — there is no Task to check membership/state/ownership against and no
+   * Task transition to run.
    */
   private admitLinkedTask(executionId: string, linkage: LinkedAdmissionInput): { ok: true } | { ok: false; error: SubmitError } {
     const runtime = this.deps.initiativeRuntime;
@@ -218,9 +228,18 @@ export class ExecutionRuntime {
       return { ok: false, error: { kind: 'linked_admission', code: 'invalid_request', message: `Unknown Initiative: ${errMessage(err)}` } };
     }
 
+    const taskUuid = linkage.task_uuid;
+    if (taskUuid === undefined) {
+      // Initiative-only linkage: the Initiative selector alone validated above is the whole
+      // check. No Task exists yet to register execution-result Evidence against or transition —
+      // `InitiativeLinker.replayInitiativeOnlyRow` records Evidence directly against the
+      // Initiative once this execution reaches a terminal state.
+      return { ok: true };
+    }
+
     let task: Task;
     try {
-      task = runtime.execute({ operation: 'initiative_task_get', input: { uuid: linkage.task_uuid } }) as Task;
+      task = runtime.execute({ operation: 'initiative_task_get', input: { uuid: taskUuid } }) as Task;
     } catch (err) {
       return { ok: false, error: { kind: 'linked_admission', code: 'invalid_request', message: `Unknown Task: ${errMessage(err)}` } };
     }
@@ -333,25 +352,60 @@ export class ExecutionRuntime {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    // Linked admission (SPEC-003 Task I-6): resolve the selected Initiative and Task, check
-    // Task membership, Task state, and claim ownership, and perform the Task's
-    // `open|claimed -> in_progress` transition — all BEFORE the execution handle two lines
-    // below exists. Placed after agent/skill/project resolution (none of which mutate
-    // `initiatives.db`) so a linked request that fails THIS check leaves no execution handle,
-    // provider session, Task mutation, or outbox row, exactly as the Contract requires.
+    // SPEC-003 B6 defect 3: the execution handle registers FIRST, THEN (for a linked request)
+    // the Task transition runs — the reverse of this file's earlier order. That earlier order
+    // (Task transition, then `executionRegistry.register` / `store.admit`) left a window where a
+    // register/admit throw stranded the Task at `in_progress` with no execution behind it:
+    // compensating that direction means an `initiative_task_release`, which FR-9 gates on
+    // claimant ownership (a system-actor release can itself throw `task_claim_conflict`,
+    // compounding the failure instead of fixing it). Registering first sidesteps the ownership
+    // question entirely — nothing ever mutates `initiatives.db` until the handle already durably
+    // exists, so a Task-transition failure has nothing on the Task side to undo; it only needs to
+    // fail the (already-real) handle as a unit, done just below.
     const executionId = randomUUID();
     const linkage = linkageOf(input);
-    if (linkage) {
-      const linked = this.admitLinkedTask(executionId, linkage);
-      if (!linked.ok) return linked;
-    }
 
     // Register task in ExecutionRegistry AND persist the admission record — a
-    // handle that exists is always a handle that survives a restart. The
-    // scope (the live abort channel) is created here too, so a cancel that
-    // lands before the async executor starts still aborts the execution.
-    deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), practiceOf(input));
-    deps.store.admit(executionId, input.type, cwd, process.pid, linkage);
+    // handle that exists is always a handle that survives a restart. Admitted WITHOUT linkage
+    // yet: `store.admit`'s `linkage` argument is what makes `terminalize()` write an outbox row,
+    // and attaching it only once the Task transition below actually succeeds (`attachLinkage`)
+    // means a request whose transition fails terminalizes with no `linkage_json` — no outbox row
+    // is ever produced claiming a Task transition that never happened.
+    try {
+      deps.executionRegistry.register(executionId, cwd, input.type, subtypeOf(input), practiceOf(input));
+      deps.store.admit(executionId, input.type, cwd, process.pid);
+    } catch (err) {
+      // Keep the two execution representations coherent even when durable admission throws
+      // after the registry accepted the id. Crucially this is still BEFORE `admitLinkedTask`,
+      // so a linked Task remains untouched and the caller receives a typed non-admission result.
+      const error: SubmitError = {
+        kind: 'execution_admission',
+        code: 'execution_admission_failed',
+        message: `Execution admission failed${linkage ? '; linked Task was not transitioned' : ''}: ${errMessage(err)}`,
+      };
+      const envelope = buildErrorEnvelope(executionId, input.type, { code: error.code, message: error.message });
+      deps.executionRegistry.fail(executionId, envelope);
+      return { ok: false, error };
+    }
+
+    if (linkage) {
+      const linked = this.admitLinkedTask(executionId, linkage);
+      if (!linked.ok) {
+        // The execution handle already exists — fail it as a unit rather than leaving a
+        // `pending` row nothing will ever terminalize. The caller never receives this
+        // executionId (this method returns the typed error below, not `{ ok: true }`), so
+        // nothing outside this function can observe the row before it reaches a terminal state.
+        const code = linked.error.kind === 'linked_admission' ? linked.error.code : 'linked_admission_failed';
+        const envelope = buildErrorEnvelope(executionId, input.type, { code, message: linked.error.message });
+        deps.executionRegistry.fail(executionId, envelope);
+        deps.store.fail(executionId, JSON.stringify(envelope));
+        return linked;
+      }
+      deps.store.attachLinkage(executionId, linkage);
+    }
+
+    // The scope (the live abort channel) is created here, after admission is durable and
+    // linked, so a cancel that lands before the async executor starts still aborts the execution.
     const scope = new ExecutionScope(executionId);
     this.liveScopes.set(executionId, scope);
 
@@ -608,6 +662,11 @@ export class ExecutionRuntime {
           // — engine-measured, never the worker's self-report. Non-git targets have no git
           // evidence, so they keep the provider-reported list.
           filesChanged: result.filesChangedFromGit ?? result.implementerTurn.filesWritten,
+          // SPEC-003 B6 defect 2 — the commit-time SHA, captured once by the pipeline when it
+          // committed. `InitiativeLinker` reads this off the persisted terminal envelope at
+          // replay time instead of re-deriving it from live git state, which would attribute a
+          // LATER commit (landed after this execution, before replay) to this execution's work.
+          commitSha: result.commitSha,
           ...(result.contractNote && { contractNote: result.contractNote }),
           contextBlockId,
           // Advisory: the reviewer ran but its output wasn't parseable, so the answer above

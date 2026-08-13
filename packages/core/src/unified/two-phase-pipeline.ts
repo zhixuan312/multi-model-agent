@@ -138,6 +138,13 @@ export interface PipelineResult {
   /** FR-3 — `git diff --name-only <headBeforeDispatch>..HEAD` for a committed git target.
    *  Null when the route did not commit (read routes, non-git targets, nothing to commit). */
   filesChangedFromGit: string[] | null;
+  /** The commit-time SHA (`CommitOutcome.head`), captured the instant `commitWork()` actually
+   *  creates a commit — never re-derived from live git state later. Null when nothing was
+   *  committed (read routes, non-git targets, a write route that changed nothing, or a
+   *  pre-commit terminal state). Persisted into the terminal envelope so a replay of this
+   *  execution's outbox row (`InitiativeLinker`) records THIS commit as Evidence even if a
+   *  later commit has since landed in the same `cwd` (SPEC-003 B6 defect 2). */
+  commitSha: string | null;
   /** FR-9 — populated only when reviewer output could not be resolved onto dispatched task
    *  ids. Distinct from "the work is incomplete". */
   contractNote: { code: 'contract_unverifiable'; message: string; availableTaskIds: string[] } | null;
@@ -214,6 +221,7 @@ function earlyFailureResult(input: PipelineInput, code: string, message: string)
     worktree: null,
     dirtyAtDispatch: false,
     filesChangedFromGit: null,
+    commitSha: null,
     contractNote: null,
     completionPercent: 0,
     failureReason: { code, message },
@@ -266,6 +274,11 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
     await assertRepoUntampered(input.cwd, baseline);
     commitState.outcome = await commitAll(input.cwd, baseline, commitMsg);
   };
+
+  /** SPEC-003 B6 defect 2 — the commit-time SHA, read off `commitState` (never re-derived from
+   *  live git). Null unless `commitWork()` actually created a commit this run. */
+  const commitShaOf = (): string | null =>
+    commitState.outcome && commitState.outcome.committed ? commitState.outcome.head : null;
 
   function buildCommitMessage(): string {
     const prefix = `[mma] ${input.type}`;
@@ -373,6 +386,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         worktree: null,
         dirtyAtDispatch: baseline.dirtyAtDispatch,
         filesChangedFromGit: null,
+        commitSha: commitShaOf(),
         contractNote: null,
         completionPercent: 0,
         failureReason: { code: 'aborted', message: 'Execution cancelled by caller' },
@@ -420,6 +434,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         worktree: null,
         dirtyAtDispatch: baseline.dirtyAtDispatch,
         filesChangedFromGit: null,
+        commitSha: null,
         contractNote: null,
         completionPercent: 0,
         failureReason: { code, message },
@@ -460,6 +475,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
         worktree: null,
         dirtyAtDispatch: baseline.dirtyAtDispatch,
         filesChangedFromGit: commitState.outcome ? commitState.outcome.filesChanged : null,
+        commitSha: commitShaOf(),
         contractNote: null,
         completionPercent: 100,
       };
@@ -646,6 +662,7 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
       worktree: null,
       dirtyAtDispatch: baseline.dirtyAtDispatch,
       filesChangedFromGit: commitState.outcome ? commitState.outcome.filesChanged : null,
+      commitSha: commitShaOf(),
       contractNote,
       completionPercent,
       ...(epConcern && { failureReason: epConcern }),

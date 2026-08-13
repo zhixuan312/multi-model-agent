@@ -26,24 +26,27 @@ const targetSchema = z.object({
 );
 
 /**
- * `initiative` — optional linkage from a bounded Execution to a durable Initiative Task
- * (SPEC-003 Task I-6). When present, `ExecutionRuntime.submit()` resolves the selected
- * Initiative and Task, checks Task membership and Task state (`open | claimed` only), checks
- * claim ownership for a claimed Task, and performs the Task's `open|claimed -> in_progress`
- * transition — all BEFORE any execution handle (`ExecutionRegistry.register` /
- * `ExecutionStore.admit`) or provider session exists. Available on every task type: linked
- * admission is a general execution-dispatch capability, not one route's concern. Mirrors
- * `ExecutionLinkage` in `packages/server/src/application/execution-store.ts` and the outbox's
- * own `linkagePayloadSchema` in `packages/server/src/application/initiative-linker.ts` — kept
- * as an independent literal here (not imported) because this is the wire boundary those two
- * internal shapes are validated against, not the other way around.
+ * `initiative` — optional linkage from a bounded Execution to a durable Initiative (SPEC-003
+ * Task I-6). `task_uuid` is itself OPTIONAL (frozen interface, AC-1.1): when present,
+ * `ExecutionRuntime.submit()` resolves the selected Initiative and Task, checks Task membership
+ * and Task state (`open | claimed` only), checks claim ownership for a claimed Task, and
+ * performs the Task's `open|claimed -> in_progress` transition — all BEFORE any execution handle
+ * (`ExecutionRegistry.register` / `ExecutionStore.admit`) or provider session exists. When
+ * `task_uuid` is omitted, this is Initiative-only linkage: only the Initiative selector is
+ * validated, no Task exists to check membership/state/ownership against, and no Task transition
+ * runs. Available on every task type: linked admission is a general execution-dispatch
+ * capability, not one route's concern. Mirrors `ExecutionLinkage` in
+ * `packages/server/src/application/execution-store.ts` and the outbox's own
+ * `linkagePayloadSchema` in `packages/server/src/application/initiative-linker.ts` — kept as an
+ * independent literal here (not imported) because this is the wire boundary those two internal
+ * shapes are validated against, not the other way around.
  */
 const initiativeLinkageSchema = z.object({
   initiative: z.union([
     z.object({ uuid: z.string().uuid() }).strict(),
     z.object({ human_key: z.string().min(1) }).strict(),
   ]),
-  task_uuid: z.string().uuid(),
+  task_uuid: z.string().uuid().optional(),
   authorized_by: z.string().min(1),
 }).strict();
 
