@@ -238,21 +238,16 @@ export class InitiativeRecordRuntime {
     const tasksByStatus = this.store.countInitiativeTasksByStatus(initiative.uuid);
     const resourceCount = workspaces.reduce((sum, link) => sum + link.resources.length, 0);
 
-    // Phase A0 shape only — `requirements`, `decisions`, `risks`, `evidence`,
-    // `verification`, and their `counts` companions are Task I-8's Phase A1
-    // resume assembly (SPEC-002 FR-12/FR-13: joined from the Task I-5 store
-    // reads — `getRequirementsWithCriteria`, `listDecisions`,
-    // `getResumeRisks`, `listEvidence`, `getLatestVerificationRuns` — per the
-    // pinned ordering and count rules), not built here. Task I-6 only needs
-    // this file to dispatch Phase A1 execute() operations; it does not
-    // extend resume assembly. `InitiativeResumeResponse` (Task I-1) already
-    // requires those fields, so the bridge below asserts through `unknown`
-    // rather than fabricate placeholder Phase A1 data that would silently
-    // satisfy the type while contradicting the still-`Phase A0`-only runtime
-    // shape asserted by the still-current `initiative-runtime-resume.test.ts`
-    // and `initiative-resume-contract.test.ts` fixtures. Task I-8 removes
-    // this cast when it adds the real fields.
-    const response = {
+    // Phase A1 professional-record sections (SPEC-002 FR-12/FR-13): each is
+    // one stable Task I-5 resume-join store read, same pattern as every
+    // Phase A0 join above — no ad hoc queries here.
+    const requirements = this.store.getRequirementsWithCriteria(initiative.uuid);
+    const decisions = this.store.listDecisions({ initiative_id: initiative.uuid });
+    const risks = this.store.getResumeRisks(initiative.uuid);
+    const evidence = this.store.listEvidence({ initiative_id: initiative.uuid });
+    const verification = this.store.getLatestVerificationRuns(initiative.uuid);
+
+    const response: InitiativeResumeResponse = {
       initiative,
       product,
       workspaces,
@@ -260,6 +255,11 @@ export class InitiativeRecordRuntime {
       tasks,
       artifacts,
       events,
+      requirements,
+      decisions,
+      risks,
+      evidence,
+      verification,
       counts: {
         workspaces: workspaces.length,
         resources: resourceCount,
@@ -269,8 +269,14 @@ export class InitiativeRecordRuntime {
         artifacts: artifacts.length,
         events_returned: events.length,
         events_total: eventsTotal,
+        requirements: this.store.countRequirements(initiative.uuid),
+        acceptance_criteria: this.store.countAcceptanceCriteria(initiative.uuid),
+        decisions_open: this.store.countOpenDecisions(initiative.uuid),
+        risks_open: this.store.countOpenRisks(initiative.uuid),
+        evidence: this.store.countEvidence(initiative.uuid),
+        verification_by_state: this.store.countVerificationByState(initiative.uuid),
       },
     };
-    return response as unknown as InitiativeResumeResponse;
+    return response;
   }
 }
