@@ -439,9 +439,22 @@ describe('ExecutionRuntime', () => {
     const executionId = (outcome as { ok: true; executionId: string }).executionId;
     await waitTerminal(executionRegistry, executionId);
 
+    // AC-1.9 asks for BYTE-identity of the no-Method prompts against the pre-change generic
+    // prompts. Comparing against a LIVE re-read of the same file this assertion exists to guard
+    // would validate itself even if `implement.md`/`review.md` drifted — it could only ever prove
+    // "the prompt contains whatever the file currently says." `toMatchFileSnapshot` compares the
+    // live read against a COMMITTED fixture instead: an accidental future edit to either generic
+    // skill file changes what gets embedded in the prompt, and that drift now fails HERE, not
+    // silently downstream.
     const genericImplementer = readFileSync(join(SKILLS_DIR, 'debug', 'implement.md'), 'utf8');
+    await expect(genericImplementer).toMatchFileSnapshot('./__snapshots__/execution-runtime.no-method-generic-implementer.md');
     // The first send() is the implementer turn — its prompt embeds implementerSkill verbatim.
     expect(capturedPrompts[0]).toContain(genericImplementer);
+
+    const genericReviewer = readFileSync(join(SKILLS_DIR, 'debug', 'review.md'), 'utf8');
+    await expect(genericReviewer).toMatchFileSnapshot('./__snapshots__/execution-runtime.no-method-generic-reviewer.md');
+    // The second send() is the reviewer turn — its prompt embeds reviewerSkill verbatim.
+    expect(capturedPrompts[1]).toContain(genericReviewer);
 
     const entry = executionRegistry.get(executionId)!;
     expect(entry.method).toBeNull();

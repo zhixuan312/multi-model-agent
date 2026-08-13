@@ -10,6 +10,11 @@ const scopedFiles = [
   'packages/server/src/skills/_shared/response-shape.md', 'packages/server/src/skills/mma-debug/SKILL.md', 'packages/server/src/skills/mma-execute-plan/SKILL.md', 'packages/server/src/skills/mma-flow/SKILL.md', 'packages/server/src/skills/mma-plan/SKILL.md', 'packages/server/src/skills/mma-review/SKILL.md',
   'plugin/commands/flow.md', 'plugin/skills/debug/SKILL.md', 'plugin/skills/execute-plan/SKILL.md', 'plugin/skills/plan/SKILL.md', 'plugin/skills/review/SKILL.md', 'plugin/skills/audit/SKILL.md',
   'tests/contract/practice-routing-contract.test.ts', 'tests/skills/practice-routing-reachability.test.ts', 'tests/skills/software-practice-regression.test.ts',
+  // The release smoke harness and public docs are wired/committed surfaces, not internal source —
+  // a caller reads README.md/ARCHITECTURE.md and `smoke:full` dispatches these scripts for real.
+  // Both stayed outside every earlier sweep, so both kept naming the retired field past removal;
+  // scoping them here means the scan can never again pass while either drifts.
+  'scripts/full-smoke/config.mjs', 'scripts/full-smoke/dispatch.mjs', 'scripts/full-smoke/verify.mjs', 'README.md', 'docs/ARCHITECTURE.md',
 ];
 
 describe('practice removal sweep', () => {

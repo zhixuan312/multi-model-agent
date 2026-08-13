@@ -18,6 +18,43 @@ const required: Record<string, string[]> = {
   'regulatory-assessment@1': ['Requirement coverage', 'Source currency', 'Professional sign-off when required'],
 };
 
+// A section title cannot be satisfied by ANY imperative sentence — it must be an imperative
+// sentence actually ABOUT what the title names. Keyed by the exact section title (unique across
+// every Method), each pattern matches a stem of one of the title's own significant (>=4 char)
+// words, so "Caller tracing" cannot be satisfied by a sentence about, say, schema conformance.
+const sectionKeyword: Record<string, RegExp> = {
+  'Caller tracing': /\bcaller|\btrac/i,
+  'Error-path review': /\berror\b/i,
+  'Security-sink review': /\bsink\b/i,
+  'Schema conformance': /\bschema\b/i,
+  'Test adequacy': /\btest/i,
+  'Source relevance': /\bsource\b/i,
+  'Claim support': /\bclaim/i,
+  'Limitation disclosure': /\blimitation/i,
+  'Goal coverage': /\bgoal/i,
+  'Constraint fit': /\bconstraint/i,
+  'Decision traceability': /\bdecision\b/i,
+  'Evidence-backed findings': /\bevidence\b|\bfind/i,
+  'Trade-off analysis': /\btrade\b/i,
+  'Scope coverage': /\bscope\b/i,
+  'Step completeness': /\bstep\b/i,
+  'Role clarity': /\brole\b|\bclar/i,
+  'Failure handling': /\bfail/i,
+  'Provenance': /\bprovenance\b/i,
+  'Relevance': /\brelevance\b/i,
+  'Currency': /\bcurrency\b/i,
+  'Integrity': /\bintegrity\b/i,
+  'Risk coverage': /\brisk/i,
+  'Evidence basis': /\bevidence\b/i,
+  'Mitigation ownership': /\bmitigation\b|\bowner/i,
+  'Accuracy': /\baccuracy\b/i,
+  'Audience fit': /\baudience\b/i,
+  'Structural completeness': /\bstructur/i,
+  'Requirement coverage': /\brequirement/i,
+  'Source currency': /\bsource\b|\bcurren/i,
+  'Professional sign-off when required': /\bprofessional\b|\bsign-off\b/i,
+};
+
 describe('Method guidance assets', () => {
   it('has an exact seed-to-production-asset bijection with substantive required sections', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-method-guidance-'));
@@ -35,7 +72,14 @@ describe('Method guidance assets', () => {
         for (const section of sections) {
           // End-of-input is `(?![\s\S])` — JavaScript has no `\z`, which would match a literal "z".
           const body = text.match(new RegExp(`^#{1,6} ${section}\\s*\\n([\\s\\S]*?)(?=^#{1,6} |(?![\\s\\S]))`, 'mi'))?.[1] ?? '';
-          expect(body).toMatch(/^\s*[A-Z][^.!?]*\b(?:Use|Check|Trace|Validate|Review|Confirm|Record|Identify|Assess|Define|Compare|Document|State)\b[^.!?]*[.!?]/mi);
+          // The verb must OPEN the sentence (not merely appear before its terminator), and that
+          // same sentence must carry a keyword drawn from the section's own name — otherwise a
+          // generic imperative unrelated to the section's topic would satisfy it.
+          const sentence = body.match(/^\s*(?:Use|Check|Trace|Validate|Review|Confirm|Record|Identify|Assess|Define|Compare|Document|State)\b[^.!?]*[.!?]/mi)?.[0];
+          expect(sentence, `${id} § ${section}: no sentence opens with a required verb`).toBeTruthy();
+          const keyword = sectionKeyword[section];
+          expect(keyword, `no keyword pattern registered for section "${section}"`).toBeTruthy();
+          expect(sentence, `${id} § ${section}: instruction sentence does not reference "${section}"`).toMatch(keyword);
         }
       }
       // No-fallback-read proof. NEVER mutate a real committed asset to prove this: the suite

@@ -10,18 +10,19 @@ accurate but pitched at the wrong audience, or that skips a required section, is
 
 ## Accuracy
 
-Before publishing the document, check every technical statement in it against its source
-material or the actual system it describes, rather than paraphrasing from memory. Correct a
+Check every technical statement's accuracy against its source material or the actual system it
+describes, before publishing the document, rather than paraphrasing from memory. Correct a
 statement the moment you cannot trace it back to a specific source or observation.
 
 ## Audience fit
 
-For content and terminology alike, define both against the stated audience's actual background,
-not a generic reader. Use terms the audience already knows and explain any term the audience is
+Define content and terminology alike against the stated audience's actual background, not a
+generic reader. Use terms the audience already knows and explain any term the audience is
 unlikely to already know.
 
 ## Structural completeness
 
-Before calling the document done, confirm it follows the required format and includes every
-section that format calls for, with no section silently omitted because it was harder to write.
-Check the document against the format's own checklist, not against your memory of the format.
+Confirm the document's structure follows the required format and includes every section that
+format calls for, before calling it done, with no section silently omitted because it was
+harder to write. Check the document against the format's own checklist, not against your memory
+of the format.

@@ -563,9 +563,16 @@ Contract** — `kind` (a free-form label the agent proposes and the human confir
 declared `artifacts`, `acceptance` criteria (each with an explicit verification method — `command`,
 `agent-review`, or `human`), and a `disposition` (`pr`, `commit-in-place`, or `deliver-file`) — bound to
 a digest that matches its content, so a human approval can never be silently applied to different
-content. The contract classifies nothing: `kind` is free-form, not drawn from a registry, and the
-engine itself picks no technique — `practice` (currently only `software`) is a separate, optional,
-caller-chosen field. See [docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
+content. The contract classifies nothing: `kind` is free-form, not drawn from a registry.
+
+Separately, every task type optionally carries `method`: a registered **Method** identifier
+(`<name>@<version>`, e.g. `software-change@1`) from the Method Registry, a small catalog of
+procedures (software change, research, solution design, architecture review, workflow design, source
+validation, risk analysis, technical writing, regulatory assessment) each with committed guidance the
+engine injects into both the implementer's and reviewer's prompts. An unregistered identifier is
+rejected synchronously (`unknown_method`, HTTP 400) before any execution starts. Omitting `method`
+loads the generic, deliverable-neutral skill. See
+[docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
 for the full validation model.
 
 ### MCP endpoint

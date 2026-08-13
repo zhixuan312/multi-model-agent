@@ -11,6 +11,13 @@ async function mutate(h: { baseUrl: string; token: string }, operation: string, 
   expect(response.status).toBe(200);
   return await response.json() as Record<string, any>;
 }
+// Read-only ops validate against a `{ operation, input }` envelope (no `expected_revision`/
+// `provenance` — that envelope is `.strict()` and rejects them as unrecognized keys).
+async function query(h: { baseUrl: string; token: string }, operation: string, input: object) {
+  const response = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation, input }) });
+  expect(response.status).toBe(200);
+  return await response.json() as Record<string, any>;
+}
 
 describe('Task Method transport contract', () => {
   it('persists, clears, resumes, and transports Method values without adapter logic', async () => {
@@ -43,6 +50,37 @@ describe('Task Method transport contract', () => {
       expect((await resumed.json() as { tasks: Array<{ method: string | null }>; events: Array<{ event_type: string; payload: object }> }).tasks).toEqual([expect.objectContaining({ method: null })]);
       const record = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
       expect((await record.json() as { events: Array<{ event_type: string; payload: object }> }).events).toEqual(expect.arrayContaining([expect.objectContaining({ event_type: 'task_method_set', payload: { previous_method: 'software-change@1', new_method: null } })]));
+
+      // The boundary check above (`method_register`/`update`/`delete` all 400) already held
+      // before this change — it proves no caller-accessible WRITE endpoint exists, which is true
+      // independent of whether `methods` is populated. It does NOT prove the populated registry
+      // stays byte-unchanged once every public Method-touching operation has actually run against
+      // it. Snapshot `method_list`'s full output, exercise the complete set of Method-touching
+      // operations (method_get, method_list, initiative_task_create WITH a method,
+      // initiative_task_set_method both setting and clearing), then snapshot again and assert
+      // byte-identity — proving immutability in practice, not just the absence of a write op.
+      const beforeMethods = await query(h, 'method_list', {});
+      expect(beforeMethods).toHaveLength(9);
+      const before = JSON.stringify(beforeMethods);
+
+      await query(h, 'method_get', { id: 'software-change@1' });
+      await query(h, 'method_list', {});
+      // initiative_task_create WITH a method (revision 0 — task creation is a Task-entity
+      // creation, so `expected_revision` is the NEW task's own starting revision, not the
+      // Initiative's — see `requireCreateRevision` in sqlite-store.ts).
+      const task2 = await mutate(h, 'initiative_task_create', { initiative_id: initiative.uuid, title: 'T2', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [], method: 'research@1' }, 0);
+      expect(task2.method).toBe('research@1');
+      // initiative_task_set_method SETTING (task3 is created with no method, then set for the
+      // first time) and CLEARING, on a fresh task so this exercise is unambiguous.
+      const task3 = await mutate(h, 'initiative_task_create', { initiative_id: initiative.uuid, title: 'T3', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] }, 0);
+      expect(task3.method).toBeNull();
+      const task3Set = await mutate(h, 'initiative_task_set_method', { initiative: { uuid: initiative.uuid }, task: { uuid: task3.uuid }, method: 'workflow-design@1' }, task3.revision);
+      expect(task3Set.method).toBe('workflow-design@1');
+      const task3Cleared = await mutate(h, 'initiative_task_set_method', { initiative: { uuid: initiative.uuid }, task: { uuid: task3.uuid }, method: null }, task3Set.revision);
+      expect(task3Cleared.method).toBeNull();
+
+      const afterMethods = await query(h, 'method_list', {});
+      expect(JSON.stringify(afterMethods)).toBe(before);
     } finally { await client.close(); await h.close(); }
   });
 });

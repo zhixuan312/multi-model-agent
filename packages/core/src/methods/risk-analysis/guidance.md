@@ -10,18 +10,18 @@ unowned mitigations or unsupported ratings gives false confidence.
 
 ## Risk coverage
 
-For the full stated scope, identify risks across every relevant category, not only the most
+Identify risks across every relevant category for the full stated scope, not only the most
 obvious one, and confirm the register addresses each named objective. A register with the same
 evidence supporting every entry is a sign that a distinct category of risk went unexamined.
 
 ## Evidence basis
 
-For each entry in the register, record the specific evidence behind its likelihood and impact
+Record, for each entry in the register, the specific evidence behind its likelihood and impact
 rating, rather than an unsupported number, so a reviewer can see why a risk was rated the way it
 was. A rating with no cited evidence is a guess, not an assessment.
 
 ## Mitigation ownership
 
-For every mitigation you propose, state a specific owner and a concrete action, not a general
+State, for every mitigation you propose, a specific owner and a concrete action, not a general
 intention like "monitor the situation." A mitigation with no owner and no action is not a
 mitigation.

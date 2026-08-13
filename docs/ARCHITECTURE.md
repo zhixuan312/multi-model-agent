@@ -232,12 +232,15 @@ An optional `deliverable` field (an `ApprovedContract`) is wired onto exactly fo
 contract governs. Every other task type omits the field entirely, so it cannot appear on their input.
 Omitting `deliverable` stays valid: an unmanaged direct call carries none.
 
-A separate, optional `practice` field (`z.enum(['software'])`, wired onto `plan`, `execute_plan`,
-`review`, and `debug`) selects an optional technique — currently only the retained `software` code
-technique — without classifying what the deliverable is. It answers *how* to do the work; `kind`
+A separate, optional `method` field (`z.string()` matching `<name>@<version>`, wired onto every one
+of the twelve `TASK_TYPES`, SPEC-005 Method Registry) names a registered **Method** — a procedure
+declaration (`packages/core/src/initiative-record/`) plus committed guidance Markdown
+(`packages/core/src/methods/<name>/guidance.md`) that `ExecutionRuntime.submit()` resolves and
+injects into both the implementer's and reviewer's prompts. It answers *how* to do the work; `kind`
 answers *what* the deliverable is; `audit`'s own `subtype` field (which criteria set examines the
-artifact) is a third, unrelated axis. Omitting `practice` loads the generic, deliverable-neutral
-implementer skill.
+artifact) is a third, unrelated axis. A syntactically valid but unregistered identifier is rejected
+synchronously as `unknown_method` (HTTP 400) before any execution handle, provider session, or
+outbox row exists. Omitting `method` loads the generic, deliverable-neutral implementer skill.
 
 ## Provider runners
 

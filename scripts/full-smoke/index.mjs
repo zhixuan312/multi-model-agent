@@ -322,15 +322,15 @@ async function runScenario(spec, ctx, log) {
         //
         // The deliverable-neutral grammar makes the Checks section OPTIONAL, which is correct
         // for a claim no machine can settle. For CODE that permission must not become an
-        // escape hatch: `practice: 'software'` states that virtually every technical AC admits
-        // a deterministic check, so a software plan that declares none has quietly dropped the
-        // discipline the release promised to preserve. Prose in `implement-software.md` cannot
-        // prove that; only the emitted plan can.
+        // escape hatch: `method: 'software-change@1'` states that virtually every technical AC
+        // admits a deterministic check, so a software plan that declares none has quietly
+        // dropped the discipline the release promised to preserve. The Method's committed
+        // guidance prose cannot prove that; only the emitted plan can.
         //
         // Three properties, because they fail independently: a plan can trace to spec ACs and
         // still declare no check, declare checks and trace to nothing, or do both and never
         // close with a suite-level gate.
-        if (spec.type === 'plan' && spec.practice === 'software') {
+        if (spec.type === 'plan' && spec.method === 'software-change@1') {
           const planFile = landed[0];
           let body = null;
           try { body = readFileSync(existsSync(planFile) ? planFile : join(ctx.dir, planFile), 'utf8'); } catch { /* unreadable */ }
@@ -493,16 +493,16 @@ try {
       [43],          // worker git denial
       [44],          // deliverable contract: valid approved contract accepted
       [45],          // execute_plan: Contract Task with NO declared check
-      [46],          // plan: practice=software reaches the skill selector
+      [46],          // plan: method=software-change@1 reaches Method resolution
       [47],          // error: contract not approved
       [48],          // error: contract digest mismatch
       [49],          // error: commit-in-place disposition in a non-git workspace
-      [50],          // error: practice not wired to audit
-      [51],          // execute_plan carrying BOTH deliverable and practice
-      [52],          // review + practice
-      [53],          // debug + practice
-      [54],          // spec + deliverable (spec takes no practice)
-      [55],          // MCP transport carrying deliverable + practice
+      [50],          // error: unregistered method identifier
+      [51],          // execute_plan carrying BOTH deliverable and method
+      [52],          // review + method
+      [53],          // debug + method
+      [54],          // spec + deliverable (this scenario omits method)
+      [55],          // MCP transport carrying deliverable + method
       [56],          // the remaining MCP tools: list, get, cancel, context-block create/delete
       [57],          // investigate a NON-CODE workspace (documents + data, no source)
       [58],          // plan a NON-CODE deliverable (no build, no suite, no tests/)
