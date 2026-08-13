@@ -28,6 +28,7 @@ import { attachHeadlineProducer } from './headline-from-events.js';
 import type { CallerContext } from './caller-context.js';
 import { ExecutionScope } from './execution-scope.js';
 import type { ExecutionStore } from './execution-store.js';
+import type { InitiativeLinker } from './initiative-linker.js';
 import type { ProjectRegistry } from './project-registry.js';
 import type { TaskEntry } from '@zhixuan92/multi-model-agent-core';
 import { SKILLS_DIR } from './skills-dir.js';
@@ -46,6 +47,11 @@ interface ExecutionRuntimeDeps {
   /** Durable execution records — admission is persisted before the handle is
    *  returned; terminal transitions mirror the in-memory registry. */
   store: ExecutionStore;
+  /** Outbox consumer for a linked Execution's terminal result (SPEC-003 Task I-5). Invoked
+   *  after every terminal store write below — optional so every existing unlinked-execution
+   *  call site (and every test that never admits a linkage) keeps working unchanged; an
+   *  execution with no `ExecutionLinkage` never produces an outbox row to replay anyway. */
+  initiativeLinker?: InitiativeLinker;
   /** Injectable agent resolver — tests substitute mock providers; production
    *  uses the config-driven resolveAgent (same pattern as PipelineInput's
    *  runAcceptanceCommand). */
@@ -132,6 +138,21 @@ export class ExecutionRuntime {
   /** Release the bus subscription. */
   close(): void {
     this.detachHeadlines();
+  }
+
+  /** Best-effort outbox replay after a terminal store write (SPEC-003 Task I-5). Swallows any
+   *  throw — `InitiativeLinker.replayOutbox()` already catches per-row failures internally, so
+   *  reaching a throw here means something unexpected (e.g. a closed store); an execution's own
+   *  terminal result must never be lost or a task destabilized over a downstream Initiative
+   *  write. */
+  private replayLinkage(): void {
+    try {
+      this.deps.initiativeLinker?.replayOutbox();
+    } catch (err) {
+      process.stderr.write(
+        `[mma] event=initiative_link_replay_error ts=${new Date().toISOString()} err="${(err instanceof Error ? err.message : String(err)).replace(/"/g, '\\"')}"\n`,
+      );
+    }
   }
 
   /**
@@ -265,6 +286,7 @@ export class ExecutionRuntime {
     const finishCancelled = (durationMs: number, envelope: Record<string, unknown>) => {
       deps.taskRegistry.cancel(taskId, envelope);
       deps.store.cancel(taskId, JSON.stringify(envelope));
+      this.replayLinkage();
       deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_cancelled', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs } });
       process.stderr.write(
         `[mma] event=task_cancelled ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
@@ -303,6 +325,7 @@ export class ExecutionRuntime {
             const envelope = buildErrorEnvelope(taskId, input.type, { code: err.code, message: err.message });
             deps.taskRegistry.fail(taskId, envelope);
             deps.store.fail(taskId, JSON.stringify(envelope));
+            this.replayLinkage();
             return;
           }
           throw err;
@@ -524,6 +547,7 @@ export class ExecutionRuntime {
       } else if (result.status === 'failed') {
         deps.taskRegistry.fail(taskId, resultObj);
         deps.store.fail(taskId, JSON.stringify(resultObj));
+        this.replayLinkage();
         deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: result.failureReason?.code ?? 'pipeline_failed', error_message: result.failureReason?.message ?? 'Pipeline completed with failed status' } });
         process.stderr.write(
           `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
@@ -531,6 +555,7 @@ export class ExecutionRuntime {
       } else {
         deps.taskRegistry.complete(taskId, resultObj);
         deps.store.complete(taskId, JSON.stringify(resultObj));
+        this.replayLinkage();
         deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_completed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs } });
         process.stderr.write(
           `[mma] event=task_completed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs}\n`,
@@ -554,6 +579,7 @@ export class ExecutionRuntime {
       const envelope = buildErrorEnvelope(taskId, input.type, errObj);
       deps.taskRegistry.fail(taskId, envelope);
       deps.store.fail(taskId, JSON.stringify(envelope));
+      this.replayLinkage();
       deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_failed', fields: { task_id: taskId, tool: input.type, duration_ms: durationMs, error_code: errObj.code, error_message: errObj.message } });
       process.stderr.write(
         `[mma] event=task_failed ts=${new Date().toISOString()} task=${taskId} route=${input.type} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,

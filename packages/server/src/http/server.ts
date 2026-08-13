@@ -146,13 +146,21 @@ export async function startServer(
   const { InitiativeRecordRuntime } = await import('../application/initiative-record-runtime.js');
   const initiativeRuntime = InitiativeRecordRuntime.open({ stateDir: config.server.stateDir });
 
+  // Outbox consumer for a linked Execution's terminal result (SPEC-003 Task I-5). Opened
+  // unconditionally alongside `initiativeRuntime` above — `ExecutionRuntime` invokes it after
+  // every terminal write, and boot reconciliation invokes it below after fencing, regardless
+  // of whether agent config is present (an agent-less daemon simply never admits a linked
+  // Execution, so its outbox stays empty).
+  const { InitiativeLinker } = await import('../application/initiative-linker.js');
+  const initiativeLinker = new InitiativeLinker({ store: executionStore, initiativeRuntime });
+
   // Boot reconciliation — BEFORE the listener accepts requests: fence worker
   // process groups that survived a dead daemon, then mark their executions
   // `interrupted` (retryable). Guarded for dev watch mode (PD-2): under
   // `tsx watch` every file save restarts the process, and reconciling there
   // would SIGKILL in-flight work on each keystroke.
   if (process.env.MMA_DEV_NO_RECONCILE !== '1') {
-    const outcome = reconcileOnBoot(executionStore);
+    const outcome = reconcileOnBoot(executionStore, process.pid, initiativeLinker);
     if (outcome.interrupted > 0 || outcome.fencedWorkers > 0) {
       process.stderr.write(
         `[mma] event=boot_reconcile ts=${new Date().toISOString()} interrupted=${outcome.interrupted} fenced_workers=${outcome.fencedWorkers} pruned=${outcome.prunedExpired}\n`,
@@ -253,8 +261,8 @@ export async function startServer(
       bus.subscribe(new WorkerPidRecorder(executionStore));
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
-      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore });
-      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime };
+      const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, taskRegistry, projectRegistry, store: executionStore, initiativeLinker });
+      const deps: HandlerDeps = { runtime, taskRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
       const { buildUnifiedTaskHandler, buildTaskPollHandler, buildTaskCancelHandler } = await import('./handlers/unified-task.js');
       router.register('POST', '/task', buildUnifiedTaskHandler(deps));
       router.register('GET', '/task/:taskId', buildTaskPollHandler(deps));

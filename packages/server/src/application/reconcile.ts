@@ -19,6 +19,7 @@
 
 import { execFileSync } from 'node:child_process';
 import type { ExecutionStore } from './execution-store.js';
+import type { InitiativeLinker } from './initiative-linker.js';
 import { buildErrorEnvelope } from './result-shape.js';
 import type { TaskType } from '@zhixuan92/multi-model-agent-core';
 import { pidAlive } from '../pid-alive.js';
@@ -59,7 +60,19 @@ interface ReconcileOutcome {
   prunedExpired: number;
 }
 
-export function reconcileOnBoot(store: ExecutionStore, ownPid = process.pid): ReconcileOutcome {
+/**
+ * `initiativeLinker`, when supplied, replays every unconsumed outbox row AFTER the fencing
+ * loop below — including rows the fencing loop's own `interrupt()` calls just produced (a
+ * linked Execution that was still pending when its owning daemon died reaches its terminal
+ * outbox row here, not in `ExecutionRuntime`, since that daemon never resumes). Optional so a
+ * daemon started without agent config (no `InitiativeRecordRuntime` wired — see
+ * `http/server.ts`) still reconciles normally.
+ */
+export function reconcileOnBoot(
+  store: ExecutionStore,
+  ownPid = process.pid,
+  initiativeLinker?: InitiativeLinker,
+): ReconcileOutcome {
   let interrupted = 0;
   let fencedWorkers = 0;
 
@@ -88,5 +101,6 @@ export function reconcileOnBoot(store: ExecutionStore, ownPid = process.pid): Re
   }
 
   const prunedExpired = store.pruneExpired();
+  initiativeLinker?.replayOutbox();
   return { interrupted, fencedWorkers, prunedExpired };
 }
