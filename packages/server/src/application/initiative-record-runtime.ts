@@ -45,6 +45,29 @@ const EXECUTE_OPERATIONS = new Set([
   'initiative_task_list',
   'artifact_register',
   'artifact_get',
+  // Phase A1 — professional record and verification ledger (SPEC-002 FR-3, FR-4).
+  'requirement_add',
+  'requirement_get',
+  'requirement_list',
+  'acceptance_criterion_add',
+  'acceptance_criterion_get',
+  'acceptance_criterion_list',
+  'decision_record',
+  'decision_supersede',
+  'decision_get',
+  'decision_list',
+  'evidence_add',
+  'evidence_get',
+  'evidence_list',
+  'evidence_link',
+  'evidence_links_list',
+  'risk_add',
+  'risk_status',
+  'risk_get',
+  'risk_list',
+  'verification_record',
+  'verification_get',
+  'verification_list',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -76,8 +99,9 @@ export class InitiativeRecordRuntime {
    * matching one-per-operation store method. Throws `invalid_request` before
    * any store call for a malformed body, an unknown operation, or a request
    * naming `initiative_resume`. Every other typed error (`not_found`,
-   * `revision_conflict`, `cross_product_workspace_link`) passes through
-   * unchanged from the store.
+   * `revision_conflict`, `cross_product_workspace_link`, and — for the Phase
+   * A1 operations added by SPEC-002 — `cross_initiative_evidence_link` and
+   * `cross_initiative_verification`) passes through unchanged from the store.
    */
   execute(rawRequest: unknown): InitiativeRecordEntity | InitiativeRecordEntity[] {
     const parsed = initiativeOperationRequestSchema.safeParse(rawRequest);
@@ -102,6 +126,17 @@ export class InitiativeRecordRuntime {
       case 'initiative_relate':
       case 'initiative_task_create':
       case 'artifact_register':
+      // Phase A1 mutations (SPEC-002 FR-3): each is one transactional
+      // `store.execute()` call, same as every Phase A0 mutation above.
+      case 'requirement_add':
+      case 'acceptance_criterion_add':
+      case 'decision_record':
+      case 'decision_supersede':
+      case 'evidence_add':
+      case 'evidence_link':
+      case 'risk_add':
+      case 'risk_status':
+      case 'verification_record':
         return this.store.execute(request);
 
       case 'product_get':
@@ -126,6 +161,35 @@ export class InitiativeRecordRuntime {
         return this.store.listInitiativeTasks(request.input);
       case 'artifact_get':
         return this.store.getArtifact(request.input);
+
+      // Phase A1 reads (SPEC-002 FR-4): each is one stable Task I-5 store
+      // read method, same pattern as every Phase A0 read above.
+      case 'requirement_get':
+        return this.store.getRequirement(request.input);
+      case 'requirement_list':
+        return this.store.listRequirements(request.input);
+      case 'acceptance_criterion_get':
+        return this.store.getAcceptanceCriterion(request.input);
+      case 'acceptance_criterion_list':
+        return this.store.listAcceptanceCriteria(request.input);
+      case 'decision_get':
+        return this.store.getDecision(request.input);
+      case 'decision_list':
+        return this.store.listDecisions(request.input);
+      case 'evidence_get':
+        return this.store.getEvidence(request.input);
+      case 'evidence_list':
+        return this.store.listEvidence(request.input);
+      case 'evidence_links_list':
+        return this.store.listEvidenceLinks(request.input);
+      case 'risk_get':
+        return this.store.getRisk(request.input);
+      case 'risk_list':
+        return this.store.listRisks(request.input);
+      case 'verification_get':
+        return this.store.getVerificationRun(request.input);
+      case 'verification_list':
+        return this.store.listVerificationRuns(request.input);
 
       // `initiative_resume` is excluded above by EXECUTE_OPERATIONS; this
       // branch is unreachable but keeps the switch exhaustive under `request`'s
@@ -174,7 +238,21 @@ export class InitiativeRecordRuntime {
     const tasksByStatus = this.store.countInitiativeTasksByStatus(initiative.uuid);
     const resourceCount = workspaces.reduce((sum, link) => sum + link.resources.length, 0);
 
-    return {
+    // Phase A0 shape only — `requirements`, `decisions`, `risks`, `evidence`,
+    // `verification`, and their `counts` companions are Task I-8's Phase A1
+    // resume assembly (SPEC-002 FR-12/FR-13: joined from the Task I-5 store
+    // reads — `getRequirementsWithCriteria`, `listDecisions`,
+    // `getResumeRisks`, `listEvidence`, `getLatestVerificationRuns` — per the
+    // pinned ordering and count rules), not built here. Task I-6 only needs
+    // this file to dispatch Phase A1 execute() operations; it does not
+    // extend resume assembly. `InitiativeResumeResponse` (Task I-1) already
+    // requires those fields, so the bridge below asserts through `unknown`
+    // rather than fabricate placeholder Phase A1 data that would silently
+    // satisfy the type while contradicting the still-`Phase A0`-only runtime
+    // shape asserted by the still-current `initiative-runtime-resume.test.ts`
+    // and `initiative-resume-contract.test.ts` fixtures. Task I-8 removes
+    // this cast when it adds the real fields.
+    const response = {
       initiative,
       product,
       workspaces,
@@ -193,5 +271,6 @@ export class InitiativeRecordRuntime {
         events_total: eventsTotal,
       },
     };
+    return response as unknown as InitiativeResumeResponse;
   }
 }

@@ -211,6 +211,8 @@ export {
   NotFoundError as InitiativeNotFoundError,
   InvalidRequestError as InitiativeInvalidRequestError,
   MigrationBackupFailedError,
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
   isInitiativeError,
   fieldErrorsFromIssues as initiativeFieldErrorsFromIssues,
   InitiativeRecordStore,

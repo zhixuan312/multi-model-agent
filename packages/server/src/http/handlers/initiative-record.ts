@@ -18,6 +18,8 @@ import {
   InitiativeNotFoundError,
   InitiativeInvalidRequestError,
   MigrationBackupFailedError,
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -66,6 +68,20 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       code: err.code,
       message: err.message,
       details: { initiative_id: err.initiative_id, workspace_id: err.workspace_id },
+    };
+  }
+  if (err instanceof CrossInitiativeEvidenceLinkError) {
+    return {
+      status: 409,
+      code: err.code,
+      message: err.message,
+    };
+  }
+  if (err instanceof CrossInitiativeVerificationError) {
+    return {
+      status: 409,
+      code: err.code,
+      message: err.message,
     };
   }
   if (err instanceof InitiativeNotFoundError) {
