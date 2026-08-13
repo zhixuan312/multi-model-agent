@@ -62,6 +62,7 @@ import {
 import {
   VERIFICATION_NON_TERMINAL_STATES,
   VERIFICATION_STALE_ELIGIBLE_STATES,
+  VERIFICATION_STATES,
   type AcceptanceCriterion,
   type ArtifactRef,
   type Decision,
@@ -81,9 +82,16 @@ import {
   type Task,
   type TaskStatus,
   type VerificationRun,
+  type VerificationState,
   type Workspace,
 } from './types.js';
-import type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
+import type {
+  InitiativeRepository,
+  InitiativeWorkspaceLinkRead,
+  LatestVerificationRead,
+  RelatedInitiativeRead,
+  RequirementWithCriteriaRead,
+} from './repository.js';
 
 export interface InitiativeRecordStorePragmas {
   journal_mode: string;
@@ -727,6 +735,265 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return Number(row?.count ?? 0);
   }
 
+  // ---------------------------------------------------------------------
+  // Phase A1 reads (Task I-5) — every remaining frozen get/list operation,
+  // plus the joined read methods `initiativeResume` (Task I-6/I-8) composes
+  // from. `getDecision` and `getVerificationRun` are implemented above
+  // (Task I-3/I-4, "Phase A1 reads needed to verify..."); every other Phase
+  // A1 read is added here, with the frozen scoped selectors and pinned
+  // deterministic orderings from SPEC-002's "frozen read-only-operation
+  // contract" and resume-ordering paragraphs.
+  // ---------------------------------------------------------------------
+
+  /** `requirement_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRequirement(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Requirement {
+    const row = this.findRequirementRow(lookup.uuid, lookup.initiative_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Requirement', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapRequirementRow(row);
+  }
+
+  /** `requirement_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listRequirements(filter: { initiative_id: string }): Requirement[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM requirements WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as RequirementRow[];
+    return rows.map(mapRequirementRow);
+  }
+
+  /** `acceptance_criterion_get` — `uuid`, or `(requirement_id, human_key)`. Throws `not_found`. */
+  getAcceptanceCriterion(lookup: { uuid?: string; requirement_id?: string; human_key?: string }): AcceptanceCriterion {
+    const row = this.findAcceptanceCriterionRow(lookup.uuid, lookup.requirement_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'AcceptanceCriterion', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapAcceptanceCriterionRow(row);
+  }
+
+  /** `acceptance_criterion_list` — scoped to one Requirement or Initiative; ordered `createdAt` ascending, then `uuid` ascending. */
+  listAcceptanceCriteria(filter: { requirement_id?: string; initiative_id?: string }): AcceptanceCriterion[] {
+    const requirementId = filter.requirement_id;
+    const initiativeId = filter.initiative_id;
+    const rows = (
+      requirementId
+        ? this.db
+            .prepare(`SELECT * FROM acceptance_criteria WHERE requirement_id = ? ORDER BY created_at ASC, uuid ASC`)
+            .all(requirementId)
+        : this.db
+            .prepare(
+              `SELECT ac.* FROM acceptance_criteria ac
+               JOIN requirements r ON r.uuid = ac.requirement_id
+               WHERE r.initiative_id = ?
+               ORDER BY ac.created_at ASC, ac.uuid ASC`,
+            )
+            .all(initiativeId as string)
+    ) as unknown as AcceptanceCriterionRow[];
+    return rows.map(mapAcceptanceCriterionRow);
+  }
+
+  /** `decision_list` — status group `'open'`, `'decided'`, `'superseded'`, then `createdAt` ascending, then `uuid` ascending. Identical to the resume ordering. */
+  listDecisions(filter: { initiative_id: string }): Decision[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM decisions WHERE initiative_id = ?
+         ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'decided' THEN 1 ELSE 2 END ASC, created_at ASC, uuid ASC`,
+      )
+      .all(filter.initiative_id) as unknown as DecisionRow[];
+    return rows.map(mapDecisionRow);
+  }
+
+  /** `evidence_get` — `uuid`, or `(initiative_id, locator)`. Throws `not_found`. */
+  getEvidence(lookup: { uuid?: string; initiative_id?: string; locator?: string }): Evidence {
+    const row = this.findEvidenceRow(lookup.uuid, lookup.initiative_id, lookup.locator);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Evidence', lookup: lookup.uuid ?? lookup.locator ?? '' });
+    }
+    return mapEvidenceRow(row);
+  }
+
+  /** `evidence_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listEvidence(filter: { initiative_id: string }): Evidence[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM evidence WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as EvidenceRow[];
+    return rows.map(mapEvidenceRow);
+  }
+
+  /**
+   * `evidence_links_list` — scoped to one Evidence or one link target (`target_type` + `target_id` together);
+   * ordered `createdAt` ascending, then the composite identity (`evidence_id`, `target_type`, `target_id`)
+   * ascending — EvidenceLink's composite identity is the tie-breaker since it has no `uuid`.
+   */
+  listEvidenceLinks(filter: {
+    evidence_id?: string;
+    target_type?: EvidenceLinkTargetType;
+    target_id?: string;
+  }): EvidenceLink[] {
+    const evidenceId = filter.evidence_id;
+    const targetType = filter.target_type;
+    const targetId = filter.target_id;
+    const rows = (
+      evidenceId
+        ? this.db
+            .prepare(
+              `SELECT * FROM evidence_links WHERE evidence_id = ?
+               ORDER BY created_at ASC, evidence_id ASC, target_type ASC, target_id ASC`,
+            )
+            .all(evidenceId)
+        : this.db
+            .prepare(
+              `SELECT * FROM evidence_links WHERE target_type = ? AND target_id = ?
+               ORDER BY created_at ASC, evidence_id ASC, target_type ASC, target_id ASC`,
+            )
+            .all(targetType as string, targetId as string)
+    ) as unknown as EvidenceLinkRow[];
+    return rows.map(mapEvidenceLinkRow);
+  }
+
+  /** `risk_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRisk(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Risk {
+    const row = this.findRiskRow(lookup.uuid, lookup.initiative_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Risk', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapRiskRow(row);
+  }
+
+  /** `risk_list` — ordered `createdAt` ascending, then `uuid` ascending (the plain list order — distinct from the resume-specific risk ordering). */
+  listRisks(filter: { initiative_id: string }): Risk[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM risks WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as RiskRow[];
+    return rows.map(mapRiskRow);
+  }
+
+  /**
+   * `verification_list` — for an `initiative_id` selector: `acceptance_criterion_id` ascending, then `createdAt`
+   * descending, then `uuid` descending. For an `acceptance_criterion_id` selector: `createdAt` descending, then
+   * `uuid` descending.
+   */
+  listVerificationRuns(filter: { acceptance_criterion_id?: string; initiative_id?: string }): VerificationRun[] {
+    const acceptanceCriterionId = filter.acceptance_criterion_id;
+    const initiativeId = filter.initiative_id;
+    const rows = (
+      acceptanceCriterionId
+        ? this.db
+            .prepare(`SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC`)
+            .all(acceptanceCriterionId)
+        : this.db
+            .prepare(
+              `SELECT * FROM verification_runs WHERE initiative_id = ?
+               ORDER BY acceptance_criterion_id ASC, created_at DESC, uuid DESC`,
+            )
+            .all(initiativeId as string)
+    ) as unknown as VerificationRunRow[];
+    return rows.map(mapVerificationRunRow);
+  }
+
+  /** Resume join: every Requirement for the Initiative, each with its ordered Acceptance Criteria. */
+  getRequirementsWithCriteria(initiativeId: string): RequirementWithCriteriaRead[] {
+    return this.listRequirements({ initiative_id: initiativeId }).map((requirement) => ({
+      requirement,
+      acceptance_criteria: this.listAcceptanceCriteria({ requirement_id: requirement.uuid }),
+    }));
+  }
+
+  /**
+   * Resume join: Risks ordered open-first (severity high to low within the open group), then all other statuses;
+   * within each group, `createdAt` ascending, then `uuid` ascending. Distinct from `listRisks`.
+   */
+  getResumeRisks(initiativeId: string): Risk[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM risks WHERE initiative_id = ?
+         ORDER BY
+           CASE WHEN status = 'open' THEN 0 ELSE 1 END ASC,
+           CASE WHEN status = 'open' THEN CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ELSE 0 END ASC,
+           created_at ASC,
+           uuid ASC`,
+      )
+      .all(initiativeId) as unknown as RiskRow[];
+    return rows.map(mapRiskRow);
+  }
+
+  /**
+   * Resume join: one entry per Acceptance Criterion (within the Requirements-then-Acceptance-Criteria order) that
+   * has any Verification Run, with `latest` selected by `createdAt` descending, then `uuid` descending.
+   */
+  getLatestVerificationRuns(initiativeId: string): LatestVerificationRead[] {
+    const results: LatestVerificationRead[] = [];
+    for (const { acceptance_criteria } of this.getRequirementsWithCriteria(initiativeId)) {
+      for (const criterion of acceptance_criteria) {
+        const row = this.db
+          .prepare(
+            `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC LIMIT 1`,
+          )
+          .get(criterion.uuid) as VerificationRunRow | undefined;
+        if (row) {
+          results.push({ acceptance_criterion_id: criterion.uuid, latest: mapVerificationRunRow(row) });
+        }
+      }
+    }
+    return results;
+  }
+
+  /** Resume count: total Requirements for the Initiative. */
+  countRequirements(initiativeId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM requirements WHERE initiative_id = ?`).get(initiativeId) as
+      | { count?: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: total Acceptance Criteria across the Initiative's Requirements. */
+  countAcceptanceCriteria(initiativeId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM acceptance_criteria ac
+         JOIN requirements r ON r.uuid = ac.requirement_id
+         WHERE r.initiative_id = ?`,
+      )
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Decisions with `status: 'open'`. */
+  countOpenDecisions(initiativeId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM decisions WHERE initiative_id = ? AND status = 'open'`)
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Risks with `status: 'open'`. */
+  countOpenRisks(initiativeId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM risks WHERE initiative_id = ? AND status = 'open'`)
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: total Evidence for the Initiative. */
+  countEvidence(initiativeId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM evidence WHERE initiative_id = ?`).get(initiativeId) as
+      | { count?: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Verification Run counts by state — every `VerificationState` key present, defaulting to `0`. */
+  countVerificationByState(initiativeId: string): Record<VerificationState, number> {
+    const counts = Object.fromEntries(VERIFICATION_STATES.map((state) => [state, 0])) as Record<VerificationState, number>;
+    const rows = this.db
+      .prepare(`SELECT state, COUNT(*) AS count FROM verification_runs WHERE initiative_id = ? GROUP BY state`)
+      .all(initiativeId) as Array<{ state: VerificationState; count: number }>;
+    for (const row of rows) {
+      counts[row.state] = Number(row.count);
+    }
+    return counts;
+  }
+
   /** Dispatches one validated mutating request to its write handler. Runs inside the caller's open transaction. */
   private applyMutation(request: InitiativeMutationRequest): InitiativeRecordEntity {
     switch (request.operation) {
@@ -938,6 +1205,54 @@ export class InitiativeRecordStore implements InitiativeRepository {
         initiativeId,
         humanKey,
       ) as RiskRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `requirement_get` lookup: `uuid` alone, or `(initiative_id, human_key)` together. */
+  private findRequirementRow(uuid?: string, initiativeId?: string, humanKey?: string): RequirementRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM requirements WHERE uuid = ?`).get(uuid) as RequirementRow | undefined;
+    }
+    if (initiativeId && humanKey) {
+      return this.db.prepare(`SELECT * FROM requirements WHERE initiative_id = ? AND human_key = ?`).get(
+        initiativeId,
+        humanKey,
+      ) as RequirementRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `acceptance_criterion_get` lookup: `uuid` alone, or `(requirement_id, human_key)` together. */
+  private findAcceptanceCriterionRow(
+    uuid?: string,
+    requirementId?: string,
+    humanKey?: string,
+  ): AcceptanceCriterionRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM acceptance_criteria WHERE uuid = ?`).get(uuid) as
+        | AcceptanceCriterionRow
+        | undefined;
+    }
+    if (requirementId && humanKey) {
+      return this.db.prepare(`SELECT * FROM acceptance_criteria WHERE requirement_id = ? AND human_key = ?`).get(
+        requirementId,
+        humanKey,
+      ) as AcceptanceCriterionRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `evidence_get` lookup: `uuid` alone, or `(initiative_id, locator)` together. */
+  private findEvidenceRow(uuid?: string, initiativeId?: string, locator?: string): EvidenceRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM evidence WHERE uuid = ?`).get(uuid) as EvidenceRow | undefined;
+    }
+    if (initiativeId && locator) {
+      return this.db.prepare(`SELECT * FROM evidence WHERE initiative_id = ? AND locator = ?`).get(
+        initiativeId,
+        locator,
+      ) as EvidenceRow | undefined;
     }
     return undefined;
   }
@@ -2123,6 +2438,63 @@ function mapVerificationRunRow(row: VerificationRunRow): VerificationRun {
     state: row.state,
     detail: row.detail,
     createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `requirements` row to the public `Requirement` shape. */
+function mapRequirementRow(row: RequirementRow): Requirement {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `acceptance_criteria` row to the public `AcceptanceCriterion` shape. */
+function mapAcceptanceCriterionRow(row: AcceptanceCriterionRow): AcceptanceCriterion {
+  return {
+    uuid: row.uuid,
+    requirement_id: row.requirement_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    check_reference: row.check_reference,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `evidence` row to the public `Evidence` shape. */
+function mapEvidenceRow(row: EvidenceRow): Evidence {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    kind: row.kind,
+    locator: row.locator,
+    content_hash: row.content_hash,
+    summary: row.summary,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `risks` row to the public `Risk` shape. */
+function mapRiskRow(row: RiskRow): Risk {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    severity: row.severity,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     revision: Number(row.revision),
   };
 }
