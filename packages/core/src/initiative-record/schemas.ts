@@ -275,6 +275,255 @@ export const artifactGetInputSchema = z.object({ uuid: uuidSchema }).strict();
 export type ArtifactGetInput = z.infer<typeof artifactGetInputSchema>;
 
 // ---------------------------------------------------------------------------
+// Phase A1 — professional record and verification ledger (SPEC-002)
+//
+// TRANSCRIPTION, not design: validates exactly the request shapes SPEC-002
+// pins in "Interfaces / contracts" and "Data model". Every scoped
+// `human_key` selector pairs with its owning scope (`initiative_id`, except
+// `requirement_id` for an AcceptanceCriterion) — a bare `human_key` is
+// rejected, because human keys are monotonic per parent and therefore
+// ambiguous across parents.
+// ---------------------------------------------------------------------------
+
+/** Exact `REQ-<n>` pattern; `<n>` is monotonic per Initiative. */
+export const requirementHumanKeySchema = z.string().regex(/^REQ-\d+$/, 'must match REQ-<n>');
+/** Exact `AC-<n>` pattern; `<n>` is monotonic per Requirement. */
+export const acceptanceCriterionHumanKeySchema = z.string().regex(/^AC-\d+$/, 'must match AC-<n>');
+/** Exact `D-<n>` pattern; `<n>` is monotonic per Initiative. */
+export const decisionHumanKeySchema = z.string().regex(/^D-\d+$/, 'must match D-<n>');
+/** Exact `RISK-<n>` pattern; `<n>` is monotonic per Initiative. */
+export const riskHumanKeySchema = z.string().regex(/^RISK-\d+$/, 'must match RISK-<n>');
+
+export const evidenceLinkTargetTypeSchema = z.enum([
+  'requirement',
+  'acceptance_criterion',
+  'decision',
+  'verification_run',
+  'task',
+]);
+
+export const decisionCreateStatusSchema = z.enum(['open', 'decided']);
+export const decisionStatusSchema = z.enum(['open', 'decided', 'superseded']);
+
+export const riskSeveritySchema = z.enum(['low', 'medium', 'high']);
+export const riskStatusValueSchema = z.enum(['open', 'mitigated', 'accepted', 'closed']);
+
+export const verificationMethodSchema = z.enum(['command', 'agent-review', 'human']);
+export const verificationStateSchema = z.enum([
+  'pending',
+  'pass',
+  'fail',
+  'blocked',
+  'needs_human_review',
+  'stale',
+  'not_applicable',
+  'superseded',
+]);
+
+// --- Requirement -----------------------------------------------------------
+
+export const requirementAddInputSchema = z
+  .object({ initiative_id: uuidSchema, statement: nonEmptyString })
+  .strict();
+export type RequirementAddInput = z.infer<typeof requirementAddInputSchema>;
+
+/** `uuid` alone, or `(initiative_id, human_key)` together — never a bare `human_key` (scoped selectors, SPEC-002). */
+export const requirementLookupInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    initiative_id: uuidSchema.optional(),
+    human_key: requirementHumanKeySchema.optional(),
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and human_key) is required',
+  });
+export type RequirementLookupInput = z.infer<typeof requirementLookupInputSchema>;
+
+export const requirementListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type RequirementListInput = z.infer<typeof requirementListInputSchema>;
+
+// --- AcceptanceCriterion ----------------------------------------------------
+
+export const acceptanceCriterionAddInputSchema = z
+  .object({ requirement_id: uuidSchema, statement: nonEmptyString, check_reference: nonEmptyString })
+  .strict();
+export type AcceptanceCriterionAddInput = z.infer<typeof acceptanceCriterionAddInputSchema>;
+
+/** `uuid` alone, or `(requirement_id, human_key)` together — an AcceptanceCriterion scopes to its Requirement, not its Initiative. */
+export const acceptanceCriterionLookupInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    requirement_id: uuidSchema.optional(),
+    human_key: acceptanceCriterionHumanKeySchema.optional(),
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.requirement_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (requirement_id and human_key) is required',
+  });
+export type AcceptanceCriterionLookupInput = z.infer<typeof acceptanceCriterionLookupInputSchema>;
+
+export const acceptanceCriterionListInputSchema = z
+  .object({ requirement_id: uuidSchema.optional(), initiative_id: uuidSchema.optional() })
+  .strict()
+  .refine((v) => (v.requirement_id !== undefined) !== (v.initiative_id !== undefined), {
+    message: 'exactly one of requirement_id or initiative_id is required',
+  });
+export type AcceptanceCriterionListInput = z.infer<typeof acceptanceCriterionListInputSchema>;
+
+// --- Decision ----------------------------------------------------------------
+
+export const decisionRecordInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    title: nonEmptyString,
+    decision: nonEmptyString,
+    rationale: nonEmptyString,
+    alternatives: z.array(z.string()),
+    status: decisionCreateStatusSchema,
+  })
+  .strict();
+export type DecisionRecordInput = z.infer<typeof decisionRecordInputSchema>;
+
+/** Old-Decision identity (`uuid` or `{ initiative_id, human_key }`) plus the full new-Decision fields (FR-6). */
+export const decisionSupersedeInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    initiative_id: uuidSchema.optional(),
+    human_key: decisionHumanKeySchema.optional(),
+    title: nonEmptyString,
+    decision: nonEmptyString,
+    rationale: nonEmptyString,
+    alternatives: z.array(z.string()),
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and human_key) is required to identify the old Decision',
+  });
+export type DecisionSupersedeInput = z.infer<typeof decisionSupersedeInputSchema>;
+
+export const decisionLookupInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    initiative_id: uuidSchema.optional(),
+    human_key: decisionHumanKeySchema.optional(),
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and human_key) is required',
+  });
+export type DecisionLookupInput = z.infer<typeof decisionLookupInputSchema>;
+
+export const decisionListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type DecisionListInput = z.infer<typeof decisionListInputSchema>;
+
+// --- Evidence and EvidenceLink -----------------------------------------------
+
+export const evidenceAddInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    kind: nonEmptyString,
+    locator: nonEmptyString,
+    /** Nullable end to end: the frozen `Evidence.content_hash` type is `string | null`. */
+    content_hash: nonEmptyString.nullable(),
+    summary: nonEmptyString,
+  })
+  .strict();
+export type EvidenceAddInput = z.infer<typeof evidenceAddInputSchema>;
+
+export const evidenceLookupInputSchema = z
+  .object({ uuid: uuidSchema.optional(), initiative_id: uuidSchema.optional(), locator: nonEmptyString.optional() })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.locator !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and locator) is required',
+  });
+export type EvidenceLookupInput = z.infer<typeof evidenceLookupInputSchema>;
+
+export const evidenceListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type EvidenceListInput = z.infer<typeof evidenceListInputSchema>;
+
+export const evidenceLinkInputSchema = z
+  .object({ evidence_id: uuidSchema, target_type: evidenceLinkTargetTypeSchema, target_id: uuidSchema })
+  .strict();
+export type EvidenceLinkInput = z.infer<typeof evidenceLinkInputSchema>;
+
+export const evidenceLinksListInputSchema = z
+  .object({
+    evidence_id: uuidSchema.optional(),
+    target_type: evidenceLinkTargetTypeSchema.optional(),
+    target_id: uuidSchema.optional(),
+  })
+  .strict()
+  .refine((v) => (v.evidence_id !== undefined) !== (v.target_type !== undefined && v.target_id !== undefined), {
+    message: 'exactly one of evidence_id or (target_type and target_id) is required',
+  });
+export type EvidenceLinksListInput = z.infer<typeof evidenceLinksListInputSchema>;
+
+// --- Risk ----------------------------------------------------------------------
+
+export const riskAddInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    statement: nonEmptyString,
+    severity: riskSeveritySchema,
+    status: riskStatusValueSchema,
+  })
+  .strict();
+export type RiskAddInput = z.infer<typeof riskAddInputSchema>;
+
+export const riskStatusInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    initiative_id: uuidSchema.optional(),
+    human_key: riskHumanKeySchema.optional(),
+    status: riskStatusValueSchema,
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and human_key) is required',
+  });
+export type RiskStatusInput = z.infer<typeof riskStatusInputSchema>;
+
+export const riskLookupInputSchema = z
+  .object({
+    uuid: uuidSchema.optional(),
+    initiative_id: uuidSchema.optional(),
+    human_key: riskHumanKeySchema.optional(),
+  })
+  .strict()
+  .refine((v) => (v.uuid !== undefined) !== (v.initiative_id !== undefined && v.human_key !== undefined), {
+    message: 'exactly one of uuid or (initiative_id and human_key) is required',
+  });
+export type RiskLookupInput = z.infer<typeof riskLookupInputSchema>;
+
+export const riskListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type RiskListInput = z.infer<typeof riskListInputSchema>;
+
+// --- VerificationRun -------------------------------------------------------------
+
+export const verificationRecordInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    acceptance_criterion_id: uuidSchema,
+    method: verificationMethodSchema,
+    state: verificationStateSchema,
+    detail: nonEmptyString,
+  })
+  .strict();
+export type VerificationRecordInput = z.infer<typeof verificationRecordInputSchema>;
+
+export const verificationGetInputSchema = z.object({ uuid: uuidSchema }).strict();
+export type VerificationGetInput = z.infer<typeof verificationGetInputSchema>;
+
+export const verificationListInputSchema = z
+  .object({ acceptance_criterion_id: uuidSchema.optional(), initiative_id: uuidSchema.optional() })
+  .strict()
+  .refine((v) => (v.acceptance_criterion_id !== undefined) !== (v.initiative_id !== undefined), {
+    message: 'exactly one of acceptance_criterion_id or initiative_id is required',
+  });
+export type VerificationListInput = z.infer<typeof verificationListInputSchema>;
+
+// ---------------------------------------------------------------------------
 // The generic operation envelope
 // ---------------------------------------------------------------------------
 
@@ -299,6 +548,16 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_relate', initiativeRelateInputSchema),
   mutating('initiative_task_create', initiativeTaskCreateInputSchema),
   mutating('artifact_register', artifactRegisterInputSchema),
+  // Phase A1 (SPEC-002 FR-3).
+  mutating('requirement_add', requirementAddInputSchema),
+  mutating('acceptance_criterion_add', acceptanceCriterionAddInputSchema),
+  mutating('decision_record', decisionRecordInputSchema),
+  mutating('decision_supersede', decisionSupersedeInputSchema),
+  mutating('evidence_add', evidenceAddInputSchema),
+  mutating('evidence_link', evidenceLinkInputSchema),
+  mutating('risk_add', riskAddInputSchema),
+  mutating('risk_status', riskStatusInputSchema),
+  mutating('verification_record', verificationRecordInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -329,5 +588,34 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
 
   mutating('artifact_register', artifactRegisterInputSchema),
   readOnly('artifact_get', artifactGetInputSchema),
+
+  // Phase A1 — professional record and verification ledger (SPEC-002 FR-3, FR-4).
+  mutating('requirement_add', requirementAddInputSchema),
+  readOnly('requirement_get', requirementLookupInputSchema),
+  readOnly('requirement_list', requirementListInputSchema),
+
+  mutating('acceptance_criterion_add', acceptanceCriterionAddInputSchema),
+  readOnly('acceptance_criterion_get', acceptanceCriterionLookupInputSchema),
+  readOnly('acceptance_criterion_list', acceptanceCriterionListInputSchema),
+
+  mutating('decision_record', decisionRecordInputSchema),
+  mutating('decision_supersede', decisionSupersedeInputSchema),
+  readOnly('decision_get', decisionLookupInputSchema),
+  readOnly('decision_list', decisionListInputSchema),
+
+  mutating('evidence_add', evidenceAddInputSchema),
+  readOnly('evidence_get', evidenceLookupInputSchema),
+  readOnly('evidence_list', evidenceListInputSchema),
+  mutating('evidence_link', evidenceLinkInputSchema),
+  readOnly('evidence_links_list', evidenceLinksListInputSchema),
+
+  mutating('risk_add', riskAddInputSchema),
+  mutating('risk_status', riskStatusInputSchema),
+  readOnly('risk_get', riskLookupInputSchema),
+  readOnly('risk_list', riskListInputSchema),
+
+  mutating('verification_record', verificationRecordInputSchema),
+  readOnly('verification_get', verificationGetInputSchema),
+  readOnly('verification_list', verificationListInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

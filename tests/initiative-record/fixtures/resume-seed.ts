@@ -14,15 +14,21 @@
  */
 import type { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import type {
+  AcceptanceCriterion,
   ArtifactRef,
+  Decision,
   Event,
+  Evidence,
   Initiative,
   InitiativeRelation,
   InitiativeResumeResponse,
   InitiativeWorkspaceLink,
   Product,
+  Requirement,
   Resource,
+  Risk,
   Task,
+  VerificationRun,
   Workspace,
 } from '../../../packages/core/src/initiative-record/index.js';
 
@@ -49,6 +55,12 @@ export interface SeedResumeFixtureResult {
   relation: InitiativeRelation;
   tasks: [Task, Task];
   artifacts: [ArtifactRef, ArtifactRef];
+  requirements: [Requirement, Requirement];
+  criteria: [AcceptanceCriterion, AcceptanceCriterion, AcceptanceCriterion];
+  decisions: [Decision, Decision, Decision];
+  risks: [Risk, Risk, Risk];
+  evidence: [Evidence, Evidence];
+  verificationRuns: [VerificationRun, VerificationRun, VerificationRun];
   events: Event[];
   expectedResume: InitiativeResumeResponse;
 }
@@ -168,6 +180,133 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     storage_mode: 'external',
     path_or_uri: 'https://example.com/resume-fixture/a2',
     description: 'Second external artifact.',
+  });
+
+  // Phase A1 — professional record and verification ledger (Task I-8,
+  // SPEC-002). Exercises every resume ordering rule: Requirements/Acceptance
+  // Criteria creation order; Decision status-group order (`open`, `decided`,
+  // `superseded`) via a real `decision_supersede`; Risk resume order (open
+  // first, severity high to low, then other statuses); Evidence creation
+  // order; and `verification`'s latest-run selection plus automatic
+  // superseding of a prior non-terminal run.
+  const requirementOne = call<Requirement>('requirement_add', {
+    initiative_id: initiative.uuid,
+    statement: 'The engine must persist Requirements.',
+  });
+  const requirementTwo = call<Requirement>('requirement_add', {
+    initiative_id: initiative.uuid,
+    statement: 'The engine must persist Acceptance Criteria.',
+  });
+
+  const criterionOneA = call<AcceptanceCriterion>('acceptance_criterion_add', {
+    requirement_id: requirementOne.uuid,
+    statement: 'Requirement rows survive a reopen.',
+    check_reference: 'a1-resume-golden.check.test.ts',
+  });
+  const criterionOneB = call<AcceptanceCriterion>('acceptance_criterion_add', {
+    requirement_id: requirementOne.uuid,
+    statement: 'Requirement ordering is createdAt then uuid.',
+    check_reference: 'a1-resume-golden.check.test.ts',
+  });
+  const criterionTwoA = call<AcceptanceCriterion>('acceptance_criterion_add', {
+    requirement_id: requirementTwo.uuid,
+    statement: 'Acceptance Criteria are scoped to their Requirement.',
+    check_reference: 'a1-resume-golden.check.test.ts',
+  });
+
+  const decisionOpen = call<Decision>('decision_record', {
+    initiative_id: initiative.uuid,
+    title: 'Keep the resume payload additive',
+    decision: 'Add fields, never remove Phase A0 fields.',
+    rationale: 'Existing callers must not break.',
+    alternatives: ['Ship a v2 endpoint'],
+    status: 'open',
+  });
+  const decisionDecided = call<Decision>('decision_record', {
+    initiative_id: initiative.uuid,
+    title: 'Store Decision.alternatives as JSON',
+    decision: 'Use a JSON column.',
+    rationale: 'The public contract only requires string[] behavior.',
+    alternatives: ['A join table'],
+    status: 'decided',
+  });
+  const decisionToSupersede = call<Decision>('decision_record', {
+    initiative_id: initiative.uuid,
+    title: 'Draft verification method list',
+    decision: 'Start with just command.',
+    rationale: 'Smallest surface first.',
+    alternatives: [],
+    status: 'open',
+  });
+  const decisionSuperseding = call<Decision>('decision_supersede', {
+    uuid: decisionToSupersede.uuid,
+    title: 'Widen verification method list',
+    decision: 'Support command, agent-review, and human.',
+    rationale: 'Not every check is scriptable.',
+    alternatives: ['Keep just command'],
+  });
+  const decisionSuperseded: Decision = {
+    ...decisionToSupersede,
+    status: 'superseded',
+    superseded_by: decisionSuperseding.uuid,
+    updatedAt: decisionSuperseding.createdAt,
+    revision: decisionToSupersede.revision + 1,
+  };
+
+  const riskHighOpen = call<Risk>('risk_add', {
+    initiative_id: initiative.uuid,
+    statement: 'Resume payload growth could break large installs.',
+    severity: 'high',
+    status: 'open',
+  });
+  const riskLowOpen = call<Risk>('risk_add', {
+    initiative_id: initiative.uuid,
+    statement: 'Fixture drift between spec and golden.',
+    severity: 'low',
+    status: 'open',
+  });
+  const riskMediumClosed = call<Risk>('risk_add', {
+    initiative_id: initiative.uuid,
+    statement: 'Migration backup verification could stall a release.',
+    severity: 'medium',
+    status: 'closed',
+  });
+
+  const evidenceOne = call<Evidence>('evidence_add', {
+    initiative_id: initiative.uuid,
+    kind: 'test-run',
+    locator: 'tests/initiative-record/a1-resume-golden.check.test.ts',
+    content_hash: null,
+    summary: 'The golden resume check passes.',
+  });
+  const evidenceTwo = call<Evidence>('evidence_add', {
+    initiative_id: initiative.uuid,
+    kind: 'build-log',
+    locator: 'pnpm run build',
+    content_hash: 'sha256:deadbeef',
+    summary: 'The full build passes.',
+  });
+
+  const verificationOnePending = call<VerificationRun>('verification_record', {
+    initiative_id: initiative.uuid,
+    acceptance_criterion_id: criterionOneA.uuid,
+    method: 'command',
+    state: 'pending',
+    detail: 'Golden check queued.',
+  });
+  const verificationOnePass = call<VerificationRun>('verification_record', {
+    initiative_id: initiative.uuid,
+    acceptance_criterion_id: criterionOneA.uuid,
+    method: 'command',
+    state: 'pass',
+    detail: 'Golden check passed.',
+  });
+  const verificationTwoFail = call<VerificationRun>('verification_record', {
+    initiative_id: initiative.uuid,
+    acceptance_criterion_id: criterionOneB.uuid,
+    method: 'agent-review',
+    state: 'fail',
+    detail: 'Ordering rule not yet implemented.',
   });
 
   // The installation-wide Event log: exactly one Event per mutating call
@@ -322,6 +461,199 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
       },
       ...provenanceAt(14),
     },
+    // Phase A1 Events (Task I-8): one per mutating call above from
+    // `requirementOne` through `verificationTwoFail`, including the two
+    // Events each written by `decision_supersede` and by the
+    // superseding `verification_record` call.
+    {
+      event_sequence: 16,
+      entity_type: 'Requirement',
+      entity_id: requirementOne.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'requirement_added',
+      payload: { uuid: requirementOne.uuid, initiative_id: initiative.uuid, human_key: requirementOne.human_key },
+      ...provenanceAt(15),
+    },
+    {
+      event_sequence: 17,
+      entity_type: 'Requirement',
+      entity_id: requirementTwo.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'requirement_added',
+      payload: { uuid: requirementTwo.uuid, initiative_id: initiative.uuid, human_key: requirementTwo.human_key },
+      ...provenanceAt(16),
+    },
+    {
+      event_sequence: 18,
+      entity_type: 'AcceptanceCriterion',
+      entity_id: criterionOneA.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'acceptance_criterion_added',
+      payload: { uuid: criterionOneA.uuid, requirement_id: requirementOne.uuid, human_key: criterionOneA.human_key },
+      ...provenanceAt(17),
+    },
+    {
+      event_sequence: 19,
+      entity_type: 'AcceptanceCriterion',
+      entity_id: criterionOneB.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'acceptance_criterion_added',
+      payload: { uuid: criterionOneB.uuid, requirement_id: requirementOne.uuid, human_key: criterionOneB.human_key },
+      ...provenanceAt(18),
+    },
+    {
+      event_sequence: 20,
+      entity_type: 'AcceptanceCriterion',
+      entity_id: criterionTwoA.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'acceptance_criterion_added',
+      payload: { uuid: criterionTwoA.uuid, requirement_id: requirementTwo.uuid, human_key: criterionTwoA.human_key },
+      ...provenanceAt(19),
+    },
+    {
+      event_sequence: 21,
+      entity_type: 'Decision',
+      entity_id: decisionOpen.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'decision_recorded',
+      payload: { uuid: decisionOpen.uuid, initiative_id: initiative.uuid, human_key: decisionOpen.human_key, status: 'open' },
+      ...provenanceAt(20),
+    },
+    {
+      event_sequence: 22,
+      entity_type: 'Decision',
+      entity_id: decisionDecided.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'decision_recorded',
+      payload: { uuid: decisionDecided.uuid, initiative_id: initiative.uuid, human_key: decisionDecided.human_key, status: 'decided' },
+      ...provenanceAt(21),
+    },
+    {
+      event_sequence: 23,
+      entity_type: 'Decision',
+      entity_id: decisionToSupersede.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'decision_recorded',
+      payload: { uuid: decisionToSupersede.uuid, initiative_id: initiative.uuid, human_key: decisionToSupersede.human_key, status: 'open' },
+      ...provenanceAt(22),
+    },
+    {
+      event_sequence: 24,
+      entity_type: 'Decision',
+      entity_id: decisionSuperseding.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'decision_recorded',
+      payload: { uuid: decisionSuperseding.uuid, initiative_id: initiative.uuid, human_key: decisionSuperseding.human_key, status: 'decided' },
+      ...provenanceAt(23),
+    },
+    {
+      event_sequence: 25,
+      entity_type: 'Decision',
+      entity_id: decisionToSupersede.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'decision_superseded',
+      payload: { uuid: decisionToSupersede.uuid, superseded_by: decisionSuperseding.uuid },
+      ...provenanceAt(23),
+    },
+    {
+      event_sequence: 26,
+      entity_type: 'Risk',
+      entity_id: riskHighOpen.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'risk_added',
+      payload: { uuid: riskHighOpen.uuid, initiative_id: initiative.uuid, human_key: riskHighOpen.human_key, severity: 'high', status: 'open' },
+      ...provenanceAt(24),
+    },
+    {
+      event_sequence: 27,
+      entity_type: 'Risk',
+      entity_id: riskLowOpen.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'risk_added',
+      payload: { uuid: riskLowOpen.uuid, initiative_id: initiative.uuid, human_key: riskLowOpen.human_key, severity: 'low', status: 'open' },
+      ...provenanceAt(25),
+    },
+    {
+      event_sequence: 28,
+      entity_type: 'Risk',
+      entity_id: riskMediumClosed.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'risk_added',
+      payload: { uuid: riskMediumClosed.uuid, initiative_id: initiative.uuid, human_key: riskMediumClosed.human_key, severity: 'medium', status: 'closed' },
+      ...provenanceAt(26),
+    },
+    {
+      event_sequence: 29,
+      entity_type: 'Evidence',
+      entity_id: evidenceOne.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'evidence_added',
+      payload: { uuid: evidenceOne.uuid, initiative_id: initiative.uuid, locator: evidenceOne.locator },
+      ...provenanceAt(27),
+    },
+    {
+      event_sequence: 30,
+      entity_type: 'Evidence',
+      entity_id: evidenceTwo.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'evidence_added',
+      payload: { uuid: evidenceTwo.uuid, initiative_id: initiative.uuid, locator: evidenceTwo.locator },
+      ...provenanceAt(28),
+    },
+    {
+      event_sequence: 31,
+      entity_type: 'VerificationRun',
+      entity_id: verificationOnePending.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'verification_recorded',
+      payload: {
+        uuid: verificationOnePending.uuid,
+        initiative_id: initiative.uuid,
+        acceptance_criterion_id: criterionOneA.uuid,
+        method: 'command',
+        state: 'pending',
+      },
+      ...provenanceAt(29),
+    },
+    {
+      event_sequence: 32,
+      entity_type: 'VerificationRun',
+      entity_id: verificationOnePass.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'verification_recorded',
+      payload: {
+        uuid: verificationOnePass.uuid,
+        initiative_id: initiative.uuid,
+        acceptance_criterion_id: criterionOneA.uuid,
+        method: 'command',
+        state: 'pass',
+      },
+      ...provenanceAt(30),
+    },
+    {
+      event_sequence: 33,
+      entity_type: 'VerificationRun',
+      entity_id: verificationOnePending.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'verification_superseded',
+      payload: { uuid: verificationOnePending.uuid, acceptance_criterion_id: criterionOneA.uuid },
+      ...provenanceAt(30),
+    },
+    {
+      event_sequence: 34,
+      entity_type: 'VerificationRun',
+      entity_id: verificationTwoFail.uuid,
+      initiative_id: initiative.uuid,
+      event_type: 'verification_recorded',
+      payload: {
+        uuid: verificationTwoFail.uuid,
+        initiative_id: initiative.uuid,
+        acceptance_criterion_id: criterionOneB.uuid,
+        method: 'agent-review',
+        state: 'fail',
+      },
+      ...provenanceAt(31),
+    },
   ];
   const events = [...eventsAscending].reverse();
 
@@ -336,6 +668,17 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     tasks: [taskOpen, taskDone],
     artifacts: [artifactOne, artifactTwo],
     events,
+    requirements: [
+      { requirement: requirementOne, acceptance_criteria: [criterionOneA, criterionOneB] },
+      { requirement: requirementTwo, acceptance_criteria: [criterionTwoA] },
+    ],
+    decisions: [decisionOpen, decisionDecided, decisionSuperseding, decisionSuperseded],
+    risks: [riskHighOpen, riskLowOpen, riskMediumClosed],
+    evidence: [evidenceOne, evidenceTwo],
+    verification: [
+      { acceptance_criterion_id: criterionOneA.uuid, latest: verificationOnePass },
+      { acceptance_criterion_id: criterionOneB.uuid, latest: verificationTwoFail },
+    ],
     counts: {
       workspaces: 2,
       resources: 3,
@@ -345,6 +688,21 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
       artifacts: 2,
       events_returned: events.length,
       events_total: events.length,
+      requirements: 2,
+      acceptance_criteria: 3,
+      decisions_open: 1,
+      risks_open: 2,
+      evidence: 2,
+      verification_by_state: {
+        pending: 0,
+        pass: 1,
+        fail: 1,
+        blocked: 0,
+        needs_human_review: 0,
+        stale: 0,
+        not_applicable: 0,
+        superseded: 1,
+      },
     },
   };
 
@@ -358,6 +716,12 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     relation,
     tasks: [taskOpen, taskDone],
     artifacts: [artifactOne, artifactTwo],
+    requirements: [requirementOne, requirementTwo],
+    criteria: [criterionOneA, criterionOneB, criterionTwoA],
+    decisions: [decisionOpen, decisionDecided, decisionSuperseding],
+    risks: [riskHighOpen, riskLowOpen, riskMediumClosed],
+    evidence: [evidenceOne, evidenceTwo],
+    verificationRuns: [verificationOnePending, verificationOnePass, verificationTwoFail],
     events,
     expectedResume,
   };

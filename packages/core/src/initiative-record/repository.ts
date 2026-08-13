@@ -24,7 +24,12 @@
  */
 import type { InitiativeMutationRequest } from './schemas.js';
 import type {
+  AcceptanceCriterion,
   ArtifactRef,
+  Decision,
+  Evidence,
+  EvidenceLink,
+  EvidenceLinkTargetType,
   Initiative,
   InitiativeRecordEntity,
   InitiativeRelation,
@@ -32,9 +37,13 @@ import type {
   InitiativeWorkspaceRole,
   Event,
   Product,
+  Requirement,
   Resource,
+  Risk,
   Task,
   TaskStatus,
+  VerificationRun,
+  VerificationState,
   Workspace,
 } from './types.js';
 
@@ -49,6 +58,18 @@ export interface InitiativeWorkspaceLinkRead {
   role: InitiativeWorkspaceRole;
   workspace: Workspace;
   resources: Resource[];
+}
+
+/** One Requirement joined with its ordered Acceptance Criteria (resume `requirements` — SPEC-002). */
+export interface RequirementWithCriteriaRead {
+  requirement: Requirement;
+  acceptance_criteria: AcceptanceCriterion[];
+}
+
+/** One Acceptance Criterion's latest Verification Run (resume `verification` — SPEC-002, `latest` by `createdAt DESC, uuid DESC`). */
+export interface LatestVerificationRead {
+  acceptance_criterion_id: string;
+  latest: VerificationRun;
 }
 
 export interface InitiativeRepository {
@@ -114,4 +135,72 @@ export interface InitiativeRepository {
   listRecentEvents(filter: { initiative_id: string; limit: number }): Event[];
   /** Resume join: the total Event count for the Initiative (independent of any `event_limit` window). */
   countInitiativeEvents(initiativeId: string): number;
+
+  // -------------------------------------------------------------------------
+  // Phase A1 — professional record and verification ledger (SPEC-002 FR-4).
+  // -------------------------------------------------------------------------
+
+  /** `requirement_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRequirement(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Requirement;
+  /** `requirement_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listRequirements(filter: { initiative_id: string }): Requirement[];
+
+  /** `acceptance_criterion_get` — `uuid`, or `(requirement_id, human_key)`. Throws `not_found`. */
+  getAcceptanceCriterion(lookup: {
+    uuid?: string;
+    requirement_id?: string;
+    human_key?: string;
+  }): AcceptanceCriterion;
+  /** `acceptance_criterion_list` — scoped to one Requirement or Initiative; ordered `createdAt` ascending, then `uuid` ascending. */
+  listAcceptanceCriteria(filter: { requirement_id?: string; initiative_id?: string }): AcceptanceCriterion[];
+
+  /** `decision_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getDecision(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Decision;
+  /** `decision_list` — sorted by status group `'open'`, then `'decided'`, then `'superseded'`; within a group, `createdAt` ascending, then `uuid` ascending. Identical to the resume ordering. */
+  listDecisions(filter: { initiative_id: string }): Decision[];
+
+  /** `evidence_get` — `uuid`, or `(initiative_id, locator)`. Throws `not_found`. */
+  getEvidence(lookup: { uuid?: string; initiative_id?: string; locator?: string }): Evidence;
+  /** `evidence_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listEvidence(filter: { initiative_id: string }): Evidence[];
+  /** `evidence_links_list` — scoped to one Evidence or one link target; ordered `createdAt` ascending, then `evidence_id` ascending, `target_type` ascending, `target_id` ascending (EvidenceLink's composite identity is the tie-breaker). */
+  listEvidenceLinks(filter: {
+    evidence_id?: string;
+    target_type?: EvidenceLinkTargetType;
+    target_id?: string;
+  }): EvidenceLink[];
+
+  /** `risk_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRisk(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Risk;
+  /** `risk_list` — ordered `createdAt` ascending, then `uuid` ascending (the plain list order — distinct from the resume-specific risk ordering below). */
+  listRisks(filter: { initiative_id: string }): Risk[];
+
+  /** `verification_get` — `uuid`. Throws `not_found`. */
+  getVerificationRun(lookup: { uuid: string }): VerificationRun;
+  /**
+   * `verification_list` — for an `initiative_id` selector: `acceptance_criterion_id` ascending, then
+   * `createdAt` descending, then `uuid` descending. For an `acceptance_criterion_id` selector: `createdAt`
+   * descending, then `uuid` descending.
+   */
+  listVerificationRuns(filter: { acceptance_criterion_id?: string; initiative_id?: string }): VerificationRun[];
+
+  /** Resume join: every Requirement for the Initiative, each with its ordered Acceptance Criteria (Requirement order, then the same order per Acceptance Criteria array). */
+  getRequirementsWithCriteria(initiativeId: string): RequirementWithCriteriaRead[];
+  /** Resume join: Risks ordered open-first, severity high to low, then all other statuses; within each group, `createdAt` ascending, then `uuid` ascending. Distinct from `listRisks`. */
+  getResumeRisks(initiativeId: string): Risk[];
+  /** Resume join: one entry per Acceptance Criterion (within the Requirements-then-Acceptance-Criteria order) that has any Verification Run, with `latest` selected by `createdAt` descending, then `uuid` descending. */
+  getLatestVerificationRuns(initiativeId: string): LatestVerificationRead[];
+
+  /** Resume count: total Requirements for the Initiative. */
+  countRequirements(initiativeId: string): number;
+  /** Resume count: total Acceptance Criteria across the Initiative's Requirements. */
+  countAcceptanceCriteria(initiativeId: string): number;
+  /** Resume count: Decisions with `status: 'open'`. */
+  countOpenDecisions(initiativeId: string): number;
+  /** Resume count: Risks with `status: 'open'`. */
+  countOpenRisks(initiativeId: string): number;
+  /** Resume count: total Evidence for the Initiative. */
+  countEvidence(initiativeId: string): number;
+  /** Resume count: Verification Run counts by state — every `VerificationState` key present, defaulting to `0`. */
+  countVerificationByState(initiativeId: string): Record<VerificationState, number>;
 }

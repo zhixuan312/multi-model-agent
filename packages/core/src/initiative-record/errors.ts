@@ -12,7 +12,9 @@ export type InitiativeErrorCode =
   | 'cross_product_workspace_link'
   | 'not_found'
   | 'invalid_request'
-  | 'migration_backup_failed';
+  | 'migration_backup_failed'
+  | 'cross_initiative_evidence_link'
+  | 'cross_initiative_verification';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -101,13 +103,51 @@ export class MigrationBackupFailedError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`. */
+/** `evidence_link` targeted a record outside the Evidence's own Initiative (SPEC-002 FR-8). */
+export class CrossInitiativeEvidenceLinkError extends Error {
+  readonly code = 'cross_initiative_evidence_link' as const;
+  readonly evidence_id: string;
+  readonly target_type: string;
+  readonly target_id: string;
+
+  constructor(params: { evidence_id: string; target_type: string; target_id: string; message?: string }) {
+    super(
+      params.message ??
+        `cross_initiative_evidence_link: Evidence ${params.evidence_id} may not link to ${params.target_type} ${params.target_id}: different Initiative`,
+    );
+    this.name = 'CrossInitiativeEvidenceLinkError';
+    this.evidence_id = params.evidence_id;
+    this.target_type = params.target_type;
+    this.target_id = params.target_id;
+  }
+}
+
+/** `verification_record`'s `acceptance_criterion_id` resolves (via its Requirement) to a different Initiative (SPEC-002 "Interfaces / contracts"). */
+export class CrossInitiativeVerificationError extends Error {
+  readonly code = 'cross_initiative_verification' as const;
+  readonly initiative_id: string;
+  readonly acceptance_criterion_id: string;
+
+  constructor(params: { initiative_id: string; acceptance_criterion_id: string; message?: string }) {
+    super(
+      params.message ??
+        `cross_initiative_verification: AcceptanceCriterion ${params.acceptance_criterion_id} does not belong to Initiative ${params.initiative_id}`,
+    );
+    this.name = 'CrossInitiativeVerificationError';
+    this.initiative_id = params.initiative_id;
+    this.acceptance_criterion_id = params.acceptance_criterion_id;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
   | NotFoundError
   | InvalidRequestError
-  | MigrationBackupFailedError;
+  | MigrationBackupFailedError
+  | CrossInitiativeEvidenceLinkError
+  | CrossInitiativeVerificationError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -115,6 +155,8 @@ const INITIATIVE_ERROR_CTORS = [
   NotFoundError,
   InvalidRequestError,
   MigrationBackupFailedError,
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

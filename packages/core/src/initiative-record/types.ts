@@ -157,6 +157,152 @@ export interface ArtifactRef {
   revision: number;
 }
 
+// ---------------------------------------------------------------------------
+// Phase A1 — professional record and verification ledger
+//
+// TRANSCRIPTION, not design: every shape below is frozen by
+// `.mma/specs/2026-08-13-spec-002-professional-record.md` (SPEC-002, version 4),
+// "Data model" and "Interfaces / contracts" sections. Every Phase A1 record uses
+// a UUID identity, except EvidenceLink, whose identity is the composite
+// `(evidence_id, target_type, target_id)`.
+// ---------------------------------------------------------------------------
+
+export type DecisionStatus = 'open' | 'decided' | 'superseded';
+/** Create-time `decision_record` status — `decision_supersede` is the only path to `'superseded'`. */
+export type DecisionCreateStatus = Exclude<DecisionStatus, 'superseded'>;
+
+export type EvidenceLinkTargetType =
+  | 'requirement'
+  | 'acceptance_criterion'
+  | 'decision'
+  | 'verification_run'
+  | 'task';
+
+export type RiskSeverity = 'low' | 'medium' | 'high';
+export type RiskStatus = 'open' | 'mitigated' | 'accepted' | 'closed';
+
+export type VerificationMethod = 'command' | 'agent-review' | 'human';
+export type VerificationState =
+  | 'pending'
+  | 'pass'
+  | 'fail'
+  | 'blocked'
+  | 'needs_human_review'
+  | 'stale'
+  | 'not_applicable'
+  | 'superseded';
+
+/** Non-terminal states eligible for automatic `'superseded'` transition when a newer run lands (FR-10). */
+export const VERIFICATION_NON_TERMINAL_STATES: readonly VerificationState[] = [
+  'pending',
+  'pass',
+  'fail',
+  'blocked',
+  'needs_human_review',
+];
+/** Historical markers — never transition to `'superseded'` (FR-10). */
+export const VERIFICATION_TERMINAL_STATES: readonly VerificationState[] = ['stale', 'not_applicable', 'superseded'];
+/** States eligible for stale-evidence propagation (FR-11). */
+export const VERIFICATION_STALE_ELIGIBLE_STATES: readonly VerificationState[] = ['pass', 'fail'];
+/** Every VerificationRun state, in a stable order — the `verification_by_state` count keys (FR-12). */
+export const VERIFICATION_STATES: readonly VerificationState[] = [
+  'pending',
+  'pass',
+  'fail',
+  'blocked',
+  'needs_human_review',
+  'stale',
+  'not_applicable',
+  'superseded',
+];
+
+export interface Requirement {
+  uuid: string;
+  initiative_id: string;
+  /** Exact `REQ-<n>` pattern; `<n>` is monotonic per Initiative. */
+  human_key: string;
+  statement: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+export interface AcceptanceCriterion {
+  uuid: string;
+  requirement_id: string;
+  /** Exact `AC-<n>` pattern; `<n>` is monotonic per Requirement. */
+  human_key: string;
+  statement: string;
+  /** Free prose naming a reference or method — not an executable command. */
+  check_reference: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+export interface Decision {
+  uuid: string;
+  initiative_id: string;
+  /** Exact `D-<n>` pattern; `<n>` is monotonic per Initiative. */
+  human_key: string;
+  title: string;
+  decision: string;
+  rationale: string;
+  alternatives: string[];
+  status: DecisionStatus;
+  superseded_by: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+/** Create-or-update identity: `(initiative_id, locator)` (FR-7). */
+export interface Evidence {
+  uuid: string;
+  initiative_id: string;
+  kind: string;
+  locator: string;
+  content_hash: string | null;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+/** The sole Phase A1 record identified by its composite identity, not a UUID: `(evidence_id, target_type, target_id)`. */
+export interface EvidenceLink {
+  evidence_id: string;
+  target_type: EvidenceLinkTargetType;
+  target_id: string;
+  createdAt: string;
+  revision: number;
+}
+
+export interface Risk {
+  uuid: string;
+  initiative_id: string;
+  /** Exact `RISK-<n>` pattern; `<n>` is monotonic per Initiative. */
+  human_key: string;
+  statement: string;
+  severity: RiskSeverity;
+  status: RiskStatus;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+/** Immutable once created; the only permitted transitions are system-driven `'stale'` and `'superseded'` (FR-10, FR-11). */
+export interface VerificationRun {
+  uuid: string;
+  initiative_id: string;
+  acceptance_criterion_id: string;
+  method: VerificationMethod;
+  state: VerificationState;
+  detail: string;
+  createdAt: string;
+  revision: number;
+}
+
 /** Append-only; no update or delete path. `event_sequence` is monotonic per installation. */
 export interface Event {
   event_sequence: number;
@@ -168,7 +314,14 @@ export interface Event {
     | 'InitiativeWorkspaceLink'
     | 'InitiativeRelation'
     | 'Task'
-    | 'ArtifactRef';
+    | 'ArtifactRef'
+    | 'Requirement'
+    | 'AcceptanceCriterion'
+    | 'Decision'
+    | 'Evidence'
+    | 'EvidenceLink'
+    | 'Risk'
+    | 'VerificationRun';
   entity_id: string;
   initiative_id: string | null;
   event_type: string;
@@ -191,7 +344,14 @@ export type InitiativeRecordEntity =
   | InitiativeWorkspaceLink
   | InitiativeRelation
   | Task
-  | ArtifactRef;
+  | ArtifactRef
+  | Requirement
+  | AcceptanceCriterion
+  | Decision
+  | Evidence
+  | EvidenceLink
+  | Risk
+  | VerificationRun;
 
 /** `initiative_resume` request — exactly one of `uuid` or `human_key`. */
 export interface InitiativeResumeRequest {
@@ -200,7 +360,7 @@ export interface InitiativeResumeRequest {
   event_limit?: number;
 }
 
-/** `initiative_resume` response — the complete pinned continuation payload (FR-13). */
+/** `initiative_resume` response — the complete pinned continuation payload (FR-13, extended by SPEC-002 FR-12). */
 export interface InitiativeResumeResponse {
   initiative: Initiative;
   product: Product;
@@ -209,6 +369,16 @@ export interface InitiativeResumeResponse {
   tasks: Task[];
   artifacts: ArtifactRef[];
   events: Event[];
+  /** Phase A1: each Requirement with its ordered Acceptance Criteria. */
+  requirements: Array<{ requirement: Requirement; acceptance_criteria: AcceptanceCriterion[] }>;
+  /** Phase A1: ordered `'open'`, then `'decided'`, then `'superseded'`. */
+  decisions: Decision[];
+  /** Phase A1: open Risks first (severity high to low), then all other statuses. */
+  risks: Risk[];
+  /** Phase A1: ordered `createdAt ASC, uuid ASC`. EvidenceLinks are deliberately NOT included here. */
+  evidence: Evidence[];
+  /** Phase A1: one entry per Acceptance Criterion with any run, `latest` by `createdAt DESC, uuid DESC`. */
+  verification: Array<{ acceptance_criterion_id: string; latest: VerificationRun }>;
   counts: {
     workspaces: number;
     resources: number;
@@ -218,10 +388,17 @@ export interface InitiativeResumeResponse {
     artifacts: number;
     events_returned: number;
     events_total: number;
+    /** Phase A1 counts (FR-12). */
+    requirements: number;
+    acceptance_criteria: number;
+    decisions_open: number;
+    risks_open: number;
+    evidence: number;
+    verification_by_state: Record<VerificationState, number>;
   };
 }
 
-/** The frozen Phase A0 operation set (FR-3). */
+/** The frozen Phase A0 operation set (FR-3), extended by the Phase A1 operation set (SPEC-002 FR-3, FR-4). */
 export const INITIATIVE_OPERATIONS = [
   'product_create',
   'product_get',
@@ -244,6 +421,29 @@ export const INITIATIVE_OPERATIONS = [
   'initiative_task_list',
   'artifact_register',
   'artifact_get',
+  // Phase A1 — professional record and verification ledger (SPEC-002).
+  'requirement_add',
+  'requirement_get',
+  'requirement_list',
+  'acceptance_criterion_add',
+  'acceptance_criterion_get',
+  'acceptance_criterion_list',
+  'decision_record',
+  'decision_supersede',
+  'decision_get',
+  'decision_list',
+  'evidence_add',
+  'evidence_get',
+  'evidence_list',
+  'evidence_link',
+  'evidence_links_list',
+  'risk_add',
+  'risk_status',
+  'risk_get',
+  'risk_list',
+  'verification_record',
+  'verification_get',
+  'verification_list',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -260,4 +460,42 @@ export const INITIATIVE_EVENT_TYPES = {
   initiative_task_create: 'task_created',
   artifact_register_create: 'artifact_registered',
   artifact_register_update: 'artifact_updated',
+  // Phase A1 (SPEC-002 "Data model" event table).
+  requirement_add: 'requirement_added',
+  acceptance_criterion_add: 'acceptance_criterion_added',
+  decision_record: 'decision_recorded',
+  /** The old Decision's transition inside `decision_supersede`; the new Decision reuses `decision_record`'s event type. */
+  decision_supersede: 'decision_superseded',
+  evidence_add_create: 'evidence_added',
+  evidence_add_update: 'evidence_updated',
+  evidence_link: 'evidence_linked',
+  risk_add: 'risk_added',
+  risk_status: 'risk_status_changed',
+  verification_record: 'verification_recorded',
+  /** System-driven: a newer run superseded a prior non-terminal run for the same Acceptance Criterion. */
+  verification_superseded: 'verification_superseded',
+  /** System-driven: a linked Evidence content-hash change staled a passing or failing run. */
+  verification_stale: 'verification_stale',
+} as const;
+
+/**
+ * Frozen Phase A1 Event payload keys (SPEC-002, "Data model" event table).
+ *
+ * This is intentionally a wire-contract table rather than a runtime payload
+ * validator: the store owns Event construction, while consumers and contract
+ * tests can share this exact approved key set without duplicating literals.
+ */
+export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
+  requirement_added: ['uuid', 'initiative_id', 'human_key'],
+  acceptance_criterion_added: ['uuid', 'requirement_id', 'human_key'],
+  decision_recorded: ['uuid', 'initiative_id', 'human_key', 'status'],
+  decision_superseded: ['uuid', 'superseded_by'],
+  evidence_added: ['uuid', 'initiative_id', 'locator'],
+  evidence_updated: ['uuid', 'initiative_id', 'locator'],
+  evidence_linked: ['evidence_id', 'target_type', 'target_id'],
+  risk_added: ['uuid', 'initiative_id', 'human_key', 'severity', 'status'],
+  risk_status_changed: ['uuid', 'status'],
+  verification_recorded: ['uuid', 'initiative_id', 'acceptance_criterion_id', 'method', 'state'],
+  verification_superseded: ['uuid', 'acceptance_criterion_id'],
+  verification_stale: ['uuid', 'acceptance_criterion_id', 'evidence_uuid'],
 } as const;

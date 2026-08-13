@@ -32,6 +32,8 @@ import {
   InitiativeNotFoundError,
   InitiativeInvalidRequestError,
   MigrationBackupFailedError,
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -324,6 +326,19 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
   }
   if (err instanceof CrossProductWorkspaceLinkError) {
     return errorResult(err.code, err.message, { initiative_id: err.initiative_id, workspace_id: err.workspace_id });
+  }
+  if (err instanceof CrossInitiativeEvidenceLinkError) {
+    return errorResult(err.code, err.message, {
+      evidence_id: err.evidence_id,
+      target_type: err.target_type,
+      target_id: err.target_id,
+    });
+  }
+  if (err instanceof CrossInitiativeVerificationError) {
+    return errorResult(err.code, err.message, {
+      initiative_id: err.initiative_id,
+      acceptance_criterion_id: err.acceptance_criterion_id,
+    });
   }
   if (err instanceof InitiativeNotFoundError) {
     return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });

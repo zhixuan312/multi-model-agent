@@ -27,6 +27,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  CrossInitiativeEvidenceLinkError,
+  CrossInitiativeVerificationError,
   CrossProductWorkspaceLinkError,
   fieldErrorsFromIssues,
   InvalidRequestError,
@@ -36,7 +38,12 @@ import {
 import { runInitiativeMigrations } from './migrations.js';
 import {
   initiativeMutationRequestSchema,
+  type AcceptanceCriterionAddInput,
   type ArtifactRegisterInput,
+  type DecisionRecordInput,
+  type DecisionSupersedeInput,
+  type EvidenceAddInput,
+  type EvidenceLinkInput,
   type InitiativeCreateInput,
   type InitiativeLinkWorkspaceInput,
   type InitiativeMutationRequest,
@@ -45,24 +52,46 @@ import {
   type InitiativeTaskCreateInput,
   type ProductCreateInput,
   type ProvenanceInput,
+  type RequirementAddInput,
   type ResourceRegisterInput,
+  type RiskAddInput,
+  type RiskStatusInput,
+  type VerificationRecordInput,
   type WorkspaceCreateInput,
 } from './schemas.js';
-import type {
-  ArtifactRef,
-  Event,
-  Initiative,
-  InitiativeRecordEntity,
-  InitiativeRelation,
-  InitiativeStatus,
-  InitiativeWorkspaceLink,
-  Product,
-  Resource,
-  Task,
-  TaskStatus,
-  Workspace,
+import {
+  VERIFICATION_NON_TERMINAL_STATES,
+  VERIFICATION_STALE_ELIGIBLE_STATES,
+  VERIFICATION_STATES,
+  type AcceptanceCriterion,
+  type ArtifactRef,
+  type Decision,
+  type Event,
+  type Evidence,
+  type EvidenceLink,
+  type EvidenceLinkTargetType,
+  type Initiative,
+  type InitiativeRecordEntity,
+  type InitiativeRelation,
+  type InitiativeStatus,
+  type InitiativeWorkspaceLink,
+  type Product,
+  type Requirement,
+  type Resource,
+  type Risk,
+  type Task,
+  type TaskStatus,
+  type VerificationRun,
+  type VerificationState,
+  type Workspace,
 } from './types.js';
-import type { InitiativeRepository, InitiativeWorkspaceLinkRead, RelatedInitiativeRead } from './repository.js';
+import type {
+  InitiativeRepository,
+  InitiativeWorkspaceLinkRead,
+  LatestVerificationRead,
+  RelatedInitiativeRead,
+  RequirementWithCriteriaRead,
+} from './repository.js';
 
 export interface InitiativeRecordStorePragmas {
   journal_mode: string;
@@ -185,6 +214,114 @@ interface EventRow {
   source: string;
 }
 
+// ---------------------------------------------------------------------------
+// Phase A1 raw row shapes (schema version 2, Task I-2). These mirror the
+// `requirements`, `acceptance_criteria`, `decisions`, `evidence`,
+// `evidence_links`, `risks`, and `verification_runs` tables added by
+// migration version 2 (`./migrations.js`). The public repository layer
+// (Task I-3/I-4/I-5) maps each row to the frozen public shape in `./types.js`;
+// these interfaces exist so that mapping is typed end to end, not `any`.
+// ---------------------------------------------------------------------------
+
+/** Raw `requirements` table row shape (snake_case columns — internal only). */
+interface RequirementRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  statement: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `acceptance_criteria` table row shape (snake_case columns — internal only). */
+interface AcceptanceCriterionRow {
+  uuid: string;
+  requirement_id: string;
+  human_key: string;
+  statement: string;
+  check_reference: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `decisions` table row shape (snake_case columns — internal only).
+ * `alternatives` is stored as a JSON-encoded array that maps losslessly to
+ * `string[]` — the underlying column format is an implementation detail, not
+ * part of the public contract.
+ */
+interface DecisionRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  title: string;
+  decision: string;
+  rationale: string;
+  alternatives: string;
+  status: Decision['status'];
+  superseded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `evidence` table row shape (snake_case columns — internal only). Unique on `(initiative_id, locator)`. */
+interface EvidenceRow {
+  uuid: string;
+  initiative_id: string;
+  kind: string;
+  locator: string;
+  content_hash: string | null;
+  summary: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `evidence_links` table row shape (snake_case columns — internal only).
+ * Identified by the composite `(evidence_id, target_type, target_id)`, the
+ * sole Phase A1 record with no UUID primary key.
+ */
+interface EvidenceLinkRow {
+  evidence_id: string;
+  target_type: EvidenceLink['target_type'];
+  target_id: string;
+  created_at: string;
+  revision: number;
+}
+
+/** Raw `risks` table row shape (snake_case columns — internal only). */
+interface RiskRow {
+  uuid: string;
+  initiative_id: string;
+  human_key: string;
+  statement: string;
+  severity: Risk['severity'];
+  status: Risk['status'];
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/**
+ * Raw `verification_runs` table row shape (snake_case columns — internal
+ * only). Immutable once created, except the system-driven `state`
+ * transitions to `'stale'` (FR-11) and `'superseded'` (FR-10).
+ */
+interface VerificationRunRow {
+  uuid: string;
+  initiative_id: string;
+  acceptance_criterion_id: string;
+  method: VerificationRun['method'];
+  state: VerificationRun['state'];
+  detail: string;
+  created_at: string;
+  revision: number;
+}
+
 /** Deterministically orders object keys so the same logical value hashes the same way regardless of construction order. */
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -302,6 +439,20 @@ export class InitiativeRecordStore implements InitiativeRepository {
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      // EvidenceLink's composite identity is an identity-level no-op. It must
+      // take precedence over idempotency replay so that a duplicate link is
+      // returned unchanged for any key, and so the no-op never creates an
+      // idempotency-result row.
+      if (request.operation === 'evidence_link') {
+        const existingLink = this.db
+          .prepare(`SELECT * FROM evidence_links WHERE evidence_id = ? AND target_type = ? AND target_id = ?`)
+          .get(request.input.evidence_id, request.input.target_type, request.input.target_id) as EvidenceLinkRow | undefined;
+        if (existingLink) {
+          this.db.exec('COMMIT');
+          return mapEvidenceLinkRow(existingLink);
+        }
+      }
+
       if (request.idempotency_key) {
         const existing = this.db
           .prepare(`SELECT request_hash, result_json FROM idempotency_results WHERE operation = ? AND idempotency_key = ?`)
@@ -352,6 +503,37 @@ export class InitiativeRecordStore implements InitiativeRepository {
         : this.db.prepare(`SELECT * FROM events ORDER BY event_sequence ASC`).all()
     ) as unknown as EventRow[];
     return rows.map(mapEventRow);
+  }
+
+  // ---------------------------------------------------------------------
+  // Phase A1 reads needed to verify Task I-3's and Task I-4's own mutations
+  // (SPEC-002). `getDecision` is implemented because `decision_supersede`'s
+  // check reads the old Decision back to confirm `status: 'superseded'` and
+  // `superseded_by`. `getVerificationRun` is implemented because Task I-4's
+  // own check verifies the system-driven `'stale'`/`'superseded'`
+  // transitions. Every other Phase A1 read (Requirement, Acceptance
+  // Criterion, Evidence, Risk, and all `list*`/count/resume joins) is Task
+  // I-5 scope, added alongside the read operations below.
+  // ---------------------------------------------------------------------
+
+  /** `decision_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getDecision(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Decision {
+    const row = this.findDecisionRow(lookup.uuid, lookup.initiative_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Decision', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapDecisionRow(row);
+  }
+
+  /** `verification_get` — `uuid`. Throws `not_found`. */
+  getVerificationRun(lookup: { uuid: string }): VerificationRun {
+    const row = this.db.prepare(`SELECT * FROM verification_runs WHERE uuid = ?`).get(lookup.uuid) as
+      | VerificationRunRow
+      | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'VerificationRun', lookup: lookup.uuid });
+    }
+    return mapVerificationRunRow(row);
   }
 
   // ---------------------------------------------------------------------
@@ -553,6 +735,265 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return Number(row?.count ?? 0);
   }
 
+  // ---------------------------------------------------------------------
+  // Phase A1 reads (Task I-5) — every remaining frozen get/list operation,
+  // plus the joined read methods `initiativeResume` (Task I-6/I-8) composes
+  // from. `getDecision` and `getVerificationRun` are implemented above
+  // (Task I-3/I-4, "Phase A1 reads needed to verify..."); every other Phase
+  // A1 read is added here, with the frozen scoped selectors and pinned
+  // deterministic orderings from SPEC-002's "frozen read-only-operation
+  // contract" and resume-ordering paragraphs.
+  // ---------------------------------------------------------------------
+
+  /** `requirement_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRequirement(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Requirement {
+    const row = this.findRequirementRow(lookup.uuid, lookup.initiative_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Requirement', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapRequirementRow(row);
+  }
+
+  /** `requirement_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listRequirements(filter: { initiative_id: string }): Requirement[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM requirements WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as RequirementRow[];
+    return rows.map(mapRequirementRow);
+  }
+
+  /** `acceptance_criterion_get` — `uuid`, or `(requirement_id, human_key)`. Throws `not_found`. */
+  getAcceptanceCriterion(lookup: { uuid?: string; requirement_id?: string; human_key?: string }): AcceptanceCriterion {
+    const row = this.findAcceptanceCriterionRow(lookup.uuid, lookup.requirement_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'AcceptanceCriterion', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapAcceptanceCriterionRow(row);
+  }
+
+  /** `acceptance_criterion_list` — scoped to one Requirement or Initiative; ordered `createdAt` ascending, then `uuid` ascending. */
+  listAcceptanceCriteria(filter: { requirement_id?: string; initiative_id?: string }): AcceptanceCriterion[] {
+    const requirementId = filter.requirement_id;
+    const initiativeId = filter.initiative_id;
+    const rows = (
+      requirementId
+        ? this.db
+            .prepare(`SELECT * FROM acceptance_criteria WHERE requirement_id = ? ORDER BY created_at ASC, uuid ASC`)
+            .all(requirementId)
+        : this.db
+            .prepare(
+              `SELECT ac.* FROM acceptance_criteria ac
+               JOIN requirements r ON r.uuid = ac.requirement_id
+               WHERE r.initiative_id = ?
+               ORDER BY ac.created_at ASC, ac.uuid ASC`,
+            )
+            .all(initiativeId as string)
+    ) as unknown as AcceptanceCriterionRow[];
+    return rows.map(mapAcceptanceCriterionRow);
+  }
+
+  /** `decision_list` — status group `'open'`, `'decided'`, `'superseded'`, then `createdAt` ascending, then `uuid` ascending. Identical to the resume ordering. */
+  listDecisions(filter: { initiative_id: string }): Decision[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM decisions WHERE initiative_id = ?
+         ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'decided' THEN 1 ELSE 2 END ASC, created_at ASC, uuid ASC`,
+      )
+      .all(filter.initiative_id) as unknown as DecisionRow[];
+    return rows.map(mapDecisionRow);
+  }
+
+  /** `evidence_get` — `uuid`, or `(initiative_id, locator)`. Throws `not_found`. */
+  getEvidence(lookup: { uuid?: string; initiative_id?: string; locator?: string }): Evidence {
+    const row = this.findEvidenceRow(lookup.uuid, lookup.initiative_id, lookup.locator);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Evidence', lookup: lookup.uuid ?? lookup.locator ?? '' });
+    }
+    return mapEvidenceRow(row);
+  }
+
+  /** `evidence_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listEvidence(filter: { initiative_id: string }): Evidence[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM evidence WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as EvidenceRow[];
+    return rows.map(mapEvidenceRow);
+  }
+
+  /**
+   * `evidence_links_list` — scoped to one Evidence or one link target (`target_type` + `target_id` together);
+   * ordered `createdAt` ascending, then the composite identity (`evidence_id`, `target_type`, `target_id`)
+   * ascending — EvidenceLink's composite identity is the tie-breaker since it has no `uuid`.
+   */
+  listEvidenceLinks(filter: {
+    evidence_id?: string;
+    target_type?: EvidenceLinkTargetType;
+    target_id?: string;
+  }): EvidenceLink[] {
+    const evidenceId = filter.evidence_id;
+    const targetType = filter.target_type;
+    const targetId = filter.target_id;
+    const rows = (
+      evidenceId
+        ? this.db
+            .prepare(
+              `SELECT * FROM evidence_links WHERE evidence_id = ?
+               ORDER BY created_at ASC, evidence_id ASC, target_type ASC, target_id ASC`,
+            )
+            .all(evidenceId)
+        : this.db
+            .prepare(
+              `SELECT * FROM evidence_links WHERE target_type = ? AND target_id = ?
+               ORDER BY created_at ASC, evidence_id ASC, target_type ASC, target_id ASC`,
+            )
+            .all(targetType as string, targetId as string)
+    ) as unknown as EvidenceLinkRow[];
+    return rows.map(mapEvidenceLinkRow);
+  }
+
+  /** `risk_get` — `uuid`, or `(initiative_id, human_key)`. Throws `not_found`. */
+  getRisk(lookup: { uuid?: string; initiative_id?: string; human_key?: string }): Risk {
+    const row = this.findRiskRow(lookup.uuid, lookup.initiative_id, lookup.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Risk', lookup: lookup.uuid ?? lookup.human_key ?? '' });
+    }
+    return mapRiskRow(row);
+  }
+
+  /** `risk_list` — ordered `createdAt` ascending, then `uuid` ascending (the plain list order — distinct from the resume-specific risk ordering). */
+  listRisks(filter: { initiative_id: string }): Risk[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM risks WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as RiskRow[];
+    return rows.map(mapRiskRow);
+  }
+
+  /**
+   * `verification_list` — for an `initiative_id` selector: `acceptance_criterion_id` ascending, then `createdAt`
+   * descending, then `uuid` descending. For an `acceptance_criterion_id` selector: `createdAt` descending, then
+   * `uuid` descending.
+   */
+  listVerificationRuns(filter: { acceptance_criterion_id?: string; initiative_id?: string }): VerificationRun[] {
+    const acceptanceCriterionId = filter.acceptance_criterion_id;
+    const initiativeId = filter.initiative_id;
+    const rows = (
+      acceptanceCriterionId
+        ? this.db
+            .prepare(`SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC`)
+            .all(acceptanceCriterionId)
+        : this.db
+            .prepare(
+              `SELECT * FROM verification_runs WHERE initiative_id = ?
+               ORDER BY acceptance_criterion_id ASC, created_at DESC, uuid DESC`,
+            )
+            .all(initiativeId as string)
+    ) as unknown as VerificationRunRow[];
+    return rows.map(mapVerificationRunRow);
+  }
+
+  /** Resume join: every Requirement for the Initiative, each with its ordered Acceptance Criteria. */
+  getRequirementsWithCriteria(initiativeId: string): RequirementWithCriteriaRead[] {
+    return this.listRequirements({ initiative_id: initiativeId }).map((requirement) => ({
+      requirement,
+      acceptance_criteria: this.listAcceptanceCriteria({ requirement_id: requirement.uuid }),
+    }));
+  }
+
+  /**
+   * Resume join: Risks ordered open-first (severity high to low within the open group), then all other statuses;
+   * within each group, `createdAt` ascending, then `uuid` ascending. Distinct from `listRisks`.
+   */
+  getResumeRisks(initiativeId: string): Risk[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM risks WHERE initiative_id = ?
+         ORDER BY
+           CASE WHEN status = 'open' THEN 0 ELSE 1 END ASC,
+           CASE WHEN status = 'open' THEN CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ELSE 0 END ASC,
+           created_at ASC,
+           uuid ASC`,
+      )
+      .all(initiativeId) as unknown as RiskRow[];
+    return rows.map(mapRiskRow);
+  }
+
+  /**
+   * Resume join: one entry per Acceptance Criterion (within the Requirements-then-Acceptance-Criteria order) that
+   * has any Verification Run, with `latest` selected by `createdAt` descending, then `uuid` descending.
+   */
+  getLatestVerificationRuns(initiativeId: string): LatestVerificationRead[] {
+    const results: LatestVerificationRead[] = [];
+    for (const { acceptance_criteria } of this.getRequirementsWithCriteria(initiativeId)) {
+      for (const criterion of acceptance_criteria) {
+        const row = this.db
+          .prepare(
+            `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC LIMIT 1`,
+          )
+          .get(criterion.uuid) as VerificationRunRow | undefined;
+        if (row) {
+          results.push({ acceptance_criterion_id: criterion.uuid, latest: mapVerificationRunRow(row) });
+        }
+      }
+    }
+    return results;
+  }
+
+  /** Resume count: total Requirements for the Initiative. */
+  countRequirements(initiativeId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM requirements WHERE initiative_id = ?`).get(initiativeId) as
+      | { count?: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: total Acceptance Criteria across the Initiative's Requirements. */
+  countAcceptanceCriteria(initiativeId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM acceptance_criteria ac
+         JOIN requirements r ON r.uuid = ac.requirement_id
+         WHERE r.initiative_id = ?`,
+      )
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Decisions with `status: 'open'`. */
+  countOpenDecisions(initiativeId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM decisions WHERE initiative_id = ? AND status = 'open'`)
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Risks with `status: 'open'`. */
+  countOpenRisks(initiativeId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM risks WHERE initiative_id = ? AND status = 'open'`)
+      .get(initiativeId) as { count?: number } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: total Evidence for the Initiative. */
+  countEvidence(initiativeId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM evidence WHERE initiative_id = ?`).get(initiativeId) as
+      | { count?: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** Resume count: Verification Run counts by state — every `VerificationState` key present, defaulting to `0`. */
+  countVerificationByState(initiativeId: string): Record<VerificationState, number> {
+    const counts = Object.fromEntries(VERIFICATION_STATES.map((state) => [state, 0])) as Record<VerificationState, number>;
+    const rows = this.db
+      .prepare(`SELECT state, COUNT(*) AS count FROM verification_runs WHERE initiative_id = ? GROUP BY state`)
+      .all(initiativeId) as Array<{ state: VerificationState; count: number }>;
+    for (const row of rows) {
+      counts[row.state] = Number(row.count);
+    }
+    return counts;
+  }
+
   /** Dispatches one validated mutating request to its write handler. Runs inside the caller's open transaction. */
   private applyMutation(request: InitiativeMutationRequest): InitiativeRecordEntity {
     switch (request.operation) {
@@ -574,11 +1015,35 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateInitiativeTaskCreate(request.input, request.expected_revision, request.provenance);
       case 'artifact_register':
         return this.mutateArtifactRegister(request.input, request.expected_revision, request.provenance);
+      // Phase A1 — professional record and verification ledger (SPEC-002 FR-3).
+      case 'requirement_add':
+        return this.mutateRequirementAdd(request.input, request.expected_revision, request.provenance);
+      case 'acceptance_criterion_add':
+        return this.mutateAcceptanceCriterionAdd(request.input, request.expected_revision, request.provenance);
+      case 'decision_record':
+        return this.mutateDecisionRecord(request.input, request.expected_revision, request.provenance);
+      case 'decision_supersede':
+        return this.mutateDecisionSupersede(request.input, request.expected_revision, request.provenance);
+      case 'evidence_add':
+        return this.mutateEvidenceAdd(request.input, request.expected_revision, request.provenance);
+      case 'evidence_link':
+        return this.mutateEvidenceLink(request.input, request.expected_revision, request.provenance);
+      case 'risk_add':
+        return this.mutateRiskAdd(request.input, request.expected_revision, request.provenance);
+      case 'risk_status':
+        return this.mutateRiskStatus(request.input, request.expected_revision, request.provenance);
+      case 'verification_record':
+        return this.mutateVerificationRecord(request.input, request.expected_revision, request.provenance);
       default: {
-        const exhaustive: never = request;
+        // The switch above is exhaustive over `InitiativeMutationRequest`;
+        // `request` narrows to `never` here. This branch only guards a future
+        // union member added without a matching case — casting `never` to an
+        // object shape is always allowed, so this still throws the correct
+        // typed error at runtime instead of a type error at compile time.
+        const unhandled = request as { operation: string };
         throw new InvalidRequestError({
           field_errors: { operation: ['unsupported mutation operation'] },
-          message: `invalid_request: unsupported mutation operation ${JSON.stringify(exhaustive)}`,
+          message: `invalid_request: unsupported mutation operation ${JSON.stringify(unhandled.operation)}`,
         });
       }
     }
@@ -620,6 +1085,18 @@ export class InitiativeRecordStore implements InitiativeRepository {
         message: `invalid_request: ${field} ${uuid} does not reference an existing ${entityType}`,
       });
     }
+  }
+
+  /** Returns the full row for `table.uuid = uuid`, or throws typed `invalid_request` (a "foreign-key failure") naming `field`/`entityType`. */
+  private requireRow<T>(table: string, uuid: string, field: string, entityType: string): T {
+    const row = this.db.prepare(`SELECT * FROM ${table} WHERE uuid = ?`).get(uuid) as T | undefined;
+    if (!row) {
+      throw new InvalidRequestError({
+        field_errors: { [field]: [`references a nonexistent ${entityType}`] },
+        message: `invalid_request: ${field} ${uuid} does not reference an existing ${entityType}`,
+      });
+    }
+    return row;
   }
 
   private nextEventSequence(): number {
@@ -679,6 +1156,105 @@ export class InitiativeRecordStore implements InitiativeRepository {
     const next = (row?.value ?? 0) + 1;
     this.db.prepare(`UPDATE counters SET value = ? WHERE name = 'initiative_human_key'`).run(next);
     return `MMA-INIT-${String(next).padStart(3, '0')}`;
+  }
+
+  /**
+   * Allocates the next value of a scoped Phase A1 counter (`REQ-<n>` per
+   * Initiative, `AC-<n>` per Requirement, `D-<n>` and `RISK-<n>` per
+   * Initiative — SPEC-002 "Data model"), reusing the generic version-1
+   * `counters(name, value)` table at a scoped key such as
+   * `requirement_human_key:<initiative_id>`. Unlike `MMA-INIT-<n>`, these
+   * human keys are NOT zero-padded (the frozen pattern is exactly `<prefix>-<n>`).
+   * Runs inside the caller's open write transaction, so two concurrent creates
+   * for the same scope never receive the same human key.
+   */
+  private allocateScopedHumanKey(counterName: string, prefix: string): string {
+    const row = this.db.prepare(`SELECT value FROM counters WHERE name = ?`).get(counterName) as
+      | { value?: number }
+      | undefined;
+    const next = (row?.value ?? 0) + 1;
+    if (row) {
+      this.db.prepare(`UPDATE counters SET value = ? WHERE name = ?`).run(next, counterName);
+    } else {
+      this.db.prepare(`INSERT INTO counters (name, value) VALUES (?, ?)`).run(counterName, next);
+    }
+    return `${prefix}-${next}`;
+  }
+
+  /** `decision_supersede`/`decision_get` old-Decision lookup: `uuid` alone, or `(initiative_id, human_key)` together. */
+  private findDecisionRow(uuid?: string, initiativeId?: string, humanKey?: string): DecisionRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM decisions WHERE uuid = ?`).get(uuid) as DecisionRow | undefined;
+    }
+    if (initiativeId && humanKey) {
+      return this.db.prepare(`SELECT * FROM decisions WHERE initiative_id = ? AND human_key = ?`).get(
+        initiativeId,
+        humanKey,
+      ) as DecisionRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `risk_status`/`risk_get` lookup: `uuid` alone, or `(initiative_id, human_key)` together. */
+  private findRiskRow(uuid?: string, initiativeId?: string, humanKey?: string): RiskRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM risks WHERE uuid = ?`).get(uuid) as RiskRow | undefined;
+    }
+    if (initiativeId && humanKey) {
+      return this.db.prepare(`SELECT * FROM risks WHERE initiative_id = ? AND human_key = ?`).get(
+        initiativeId,
+        humanKey,
+      ) as RiskRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `requirement_get` lookup: `uuid` alone, or `(initiative_id, human_key)` together. */
+  private findRequirementRow(uuid?: string, initiativeId?: string, humanKey?: string): RequirementRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM requirements WHERE uuid = ?`).get(uuid) as RequirementRow | undefined;
+    }
+    if (initiativeId && humanKey) {
+      return this.db.prepare(`SELECT * FROM requirements WHERE initiative_id = ? AND human_key = ?`).get(
+        initiativeId,
+        humanKey,
+      ) as RequirementRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `acceptance_criterion_get` lookup: `uuid` alone, or `(requirement_id, human_key)` together. */
+  private findAcceptanceCriterionRow(
+    uuid?: string,
+    requirementId?: string,
+    humanKey?: string,
+  ): AcceptanceCriterionRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM acceptance_criteria WHERE uuid = ?`).get(uuid) as
+        | AcceptanceCriterionRow
+        | undefined;
+    }
+    if (requirementId && humanKey) {
+      return this.db.prepare(`SELECT * FROM acceptance_criteria WHERE requirement_id = ? AND human_key = ?`).get(
+        requirementId,
+        humanKey,
+      ) as AcceptanceCriterionRow | undefined;
+    }
+    return undefined;
+  }
+
+  /** `evidence_get` lookup: `uuid` alone, or `(initiative_id, locator)` together. */
+  private findEvidenceRow(uuid?: string, initiativeId?: string, locator?: string): EvidenceRow | undefined {
+    if (uuid) {
+      return this.db.prepare(`SELECT * FROM evidence WHERE uuid = ?`).get(uuid) as EvidenceRow | undefined;
+    }
+    if (initiativeId && locator) {
+      return this.db.prepare(`SELECT * FROM evidence WHERE initiative_id = ? AND locator = ?`).get(
+        initiativeId,
+        locator,
+      ) as EvidenceRow | undefined;
+    }
+    return undefined;
   }
 
   private mutateProductCreate(input: ProductCreateInput, expectedRevision: number, provenance: ProvenanceInput): Product {
@@ -1107,6 +1683,591 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return artifact;
   }
 
+  // ---------------------------------------------------------------------
+  // Phase A1 — professional record and verification ledger (SPEC-002 FR-3).
+  // Task I-3 scope: the seven ordinary mutations below. `evidence_link` and
+  // `verification_record` (EvidenceLink integrity, immutable Verification
+  // Runs, and stale-evidence propagation) are Task I-4 scope.
+  // ---------------------------------------------------------------------
+
+  private mutateRequirementAdd(
+    input: RequirementAddInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Requirement {
+    this.requireCreateRevision(expectedRevision, 'Requirement');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    const humanKey = this.allocateScopedHumanKey(`requirement_human_key:${input.initiative_id}`, 'REQ');
+    this.db
+      .prepare(
+        `INSERT INTO requirements (uuid, initiative_id, human_key, statement, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(uuid, input.initiative_id, humanKey, input.statement, now, now);
+    const requirement: Requirement = {
+      uuid,
+      initiative_id: input.initiative_id,
+      human_key: humanKey,
+      statement: input.statement,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'Requirement',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'requirement_added',
+      payload: { uuid, initiative_id: input.initiative_id, human_key: humanKey },
+      provenance,
+    });
+    return requirement;
+  }
+
+  private mutateAcceptanceCriterionAdd(
+    input: AcceptanceCriterionAddInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): AcceptanceCriterion {
+    this.requireCreateRevision(expectedRevision, 'AcceptanceCriterion');
+    const requirementRow = this.requireRow<RequirementRow>(
+      'requirements',
+      input.requirement_id,
+      'requirement_id',
+      'Requirement',
+    );
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    const humanKey = this.allocateScopedHumanKey(`acceptance_criterion_human_key:${input.requirement_id}`, 'AC');
+    this.db
+      .prepare(
+        `INSERT INTO acceptance_criteria (uuid, requirement_id, human_key, statement, check_reference, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(uuid, input.requirement_id, humanKey, input.statement, input.check_reference, now, now);
+    const criterion: AcceptanceCriterion = {
+      uuid,
+      requirement_id: input.requirement_id,
+      human_key: humanKey,
+      statement: input.statement,
+      check_reference: input.check_reference,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'AcceptanceCriterion',
+      entity_id: uuid,
+      initiative_id: requirementRow.initiative_id,
+      event_type: 'acceptance_criterion_added',
+      payload: { uuid, requirement_id: input.requirement_id, human_key: humanKey },
+      provenance,
+    });
+    return criterion;
+  }
+
+  private mutateDecisionRecord(
+    input: DecisionRecordInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Decision {
+    this.requireCreateRevision(expectedRevision, 'Decision');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    const humanKey = this.allocateScopedHumanKey(`decision_human_key:${input.initiative_id}`, 'D');
+    this.db
+      .prepare(
+        `INSERT INTO decisions (uuid, initiative_id, human_key, title, decision, rationale, alternatives, status, superseded_by, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+      )
+      .run(
+        uuid,
+        input.initiative_id,
+        humanKey,
+        input.title,
+        input.decision,
+        input.rationale,
+        JSON.stringify(input.alternatives),
+        input.status,
+        now,
+        now,
+      );
+    const decision: Decision = {
+      uuid,
+      initiative_id: input.initiative_id,
+      human_key: humanKey,
+      title: input.title,
+      decision: input.decision,
+      rationale: input.rationale,
+      alternatives: input.alternatives,
+      status: input.status,
+      superseded_by: null,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'Decision',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'decision_recorded',
+      payload: { uuid, initiative_id: input.initiative_id, human_key: humanKey, status: input.status },
+      provenance,
+    });
+    return decision;
+  }
+
+  /**
+   * One transaction: create the replacement Decision (`status: 'decided'`,
+   * `decision_recorded`), then change the old Decision to `'superseded'` with
+   * `superseded_by` set to the replacement's `uuid` (`decision_superseded`) —
+   * FR-6. Both changes and both Events share this `execute()` call's single
+   * open transaction, so a failure at either step rolls back both.
+   */
+  private mutateDecisionSupersede(
+    input: DecisionSupersedeInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Decision {
+    const oldRow = this.findDecisionRow(input.uuid, input.initiative_id, input.human_key);
+    if (!oldRow) {
+      throw new NotFoundError({ entity_type: 'Decision', lookup: input.uuid ?? input.human_key ?? '' });
+    }
+    if (oldRow.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Decision',
+        entity_id: oldRow.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: oldRow.revision,
+      });
+    }
+    const now = provenance.timestamp;
+    const newUuid = randomUUID();
+    const humanKey = this.allocateScopedHumanKey(`decision_human_key:${oldRow.initiative_id}`, 'D');
+    this.db
+      .prepare(
+        `INSERT INTO decisions (uuid, initiative_id, human_key, title, decision, rationale, alternatives, status, superseded_by, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, 'decided', NULL, ?, ?, 0)`,
+      )
+      .run(
+        newUuid,
+        oldRow.initiative_id,
+        humanKey,
+        input.title,
+        input.decision,
+        input.rationale,
+        JSON.stringify(input.alternatives),
+        now,
+        now,
+      );
+    const replacement: Decision = {
+      uuid: newUuid,
+      initiative_id: oldRow.initiative_id,
+      human_key: humanKey,
+      title: input.title,
+      decision: input.decision,
+      rationale: input.rationale,
+      alternatives: input.alternatives,
+      status: 'decided',
+      superseded_by: null,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'Decision',
+      entity_id: newUuid,
+      initiative_id: oldRow.initiative_id,
+      event_type: 'decision_recorded',
+      payload: { uuid: newUuid, initiative_id: oldRow.initiative_id, human_key: humanKey, status: 'decided' },
+      provenance,
+    });
+
+    const oldNextRevision = oldRow.revision + 1;
+    this.db
+      .prepare(`UPDATE decisions SET status = 'superseded', superseded_by = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(newUuid, now, oldNextRevision, oldRow.uuid);
+    this.writeEvent({
+      entity_type: 'Decision',
+      entity_id: oldRow.uuid,
+      initiative_id: oldRow.initiative_id,
+      event_type: 'decision_superseded',
+      payload: { uuid: oldRow.uuid, superseded_by: newUuid },
+      provenance,
+    });
+
+    return replacement;
+  }
+
+  /**
+   * Create-or-update by `(initiative_id, locator)` (FR-7). A create requires
+   * `expected_revision: 0` and writes `evidence_added`. An update requires the
+   * stored revision and may change only `kind`, `content_hash`, and `summary`;
+   * it writes `evidence_updated`. Stale-evidence propagation for a changed
+   * `content_hash` (FR-11) is Task I-4 scope — not applied here.
+   */
+  private mutateEvidenceAdd(input: EvidenceAddInput, expectedRevision: number, provenance: ProvenanceInput): Evidence {
+    const existingRow = this.db
+      .prepare(`SELECT * FROM evidence WHERE initiative_id = ? AND locator = ?`)
+      .get(input.initiative_id, input.locator) as EvidenceRow | undefined;
+    const now = provenance.timestamp;
+
+    if (!existingRow) {
+      this.requireCreateRevision(expectedRevision, 'Evidence');
+      this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+      const uuid = randomUUID();
+      this.db
+        .prepare(
+          `INSERT INTO evidence (uuid, initiative_id, kind, locator, content_hash, summary, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        )
+        .run(uuid, input.initiative_id, input.kind, input.locator, input.content_hash, input.summary, now, now);
+      const evidence: Evidence = {
+        uuid,
+        initiative_id: input.initiative_id,
+        kind: input.kind,
+        locator: input.locator,
+        content_hash: input.content_hash,
+        summary: input.summary,
+        createdAt: now,
+        updatedAt: now,
+        revision: 0,
+      };
+      this.writeEvent({
+        entity_type: 'Evidence',
+        entity_id: uuid,
+        initiative_id: input.initiative_id,
+        event_type: 'evidence_added',
+        payload: { uuid, initiative_id: input.initiative_id, locator: input.locator },
+        provenance,
+      });
+      return evidence;
+    }
+
+    if (existingRow.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Evidence',
+        entity_id: existingRow.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: existingRow.revision,
+      });
+    }
+    const nextRevision = existingRow.revision + 1;
+    this.db
+      .prepare(`UPDATE evidence SET kind = ?, content_hash = ?, summary = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.kind, input.content_hash, input.summary, now, nextRevision, existingRow.uuid);
+    const evidence: Evidence = {
+      uuid: existingRow.uuid,
+      initiative_id: existingRow.initiative_id,
+      kind: input.kind,
+      locator: existingRow.locator,
+      content_hash: input.content_hash,
+      summary: input.summary,
+      createdAt: existingRow.created_at,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Evidence',
+      entity_id: existingRow.uuid,
+      initiative_id: existingRow.initiative_id,
+      event_type: 'evidence_updated',
+      payload: { uuid: existingRow.uuid, initiative_id: existingRow.initiative_id, locator: existingRow.locator },
+      provenance,
+    });
+    // Stale-evidence propagation (FR-11): only a CHANGED `content_hash` on an
+    // update propagates. An unchanged hash (including two updates that both
+    // set the same new hash) must change no VerificationRun and emit no
+    // `verification_stale` Event.
+    if (input.content_hash !== existingRow.content_hash) {
+      this.propagateEvidenceStale(existingRow.uuid, provenance);
+    }
+    return evidence;
+  }
+
+  /**
+   * `evidence_link` (FR-8): creates the composite-identity EvidenceLink
+   * `(evidence_id, target_type, target_id)` after resolving the target's
+   * owning Initiative and confirming it matches the Evidence's Initiative. A
+   * duplicate composite identity is an identity-level no-op — it returns the
+   * existing record unchanged, writes no Event, and skips every check below
+   * (including the revision check), regardless of idempotency key.
+   */
+  private mutateEvidenceLink(input: EvidenceLinkInput, expectedRevision: number, provenance: ProvenanceInput): EvidenceLink {
+    const existingLink = this.db
+      .prepare(`SELECT * FROM evidence_links WHERE evidence_id = ? AND target_type = ? AND target_id = ?`)
+      .get(input.evidence_id, input.target_type, input.target_id) as EvidenceLinkRow | undefined;
+    if (existingLink) {
+      return mapEvidenceLinkRow(existingLink);
+    }
+
+    const evidenceRow = this.requireRow<EvidenceRow>('evidence', input.evidence_id, 'evidence_id', 'Evidence');
+    const targetInitiativeId = this.resolveEvidenceLinkTargetInitiativeId(input.target_type, input.target_id);
+    if (targetInitiativeId !== evidenceRow.initiative_id) {
+      throw new CrossInitiativeEvidenceLinkError({
+        evidence_id: input.evidence_id,
+        target_type: input.target_type,
+        target_id: input.target_id,
+      });
+    }
+    this.requireCreateRevision(expectedRevision, 'EvidenceLink');
+
+    const now = provenance.timestamp;
+    this.db
+      .prepare(`INSERT INTO evidence_links (evidence_id, target_type, target_id, created_at, revision) VALUES (?, ?, ?, ?, 0)`)
+      .run(input.evidence_id, input.target_type, input.target_id, now);
+    const link: EvidenceLink = {
+      evidence_id: input.evidence_id,
+      target_type: input.target_type,
+      target_id: input.target_id,
+      createdAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'EvidenceLink',
+      entity_id: `${input.evidence_id}:${input.target_type}:${input.target_id}`,
+      initiative_id: evidenceRow.initiative_id,
+      event_type: 'evidence_linked',
+      payload: { evidence_id: input.evidence_id, target_type: input.target_type, target_id: input.target_id },
+      provenance,
+    });
+    return link;
+  }
+
+  /** Resolves an EvidenceLink target's owning Initiative, throwing the existing typed `invalid_request` error for a nonexistent target (FR-8). */
+  private resolveEvidenceLinkTargetInitiativeId(targetType: EvidenceLinkTargetType, targetId: string): string {
+    switch (targetType) {
+      case 'requirement': {
+        const row = this.requireRow<RequirementRow>('requirements', targetId, 'target_id', 'Requirement');
+        return row.initiative_id;
+      }
+      case 'acceptance_criterion': {
+        const row = this.requireRow<AcceptanceCriterionRow>('acceptance_criteria', targetId, 'target_id', 'AcceptanceCriterion');
+        const requirementRow = this.requireRow<RequirementRow>(
+          'requirements',
+          row.requirement_id,
+          'requirement_id',
+          'Requirement',
+        );
+        return requirementRow.initiative_id;
+      }
+      case 'decision': {
+        const row = this.requireRow<DecisionRow>('decisions', targetId, 'target_id', 'Decision');
+        return row.initiative_id;
+      }
+      case 'verification_run': {
+        const row = this.requireRow<VerificationRunRow>('verification_runs', targetId, 'target_id', 'VerificationRun');
+        return row.initiative_id;
+      }
+      case 'task': {
+        const row = this.requireRow<TaskRow>('tasks', targetId, 'target_id', 'Task');
+        return row.initiative_id;
+      }
+    }
+  }
+
+  /**
+   * Stale-evidence propagation (FR-11): follows EvidenceLinks from the
+   * changed Evidence to `target_type: 'verification_run'`, changes only
+   * linked runs in `'pass'` or `'fail'` to `'stale'`, and emits one
+   * `verification_stale` Event per changed run. Runs inside the caller's
+   * `evidence_add` transaction — not a separate one. Changes no other record.
+   */
+  private propagateEvidenceStale(evidenceId: string, provenance: ProvenanceInput): void {
+    const linkRows = this.db
+      .prepare(`SELECT target_id FROM evidence_links WHERE evidence_id = ? AND target_type = 'verification_run'`)
+      .all(evidenceId) as Array<{ target_id: string }>;
+    if (linkRows.length === 0) {
+      return;
+    }
+    const staleEligiblePlaceholders = VERIFICATION_STALE_ELIGIBLE_STATES.map(() => '?').join(', ');
+    for (const linkRow of linkRows) {
+      const runRow = this.db
+        .prepare(`SELECT * FROM verification_runs WHERE uuid = ? AND state IN (${staleEligiblePlaceholders})`)
+        .get(linkRow.target_id, ...VERIFICATION_STALE_ELIGIBLE_STATES) as VerificationRunRow | undefined;
+      if (!runRow) {
+        continue;
+      }
+      const nextRevision = runRow.revision + 1;
+      this.db.prepare(`UPDATE verification_runs SET state = 'stale', revision = ? WHERE uuid = ?`).run(nextRevision, runRow.uuid);
+      this.writeEvent({
+        entity_type: 'VerificationRun',
+        entity_id: runRow.uuid,
+        initiative_id: runRow.initiative_id,
+        event_type: 'verification_stale',
+        payload: { uuid: runRow.uuid, acceptance_criterion_id: runRow.acceptance_criterion_id, evidence_uuid: evidenceId },
+        provenance,
+      });
+    }
+  }
+
+  /**
+   * `verification_record` (FR-10): creates a new immutable VerificationRun
+   * after confirming `acceptance_criterion_id` belongs (via its Requirement)
+   * to `initiative_id`. In the same transaction, changes every prior
+   * non-terminal run (the pinned `VERIFICATION_NON_TERMINAL_STATES` set —
+   * `'pending'`, `'pass'`, `'fail'`, `'blocked'`, `'needs_human_review'`) for
+   * the same Acceptance Criterion to `'superseded'`, emitting one
+   * `verification_superseded` Event per changed run. The terminal states
+   * (`'stale'`, `'not_applicable'`, `'superseded'`) never transition again.
+   */
+  private mutateVerificationRecord(
+    input: VerificationRecordInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): VerificationRun {
+    this.requireCreateRevision(expectedRevision, 'VerificationRun');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const criterionRow = this.requireRow<AcceptanceCriterionRow>(
+      'acceptance_criteria',
+      input.acceptance_criterion_id,
+      'acceptance_criterion_id',
+      'AcceptanceCriterion',
+    );
+    const requirementRow = this.requireRow<RequirementRow>(
+      'requirements',
+      criterionRow.requirement_id,
+      'requirement_id',
+      'Requirement',
+    );
+    if (requirementRow.initiative_id !== input.initiative_id) {
+      throw new CrossInitiativeVerificationError({
+        initiative_id: input.initiative_id,
+        acceptance_criterion_id: input.acceptance_criterion_id,
+      });
+    }
+
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    this.db
+      .prepare(
+        `INSERT INTO verification_runs (uuid, initiative_id, acceptance_criterion_id, method, state, detail, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(uuid, input.initiative_id, input.acceptance_criterion_id, input.method, input.state, input.detail, now);
+    const run: VerificationRun = {
+      uuid,
+      initiative_id: input.initiative_id,
+      acceptance_criterion_id: input.acceptance_criterion_id,
+      method: input.method,
+      state: input.state,
+      detail: input.detail,
+      createdAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'VerificationRun',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'verification_recorded',
+      payload: {
+        uuid,
+        initiative_id: input.initiative_id,
+        acceptance_criterion_id: input.acceptance_criterion_id,
+        method: input.method,
+        state: input.state,
+      },
+      provenance,
+    });
+
+    const nonTerminalPlaceholders = VERIFICATION_NON_TERMINAL_STATES.map(() => '?').join(', ');
+    const priorRows = this.db
+      .prepare(
+        `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? AND uuid != ? AND state IN (${nonTerminalPlaceholders})`,
+      )
+      .all(input.acceptance_criterion_id, uuid, ...VERIFICATION_NON_TERMINAL_STATES) as unknown as VerificationRunRow[];
+    for (const priorRow of priorRows) {
+      const nextRevision = priorRow.revision + 1;
+      this.db
+        .prepare(`UPDATE verification_runs SET state = 'superseded', revision = ? WHERE uuid = ?`)
+        .run(nextRevision, priorRow.uuid);
+      this.writeEvent({
+        entity_type: 'VerificationRun',
+        entity_id: priorRow.uuid,
+        initiative_id: priorRow.initiative_id,
+        event_type: 'verification_superseded',
+        payload: { uuid: priorRow.uuid, acceptance_criterion_id: priorRow.acceptance_criterion_id },
+        provenance,
+      });
+    }
+
+    return run;
+  }
+
+  private mutateRiskAdd(input: RiskAddInput, expectedRevision: number, provenance: ProvenanceInput): Risk {
+    this.requireCreateRevision(expectedRevision, 'Risk');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    const humanKey = this.allocateScopedHumanKey(`risk_human_key:${input.initiative_id}`, 'RISK');
+    this.db
+      .prepare(
+        `INSERT INTO risks (uuid, initiative_id, human_key, statement, severity, status, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(uuid, input.initiative_id, humanKey, input.statement, input.severity, input.status, now, now);
+    const risk: Risk = {
+      uuid,
+      initiative_id: input.initiative_id,
+      human_key: humanKey,
+      statement: input.statement,
+      severity: input.severity,
+      status: input.status,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'Risk',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'risk_added',
+      payload: { uuid, initiative_id: input.initiative_id, human_key: humanKey, severity: input.severity, status: input.status },
+      provenance,
+    });
+    return risk;
+  }
+
+  /** The only post-create Risk mutation (FR-9): changes only `status`. No generic Risk update/delete operation exists. */
+  private mutateRiskStatus(input: RiskStatusInput, expectedRevision: number, provenance: ProvenanceInput): Risk {
+    const row = this.findRiskRow(input.uuid, input.initiative_id, input.human_key);
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Risk', lookup: input.uuid ?? input.human_key ?? '' });
+    }
+    if (row.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Risk',
+        entity_id: row.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: row.revision,
+      });
+    }
+    const now = provenance.timestamp;
+    const nextRevision = row.revision + 1;
+    this.db.prepare(`UPDATE risks SET status = ?, updated_at = ?, revision = ? WHERE uuid = ?`).run(
+      input.status,
+      now,
+      nextRevision,
+      row.uuid,
+    );
+    const risk: Risk = {
+      uuid: row.uuid,
+      initiative_id: row.initiative_id,
+      human_key: row.human_key,
+      statement: row.statement,
+      severity: row.severity,
+      status: input.status,
+      createdAt: row.created_at,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Risk',
+      entity_id: row.uuid,
+      initiative_id: row.initiative_id,
+      event_type: 'risk_status_changed',
+      payload: { uuid: row.uuid, status: input.status },
+      provenance,
+    });
+    return risk;
+  }
+
   /** Closes the store's own `DatabaseSync` connection. Idempotent. */
   close(): void {
     if (this.closed) return;
@@ -1234,6 +2395,106 @@ function mapRelationRow(row: RelationRow): InitiativeRelation {
     to_id: row.to_id,
     type: row.type,
     createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `decisions` row to the public `Decision` shape, parsing the JSON `alternatives` column. */
+function mapDecisionRow(row: DecisionRow): Decision {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    human_key: row.human_key,
+    title: row.title,
+    decision: row.decision,
+    rationale: row.rationale,
+    alternatives: JSON.parse(row.alternatives) as string[],
+    status: row.status,
+    superseded_by: row.superseded_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `evidence_links` row to the public `EvidenceLink` shape (the sole Phase A1 record with no `uuid`). */
+function mapEvidenceLinkRow(row: EvidenceLinkRow): EvidenceLink {
+  return {
+    evidence_id: row.evidence_id,
+    target_type: row.target_type,
+    target_id: row.target_id,
+    createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `verification_runs` row to the public `VerificationRun` shape. */
+function mapVerificationRunRow(row: VerificationRunRow): VerificationRun {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    acceptance_criterion_id: row.acceptance_criterion_id,
+    method: row.method,
+    state: row.state,
+    detail: row.detail,
+    createdAt: row.created_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `requirements` row to the public `Requirement` shape. */
+function mapRequirementRow(row: RequirementRow): Requirement {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `acceptance_criteria` row to the public `AcceptanceCriterion` shape. */
+function mapAcceptanceCriterionRow(row: AcceptanceCriterionRow): AcceptanceCriterion {
+  return {
+    uuid: row.uuid,
+    requirement_id: row.requirement_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    check_reference: row.check_reference,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `evidence` row to the public `Evidence` shape. */
+function mapEvidenceRow(row: EvidenceRow): Evidence {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    kind: row.kind,
+    locator: row.locator,
+    content_hash: row.content_hash,
+    summary: row.summary,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `risks` row to the public `Risk` shape. */
+function mapRiskRow(row: RiskRow): Risk {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    human_key: row.human_key,
+    statement: row.statement,
+    severity: row.severity,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     revision: Number(row.revision),
   };
 }

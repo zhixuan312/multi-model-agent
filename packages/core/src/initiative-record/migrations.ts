@@ -26,7 +26,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { MigrationBackupFailedError } from './errors.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 1;
+export const INITIATIVE_SCHEMA_VERSION = 2;
 
 interface Migration {
   version: number;
@@ -176,6 +176,116 @@ const MIGRATIONS: Migration[] = [
           value INTEGER NOT NULL
         );
         INSERT OR IGNORE INTO counters (name, value) VALUES ('initiative_human_key', 0);
+      `);
+    },
+  },
+  {
+    // Version 2 — Phase A1 professional record and verification ledger
+    // (SPEC-002, "Data model" and "Implementation details"). Additive only: no
+    // version 1 table or column is reshaped, renamed, or dropped. Every new
+    // table below is either identified by its own UUID or, for EvidenceLink,
+    // by its composite `(evidence_id, target_type, target_id)` identity — the
+    // sole Phase A1 record with no UUID primary key. Human-key allocation
+    // (`REQ-<n>`, `AC-<n>`, `D-<n>`, `RISK-<n>`) reuses the existing generic
+    // `counters(name, value)` table from version 1 at a scoped key (for
+    // example `requirement_human_key:<initiative_id>`); no new counter table
+    // is needed. The public repository layer (Task I-3/I-4/I-5) maps these
+    // snake_case columns to the frozen public shapes in `./types.js`.
+    version: 2,
+    apply: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS requirements (
+          uuid          TEXT PRIMARY KEY,
+          initiative_id TEXT NOT NULL REFERENCES initiatives(uuid),
+          human_key     TEXT NOT NULL,
+          statement     TEXT NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL,
+          revision      INTEGER NOT NULL,
+          UNIQUE (initiative_id, human_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_requirements_initiative_id ON requirements(initiative_id);
+
+        CREATE TABLE IF NOT EXISTS acceptance_criteria (
+          uuid            TEXT PRIMARY KEY,
+          requirement_id  TEXT NOT NULL REFERENCES requirements(uuid),
+          human_key       TEXT NOT NULL,
+          statement       TEXT NOT NULL,
+          check_reference TEXT NOT NULL,
+          created_at      TEXT NOT NULL,
+          updated_at      TEXT NOT NULL,
+          revision        INTEGER NOT NULL,
+          UNIQUE (requirement_id, human_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_acceptance_criteria_requirement_id ON acceptance_criteria(requirement_id);
+
+        CREATE TABLE IF NOT EXISTS decisions (
+          uuid           TEXT PRIMARY KEY,
+          initiative_id  TEXT NOT NULL REFERENCES initiatives(uuid),
+          human_key      TEXT NOT NULL,
+          title          TEXT NOT NULL,
+          decision       TEXT NOT NULL,
+          rationale      TEXT NOT NULL,
+          alternatives   TEXT NOT NULL,
+          status         TEXT NOT NULL,
+          superseded_by  TEXT,
+          created_at     TEXT NOT NULL,
+          updated_at     TEXT NOT NULL,
+          revision       INTEGER NOT NULL,
+          UNIQUE (initiative_id, human_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_decisions_initiative_id ON decisions(initiative_id);
+
+        CREATE TABLE IF NOT EXISTS evidence (
+          uuid          TEXT PRIMARY KEY,
+          initiative_id TEXT NOT NULL REFERENCES initiatives(uuid),
+          kind          TEXT NOT NULL,
+          locator       TEXT NOT NULL,
+          content_hash  TEXT,
+          summary       TEXT NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL,
+          revision      INTEGER NOT NULL,
+          UNIQUE (initiative_id, locator)
+        );
+        CREATE INDEX IF NOT EXISTS idx_evidence_initiative_id ON evidence(initiative_id);
+
+        CREATE TABLE IF NOT EXISTS evidence_links (
+          evidence_id  TEXT NOT NULL REFERENCES evidence(uuid),
+          target_type  TEXT NOT NULL,
+          target_id    TEXT NOT NULL,
+          created_at   TEXT NOT NULL,
+          revision     INTEGER NOT NULL,
+          PRIMARY KEY (evidence_id, target_type, target_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_evidence_links_target ON evidence_links(target_type, target_id);
+
+        CREATE TABLE IF NOT EXISTS risks (
+          uuid          TEXT PRIMARY KEY,
+          initiative_id TEXT NOT NULL REFERENCES initiatives(uuid),
+          human_key     TEXT NOT NULL,
+          statement     TEXT NOT NULL,
+          severity      TEXT NOT NULL,
+          status        TEXT NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL,
+          revision      INTEGER NOT NULL,
+          UNIQUE (initiative_id, human_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_risks_initiative_id ON risks(initiative_id);
+
+        CREATE TABLE IF NOT EXISTS verification_runs (
+          uuid                     TEXT PRIMARY KEY,
+          initiative_id            TEXT NOT NULL REFERENCES initiatives(uuid),
+          acceptance_criterion_id  TEXT NOT NULL REFERENCES acceptance_criteria(uuid),
+          method                   TEXT NOT NULL,
+          state                    TEXT NOT NULL,
+          detail                   TEXT NOT NULL,
+          created_at               TEXT NOT NULL,
+          revision                 INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_verification_runs_acceptance_criterion_id ON verification_runs(acceptance_criterion_id);
+        CREATE INDEX IF NOT EXISTS idx_verification_runs_initiative_id ON verification_runs(initiative_id);
       `);
     },
   },
