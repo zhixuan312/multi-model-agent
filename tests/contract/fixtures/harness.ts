@@ -32,6 +32,13 @@ export interface HarnessHandle {
    *  to `<stateDir>/executions.db` (WAL mode, multi-reader safe) rather than reaching into the
    *  running server's own connection, which this module never gets a handle to. */
   unconsumedOutbox(): HarnessOutboxRow[];
+  /** Total row count in `<stateDir>/executions.db`'s `executions` table (SPEC-003 B6 round-2
+   *  defect A) — for asserting that a REJECTED linked admission (task_claim_conflict /
+   *  invalid_task_transition / invalid_request) created no durable execution row at all. A
+   *  rejected admission never receives an `executionId` (the HTTP response is a 400, not a
+   *  202), so this counts rows rather than looking one up by id. Opens its own short-lived
+   *  connection, mirroring `unconsumedOutbox()`. */
+  executionRowCount(): number;
   /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
    *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
    *  replay) runs against the reopened stores (SPEC-003 Task I-6). Returns a NEW handle sharing
@@ -162,12 +169,23 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     }
   }
 
+  function executionRowCount(): number {
+    const db = new DatabaseSync(join(config.server.stateDir, 'executions.db'));
+    try {
+      const row = db.prepare('SELECT COUNT(*) AS n FROM executions').get() as { n: number };
+      return Number(row.n);
+    } finally {
+      db.close();
+    }
+  }
+
   function buildHandle(): HarnessHandle {
     return {
       baseUrl: `http://127.0.0.1:${server.port}`,
       token,
       executionRegistry: server.executionRegistry,
       unconsumedOutbox,
+      executionRowCount,
       async restart(): Promise<HarnessHandle> {
         await server.stop();
         // Reopens over the SAME `config` (same stateDir, same token file) — a fresh

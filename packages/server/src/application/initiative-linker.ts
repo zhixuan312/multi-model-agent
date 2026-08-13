@@ -18,6 +18,12 @@
 // boot after pending-execution fencing (`reconcileOnBoot`), and a row's `consumed_at` is set
 // only after every step for that row has succeeded. A failed Execution NEVER produces a Task
 // status of `failed` — see `terminalTaskUpdate`.
+//
+// SPEC-003 B6 round-2 defect B (Option 1): linkage is attached to the pending execution row at
+// admission, BEFORE the admission-time Task transition runs (`ExecutionRuntime.submit`) — so a
+// crash anywhere from admission onward still produces this outbox row, even when that Task
+// transition never actually landed. `replayRow`'s Task-update step (below) is tolerant of exactly
+// that: it treats "the Task never entered `in_progress` for this execution" as nothing to undo.
 
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -307,7 +313,39 @@ export class InitiativeLinker {
     const { transition, outcome } = terminalTaskUpdate(status);
     const terminalAlreadyApplied = liveTask.status === transition
       && (outcome === undefined || liveTask.outcome === outcome);
-    if (!terminalAlreadyApplied) {
+
+    // SPEC-003 B6 round-2 defect B (Option 1): linkage is now attached to the pending execution
+    // row in the SAME write as admission — before the admission-time `open|claimed -> in_progress`
+    // transition ever runs (`ExecutionRuntime.submit`). A crash between admission and that
+    // transition (or a genuine failure of the transition call itself) therefore still produces
+    // this outbox row, but the transition it describes never actually landed. That transition is
+    // the SAME write that appends `execution_ref` to the Task (`mutateInitiativeTaskExecution`),
+    // so its absence from `executionRefs` here is the reliable signal that the Task never left its
+    // pre-admission state for THIS execution. Replaying the mapped transition in that case would
+    // apply an FR-9 move the Task's actual current status was never a party to — e.g. `claimed ->
+    // open` is not a listed transition (an `invalid_task_transition` throw that retries forever,
+    // a permanently stuck outbox row) or `open -> open`, a no-op status write that nonetheless
+    // claims a transition that never happened. Neither is correct: there is nothing to undo.
+    const neverEnteredInProgress = !liveTask.executionRefs.includes(executionId);
+
+    if (terminalAlreadyApplied) {
+      // Nothing to do — a prior replay attempt already applied the mapped terminal state, and
+      // only `markOutboxConsumed` failed to land.
+    } else if (neverEnteredInProgress) {
+      // Reconciliation-complete, not a give-up state: append the ref (harmless, idempotent,
+      // always valid short of `completed`/`cancelled`) so the Task's history still names this
+      // execution, skip the FR-9 transition entirely, and consume the row with a logged note.
+      this.runtime.execute({
+        operation: 'initiative_task_execution',
+        input: { uuid: liveTask.uuid, execution_ref: executionId },
+        expected_revision: liveTask.revision,
+        idempotency_key: `outbox:${executionId}:task_execution_ref_only`,
+        provenance,
+      });
+      this.log(
+        `[mma] event=initiative_link_task_untouched ts=${new Date().toISOString()} outbox_id=${executionId} task=${liveTask.uuid} status=${liveTask.status} reason="Task never entered in_progress for this execution — nothing to undo, execution_ref recorded"`,
+      );
+    } else {
       this.runtime.execute({
         operation: 'initiative_task_execution',
         input: {

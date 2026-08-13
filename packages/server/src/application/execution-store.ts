@@ -195,7 +195,14 @@ export class ExecutionStore {
    *  persisted here (not held in memory) so the terminal CAS in `terminalize` — reached later,
    *  possibly after a daemon restart via boot reconciliation's `interrupt()` — can read it back
    *  without the caller re-supplying it. Omitting it (the existing unlinked call shape) means
-   *  the terminal write for this execution creates no outbox row. */
+   *  the terminal write for this execution creates no outbox row.
+   *
+   *  SPEC-003 B6 round-2 defect B (Option 1): `ExecutionRuntime.submit()` always supplies an
+   *  already-validated `linkage` HERE, in the same write as admission — never in a later,
+   *  separate call once some downstream Task transition succeeds. Attaching it any later leaves a
+   *  crash window where a Task mutation lands in `initiatives.db` but the pending row in
+   *  `executions.db` never learns about it, so `terminalize()`'s outbox insert (gated on
+   *  `linkage_json`) never fires and the Task is stranded with nothing left to reopen it. */
   admit(id: string, type: string, cwd: string, daemonPid: number, linkage?: ExecutionLinkage): void {
     if (this.closed) return;
     const now = Date.now();
@@ -203,21 +210,6 @@ export class ExecutionStore {
       INSERT INTO executions (id, type, cwd, state, created_at, updated_at, daemon_pid, linkage_json)
       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
     `).run(id, type, cwd, now, now, daemonPid, linkage ? JSON.stringify(linkage) : null);
-  }
-
-  /** Attaches a linkage to an already-admitted row (SPEC-003 B6 defect 3). Used when the Task
-   *  transition that authorizes a linked Execution runs AFTER `admit()`: admitting WITHOUT
-   *  linkage first means a `register`/`admit` failure has nothing to compensate on the Task side
-   *  (the transition hasn't run yet), and attaching linkage only once the transition itself
-   *  succeeds means a request whose transition fails terminalizes with no `linkage_json` — so
-   *  `terminalize()` produces no outbox row claiming a Task transition that never happened.
-   *  No-op on a row that already reached a terminal state. */
-  attachLinkage(id: string, linkage: ExecutionLinkage): void {
-    if (this.closed) return;
-    this.db.prepare(`
-      UPDATE executions SET linkage_json = ?, updated_at = ?
-      WHERE id = ? AND state = 'pending'
-    `).run(JSON.stringify(linkage), Date.now(), id);
   }
 
   /** Record the detached worker's process-group leader pid (codex). Only

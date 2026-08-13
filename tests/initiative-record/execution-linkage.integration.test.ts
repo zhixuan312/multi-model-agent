@@ -36,6 +36,9 @@ describe('Execution linkage integration', () => {
       expect(conflicted.status).toBe(400);
       expect(await conflicted.json()).toMatchObject({ error: { code: 'task_claim_conflict' } });
       expect(h.unconsumedOutbox()).toEqual([]);
+      // SPEC-003 B6 round-2 defect A: a rejected linked admission must create NO durable
+      // execution row at all (AC-1.9/AC-1.10) — not merely no outbox row.
+      expect(h.executionRowCount()).toBe(0);
       const dispatch = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
       expect(dispatch.status).toBe(202);
       const { executionId } = await dispatch.json() as { executionId: string };
@@ -48,10 +51,15 @@ describe('Execution linkage integration', () => {
         expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded_with_concerns', executionRefs: [executionId] })]);
         expect(record.evidence).toHaveLength(1);
         expect(restarted.unconsumedOutbox()).toEqual([]);
+        // Baseline: exactly one durable row exists — the earlier SUCCESSFUL dispatch.
+        expect(restarted.executionRowCount()).toBe(1);
         const invalid = await fetch(`${restarted.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/a.ts'] }, initiative: { initiative: { uuid: initiative.uuid }, task_uuid: task.uuid, authorized_by: 'host-a' } }) });
         expect(invalid.status).toBe(400);
         expect(await invalid.json()).toMatchObject({ error: { code: 'invalid_task_transition' } });
         expect(restarted.unconsumedOutbox()).toEqual([]);
+        // SPEC-003 B6 round-2 defect A: the rejection above must not have created a SECOND
+        // durable execution row (AC-1.9/AC-1.10) — the count stays exactly what it was.
+        expect(restarted.executionRowCount()).toBe(1);
       } finally { await restarted.close(); }
     } finally { await h.close(); }
   });

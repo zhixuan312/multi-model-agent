@@ -4,9 +4,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
+import { InitiativeLinker } from '../../../packages/server/src/application/initiative-linker.js';
+import { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import { reconcileOnBoot } from '../../../packages/server/src/application/reconcile.js';
 
 const DEAD_PID = 999_999_999; // far beyond pid_max everywhere — never a live process
+
+/** Provenance for direct `InitiativeRecordRuntime.execute()` calls below — bypasses the
+ *  HTTP/MCP adapter's own provenance stamping, so any non-empty `timestamp` is accepted by the
+ *  schema as-is. Mirrors `execution-runtime.test.ts`'s SPEC-003 B6 fixture. */
+const provenance = {
+  actor_type: 'human' as const,
+  actor_id: 'host-a',
+  interface: 'test',
+  initiated_by: 'host-a',
+  authorized_by: 'host-a',
+  timestamp: 'ignored',
+  source: 'test',
+};
 
 function pidAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (err) {
@@ -103,5 +118,105 @@ describe('reconcileOnBoot', () => {
     const outcome = reconcileOnBoot(store, process.pid);
     expect(outcome.prunedExpired).toBe(0);
     expect(store.get('done-old')).toBeDefined();
+  });
+
+  // SPEC-003 B6 round-2 defect B — Option 1: linkage is attached to the pending row in the SAME
+  // write as admission, before the admission-time Task transition ever runs. These two tests
+  // simulate the crash window that defect described directly on the store (no HTTP, no real
+  // `ExecutionRuntime.submit()` call — that method never leaves this window open long enough to
+  // observe from outside it): a linked row admitted with a DEAD daemon pid, whose Task transition
+  // either ran before the "crash" or never got the chance to.
+  describe('linked-execution crash window (SPEC-003 B6 round-2 defect B)', () => {
+    let initiativeStateDir: string;
+    let initiativeRuntime: InitiativeRecordRuntime;
+
+    beforeEach(() => {
+      initiativeStateDir = mkdtempSync(join(tmpdir(), 'mma-reconcile-initiative-'));
+      initiativeRuntime = InitiativeRecordRuntime.open({ stateDir: initiativeStateDir });
+    });
+    afterEach(() => {
+      initiativeRuntime.close();
+      rmSync(initiativeStateDir, { recursive: true, force: true });
+    });
+
+    function seedInitiativeAndTask(slug: string): { initiativeUuid: string; taskUuid: string } {
+      const product = initiativeRuntime.execute({
+        operation: 'product_create', input: { name: 'MMA', slug }, expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const initiative = initiativeRuntime.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      const task = initiativeRuntime.execute({
+        operation: 'initiative_task_create',
+        input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] },
+        expected_revision: 0, provenance,
+      }) as { uuid: string };
+      return { initiativeUuid: initiative.uuid, taskUuid: task.uuid };
+    }
+
+    it('a crash AFTER the Task transition succeeded still reopens the Task — linkage was already durable at admission, so the outbox row exists', () => {
+      const { initiativeUuid, taskUuid } = seedInitiativeAndTask('mma-crash-after-transition');
+      const linkage = { initiative: { uuid: initiativeUuid }, task_uuid: taskUuid, authorized_by: 'host-a' };
+
+      // Mirrors what `ExecutionRuntime.submit()` now does: attach linkage in the SAME admit()
+      // write, THEN run the admission-time Task transition. Then "crash" — no terminal write is
+      // ever made on the execution, and the owning daemon (DEAD_PID) is dead.
+      store.admit('crashed-after', 'investigate', '/repo', DEAD_PID, linkage);
+      const claimedTask = initiativeRuntime.execute({
+        operation: 'initiative_task_execution',
+        input: { uuid: taskUuid, execution_ref: 'crashed-after', transition: 'in_progress' },
+        expected_revision: 0,
+        provenance,
+      }) as { revision: number };
+      expect(claimedTask.revision).toBeGreaterThan(0);
+
+      const linker = new InitiativeLinker({ store, initiativeRuntime });
+      const outcome = reconcileOnBoot(store, process.pid, linker);
+
+      expect(outcome.interrupted).toBe(1);
+      expect(store.get('crashed-after')!.state).toBe('interrupted');
+      // The row produced an outbox entry (linkage was already attached at admission) AND the
+      // linker consumed it — under the prior attach-AFTER-transition ordering this outbox row
+      // would never have existed, and the Task below would be stuck at `in_progress` forever.
+      expect(store.listUnconsumedOutbox()).toEqual([]);
+      const liveTask = initiativeRuntime.execute({ operation: 'initiative_task_get', input: { uuid: taskUuid } }) as { status: string };
+      expect(liveTask.status).toBe('open');
+    });
+
+    it('a crash BEFORE the Task transition ran leaves the Task untouched — tolerant replay treats it as nothing to undo, not a stuck outbox row', () => {
+      const { initiativeUuid, taskUuid } = seedInitiativeAndTask('mma-crash-before-transition');
+      const linkage = { initiative: { uuid: initiativeUuid }, task_uuid: taskUuid, authorized_by: 'host-a' };
+
+      // Claim the Task first, so its pre-admission status is `claimed`, not `open` — this is
+      // the case the naive "already in target state" check cannot catch by itself: replaying
+      // `interrupted -> open` against a Task still `claimed` is not a listed FR-9 transition.
+      initiativeRuntime.execute({
+        operation: 'initiative_task_claim', input: { uuid: taskUuid }, expected_revision: 0, provenance,
+      });
+
+      // Admit WITH linkage already attached (Option 1) but never run the Task transition — the
+      // daemon "died" in the gap between admission and the transition call.
+      store.admit('crashed-before', 'investigate', '/repo', DEAD_PID, linkage);
+
+      const linker = new InitiativeLinker({ store, initiativeRuntime });
+      const outcome = reconcileOnBoot(store, process.pid, linker);
+
+      expect(outcome.interrupted).toBe(1);
+      expect(store.get('crashed-before')!.state).toBe('interrupted');
+      // No `invalid_task_transition` throw left the row stuck unconsumed.
+      expect(store.listUnconsumedOutbox()).toEqual([]);
+
+      const liveTask = initiativeRuntime.execute({ operation: 'initiative_task_get', input: { uuid: taskUuid } }) as {
+        status: string; claimed_by: string | null; executionRefs: string[];
+      };
+      // Nothing to undo: the Task stays exactly where it was — still claimed, ready for a fresh
+      // linked attempt — not forced into `open` (invalid from `claimed`) and not left stranded.
+      expect(liveTask.status).toBe('claimed');
+      expect(liveTask.claimed_by).toBe('host-a');
+      // The execution_ref is still recorded so the Task's history names this attempt.
+      expect(liveTask.executionRefs).toEqual(['crashed-before']);
+    });
   });
 });
