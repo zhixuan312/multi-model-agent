@@ -13,6 +13,7 @@ import { z } from 'zod';
 import {
   taskInputSchema,
   initiativeOperationRequestSchema,
+  initiativeMutationRequestSchema,
   initiativeResumeRequestSchema,
   INITIATIVE_OPERATIONS,
   type InitiativeOperation,
@@ -136,22 +137,19 @@ interface McpToolDefinition {
 // hand-written second copy of the Product/Workspace/Initiative/Task/ArtifactRef
 // field rules.
 
-/** The nine operations whose envelope carries `MutationControl`
- *  (`expected_revision`, optional `idempotency_key`, `provenance`) — the exact
- *  set `schemas.ts`'s private `mutating()` builder wraps. Read here so the MCP
- *  adapter knows which calls need adapter-owned provenance stamped
- *  (`interface: 'mcp'`, server timestamp) before dispatch. */
-export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>([
-  'product_create',
-  'workspace_create',
-  'resource_register',
-  'initiative_create',
-  'initiative_status',
-  'initiative_link_workspace',
-  'initiative_relate',
-  'initiative_task_create',
-  'artifact_register',
-]);
+/** Every operation whose envelope carries `MutationControl` (`expected_revision`,
+ *  optional `idempotency_key`, `provenance`) — the Phase A0 nine plus the Phase A1
+ *  nine, derived from `initiativeMutationRequestSchema` (the exact discriminated
+ *  union `schemas.ts`'s private `mutating()` builder produces) rather than a
+ *  hand-maintained duplicate list that could silently drift when a future phase
+ *  adds another mutation. Read here so the MCP adapter knows which calls need
+ *  adapter-owned provenance stamped (`interface: 'mcp'`, server timestamp) before
+ *  dispatch. */
+export const INITIATIVE_MUTATING_OPERATIONS = new Set<InitiativeOperation>(
+  (initiativeMutationRequestSchema.options as readonly z.ZodTypeAny[]).map(
+    (member) => (member as z.ZodObject<{ operation: z.ZodLiteral<string> }>).shape.operation.value as InitiativeOperation,
+  ),
+);
 
 /** `mma_<operation>` -> `<operation>`, for every operation EXCEPT
  *  `initiative_resume` (its own dedicated tool/handler — see below). Built
@@ -253,6 +251,49 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + 'linked Workspaces and their Resources, related Initiatives, Tasks, ArtifactRefs, the most recent Events '
     + '(event_limit, default 20, max 100), and summary counts. Use this to resume work on an Initiative from a '
     + 'fresh session without a handover document.',
+  // Phase A1 — professional record and verification ledger (SPEC-002 FR-4).
+  requirement_add:
+    'Add a Requirement (a statement of what the Initiative must satisfy) to an Initiative. Mutating: pass '
+    + 'expected_revision and provenance.',
+  requirement_get: 'Look up a Requirement by uuid, or by (initiative_id, human_key) together.',
+  requirement_list: 'List the Requirements under an Initiative.',
+  acceptance_criterion_add:
+    'Add an AcceptanceCriterion (a checkable statement with a check_reference) to a Requirement. Mutating: pass '
+    + 'expected_revision and provenance.',
+  acceptance_criterion_get: 'Look up an AcceptanceCriterion by uuid, or by (requirement_id, human_key) together.',
+  acceptance_criterion_list: 'List the AcceptanceCriteria under a Requirement, or under an Initiative as a whole.',
+  decision_record:
+    'Record a Decision (title, decision, rationale, alternatives considered, status) against an Initiative. '
+    + 'Mutating: pass expected_revision and provenance.',
+  decision_supersede:
+    'Supersede an existing Decision with a new one in one transaction: the old Decision is marked superseded and '
+    + 'the new Decision is recorded decided. Identify the old Decision by uuid or by (initiative_id, human_key). '
+    + 'Mutating: pass expected_revision and provenance.',
+  decision_get: 'Look up a Decision by uuid, or by (initiative_id, human_key) together.',
+  decision_list: 'List the Decisions under an Initiative.',
+  evidence_add:
+    'Add Evidence (kind, locator, optional content_hash, summary) supporting an Initiative. Mutating: pass '
+    + 'expected_revision and provenance.',
+  evidence_get: 'Look up Evidence by uuid, or by (initiative_id, locator) together.',
+  evidence_list: 'List the Evidence recorded under an Initiative.',
+  evidence_link:
+    'Link Evidence to a target record (a Requirement, AcceptanceCriterion, Decision, Risk, or VerificationRun) '
+    + "within the Evidence's own Initiative. Mutating: pass expected_revision and provenance.",
+  evidence_links_list:
+    'List EvidenceLinks, either every link from one piece of Evidence or every link pointing at one target record.',
+  risk_add:
+    'Add a Risk (statement, severity, initial status) to an Initiative. Mutating: pass expected_revision and '
+    + 'provenance.',
+  risk_status:
+    "Change a Risk's status. Identify the Risk by uuid or by (initiative_id, human_key). Mutating: pass "
+    + 'expected_revision and provenance.',
+  risk_get: 'Look up a Risk by uuid, or by (initiative_id, human_key) together.',
+  risk_list: 'List the Risks under an Initiative.',
+  verification_record:
+    'Record an immutable VerificationRun (method, state, detail) against an AcceptanceCriterion. Mutating: pass '
+    + 'expected_revision and provenance.',
+  verification_get: 'Look up a VerificationRun by uuid.',
+  verification_list: 'List the VerificationRuns for one AcceptanceCriterion, or for an Initiative as a whole.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
