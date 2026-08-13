@@ -78,11 +78,15 @@ export interface InitiativeRepository {
 
   /**
    * Validates, then transactionally applies, one mutating operation request
-   * (Task I-1's mutating discriminated-union subset). Synchronous: the store
-   * owns a single `DatabaseSync` connection and every step — idempotency
-   * lookup, revision compare, record write, Event write, idempotency persist —
-   * runs inside one explicit SQLite transaction. Throws a typed error from
-   * `./errors.js` for every documented failure; never partially writes.
+   * (Task I-1's mutating discriminated-union subset — extended by SPEC-003
+   * Phase B's `initiative_task_claim`, `initiative_task_release`,
+   * `initiative_task_complete`, and `initiative_task_execution`). Synchronous:
+   * the store owns a single `DatabaseSync` connection and every step —
+   * idempotency lookup, revision compare, record write, Event write,
+   * idempotency persist — runs inside one explicit SQLite transaction. Throws
+   * a typed error from `./errors.js` for every documented failure, including
+   * `task_not_claimable`, `task_claim_conflict`, and `invalid_task_transition`
+   * for the Task claim/transition operations; never partially writes.
    */
   execute(request: InitiativeMutationRequest): InitiativeRecordEntity;
 
@@ -119,7 +123,7 @@ export interface InitiativeRepository {
   /** Resume join: the Initiative's Workspace links, each joined with its Workspace and that Workspace's Resources, ordered by Workspace `createdAt` ascending, then `uuid` ascending. */
   getInitiativeWorkspaceLinks(initiativeId: string): InitiativeWorkspaceLinkRead[];
 
-  /** `initiative_task_get` — throws `not_found` for an unknown `uuid`. */
+  /** `initiative_task_get` — throws `not_found` for an unknown `uuid`. `Task.claimed_by` is `null` unless claimed (SPEC-003 Phase B). */
   getInitiativeTask(lookup: { uuid: string }): Task;
   /** `initiative_task_list` — the resume ordering: non-terminal Tasks first, then terminal Tasks; each group by `createdAt` ascending, then `uuid` ascending. */
   listInitiativeTasks(filter: { initiative_id: string }): Task[];

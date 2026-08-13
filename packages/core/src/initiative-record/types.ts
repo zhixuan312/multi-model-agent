@@ -132,6 +132,13 @@ export interface Task {
   goal: string;
   status: TaskStatus;
   outcome: TaskOutcome;
+  /**
+   * NEW in SPEC-003 Phase B: the claimant's `provenance.actor_id`, or `null`
+   * when unclaimed. `initiative_task_claim` sets it; `initiative_task_release`
+   * resets it to `null`; `initiative_task_complete` leaves it unchanged. Tasks
+   * created before schema version 3, and every unclaimed Task, read `null`.
+   */
+  claimed_by: string | null;
   workspace_ids: string[];
   resource_ids: string[];
   /** Optional on input; `[]` when omitted. Free-form — no foreign key into `executions.db`. */
@@ -419,6 +426,11 @@ export const INITIATIVE_OPERATIONS = [
   'initiative_task_create',
   'initiative_task_get',
   'initiative_task_list',
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  'initiative_task_claim',
+  'initiative_task_release',
+  'initiative_task_complete',
+  'initiative_task_execution',
   'artifact_register',
   'artifact_get',
   // Phase A1 — professional record and verification ledger (SPEC-002).
@@ -458,6 +470,11 @@ export const INITIATIVE_EVENT_TYPES = {
   initiative_link_workspace: 'initiative_workspace_linked',
   initiative_relate: 'initiative_related',
   initiative_task_create: 'task_created',
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  initiative_task_claim: 'task_claimed',
+  initiative_task_release: 'task_released',
+  initiative_task_complete: 'task_completed',
+  initiative_task_execution: 'task_execution_recorded',
   artifact_register_create: 'artifact_registered',
   artifact_register_update: 'artifact_updated',
   // Phase A1 (SPEC-002 "Data model" event table).
@@ -479,7 +496,8 @@ export const INITIATIVE_EVENT_TYPES = {
 } as const;
 
 /**
- * Frozen Phase A1 Event payload keys (SPEC-002, "Data model" event table).
+ * Frozen Event payload keys (SPEC-002 Phase A1 "Data model" event table,
+ * extended by SPEC-003 Phase B's Task claim/transition event table).
  *
  * This is intentionally a wire-contract table rather than a runtime payload
  * validator: the store owns Event construction, while consumers and contract
@@ -498,4 +516,9 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   verification_recorded: ['uuid', 'initiative_id', 'acceptance_criterion_id', 'method', 'state'],
   verification_superseded: ['uuid', 'acceptance_criterion_id'],
   verification_stale: ['uuid', 'acceptance_criterion_id', 'evidence_uuid'],
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9, "Interfaces / contracts").
+  task_claimed: ['uuid', 'initiative_id', 'claimed_by'],
+  task_released: ['uuid', 'initiative_id'],
+  task_completed: ['uuid', 'initiative_id', 'outcome'],
+  task_execution_recorded: ['uuid', 'initiative_id', 'execution_ref'],
 } as const;

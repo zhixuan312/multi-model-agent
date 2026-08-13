@@ -242,6 +242,21 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + 'Mutating: pass expected_revision and provenance.',
   initiative_task_get: 'Look up an Initiative Task by uuid.',
   initiative_task_list: 'List the Tasks under an Initiative.',
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  initiative_task_claim:
+    "Claim an open Initiative Task, setting claimed_by to the caller's provenance.actor_id (open -> claimed "
+    + "only; any other status rejects task_not_claimable). Mutating: pass expected_revision and provenance.",
+  initiative_task_release:
+    'Release a claimed or in_progress Initiative Task back to open, clearing claimed_by (claimed|in_progress -> '
+    + 'open only). Only the claimant may release, except a human-provenance caller may release any claim. '
+    + 'Mutating: pass expected_revision and provenance.',
+  initiative_task_complete:
+    'Complete a claimed or in_progress Initiative Task with a required outcome (claimed|in_progress -> completed '
+    + 'only; only the claimant may complete). Mutating: pass expected_revision and provenance.',
+  initiative_task_execution:
+    'Record an execution_ref against an Initiative Task (appended once, idempotent) and optionally apply one '
+    + 'permitted status transition; rejected once the Task is completed or cancelled. Mutating: pass '
+    + 'expected_revision and provenance.',
   artifact_register:
     'Register an ArtifactRef (managed or external) produced for or consumed by an Initiative. Mutating: pass '
     + 'expected_revision and provenance.',

@@ -253,6 +253,42 @@ export type InitiativeTaskGetInput = z.infer<typeof initiativeTaskGetInputSchema
 export const initiativeTaskListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
 export type InitiativeTaskListInput = z.infer<typeof initiativeTaskListInputSchema>;
 
+// --- Task claim / release / complete / execution (SPEC-003 Phase B, FR-8, FR-9) --------------
+
+/** The non-null `TaskOutcome` values `initiative_task_complete` and a `completed` transition require. */
+const taskOutcomeValueSchema = z.enum(['succeeded', 'succeeded_with_concerns', 'failed', 'not_completed']);
+
+export const initiativeTaskClaimInputSchema = z.object({ uuid: uuidSchema }).strict();
+export type InitiativeTaskClaimInput = z.infer<typeof initiativeTaskClaimInputSchema>;
+
+export const initiativeTaskReleaseInputSchema = z.object({ uuid: uuidSchema }).strict();
+export type InitiativeTaskReleaseInput = z.infer<typeof initiativeTaskReleaseInputSchema>;
+
+export const initiativeTaskCompleteInputSchema = z
+  .object({ uuid: uuidSchema, outcome: taskOutcomeValueSchema })
+  .strict();
+export type InitiativeTaskCompleteInput = z.infer<typeof initiativeTaskCompleteInputSchema>;
+
+/** `transition` is optional; `outcome` is required only when `transition` is `'completed'` (FR-9). */
+export const initiativeTaskExecutionInputSchema = z
+  .object({
+    uuid: uuidSchema,
+    execution_ref: nonEmptyString,
+    transition: z.enum(['in_progress', 'blocked', 'open', 'completed']).optional(),
+    outcome: taskOutcomeValueSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.transition === 'completed' && value.outcome === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outcome'],
+        message: "outcome is required when transition is 'completed'",
+      });
+    }
+  });
+export type InitiativeTaskExecutionInput = z.infer<typeof initiativeTaskExecutionInputSchema>;
+
 // ---------------------------------------------------------------------------
 // ArtifactRef
 // ---------------------------------------------------------------------------
@@ -547,6 +583,11 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_link_workspace', initiativeLinkWorkspaceInputSchema),
   mutating('initiative_relate', initiativeRelateInputSchema),
   mutating('initiative_task_create', initiativeTaskCreateInputSchema),
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  mutating('initiative_task_claim', initiativeTaskClaimInputSchema),
+  mutating('initiative_task_release', initiativeTaskReleaseInputSchema),
+  mutating('initiative_task_complete', initiativeTaskCompleteInputSchema),
+  mutating('initiative_task_execution', initiativeTaskExecutionInputSchema),
   mutating('artifact_register', artifactRegisterInputSchema),
   // Phase A1 (SPEC-002 FR-3).
   mutating('requirement_add', requirementAddInputSchema),
@@ -585,6 +626,11 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   mutating('initiative_task_create', initiativeTaskCreateInputSchema),
   readOnly('initiative_task_get', initiativeTaskGetInputSchema),
   readOnly('initiative_task_list', initiativeTaskListInputSchema),
+  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
+  mutating('initiative_task_claim', initiativeTaskClaimInputSchema),
+  mutating('initiative_task_release', initiativeTaskReleaseInputSchema),
+  mutating('initiative_task_complete', initiativeTaskCompleteInputSchema),
+  mutating('initiative_task_execution', initiativeTaskExecutionInputSchema),
 
   mutating('artifact_register', artifactRegisterInputSchema),
   readOnly('artifact_get', artifactGetInputSchema),
