@@ -21,6 +21,7 @@ function buildTestConfig(tokenFile: string, overrides?: DeepPartial<ServerConfig
           maxContextBlocksPerProject: 32,
           shutdownDrainMs: 30_000,
         },
+        autoUpdateSkills: false,
         // Isolated per-process state dir — server tests must never touch the
         // developer's real ~/.mma/state (executions.db).
         stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),

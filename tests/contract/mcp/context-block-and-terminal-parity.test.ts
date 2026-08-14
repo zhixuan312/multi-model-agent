@@ -5,7 +5,8 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 import { INITIATIVE_OPERATIONS } from '@zhixuan92/multi-model-agent-core';
 
-const parse = (result: { content: Array<{ text: string }> }) => JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+const parse = (result: unknown) =>
+  JSON.parse((result as { content: Array<{ text: string }> }).content[0]!.text) as Record<string, unknown>;
 
 // Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
 // alongside the original seven.

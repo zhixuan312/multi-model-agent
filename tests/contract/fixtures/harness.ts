@@ -140,6 +140,10 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     diagnostics: {
       log: opts.diagnosticsLog ?? false,
     },
+    research: {
+      brave: { apiKeys: [], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
+      builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
+    },
     server: {
       bind: '127.0.0.1',
       port: 0,

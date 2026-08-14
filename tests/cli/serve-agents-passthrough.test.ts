@@ -38,7 +38,10 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
       diagnostics: { log: false },
     } as unknown as MultiModelConfig;
 
-    const handle = await startServe(config, (() => {}) as (code: number) => never);
+    const noExit = (code: number): never => {
+      throw new Error(`startServe should not exit (code ${code})`);
+    };
+    const handle = await startServe(config, noExit);
 
     try {
       const res = await fetch(`http://127.0.0.1:${handle.port}/task?cwd=${encodeURIComponent(dir)}`, {

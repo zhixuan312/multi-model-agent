@@ -70,16 +70,18 @@ describe('contract: MCP adapter', () => {
 
       const run = tools.find((t) => t.name === 'mma_run')!;
       const schema = run.inputSchema as {
-        required: string[];
-        properties: Record<string, unknown> & { request: { oneOf?: unknown[]; anyOf?: unknown[] } };
+        [x: string]: unknown;
+        required?: string[];
+        properties?: { [x: string]: unknown; request?: { oneOf?: unknown[]; anyOf?: unknown[] } };
       };
+      expect(schema.properties).toBeDefined();
       // No `mainModel` on the wire. The cost baseline is the daemon's configured
       // `agents.main` tier, so the caller carries nothing for it.
       expect(schema.required).toEqual(['cwd', 'request']);
-      expect(Object.keys(schema.properties)).not.toContain('mainModel');
+      expect(Object.keys(schema.properties!)).not.toContain('mainModel');
       // The request schema is the SAME discriminated union REST validates with:
       // one variant per task type, generated — never a hand-written copy.
-      const variants = (schema.properties.request.oneOf ?? schema.properties.request.anyOf) as Array<{
+      const variants = (schema.properties!.request!.oneOf ?? schema.properties!.request!.anyOf) as Array<{
         properties: { type: { const?: string; enum?: string[] } };
       }>;
       const variantTypes = variants

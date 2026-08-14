@@ -53,7 +53,7 @@ describe('initiatives import-bootstrap', () => {
     writeFileSync(join(root, '.mma', 'config.json'), JSON.stringify({ server: { stateDir, bind: '127.0.0.1', port: 0, auth: { tokenFile: join(root, 'token') }, limits: { maxBodyBytes: 1, batchTtlMs: 1, projectCap: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 }, autoUpdateSkills: false } }));
     const provenance = { actor_type: 'system', actor_id: 's', interface: 'cli', initiated_by: 's', authorized_by: 'h', timestamp: '2026-08-12T00:00:00.000Z', source: 'manual' } as const;
     const seed = InitiativeRecordStore.open({ dbPath: join(stateDir, 'initiatives.db') });
-    const product = seed.execute({ operation: 'product_create', input: { name: 'Other', slug: 'other' }, expected_revision: 0, provenance });
+    const product = seed.execute({ operation: 'product_create', input: { name: 'Other', slug: 'other' }, expected_revision: 0, provenance }) as { uuid: string };
     seed.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'X', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance });
     const eventsBefore = seed.listEvents({}).length; seed.close();
     // Manufacture the unreachable-by-API precondition state with raw SQL (the monotonic

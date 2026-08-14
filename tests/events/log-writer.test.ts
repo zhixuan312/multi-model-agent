@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { LogWriter } from '../../packages/core/src/events/log-writer.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 
 describe('LogWriter — JSONL disabled (4.7.3+ contract)', () => {
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
   beforeEach(() => { stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); });
 
   it('is a no-op on receive() when diagnosticsLog=false (stderr is owned by StderrLogSubscriber)', () => {

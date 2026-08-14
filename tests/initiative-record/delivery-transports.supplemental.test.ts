@@ -79,7 +79,7 @@ describe('SPEC-007 Delivery transport supplemental MCP coverage', () => {
       const unknown = await client.callTool({
         name: 'mma_delivery_contract_get',
         arguments: { input: { id: 'not-a-real-contract@1' } },
-      });
+      }) as { isError?: boolean; content: Array<{ text?: string }> };
       expect(unknown.isError).toBe(true);
       expect(unknown.content[0]?.text).toContain('unknown_delivery_contract');
 
@@ -149,7 +149,7 @@ describe('SPEC-007 Delivery transport supplemental MCP coverage', () => {
             source: 'test',
           },
         },
-      });
+      }) as { isError?: boolean; content: Array<{ text?: string }> };
       expect(adapterFailure.isError).toBe(true);
       expect(adapterFailure.content[0]?.text).toContain('target_adapter_validation_failed');
     } finally {

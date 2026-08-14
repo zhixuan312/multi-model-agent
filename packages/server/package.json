@@ -61,6 +61,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@types/jsdom": "^30.0.0",
     "@types/minimist": "^1.2.5",
     "@types/proper-lockfile": "^4.1.4",
     "jsdom": "^30.0.0",

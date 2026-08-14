@@ -77,7 +77,7 @@ describe('host-header guard wiring in handleRequest', () => {
     loopbackOnlyPaths: new Set(),
     authExemptPaths: new Set(),
     cwdRequiredPaths: new Set(),
-    mainModelRequiredPaths: new Set(),
+    clientRequiredPaths: new Set(),
   };
 
   it('returns 403 forbidden_host when Host header is not an allowed loopback host', async () => {

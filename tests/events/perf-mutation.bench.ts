@@ -16,7 +16,7 @@ bench('medium envelope (5 stages, 50 tool calls)', () => {
   const s = TaskEnvelopeStore.create(seed);
   for (const name of ['implementing','reviewing','reworking','annotating','committing'] as const) {
     s.startStage(name, { model: 'claude-sonnet-4-6', tier: 'standard' });
-    for (let i = 0; i < 10; i++) s.recordToolCall({ stage: name, tool: 'Read', filesRead: [`/f${i}`] });
+    for (let i = 0; i < 10; i++) s.recordToolCall({ stage: name, tool: 'Read' });
     s.completeStage(name, 1, { outcome: 'advance', durationMs: 1000, inputTokens: 100, outputTokens: 50 });
   }
 }, { time: 1000 });
@@ -25,7 +25,7 @@ bench('large envelope (5 stages, 500 tool calls)', () => {
   const s = TaskEnvelopeStore.create(seed);
   for (const name of ['implementing','reviewing','reworking','annotating','committing'] as const) {
     s.startStage(name, { model: 'claude-sonnet-4-6', tier: 'standard' });
-    for (let i = 0; i < 100; i++) s.recordToolCall({ stage: name, tool: 'Read', filesRead: [`/f${i}`] });
+    for (let i = 0; i < 100; i++) s.recordToolCall({ stage: name, tool: 'Read' });
     s.completeStage(name, 1, { outcome: 'advance', durationMs: 1000, inputTokens: 100, outputTokens: 50 });
   }
 }, { time: 2000 });

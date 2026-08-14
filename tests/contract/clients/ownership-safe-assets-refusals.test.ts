@@ -98,6 +98,7 @@ describe('contract: ownership-safe provisioning assets — additional refusal pa
       createTemp: (path) => `${path}.tmp-test`,
       write: () => {},
       fsync: () => {},
+      fsyncDir: () => {},
       rename: () => {
         throw new Error('rename must never be reached once a stale read is detected');
       },

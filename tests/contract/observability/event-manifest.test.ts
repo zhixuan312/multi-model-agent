@@ -9,7 +9,7 @@ describe('observability event manifest', () => {
   });
 
   it('every kind in manifest matches PlainLogKindEnum', () => {
-    const enumKinds = new Set(PlainLogKindEnum.options);
+    const enumKinds: Set<string> = new Set(PlainLogKindEnum.options);
     for (const kindEntry of manifest.kinds) {
       expect(enumKinds.has(kindEntry.kind), `kind ${kindEntry.kind} not in PlainLogKindEnum`).toBe(true);
     }
