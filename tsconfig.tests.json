@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "skipLibCheck": true, "types": ["node", "vitest/globals"] },
+  "include": ["tests", "packages/core/src", "packages/server/src"]
+}

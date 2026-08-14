@@ -34,25 +34,25 @@ describe('InitiativeRecordRuntime execute()', () => {
   it('dispatches every read-only operation to the matching store method', () => {
     const { runtime, cleanup } = openRuntime();
     try {
-      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const workspace = runtime.execute({
         operation: 'workspace_create',
         input: { product_id: product.uuid, name: 'Engine', slug: 'engine', description: 'd' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const resource = runtime.execute({
         operation: 'resource_register',
         input: { workspace_id: workspace.uuid, type: 'git_repository', canonical_locator: 'repo', description: 'd' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const initiative = runtime.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const task = runtime.execute({
         operation: 'initiative_task_create',
         input: {
@@ -66,13 +66,13 @@ describe('InitiativeRecordRuntime execute()', () => {
         },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const artifact = runtime.execute({
         operation: 'artifact_register',
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', description: 'd' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
 
       expect(runtime.execute({ operation: 'product_get', input: { uuid: product.uuid } })).toEqual(product);
       expect(runtime.execute({ operation: 'product_list', input: {} })).toEqual([product]);
@@ -158,13 +158,13 @@ describe('InitiativeRecordRuntime initiativeResume()', () => {
   it('rejects an event_limit above 100 with invalid_request', () => {
     const { runtime, cleanup } = openRuntime();
     try {
-      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = runtime.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { human_key: string };
       expect(() => runtime.initiativeResume({ initiative: { human_key: initiative.human_key }, event_limit: 101 })).toThrow(
         /invalid_request/,
       );
