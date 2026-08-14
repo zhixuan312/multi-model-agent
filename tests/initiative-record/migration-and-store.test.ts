@@ -13,9 +13,18 @@ describe('InitiativeRecordStore migrations', () => {
     const store = InitiativeRecordStore.open({ dbPath });
     try {
       expect(existsSync(dbPath)).toBe(true);
+      // Connection pragmas come from the STORE: `busy_timeout` is per-connection and a second
+      // connection cannot see it, so this is the one thing only the store can answer.
       expect(store.inspectPragmas()).toMatchObject({ journal_mode: 'wal', busy_timeout: expect.any(Number) });
       expect(store.inspectPragmas().busy_timeout).toBeGreaterThan(0);
-      expect(store.listSchemaTables()).toEqual(expect.arrayContaining(['products', 'initiatives', 'events', 'idempotency_results']));
+      // Schema shape is a property of the FILE, so read it through an ordinary connection rather
+      // than through a test-only method on the production class.
+      const probe = new DatabaseSync(dbPath);
+      try {
+        const tables = (probe.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view')").all() as Array<{ name: string }>)
+          .map((row) => row.name);
+        expect(tables).toEqual(expect.arrayContaining(['products', 'initiatives', 'events', 'idempotency_results']));
+      } finally { probe.close(); }
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 

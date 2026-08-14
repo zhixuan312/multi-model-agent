@@ -573,23 +573,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
   }
 
-  /** Test/inspection use: this store connection's own pragma settings. */
-  inspectPragmas(): InitiativeRecordStorePragmas {
-    const journalRow = this.db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string } | undefined;
-    const busyRow = this.db.prepare('PRAGMA busy_timeout').get() as { timeout?: number } | undefined;
-    return {
-      journal_mode: String(journalRow?.journal_mode ?? ''),
-      busy_timeout: Number(busyRow?.timeout ?? 0),
-    };
-  }
 
-  /** Test/inspection use: table and view names currently present in the schema. */
-  listSchemaTables(): string[] {
-    const rows = this.db
-      .prepare(`SELECT name FROM sqlite_master WHERE type IN ('table', 'view')`)
-      .all() as Array<{ name?: string }>;
-    return rows.map((row) => String(row.name));
-  }
 
   /**
    * Validates `rawRequest` against {@link initiativeMutationRequestSchema} and,
@@ -672,7 +656,23 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
   }
 
-  /** Test/inspection use: stored Events, optionally scoped to one Initiative, ordered by `event_sequence` ascending. */
+  /**
+   * This store connection's own pragma settings. Connection state — `busy_timeout` in particular —
+   * is per-connection and invisible to any other reader of the same file, so the only way to
+   * assert the store configures its connection correctly is to ask the store. Kept for that
+   * reason; the schema-shape sibling was removed because a plain connection can read it (audit
+   * M1-10).
+   */
+  inspectPragmas(): InitiativeRecordStorePragmas {
+    const journalRow = this.db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string } | undefined;
+    const busyRow = this.db.prepare('PRAGMA busy_timeout').get() as { timeout?: number } | undefined;
+    return {
+      journal_mode: String(journalRow?.journal_mode ?? ''),
+      busy_timeout: Number(busyRow?.timeout ?? 0),
+    };
+  }
+
+  /** Stored Events, optionally scoped to one Initiative, ordered by `event_sequence` ascending. */
   listEvents(filter: { initiative_id?: string } = {}): Event[] {
     const rows = (
       filter.initiative_id
