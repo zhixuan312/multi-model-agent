@@ -23,7 +23,7 @@ describe('SPEC-007 schema v7 Delivery Contract catalog', () => {
       raw.close();
       runInitiativeMigrations({ dbPath });
       const store = InitiativeRecordStore.open({ dbPath });
-      expect(INITIATIVE_SCHEMA_VERSION).toBe(7);
+      expect(INITIATIVE_SCHEMA_VERSION).toBe(8);
       expect(store.listDeliveryContracts().map((contract) => contract.id)).toEqual(IDS);
       expect(store.getDeliveryContract({ id: 'runnable-prototype@1' }).requires).toEqual([
         'executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence',

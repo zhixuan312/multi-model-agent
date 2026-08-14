@@ -44,9 +44,9 @@ describe('Task claim schema migration', () => {
       const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string; notnull: number }>;
       expect(columns.filter((column) => column.name === 'claimed_by').map(({ name, notnull }) => ({ name, notnull }))).toEqual([{ name: 'claimed_by', notnull: 0 }]);
       // A v2 database upgrades through every pending migration, landing on the current
-      // INITIATIVE_SCHEMA_VERSION (SPEC-007 Task I-1 added v7) rather than the v3 this check
+      // INITIATIVE_SCHEMA_VERSION (SPEC-007 Task I-7 added v8) rather than the v3 this check
       // originally pinned.
-      expect(Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(7);
+      expect(Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(8);
       db.close();
       const store = InitiativeRecordStore.open({ dbPath });
       try {

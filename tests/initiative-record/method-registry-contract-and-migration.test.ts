@@ -34,16 +34,16 @@ describe('Method registry contract and schema v6', () => {
       runInitiativeMigrations({ dbPath });
       const upgraded = new DatabaseSync(dbPath);
       // SPEC-007 (Task I-1) added migration version 7 after this v4 database's target v6, so a
-      // v4 database now upgrades through v5, v6, and v7, landing on the current
+      // v4 database now upgrades through v5, v6, v7, and v8, landing on the current
       // INITIATIVE_SCHEMA_VERSION rather than the v6 this check originally pinned. SPEC-007's
       // v7 tables are additive-only `CREATE TABLE IF NOT EXISTS` / `INSERT OR IGNORE` DDL with
       // no v4/v5/v6 column dependency, so re-applying it here is inert for this check.
-      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 });
+      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 8 });
       expect(upgraded.prepare('PRAGMA table_info(tasks)').all().map((row: { name: string }) => row.name)).toContain('method');
       expect(upgraded.prepare('SELECT id, is_builtin FROM methods ORDER BY id').all()).toEqual(IDS.slice().sort().map((id) => ({ id, is_builtin: 1 })));
       expect(upgraded.prepare('SELECT method FROM tasks WHERE uuid = ?').get(task.uuid)).toEqual({ method: null });
       upgraded.close();
-      expect(INITIATIVE_SCHEMA_VERSION).toBe(7);
+      expect(INITIATIVE_SCHEMA_VERSION).toBe(8);
       expect(INITIATIVE_OPERATIONS).toEqual(expect.arrayContaining(['method_get', 'method_list', 'initiative_task_set_method']));
       expect(INITIATIVE_OPERATIONS.some((operation) => /method_(create|update|delete|register)/.test(operation))).toBe(false);
       expect(INITIATIVE_EVENT_PAYLOAD_KEYS.task_method_set).toEqual(['previous_method', 'new_method']);

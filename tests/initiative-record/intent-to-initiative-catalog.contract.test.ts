@@ -29,9 +29,9 @@ describe('SPEC-006 Method catalog', () => {
       runInitiativeMigrations({ dbPath });
       const upgraded = InitiativeRecordStore.open({ dbPath });
       // SPEC-007 (Task I-1) added migration version 7 after this v5 database's target v6, so a
-      // v5 database now upgrades through v6 and v7, landing on the current
+      // v5 database now upgrades through v6, v7, and v8, landing on the current
       // INITIATIVE_SCHEMA_VERSION rather than the v6 this check originally pinned.
-      expect(INITIATIVE_SCHEMA_VERSION).toBe(7);
+      expect(INITIATIVE_SCHEMA_VERSION).toBe(8);
       expect(upgraded.listMethods().map((method) => method.id).sort()).toEqual(METHOD_IDS);
       upgraded.close();
       const guidance = loadMethodGuidance('intent-to-initiative@1');

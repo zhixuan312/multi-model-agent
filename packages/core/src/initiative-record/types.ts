@@ -376,8 +376,18 @@ export const DEFAULT_LIFECYCLE_CONTRACT_ID = 'default-sdl@1' as const;
 /** A Phase Record's state machine (FR-2). Absent rows synthesize to `'not_started'`. */
 export type PhaseRecordState = 'not_started' | 'active' | 'satisfied' | 'reopened' | 'skipped';
 
-/** The closed, typed satisfier vocabulary (FR-5) — no conditions, scripts, or runtime-extensible types. */
-export type Satisfier = 'manual' | 'requirements_exist' | 'acceptance_criteria_exist' | 'decisions_settled';
+/**
+ * The closed, typed satisfier vocabulary (FR-5) — no conditions, scripts, or runtime-extensible
+ * types. `deliverables_valid` is SPEC-007's Delivery Layer addition (Task I-7, ← AC-1.11): true
+ * only when every Deliverable of the Initiative is `valid` or `human_approved` (vacuously true
+ * with no Deliverables).
+ */
+export type Satisfier =
+  | 'manual'
+  | 'requirements_exist'
+  | 'acceptance_criteria_exist'
+  | 'decisions_settled'
+  | 'deliverables_valid';
 
 /** One required gate condition inside a `LifecycleContract` phase (FR-5). */
 export interface Establishment {

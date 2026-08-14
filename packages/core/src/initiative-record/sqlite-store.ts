@@ -3626,11 +3626,22 @@ export class InitiativeRecordStore implements InitiativeRepository {
     const acceptanceCriteria = this.listAcceptanceCriteria({ initiative_id: initiativeId });
     const decisions = this.listDecisions({ initiative_id: initiativeId });
     const events = this.listEvents({ initiative_id: initiativeId });
+    const deliverableValidationStates = this.listDeliverables({ initiative_id: initiativeId }).map(
+      (deliverable) => deliverable.validation_state,
+    );
     const effectiveEvents =
       prospectiveSatisfyAsserted !== undefined
         ? [...events, this.buildProspectiveSatisfiedEvent(initiativeId, phase, prospectiveSatisfyAsserted)]
         : events;
-    return evaluateLifecycleGate({ contract, phase, requirements, acceptanceCriteria, decisions, events: effectiveEvents });
+    return evaluateLifecycleGate({
+      contract,
+      phase,
+      requirements,
+      acceptanceCriteria,
+      decisions,
+      events: effectiveEvents,
+      deliverableValidationStates,
+    });
   }
 
   /** A not-yet-persisted `phase_satisfied` Event standing in for the current mutation's own future Event, for snapshot purposes only. Never written to `events`. */

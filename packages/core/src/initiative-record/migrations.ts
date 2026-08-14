@@ -27,7 +27,7 @@ import { MigrationBackupFailedError } from './errors.js';
 import { DEFAULT_LIFECYCLE_CONTRACT_ID, type DeliveryContract, type LifecycleContract, type MethodDeclaration } from './types.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 7;
+export const INITIATIVE_SCHEMA_VERSION = 8;
 
 interface Migration {
   version: number;
@@ -439,6 +439,21 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Version 8 — SPEC-007 Delivery Layer (Task I-7, AC-1.11). The immutable
+    // default Lifecycle Contract predates the Delivery layer, so existing v7
+    // databases need an explicit forward migration to receive the advisory
+    // `deliverables_valid` deliver-phase Establishment. Only the built-in row is
+    // updated: any custom contract remains caller-owned and untouched.
+    version: 8,
+    apply: (db) => {
+      db.prepare(
+        `UPDATE lifecycle_contracts
+         SET definition_json = ?
+         WHERE id = ? AND is_builtin = 1`,
+      ).run(JSON.stringify(DEFAULT_SDL_CONTRACT), DEFAULT_SDL_CONTRACT.id);
+    },
+  },
 ];
 
 /**
@@ -589,7 +604,11 @@ const BUILTIN_DELIVERY_CONTRACTS: readonly DeliveryContract[] = [
  * The frozen `default-sdl@1` definition (SPEC-004 "Data model" — the pinned YAML). Seeded once
  * by migration v4 as an immutable, built-in row; `execute` deliberately has no Requirement or
  * Acceptance Criterion Establishment because SPEC-007's Delivery Contract validation, not this
- * specification, owns Execute-phase gating.
+ * specification, owns Execute-phase gating. SPEC-007 (Task I-7, ← AC-1.11) appends the advisory
+ * `deliverables_valid` Establishment to `deliver`, after the pre-existing manual
+ * `delivery_confirmed` — migration v4 still runs this same seed insert for a brand-new database,
+ * so the migrated row carries both Establishments in this order without a dedicated later
+ * migration step.
  */
 const DEFAULT_SDL_CONTRACT: LifecycleContract = {
   id: DEFAULT_LIFECYCLE_CONTRACT_ID,
@@ -610,7 +629,12 @@ const DEFAULT_SDL_CONTRACT: LifecycleContract = {
     },
     execute: { required: [] },
     verify: { required: [{ key: 'acceptance_verified', satisfier: 'manual' }] },
-    deliver: { required: [{ key: 'delivery_confirmed', satisfier: 'manual' }] },
+    deliver: {
+      required: [
+        { key: 'delivery_confirmed', satisfier: 'manual' },
+        { key: 'deliverables_valid', satisfier: 'deliverables_valid' },
+      ],
+    },
   },
 };
 

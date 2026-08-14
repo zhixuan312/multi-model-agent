@@ -49,9 +49,9 @@ describe('Lifecycle data contract and v4 migration', () => {
       runInitiativeMigrations({ dbPath });
       const upgraded = new DatabaseSync(dbPath);
       // A v3 database upgrades through every pending migration, landing on the current
-      // INITIATIVE_SCHEMA_VERSION (SPEC-007 Task I-1 added v7) rather than the v4 this check
+      // INITIATIVE_SCHEMA_VERSION (SPEC-007 Task I-7 added v8) rather than the v4 this check
       // originally pinned.
-      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 });
+      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 8 });
       expect(upgraded.prepare("SELECT COUNT(*) AS count FROM phase_records WHERE initiative_id = ?").get(initiativeId)).toMatchObject({ count: 0 });
       expect(upgraded.prepare("SELECT id FROM lifecycle_contracts WHERE id = 'default-sdl@1'").get()).toEqual({ id: 'default-sdl@1' });
       upgraded.close();
@@ -81,6 +81,43 @@ describe('Lifecycle data contract and v4 migration', () => {
       expect(INITIATIVE_EVENT_PAYLOAD_KEYS.lifecycle_contract_set).toEqual(['previous_lifecycle_contract', 'new_lifecycle_contract']);
       expect(initiativeOperationRequestSchema.safeParse({ operation: 'initiative_phase_satisfy', input: { initiative: { uuid: initiativeId }, phase: 'discover', asserted: ['problem_framed'] }, expected_revision: 0, provenance }).success).toBe(true);
       expect(initiativeOperationRequestSchema.safeParse({ operation: 'initiative_set_lifecycle_contract', input: { initiative: { uuid: initiativeId }, lifecycle_contract: 'Default@0' }, expected_revision: 0, provenance }).success).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('upgrades the v7 built-in default deliver gate with the advisory deliverables_valid requirement', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-lifecycle-v8-'));
+    const dbPath = join(dir, 'initiatives.db');
+    try {
+      const store = InitiativeRecordStore.open({ dbPath });
+      store.close();
+
+      const v7 = new DatabaseSync(dbPath);
+      v7.prepare("UPDATE lifecycle_contracts SET definition_json = ? WHERE id = 'default-sdl@1'").run(
+        JSON.stringify({
+          id: 'default-sdl@1',
+          phases: {
+            discover: { required: [{ key: 'problem_framed', satisfier: 'manual' }] },
+            refine: { required: [] },
+            design: { required: [] },
+            execute: { required: [] },
+            verify: { required: [] },
+            deliver: { required: [{ key: 'delivery_confirmed', satisfier: 'manual' }] },
+          },
+        }),
+      );
+      v7.exec('PRAGMA user_version = 7');
+      expect(v7.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 });
+      v7.close();
+
+      runInitiativeMigrations({ dbPath });
+
+      const upgraded = new DatabaseSync(dbPath);
+      const definition = upgraded.prepare("SELECT definition_json FROM lifecycle_contracts WHERE id = 'default-sdl@1'").get() as { definition_json: string };
+      expect(JSON.parse(definition.definition_json).phases.deliver.required).toEqual([
+        { key: 'delivery_confirmed', satisfier: 'manual' },
+        { key: 'deliverables_valid', satisfier: 'deliverables_valid' },
+      ]);
+      upgraded.close();
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
