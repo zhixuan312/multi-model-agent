@@ -219,15 +219,35 @@ function resolveSubmittedApiKey(input: ConfigureProviderRequest): string | undef
   return input.auth.apiKey;
 }
 
-export function applyToConfig(config: MultiModelConfig, input: ConfigureProviderRequest): void {
+/**
+ * The only part of a config `applyToConfig` and `persistConfig` read or write.
+ *
+ * Declaring `MultiModelConfig` here was over-wide in both directions. Neither function touches
+ * anything but `agents`, and `MultiModelConfig.agents` is a CLOSED `{standard?, complex?, main?}`
+ * shape while both write by dynamic tier key — so the signature demanded more than the functions
+ * need AND described the wrong thing about the one field they use. Four casts existed only to
+ * bridge that gap: two `as never` at the `mma setup` call sites, which erased the argument type
+ * entirely, and two inside `applyToConfig`. Naming the real requirement removes all four.
+ */
+/**
+ * One tier entry as these functions treat it: an open record that MAY carry `effort`. Open because
+ * a tier written by an older release can hold keys this code does not know, and rewriting a tier
+ * must not silently drop them.
+ */
+export type AgentTierEntry = Record<string, unknown> & { effort?: string };
+
+export interface AgentsCarrier {
+  agents?: Record<string, AgentTierEntry | undefined>;
+}
+
+export function applyToConfig(config: AgentsCarrier, input: ConfigureProviderRequest): void {
   // A config being written for the first time has no agents at all — `mma setup`
-  // creates the block as it fills the first tier. Before tiers were optional this
-  // could not happen, so the cast below assumed an object was always there.
-  if (!config.agents) (config as { agents?: unknown }).agents = {};
+  // creates the block as it fills the first tier.
+  if (!config.agents) config.agents = {};
   // The tier entry is replaced wholesale, so a per-tier reasoning level the
   // user set by hand has to be carried across — otherwise swapping a model
   // from the Models page silently resets that tier to DEFAULT_EFFORT.
-  const previousEffort = (config.agents as Record<string, { effort?: string } | undefined>)[input.tier]?.effort;
+  const previousEffort = config.agents[input.tier]?.effort;
   // Only a genuine override survives — an absent effort stays absent so the
   // written config keeps meaning "use the default".
   const agentConfig: Record<string, unknown> = {
@@ -245,10 +265,10 @@ export function applyToConfig(config: MultiModelConfig, input: ConfigureProvider
     if (input.auth.baseUrl) agentConfig.baseUrl = input.auth.baseUrl;
   }
 
-  (config.agents as Record<string, unknown>)[input.tier] = agentConfig;
+  config.agents[input.tier] = agentConfig;
 }
 
-export function persistConfig(configPath: string, config: MultiModelConfig): { ok: boolean; error?: string } {
+export function persistConfig(configPath: string, config: AgentsCarrier): { ok: boolean; error?: string } {
   try {
     // The directory may not exist yet: `mma setup` on a fresh machine writes the
     // very first ~/.mma/config.json. Every prior caller reached here with a

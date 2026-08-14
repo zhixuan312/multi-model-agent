@@ -17,6 +17,7 @@ import {
   inheritableExecArgv,
   resolveDaemon,
   startDaemonDetached,
+  matchesDaemonCommand,
   stopDaemon,
   waitForHealth,
 } from '../../packages/server/src/cli/daemon-control.js';
@@ -216,11 +217,11 @@ describe('stopDaemon', () => {
     expect(signals).toEqual([]);
   });
 
-  it('sends NO signal when the pid is alive but no longer ours', async () => {
-    // The pid is resolved before stopDaemon runs, so the daemon can exit and the OS can hand its
-    // number to something else before the FIRST signal — the same race the escalation guards
-    // already covered, just a smaller window. Guarding only liveness here meant that first SIGTERM
-    // landed on an unrelated process (audit M3-2).
+  it('signals nothing AND reports not-stopped when the pid is alive but not ours', async () => {
+    // Two guarantees in one, and the second is the one that bites. Refusing to signal an unrelated
+    // process is right; reporting that refusal as `stopped: true` is not, because `restart` and
+    // `update` read `stopped` as "the port is free now" and go on to bind it. A live process is
+    // still holding that pid, so the only honest answer is `stopped: false`.
     const signals: string[] = [];
     const out = await stopDaemon(1, {
       ...base, stateDir: dir,
@@ -228,8 +229,26 @@ describe('stopDaemon', () => {
       verifyProcess: () => false, // alive, but not an mma daemon
       kill: (_p, s) => { signals.push(s); },
     });
-    expect(out).toMatchObject({ stopped: true, escalatedTo: 'none' });
+    expect(out).toMatchObject({ stopped: false, escalatedTo: 'none', notOurs: true });
     expect(signals).toEqual([]);
+  });
+
+  // The regression that made this distinction matter. `verifyDaemonProcess` matched only command
+  // lines containing "mma" or "multi-model-agent", but `npm run serve` — the documented dev
+  // command, and what CI and the smoke harness run — launches
+  // `node packages/server/dist/cli/index.js serve`, which contains neither. Every such daemon
+  // verified as "not ours", so `mma stop` reported success while the daemon kept serving /health.
+  it('recognises the daemon by its dist entry path, not just the package name', () => {
+    // `verifyDaemonProcess` shells out to `ps`; `matchesDaemonCommand` is the predicate it applies
+    // to the output, so the matching rule is testable without a live process.
+    expect(matchesDaemonCommand('node packages/server/dist/cli/index.js serve')).toBe(true);
+    expect(matchesDaemonCommand('/usr/local/bin/mma serve')).toBe(true);
+    expect(matchesDaemonCommand('node /repo/packages/server/src/cli/index.ts serve')).toBe(true);
+    // Still rejects the near misses the two-halves rule exists to reject.
+    expect(matchesDaemonCommand('mma status')).toBe(false);
+    expect(matchesDaemonCommand('vim multi-model-agent/README.md')).toBe(false);
+    expect(matchesDaemonCommand('node other/cli/index.js')).toBe(false);
+    expect(matchesDaemonCommand('python -m http.server serve')).toBe(false);
   });
 
   it('stops on the first SIGTERM when the daemon exits during its drain', async () => {

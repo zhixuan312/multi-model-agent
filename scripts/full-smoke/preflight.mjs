@@ -595,10 +595,12 @@ function mcpOnlySurfaceGate() {
   // Each pattern is a way an instruction could hand an agent the HTTP route.
   const FORBIDDEN = [
     [/\bcurl\s+-/, 'a curl invocation'],
-    [/POST\s+\/task\b/, 'a POST /task instruction'],
+    // `/execution` as well as `/task`: SPEC-003 renamed the route, and a gate that names only the
+    // retired spelling cannot catch the instruction an author would write today.
+    [/POST\s+\/(task|execution)\b/, 'a POST /task or /execution instruction'],
     [/Authorization:\s*Bearer/i, 'an Authorization: Bearer header'],
-    [/127\.0\.0\.1:\d+\/task\b/, 'a direct /task URL'],
-    [/localhost:\d+\/task\b/, 'a direct /task URL'],
+    [/127\.0\.0\.1:\d+\/(task|execution)\b/, 'a direct route URL'],
+    [/localhost:\d+\/(task|execution)\b/, 'a direct route URL'],
     [/--target=(gemini-cli|codex-cli)\b/, 'a retired client id'],
   ];
 
@@ -636,7 +638,10 @@ function mcpOnlySurfaceGate() {
   // self-enforcing: it holds only while the skill names no MMA tool, so adding a
   // dispatch to an exempt skill fails here. Keep this rule identical to
   // tests/contract/skills/mcp-only-client-surface.test.ts.
-  const callsMmaTool = (text) => /\bmma_(run|task_get|task_wait|task_cancel|task_list|context_block_)/.test(text);
+  // Matches ANY mma_ tool. The old list named task_get/task_wait/task_cancel/task_list, which
+  // SPEC-003 retired — so a skill calling mma_execution_wait (13 such references ship today)
+  // silently stopped being covered by this rule. A generic match cannot go stale that way.
+  const callsMmaTool = (text) => /\bmma_[a-z_]+/.test(text);
   const silent = skillDirs.filter((name) => {
     const p = join(SKILLS_ROOT, name, 'SKILL.md');
     if (!existsSync(p)) return false;

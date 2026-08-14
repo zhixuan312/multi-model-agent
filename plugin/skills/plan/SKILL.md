@@ -123,7 +123,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false

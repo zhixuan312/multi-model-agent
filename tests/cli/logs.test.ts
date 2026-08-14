@@ -15,12 +15,11 @@ function cap() {
   };
 }
 
-function mkConfig(logDir: string, enabled = true): MultiModelConfig {
-  return {
-    agents: {} as MultiModelConfig['agents'],
-    diagnostics: { log: enabled, logDir },
-    server: {} as MultiModelConfig['server'],
-  } as MultiModelConfig;
+// No casts: `runLogs` asks only for `diagnostics`, so that is all this builds. It used to fake an
+// empty `agents` and `server` and cast three times to satisfy a parameter type the function never
+// touched — which also meant a real change to either of those shapes could not be noticed here.
+function mkConfig(logDir: string, enabled = true): Pick<MultiModelConfig, 'diagnostics'> {
+  return { diagnostics: { log: enabled, logDir } };
 }
 
 function today(): string {

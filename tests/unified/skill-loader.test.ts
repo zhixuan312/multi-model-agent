@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { loadSkill, clearSkillCache } from '../../packages/core/src/unified/skill-loader.js';
+import type { TaskType } from '../../packages/core/src/unified/type-registry.js';
 
 const SKILLS_DIR = path.resolve(import.meta.dirname, '../../packages/core/src/skills');
 
@@ -26,7 +27,10 @@ describe('SkillLoader', () => {
   });
 
   it('throws for missing type', async () => {
-    await expect(loadSkill('nonexistent' as any, SKILLS_DIR)).rejects.toThrow('Skill file missing');
+    // `as TaskType`, not `as any`. The lie has to be narrow: widening the argument to `any` would
+    // also stop the compiler checking the OTHER argument and the return, so a signature change
+    // would slip through here silently. Matches how type-registry.test.ts spells the same idea.
+    await expect(loadSkill('nonexistent' as TaskType, SKILLS_DIR)).rejects.toThrow('Skill file missing');
   });
 
   it('loads audit subtype implement-plan.md when subtype=plan', async () => {

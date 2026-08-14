@@ -7,8 +7,6 @@ vi.mock('../../packages/core/src/unified/repo-commit.js', () => ({
   captureBaseline: vi.fn().mockResolvedValue({ head: 'base0', branch: 'mma/2026-07-31-x', dirtyAtDispatch: false }),
   assertRepoUntampered: vi.fn().mockResolvedValue(undefined),
   commitAll: vi.fn().mockResolvedValue({ committed: true, head: 'new1', filesChanged: ['a.ts'] }),
-  isGitRepo: vi.fn().mockResolvedValue(true),
-  filesChangedSince: vi.fn().mockResolvedValue([]),
 }));
 
 const mockTurn = (output: string) => ({

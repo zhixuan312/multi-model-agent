@@ -1,8 +1,16 @@
-// Full-pipeline smoke — pinned constants. All values confirmed against the codebase
-// (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
+// Full-pipeline smoke — pinned constants (events_raw migrations, wire-schema, telemetry paths).
+// These are pins against the live codebase, so a drift here fails the run rather than passing
+// quietly; re-confirm them whenever a migration or the wire schema moves.
 //
-// Comprehensive product release gate: 50 scenarios, each testing a DISTINCT product
-// capability — no duplicates, every scenario earns its place. Full functional coverage:
+// Comprehensive product release gate. Every scenario tests a DISTINCT product capability — no
+// duplicates, every scenario earns its place. Two suites make up a run:
+//   - the numeric `SCENARIOS` array below, covering the EXECUTION routes;
+//   - `record-surface.mjs`, covering the Initiative Record surface (lifecycle, methods, intake,
+//     delivery), which the numeric array never touches.
+// Counts are not restated here — they drift, and a header that miscounts is worse than one that
+// does not count. The harness reports the real totals for both suites at the end of a run.
+//
+// Full functional coverage:
 //   - the deliverable-agnostic solution lifecycle: a digest-matched ApprovedContract
 //     accepted on a governed route, a Contract Task that declares NO deterministic check
 //     (the shape every non-code deliverable needs), `method: 'software-change@1'` reaching
@@ -95,7 +103,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 43-scenario release gate.
+// The release gate. (No count here — it drifts; the harness reports the real total per run.)
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -125,12 +133,16 @@ export const POLL = {
 //      #16 investigate resume — resume prior session from scenario #2
 //
 //   E. Error Cases:
-//      #17 invalid type     — POST /task with type: 'nonexistent' → 400
-//      #18 missing field    — POST /task with type: 'investigate' but no prompt/target → 400
+//      #17 invalid type     — POST /execution with type: 'nonexistent' → 400
+//      #18 missing field    — POST /execution with type: 'investigate' but no prompt/target → 400
 //
 //   F. Sandbox Confinement:
-//      #20 delegate cwd-escape  — worker instructed to write /tmp; hook denies, worker adapts
-//      #21 delegate cd-chain    — worker instructed to cd /tmp && touch; hardened hook catches
+//      #20 delegate cwd-escape  — worker told to write ~/.mma/smoke-escape-probe/; hook denies,
+//                                   worker adapts. NOT /tmp: `cwd-only` permits the cwd AND the
+//                                   temp dirs (codex workspace-write parity), and the scenario
+//                                   workspace is itself a mkdtemp dir — so no path under temp can
+//                                   demonstrate confinement.
+//      #21 delegate cd-chain    — worker told to cd into that probe dir && touch; hardened hook catches
 //      #22 audit read-only      — read-only sandbox completes normally without write capability
 //
 //   G. Lifecycle & transports (5.16.0):

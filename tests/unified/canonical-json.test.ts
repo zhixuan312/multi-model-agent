@@ -19,9 +19,15 @@ import { canonicalDigest, canonicalizeValue, compareByCodePoint, canonicalContra
  * The tests that existed at the time all used ASCII keys, so every one of them passed.
  */
 
-// 'e' + COMBINING ACUTE ACCENT (NFD) and the precomposed 'é' (NFC) — the same text, two encodings.
-const NFD_KEY = 'é';
-const NFC_KEY = 'é';
+// 'e' + COMBINING ACUTE ACCENT (NFD) and the precomposed 'e-acute' (NFC) — one text, two encodings.
+//
+// Written as ESCAPES, not literal characters. As literals the two lines are visually identical, and
+// any tool that NFC-normalises this source — an editor, a formatter, a copy through something that
+// normalises — would silently make them the same string. Every test below would then compare a
+// value to itself and pass while testing nothing. The sibling NFD/NFC block already used escapes;
+// these did not.
+const NFD_KEY = 'e\u0301';
+const NFC_KEY = '\u00e9';
 
 describe('the NFC key defect must never return', () => {
   it('an NFD-keyed object does not collide with an empty object', () => {
@@ -119,19 +125,18 @@ describe('frozen digests — change these only when changing the algorithm on pu
   });
 
   it('digests a fixed file subject to a fixed value', () => {
+    // This compared our own output to our own output — precisely what this block's header says
+    // cannot detect drift, since a change to the algorithm moves both sides together. It was an
+    // order-independence test wearing a frozen-value name, and order-independence is already
+    // asserted in verification-subject.test.ts. Only a hardcoded constant makes Forge's copy of
+    // the algorithm falsifiable from here.
     expect(canonicalSubjectDigest({
       type: 'files',
       artifacts: [
         { root: 'workspaceRoot', path: 'report.md', digest: 'sha256:aaa' },
         { root: 'child-repo', path: 'report.md', digest: 'sha256:bbb' },
       ],
-    })).toBe(canonicalSubjectDigest({
-      type: 'files',
-      artifacts: [
-        { root: 'child-repo', path: 'report.md', digest: 'sha256:bbb' },
-        { root: 'workspaceRoot', path: 'report.md', digest: 'sha256:aaa' },
-      ],
-    }));
+    })).toBe('sha256:de840f09808e33571f0d675e80bc99702c46ca3f2653fc03a0e341e423e088de');
   });
 });
 

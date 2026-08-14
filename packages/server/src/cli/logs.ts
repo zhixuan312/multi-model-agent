@@ -14,7 +14,12 @@ import * as fs from 'node:fs';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 interface LogsDeps {
-  config: MultiModelConfig;
+  /**
+   * Only `diagnostics` is read (the log directory and the enabled flag), so only `diagnostics` is
+   * demanded. Asking for a whole `MultiModelConfig` made every caller that does not have one —
+   * which is every test — assemble a fake config and cast it past the compiler three times over.
+   */
+  config: Pick<MultiModelConfig, 'diagnostics'>;
   homeDir?: string;
   follow?: boolean;
   batchId?: string;
@@ -30,7 +35,7 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
+function resolveLogPath(config: Pick<MultiModelConfig, 'diagnostics'>, homeDir: string): string {
   const dir = config.diagnostics?.logDir ?? path.join(homeDir, '.mma', 'logs');
   return path.join(dir, `mma-${todayUtc()}.jsonl`);
 }

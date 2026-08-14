@@ -40,11 +40,13 @@ describe('shutdown drain', () => {
           method: 'POST', headers, body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
         });
         expect(denied.status).toBe(503);
-        const body = await denied.json() as { error?: string | { code?: string } };
-        // The startTestServer fetch adapter transforms /execution error responses
-        // from { error: { code } } to { error: code } (a string).
-        const code = typeof body.error === 'string' ? body.error : body.error?.code;
-        expect(code).toBe('service_unavailable');
+        // The real envelope shape, asserted directly. This used to accept EITHER
+        // `{ error: 'code' }` or `{ error: { code } }`, to tolerate a fetch adapter in
+        // startTestServer that reshaped one into the other — an adapter that had stopped firing
+        // (it matched only the retired /task route) and is now deleted. Accepting two shapes meant
+        // the envelope could change to the wrong one here and still pass.
+        const body = await denied.json() as { error?: { code?: string } };
+        expect(body.error?.code).toBe('service_unavailable');
 
         // /health stays available.
         const health = await fetch(`${server.baseUrl}/health`);

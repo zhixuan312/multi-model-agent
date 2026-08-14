@@ -74,7 +74,15 @@ export async function runRecordSurface(ctx, log) {
     if (created.status === 200) {
       initiative = created.json.uuid;
       checks.push(C('multi-workspace', (created.json.workspaces || []).length === 2, `workspaces=${(created.json.workspaces || []).length}`));
-      checks.push(C('greenfield-no-git', true, 'creates-role workspace accepted with no resource, path, or remote'));
+      // This was a hardcoded `true` — it asserted nothing and would have passed even if the
+      // daemon had silently substituted a repository-backed workspace. Assert the actual shape:
+      // the creates-role workspace came back, and it carries no Resource, no local path and no
+      // remote, which is what "greenfield" means here.
+      const greenfield = (created.json.workspaces || []).find((w) => w.slug === `greenfield-${suffix}`);
+      const greenfieldResources = (created.json.resources || []).filter((r) => r.workspace_id === greenfield?.uuid);
+      checks.push(C('greenfield-no-git',
+        !!greenfield && greenfieldResources.length === 0 && !greenfield.local_path && !greenfield.canonical_locator,
+        `workspace=${greenfield ? 'created' : 'MISSING'} resources=${greenfieldResources.length} local_path=${greenfield?.local_path ?? 'none'}`));
       checks.push(C('default-contract', created.json.lifecycle_contract === 'default-sdl@1', `contract=${created.json.lifecycle_contract}`));
     }
     const before = (await op(token, cwd, 'initiative_list', {})).json?.length ?? -1;
@@ -195,6 +203,21 @@ export async function runRecordSurface(ctx, log) {
   // ── R8 (AC I1) verification: a command criterion can be RUN, not only recorded ─────────────
   {
     const checks = [];
+    // A verification_run is CONFINED to a directory the Initiative owns, so the greenfield
+    // Initiative above — which deliberately has no Resource and no local path — cannot host one.
+    // Register a Workspace whose Resource declares a real local path first. That refusal is the
+    // product behaving correctly, not a gap: an unconfined run would be a sandbox escape.
+    const runWorkspace = await mut(token, cwd, 'workspace_create',
+      { product_id: (await op(token, cwd, 'initiative_get', { uuid: initiative })).json.product_id,
+        name: 'Verification host', slug: `verify-host-${suffix}`, description: 'Workspace the verification command runs inside.' }, 0);
+    if (runWorkspace.status === 200) {
+      await mut(token, cwd, 'resource_register',
+        { workspace_id: runWorkspace.json.uuid, type: 'repository', canonical_locator: `https://example.test/${suffix}`,
+          local_path: cwd, description: 'Local checkout the command runs in.' }, 0);
+      await mut(token, cwd, 'initiative_link_workspace',
+        { initiative_id: initiative, workspace_id: runWorkspace.json.uuid, role: 'modifies' }, 0);
+    }
+
     // Child-entity creates carry their OWN expected_revision of 0 (the entity does not exist yet),
     // exactly like `deliverable_define` — not the parent Initiative's revision.
     const req = await mut(token, cwd, 'requirement_add', { initiative_id: initiative, statement: 'The smoke must be able to run a verification.' }, 0);

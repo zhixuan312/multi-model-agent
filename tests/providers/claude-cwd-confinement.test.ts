@@ -78,9 +78,45 @@ describe('bashWritesOutsideCwd', () => {
     expect(bashWritesOutsideCwd('rm -rf /Users/me/other/repo/.git', CWD)).toContain('/Users/me/other/repo');
     expect(bashWritesOutsideCwd('mv a.txt /work/repo/elsewhere/a.txt', CWD)).toContain('/work/repo/elsewhere');
   });
-  it('does not flag system-path writes (tmp, /dev/null)', () => {
+  // These were ONE test asserting "system paths are not flagged", which bundled two unrelated
+  // reasons under one name. `/dev/null` is skipped because it is not a write target; `/tmp` is
+  // skipped because the policy permits writing there. Sharing a list let `/etc` inherit the
+  // allowance and become silently writable, which no reading of `cwd-only` supports.
+  it('does not flag paths that are not the write target (binaries, /dev)', () => {
     expect(bashWritesOutsideCwd('echo x > /dev/null', CWD)).toBeNull();
+    expect(bashWritesOutsideCwd('python3 /usr/bin/foo && touch out.txt', CWD)).toBeNull();
+  });
+
+  it('permits temp-dir writes, because codex workspace-write does', () => {
+    // `cwd-only` maps to codex `-s workspace-write`, which allows the cwd AND the temp dirs. That
+    // OS sandbox cannot be tightened, so denying temp here would make one policy mean two
+    // different things depending on which runner picked the task up.
     expect(bashWritesOutsideCwd('cp a /tmp/b', CWD)).toBeNull();
+    expect(bashWritesOutsideCwd('echo x > /var/folders/ab/cd/scratch.txt', CWD)).toBeNull();
+    expect(bashWritesOutsideCwd('echo x > /private/tmp/scratch.txt', CWD)).toBeNull();
+  });
+
+  // KNOWN GAP, pinned deliberately rather than left implicit. `/etc` is skipped by the same
+  // not-a-write-target list as `/usr` and `/dev`, so a shell write there is not flagged. The
+  // scanner cannot tell `echo x > /etc/f` from `python -c "...open('/etc/hosts')..."`, and denying
+  // both would break the read. In practice a worker runs as the invoking user and lacks write
+  // permission on /etc, so the OS is the real boundary here — but that is the OS's guarantee, not
+  // this hook's. Recorded so the gap is a decision rather than a surprise.
+  it('does NOT currently flag a shell write under /etc (known gap — the OS permission is the guard)', () => {
+    expect(bashWritesOutsideCwd('echo x > /etc/evil.conf', CWD)).toBeNull();
+  });
+
+  it('gives the Write tool the SAME boundary as Bash', () => {
+    // One policy, one boundary. The Write branch used to deny every out-of-cwd path including
+    // temp, so a worker was refused `Write /tmp/scratch` and then allowed
+    // `echo … > /tmp/scratch` — no safety gained, since the looser tool is the effective one.
+    const denied = (target: string) =>
+      evaluateConfinement('Write', { file_path: target }, CWD).hookSpecificOutput !== undefined;
+    expect(denied('/tmp/scratch.txt')).toBe(false);
+    expect(denied('/var/folders/ab/cd/scratch.txt')).toBe(false);
+    expect(denied(`${CWD}/src/a.ts`)).toBe(false);
+    expect(denied('/etc/evil.conf')).toBe(true);
+    expect(denied('/Users/me/elsewhere/f.ts')).toBe(true);
   });
 
   // --- NEW: cd chain detection ---

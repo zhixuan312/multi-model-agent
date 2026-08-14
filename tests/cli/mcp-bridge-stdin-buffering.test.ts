@@ -14,10 +14,14 @@ import { bufferedLines } from '../../packages/server/src/cli/mcp.js';
  * generator, which by construction cannot drop anything — so they passed while the
  * real wiring was broken. These tests exercise the eager-emitter shape instead.
  */
+// `source` is passed unwrapped: `bufferedLines` declares exactly the two `on` overloads it uses,
+// and a bare EventEmitter satisfies them. The `as never` these calls used to carry was not
+// bridging anything — it silenced a check that already passed, while also hiding any future
+// change to that parameter's shape.
 describe('bufferedLines', () => {
   it('does not lose lines emitted BEFORE iteration starts', async () => {
     const source = new EventEmitter();
-    const lines = bufferedLines(source as never);
+    const lines = bufferedLines(source);
 
     // All input arrives first — exactly what a pipe does while startup is still awaiting.
     source.emit('line', '{"id":1}');
@@ -32,7 +36,7 @@ describe('bufferedLines', () => {
 
   it('delivers lines that arrive while the consumer is awaiting', async () => {
     const source = new EventEmitter();
-    const lines = bufferedLines(source as never);
+    const lines = bufferedLines(source);
     const seen: string[] = [];
 
     const consumer = (async () => {
@@ -52,7 +56,7 @@ describe('bufferedLines', () => {
 
   it('terminates on close with nothing buffered', async () => {
     const source = new EventEmitter();
-    const lines = bufferedLines(source as never);
+    const lines = bufferedLines(source);
     source.emit('close');
     const seen: string[] = [];
     for await (const line of lines) seen.push(line);
@@ -61,7 +65,7 @@ describe('bufferedLines', () => {
 
   it('drains everything buffered before close even when close arrives first', async () => {
     const source = new EventEmitter();
-    const lines = bufferedLines(source as never);
+    const lines = bufferedLines(source);
     source.emit('line', 'a');
     source.emit('close');
     source.emit('line', 'ignored-after-close');

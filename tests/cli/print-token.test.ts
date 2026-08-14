@@ -1,8 +1,12 @@
 /**
- * tests/cli/print-token.test.ts
+ * `mma print-token` — the command scripts pipe into an Authorization header.
  *
- * Tests for Task 9.2 — `mma print-token` subcommand.
- * Uses temp dirs; never touches real ~/.multi-model or HOME.
+ * The contract worth pinning is that stdout carries the token AND NOTHING ELSE: a warning or a
+ * hint leaking onto stdout is silently concatenated into whatever consumed it. Everything
+ * explanatory goes to stderr.
+ *
+ * Every case runs against a temp dir. The header used to say "never touches real ~/.multi-model" —
+ * a directory that has not existed since the rename to ~/.mma.
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';

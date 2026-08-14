@@ -138,7 +138,10 @@ describe('mma info (daemon running)', () => {
     }
   });
 
-  it('marks legacy daemon fields as NotApplicable when health response omits them', async () => {
+  // This slot held a byte-for-byte copy of the test above — same mock, same assertions, a
+  // different name. So BOTH covered the omitted-fields branch and the populated one, which is what
+  // every current daemon actually returns, was covered by nothing.
+  it('surfaces the daemon fields when /health reports them', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();
     try {
@@ -150,11 +153,40 @@ describe('mma info (daemon running)', () => {
         json: true,
         stdout: cap.stdoutFn,
         stderr: cap.stderrFn,
-        fetch: mockFetch(200, { status: 'ok' }),
+        fetch: mockFetch(200, {
+          status: 'ok', version: '6.9.0', pid: 4242, uptimeMs: 90_000, startedAt: 1_700_000_000_000,
+        }),
       });
       expect(code).toBe(0);
       const body = JSON.parse(cap.stdout.join(''));
       expect(body.running).toBe(true);
+      expect(body.daemonVersion).toBe('6.9.0');
+      expect(body.pid).toBe(4242);
+      expect(body.uptimeMs).toBe(90_000);
+      expect(body.startedAt).toBe(1_700_000_000_000);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a field of the wrong shape rather than passing it through', async () => {
+    // `fromHealth` type-guards each field, so a daemon answering with a wrong-typed or empty value
+    // must degrade to the sentinel — not surface a `pid` of `"unknown"` that a caller then formats
+    // into a kill command.
+    const { tokenFile, dir } = writeToken();
+    const cap = capture();
+    try {
+      await runInfo({
+        cliVersion: '3.1.0',
+        bind: '127.0.0.1',
+        port: 17337,
+        tokenFile,
+        json: true,
+        stdout: cap.stdoutFn,
+        stderr: cap.stderrFn,
+        fetch: mockFetch(200, { status: 'ok', version: '', pid: 'not-a-number' }),
+      });
+      const body = JSON.parse(cap.stdout.join(''));
       expect(body.daemonVersion).toEqual({ kind: 'not_applicable', reason: 'daemon version predates info fields' });
       expect(body.pid).toEqual({ kind: 'not_applicable', reason: 'daemon version predates info fields' });
     } finally {

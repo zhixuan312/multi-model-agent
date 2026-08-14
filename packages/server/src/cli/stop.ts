@@ -64,8 +64,14 @@ export async function runStop(deps: StopDeps): Promise<number> {
   });
 
   if (!outcome.stopped) {
-    if (json) stdout(JSON.stringify({ stopped: false, pid: outcome.pid, reason: 'still_running' }) + '\n');
-    else stderr(`mma stop: pid ${outcome.pid} is still running after SIGKILL.\n`);
+    // Two different failures wear `stopped: false`. Saying "survived SIGKILL" for a process we
+    // never signalled would send the user hunting a wedged daemon that does not exist.
+    const reason = outcome.notOurs === true ? 'not_an_mma_daemon' : 'still_running';
+    if (json) stdout(JSON.stringify({ stopped: false, pid: outcome.pid, reason }) + '\n');
+    else if (outcome.notOurs === true) {
+      stderr(`mma stop: pid ${outcome.pid} is not an mma daemon; refusing to signal it.\n`);
+      stderr('  the pidfile is stale, or the number was reused. Nothing was stopped.\n');
+    } else stderr(`mma stop: pid ${outcome.pid} is still running after SIGKILL.\n`);
     return StopExitCode.ERR_NOT_STOPPED;
   }
 

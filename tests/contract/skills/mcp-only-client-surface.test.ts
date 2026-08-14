@@ -4,7 +4,18 @@ import { describe, expect, it } from 'vitest';
 import { buildPlugin } from '../../../packages/server/src/plugin/build-plugin.js';
 
 const root = join(process.cwd(), 'packages/server/src/skills');
-const forbidden = [/\bcurl\b/i, /POST\s+\/task/i, /GET\s+\/task\//i, /Authorization:\s*Bearer/i, /print-token/i, /port discovery/i];
+// Matches the CURRENT route as well as the retired one. These patterns named only `/task`, which
+// SPEC-003 renamed to `/execution` — so the gate that exists to stop a skill teaching an agent the
+// HTTP route no longer covered the route an author would actually write. A retired spelling is
+// worth keeping (it costs nothing and catches a stale copy-paste), but it cannot be the only one.
+const forbidden = [
+  /\bcurl\b/i,
+  /POST\s+\/(task|execution)\b/i,
+  /GET\s+\/(task|execution)\//i,
+  /Authorization:\s*Bearer/i,
+  /print-token/i,
+  /port discovery/i,
+];
 async function markdownFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir);
   const nested = await Promise.all(entries.map(async (entry) => {
@@ -33,7 +44,9 @@ describe('contract: MCP-only packaged client surface', () => {
         // requiring the line would force meaningless text into it. The exemption
         // is self-enforcing: it holds only while the skill names no MMA tool, so
         // adding a dispatch to an exempt skill fails here.
-        if (/\bmma_(run|task_get|task_wait|task_cancel|task_list|context_block_)/.test(content)) {
+        // Any mma_ tool: the old explicit list named the task_* tools SPEC-003 retired, so skills
+        // calling mma_execution_* silently fell out of this rule's scope.
+        if (/\bmma_[a-z_]+/.test(content)) {
           expect(content, `${file} calls an MMA tool, so it must name the mma clients recovery path`)
             .toContain('mma clients');
         } else {

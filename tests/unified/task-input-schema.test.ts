@@ -109,8 +109,12 @@ describe('taskInputSchema', () => {
   });
 
   it('rejects investigate with deprecated question field', () => {
+    // `prompt` is present so the RETIRED key is the only thing left to reject. Without it the
+    // payload also fails "prompt is required", and the assertion passes whether or not `question`
+    // is still accepted — a test that cannot notice the regression it was written to catch.
     expect(taskInputSchema.safeParse({
       type: 'investigate',
+      prompt: 'How does auth work?',
       question: 'How does auth work?',
     }).success).toBe(false);
   });
@@ -140,7 +144,7 @@ describe('taskInputSchema', () => {
   it('rejects execute_plan with deprecated taskDescriptors', () => {
     expect(taskInputSchema.safeParse({
       type: 'execute_plan',
-      filePaths: ['/plan.md'],
+      target: { paths: ['/plan.md'] },
       taskDescriptors: ['Task 1'],
     }).success).toBe(false);
   });
@@ -155,6 +159,7 @@ describe('taskInputSchema', () => {
   it('rejects research with deprecated researchQuestion', () => {
     expect(taskInputSchema.safeParse({
       type: 'research',
+      prompt: 'What are the best practices for X in the industry?',
       researchQuestion: 'What?',
       background: 'Some context for the question here.',
     }).success).toBe(false);
@@ -232,6 +237,7 @@ describe('taskInputSchema', () => {
   it('rejects journal_recall with deprecated query', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
       query: 'caching?',
     }).success).toBe(false);
   });
@@ -371,6 +377,7 @@ describe('taskInputSchema', () => {
   it('rejects journal_record with deprecated entry', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
       entry: 'learning',
     }).success).toBe(false);
   });
@@ -392,6 +399,7 @@ describe('taskInputSchema', () => {
   it('rejects review with deprecated code field', () => {
     expect(taskInputSchema.safeParse({
       type: 'review',
+      target: { paths: ['/src/main.ts'] },
       code: 'const x = 1;',
     }).success).toBe(false);
   });
@@ -414,6 +422,7 @@ describe('taskInputSchema', () => {
   it('rejects debug with deprecated errorMessage', () => {
     expect(taskInputSchema.safeParse({
       type: 'debug',
+      prompt: 'TypeError: cannot read property verify of undefined',
       errorMessage: 'TypeError',
     }).success).toBe(false);
   });

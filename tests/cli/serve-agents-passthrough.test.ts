@@ -44,7 +44,7 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
     const handle = await startServe(config, noExit);
 
     try {
-      const res = await fetch(`http://127.0.0.1:${handle.port}/task?cwd=${encodeURIComponent(dir)}`, {
+      const res = await fetch(`http://127.0.0.1:${handle.port}/execution?cwd=${encodeURIComponent(dir)}`, {
         method: 'POST',
         headers: {
           'X-MMA-Main-Model': 'claude-opus-4-7', 'X-MMA-Client': 'claude-code', Authorization: 'Bearer test-token',

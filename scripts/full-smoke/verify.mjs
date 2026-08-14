@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { SANDBOX_ESCAPE_TARGETS } from './dispatch.mjs';
 import { SCHEMA_VERSION, configuredMainModel, configuredWorkerModels } from './config.mjs';
 import { SMOKE_CLIENT } from './http.mjs';
 // The component catalog is defined ONCE, in the core package (AC-5.4). A second copy here could
@@ -310,16 +311,23 @@ export function verify(rec) {
     const m = rec.mcpTools ?? {};
     out.push(C('mcp-context-block-create', m.blockId ? 'PASS' : 'FAIL', `blockId=${m.blockId}`));
     const listed = Array.isArray(m.listPayload?.executions) ? m.listPayload.executions
-      : Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks
       : (Array.isArray(m.listPayload) ? m.listPayload : null);
     out.push(C('mcp-task-list', listed !== null ? 'PASS' : 'FAIL',
       `executions=${listed ? listed.length : 'not an array'} — the tool must return an execution collection`));
-    out.push(C('mcp-task-get', (m.getPayload?.executionId ?? m.getPayload?.taskId) === m.taskId ? 'PASS' : 'FAIL',
-      `returned executionId=${m.getPayload?.executionId ?? m.getPayload?.taskId} want=${m.taskId}`));
+    out.push(C('mcp-task-get', m.getPayload?.executionId === m.taskId ? 'PASS' : 'FAIL',
+      `returned executionId=${m.getPayload?.executionId} want=${m.taskId}`));
     // Cancellation is REQUESTED, so either acknowledgement shape is correct; what must not happen
     // is the tool failing to answer at all.
-    out.push(C('mcp-task-cancel', m.cancelPayload !== null && m.cancelPayload !== undefined ? 'PASS' : 'FAIL',
-      `ack=${JSON.stringify(m.cancelPayload)}`));
+    // A non-null payload is NOT an ack. An MCP tool error carries a parseable `{error:{...}}` body
+    // too, so the old "did it parse" check scored a rejected cancel as a successful one. The ack
+    // has a shape — `cancellationRequested: true` on the execution we asked about — and that shape
+    // is what proves the request reached the runtime.
+    const ack = m.cancelPayload;
+    const cancelOk = m.cancelIsError === false
+      && ack?.cancellationRequested === true
+      && ack?.executionId === m.taskId;
+    out.push(C('mcp-task-cancel', cancelOk ? 'PASS' : 'FAIL',
+      `isError=${m.cancelIsError} ack=${JSON.stringify(ack)}`));
     out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.execution?.status) ? 'PASS' : 'WARN',
       `terminal status=${m.terminal?.execution?.status}`));
     out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
@@ -435,12 +443,24 @@ export function verify(rec) {
     out.push(C('mcp-terminal', w?.execution?.status && w.execution.status !== 'failed' ? 'PASS' : 'FAIL',
       `status=${w?.execution?.status} error=${JSON.stringify(w?.error)}`));
 
-    // THE load-bearing assertion: the same execution read over REST must be
+    // `mma_execution_wait` is capped at 55s by design (MCP hosts give up around 60s), so a task
+    // slower than that returning before terminal is CORRECT, not a defect — reported, never failed.
+    out.push(C('mcp-wait-bounded', 'PASS',
+      m.waitReachedTerminal === true
+        ? 'mma_execution_wait returned the terminal envelope within its 55s cap'
+        : 'wait returned before terminal (task outran the 55s cap, as designed); parity uses mma_execution_get'));
+
+    // THE load-bearing assertion: the same execution read over MCP and over REST must be
     // byte-identical — one runtime, two transports, no duplicated state.
-    const parity = m.restStatus === 200
-      && JSON.stringify(m.restEnvelope) === JSON.stringify(w);
+    //
+    // Compares the MCP `mma_execution_get` read, NOT the wait payload. The wait payload silently
+    // becomes a REST envelope whenever the task outruns the cap, which turned this into REST-vs-REST
+    // on every long task — the assertion passing regardless of what MCP returned.
+    const mcpSide = m.mcpTerminal;
+    const identical = JSON.stringify(m.restEnvelope) === JSON.stringify(mcpSide);
+    const parity = m.restStatus === 200 && mcpSide != null && identical;
     out.push(C('mcp-rest-parity', parity ? 'PASS' : 'FAIL',
-      `restStatus=${m.restStatus} identical=${JSON.stringify(m.restEnvelope) === JSON.stringify(w)}`));
+      `restStatus=${m.restStatus} mcpGet=${mcpSide ? 'present' : 'MISSING'} identical=${identical}`));
 
     // Caller attribution over MCP (6.2.0). The handshake sends clientInfo
     // name='full-smoke', which is NOT in the allowlist, so resolution must fall
@@ -575,13 +595,18 @@ export function verify(rec) {
   // Read-type specific checks
   if (e.kind === 'read') {
     if (e.type === 'research') {
-      // sourcesUsed is no longer on the response envelope — research sources
-      // are internal to the research orchestrator. The task completed if we
-      // reached here, so we mark sources as PASS with a note.
-      out.push(C('research-sources', 'PASS',
-        `sourcesUsed not in response envelope (internal to research orchestrator)`));
-      out.push(C('research-adapter-surface', 'PASS',
-        `adapter surface validated server-side`));
+      // These were two hardcoded PASSes whose own notes admitted they checked nothing
+      // ("validated server-side"). `sourcesUsed` did leave the envelope, but the research refiner
+      // schema still requires `url` and `source` on every finding — that IS the adapter surface
+      // reaching the caller, and it is observable right here.
+      const researchFindings = r?.output?.summary?.findings ?? [];
+      const sourced = researchFindings.filter((f) => typeof f?.url === 'string' && f.url.length > 0
+        && typeof f?.source === 'string' && f.source.length > 0);
+      out.push(C('research-sources', researchFindings.length > 0 && sourced.length === researchFindings.length ? 'PASS' : 'FAIL',
+        `${sourced.length}/${researchFindings.length} findings carry both url and source`));
+      const distinctSources = new Set(sourced.map((f) => f.source));
+      out.push(C('research-adapter-surface', distinctSources.size > 0 ? 'PASS' : 'FAIL',
+        `sources reaching the caller: ${[...distinctSources].join(', ') || 'NONE'}`));
     }
   }
 
@@ -651,19 +676,28 @@ export function verify(rec) {
   if (e.sandbox) {
     const output = r?.raw?.implementer ?? (typeof r?.output?.summary === 'string' ? r.output.summary : '') ?? '';
 
-    if (e.sandbox === 'cwd-only' && e.id === 20) {
-      // The worker was told to write to /tmp; the hook should have denied it.
-      // Worker should have adapted and written in-cwd instead.
-      const wroteInCwd = /confined|CONFINED|src\/confined/.test(output) || taskStatus === 'done' || taskStatus === 'done_with_concerns';
-      out.push(C('sandbox-cwd-escape', wroteInCwd ? 'PASS' : 'WARN',
-        `worker adapted to cwd confinement; status=${taskStatus}; output has confined=${/confined/i.test(output)}`));
-    }
-
-    if (e.sandbox === 'cwd-only' && e.id === 21) {
-      // The worker was told to cd /tmp && touch file; the hardened hook should block.
-      const adapted = /cd.safe|CD_SAFE|src\/cd-safe/.test(output) || taskStatus === 'done' || taskStatus === 'done_with_concerns';
-      out.push(C('sandbox-cd-chain', adapted ? 'PASS' : 'WARN',
-        `cd-chain escape blocked; status=${taskStatus}; output has cd-safe=${/cd.safe/i.test(output)}`));
+    // These two checks used to read `<adapted> || taskStatus === 'done'`. Every scenario reaches a
+    // terminal status, so the `||` made them pass unconditionally: the checks guarding sandbox
+    // confinement never evaluated confinement at all. They now assert the only thing that actually
+    // settles it — whether the escape file exists on disk. `dispatch.mjs` removes each target
+    // before the run, so absence here is evidence rather than luck, and an escape is a hard FAIL
+    // rather than a WARN, because a worker outside its cwd is the failure the sandbox exists for.
+    if (e.sandbox === 'cwd-only' && (e.id === 20 || e.id === 21)) {
+      const escapeTarget = SANDBOX_ESCAPE_TARGETS[e.id];
+      const escaped = escapeTarget ? existsSync(escapeTarget) : false;
+      const checkId = e.id === 20 ? 'sandbox-cwd-escape' : 'sandbox-cd-chain';
+      out.push(C(checkId, escaped ? 'FAIL' : 'PASS',
+        escaped
+          ? `WORKER ESCAPED ITS CWD: ${escapeTarget} exists after the run`
+          : `${escapeTarget} absent — confinement held; status=${taskStatus}`));
+      // The positive half: the worker adapted and wrote inside its cwd. Weaker than the absence
+      // assertion above, so a WARN — a worker that gives up entirely is worth noticing, but it is
+      // not a confinement breach.
+      const adapted = e.id === 20
+        ? /confined|CONFINED/.test(output)
+        : /cd.safe|CD_SAFE/.test(output);
+      out.push(C(`${checkId}-adapted`, adapted ? 'PASS' : 'WARN',
+        `worker ${adapted ? 'adapted and wrote in-cwd' : 'did not report an in-cwd write'}; status=${taskStatus}`));
     }
 
     if (e.sandbox === 'read-only') {
@@ -694,7 +728,7 @@ export function verify(rec) {
   // ⑫ Structured 202 polling shape (captured during poll phase)
   if (rec.polling202) {
     const p = rec.polling202;
-    const hasFields = (p.executionId ?? p.taskId) && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
+    const hasFields = p.executionId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
     out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
       `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
 
@@ -704,7 +738,7 @@ export function verify(rec) {
     //     admission. `phaseElapsedMs` is asserted here too because it is the field
     //     that silently went missing on one wire when the two running-snapshot
     //     shapes were maintained by hand.
-    const identity = (p.executionId ?? p.taskId) && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
+    const identity = p.executionId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
     out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
       `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
   }
@@ -745,10 +779,10 @@ export function verify(rec) {
   //     submitted, so a disagreement between them is a real defect rather than a
   //     cosmetic one. Only the live daemon can prove this; a unit test asserts a
   //     shared helper, not that both wires actually call it.
-  if (rec.admission && r?.execution?.taskId) {
+  if (rec.admission && r?.execution?.executionId) {
     const a = rec.admission;
     const p = rec.polling202;
-    // `taskId` and `type` must be PRESENT on admission and on the terminal
+    // `executionId` and `type` must be PRESENT on admission and on the terminal
     // envelope, not merely non-contradictory: an absent field agrees with
     // everything, which is exactly how a surface that silently stopped
     // reporting identity would slip through a pure equality check.
@@ -759,12 +793,12 @@ export function verify(rec) {
       if (required && present.length !== surfaces.length) return false;
       return present.every(([, v]) => v === present[0][1]);
     };
-    const mismatched = [['taskId', true], ['type', true], ['subtype', false]]
+    const mismatched = [['executionId', true], ['type', true], ['subtype', false]]
       .filter(([f, required]) => !agree(f, required))
       .map(([f]) => f);
     out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
       mismatched.length === 0
-        ? `taskId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
+        ? `executionId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
         : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.execution[f]})`).join(', ')}`));
   }
 
@@ -818,8 +852,13 @@ export function verify(rec) {
   if (e.delta) {
     const summary = r?.output?.summary;
     const findings = summary?.findings ?? [];
-    out.push(C('delta-mode', findings.length >= 0 ? 'PASS' : 'FAIL',
-      `delta round 2: ${findings.length} findings (task completed with prior context injected)`));
+    // `findings.length >= 0` is true for every possible array, so this reported PASS even if the
+    // worker never received the prior context block or returned nothing at all. The stated intent
+    // is that round 2 STILL produces findings, so assert the shape hard and the intent as a warn.
+    out.push(C('delta-mode', Array.isArray(findings) ? 'PASS' : 'FAIL',
+      `delta round 2 returned ${Array.isArray(findings) ? `${findings.length} findings` : 'a non-array summary'}`));
+    out.push(C('delta-still-finds', findings.length > 0 ? 'PASS' : 'WARN',
+      `${findings.length} findings with the prior round injected as context`));
   }
 
   // ⑰ Spec components — default spec emits all 8 (Forge-compat); a subset request must

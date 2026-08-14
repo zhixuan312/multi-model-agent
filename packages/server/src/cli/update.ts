@@ -268,7 +268,10 @@ async function runPostInstallPhases(
   if (before !== null) {
     const outcome = await stopDaemon(before.pid, { ...deps, graceMs: 1_000 });
     if (!outcome.stopped) {
-      stderr(`\nmma update: could not stop daemon pid ${outcome.pid}. Nothing else was changed.\n`);
+      const why = outcome.notOurs === true
+        ? ' (it is not an mma daemon, so it was never signalled)'
+        : '';
+      stderr(`\nmma update: could not stop daemon pid ${outcome.pid}${why}. Nothing else was changed.\n`);
       return UpdateExitCode.ERR_DAEMON;
     }
   }

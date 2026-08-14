@@ -100,6 +100,26 @@ const realSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r
  *          equivalent — callers treat null as "cannot verify" and fall back to
  *          the pidfile, which only a daemon ever writes.
  */
+/**
+ * Does this command line belong to an mma daemon?
+ *
+ * Both halves are required. "serve" alone matches any server; an identity match alone matches
+ * `mma status` or a text editor holding the source file open.
+ *
+ * The identity half must accept how the daemon is ACTUALLY launched, not just its installed name.
+ * `npm run serve` — and every dev, CI, and smoke-harness invocation — runs
+ * `node packages/server/dist/cli/index.js serve`, whose command line contains neither "mma" nor
+ * "multi-model-agent". Those daemons all verified as somebody else's, which made `stopDaemon`
+ * skip its escalation and (once the first signal was guarded too) skip stopping them at all.
+ */
+export function matchesDaemonCommand(commandLine: string): boolean {
+  const cmd = commandLine.toLowerCase();
+  const looksLikeMma = cmd.includes('mma')
+    || cmd.includes('multi-model-agent')
+    || /\bcli[/\\]index\.(js|ts)\b/.test(cmd);
+  return /\bserve\b/.test(cmd) && looksLikeMma;
+}
+
 export function verifyDaemonProcess(pid: number, platform: NodeJS.Platform = process.platform): boolean | null {
   if (platform === 'win32') return null;
   try {
@@ -107,9 +127,7 @@ export function verifyDaemonProcess(pid: number, platform: NodeJS.Platform = pro
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).toLowerCase();
-    // Both halves are required. "serve" alone matches any server; the package
-    // name alone matches `mma status` or a text editor holding the file open.
-    return /\bserve\b/.test(cmd) && (cmd.includes('mma') || cmd.includes('multi-model-agent'));
+    return matchesDaemonCommand(cmd);
   } catch {
     return false; // ps failed → the process is gone
   }
@@ -269,6 +287,15 @@ export interface StopOutcome {
   pid: number;
   /** The strongest signal it took. Reported so a wedged daemon is visible. */
   escalatedTo: 'SIGTERM' | 'SIGTERM(second)' | 'SIGKILL' | 'none';
+  /**
+   * Set when the pid is alive but `ps` says it is not an mma daemon, so NOTHING was signalled.
+   *
+   * This is separate from `stopped: false` after SIGKILL, and callers must not conflate them: one
+   * means "we tried everything and it survived", the other means "we deliberately did not touch
+   * it". Both leave a live process on the pid, which is why neither may report `stopped: true` —
+   * `restart` and `update` read that flag as permission to bind the port.
+   */
+  notOurs?: boolean;
 }
 
 /**
@@ -308,7 +335,7 @@ export async function stopDaemon(
   };
 
   /**
-   * Re-confirm before EVERY signal, not just the first.
+   * Re-confirm before each ESCALATION.
    *
    * Between two signals the daemon can exit and the operating system can hand
    * its pid to something else. Escalating on the bare number would then send
@@ -317,11 +344,15 @@ export async function stopDaemon(
    */
   const stillOurs = (): boolean => isAlive(pid) && verify(pid) !== false;
 
-  // Including the FIRST signal. The pid was resolved before this call, and the daemon can exit and
-  // have its number reused in between exactly as it can between escalations — the window is
-  // smaller, not absent. Checking only liveness here meant the first SIGTERM could land on an
-  // unrelated process, which is the one outcome this guard exists to prevent (audit M3-2).
-  if (!stillOurs()) return { stopped: true, pid, escalatedTo: 'none' };
+  // The first check is NOT the same as the escalation checks, and collapsing them is a bug.
+  //
+  // At an escalation we have already signalled a pid that verified as ours, so a later "not ours"
+  // reading means the daemon exited and the number was reused — our daemon is genuinely stopped.
+  // Before the FIRST signal there is no such history: "not ours" means we never touched anything,
+  // and a live process is still sitting on that pid. Reporting `stopped: true` there tells
+  // `restart` and `update` to bind a port that may still be held.
+  if (!isAlive(pid)) return { stopped: true, pid, escalatedTo: 'none' };
+  if (verify(pid) === false) return { stopped: false, pid, escalatedTo: 'none', notOurs: true };
 
   try {
     kill(pid, 'SIGTERM');

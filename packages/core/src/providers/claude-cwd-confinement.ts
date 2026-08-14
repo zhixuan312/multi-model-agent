@@ -1,5 +1,9 @@
 // cwd-confinement for the claude worker — the SDK equivalent of codex's
-// `-s workspace-write` sandbox (read anywhere, write only inside the workspace).
+// `-s workspace-write` sandbox: read anywhere, write only inside the workspace OR a temp dir.
+//
+// The temp allowance is part of the policy, not an exception to it: codex's OS sandbox permits it
+// and cannot be tightened, so denying it here would make `cwd-only` mean two different things
+// depending on which runner picked up the task.
 //
 // `permissionMode: 'bypassPermissions'` gives "never prompt" but applies NO
 // filesystem boundary. PreToolUse hooks run independently of the permission mode
@@ -76,7 +80,7 @@ export function bashWritesOutsideCwd(command: string, cwd: string): string | nul
   if (INTERPRETER_WRITE_RE.test(command)) {
     const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
     for (const p of absPaths) {
-      if (isSystemRoot(p) || isUrlFragment(p)) continue;
+      if (isIgnorableScanPath(p)) continue;
       if (pathEscapesCwd(p, cwd)) return p;
     }
   }
@@ -85,7 +89,7 @@ export function bashWritesOutsideCwd(command: string, cwd: string): string | nul
   if (DOWNLOAD_WRITE_RE.test(command)) {
     const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
     for (const p of absPaths) {
-      if (isSystemRoot(p) || isUrlFragment(p)) continue;
+      if (isIgnorableScanPath(p)) continue;
       if (pathEscapesCwd(p, cwd)) return p;
     }
   }
@@ -94,14 +98,50 @@ export function bashWritesOutsideCwd(command: string, cwd: string): string | nul
   if (!BASH_WRITE_CMD_RE.test(command)) return null;
   const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
   for (const p of absPaths) {
-    if (isSystemRoot(p) || isUrlFragment(p)) continue;
+    if (isIgnorableScanPath(p)) continue;
     if (pathEscapesCwd(p, cwd)) return p;
   }
   return null;
 }
 
-function isSystemRoot(p: string): boolean {
-  return /^\/(usr|bin|sbin|opt|System|Library|private\/var\/folders|tmp|var\/folders|dev|etc|proc)\b/.test(p);
+/**
+ * A temp directory — WRITABLE under `cwd-only`, by policy.
+ *
+ * `cwd-only` means "writes confined to the cwd **and the temp dirs**", because that is exactly what
+ * codex's `-s workspace-write` OS sandbox permits (see codex-cli-launch.ts). The claude hook is the
+ * SDK equivalent of that sandbox, and a boundary that differs by runner is not one boundary.
+ *
+ * This is deliberately separate from `isNonWriteTargetPath` below. The two used to be one list,
+ * which made a policy allowance ("temp is writable") indistinguishable from a parser workaround
+ * ("this path is not a write target"). Splitting them is what let the Write tool adopt the temp
+ * allowance without also adopting the workaround — the two enforcement paths disagreed about temp
+ * for exactly as long as one list served both purposes.
+ */
+function isTempPath(p: string): boolean {
+  return /^\/(?:private\/)?(?:tmp|var\/folders)\b/.test(p);
+}
+
+/**
+ * A path that appears in a command but is not what the command WRITES: interpreter and binary
+ * directories, and the /dev and /proc pseudo-filesystems. Skipped so `python3 /usr/bin/foo …` and
+ * `cmd > /dev/null` are not misread as escapes.
+ *
+ * This is a parser workaround, not a permission. It must never grow to include a directory a
+ * worker could plausibly be told to write into — that is what put `/tmp` here.
+ *
+ * `/etc` is the uncomfortable member. A shell write there is genuinely not flagged, but the scan
+ * cannot separate `echo x > /etc/f` from `python -c "...open('/etc/hosts')..."`, and denying the
+ * read is a concrete regression against a mostly theoretical write: a worker runs as the invoking
+ * user and has no write permission on /etc. The OS is the boundary there, not this hook. Pinned by
+ * a test so the gap stays a decision.
+ */
+function isNonWriteTargetPath(p: string): boolean {
+  return /^\/(usr|bin|sbin|opt|System|Library|dev|proc|etc)\b/.test(p);
+}
+
+/** Absolute paths in a command that are neither the write target nor forbidden to write. */
+function isIgnorableScanPath(p: string): boolean {
+  return isNonWriteTargetPath(p) || isTempPath(p) || isUrlFragment(p);
 }
 
 /** True when a path-like string is actually a URL fragment (e.g. `//example.com/f`
@@ -133,7 +173,12 @@ export function evaluateConfinement(toolName: string, toolInput: unknown, cwd: s
 
   if (WRITE_TOOLS.has(toolName)) {
     const target = [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === 'string') as string | undefined;
-    if (target && pathEscapesCwd(target, cwd)) {
+    // Temp is writable under this policy, so it is writable through EVERY tool. The Bash scan
+    // already allowed it and this branch did not, which meant one policy had two boundaries: a
+    // worker was refused `Write /tmp/scratch` and then permitted `echo … > /tmp/scratch`. The
+    // looser path is the effective one whenever both tools are available, so the disagreement
+    // bought no safety — only a confusing denial.
+    if (target && !isTempPath(target) && pathEscapesCwd(target, cwd)) {
       return deny(
         `Write blocked: "${target}" is outside the task workspace (${cwd}). ` +
           `This task may only modify files inside that directory — make your change there.`,

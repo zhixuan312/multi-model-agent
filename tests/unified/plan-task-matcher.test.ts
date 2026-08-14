@@ -123,14 +123,53 @@ describe('matchTasks', () => {
     expect(matched.map(m => m.normalized)).toEqual(['Add schema file', 'Write unit tests']);
   });
 
-  it('fully-qualified Phase: Task selector', () => {
-    // "Phase 2: Integration" is the parent phase, "Wire up handler" is the task
-    // The colon split finds "Phase 2" as phase selector — but the phase name is "Phase 2: Integration"
-    // So we use the task title directly under a matching parent
-    const matched = matchTasks(headings, ['Wire up handler']);
-    expect(matched.length).toBe(1);
-    expect(matched[0].normalized).toBe('Wire up handler');
-    expect(matched[0].parentPhase).toBe('Phase 2: Integration');
+  // The `Phase: Task` fallback branch. A test with this name used to select the bare title
+  // `'Wire up handler'`, which resolves on the exact-match path and never reaches the fallback —
+  // so the branch shipped untested. It is only reachable when the bare title does NOT match
+  // exactly, which in practice means one title repeated under two phases.
+  describe('fully-qualified "Phase: Task" selector', () => {
+    const DUPLICATE_TITLE_PLAN = `# Plan
+
+## Setup
+
+### 1. Add validation
+
+## Integration
+
+### 2. Add validation
+`;
+    const dupHeadings = parsePlanHeadings(DUPLICATE_TITLE_PLAN);
+
+    it('disambiguates one title repeated under two phases', () => {
+      const setup = matchTasks(dupHeadings, ['Setup: Add validation']);
+      expect(setup.length).toBe(1);
+      expect(setup[0].parentPhase).toBe('Setup');
+
+      const integration = matchTasks(dupHeadings, ['Integration: Add validation']);
+      expect(integration.length).toBe(1);
+      expect(integration[0].parentPhase).toBe('Integration');
+    });
+
+    it('rejects the bare ambiguous title rather than guessing a phase', () => {
+      try {
+        matchTasks(dupHeadings, ['Add validation']);
+        throw new Error('expected matchTasks to throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(MatchError);
+        expect((e as MatchError).code).toBe('ambiguous_selector');
+      }
+    });
+
+    it('cannot qualify a phase whose own name contains ": " — the split takes the FIRST colon', () => {
+      // `Phase 2: Integration: Wire up handler` splits into phase `Phase 2` / task
+      // `Integration: Wire up handler`, neither of which exists. Pinned because it looks like it
+      // should work and silently does not; the workaround is to select the bare title, which is
+      // unambiguous whenever the phase name is this specific.
+      expect(() => matchTasks(headings, ['Phase 2: Integration: Wire up handler'])).toThrow(MatchError);
+      const byTitle = matchTasks(headings, ['Wire up handler']);
+      expect(byTitle.length).toBe(1);
+      expect(byTitle[0].parentPhase).toBe('Phase 2: Integration');
+    });
   });
 
   it('deduplicates phase + child selectors', () => {

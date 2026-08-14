@@ -31,7 +31,7 @@ const isolated = {
   env: () => ({} as Record<string, string | undefined>),
   stdout: () => true,
   stderr: () => true,
-  exit: (() => { throw new Error('exit'); }) as never,
+  exit: (() => { throw new Error('exit'); }),
 };
 
 describe('mma mcp nested commands', () => {

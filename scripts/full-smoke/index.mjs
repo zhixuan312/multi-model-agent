@@ -35,6 +35,32 @@ import { startAvailabilityProbe } from './availability.mjs';
 import { runRecordSurface } from './record-surface.mjs';
 
 const argv = process.argv.slice(2);
+
+/**
+ * Reject an argument this harness does not understand, instead of ignoring it.
+ *
+ * Every value flag here is `--name=value`. Writing the space form (`--only 40`) parses as an
+ * unrecognised `--only` plus a stray `40`, both silently dropped — so the run quietly becomes a
+ * FULL sweep. A full sweep costs real provider spend and around twenty minutes, and the operator
+ * only finds out at the end, from a report covering scenarios they did not ask for. A typo must
+ * cost one line of stderr, not a full run.
+ */
+const VALUE_FLAGS = ['--only', '--branch', '--concurrency'];
+const BOOLEAN_FLAGS = [
+  '--skip-backend', '--strict', '--allow-mismatch', '--wait-flush', '--sequential',
+];
+for (const [i, a] of argv.entries()) {
+  if (BOOLEAN_FLAGS.includes(a)) continue;
+  if (VALUE_FLAGS.some((f) => a.startsWith(`${f}=`))) continue;
+  if (VALUE_FLAGS.includes(a)) {
+    console.error(`full-smoke: ${a} needs its value attached: ${a}=${argv[i + 1] ?? '<value>'}`);
+    process.exit(2);
+  }
+  console.error(`full-smoke: unknown argument "${a}"`);
+  console.error(`  flags: ${BOOLEAN_FLAGS.join(' ')} ${VALUE_FLAGS.map((f) => `${f}=…`).join(' ')}`);
+  process.exit(2);
+}
+
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const opts = {
   skipBackend: argv.includes('--skip-backend'),
@@ -99,7 +125,7 @@ async function runScenario(spec, ctx, log) {
       rec.repeatCancel = res.repeatCancel;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      log(`#${spec.id}  cancel  → ${res.envelope?.execution?.status} (${res.envelope?.error?.code})`);
       return;
     }
 
@@ -124,7 +150,7 @@ async function runScenario(spec, ctx, log) {
       rec.mcpContract = res;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.task?.status}`);
+      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.execution?.status}`);
       return;
     }
 
@@ -156,7 +182,7 @@ async function runScenario(spec, ctx, log) {
       rec.mcp = res;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  mcp  → taskId=${res.taskId} status=${res.waitPayload?.task?.status}`);
+      log(`#${spec.id}  mcp  → taskId=${res.taskId} status=${res.waitPayload?.execution?.status}`);
       return;
     }
 
@@ -383,7 +409,7 @@ async function runScenario(spec, ctx, log) {
     const fails = checks.filter(c => c.status === 'FAIL').length;
     const warns = checks.filter(c => c.status === 'WARN').length;
     const cost = envelope.metrics?.implementer?.costUsd ?? 0;
-    const status = envelope.task?.status ?? '?';
+    const status = envelope.execution?.status ?? '?';
     log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
     if (spec.kind === 'write' && !ctx.writeRepos?.[spec.id]) keepWorkspaceClean(ctx.dir);
     totalCostUSD += envelope.metrics?.totalCostUsd ?? 0;
