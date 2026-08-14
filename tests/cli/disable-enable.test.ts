@@ -20,7 +20,6 @@ import {
 import { tmpdir } from 'node:os';
 
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
-import { readFileSync } from 'node:fs';
 import { runDisable, runEnable, ToggleExitCode } from '../../packages/server/src/cli/toggle.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
