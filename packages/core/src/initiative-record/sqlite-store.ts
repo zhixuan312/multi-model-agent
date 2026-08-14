@@ -454,6 +454,9 @@ function canonicalize(value: unknown): unknown {
  * configurable — the same "no new knob without a concrete need" posture the rest of this module
  * follows.
  */
+/** Result of running a declared verification command, computed outside the write transaction. */
+interface VerificationCommandOutcome { state: VerificationRun['state']; detail: string; }
+
 const VERIFICATION_RUN_TIMEOUT_MS = 120_000;
 const VERIFICATION_RUN_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 /** Persisted `detail` text is capped well below any practical SQLite TEXT concern — this bounds
@@ -595,6 +598,15 @@ export class InitiativeRecordStore implements InitiativeRepository {
     const request = parsed.data;
     const requestHash = computeRequestHash(request.operation, request.input, request.expected_revision, request.provenance);
 
+    // `verification_run` is the ONE operation that waits on something outside SQLite, and it may
+    // wait up to VERIFICATION_RUN_TIMEOUT_MS. Running it inside the write transaction below would
+    // hold `BEGIN IMMEDIATE` — and therefore block every other read and write on this connection —
+    // for the whole duration of somebody's test suite. The command runs here, before the lock is
+    // taken; the transaction then only persists its result, which is fast (audit M1-3).
+    const preRunVerification = request.operation === 'verification_run'
+      ? this.runVerificationCommand(request.input as VerificationRunInput)
+      : undefined;
+
     this.db.exec('BEGIN IMMEDIATE');
     try {
       // EvidenceLink's composite identity is an identity-level no-op. It must
@@ -629,7 +641,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
         }
       }
 
-      const result = this.applyMutation(request);
+      const result = this.applyMutation(request, preRunVerification);
 
       if (request.idempotency_key) {
         this.db
@@ -1407,7 +1419,11 @@ export class InitiativeRecordStore implements InitiativeRepository {
   }
 
   /** Dispatches one validated mutating request to its write handler. Runs inside the caller's open transaction. */
-  private applyMutation(request: InitiativeMutationRequest): InitiativeRecordEntity {
+  private applyMutation(
+    request: InitiativeMutationRequest,
+    /** Pre-executed `verification_run` outcome; see `execute()` (audit M1-3). */
+    preRunVerification?: VerificationCommandOutcome,
+  ): InitiativeRecordEntity {
     switch (request.operation) {
       case 'product_create':
         return this.mutateProductCreate(request.input, request.expected_revision, request.provenance);
@@ -1497,7 +1513,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       // pattern as every mutation above. `initiative_export` is not here: it is a dedicated
       // read (`InitiativeRecordRuntime.initiativeExport`), like `initiative_resume`.
       case 'verification_run':
-        return this.mutateVerificationRun(request.input, request.expected_revision, request.provenance);
+        return this.mutateVerificationRun(request.input, request.expected_revision, request.provenance, preRunVerification);
       case 'deliverable_package':
         return this.mutateDeliverablePackage(request.input, request.expected_revision, request.provenance);
       case 'initiative_import':
@@ -3657,10 +3673,51 @@ export class InitiativeRecordStore implements InitiativeRepository {
     });
   }
 
+  /**
+   * Executes a declared verification command and classifies the outcome. Called from `execute()`
+   * BEFORE the write transaction opens, so a slow command never holds the database lock.
+   */
+  private runVerificationCommand(input: VerificationRunInput): VerificationCommandOutcome | undefined {
+    if (input.method !== 'command') return undefined; // rejected inside the transaction, uniformly
+    // Validate the target FIRST, in the same order the mutation does. Hoisting execution out of
+    // the transaction must not reorder the errors a caller sees: a cross-Initiative criterion has
+    // to be rejected as such, not as a missing working directory. These are reads, so they need no
+    // write lock.
+    this.requireVerificationTarget(input.initiative_id, input.acceptance_criterion_id);
+    const cwd = this.resolveVerificationRunCwd(input.initiative_id);
+    const [program, ...args] = parseVerificationCommand(input.command);
+    if (!program) {
+      throw new InvalidRequestError({ field_errors: { command: ['command must name a program to run'] } });
+    }
+    const result = spawnSync(program, args, {
+      cwd,
+      shell: false,
+      encoding: 'utf8',
+      timeout: VERIFICATION_RUN_TIMEOUT_MS,
+      maxBuffer: VERIFICATION_RUN_MAX_BUFFER_BYTES,
+    });
+    if (result.error) {
+      return { state: 'blocked', detail: truncateVerificationDetail(`command could not be executed: ${result.error.message}`) };
+    }
+    if (result.signal) {
+      return {
+        state: 'blocked',
+        detail: truncateVerificationDetail(`command terminated by signal ${result.signal}\n${combineCommandOutput(result.stdout, result.stderr)}`),
+      };
+    }
+    const exitCode = result.status ?? 0;
+    return {
+      state: exitCode === 0 ? 'pass' : 'fail',
+      detail: truncateVerificationDetail(`exit ${exitCode}\n${combineCommandOutput(result.stdout, result.stderr)}`),
+    };
+  }
+
   private mutateVerificationRun(
     input: VerificationRunInput,
     expectedRevision: number,
     provenance: ProvenanceInput,
+    /** Outcome of the command, already executed OUTSIDE the write transaction (audit M1-3). */
+    preRun: VerificationCommandOutcome | undefined,
   ): VerificationRun {
     this.requireCreateRevision(expectedRevision, 'VerificationRun');
     const { initiativeId, acceptanceCriterionId } = this.requireVerificationTarget(
@@ -3681,36 +3738,13 @@ export class InitiativeRecordStore implements InitiativeRepository {
     //      and the run is refused rather than silently widened.
     //   2. No shell. `shell: true` makes the request body a shell program — metacharacters,
     //      substitution, chaining. The argv form executes exactly one declared program.
-    const cwd = this.resolveVerificationRunCwd(initiativeId);
-    const [program, ...args] = parseVerificationCommand(input.command);
-    if (!program) {
-      throw new InvalidRequestError({ field_errors: { command: ['command must name a program to run'] } });
+    // Already executed before the transaction opened (audit M1-3). `execute()` computes this for
+    // every `verification_run`, so its absence means the operation was dispatched from somewhere
+    // that skipped that step — a programming error, not a caller error.
+    if (!preRun) {
+      throw new Error('verification_run reached the store without a pre-executed command outcome');
     }
-    const result = spawnSync(program, args, {
-      cwd,
-      shell: false,
-      encoding: 'utf8',
-      timeout: VERIFICATION_RUN_TIMEOUT_MS,
-      maxBuffer: VERIFICATION_RUN_MAX_BUFFER_BYTES,
-    });
-
-    let state: VerificationRun['state'];
-    let detail: string;
-    if (result.error) {
-      state = 'blocked';
-      detail = truncateVerificationDetail(`command could not be executed: ${result.error.message}`);
-    } else if (result.signal) {
-      state = 'blocked';
-      detail = truncateVerificationDetail(
-        `command terminated by signal ${result.signal}\n${combineCommandOutput(result.stdout, result.stderr)}`,
-      );
-    } else {
-      const exitCode = result.status ?? 0;
-      state = exitCode === 0 ? 'pass' : 'fail';
-      detail = truncateVerificationDetail(
-        `exit ${exitCode}\n${combineCommandOutput(result.stdout, result.stderr)}`,
-      );
-    }
+    const { state, detail } = preRun;
 
     return this.insertVerificationRun({
       initiativeId,
