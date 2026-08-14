@@ -423,6 +423,9 @@ export interface GateEstablishmentResult {
 /** A phase's live, advisory, never-persisted gate result (FR-8). */
 export interface GateStatus {
   status: 'green' | 'red';
+  /** Every required Establishment with its verdict (FR-8), satisfied and unsatisfied alike. */
+  establishments: GateEstablishmentResult[];
+  /** The unsatisfied subset of `establishments` — what still stands between here and green. */
   missing: GateEstablishmentResult[];
   note?: string;
 }

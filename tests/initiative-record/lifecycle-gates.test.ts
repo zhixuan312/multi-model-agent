@@ -20,7 +20,7 @@ const decision = (status: Decision['status']): Decision => ({ uuid: 'd', initiat
 
 describe('Lifecycle gates', () => {
   it('evaluates all five satisfiers and keeps a null contract green', () => {
-    expect(evaluateLifecycleGate({ contract: null, phase: 'discover', requirements: [], acceptanceCriteria: [], decisions: [], events: [], deliverableValidationStates: [] })).toEqual({ status: 'green', missing: [], note: 'No lifecycle contract is set.' });
+    expect(evaluateLifecycleGate({ contract: null, phase: 'discover', requirements: [], acceptanceCriteria: [], decisions: [], events: [], deliverableValidationStates: [] })).toEqual({ status: 'green', missing: [], establishments: [], note: 'No lifecycle contract is set.' });
     const refineRedResult = evaluateLifecycleGate({ contract, phase: 'refine', requirements: [], acceptanceCriteria: [], decisions: [], events: [], deliverableValidationStates: [] });
     expect(refineRedResult).toMatchObject({ status: 'red', missing: [{ establishment: { key: 'requirements_defined' } }, { establishment: { key: 'acceptance_criteria_defined' } }] });
     for (const missing of refineRedResult.missing) {
