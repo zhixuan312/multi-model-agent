@@ -454,6 +454,24 @@ function canonicalize(value: unknown): unknown {
  * configurable — the same "no new knob without a concrete need" posture the rest of this module
  * follows.
  */
+/**
+ * Test-only `initiative_bootstrap` failure-injection state (audit M1-4).
+ *
+ * MODULE-level, not a member of `InitiativeRecordStore`, and absent from `initiative-record/
+ * index.ts` — that barrel NAMES its exports from this file, so this setter never reaches a
+ * consumer of the published package. As a public method it did: every caller got a
+ * failure-injection switch, and production objects carried mutable test state.
+ *
+ * It exists because it is the only way to prove the bootstrap rolls back at EACH of its seven
+ * creation steps — a real constraint violation can only reach some of them. Same shape as the
+ * resolver seam in `method-guidance.ts`, so the policy is uniform.
+ */
+let bootstrapFailureStepForTest: BootstrapFailureStep | undefined;
+
+export function setBootstrapFailureStepForTest(step: BootstrapFailureStep | undefined): void {
+  bootstrapFailureStepForTest = step;
+}
+
 /** Initiative-wide inputs shared across a six-phase gate sweep (audit M1-11). */
 interface GateInputs {
   requirements: ReturnType<InitiativeRecordStore['listRequirements']>;
@@ -540,8 +558,6 @@ function computeRequestHash(
 
 export class InitiativeRecordStore implements InitiativeRepository {
   private closed = false;
-  /** Test-only `initiative_bootstrap` failure-injection hook — see `setBootstrapFailureStepForTest`. */
-  private bootstrapFailureStepForTest: BootstrapFailureStep | undefined;
 
   private constructor(private readonly db: DatabaseSync) {}
 
@@ -3169,20 +3185,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
     };
   }
 
-  /**
-   * Test-only failure injection for `initiative_bootstrap` (SPEC-006 Task I-3): when set, the
-   * write phase throws immediately after the named step's creation, proving the whole-transaction
-   * rollback guarantee end to end. Non-exported from the public barrel and never invoked by
-   * production code — HTTP and MCP callers only ever reach `execute()`, never a direct
-   * `InitiativeRecordStore` reference, so this hook is structurally unreachable through either
-   * transport. Test/inspection use only.
-   */
-  setBootstrapFailureStepForTest(step: BootstrapFailureStep | undefined): void {
-    this.bootstrapFailureStepForTest = step;
-  }
-
   private maybeForceBootstrapFailure(step: BootstrapFailureStep): void {
-    if (this.bootstrapFailureStepForTest === step) {
+    if (bootstrapFailureStepForTest === step) {
       throw new Error(`forced bootstrap failure after ${step} creation`);
     }
   }
