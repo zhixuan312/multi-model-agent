@@ -51,6 +51,14 @@
  * type, `method_get` / `method_list` operations, and `loadMethodGuidance` resolver already
  * exported above cover it.
  *
+ * SPEC-007 Delivery Layer (Task I-2) extends this surface with the generic `TargetAdapter`
+ * interface (`types.ts`, alongside `Deliverable` / `DeliverableArtifactMember` /
+ * `DeliveryHistoryEntry` — declared now so `TargetAdapter.validate` type-checks, though their
+ * store methods and operations are Task I-3/I-4), the `duplicate_target_adapter` typed error
+ * (`DuplicateTargetAdapterError`), and the public process-local registry
+ * `registerTargetAdapter` / `resolveTargetAdapter` (`target-adapters.ts`, exported below — the
+ * only names from that module re-exported here; it registers no adapter of its own).
+ *
  * SPEC-007 Delivery Layer (Task I-1) extends this surface with the `DeliveryContract` domain
  * type, `deliveryContractDeclarationSchema` / `deliveryContractGetInputSchema` /
  * `deliveryContractListInputSchema`, the `unknown_delivery_contract` typed error
@@ -83,3 +91,6 @@ export type { RunInitiativeMigrationsOptions, RunInitiativeMigrationsResult } fr
 // `resolveGuidanceFromRootForTest` (the internal test seam) is intentionally NOT re-exported
 // here — see `method-guidance.ts`'s module doc and Task I-2's contract.
 export { loadMethodGuidance } from './method-guidance.js';
+// SPEC-007 Delivery Layer (Task I-2) — public generic adapter registry. See `target-adapters.ts`'s
+// module doc; `registry` (the internal `Map`) is intentionally NOT re-exported here.
+export { registerTargetAdapter, resolveTargetAdapter } from './target-adapters.js';

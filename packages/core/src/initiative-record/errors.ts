@@ -20,7 +20,9 @@ export type InitiativeErrorCode =
   | 'invalid_task_transition'
   | 'invalid_phase_transition'
   | 'unknown_lifecycle_contract'
-  | 'unknown_method';
+  | 'unknown_method'
+  | 'unknown_delivery_contract'
+  | 'duplicate_target_adapter';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -281,6 +283,26 @@ export class UnknownDeliveryContractError extends Error {
   }
 }
 
+/**
+ * `registerTargetAdapter` was called with a `target_type` that already has a registered
+ * adapter (SPEC-007 FR-8, "Interfaces / contracts" — "The registry must reject duplicate
+ * registrations for the same `target_type` as a conflict-shaped typed error."). Conflict-shaped,
+ * like `RevisionConflictError` and `TaskClaimConflictError` — Task I-8 maps it to HTTP 409.
+ */
+export class DuplicateTargetAdapterError extends Error {
+  readonly code = 'duplicate_target_adapter' as const;
+  readonly target_type: string;
+
+  constructor(params: { target_type: string; message?: string }) {
+    super(
+      params.message ??
+        `duplicate_target_adapter: a TargetAdapter is already registered for target_type '${params.target_type}' (conflict)`,
+    );
+    this.name = 'DuplicateTargetAdapterError';
+    this.target_type = params.target_type;
+  }
+}
+
 /** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, and SPEC-007. */
 export type InitiativeError =
   | RevisionConflictError
@@ -296,7 +318,8 @@ export type InitiativeError =
   | InvalidPhaseTransitionError
   | UnknownLifecycleContractError
   | UnknownMethodError
-  | UnknownDeliveryContractError;
+  | UnknownDeliveryContractError
+  | DuplicateTargetAdapterError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -313,6 +336,7 @@ const INITIATIVE_ERROR_CTORS = [
   UnknownLifecycleContractError,
   UnknownMethodError,
   UnknownDeliveryContractError,
+  DuplicateTargetAdapterError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

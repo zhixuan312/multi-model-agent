@@ -251,6 +251,10 @@ export {
   deliveryContractDeclarationSchema,
   deliveryContractGetInputSchema,
   deliveryContractListInputSchema,
+  // SPEC-007 Delivery Layer — Task I-2: generic adapter interface and public registry
+  DuplicateTargetAdapterError,
+  registerTargetAdapter,
+  resolveTargetAdapter,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -319,4 +323,10 @@ export type {
   DeliveryContractDeclarationInput,
   DeliveryContractGetInput,
   DeliveryContractListInput,
+  // SPEC-007 Delivery Layer — Task I-2: generic adapter interface and its supporting shapes
+  DeliverableValidationState,
+  Deliverable,
+  DeliverableArtifactMember,
+  DeliveryHistoryEntry,
+  TargetAdapter,
 } from './initiative-record/index.js';

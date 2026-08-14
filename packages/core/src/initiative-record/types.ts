@@ -476,6 +476,70 @@ export interface DeliveryContract {
   verification: string[];
 }
 
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — generic adapter interface (Task I-2)
+//
+// TRANSCRIPTION, not design: frozen by
+// `.mma/specs/2026-08-14-spec-007-delivery-layer.md` (SPEC-007, "Interfaces /
+// contracts"). These are the FULL public Deliverable, membership, and
+// history shapes the frozen `TargetAdapter.validate` signature names —
+// declared here (Task I-2) so the interface type-checks; the store methods,
+// operations, and persistence that populate and mutate them are Task I-3
+// (Deliverable + membership) and Task I-4 (validation + delivery history).
+// Declaring the shape here is not "implementing" those later tasks' scope:
+// no store method, operation, schema, or migration touches these two tables'
+// rows in this task.
+// ---------------------------------------------------------------------------
+
+/** The closed Deliverable validation-state vocabulary (FR-3, FR-6). */
+export type DeliverableValidationState = 'pending' | 'valid' | 'invalid' | 'human_approved';
+
+/** A target-ready bundle of Artifacts (FR-3). Task I-3 adds the store methods that create and read these rows. */
+export interface Deliverable {
+  uuid: string;
+  initiative_id: string;
+  target_type: string;
+  delivery_contract: string;
+  validation_state: DeliverableValidationState;
+  validation_detail: string;
+  delivery_reference: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+/** One Deliverable-to-Artifact membership row, naming the contract `requires` entry it satisfies (FR-4). */
+export interface DeliverableArtifactMember {
+  deliverable_id: string;
+  artifact_id: string;
+  requirement: string;
+  createdAt: string;
+}
+
+/** One immutable, append-only delivery history row (FR-7). Task I-4 adds the store method that appends these. */
+export interface DeliveryHistoryEntry {
+  uuid: string;
+  deliverable_id: string;
+  delivery_reference: string;
+  validation_state: DeliverableValidationState;
+  createdAt: string;
+}
+
+/**
+ * The public extension contract (FR-8). `validate` receives a generic Deliverable, its
+ * resolved Delivery Contract, and its joined membership — never a target-specific shape.
+ * Core defines this interface and the registry below; core registers no adapter and this
+ * module names no shipped or fake target (Task I-5 proves that boundary with a source scan).
+ */
+export interface TargetAdapter {
+  target_type: string;
+  validate(input: {
+    deliverable: Deliverable;
+    contract: DeliveryContract;
+    members: Array<{ member: DeliverableArtifactMember; artifact: ArtifactRef }>;
+  }): { valid: boolean; detail: string };
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product
