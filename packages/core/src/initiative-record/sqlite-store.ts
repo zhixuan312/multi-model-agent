@@ -454,6 +454,15 @@ function canonicalize(value: unknown): unknown {
  * configurable — the same "no new knob without a concrete need" posture the rest of this module
  * follows.
  */
+/** Initiative-wide inputs shared across a six-phase gate sweep (audit M1-11). */
+interface GateInputs {
+  requirements: ReturnType<InitiativeRecordStore['listRequirements']>;
+  acceptanceCriteria: ReturnType<InitiativeRecordStore['listAcceptanceCriteria']>;
+  decisions: ReturnType<InitiativeRecordStore['listDecisions']>;
+  events: ReturnType<InitiativeRecordStore['listEvents']>;
+  deliverableValidationStates: DeliverableValidationState[];
+}
+
 /** Result of running a declared verification command, computed outside the write transaction. */
 interface VerificationCommandOutcome { state: VerificationRun['state']; detail: string; }
 
@@ -1346,17 +1355,28 @@ export class InitiativeRecordStore implements InitiativeRepository {
    * has any Verification Run, with `latest` selected by `createdAt` descending, then `uuid` descending.
    */
   getLatestVerificationRuns(initiativeId: string): LatestVerificationRead[] {
+    // One query for the whole Initiative, not one per Acceptance Criterion (audit M1-16). The
+    // window function picks each criterion's newest run under the SAME ordering the per-criterion
+    // query used, so the selected row is identical — this is a shape change, not a semantic one.
+    // Criteria are still visited in requirement order so the returned sequence is unchanged.
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM (
+           SELECT vr.*, ROW_NUMBER() OVER (
+             PARTITION BY vr.acceptance_criterion_id ORDER BY vr.created_at DESC, vr.uuid DESC
+           ) AS rank_in_criterion
+           FROM verification_runs vr
+           WHERE vr.initiative_id = ?
+         ) WHERE rank_in_criterion = 1`,
+      )
+      .all(initiativeId) as unknown as VerificationRunRow[];
+    const latestByCriterion = new Map(rows.map((row) => [row.acceptance_criterion_id, mapVerificationRunRow(row)]));
+
     const results: LatestVerificationRead[] = [];
     for (const { acceptance_criteria } of this.getRequirementsWithCriteria(initiativeId)) {
       for (const criterion of acceptance_criteria) {
-        const row = this.db
-          .prepare(
-            `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC LIMIT 1`,
-          )
-          .get(criterion.uuid) as VerificationRunRow | undefined;
-        if (row) {
-          results.push({ acceptance_criterion_id: criterion.uuid, latest: mapVerificationRunRow(row) });
-        }
+        const latest = latestByCriterion.get(criterion.uuid);
+        if (latest) results.push({ acceptance_criterion_id: criterion.uuid, latest });
       }
     }
     return results;
@@ -3987,19 +4007,35 @@ export class InitiativeRecordStore implements InitiativeRepository {
    * request's own (already-validated) assertions count toward its own snapshot (SPEC-004
    * "Data model" — "computed AFTER counting the current request's asserted keys as valid").
    */
+  /**
+   * The Initiative-wide inputs every gate evaluation needs. Read once and shared across a whole
+   * six-phase sweep (audit M1-11): the gate for `discover` and the gate for `deliver` are computed
+   * from exactly the same Requirements, Acceptance Criteria, Decisions, Events and Deliverables —
+   * only the contract's phase entry differs — so reading them per phase re-read the entire record
+   * six times for one `initiative_resume`.
+   */
+  private readGateInputs(initiativeId: string): GateInputs {
+    return {
+      requirements: this.listRequirements({ initiative_id: initiativeId }),
+      acceptanceCriteria: this.listAcceptanceCriteria({ initiative_id: initiativeId }),
+      decisions: this.listDecisions({ initiative_id: initiativeId }),
+      events: this.listEvents({ initiative_id: initiativeId }),
+      deliverableValidationStates: this.listDeliverables({ initiative_id: initiativeId }).map(
+        (deliverable) => deliverable.validation_state,
+      ),
+    };
+  }
+
   private evaluateGate(
     initiativeId: string,
     phase: Phase,
     contract: LifecycleContract | null,
     prospectiveSatisfyAsserted?: readonly string[],
+    /** Shared snapshot when sweeping several phases; read fresh when absent. */
+    sharedInputs?: GateInputs,
   ): GateStatus {
-    const requirements = this.listRequirements({ initiative_id: initiativeId });
-    const acceptanceCriteria = this.listAcceptanceCriteria({ initiative_id: initiativeId });
-    const decisions = this.listDecisions({ initiative_id: initiativeId });
-    const events = this.listEvents({ initiative_id: initiativeId });
-    const deliverableValidationStates = this.listDeliverables({ initiative_id: initiativeId }).map(
-      (deliverable) => deliverable.validation_state,
-    );
+    const { requirements, acceptanceCriteria, decisions, events, deliverableValidationStates } =
+      sharedInputs ?? this.readGateInputs(initiativeId);
     const effectiveEvents =
       prospectiveSatisfyAsserted !== undefined
         ? [...events, this.buildProspectiveSatisfiedEvent(initiativeId, phase, prospectiveSatisfyAsserted)]
@@ -4282,12 +4318,15 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
     const phaseStates = this.getPhaseStates(row.uuid);
     const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    // One read of the Initiative-wide inputs for the whole six-phase sweep, and the Event log is
+    // reused for the lifecycle-event tail below rather than fetched a second time (audit M1-11).
+    const gateInputs = this.readGateInputs(row.uuid);
     const phases = LIFECYCLE_PHASES.map((phase) => ({
       phase,
       state: phaseStates[phase],
-      gate: this.evaluateGate(row.uuid, phase, contract),
+      gate: this.evaluateGate(row.uuid, phase, contract, undefined, gateInputs),
     }));
-    const lifecycleEvents = this.listEvents({ initiative_id: row.uuid }).filter((event) =>
+    const lifecycleEvents = gateInputs.events.filter((event) =>
       InitiativeRecordStore.LIFECYCLE_EVENT_TYPES.has(event.event_type),
     );
     const recentLifecycleEvents = [...lifecycleEvents]
