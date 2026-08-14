@@ -57,6 +57,7 @@ const ACTIONABLE_SKILLS = [
   'mma-review',
   'mma-investigate',
   'mma-research',
+  'mma-solution-lead',
   'mma-spec',
   'mma-tldr',
 ];
