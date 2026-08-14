@@ -334,7 +334,9 @@ export interface Event {
     | 'Evidence'
     | 'EvidenceLink'
     | 'Risk'
-    | 'VerificationRun';
+    | 'VerificationRun'
+    | 'Deliverable'
+    | 'DeliverableArtifactMember';
   entity_id: string;
   initiative_id: string | null;
   event_type: string;
@@ -374,8 +376,18 @@ export const DEFAULT_LIFECYCLE_CONTRACT_ID = 'default-sdl@1' as const;
 /** A Phase Record's state machine (FR-2). Absent rows synthesize to `'not_started'`. */
 export type PhaseRecordState = 'not_started' | 'active' | 'satisfied' | 'reopened' | 'skipped';
 
-/** The closed, typed satisfier vocabulary (FR-5) — no conditions, scripts, or runtime-extensible types. */
-export type Satisfier = 'manual' | 'requirements_exist' | 'acceptance_criteria_exist' | 'decisions_settled';
+/**
+ * The closed, typed satisfier vocabulary (FR-5) — no conditions, scripts, or runtime-extensible
+ * types. `deliverables_valid` is SPEC-007's Delivery Layer addition (Task I-7, ← AC-1.11): true
+ * only when every Deliverable of the Initiative is `valid` or `human_approved` (vacuously true
+ * with no Deliverables).
+ */
+export type Satisfier =
+  | 'manual'
+  | 'requirements_exist'
+  | 'acceptance_criteria_exist'
+  | 'decisions_settled'
+  | 'deliverables_valid';
 
 /** One required gate condition inside a `LifecycleContract` phase (FR-5). */
 export interface Establishment {
@@ -449,6 +461,97 @@ export interface MethodDeclaration {
   verification_expectations: string[];
 }
 
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — Delivery Contract registry (Task I-1)
+//
+// TRANSCRIPTION, not design: frozen by
+// `.mma/specs/2026-08-14-spec-007-delivery-layer.md` (SPEC-007, "Interfaces /
+// contracts" and "Data model"). A Delivery Contract is the immutable
+// declaration of the required bundle items and verification expectations for
+// one kind of Deliverable. The registry exposes no caller-visible write
+// operation — only the two seeded built-in declarations ever exist.
+// ---------------------------------------------------------------------------
+
+/** A Delivery Contract identifier: `<name>@<version>`, version >= 1, no leading zero (FR-1). */
+export const DELIVERY_CONTRACT_ID_PATTERN = /^[a-z][a-z0-9-]*@[1-9][0-9]*$/;
+
+/**
+ * A registered, immutable Delivery Contract declaration (FR-1, FR-2). Exactly these six
+ * fields — no conditional, script, expression, or runtime-extensible field.
+ */
+export interface DeliveryContract {
+  id: string;
+  name: string;
+  version: number;
+  target_type: string;
+  requires: string[];
+  verification: string[];
+}
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — generic adapter interface (Task I-2)
+//
+// TRANSCRIPTION, not design: frozen by
+// `.mma/specs/2026-08-14-spec-007-delivery-layer.md` (SPEC-007, "Interfaces /
+// contracts"). These are the FULL public Deliverable, membership, and
+// history shapes the frozen `TargetAdapter.validate` signature names —
+// declared here (Task I-2) so the interface type-checks; the store methods,
+// operations, and persistence that populate and mutate them are Task I-3
+// (Deliverable + membership) and Task I-4 (validation + delivery history).
+// Declaring the shape here is not "implementing" those later tasks' scope:
+// no store method, operation, schema, or migration touches these two tables'
+// rows in this task.
+// ---------------------------------------------------------------------------
+
+/** The closed Deliverable validation-state vocabulary (FR-3, FR-6). */
+export type DeliverableValidationState = 'pending' | 'valid' | 'invalid' | 'human_approved';
+
+/** A target-ready bundle of Artifacts (FR-3). Task I-3 adds the store methods that create and read these rows. */
+export interface Deliverable {
+  uuid: string;
+  initiative_id: string;
+  target_type: string;
+  delivery_contract: string;
+  validation_state: DeliverableValidationState;
+  validation_detail: string;
+  delivery_reference: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+}
+
+/** One Deliverable-to-Artifact membership row, naming the contract `requires` entry it satisfies (FR-4). */
+export interface DeliverableArtifactMember {
+  deliverable_id: string;
+  artifact_id: string;
+  requirement: string;
+  createdAt: string;
+}
+
+/** One immutable, append-only delivery history row (FR-7). Task I-4 adds the store method that appends these. */
+export interface DeliveryHistoryEntry {
+  uuid: string;
+  deliverable_id: string;
+  delivery_reference: string;
+  validation_state: DeliverableValidationState;
+  createdAt: string;
+}
+
+/**
+ * The public extension contract (FR-8). `validate` receives a generic Deliverable, its
+ * resolved Delivery Contract, and its joined membership — never a target-specific shape.
+ * Core defines this interface and the registry below; core registers no adapter and this
+ * module names no shipped or fake target (Task I-5 proves that boundary with a source scan).
+ */
+export interface TargetAdapter {
+  target_type: string;
+  validate(input: {
+    deliverable: Deliverable;
+    contract: DeliveryContract;
+    members: Array<{ member: DeliverableArtifactMember; artifact: ArtifactRef }>;
+  }): { valid: boolean; detail: string };
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product
@@ -467,7 +570,9 @@ export type InitiativeRecordEntity =
   | Risk
   | VerificationRun
   | PhaseRecord
-  | InitiativeBootstrapResult;
+  | InitiativeBootstrapResult
+  | Deliverable
+  | DeliverableArtifactMember;
 
 /** One `initiative_bootstrap` requested Workspace, paired back to its request `workspace_key`. */
 export interface InitiativeBootstrapWorkspaceResult extends Workspace {
@@ -616,6 +721,21 @@ export const INITIATIVE_OPERATIONS = [
   // SPEC-006 Business intake — the confirmed-draft composite mutation (FR-6, ← AC-1.6). Task
   // I-2 defines the contract only; Task I-3 implements the store dispatch.
   'initiative_bootstrap',
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1 defined the schemas;
+  // Task I-3 wires them into the shared operation union) and the first Deliverable operations
+  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate` and `deliverable_deliver`
+  // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
+  // `deliverable_approve` (Task I-6, ← AC-1.7) is the maintainer-confirmed sole path to the
+  // human-approved validation state.
+  'delivery_contract_get',
+  'delivery_contract_list',
+  'deliverable_define',
+  'deliverable_get',
+  'deliverable_list',
+  'deliverable_attach_artifact',
+  'deliverable_validate',
+  'deliverable_deliver',
+  'deliverable_approve',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -664,6 +784,17 @@ export const INITIATIVE_EVENT_TYPES = {
   // SPEC-005 Method Registry (FR-4, "Data model" event table). `method_get`/`method_list` are
   // reads — they have no event-type mapping.
   initiative_task_set_method: 'task_method_set',
+  // SPEC-007 Delivery Layer (Task I-3, "Data model" event table). `delivery_contract_get`/
+  // `delivery_contract_list`/`deliverable_get`/`deliverable_list` are reads — they have no
+  // event-type mapping.
+  deliverable_define: 'deliverable_defined',
+  deliverable_attach_artifact: 'deliverable_artifact_attached',
+  // SPEC-007 Delivery Layer (Task I-4, "Data model" event table).
+  deliverable_validate: 'deliverable_validated',
+  deliverable_deliver: 'deliverable_delivered',
+  // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts") — the maintainer-confirmed
+  // human-approval mutation.
+  deliverable_approve: 'deliverable_approved',
 } as const;
 
 /**
@@ -711,4 +842,12 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   lifecycle_contract_set: ['previous_lifecycle_contract', 'new_lifecycle_contract'],
   // SPEC-005 Method Registry (FR-4, "Interfaces / contracts").
   task_method_set: ['previous_method', 'new_method'],
+  // SPEC-007 Delivery Layer (Task I-3, "Interfaces / contracts").
+  deliverable_defined: ['uuid', 'initiative_id', 'target_type', 'delivery_contract'],
+  deliverable_artifact_attached: ['deliverable_id', 'artifact_id', 'requirement'],
+  // SPEC-007 Delivery Layer (Task I-4, "Interfaces / contracts").
+  deliverable_validated: ['uuid', 'validation_state', 'detail'],
+  deliverable_delivered: ['uuid', 'delivery_reference', 'validation_state'],
+  // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts", maintainer-confirmed shape).
+  deliverable_approved: ['uuid', 'previous_validation_state', 'new_validation_state', 'reason'],
 } as const;

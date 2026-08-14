@@ -246,6 +246,23 @@ export {
   // server runtime through a core export"). `ExecutionRuntime` (Task I-4) is its first
   // caller outside the initiative-record package itself.
   loadMethodGuidance,
+  // SPEC-007 Delivery Layer (see .mma/specs/2026-08-14-spec-007-delivery-layer.md) — Task I-1
+  UnknownDeliveryContractError,
+  deliveryContractDeclarationSchema,
+  deliveryContractGetInputSchema,
+  deliveryContractListInputSchema,
+  // SPEC-007 Delivery Layer — Task I-2: generic adapter interface and public registry
+  DuplicateTargetAdapterError,
+  registerTargetAdapter,
+  resolveTargetAdapter,
+  // SPEC-007 Delivery Layer — Task I-4: computed validation and delivery history. Re-exported so
+  // Task I-8 can import it to map it to an HTTP/MCP status, same pattern as every other typed
+  // error above.
+  TargetAdapterValidationFailedError,
+  // SPEC-007 Delivery Layer — Task I-9: committed Delivery packager guidance resolver, the same
+  // "available to the server runtime through a core export" shape `loadMethodGuidance` gives
+  // Method Procedure guidance above.
+  loadDeliveryPackager,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -309,4 +326,15 @@ export type {
   // SPEC-006 Business intake (see .mma/specs/2026-08-14-spec-006-business-intake-solution-lead.md)
   InitiativeBootstrapInput,
   InitiativeBootstrapResult,
+  // SPEC-007 Delivery Layer (see .mma/specs/2026-08-14-spec-007-delivery-layer.md) — Task I-1
+  DeliveryContract,
+  DeliveryContractDeclarationInput,
+  DeliveryContractGetInput,
+  DeliveryContractListInput,
+  // SPEC-007 Delivery Layer — Task I-2: generic adapter interface and its supporting shapes
+  DeliverableValidationState,
+  Deliverable,
+  DeliverableArtifactMember,
+  DeliveryHistoryEntry,
+  TargetAdapter,
 } from './initiative-record/index.js';

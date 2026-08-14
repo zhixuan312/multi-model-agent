@@ -17,6 +17,7 @@ import {
   initiativeGateStatusInputSchema,
   initiativeFieldErrorsFromIssues,
   InitiativeInvalidRequestError,
+  type DeliveryContract,
   type InitiativeRecordEntity,
   type InitiativeResumeResponse,
   type LifecycleResumeBlock,
@@ -94,6 +95,20 @@ const EXECUTE_OPERATIONS = new Set([
   // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation. Same
   // dispatch pattern as every mutation above: one transactional `store.execute()` call.
   'initiative_bootstrap',
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
+  // operations (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate`/`deliverable_deliver`
+  // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
+  // `deliverable_approve` (Task I-6, ← AC-1.7) extends this set further with the
+  // maintainer-confirmed human-approval mutation.
+  'delivery_contract_get',
+  'delivery_contract_list',
+  'deliverable_define',
+  'deliverable_get',
+  'deliverable_list',
+  'deliverable_attach_artifact',
+  'deliverable_validate',
+  'deliverable_deliver',
+  'deliverable_approve',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -135,7 +150,13 @@ export class InitiativeRecordRuntime {
    */
   execute(
     rawRequest: unknown,
-  ): InitiativeRecordEntity | InitiativeRecordEntity[] | MethodDeclaration | MethodDeclaration[] {
+  ):
+    | InitiativeRecordEntity
+    | InitiativeRecordEntity[]
+    | MethodDeclaration
+    | MethodDeclaration[]
+    | DeliveryContract
+    | DeliveryContract[] {
     const parsed = initiativeOperationRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
@@ -194,6 +215,21 @@ export class InitiativeRecordRuntime {
       // pattern as every mutation above — the store owns the whole write algorithm; this
       // runtime does nothing beyond validating the envelope and forwarding the request.
       case 'initiative_bootstrap':
+      // SPEC-007 Delivery Layer (Task I-3, ← AC-1.5, AC-1.6): the first Deliverable mutations.
+      // Same pattern as every mutation above — the store owns the whole write algorithm.
+      case 'deliverable_define':
+      case 'deliverable_attach_artifact':
+      // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9): computed
+      // validation and delivery history. Same pattern as every mutation above — the store
+      // owns the whole write algorithm; this runtime does nothing beyond validating the
+      // envelope and forwarding the request.
+      case 'deliverable_validate':
+      case 'deliverable_deliver':
+      // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7): the maintainer-confirmed human-approval
+      // mutation. Same pattern as every mutation above — the store owns the whole write
+      // algorithm; this runtime does nothing beyond validating the envelope and forwarding
+      // the request.
+      case 'deliverable_approve':
         return this.store.execute(request);
 
       case 'product_get':
@@ -254,6 +290,17 @@ export class InitiativeRecordRuntime {
         return this.store.getMethod(request.input);
       case 'method_list':
         return this.store.listMethods();
+
+      // SPEC-007 Delivery Layer reads (Task I-3, ← AC-1.4, AC-1.5, AC-1.6): one stable Task I-1/
+      // I-3 store read method each, same pattern as every read above.
+      case 'delivery_contract_get':
+        return this.store.getDeliveryContract(request.input);
+      case 'delivery_contract_list':
+        return this.store.listDeliveryContracts();
+      case 'deliverable_get':
+        return this.store.getDeliverable(request.input);
+      case 'deliverable_list':
+        return this.store.listDeliverables(request.input);
 
       // `initiative_resume` and `initiative_gate_status` are excluded above
       // by EXECUTE_OPERATIONS; this branch is unreachable but keeps the

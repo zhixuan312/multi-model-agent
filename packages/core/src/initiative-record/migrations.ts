@@ -24,10 +24,10 @@ import { dirname, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { MigrationBackupFailedError } from './errors.js';
-import { DEFAULT_LIFECYCLE_CONTRACT_ID, type LifecycleContract, type MethodDeclaration } from './types.js';
+import { DEFAULT_LIFECYCLE_CONTRACT_ID, type DeliveryContract, type LifecycleContract, type MethodDeclaration } from './types.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 6;
+export const INITIATIVE_SCHEMA_VERSION = 8;
 
 interface Migration {
   version: number;
@@ -380,6 +380,80 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    // Version 7 — SPEC-007 Delivery Layer data contract ("Data model", Task I-1). Additive only:
+    // the new `delivery_contracts` registry (mirroring the `methods`/`lifecycle_contracts`
+    // `(id, definition_json, is_builtin)` shape), the new `deliverables`, `deliverable_artifacts`
+    // (membership), and `deliverable_delivery_history` (append-only history) tables — all four
+    // created here, schema-only DDL, in this one additive migration so no later Delivery Layer
+    // task needs its own migration. This task writes no `deliverables`, `deliverable_artifacts`,
+    // or `deliverable_delivery_history` rows; it seeds only the two fixed, immutable Delivery
+    // Contract declarations with `INSERT OR IGNORE`, matching the same idempotent-reseed pattern
+    // versions 4 and 5 used for `lifecycle_contracts` and `methods`. No v1-v6 table, index, or
+    // column is reshaped, renamed, or dropped, and this migration performs no Artifact or
+    // Deliverable backfill — no existing bundle relationship can be inferred safely.
+    version: 7,
+    apply: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS delivery_contracts (
+          id              TEXT PRIMARY KEY,
+          definition_json TEXT NOT NULL,
+          is_builtin      INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS deliverables (
+          uuid               TEXT PRIMARY KEY,
+          initiative_id      TEXT NOT NULL REFERENCES initiatives(uuid),
+          target_type        TEXT NOT NULL,
+          delivery_contract  TEXT NOT NULL REFERENCES delivery_contracts(id),
+          validation_state   TEXT NOT NULL,
+          validation_detail  TEXT NOT NULL,
+          delivery_reference TEXT,
+          created_at         TEXT NOT NULL,
+          updated_at         TEXT NOT NULL,
+          revision           INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_deliverables_initiative_id ON deliverables(initiative_id);
+
+        CREATE TABLE IF NOT EXISTS deliverable_artifacts (
+          deliverable_id TEXT NOT NULL REFERENCES deliverables(uuid),
+          artifact_id    TEXT NOT NULL REFERENCES artifact_refs(uuid),
+          requirement    TEXT NOT NULL,
+          created_at     TEXT NOT NULL,
+          PRIMARY KEY (deliverable_id, artifact_id, requirement)
+        );
+        CREATE INDEX IF NOT EXISTS idx_deliverable_artifacts_artifact_id ON deliverable_artifacts(artifact_id);
+
+        CREATE TABLE IF NOT EXISTS deliverable_delivery_history (
+          uuid               TEXT PRIMARY KEY,
+          deliverable_id     TEXT NOT NULL REFERENCES deliverables(uuid),
+          delivery_reference TEXT NOT NULL,
+          validation_state   TEXT NOT NULL,
+          created_at         TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_deliverable_delivery_history_deliverable_id ON deliverable_delivery_history(deliverable_id);
+      `);
+      const insert = db.prepare(`INSERT OR IGNORE INTO delivery_contracts (id, definition_json, is_builtin) VALUES (?, ?, 1)`);
+      for (const contract of BUILTIN_DELIVERY_CONTRACTS) {
+        insert.run(contract.id, JSON.stringify(contract));
+      }
+    },
+  },
+  {
+    // Version 8 — SPEC-007 Delivery Layer (Task I-7, AC-1.11). The immutable
+    // default Lifecycle Contract predates the Delivery layer, so existing v7
+    // databases need an explicit forward migration to receive the advisory
+    // `deliverables_valid` deliver-phase Establishment. Only the built-in row is
+    // updated: any custom contract remains caller-owned and untouched.
+    version: 8,
+    apply: (db) => {
+      db.prepare(
+        `UPDATE lifecycle_contracts
+         SET definition_json = ?
+         WHERE id = ? AND is_builtin = 1`,
+      ).run(JSON.stringify(DEFAULT_SDL_CONTRACT), DEFAULT_SDL_CONTRACT.id);
+    },
+  },
 ];
 
 /**
@@ -501,10 +575,40 @@ const INTENT_TO_INITIATIVE_METHOD: MethodDeclaration = {
 };
 
 /**
+ * The frozen, seeded built-in Delivery Contract catalog (SPEC-007 "Data model" — the pinned
+ * table). Exactly these two identifiers exist; there is no caller-visible registration path.
+ * Bundle-assembly procedure prose lives in the committed
+ * `packages/core/src/delivery-packagers/<target-type>/packager.md` assets (Task I-9), never in
+ * this declaration.
+ */
+const BUILTIN_DELIVERY_CONTRACTS: readonly DeliveryContract[] = [
+  {
+    id: 'runnable-prototype@1',
+    name: 'Runnable prototype',
+    version: 1,
+    target_type: 'runnable-prototype',
+    requires: ['executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence'],
+    verification: ['starts_locally', 'sample_flow_passed', 'business_user_reviewed'],
+  },
+  {
+    id: 'runnable-software@1',
+    name: 'Runnable software',
+    version: 1,
+    target_type: 'runnable-software',
+    requires: ['source_changes', 'run_instructions', 'successful_build', 'automated_checks', 'runnable_preview'],
+    verification: ['build_passed', 'tests_passed', 'primary_user_flow_passed'],
+  },
+];
+
+/**
  * The frozen `default-sdl@1` definition (SPEC-004 "Data model" — the pinned YAML). Seeded once
  * by migration v4 as an immutable, built-in row; `execute` deliberately has no Requirement or
  * Acceptance Criterion Establishment because SPEC-007's Delivery Contract validation, not this
- * specification, owns Execute-phase gating.
+ * specification, owns Execute-phase gating. SPEC-007 (Task I-7, ← AC-1.11) appends the advisory
+ * `deliverables_valid` Establishment to `deliver`, after the pre-existing manual
+ * `delivery_confirmed` — migration v4 still runs this same seed insert for a brand-new database,
+ * so the migrated row carries both Establishments in this order without a dedicated later
+ * migration step.
  */
 const DEFAULT_SDL_CONTRACT: LifecycleContract = {
   id: DEFAULT_LIFECYCLE_CONTRACT_ID,
@@ -525,7 +629,12 @@ const DEFAULT_SDL_CONTRACT: LifecycleContract = {
     },
     execute: { required: [] },
     verify: { required: [{ key: 'acceptance_verified', satisfier: 'manual' }] },
-    deliver: { required: [{ key: 'delivery_confirmed', satisfier: 'manual' }] },
+    deliver: {
+      required: [
+        { key: 'delivery_confirmed', satisfier: 'manual' },
+        { key: 'deliverables_valid', satisfier: 'deliverables_valid' },
+      ],
+    },
   },
 };
 

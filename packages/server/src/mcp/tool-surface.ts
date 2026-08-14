@@ -371,6 +371,39 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     'Create (or reference) a Product, its Workspaces and Resources, an Initiative linked to each '
     + 'Workspace, and optional Requirements with nested Acceptance Criteria, in one atomic call from '
     + 'a confirmed intake draft. Mutating: pass expected_revision and provenance.',
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
+  // operations (← AC-1.4, AC-1.5, AC-1.6). No caller-accessible Delivery Contract registration,
+  // update, or deletion tool exists.
+  delivery_contract_get: 'Look up one registered Delivery Contract declaration by its exact identifier (e.g. runnable-prototype@1).',
+  delivery_contract_list: 'List every registered Delivery Contract declaration, in stable identifier order.',
+  deliverable_define:
+    'Define a Deliverable for an Initiative against a registered Delivery Contract (target_type must match the '
+    + "contract's own target_type). Starts pending, with no delivery_reference and no membership. Mutating: pass "
+    + 'expected_revision (0 — a Deliverable is always newly created) and provenance.',
+  deliverable_get: 'Look up a Deliverable by uuid.',
+  deliverable_list: 'List the Deliverables defined under an Initiative.',
+  deliverable_attach_artifact:
+    'Attach an ArtifactRef (from the same Initiative as the Deliverable) to a Deliverable under a named '
+    + 'requirement string from its Delivery Contract. Mutating: pass expected_revision (the Deliverable '
+    + 'revision) and provenance.',
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation and
+  // delivery history complete the shared Deliverable operation surface.
+  deliverable_validate:
+    'Compute and persist a Deliverable\'s validation_state from complete Delivery Contract requirement '
+    + "coverage, combined with a registered target adapter's verdict for the Deliverable's target_type "
+    + "(valid only when both agree; with no registered adapter, validation_detail is the exact string "
+    + "'no adapter registered'). Mutating: pass expected_revision (the Deliverable revision) and provenance.",
+  deliverable_deliver:
+    'Record a delivery_reference for a Deliverable and append an immutable delivery history entry '
+    + "capturing its validation_state at delivery time — an invalid Deliverable is not vetoed. Mutating: "
+    + 'pass expected_revision (the Deliverable revision) and provenance.',
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
+  // mutation, the sole path to validation_state 'human_approved'.
+  deliverable_approve:
+    "Record a human decision that approves a Deliverable, setting validation_state to 'human_approved' "
+    + '(the sole operation that may set this state). Requires a non-empty reason. A later '
+    + 'deliverable_validate call on an approved Deliverable skips recomputation and leaves the state '
+    + 'unchanged. Mutating: pass expected_revision (the Deliverable revision) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,

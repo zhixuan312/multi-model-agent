@@ -27,6 +27,9 @@ import type {
   AcceptanceCriterion,
   ArtifactRef,
   Decision,
+  Deliverable,
+  DeliveryContract,
+  DeliveryHistoryEntry,
   Evidence,
   EvidenceLink,
   EvidenceLinkTargetType,
@@ -207,4 +210,35 @@ export interface InitiativeRepository {
   countEvidence(initiativeId: string): number;
   /** Resume count: Verification Run counts by state — every `VerificationState` key present, defaulting to `0`. */
   countVerificationByState(initiativeId: string): Record<VerificationState, number>;
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1,
+  // FR-1). Immutable, seeded-only catalog; no register/update/delete method
+  // exists here or anywhere in this codebase.
+  // -------------------------------------------------------------------------
+
+  /** `delivery_contract_get` — throws `unknown_delivery_contract` for an unregistered identifier. */
+  getDeliveryContract(lookup: { id: string }): DeliveryContract;
+  /** `delivery_contract_list` — every registered declaration, in stable ascending identifier order. */
+  listDeliveryContracts(): DeliveryContract[];
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — the first Deliverable reads (Task I-3, ← AC-1.4,
+  // AC-1.5, AC-1.6).
+  // -------------------------------------------------------------------------
+
+  /** `deliverable_get` — throws `not_found` for an unknown `uuid`. */
+  getDeliverable(lookup: { uuid: string }): Deliverable;
+  /** `deliverable_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listDeliverables(filter: { initiative_id: string }): Deliverable[];
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — computed validation and delivery history (Task
+  // I-4, ← AC-1.8). `deliverable_validate` and `deliverable_deliver` are
+  // dispatched through `execute()`, like every other mutation; this is the
+  // one plain read method they add.
+  // -------------------------------------------------------------------------
+
+  /** Every immutable `DeliveryHistoryEntry` for a Deliverable, insertion-ordered. Never updated or deleted. */
+  listDeliveryHistory(filter: { deliverable_id: string }): DeliveryHistoryEntry[];
 }

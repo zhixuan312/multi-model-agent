@@ -18,6 +18,7 @@
 import type {
   AcceptanceCriterion,
   Decision,
+  DeliverableValidationState,
   Establishment,
   Event,
   GateEstablishmentResult,
@@ -43,6 +44,12 @@ export interface EvaluateLifecycleGateInput {
    * assertions count toward its own snapshot (SPEC-004 "Data model").
    */
   events: readonly Event[];
+  /**
+   * SPEC-007 (Task I-7, ← AC-1.11): the current `validation_state` of every Deliverable
+   * belonging to the Initiative, in any order. Drives the `deliverables_valid` satisfier —
+   * an empty array (no Deliverables) satisfies it vacuously.
+   */
+  deliverableValidationStates: readonly DeliverableValidationState[];
 }
 
 /** A user-readable `detail` string for one Establishment, used whether it is satisfied or missing. */
@@ -56,6 +63,8 @@ function detailFor(establishment: Establishment): string {
       return `Every recorded Decision must reach a non-'open' status (establishment '${establishment.key}').`;
     case 'manual':
       return `Manual establishment '${establishment.key}' has not been asserted for this phase and contract.`;
+    case 'deliverables_valid':
+      return `Every Deliverable must be 'valid' or 'human_approved' (establishment '${establishment.key}').`;
     default: {
       const unhandled: never = establishment.satisfier;
       return `Unknown satisfier for establishment '${establishment.key}': ${String(unhandled)}.`;
@@ -140,6 +149,15 @@ function isManualAsserted(
   return false;
 }
 
+/**
+ * `deliverables_valid` satisfier (SPEC-007, Task I-7, ← AC-1.11): true only when every
+ * Deliverable's `validation_state` is `valid` or `human_approved`. An empty array (no
+ * Deliverables) is true — every member of an empty set satisfies the predicate.
+ */
+function isDeliverablesValid(deliverableValidationStates: readonly DeliverableValidationState[]): boolean {
+  return deliverableValidationStates.every((state) => state === 'valid' || state === 'human_approved');
+}
+
 function isEstablishmentSatisfied(
   establishment: Establishment,
   phase: Phase,
@@ -148,6 +166,7 @@ function isEstablishmentSatisfied(
   acceptanceCriteria: readonly AcceptanceCriterion[],
   decisions: readonly Decision[],
   events: readonly Event[],
+  deliverableValidationStates: readonly DeliverableValidationState[],
 ): boolean {
   switch (establishment.satisfier) {
     case 'requirements_exist':
@@ -158,6 +177,8 @@ function isEstablishmentSatisfied(
       return !decisions.some((decision) => decision.status === 'open');
     case 'manual':
       return isManualAsserted(establishment.key, phase, contractId, events);
+    case 'deliverables_valid':
+      return isDeliverablesValid(deliverableValidationStates);
     default:
       // An impossible malformed internal Establishment (a satisfier outside the closed
       // vocabulary — e.g. corrupted stored `definition_json`) is never silently treated
@@ -175,7 +196,7 @@ function isEstablishmentSatisfied(
  * whatever its colour.
  */
 export function evaluateLifecycleGate(input: EvaluateLifecycleGateInput): GateStatus {
-  const { contract, phase, requirements, acceptanceCriteria, decisions, events } = input;
+  const { contract, phase, requirements, acceptanceCriteria, decisions, events, deliverableValidationStates } = input;
   if (!contract) {
     return { status: 'green', missing: [], note: 'No lifecycle contract is set.' };
   }
@@ -190,6 +211,7 @@ export function evaluateLifecycleGate(input: EvaluateLifecycleGateInput): GateSt
       acceptanceCriteria,
       decisions,
       events,
+      deliverableValidationStates,
     );
     if (!satisfied) {
       missing.push({ establishment, satisfied: false, detail: detailFor(establishment) });

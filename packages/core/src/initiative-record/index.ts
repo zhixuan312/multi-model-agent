@@ -50,6 +50,32 @@
  * `initiatives.db` schema version 6 migration. No new export — the same `MethodDeclaration`
  * type, `method_get` / `method_list` operations, and `loadMethodGuidance` resolver already
  * exported above cover it.
+ *
+ * SPEC-007 Delivery Layer (Task I-2) extends this surface with the generic `TargetAdapter`
+ * interface (`types.ts`, alongside `Deliverable` / `DeliverableArtifactMember` /
+ * `DeliveryHistoryEntry` — declared now so `TargetAdapter.validate` type-checks, though their
+ * store methods and operations are Task I-3/I-4), the `duplicate_target_adapter` typed error
+ * (`DuplicateTargetAdapterError`), and the public process-local registry
+ * `registerTargetAdapter` / `resolveTargetAdapter` (`target-adapters.ts`, exported below — the
+ * only names from that module re-exported here; it registers no adapter of its own).
+ *
+ * SPEC-007 Delivery Layer (Task I-1) extends this surface with the `DeliveryContract` domain
+ * type, `deliveryContractDeclarationSchema` / `deliveryContractGetInputSchema` /
+ * `deliveryContractListInputSchema`, the `unknown_delivery_contract` typed error
+ * (`UnknownDeliveryContractError`), the additive `initiatives.db` schema version 7 migration
+ * (seeded immutable two-Delivery-Contract built-in catalog, plus the schema-only
+ * `deliverables` / `deliverable_artifacts` / `deliverable_delivery_history` DDL a later task
+ * populates), and `InitiativeRecordStore.getDeliveryContract()` / `.listDeliveryContracts()`
+ * (declared on the class and the `InitiativeRepository` interface) — all re-exported through
+ * the wildcard exports below, no new export list required. This task does not add the
+ * `delivery_contract_get` / `delivery_contract_list` operations to the shared operation union,
+ * the generic adapter interface/registry, or any Deliverable entity or operation — those are
+ * later, independently checkable tasks.
+ *
+ * SPEC-007 Delivery Layer (Task I-9) adds `loadDeliveryPackager(id)`, the committed
+ * `packages/core/src/delivery-packagers/<name>/packager.md` resolver, exported below — the same
+ * declaration/guidance split and dev-vs-installed dual-path resolution `loadMethodGuidance`
+ * already gives Method Procedure guidance.
  */
 export * from './types.js';
 export * from './schemas.js';
@@ -70,3 +96,9 @@ export type { RunInitiativeMigrationsOptions, RunInitiativeMigrationsResult } fr
 // `resolveGuidanceFromRootForTest` (the internal test seam) is intentionally NOT re-exported
 // here — see `method-guidance.ts`'s module doc and Task I-2's contract.
 export { loadMethodGuidance } from './method-guidance.js';
+// SPEC-007 Delivery Layer (Task I-2) — public generic adapter registry. See `target-adapters.ts`'s
+// module doc; `registry` (the internal `Map`) is intentionally NOT re-exported here.
+export { registerTargetAdapter, resolveTargetAdapter } from './target-adapters.js';
+// SPEC-007 Delivery Layer (Task I-9) — committed Delivery packager guidance resolver. See
+// `delivery-packagers.ts`'s module doc; mirrors `loadMethodGuidance` above.
+export { loadDeliveryPackager } from './delivery-packagers.js';

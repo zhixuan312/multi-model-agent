@@ -15,7 +15,7 @@
  * missing required values, and JSON-list values that are not string arrays (AC-1.2).
  */
 import { z } from 'zod';
-import { METHOD_ID_PATTERN } from './types.js';
+import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN } from './types.js';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyString = z.string().min(1);
@@ -513,6 +513,110 @@ export const initiativeTaskSetMethodInputSchema = z
 export type InitiativeTaskSetMethodInput = z.infer<typeof initiativeTaskSetMethodInputSchema>;
 
 // ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — Delivery Contract registry (Task I-1, FR-1). No
+// caller-visible Delivery Contract write operation exists: there is no
+// `delivery_contract_register`/`_update`/`_delete` schema anywhere in this
+// file.
+// ---------------------------------------------------------------------------
+
+/** `<name>@<version>`, version >= 1, no leading zero (FR-1). */
+const deliveryContractIdSchema = z
+  .string()
+  .regex(DELIVERY_CONTRACT_ID_PATTERN, 'must match <name>@<version>, e.g. runnable-prototype@1');
+
+/**
+ * Validates exactly the frozen declaration field set (FR-1): `id`, `name`, `version`,
+ * `target_type`, `requires`, and `verification`. No conditional, script, expression, or
+ * extension field is permitted (`.strict()`).
+ */
+export const deliveryContractDeclarationSchema = z
+  .object({
+    id: deliveryContractIdSchema,
+    name: nonEmptyString,
+    version: z.number().int().positive(),
+    target_type: nonEmptyString,
+    requires: z.array(z.string()),
+    verification: z.array(z.string()),
+  })
+  .strict();
+export type DeliveryContractDeclarationInput = z.infer<typeof deliveryContractDeclarationSchema>;
+
+export const deliveryContractGetInputSchema = z.object({ id: deliveryContractIdSchema }).strict();
+export type DeliveryContractGetInput = z.infer<typeof deliveryContractGetInputSchema>;
+
+export const deliveryContractListInputSchema = z.object({}).strict();
+export type DeliveryContractListInput = z.infer<typeof deliveryContractListInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — the first Deliverable operations (Task I-3, FR-3,
+// FR-4). `validation_state` is computed-only: none of these input schemas
+// accepts it (`.strict()` rejects the extra field). `deliverable_validate`
+// and `deliverable_deliver` (Task I-4) and `deliverable_approve` (Task I-6)
+// are separate, later schemas below.
+// ---------------------------------------------------------------------------
+
+export const deliverableDefineInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    target_type: nonEmptyString,
+    delivery_contract: deliveryContractIdSchema,
+  })
+  .strict();
+export type DeliverableDefineInput = z.infer<typeof deliverableDefineInputSchema>;
+
+export const deliverableGetInputSchema = z.object({ uuid: uuidSchema }).strict();
+export type DeliverableGetInput = z.infer<typeof deliverableGetInputSchema>;
+
+export const deliverableListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type DeliverableListInput = z.infer<typeof deliverableListInputSchema>;
+
+export const deliverableAttachArtifactInputSchema = z
+  .object({
+    deliverable_id: uuidSchema,
+    artifact_id: uuidSchema,
+    requirement: nonEmptyString,
+  })
+  .strict();
+export type DeliverableAttachArtifactInput = z.infer<typeof deliverableAttachArtifactInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — computed validation and delivery history (Task
+// I-4, FR-6, FR-7). Neither input schema accepts `validation_state`
+// (`.strict()` rejects the extra field) — it stays computed-only, and the
+// only path that may set `human_approved` is the separate, later
+// `deliverable_approve` mutation (Task I-6).
+// ---------------------------------------------------------------------------
+
+export const deliverableValidateInputSchema = z.object({ deliverable_id: uuidSchema }).strict();
+export type DeliverableValidateInput = z.infer<typeof deliverableValidateInputSchema>;
+
+export const deliverableDeliverInputSchema = z
+  .object({
+    deliverable_id: uuidSchema,
+    delivery_reference: nonEmptyString,
+  })
+  .strict();
+export type DeliverableDeliverInput = z.infer<typeof deliverableDeliverInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — the human-approval mutation (Task I-6, ← AC-1.7,
+// maintainer-confirmed shape: `{ deliverable: { uuid }, reason }`). This is the sole
+// input schema across the whole Deliverable operation surface that accepts
+// `human_approved` at all — it does so implicitly, by being the only mutation whose
+// store method may write that state; the field itself is never part of any input.
+// `reason` uses the same `nonEmptyString` primitive as every other required free-text
+// field, so an empty string fails the same `.min(1)` Zod check a missing field does.
+// ---------------------------------------------------------------------------
+
+export const deliverableApproveInputSchema = z
+  .object({
+    deliverable: z.object({ uuid: uuidSchema }).strict(),
+    reason: nonEmptyString,
+  })
+  .strict();
+export type DeliverableApproveInput = z.infer<typeof deliverableApproveInputSchema>;
+
+// ---------------------------------------------------------------------------
 // ArtifactRef
 // ---------------------------------------------------------------------------
 
@@ -833,6 +937,16 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
   // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
   mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
+  // SPEC-007 Delivery Layer (Task I-3, ← AC-1.5, AC-1.6) — the first Deliverable mutations.
+  mutating('deliverable_define', deliverableDefineInputSchema),
+  mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation
+  // and delivery history.
+  mutating('deliverable_validate', deliverableValidateInputSchema),
+  mutating('deliverable_deliver', deliverableDeliverInputSchema),
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
+  // mutation, the sole path to `human_approved`.
+  mutating('deliverable_approve', deliverableApproveInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -914,5 +1028,22 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
 
   // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
   mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
+
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1 defined the schemas;
+  // Task I-3 wires them into the shared operation union) and the first Deliverable operations
+  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6).
+  readOnly('delivery_contract_get', deliveryContractGetInputSchema),
+  readOnly('delivery_contract_list', deliveryContractListInputSchema),
+  mutating('deliverable_define', deliverableDefineInputSchema),
+  readOnly('deliverable_get', deliverableGetInputSchema),
+  readOnly('deliverable_list', deliverableListInputSchema),
+  mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation
+  // and delivery history.
+  mutating('deliverable_validate', deliverableValidateInputSchema),
+  mutating('deliverable_deliver', deliverableDeliverInputSchema),
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
+  // mutation, the sole path to `human_approved`.
+  mutating('deliverable_approve', deliverableApproveInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

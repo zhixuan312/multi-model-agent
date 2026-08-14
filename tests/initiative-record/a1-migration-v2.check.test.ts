@@ -20,16 +20,18 @@ describe('Phase A1 migration version 2', () => {
       const result = runInitiativeMigrations({ dbPath });
       // SPEC-003 Phase B (Task I-1) added migration version 3, SPEC-004
       // (Task I-1) added migration version 4, SPEC-005 (Task I-1) added
-      // migration version 5, and SPEC-006 (Task I-1) added migration version
-      // 6; a v1 database upgrades through every pending migration, landing
-      // on the current INITIATIVE_SCHEMA_VERSION rather than the Phase A1
-      // version 2 this check originally pinned.
-      expect(INITIATIVE_SCHEMA_VERSION).toBe(6);
+      // migration version 5, SPEC-006 (Task I-1) added migration version 6,
+      // SPEC-007 (Task I-1) added migration version 7, and SPEC-007 (Task I-7)
+      // added migration version 8; a v1 database
+      // upgrades through every pending migration, landing on the current
+      // INITIATIVE_SCHEMA_VERSION rather than the Phase A1 version 2 this
+      // check originally pinned.
+      expect(INITIATIVE_SCHEMA_VERSION).toBe(8);
       expect(result.backup_path).toBeDefined();
       expect(existsSync(result.backup_path!)).toBe(true);
       expect(statSync(result.backup_path!).size).toBe(before);
       const upgraded = new DatabaseSync(dbPath);
-      expect((upgraded.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect((upgraded.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
       expect(upgraded.prepare("SELECT human_key FROM initiatives WHERE human_key = 'MMA-INIT-001'").get()).toEqual({ human_key: 'MMA-INIT-001' });
       expect(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'verification_runs'").get()).toEqual({ name: 'verification_runs' });
       // Every version-1 table's seeded rows survive the upgrade (AC-1.9): the

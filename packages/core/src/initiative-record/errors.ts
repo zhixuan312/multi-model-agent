@@ -20,7 +20,10 @@ export type InitiativeErrorCode =
   | 'invalid_task_transition'
   | 'invalid_phase_transition'
   | 'unknown_lifecycle_contract'
-  | 'unknown_method';
+  | 'unknown_method'
+  | 'unknown_delivery_contract'
+  | 'duplicate_target_adapter'
+  | 'target_adapter_validation_failed';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -263,7 +266,66 @@ export class UnknownMethodError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, and SPEC-005. */
+/**
+ * A syntactically valid but unregistered Delivery Contract identifier — a `delivery_contract_get`
+ * lookup or a Deliverable operation's `delivery_contract` names no row in `delivery_contracts`
+ * (SPEC-007 FR-1, FR-3).
+ */
+export class UnknownDeliveryContractError extends Error {
+  readonly code = 'unknown_delivery_contract' as const;
+  readonly delivery_contract: string;
+
+  constructor(params: { delivery_contract: string; message?: string }) {
+    super(
+      params.message ?? `unknown_delivery_contract: no registered Delivery Contract '${params.delivery_contract}'`,
+    );
+    this.name = 'UnknownDeliveryContractError';
+    this.delivery_contract = params.delivery_contract;
+  }
+}
+
+/**
+ * `registerTargetAdapter` was called with a `target_type` that already has a registered
+ * adapter (SPEC-007 FR-8, "Interfaces / contracts" — "The registry must reject duplicate
+ * registrations for the same `target_type` as a conflict-shaped typed error."). Conflict-shaped,
+ * like `RevisionConflictError` and `TaskClaimConflictError` — Task I-8 maps it to HTTP 409.
+ */
+export class DuplicateTargetAdapterError extends Error {
+  readonly code = 'duplicate_target_adapter' as const;
+  readonly target_type: string;
+
+  constructor(params: { target_type: string; message?: string }) {
+    super(
+      params.message ??
+        `duplicate_target_adapter: a TargetAdapter is already registered for target_type '${params.target_type}' (conflict)`,
+    );
+    this.name = 'DuplicateTargetAdapterError';
+    this.target_type = params.target_type;
+  }
+}
+
+/**
+ * A registered `TargetAdapter.validate` call threw, or returned a value that fails the
+ * `{ valid: boolean, detail: string }` shape, during `deliverable_validate` (SPEC-007 FR-8,
+ * FR-9, "Interfaces / contracts"). The store must leave the Deliverable's stored
+ * `validation_state`/`validation_detail`, revision, and Events unchanged — this error is
+ * detected and thrown before any write for the mutation.
+ */
+export class TargetAdapterValidationFailedError extends Error {
+  readonly code = 'target_adapter_validation_failed' as const;
+  readonly target_type: string;
+
+  constructor(params: { target_type: string; message?: string }) {
+    super(
+      params.message ??
+        `target_adapter_validation_failed: TargetAdapter for target_type '${params.target_type}' threw or returned a malformed result`,
+    );
+    this.name = 'TargetAdapterValidationFailedError';
+    this.target_type = params.target_type;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, and SPEC-007. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -277,7 +339,10 @@ export type InitiativeError =
   | InvalidTaskTransitionError
   | InvalidPhaseTransitionError
   | UnknownLifecycleContractError
-  | UnknownMethodError;
+  | UnknownMethodError
+  | UnknownDeliveryContractError
+  | DuplicateTargetAdapterError
+  | TargetAdapterValidationFailedError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -293,6 +358,9 @@ const INITIATIVE_ERROR_CTORS = [
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
   UnknownMethodError,
+  UnknownDeliveryContractError,
+  DuplicateTargetAdapterError,
+  TargetAdapterValidationFailedError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {
