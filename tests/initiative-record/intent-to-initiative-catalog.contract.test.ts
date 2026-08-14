@@ -12,7 +12,7 @@ import {
 } from '../../packages/core/src/initiative-record/index.js';
 import { TASK_TYPES } from '../../packages/core/src/unified/type-registry.js';
 
-const METHOD_IDS = ['architecture-review@1', 'intent-to-initiative@1', 'regulatory-assessment@1', 'research@1', 'risk-analysis@1', 'solution-design@1', 'software-change@1', 'source-validation@1', 'technical-writing@1', 'workflow-design@1'];
+const METHOD_IDS = ['architecture-review@1', 'intent-to-initiative@1', 'regulatory-assessment@1', 'research@1', 'risk-analysis@1', 'software-change@1', 'solution-design@1', 'source-validation@1', 'technical-writing@1', 'workflow-design@1'];
 const TASK_TYPE_IDS = ['audit', 'investigate', 'delegate', 'execute_plan', 'review', 'debug', 'research', 'journal_recall', 'journal_record', 'orchestrate', 'spec', 'plan'];
 
 describe('SPEC-006 Method catalog', () => {
