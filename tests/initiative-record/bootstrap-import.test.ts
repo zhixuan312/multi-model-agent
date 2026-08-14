@@ -26,7 +26,7 @@ describe('initiatives import-bootstrap', () => {
       const second = await run(['initiatives', 'import-bootstrap', '--stem', 'flow'], nested, root);
       expect(second.exitCode).toBe(0);
       const store = InitiativeRecordStore.open({ dbPath: join(stateDir, 'initiatives.db') });
-      try { const init = store.getInitiative({ human_key: 'MMA-INIT-001' })!; expect(init.title).toBe('Bootstrap title'); expect(store.listArtifacts({ initiative_id: init.uuid })).toHaveLength(2); expect(store.listEvents({ initiative_id: init.uuid }).filter((event) => event.event_type === 'artifact_updated')).toHaveLength(1); } finally { store.close(); }
+      try { const init = store.getInitiative({ human_key: 'MMA-INIT-001' })!; expect(init.title).toBe('Bootstrap title'); expect(store.listInitiativeArtifacts(init.uuid)).toHaveLength(2); expect(store.listEvents({ initiative_id: init.uuid }).filter((event) => event.event_type === 'artifact_updated')).toHaveLength(1); } finally { store.close(); }
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 

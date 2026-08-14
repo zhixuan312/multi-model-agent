@@ -725,8 +725,21 @@ export function runInitiativeMigrations(opts: RunInitiativeMigrationsOptions): R
       (a, b) => a.version - b.version,
     );
     for (const migration of pending) {
-      migration.apply(db);
-      db.exec(`PRAGMA user_version = ${migration.version};`);
+      // Each migration is ATOMIC with the version bump that records it. Without this, a failure
+      // partway through `apply()` leaves the schema half-changed while `user_version` still names
+      // the OLD version, so the next boot replays the same migration — and 5 of these statements
+      // are `ALTER TABLE ADD COLUMN`, which is not idempotent. The retry then fails on "duplicate
+      // column", permanently, and the database is wedged with no way forward but the backup.
+      // SQLite supports transactional DDL, so the pair either both land or neither does.
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        migration.apply(db);
+        db.exec(`PRAGMA user_version = ${migration.version};`);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     }
     return { backup_path: backupPath, schema_version: readSchemaVersion(db) };
   } finally {

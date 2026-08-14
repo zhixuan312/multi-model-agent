@@ -181,8 +181,6 @@ export interface ArtifactRef {
 // ---------------------------------------------------------------------------
 
 export type DecisionStatus = 'open' | 'decided' | 'superseded';
-/** Create-time `decision_record` status — `decision_supersede` is the only path to `'superseded'`. */
-export type DecisionCreateStatus = Exclude<DecisionStatus, 'superseded'>;
 
 export type EvidenceLinkTargetType =
   | 'requirement'
@@ -213,8 +211,6 @@ export const VERIFICATION_NON_TERMINAL_STATES: readonly VerificationState[] = [
   'blocked',
   'needs_human_review',
 ];
-/** Historical markers — never transition to `'superseded'` (FR-10). */
-export const VERIFICATION_TERMINAL_STATES: readonly VerificationState[] = ['stale', 'not_applicable', 'superseded'];
 /** States eligible for stale-evidence propagation (FR-11). */
 export const VERIFICATION_STALE_ELIGIBLE_STATES: readonly VerificationState[] = ['pass', 'fail'];
 /** Every VerificationRun state, in a stable order — the `verification_by_state` count keys (FR-12). */

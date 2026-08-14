@@ -1131,11 +1131,6 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return rows.map(mapArtifactRefRow);
   }
 
-  /** Same read as {@link listInitiativeArtifacts}, in the object-filter shape every other `list*` method on this class takes. */
-  listArtifacts(filter: { initiative_id: string }): ArtifactRef[] {
-    return this.listInitiativeArtifacts(filter.initiative_id);
-  }
-
   /** Resume join: the newest `limit` Events for the Initiative, ordered by `event_sequence` descending. */
   listRecentEvents(filter: { initiative_id: string; limit: number }): Event[] {
     const rows = this.db

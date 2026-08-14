@@ -15,7 +15,7 @@
  * missing required values, and JSON-list values that are not string arrays (AC-1.2).
  */
 import { z } from 'zod';
-import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN } from './types.js';
+import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN, TERMINAL_TASK_STATUSES } from './types.js';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyString = z.string().min(1);
@@ -398,7 +398,9 @@ export type InitiativeGateStatusInput = z.infer<typeof initiativeGateStatusInput
 
 const taskStatusSchema = z.enum(['open', 'claimed', 'in_progress', 'blocked', 'completed', 'cancelled']);
 const taskOutcomeSchema = z.enum(['succeeded', 'succeeded_with_concerns', 'failed', 'not_completed']).nullable();
-const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled']);
+// One encoding of the terminal-status vocabulary, imported from the domain types rather than
+// re-listed here — two independent lists drift, and this one already had.
+const TERMINAL_TASK_STATUS_SET = new Set<string>(TERMINAL_TASK_STATUSES);
 
 export const initiativeTaskCreateInputSchema = z
   .object({
@@ -415,7 +417,7 @@ export const initiativeTaskCreateInputSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const isTerminal = TERMINAL_TASK_STATUSES.has(value.status);
+    const isTerminal = TERMINAL_TASK_STATUS_SET.has(value.status);
     if (!isTerminal && value.outcome !== null) {
       ctx.addIssue({ code: 'custom', path: ['outcome'], message: 'outcome must be null for a non-terminal status' });
     }
