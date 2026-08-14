@@ -36,6 +36,7 @@ import {
   InvalidTaskTransitionError,
   NotFoundError,
   RevisionConflictError,
+  TargetAdapterValidationFailedError,
   TaskClaimConflictError,
   TaskNotClaimableError,
   UnknownDeliveryContractError,
@@ -44,6 +45,7 @@ import {
 } from './errors.js';
 import { evaluateLifecycleGate } from './lifecycle-gates.js';
 import { runInitiativeMigrations } from './migrations.js';
+import { resolveTargetAdapter } from './target-adapters.js';
 import {
   deliveryContractDeclarationSchema,
   initiativeMutationRequestSchema,
@@ -54,6 +56,8 @@ import {
   type DecisionSupersedeInput,
   type DeliverableAttachArtifactInput,
   type DeliverableDefineInput,
+  type DeliverableDeliverInput,
+  type DeliverableValidateInput,
   type EvidenceAddInput,
   type EvidenceLinkInput,
   type InitiativeBootstrapInput,
@@ -94,7 +98,9 @@ import {
   type Decision,
   type Deliverable,
   type DeliverableArtifactMember,
+  type DeliverableValidationState,
   type DeliveryContract,
+  type DeliveryHistoryEntry,
   type Event,
   type Evidence,
   type EvidenceLink,
@@ -201,6 +207,15 @@ interface DeliverableArtifactRow {
   deliverable_id: string;
   artifact_id: string;
   requirement: string;
+  created_at: string;
+}
+
+/** Raw `deliverable_delivery_history` table row shape (snake_case columns — internal only). SPEC-007 Delivery Layer, Task I-4. */
+interface DeliveryHistoryRow {
+  uuid: string;
+  deliverable_id: string;
+  delivery_reference: string;
+  validation_state: Deliverable['validation_state'];
   created_at: string;
 }
 
@@ -772,6 +787,22 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return rows.map(mapDeliverableRow);
   }
 
+  /**
+   * Every immutable `deliverable_delivery_history` row for a Deliverable, in true insertion
+   * order. Ordered by SQLite's implicit `rowid` (the table declares no `WITHOUT ROWID` clause
+   * and no dedicated sequence column — `created_at` alone is NOT a safe sort key here: caller
+   * provenance timestamps are not guaranteed unique-per-millisecond, e.g. two deliveries in the
+   * same test/request tick share one `created_at`, and `uuid` is random, so `created_at, uuid`
+   * would silently reorder history under a timestamp collision). Never updated or deleted —
+   * `mutateDeliverableDeliver` (Task I-4, ← AC-1.8) only ever inserts a new row.
+   */
+  listDeliveryHistory(filter: { deliverable_id: string }): DeliveryHistoryEntry[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM deliverable_delivery_history WHERE deliverable_id = ? ORDER BY rowid ASC`)
+      .all(filter.deliverable_id) as unknown as DeliveryHistoryRow[];
+    return rows.map(mapDeliveryHistoryRow);
+  }
+
   /** Returns the raw `deliverables` row for `uuid`, or throws `not_found`. Shared by reads and the attach mutation's revision check. */
   private requireDeliverableRow(uuid: string): DeliverableRow {
     const row = this.db.prepare(`SELECT * FROM deliverables WHERE uuid = ?`).get(uuid) as DeliverableRow | undefined;
@@ -1326,6 +1357,13 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateDeliverableDefine(request.input, request.expected_revision, request.provenance);
       case 'deliverable_attach_artifact':
         return this.mutateDeliverableAttachArtifact(request.input, request.expected_revision, request.provenance);
+      // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9): computed
+      // validation and delivery history — same one-transactional-call pattern as every
+      // mutation above.
+      case 'deliverable_validate':
+        return this.mutateDeliverableValidate(request.input, request.expected_revision, request.provenance);
+      case 'deliverable_deliver':
+        return this.mutateDeliverableDeliver(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -2388,6 +2426,134 @@ export class InitiativeRecordStore implements InitiativeRepository {
       provenance,
     });
     return member;
+  }
+
+  /**
+   * `deliverable_validate` (← AC-1.6, AC-1.7, AC-1.9): computes `validation_state` from
+   * requirement coverage combined with a registered adapter verdict (SPEC-007 FR-6, FR-8,
+   * "Proposed design" validation sequence). Resolution order: (1) resolve the Delivery
+   * Contract, (2) read membership and compute missing requirements, (3) resolve a
+   * `TargetAdapter` by the Deliverable's own `target_type`, (4) if one is registered, call it
+   * — inside a try/catch so a throw or a malformed `{ valid, detail }` result is caught BEFORE
+   * any store write and rethrown as `target_adapter_validation_failed`, leaving the stored
+   * validation fields, revision, and Events untouched — otherwise fall back to contract
+   * completeness only and the exact detail string `'no adapter registered'`. The final
+   * `valid`/`invalid` state requires BOTH complete coverage AND (when an adapter is
+   * registered) a truthy adapter verdict.
+   */
+  private mutateDeliverableValidate(
+    input: DeliverableValidateInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Deliverable {
+    const deliverableRow = this.requireDeliverableRow(input.deliverable_id);
+    this.requireDeliverableRevision(deliverableRow, expectedRevision);
+    const contract = this.getDeliveryContractOrThrow(deliverableRow.delivery_contract);
+    const memberRows = this.db
+      .prepare(`SELECT deliverable_id, artifact_id, requirement, created_at FROM deliverable_artifacts WHERE deliverable_id = ?`)
+      .all(input.deliverable_id) as unknown as DeliverableArtifactRow[];
+    const coveredRequirements = new Set(memberRows.map((row) => row.requirement));
+    const complete = contract.requires.every((requirement) => coveredRequirements.has(requirement));
+
+    const adapter = resolveTargetAdapter(deliverableRow.target_type);
+    let valid = complete;
+    let detail: string;
+    if (adapter) {
+      const deliverable = mapDeliverableRow(deliverableRow);
+      const members = memberRows.map((row) => ({
+        member: mapDeliverableArtifactRow(row),
+        artifact: mapArtifactRefRow(
+          this.requireRow<ArtifactRefRow>('artifact_refs', row.artifact_id, 'artifact_id', 'ArtifactRef'),
+        ),
+      }));
+      let verdict: { valid: boolean; detail: string };
+      try {
+        verdict = adapter.validate({ deliverable, contract, members });
+      } catch {
+        throw new TargetAdapterValidationFailedError({ target_type: deliverableRow.target_type });
+      }
+      if (
+        typeof verdict !== 'object' ||
+        verdict === null ||
+        typeof verdict.valid !== 'boolean' ||
+        typeof verdict.detail !== 'string'
+      ) {
+        throw new TargetAdapterValidationFailedError({ target_type: deliverableRow.target_type });
+      }
+      valid = complete && verdict.valid;
+      detail = verdict.detail;
+    } else {
+      detail = 'no adapter registered';
+    }
+
+    const validationState: DeliverableValidationState = valid ? 'valid' : 'invalid';
+    const now = provenance.timestamp;
+    const nextRevision = deliverableRow.revision + 1;
+    this.db
+      .prepare(`UPDATE deliverables SET validation_state = ?, validation_detail = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(validationState, detail, now, nextRevision, input.deliverable_id);
+    const updated: Deliverable = {
+      ...mapDeliverableRow(deliverableRow),
+      validation_state: validationState,
+      validation_detail: detail,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Deliverable',
+      entity_id: input.deliverable_id,
+      initiative_id: deliverableRow.initiative_id,
+      event_type: 'deliverable_validated',
+      payload: { uuid: input.deliverable_id, validation_state: validationState, detail },
+      provenance,
+    });
+    return updated;
+  }
+
+  /**
+   * `deliverable_deliver` (← AC-1.8): stores `delivery_reference` and appends a new immutable
+   * `deliverable_delivery_history` row recording the Deliverable's CURRENT `validation_state`
+   * at delivery time — an `invalid` (or `pending`) Deliverable is not vetoed (SPEC-007 FR-7,
+   * "The engine must never enforce delivery judgment"). A history row is never updated or
+   * deleted; a second delivery appends a second row and leaves the first row's content
+   * untouched.
+   */
+  private mutateDeliverableDeliver(
+    input: DeliverableDeliverInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Deliverable {
+    const deliverableRow = this.requireDeliverableRow(input.deliverable_id);
+    this.requireDeliverableRevision(deliverableRow, expectedRevision);
+    const now = provenance.timestamp;
+    const nextRevision = deliverableRow.revision + 1;
+    this.db
+      .prepare(`UPDATE deliverables SET delivery_reference = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(input.delivery_reference, now, nextRevision, input.deliverable_id);
+    this.db
+      .prepare(
+        `INSERT INTO deliverable_delivery_history (uuid, deliverable_id, delivery_reference, validation_state, created_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(randomUUID(), input.deliverable_id, input.delivery_reference, deliverableRow.validation_state, now);
+    const updated: Deliverable = {
+      ...mapDeliverableRow(deliverableRow),
+      delivery_reference: input.delivery_reference,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Deliverable',
+      entity_id: input.deliverable_id,
+      initiative_id: deliverableRow.initiative_id,
+      event_type: 'deliverable_delivered',
+      payload: {
+        uuid: input.deliverable_id,
+        delivery_reference: input.delivery_reference,
+        validation_state: deliverableRow.validation_state,
+      },
+      provenance,
+    });
+    return updated;
   }
 
   // ---------------------------------------------------------------------
@@ -3827,6 +3993,17 @@ function mapDeliverableArtifactRow(row: DeliverableArtifactRow): DeliverableArti
     deliverable_id: row.deliverable_id,
     artifact_id: row.artifact_id,
     requirement: row.requirement,
+    createdAt: row.created_at,
+  };
+}
+
+/** Maps one raw `deliverable_delivery_history` row to the public `DeliveryHistoryEntry` shape. SPEC-007 Delivery Layer, Task I-4. */
+function mapDeliveryHistoryRow(row: DeliveryHistoryRow): DeliveryHistoryEntry {
+  return {
+    uuid: row.uuid,
+    deliverable_id: row.deliverable_id,
+    delivery_reference: row.delivery_reference,
+    validation_state: row.validation_state,
     createdAt: row.created_at,
   };
 }

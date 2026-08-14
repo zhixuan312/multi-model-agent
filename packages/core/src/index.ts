@@ -255,6 +255,10 @@ export {
   DuplicateTargetAdapterError,
   registerTargetAdapter,
   resolveTargetAdapter,
+  // SPEC-007 Delivery Layer — Task I-4: computed validation and delivery history. Re-exported so
+  // Task I-8 can import it to map it to an HTTP/MCP status, same pattern as every other typed
+  // error above.
+  TargetAdapterValidationFailedError,
 } from './initiative-record/index.js';
 export type {
   Product,

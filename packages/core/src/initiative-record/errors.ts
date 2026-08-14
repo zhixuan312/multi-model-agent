@@ -22,7 +22,8 @@ export type InitiativeErrorCode =
   | 'unknown_lifecycle_contract'
   | 'unknown_method'
   | 'unknown_delivery_contract'
-  | 'duplicate_target_adapter';
+  | 'duplicate_target_adapter'
+  | 'target_adapter_validation_failed';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -303,6 +304,27 @@ export class DuplicateTargetAdapterError extends Error {
   }
 }
 
+/**
+ * A registered `TargetAdapter.validate` call threw, or returned a value that fails the
+ * `{ valid: boolean, detail: string }` shape, during `deliverable_validate` (SPEC-007 FR-8,
+ * FR-9, "Interfaces / contracts"). The store must leave the Deliverable's stored
+ * `validation_state`/`validation_detail`, revision, and Events unchanged — this error is
+ * detected and thrown before any write for the mutation.
+ */
+export class TargetAdapterValidationFailedError extends Error {
+  readonly code = 'target_adapter_validation_failed' as const;
+  readonly target_type: string;
+
+  constructor(params: { target_type: string; message?: string }) {
+    super(
+      params.message ??
+        `target_adapter_validation_failed: TargetAdapter for target_type '${params.target_type}' threw or returned a malformed result`,
+    );
+    this.name = 'TargetAdapterValidationFailedError';
+    this.target_type = params.target_type;
+  }
+}
+
 /** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, and SPEC-007. */
 export type InitiativeError =
   | RevisionConflictError
@@ -319,7 +341,8 @@ export type InitiativeError =
   | UnknownLifecycleContractError
   | UnknownMethodError
   | UnknownDeliveryContractError
-  | DuplicateTargetAdapterError;
+  | DuplicateTargetAdapterError
+  | TargetAdapterValidationFailedError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -337,6 +360,7 @@ const INITIATIVE_ERROR_CTORS = [
   UnknownMethodError,
   UnknownDeliveryContractError,
   DuplicateTargetAdapterError,
+  TargetAdapterValidationFailedError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

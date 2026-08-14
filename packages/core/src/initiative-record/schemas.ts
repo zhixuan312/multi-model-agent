@@ -580,6 +580,25 @@ export const deliverableAttachArtifactInputSchema = z
 export type DeliverableAttachArtifactInput = z.infer<typeof deliverableAttachArtifactInputSchema>;
 
 // ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — computed validation and delivery history (Task
+// I-4, FR-6, FR-7). Neither input schema accepts `validation_state`
+// (`.strict()` rejects the extra field) — it stays computed-only, and the
+// only path that may set `human_approved` is the separate, later
+// `deliverable_approve` mutation (Task I-6).
+// ---------------------------------------------------------------------------
+
+export const deliverableValidateInputSchema = z.object({ deliverable_id: uuidSchema }).strict();
+export type DeliverableValidateInput = z.infer<typeof deliverableValidateInputSchema>;
+
+export const deliverableDeliverInputSchema = z
+  .object({
+    deliverable_id: uuidSchema,
+    delivery_reference: nonEmptyString,
+  })
+  .strict();
+export type DeliverableDeliverInput = z.infer<typeof deliverableDeliverInputSchema>;
+
+// ---------------------------------------------------------------------------
 // ArtifactRef
 // ---------------------------------------------------------------------------
 
@@ -903,6 +922,10 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   // SPEC-007 Delivery Layer (Task I-3, ← AC-1.5, AC-1.6) — the first Deliverable mutations.
   mutating('deliverable_define', deliverableDefineInputSchema),
   mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation
+  // and delivery history.
+  mutating('deliverable_validate', deliverableValidateInputSchema),
+  mutating('deliverable_deliver', deliverableDeliverInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -994,5 +1017,9 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   readOnly('deliverable_get', deliverableGetInputSchema),
   readOnly('deliverable_list', deliverableListInputSchema),
   mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation
+  // and delivery history.
+  mutating('deliverable_validate', deliverableValidateInputSchema),
+  mutating('deliverable_deliver', deliverableDeliverInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

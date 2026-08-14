@@ -386,6 +386,17 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     'Attach an ArtifactRef (from the same Initiative as the Deliverable) to a Deliverable under a named '
     + 'requirement string from its Delivery Contract. Mutating: pass expected_revision (the Deliverable '
     + 'revision) and provenance.',
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) — computed validation and
+  // delivery history complete the shared Deliverable operation surface.
+  deliverable_validate:
+    'Compute and persist a Deliverable\'s validation_state from complete Delivery Contract requirement '
+    + "coverage, combined with a registered target adapter's verdict for the Deliverable's target_type "
+    + "(valid only when both agree; with no registered adapter, validation_detail is the exact string "
+    + "'no adapter registered'). Mutating: pass expected_revision (the Deliverable revision) and provenance.",
+  deliverable_deliver:
+    'Record a delivery_reference for a Deliverable and append an immutable delivery history entry '
+    + "capturing its validation_state at delivery time — an invalid Deliverable is not vetoed. Mutating: "
+    + 'pass expected_revision (the Deliverable revision) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,

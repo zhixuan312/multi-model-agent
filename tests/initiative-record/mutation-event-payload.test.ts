@@ -249,6 +249,61 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
     }
   });
 
+  // SPEC-007 Delivery Layer (Task I-4, ← AC-1.9): `deliverable_validate`'s and
+  // `deliverable_deliver`'s event_type/payload-key pairs are runtime-only allowlist entries (see
+  // the plan's compile-boundary note) — a green build does not prove `INITIATIVE_EVENT_TYPES`/
+  // `INITIATIVE_EVENT_PAYLOAD_KEYS` were extended correctly. Supplementary to the plan-authored
+  // deliverable-validation-and-history.contract.test.ts, which already exercises the exact
+  // successful Event sequence end to end through the runtime.
+  it('emits the frozen event_type and exact payload keys for deliverable_validate and deliverable_deliver', () => {
+    const { store, cleanup } = openStore();
+    try {
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const initiative = store.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
+        expected_revision: 0,
+        provenance,
+      });
+      const deliverable = store.execute({
+        operation: 'deliverable_define',
+        input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
+        expected_revision: 0,
+        provenance,
+      });
+      const beforeCount = store.listEvents({}).length;
+      const validated = store.execute({
+        operation: 'deliverable_validate',
+        input: { deliverable_id: deliverable.uuid },
+        expected_revision: deliverable.revision,
+        provenance,
+      });
+      store.execute({
+        operation: 'deliverable_deliver',
+        input: { deliverable_id: deliverable.uuid, delivery_reference: 'ref-1' },
+        expected_revision: validated.revision,
+        provenance,
+      });
+
+      const events = store.listEvents({}).slice(beforeCount);
+      expect(events.map((event) => event.event_type)).toEqual(['deliverable_validated', 'deliverable_delivered']);
+      expect(Object.keys(events[0]!.payload).sort()).toEqual(['detail', 'uuid', 'validation_state'].sort());
+      expect(Object.keys(events[1]!.payload).sort()).toEqual(['delivery_reference', 'uuid', 'validation_state'].sort());
+      expect(events[0]!.payload).toEqual({
+        uuid: deliverable.uuid,
+        validation_state: 'invalid',
+        detail: 'no adapter registered',
+      });
+      expect(events[1]!.payload).toEqual({
+        uuid: deliverable.uuid,
+        delivery_reference: 'ref-1',
+        validation_state: 'invalid',
+      });
+    } finally {
+      cleanup();
+    }
+  });
+
   it('rejects an attachment for a requirement not declared by the Delivery Contract without writing membership or an Event', () => {
     const { store, cleanup } = openStore();
     try {

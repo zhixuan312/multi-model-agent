@@ -29,6 +29,7 @@ import type {
   Decision,
   Deliverable,
   DeliveryContract,
+  DeliveryHistoryEntry,
   Evidence,
   EvidenceLink,
   EvidenceLinkTargetType,
@@ -230,4 +231,14 @@ export interface InitiativeRepository {
   getDeliverable(lookup: { uuid: string }): Deliverable;
   /** `deliverable_list` — ordered `createdAt` ascending, then `uuid` ascending. */
   listDeliverables(filter: { initiative_id: string }): Deliverable[];
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — computed validation and delivery history (Task
+  // I-4, ← AC-1.8). `deliverable_validate` and `deliverable_deliver` are
+  // dispatched through `execute()`, like every other mutation; this is the
+  // one plain read method they add.
+  // -------------------------------------------------------------------------
+
+  /** Every immutable `DeliveryHistoryEntry` for a Deliverable, insertion-ordered. Never updated or deleted. */
+  listDeliveryHistory(filter: { deliverable_id: string }): DeliveryHistoryEntry[];
 }

@@ -713,14 +713,17 @@ export const INITIATIVE_OPERATIONS = [
   'initiative_bootstrap',
   // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1 defined the schemas;
   // Task I-3 wires them into the shared operation union) and the first Deliverable operations
-  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate` and `deliverable_deliver` are
-  // Task I-4 scope; `deliverable_approve` is Task I-6 scope.
+  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate` and `deliverable_deliver`
+  // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
+  // `deliverable_approve` is Task I-6 scope.
   'delivery_contract_get',
   'delivery_contract_list',
   'deliverable_define',
   'deliverable_get',
   'deliverable_list',
   'deliverable_attach_artifact',
+  'deliverable_validate',
+  'deliverable_deliver',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -774,6 +777,9 @@ export const INITIATIVE_EVENT_TYPES = {
   // event-type mapping.
   deliverable_define: 'deliverable_defined',
   deliverable_attach_artifact: 'deliverable_artifact_attached',
+  // SPEC-007 Delivery Layer (Task I-4, "Data model" event table).
+  deliverable_validate: 'deliverable_validated',
+  deliverable_deliver: 'deliverable_delivered',
 } as const;
 
 /**
@@ -824,4 +830,7 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   // SPEC-007 Delivery Layer (Task I-3, "Interfaces / contracts").
   deliverable_defined: ['uuid', 'initiative_id', 'target_type', 'delivery_contract'],
   deliverable_artifact_attached: ['deliverable_id', 'artifact_id', 'requirement'],
+  // SPEC-007 Delivery Layer (Task I-4, "Interfaces / contracts").
+  deliverable_validated: ['uuid', 'validation_state', 'detail'],
+  deliverable_delivered: ['uuid', 'delivery_reference', 'validation_state'],
 } as const;
