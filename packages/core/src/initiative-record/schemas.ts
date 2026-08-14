@@ -236,6 +236,110 @@ export const initiativeRelationsInputSchema = z.object({ initiative_id: uuidSche
 export type InitiativeRelationsInput = z.infer<typeof initiativeRelationsInputSchema>;
 
 // ---------------------------------------------------------------------------
+// SPEC-006 Business intake — `initiative_bootstrap`, one confirmed-draft
+// composite mutation (FR-6, ← AC-1.6). Task I-2 defines the contract only —
+// no store dispatch, transaction logic, or runtime wiring; that is Task I-3.
+// ---------------------------------------------------------------------------
+
+const bootstrapProductInputSchema = z
+  .object({
+    create: productCreateInputSchema.optional(),
+    existing: z.object({ uuid: uuidSchema }).strict().optional(),
+  })
+  .strict()
+  .refine((v) => (v.create !== undefined) !== (v.existing !== undefined), {
+    message: 'exactly one of create or existing is required',
+  });
+
+const bootstrapWorkspaceCreateInputSchema = z
+  .object({ name: nonEmptyString, slug: nonEmptyString, description: nonEmptyString })
+  .strict();
+
+const bootstrapWorkspaceItemInputSchema = z
+  .object({
+    workspace_key: nonEmptyString,
+    role: z.enum(['consumes', 'references', 'modifies', 'creates', 'delivers_to']),
+    create: bootstrapWorkspaceCreateInputSchema.optional(),
+    existing: z.object({ uuid: uuidSchema }).strict().optional(),
+  })
+  .strict()
+  .refine((v) => (v.create !== undefined) !== (v.existing !== undefined), {
+    message: 'exactly one of create or existing is required',
+  });
+
+const bootstrapResourceItemInputSchema = z
+  .object({
+    workspace_key: nonEmptyString,
+    type: nonEmptyString,
+    canonical_locator: nonEmptyString,
+    local_path: nonEmptyString.optional(),
+    description: nonEmptyString,
+  })
+  .strict();
+
+const bootstrapInitiativeInputSchema = z
+  .object({
+    title: nonEmptyString,
+    goal: nonEmptyString,
+    status: initiativeStatusSchema,
+    outcome: initiativeOutcomeSchema,
+    lifecycle_contract: lifecycleContractIdSchema.optional(),
+  })
+  .strict()
+  .superRefine(refineStatusOutcomePairing);
+
+const bootstrapAcceptanceCriterionItemInputSchema = z
+  .object({ statement: nonEmptyString, check_reference: nonEmptyString })
+  .strict();
+
+const bootstrapRequirementItemInputSchema = z
+  .object({
+    statement: nonEmptyString,
+    acceptance_criteria: z.array(bootstrapAcceptanceCriterionItemInputSchema).optional(),
+  })
+  .strict();
+
+/**
+ * `initiative_bootstrap` — one confirmed intake draft as a single strict input. No Tasks,
+ * Executions, Decisions, Evidence, Deliverables, or unknown top-level keys are accepted
+ * (`.strict()` on every nested object rejects them). Cross-field checks beyond per-field shape:
+ * every `workspaces[].workspace_key` is unique, and every `resources[].workspace_key` names one
+ * `workspaces[]` entry in the same request.
+ */
+export const initiativeBootstrapInputSchema = z
+  .object({
+    product: bootstrapProductInputSchema,
+    workspaces: z.array(bootstrapWorkspaceItemInputSchema).min(1),
+    resources: z.array(bootstrapResourceItemInputSchema).optional(),
+    initiative: bootstrapInitiativeInputSchema,
+    requirements: z.array(bootstrapRequirementItemInputSchema).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const seenWorkspaceKeys = new Set<string>();
+    value.workspaces.forEach((workspace, index) => {
+      if (seenWorkspaceKeys.has(workspace.workspace_key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['workspaces', index, 'workspace_key'],
+          message: 'duplicate workspace_key within this request',
+        });
+      }
+      seenWorkspaceKeys.add(workspace.workspace_key);
+    });
+    (value.resources ?? []).forEach((resource, index) => {
+      if (!seenWorkspaceKeys.has(resource.workspace_key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['resources', index, 'workspace_key'],
+          message: 'workspace_key does not name a workspaces entry in this request',
+        });
+      }
+    });
+  });
+export type InitiativeBootstrapInput = z.infer<typeof initiativeBootstrapInputSchema>;
+
+// ---------------------------------------------------------------------------
 // SPEC-004 Lifecycle Engine — phase/focus mutations, contract reference, and
 // the advisory gate read (FR-2 through FR-9). Every lifecycle request
 // identifies the Initiative through the same `{ uuid?, human_key? }` lookup
@@ -727,6 +831,8 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_set_lifecycle_contract', initiativeSetLifecycleContractInputSchema),
   // SPEC-005 Method Registry (FR-4) — the sole Task Method mutation.
   mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
+  // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
+  mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -805,5 +911,8 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   readOnly('method_get', methodGetInputSchema),
   readOnly('method_list', methodListInputSchema),
   mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
+
+  // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
+  mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

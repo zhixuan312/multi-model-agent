@@ -468,6 +468,22 @@ export type InitiativeRecordEntity =
   | VerificationRun
   | PhaseRecord;
 
+/**
+ * `initiative_bootstrap` result shape (SPEC-006, ← AC-1.6). Task I-2 defines this type only —
+ * Task I-3 makes the store return it. Identifies the resolved Product, the requested Workspaces
+ * (each paired back to its request `workspace_key`), created Resources (same pairing), the
+ * created Initiative, its Initiative-to-Workspace links, and its Requirements with their nested
+ * Acceptance Criteria.
+ */
+export interface InitiativeBootstrapResult {
+  initiative: Initiative;
+  product: Product;
+  workspaces: Array<{ workspace_key: string; role: InitiativeWorkspaceRole; workspace: Workspace }>;
+  resources: Array<{ workspace_key: string; resource: Resource }>;
+  initiative_workspace_links: InitiativeWorkspaceLink[];
+  requirements: Array<{ requirement: Requirement; acceptance_criteria: AcceptanceCriterion[] }>;
+}
+
 /** `initiative_resume` request — exactly one of `uuid` or `human_key`. */
 export interface InitiativeResumeRequest {
   initiative: { uuid?: string; human_key?: string };
@@ -579,6 +595,9 @@ export const INITIATIVE_OPERATIONS = [
   'method_get',
   'method_list',
   'initiative_task_set_method',
+  // SPEC-006 Business intake — the confirmed-draft composite mutation (FR-6, ← AC-1.6). Task
+  // I-2 defines the contract only; Task I-3 implements the store dispatch.
+  'initiative_bootstrap',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -638,6 +657,15 @@ export const INITIATIVE_EVENT_TYPES = {
  * tests can share this exact approved key set without duplicating literals.
  */
 export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
+  // SPEC-006 Business intake (← AC-1.6): the five Group 001A event types `initiative_bootstrap`
+  // reuses unchanged. These key sets already match what `sqlite-store.ts`'s per-entity mutations
+  // construct (Task I-3 supplementary coverage, `mutation-event-payload.test.ts`) — added here so
+  // the frozen payload-key table documents every event type `initiative_bootstrap` can emit.
+  product_created: ['uuid', 'slug'],
+  workspace_created: ['uuid', 'product_id', 'slug'],
+  resource_registered: ['uuid', 'workspace_id', 'canonical_locator'],
+  initiative_created: ['uuid', 'human_key', 'product_id'],
+  initiative_workspace_linked: ['initiative_id', 'workspace_id', 'role'],
   requirement_added: ['uuid', 'initiative_id', 'human_key'],
   acceptance_criterion_added: ['uuid', 'requirement_id', 'human_key'],
   decision_recorded: ['uuid', 'initiative_id', 'human_key', 'status'],

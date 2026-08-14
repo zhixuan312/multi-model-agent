@@ -366,6 +366,11 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     "Set or clear (null) an Initiative Task's registered Method reference; a non-null value must "
     + 'already be registered (unknown_method otherwise). Mutating: pass expected_revision '
     + '(the Task revision) and provenance.',
+  // SPEC-006 Business intake (FR-6) — one confirmed-draft composite mutation.
+  initiative_bootstrap:
+    'Create (or reference) a Product, its Workspaces and Resources, an Initiative linked to each '
+    + 'Workspace, and optional Requirements with nested Acceptance Criteria, in one atomic call from '
+    + 'a confirmed intake draft. Mutating: pass expected_revision and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
