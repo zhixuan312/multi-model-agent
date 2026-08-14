@@ -460,6 +460,28 @@ const VERIFICATION_RUN_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
  *  what a single verification run can add to `initiatives.db`'s size, not SQLite's own limit. */
 const VERIFICATION_RUN_DETAIL_MAX_CHARS = 20_000;
 
+/**
+ * Splits a declared verification command into argv WITHOUT a shell. Supports single and double
+ * quoting so a path containing spaces still works; everything else is a literal argument, so a
+ * metacharacter is passed to the program rather than interpreted.
+ */
+function parseVerificationCommand(command: string): string[] {
+  const argv: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+  let has = false;
+  for (const ch of command) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else { current += ch; has = true; }
+    } else if (ch === '"' || ch === "'") { quote = ch; has = true; }
+    else if (/\s/.test(ch)) { if (has) { argv.push(current); current = ''; has = false; } }
+    else { current += ch; has = true; }
+  }
+  if (has) argv.push(current);
+  return argv;
+}
+
 /** Combines a `spawnSync` result's stdout/stderr into one block, labeling stderr when present. */
 function combineCommandOutput(stdout: string | Buffer | null, stderr: string | Buffer | null): string {
   const out = stdout ? stdout.toString() : '';
@@ -3619,6 +3641,27 @@ export class InitiativeRecordStore implements InitiativeRepository {
    * allow-listing is layered on top, because the command is meant to run declared local
    * verification exactly as given (e.g. `npm test`), not a sanitizable fixed argument list.
    */
+  /**
+   * The directory a `verification_run` is confined to: the first local path declared by a Resource
+   * under any Workspace linked to this Initiative. Refuses when none exists — an unconfined run
+   * would inherit the daemon's cwd and become a sandbox escape (audit M1-1).
+   */
+  private resolveVerificationRunCwd(initiativeId: string): string {
+    for (const { resources } of this.listInitiativeWorkspaceLinksWithDetail({ initiative_id: initiativeId })) {
+      for (const resource of resources) {
+        if (resource.local_path) return resource.local_path;
+      }
+    }
+    throw new InvalidRequestError({
+      field_errors: {
+        initiative_id: [
+          'verification_run needs a local working directory to run inside: link a Workspace whose '
+          + 'Resource declares a local_path, or record the outcome with verification_record instead',
+        ],
+      },
+    });
+  }
+
   private mutateVerificationRun(
     input: VerificationRunInput,
     expectedRevision: number,
@@ -3633,8 +3676,24 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new VerificationMethodNotRunnableError({ method: input.method });
     }
 
-    const result = spawnSync(input.command, {
-      shell: true,
+    // CONFINEMENT (audit M1-1). This is the only place the engine itself executes a command, and
+    // it is reachable by anything holding the loopback token — including a worker that is itself
+    // sandboxed. Run unconfined, it would be a sandbox ESCAPE: a worker confined to its own cwd
+    // could ask the daemon to run anything, anywhere the daemon can reach. Two rules close that:
+    //
+    //   1. The command runs INSIDE the Initiative's own workspace, never the daemon's cwd. If no
+    //      linked workspace resource declares a local path, there is no confinement to run within
+    //      and the run is refused rather than silently widened.
+    //   2. No shell. `shell: true` makes the request body a shell program — metacharacters,
+    //      substitution, chaining. The argv form executes exactly one declared program.
+    const cwd = this.resolveVerificationRunCwd(initiativeId);
+    const [program, ...args] = parseVerificationCommand(input.command);
+    if (!program) {
+      throw new InvalidRequestError({ field_errors: { command: ['command must name a program to run'] } });
+    }
+    const result = spawnSync(program, args, {
+      cwd,
+      shell: false,
       encoding: 'utf8',
       timeout: VERIFICATION_RUN_TIMEOUT_MS,
       maxBuffer: VERIFICATION_RUN_MAX_BUFFER_BYTES,

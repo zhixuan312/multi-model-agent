@@ -68,10 +68,29 @@ describe('MMA Next gap-closure — HTTP exposure (POST /initiatives)', () => {
       expect(notRunnable.status).toBe(400);
       expect((notRunnable.json as { error: { code: string } }).error.code).toBe('verification_method_not_runnable');
 
-      // A real 'command' run succeeds as a normal mutation over the same envelope.
+      // A verification_run is confined to the Initiative's own workspace (audit M1-1), so link a
+      // Workspace whose Resource declares a local path before running anything.
+      const workspace = await post(h.baseUrl, h.token, {
+        operation: 'workspace_create',
+        input: { product_id: product.uuid, name: 'W', slug: 'w', description: 'Workspace the verification runs inside.' },
+        expected_revision: 0, provenance,
+      });
+      await post(h.baseUrl, h.token, {
+        operation: 'resource_register',
+        input: { workspace_id: (workspace.json as { uuid: string }).uuid, type: 'repository', canonical_locator: 'https://example.test/w', local_path: process.cwd(), description: 'Local checkout.' },
+        expected_revision: 0, provenance,
+      });
+      await post(h.baseUrl, h.token, {
+        operation: 'initiative_link_workspace',
+        input: { initiative_id: initiative.uuid, workspace_id: (workspace.json as { uuid: string }).uuid, role: 'modifies' },
+        expected_revision: 0, provenance,
+      });
+
+      // A real 'command' run succeeds as a normal mutation over the same envelope. `true` is a
+      // program, not a shell snippet — the store executes argv, never a shell.
       const ran = await post(h.baseUrl, h.token, {
         operation: 'verification_run',
-        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'exit 0' },
+        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'true' },
         expected_revision: 0,
         provenance,
       });

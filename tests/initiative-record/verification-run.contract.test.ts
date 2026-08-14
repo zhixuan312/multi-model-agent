@@ -25,7 +25,7 @@ const provenance = {
   source: 'test',
 };
 
-function seedCriterion(store: InitiativeRecordStore) {
+function seedCriterion(store: InitiativeRecordStore, dir: string) {
   const product = store.execute({ operation: 'product_create', input: { name: 'P', slug: 'p' }, expected_revision: 0, provenance }) as { uuid: string };
   const initiative = store.execute({
     operation: 'initiative_create',
@@ -45,6 +45,26 @@ function seedCriterion(store: InitiativeRecordStore) {
     expected_revision: 0,
     provenance,
   }) as { uuid: string };
+  // A verification_run is CONFINED to the Initiative's own workspace (audit M1-1): without a
+  // Resource declaring a local path there is nowhere safe to run, and the store refuses. Seed one.
+  const workspace = store.execute({
+    operation: 'workspace_create',
+    input: { product_id: product.uuid, name: 'W', slug: 'w', description: 'Workspace the verification runs inside.' },
+    expected_revision: 0,
+    provenance,
+  }) as { uuid: string };
+  store.execute({
+    operation: 'resource_register',
+    input: { workspace_id: workspace.uuid, type: 'repository', canonical_locator: 'https://example.test/w', local_path: dir, description: 'Local checkout the command runs in.' },
+    expected_revision: 0,
+    provenance,
+  });
+  store.execute({
+    operation: 'initiative_link_workspace',
+    input: { initiative_id: initiative.uuid, workspace_id: workspace.uuid, role: 'modifies' },
+    expected_revision: 0,
+    provenance,
+  });
   return { initiative, criterion };
 }
 
@@ -65,11 +85,11 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-verification-run-'));
     try {
       const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
-      const { initiative, criterion } = seedCriterion(store);
+      const { initiative, criterion } = seedCriterion(store, dir);
 
       const passed = store.execute({
         operation: 'verification_run',
-        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'exit 0' },
+        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'true' },
         expected_revision: 0,
         provenance,
       }) as { uuid: string; state: string; method: string; detail: string };
@@ -79,19 +99,21 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
 
       const failed = store.execute({
         operation: 'verification_run',
-        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'echo boom 1>&2; exit 3' },
+        input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'false' },
         expected_revision: 0,
         provenance,
       }) as { uuid: string; state: string; detail: string };
       expect(failed.state).toBe('fail');
-      expect(failed.detail).toContain('exit 3');
-      expect(failed.detail).toContain('boom');
+      // `false` exits 1. The command is argv, not a shell program, so an exit code is the only
+      // signal a failing check can send — there is no `; exit 3` to interpret (audit M1-1).
+      expect(failed.detail).toContain('exit 1');
 
       // A shell command that cannot even be found (exit 127) is a legitimate FAIL, not
-      // 'blocked' — the shell itself launched fine and reported the failure via exit status.
-      // 'blocked' is reserved for when the command could not be run AT ALL: a spawn failure or
-      // the bounded execution timeout — neither of which a fast, deterministic unit test can
-      // trigger portably, so it is exercised by code review/manual verification rather than here.
+      // A command that does not exist is 'blocked', not 'fail'. Under the old `shell: true` form
+      // the SHELL launched fine and reported "command not found" as exit 127, so a misspelled
+      // verification command was recorded as a genuine test failure — indistinguishable from the
+      // code actually being broken. Without a shell the spawn itself fails, which is the honest
+      // signal: the check could not be RUN, as opposed to ran and failed (audit M1-1).
       const notFound = store.execute({
         operation: 'verification_run',
         input: {
@@ -103,7 +125,8 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
         expected_revision: 0,
         provenance,
       }) as { state: string; detail: string };
-      expect(notFound.state).toBe('fail');
+      expect(notFound.state).toBe('blocked');
+      expect(notFound.detail).toContain('could not be executed');
 
       // The first ('pass') run must have been superseded by the second ('fail') run for the
       // same Acceptance Criterion — the same automatic-supersede rule `verification_record`
@@ -121,7 +144,7 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-verification-run-not-runnable-'));
     try {
       const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
-      const { initiative, criterion } = seedCriterion(store);
+      const { initiative, criterion } = seedCriterion(store, dir);
       store.close();
 
       // Route through the SERVER RUNTIME, not store.execute() directly, to prove
@@ -148,7 +171,7 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
 
         const passed = runtime.execute({
           operation: 'verification_run',
-          input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'exit 0' },
+          input: { initiative_id: initiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'true' },
           expected_revision: 0,
           provenance,
         }) as { state: string };
@@ -165,7 +188,7 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-verification-run-cross-initiative-'));
     try {
       const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
-      const { criterion } = seedCriterion(store);
+      const { criterion } = seedCriterion(store, dir);
       const product = store.execute({ operation: 'product_create', input: { name: 'Other', slug: 'other' }, expected_revision: 0, provenance }) as { uuid: string };
       const otherInitiative = store.execute({
         operation: 'initiative_create',
@@ -176,7 +199,7 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
       expect(() =>
         store.execute({
           operation: 'verification_run',
-          input: { initiative_id: otherInitiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'exit 0' },
+          input: { initiative_id: otherInitiative.uuid, acceptance_criterion_id: criterion.uuid, method: 'command', command: 'true' },
           expected_revision: 0,
           provenance,
         }),
