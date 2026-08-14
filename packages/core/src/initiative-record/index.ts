@@ -71,6 +71,11 @@
  * `delivery_contract_get` / `delivery_contract_list` operations to the shared operation union,
  * the generic adapter interface/registry, or any Deliverable entity or operation — those are
  * later, independently checkable tasks.
+ *
+ * SPEC-007 Delivery Layer (Task I-9) adds `loadDeliveryPackager(id)`, the committed
+ * `packages/core/src/delivery-packagers/<name>/packager.md` resolver, exported below — the same
+ * declaration/guidance split and dev-vs-installed dual-path resolution `loadMethodGuidance`
+ * already gives Method Procedure guidance.
  */
 export * from './types.js';
 export * from './schemas.js';
@@ -94,3 +99,6 @@ export { loadMethodGuidance } from './method-guidance.js';
 // SPEC-007 Delivery Layer (Task I-2) — public generic adapter registry. See `target-adapters.ts`'s
 // module doc; `registry` (the internal `Map`) is intentionally NOT re-exported here.
 export { registerTargetAdapter, resolveTargetAdapter } from './target-adapters.js';
+// SPEC-007 Delivery Layer (Task I-9) — committed Delivery packager guidance resolver. See
+// `delivery-packagers.ts`'s module doc; mirrors `loadMethodGuidance` above.
+export { loadDeliveryPackager } from './delivery-packagers.js';

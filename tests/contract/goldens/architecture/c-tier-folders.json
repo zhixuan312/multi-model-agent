@@ -3,6 +3,7 @@
     "bounded-execution",
     "clients",
     "config",
+    "delivery-packagers",
     "events",
     "identity",
     "initiative-record",

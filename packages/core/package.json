@@ -25,7 +25,8 @@
   "files": [
     "dist",
     "src/skills",
-    "src/methods"
+    "src/methods",
+    "src/delivery-packagers"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -259,6 +259,10 @@ export {
   // Task I-8 can import it to map it to an HTTP/MCP status, same pattern as every other typed
   // error above.
   TargetAdapterValidationFailedError,
+  // SPEC-007 Delivery Layer — Task I-9: committed Delivery packager guidance resolver, the same
+  // "available to the server runtime through a core export" shape `loadMethodGuidance` gives
+  // Method Procedure guidance above.
+  loadDeliveryPackager,
 } from './initiative-record/index.js';
 export type {
   Product,
