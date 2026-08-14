@@ -26,8 +26,21 @@ inferred from context already given rather than requested again.
 ## Draft completeness
 
 Ensure the draft includes every required section before it is presented as complete, and state
-plainly which section is missing if one is not yet done. A partial draft presented as a finished
-proposal is a defect, not an acceptable shortcut.
+plainly which section is missing if one is not yet done. Fill each of these ten fields with what
+has been confirmed so far:
+
+- Goal
+- Scope
+- candidate Workspaces (existing or to-create)
+- required Resources
+- Requirements
+- Acceptance Criteria
+- Risks
+- suggested Lifecycle Contract
+- suggested Delivery target
+- open questions
+
+A partial draft presented as a finished proposal is a defect, not an acceptable shortcut.
 
 ## Human confirmation
 

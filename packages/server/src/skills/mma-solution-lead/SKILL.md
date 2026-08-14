@@ -92,23 +92,33 @@ with the confirmed draft as a single atomic request:
 {
   "operation": "initiative_bootstrap",
   "input": {
-    "product": { "existing": { "uuid": "<confirmed product>" } },
+    "product": { "existing": { "uuid": "11111111-1111-4111-8111-111111111111" } },
     "workspaces": [
       {
         "workspace_key": "primary",
         "role": "modifies",
-        "existing": { "uuid": "<confirmed workspace>" }
+        "existing": { "uuid": "22222222-2222-4222-8222-222222222222" }
       }
     ],
     "initiative": {
       "title": "<plain-language title the stakeholder recognizes>",
       "goal": "<the confirmed goal in the stakeholder's own words>",
-      "status": "active",
-      "outcome": "in_progress"
+      "status": "open",
+      "outcome": null
     },
     "requirements": [
       { "statement": "<a confirmed requirement>" }
     ]
+  },
+  "expected_revision": 0,
+  "provenance": {
+    "actor_type": "agent",
+    "actor_id": "mma-solution-lead",
+    "interface": "mma-solution-lead",
+    "initiated_by": "<stakeholder>",
+    "authorized_by": "<stakeholder>",
+    "timestamp": "<RFC 3339 UTC timestamp>",
+    "source": "mma-solution-lead"
   }
 }
 ```
