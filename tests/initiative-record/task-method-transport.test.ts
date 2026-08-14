@@ -60,7 +60,7 @@ describe('Task Method transport contract', () => {
       // initiative_task_set_method both setting and clearing), then snapshot again and assert
       // byte-identity — proving immutability in practice, not just the absence of a write op.
       const beforeMethods = await query(h, 'method_list', {});
-      expect(beforeMethods).toHaveLength(9);
+      expect(beforeMethods).toHaveLength(10);
       const before = JSON.stringify(beforeMethods);
 
       await query(h, 'method_get', { id: 'software-change@1' });

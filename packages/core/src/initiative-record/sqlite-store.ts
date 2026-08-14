@@ -52,6 +52,7 @@ import {
   type DecisionSupersedeInput,
   type EvidenceAddInput,
   type EvidenceLinkInput,
+  type InitiativeBootstrapInput,
   type InitiativeCreateInput,
   type InitiativeFocusSetInput,
   type InitiativeLinkWorkspaceInput,
@@ -93,6 +94,10 @@ import {
   type EvidenceLinkTargetType,
   type GateStatus,
   type Initiative,
+  type InitiativeBootstrapRequirementResult,
+  type InitiativeBootstrapResourceResult,
+  type InitiativeBootstrapResult,
+  type InitiativeBootstrapWorkspaceResult,
   type InitiativeRecordEntity,
   type InitiativeRelation,
   type InitiativeStatus,
@@ -125,6 +130,16 @@ export interface InitiativeRecordStorePragmas {
   journal_mode: string;
   busy_timeout: number;
 }
+
+/** The seven `initiative_bootstrap` write-sequence creation steps (SPEC-006 Task I-3), in write order. */
+type BootstrapFailureStep =
+  | 'product'
+  | 'workspace'
+  | 'resource'
+  | 'initiative'
+  | 'initiative_workspace_link'
+  | 'requirement'
+  | 'acceptance_criterion';
 
 /** Raw `initiatives` table row shape (snake_case columns — internal only). */
 interface InitiativeRow {
@@ -408,6 +423,8 @@ function computeRequestHash(
 
 export class InitiativeRecordStore implements InitiativeRepository {
   private closed = false;
+  /** Test-only `initiative_bootstrap` failure-injection hook — see `setBootstrapFailureStepForTest`. */
+  private bootstrapFailureStepForTest: BootstrapFailureStep | undefined;
 
   private constructor(private readonly db: DatabaseSync) {}
 
@@ -1160,6 +1177,10 @@ export class InitiativeRecordStore implements InitiativeRepository {
       // SPEC-005 Method Registry (FR-5) — the sole Task Method mutation.
       case 'initiative_task_set_method':
         return this.mutateInitiativeTaskSetMethod(request.input, request.expected_revision, request.provenance);
+      // SPEC-006 Business intake (← AC-1.4, AC-1.5, AC-1.7) — the confirmed-draft
+      // composite mutation: one atomic transaction over several entity creates.
+      case 'initiative_bootstrap':
+        return this.mutateInitiativeBootstrap(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -1482,10 +1503,18 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return resource;
   }
 
+  /**
+   * `uuidOverride` (SPEC-006 Task I-3): `initiative_bootstrap` pre-generates the Initiative's
+   * `uuid` during its own validation phase — before this method's write — so a rejected
+   * cross-Product existing-Workspace check can construct `CrossProductWorkspaceLinkError` with
+   * the same real identifier the row is later created with. Every other caller omits it and gets
+   * a freshly generated `uuid`, unchanged from before this parameter existed.
+   */
   private mutateInitiativeCreate(
     input: InitiativeCreateInput,
     expectedRevision: number,
     provenance: ProvenanceInput,
+    uuidOverride?: string,
   ): Initiative {
     this.requireCreateRevision(expectedRevision, 'Initiative');
     this.requireExists('products', input.product_id, 'product_id', 'Product');
@@ -1497,7 +1526,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     if (!contractRow) {
       throw new UnknownLifecycleContractError({ lifecycle_contract: lifecycleContract });
     }
-    const uuid = randomUUID();
+    const uuid = uuidOverride ?? randomUUID();
     const now = provenance.timestamp;
     const humanKey = this.allocateInitiativeHumanKey();
     this.db
@@ -2146,6 +2175,243 @@ export class InitiativeRecordStore implements InitiativeRepository {
       provenance,
     });
     return criterion;
+  }
+
+  /**
+   * `initiative_bootstrap` (SPEC-006 Task I-3, ← AC-1.4, AC-1.5, AC-1.7): the confirmed-draft
+   * composite mutation. Runs entirely inside the one explicit transaction {@link execute} already
+   * opened — every helper call below is an ordinary `INSERT` + `writeEvent` pair on this same
+   * connection, so any thrown error (including {@link maybeForceBootstrapFailure}'s test-only
+   * hook) unwinds to `execute()`'s `catch` and rolls back everything this method has written so
+   * far, with no special transaction handling needed here.
+   *
+   * Validation phase (no writes): resolves and compare-and-swaps the Product (create ⇒
+   * `expected_revision` must be 0; existing ⇒ `expected_revision` must match its stored
+   * revision), pre-generates the Initiative's `uuid` — before validating existing-Workspace
+   * ownership, so a rejected cross-Product link can carry the real identifier — validates every
+   * `workspaces[]` entry's ownership (an `existing` Workspace under a still-to-be-created Product
+   * can never belong to it, so it always rejects) and input-local duplicate create-Workspace
+   * slugs, validates input-local duplicate Resource `canonical_locator`s against the same target
+   * Workspace, and validates the resolved lifecycle contract is registered.
+   *
+   * Write phase (dependency order — Data mapping): optional Product, create Workspaces,
+   * Resources, Initiative, links, Requirements, Acceptance Criteria. Each step reuses the same
+   * per-entity `mutate*` method every other operation uses, so it gets that method's own
+   * `INSERT` + exactly one `writeEvent` call for free — this task widens no table and adds no new
+   * event type. An `existing` Product or Workspace creates no row and no Event.
+   */
+  private mutateInitiativeBootstrap(
+    input: InitiativeBootstrapInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): InitiativeBootstrapResult {
+    // --- Validation phase — nothing below this point writes to the database. ---
+
+    let existingProductRow: ProductRow | undefined;
+    if (input.product.existing) {
+      existingProductRow = this.requireRow<ProductRow>(
+        'products',
+        input.product.existing.uuid,
+        'product.existing.uuid',
+        'Product',
+      );
+      if (existingProductRow.revision !== expectedRevision) {
+        throw new RevisionConflictError({
+          entity_type: 'Product',
+          entity_id: existingProductRow.uuid,
+          expected_revision: expectedRevision,
+          actual_revision: existingProductRow.revision,
+        });
+      }
+    } else {
+      this.requireCreateRevision(expectedRevision, 'Product');
+      this.requireUnique('products', { slug: input.product.create!.slug }, 'Product', 'slug');
+    }
+    // `undefined` only while `product.create` has not written its row yet (write phase, below) —
+    // no `workspaces[].existing` entry can validly resolve against an unwritten Product.
+    const resolvedProductId = existingProductRow?.uuid;
+
+    // Pre-generate the Initiative identifier now, before validating existing-Workspace ownership,
+    // so `CrossProductWorkspaceLinkError` below always carries the real `initiative_id` this
+    // request will create if it is not rejected (Data mapping).
+    const initiativeUuid = randomUUID();
+
+    const seenCreateWorkspaceSlugs = new Set<string>();
+    for (const workspaceInput of input.workspaces) {
+      if (workspaceInput.existing) {
+        const workspaceRow = this.requireRow<WorkspaceRow>(
+          'workspaces',
+          workspaceInput.existing.uuid,
+          'workspaces.existing.uuid',
+          'Workspace',
+        );
+        if (!resolvedProductId || workspaceRow.product_id !== resolvedProductId) {
+          throw new CrossProductWorkspaceLinkError({ initiative_id: initiativeUuid, workspace_id: workspaceRow.uuid });
+        }
+      } else {
+        const create = workspaceInput.create!;
+        if (seenCreateWorkspaceSlugs.has(create.slug)) {
+          throw new InvalidRequestError({
+            field_errors: { 'workspaces.slug': ['duplicate workspace slug within this request'] },
+            message: `invalid_request: duplicate workspace slug ${create.slug} within this request`,
+          });
+        }
+        seenCreateWorkspaceSlugs.add(create.slug);
+        if (resolvedProductId) {
+          this.requireUnique('workspaces', { product_id: resolvedProductId, slug: create.slug }, 'Workspace', 'slug');
+        }
+      }
+    }
+
+    const seenResourceKeys = new Set<string>();
+    for (const resourceInput of input.resources ?? []) {
+      const key = `${resourceInput.workspace_key}::${resourceInput.canonical_locator}`;
+      if (seenResourceKeys.has(key)) {
+        throw new InvalidRequestError({
+          field_errors: {
+            'resources.canonical_locator': ['duplicate canonical_locator for this workspace within this request'],
+          },
+          message: `invalid_request: duplicate canonical_locator ${resourceInput.canonical_locator} for workspace_key ${resourceInput.workspace_key} within this request`,
+        });
+      }
+      seenResourceKeys.add(key);
+      const targetWorkspace = input.workspaces.find((workspace) => workspace.workspace_key === resourceInput.workspace_key)!;
+      if (targetWorkspace.existing) {
+        this.requireUnique(
+          'resources',
+          { workspace_id: targetWorkspace.existing.uuid, canonical_locator: resourceInput.canonical_locator },
+          'Resource',
+          'canonical_locator',
+        );
+      }
+    }
+
+    const lifecycleContract = input.initiative.lifecycle_contract ?? DEFAULT_LIFECYCLE_CONTRACT_ID;
+    if (!this.db.prepare(`SELECT 1 FROM lifecycle_contracts WHERE id = ?`).get(lifecycleContract)) {
+      throw new UnknownLifecycleContractError({ lifecycle_contract: lifecycleContract });
+    }
+
+    // --- Write phase — dependency order: optional Product, create Workspaces, Resources,
+    // Initiative, links, Requirements, Acceptance Criteria. ---
+
+    let product: Product;
+    if (existingProductRow) {
+      product = mapProductRow(existingProductRow);
+    } else {
+      product = this.mutateProductCreate(input.product.create!, expectedRevision, provenance);
+      this.maybeForceBootstrapFailure('product');
+    }
+
+    const workspaceKeyToUuid = new Map<string, string>();
+    const workspaceResults: InitiativeBootstrapWorkspaceResult[] = [];
+    for (const workspaceInput of input.workspaces) {
+      let workspace: Workspace;
+      if (workspaceInput.existing) {
+        workspace = mapWorkspaceRow(
+          this.requireRow<WorkspaceRow>('workspaces', workspaceInput.existing.uuid, 'workspaces.existing.uuid', 'Workspace'),
+        );
+      } else {
+        workspace = this.mutateWorkspaceCreate({ product_id: product.uuid, ...workspaceInput.create! }, 0, provenance);
+        this.maybeForceBootstrapFailure('workspace');
+      }
+      workspaceKeyToUuid.set(workspaceInput.workspace_key, workspace.uuid);
+      workspaceResults.push({ ...workspace, workspace_key: workspaceInput.workspace_key, role: workspaceInput.role });
+    }
+
+    const resourceResults: InitiativeBootstrapResourceResult[] = [];
+    for (const resourceInput of input.resources ?? []) {
+      const resource = this.mutateResourceRegister(
+        {
+          workspace_id: workspaceKeyToUuid.get(resourceInput.workspace_key)!,
+          type: resourceInput.type,
+          canonical_locator: resourceInput.canonical_locator,
+          local_path: resourceInput.local_path,
+          description: resourceInput.description,
+        },
+        0,
+        provenance,
+      );
+      this.maybeForceBootstrapFailure('resource');
+      resourceResults.push({ ...resource, workspace_key: resourceInput.workspace_key });
+    }
+
+    const initiative = this.mutateInitiativeCreate(
+      {
+        product_id: product.uuid,
+        title: input.initiative.title,
+        goal: input.initiative.goal,
+        status: input.initiative.status,
+        outcome: input.initiative.outcome,
+        lifecycle_contract: input.initiative.lifecycle_contract,
+      },
+      0,
+      provenance,
+      initiativeUuid,
+    );
+    this.maybeForceBootstrapFailure('initiative');
+
+    const links: InitiativeWorkspaceLink[] = [];
+    for (const workspaceInput of input.workspaces) {
+      const link = this.mutateInitiativeLinkWorkspace(
+        {
+          initiative_id: initiative.uuid,
+          workspace_id: workspaceKeyToUuid.get(workspaceInput.workspace_key)!,
+          role: workspaceInput.role,
+        },
+        0,
+        provenance,
+      );
+      this.maybeForceBootstrapFailure('initiative_workspace_link');
+      links.push(link);
+    }
+
+    const requirementResults: InitiativeBootstrapRequirementResult[] = [];
+    for (const requirementInput of input.requirements ?? []) {
+      const requirement = this.mutateRequirementAdd(
+        { initiative_id: initiative.uuid, statement: requirementInput.statement },
+        0,
+        provenance,
+      );
+      this.maybeForceBootstrapFailure('requirement');
+      const criteria: AcceptanceCriterion[] = [];
+      for (const criterionInput of requirementInput.acceptance_criteria ?? []) {
+        const criterion = this.mutateAcceptanceCriterionAdd(
+          { requirement_id: requirement.uuid, statement: criterionInput.statement, check_reference: criterionInput.check_reference },
+          0,
+          provenance,
+        );
+        this.maybeForceBootstrapFailure('acceptance_criterion');
+        criteria.push(criterion);
+      }
+      requirementResults.push({ ...requirement, acceptance_criteria: criteria });
+    }
+
+    return {
+      ...initiative,
+      product,
+      workspaces: workspaceResults,
+      resources: resourceResults,
+      initiative_workspace_links: links,
+      requirements: requirementResults,
+    };
+  }
+
+  /**
+   * Test-only failure injection for `initiative_bootstrap` (SPEC-006 Task I-3): when set, the
+   * write phase throws immediately after the named step's creation, proving the whole-transaction
+   * rollback guarantee end to end. Non-exported from the public barrel and never invoked by
+   * production code — HTTP and MCP callers only ever reach `execute()`, never a direct
+   * `InitiativeRecordStore` reference, so this hook is structurally unreachable through either
+   * transport. Test/inspection use only.
+   */
+  setBootstrapFailureStepForTest(step: BootstrapFailureStep | undefined): void {
+    this.bootstrapFailureStepForTest = step;
+  }
+
+  private maybeForceBootstrapFailure(step: BootstrapFailureStep): void {
+    if (this.bootstrapFailureStepForTest === step) {
+      throw new Error(`forced bootstrap failure after ${step} creation`);
+    }
   }
 
   private mutateDecisionRecord(

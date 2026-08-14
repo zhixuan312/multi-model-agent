@@ -5,7 +5,7 @@ edit by hand: re-run the command to regenerate.
 
 ## What it installs
 
-- **16 skills** — auto-matched by intent (`/mma:audit`, `/mma:delegate`, …)
+- **17 skills** — auto-matched by intent (`/mma:audit`, `/mma:delegate`, …)
 - **3 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)
 - **1 MCP server** (`mma:daemon`) — `http://127.0.0.1:7337/mcp`, exposing `mma_run`, `mma_execution_get`, `mma_execution_wait`, `mma_execution_cancel`, `mma_execution_list`, `mma_context_block_create`, `mma_context_block_delete`
 

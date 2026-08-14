@@ -91,6 +91,9 @@ const EXECUTE_OPERATIONS = new Set([
   'method_get',
   'method_list',
   'initiative_task_set_method',
+  // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation. Same
+  // dispatch pattern as every mutation above: one transactional `store.execute()` call.
+  'initiative_bootstrap',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -187,6 +190,10 @@ export class InitiativeRecordRuntime {
       // SPEC-005 Method Registry mutation (FR-5): same pattern as every mutation above — one
       // transactional `store.execute()` call.
       case 'initiative_task_set_method':
+      // SPEC-006 Business intake (← AC-1.6): the confirmed-draft composite mutation. Same
+      // pattern as every mutation above — the store owns the whole write algorithm; this
+      // runtime does nothing beyond validating the envelope and forwarding the request.
+      case 'initiative_bootstrap':
         return this.store.execute(request);
 
       case 'product_get':

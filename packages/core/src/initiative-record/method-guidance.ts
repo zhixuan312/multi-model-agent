@@ -47,6 +47,7 @@ const METHODS_ROOT = existsSync(DEV_METHODS_ROOT) ? DEV_METHODS_ROOT : INSTALLED
  */
 const GUIDANCE_ASSET_IDS = [
   'architecture-review@1',
+  'intent-to-initiative@1',
   'regulatory-assessment@1',
   'research@1',
   'risk-analysis@1',

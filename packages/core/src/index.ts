@@ -240,6 +240,8 @@ export {
   methodListInputSchema,
   initiativeTaskSetMethodInputSchema,
   METHOD_ID_PATTERN,
+  // SPEC-006 Business intake (see .mma/specs/2026-08-14-spec-006-business-intake-solution-lead.md)
+  initiativeBootstrapInputSchema,
   // Committed Method procedure guidance resolver (Task I-2 contract: "available to the
   // server runtime through a core export"). `ExecutionRuntime` (Task I-4) is its first
   // caller outside the initiative-record package itself.
@@ -304,4 +306,7 @@ export type {
   MethodGetInput,
   MethodListInput,
   InitiativeTaskSetMethodInput,
+  // SPEC-006 Business intake (see .mma/specs/2026-08-14-spec-006-business-intake-solution-lead.md)
+  InitiativeBootstrapInput,
+  InitiativeBootstrapResult,
 } from './initiative-record/index.js';

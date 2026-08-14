@@ -21,6 +21,7 @@ export const SUPPORTED_SKILLS = [
   'mma-orchestrate',
   'mma-spec',
   'mma-plan',
+  'mma-solution-lead',
 ] as const;
 
 /**

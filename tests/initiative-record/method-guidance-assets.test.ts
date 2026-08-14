@@ -16,6 +16,7 @@ const required: Record<string, string[]> = {
   'risk-analysis@1': ['Risk coverage', 'Evidence basis', 'Mitigation ownership'],
   'technical-writing@1': ['Accuracy', 'Audience fit', 'Structural completeness'],
   'regulatory-assessment@1': ['Requirement coverage', 'Source currency', 'Professional sign-off when required'],
+  'intent-to-initiative@1': ['Goal elicitation', 'Necessary-question discipline', 'Draft completeness', 'Human confirmation', 'Record-entity restraint'],
 };
 
 // A section title cannot be satisfied by ANY imperative sentence — it must be an imperative
@@ -53,6 +54,11 @@ const sectionKeyword: Record<string, RegExp> = {
   'Requirement coverage': /\brequirement/i,
   'Source currency': /\bsource\b|\bcurren/i,
   'Professional sign-off when required': /\bprofessional\b|\bsign-off\b/i,
+  'Goal elicitation': /\bgoal\b/i,
+  'Necessary-question discipline': /\bnecessary\b|\bquestion/i,
+  'Draft completeness': /\bdraft\b|\bcomplete\b/i,
+  'Human confirmation': /\bhuman\b|\bconfirmation\b/i,
+  'Record-entity restraint': /record entit/i,
 };
 
 describe('Method guidance assets', () => {
