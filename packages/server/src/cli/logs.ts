@@ -35,6 +35,29 @@ function resolveLogPath(config: MultiModelConfig, homeDir: string): string {
   return path.join(dir, `mma-${todayUtc()}.jsonl`);
 }
 
+/**
+ * Where the tail should read from on the next poll.
+ *
+ * Two things can move the target out from under a `--follow` session, and both used to silence it
+ * permanently (audit M3-3):
+ *   - ROTATION. The writer switches to `mma-<date>.jsonl` at UTC midnight, so a session started
+ *     the previous day kept tailing a file nothing writes to any more.
+ *   - TRUNCATION. A file that shrank left `offset` past its end, and `size <= offset` then skipped
+ *     every subsequent poll forever.
+ *
+ * Pure so the decision is testable without racing the endless poll loop.
+ */
+export function nextFollowTarget(
+  current: { path: string; offset: number },
+  resolvedPath: string,
+  resolvedExists: boolean,
+  size: number,
+): { path: string; offset: number } {
+  if (resolvedPath !== current.path && resolvedExists) return { path: resolvedPath, offset: 0 };
+  if (size < current.offset) return { path: current.path, offset: 0 };
+  return current;
+}
+
 function matchesBatch(line: string, batchId: string): boolean {
   // The JSONL log carries the task/batch id under several key spellings depending on
   // the writer: plain diagnostic entries nest it in `fields` as snake_case
@@ -96,17 +119,36 @@ export async function runLogs(deps: LogsDeps): Promise<number> {
   if (!follow) return 0;
 
   // Tail — poll for new content appended after `offset`.
+  //
+  // The path is RE-RESOLVED every poll rather than captured once. The writer rotates to
+  // `mma-<date>.jsonl` at UTC midnight, so a session started before midnight kept tailing
+  // yesterday's file and went silent for the rest of the run while the daemon wrote to today's —
+  // indistinguishable, to the user, from "nothing is happening" (audit M3-3).
   let buf = '';
+  let followPath = logPath;
   while (true) {
     await new Promise((r) => setTimeout(r, pollMs));
+    const resolvedPath = resolveLogPath(deps.config, homeDir);
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(logPath);
+      stat = fs.statSync(fs.existsSync(resolvedPath) ? resolvedPath : followPath);
     } catch {
       continue;
     }
+    const target = nextFollowTarget(
+      { path: followPath, offset },
+      resolvedPath,
+      fs.existsSync(resolvedPath),
+      stat.size,
+    );
+    if (target.path !== followPath || target.offset !== offset) {
+      followPath = target.path;
+      offset = target.offset;
+      buf = '';
+      try { stat = fs.statSync(followPath); } catch { continue; }
+    }
     if (stat.size <= offset) continue;
-    const fd = fs.openSync(logPath, 'r');
+    const fd = fs.openSync(followPath, 'r');
     try {
       const chunk = Buffer.alloc(stat.size - offset);
       fs.readSync(fd, chunk, 0, chunk.length, offset);

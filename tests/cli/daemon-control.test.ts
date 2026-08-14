@@ -216,6 +216,22 @@ describe('stopDaemon', () => {
     expect(signals).toEqual([]);
   });
 
+  it('sends NO signal when the pid is alive but no longer ours', async () => {
+    // The pid is resolved before stopDaemon runs, so the daemon can exit and the OS can hand its
+    // number to something else before the FIRST signal — the same race the escalation guards
+    // already covered, just a smaller window. Guarding only liveness here meant that first SIGTERM
+    // landed on an unrelated process (audit M3-2).
+    const signals: string[] = [];
+    const out = await stopDaemon(1, {
+      ...base, stateDir: dir,
+      isAlive: () => true,
+      verifyProcess: () => false, // alive, but not an mma daemon
+      kill: (_p, s) => { signals.push(s); },
+    });
+    expect(out).toMatchObject({ stopped: true, escalatedTo: 'none' });
+    expect(signals).toEqual([]);
+  });
+
   it('stops on the first SIGTERM when the daemon exits during its drain', async () => {
     const signals: string[] = [];
     let alive = true;

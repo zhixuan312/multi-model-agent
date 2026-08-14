@@ -298,8 +298,6 @@ export async function stopDaemon(
 
   const verify = deps.verifyProcess ?? ((p: number) => verifyDaemonProcess(p, deps.platform ?? process.platform));
 
-  if (!isAlive(pid)) return { stopped: true, pid, escalatedTo: 'none' };
-
   const waitGone = async (budgetMs: number): Promise<boolean> => {
     const deadline = now() + budgetMs;
     while (now() < deadline) {
@@ -318,6 +316,12 @@ export async function stopDaemon(
    * killing a program the user never asked to stop, so it is worth one `ps`.
    */
   const stillOurs = (): boolean => isAlive(pid) && verify(pid) !== false;
+
+  // Including the FIRST signal. The pid was resolved before this call, and the daemon can exit and
+  // have its number reused in between exactly as it can between escalations — the window is
+  // smaller, not absent. Checking only liveness here meant the first SIGTERM could land on an
+  // unrelated process, which is the one outcome this guard exists to prevent (audit M3-2).
+  if (!stillOurs()) return { stopped: true, pid, escalatedTo: 'none' };
 
   try {
     kill(pid, 'SIGTERM');
