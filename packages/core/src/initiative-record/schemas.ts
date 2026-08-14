@@ -552,7 +552,7 @@ export type DeliveryContractListInput = z.infer<typeof deliveryContractListInput
 // FR-4). `validation_state` is computed-only: none of these input schemas
 // accepts it (`.strict()` rejects the extra field). `deliverable_validate`
 // and `deliverable_deliver` (Task I-4) and `deliverable_approve` (Task I-6)
-// are separate, later schemas.
+// are separate, later schemas below.
 // ---------------------------------------------------------------------------
 
 export const deliverableDefineInputSchema = z
@@ -597,6 +597,24 @@ export const deliverableDeliverInputSchema = z
   })
   .strict();
 export type DeliverableDeliverInput = z.infer<typeof deliverableDeliverInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — the human-approval mutation (Task I-6, ← AC-1.7,
+// maintainer-confirmed shape: `{ deliverable: { uuid }, reason }`). This is the sole
+// input schema across the whole Deliverable operation surface that accepts
+// `human_approved` at all — it does so implicitly, by being the only mutation whose
+// store method may write that state; the field itself is never part of any input.
+// `reason` uses the same `nonEmptyString` primitive as every other required free-text
+// field, so an empty string fails the same `.min(1)` Zod check a missing field does.
+// ---------------------------------------------------------------------------
+
+export const deliverableApproveInputSchema = z
+  .object({
+    deliverable: z.object({ uuid: uuidSchema }).strict(),
+    reason: nonEmptyString,
+  })
+  .strict();
+export type DeliverableApproveInput = z.infer<typeof deliverableApproveInputSchema>;
 
 // ---------------------------------------------------------------------------
 // ArtifactRef
@@ -926,6 +944,9 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   // and delivery history.
   mutating('deliverable_validate', deliverableValidateInputSchema),
   mutating('deliverable_deliver', deliverableDeliverInputSchema),
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
+  // mutation, the sole path to `human_approved`.
+  mutating('deliverable_approve', deliverableApproveInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -1021,5 +1042,8 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   // and delivery history.
   mutating('deliverable_validate', deliverableValidateInputSchema),
   mutating('deliverable_deliver', deliverableDeliverInputSchema),
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
+  // mutation, the sole path to `human_approved`.
+  mutating('deliverable_approve', deliverableApproveInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

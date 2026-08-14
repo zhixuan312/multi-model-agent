@@ -715,7 +715,8 @@ export const INITIATIVE_OPERATIONS = [
   // Task I-3 wires them into the shared operation union) and the first Deliverable operations
   // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate` and `deliverable_deliver`
   // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
-  // `deliverable_approve` is Task I-6 scope.
+  // `deliverable_approve` (Task I-6, ← AC-1.7) is the maintainer-confirmed sole path to the
+  // human-approved validation state.
   'delivery_contract_get',
   'delivery_contract_list',
   'deliverable_define',
@@ -724,6 +725,7 @@ export const INITIATIVE_OPERATIONS = [
   'deliverable_attach_artifact',
   'deliverable_validate',
   'deliverable_deliver',
+  'deliverable_approve',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -780,6 +782,9 @@ export const INITIATIVE_EVENT_TYPES = {
   // SPEC-007 Delivery Layer (Task I-4, "Data model" event table).
   deliverable_validate: 'deliverable_validated',
   deliverable_deliver: 'deliverable_delivered',
+  // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts") — the maintainer-confirmed
+  // human-approval mutation.
+  deliverable_approve: 'deliverable_approved',
 } as const;
 
 /**
@@ -833,4 +838,6 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   // SPEC-007 Delivery Layer (Task I-4, "Interfaces / contracts").
   deliverable_validated: ['uuid', 'validation_state', 'detail'],
   deliverable_delivered: ['uuid', 'delivery_reference', 'validation_state'],
+  // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts", maintainer-confirmed shape).
+  deliverable_approved: ['uuid', 'previous_validation_state', 'new_validation_state', 'reason'],
 } as const;

@@ -98,7 +98,8 @@ const EXECUTE_OPERATIONS = new Set([
   // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
   // operations (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate`/`deliverable_deliver`
   // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
-  // `deliverable_approve` (Task I-6) extends this set further.
+  // `deliverable_approve` (Task I-6, ← AC-1.7) extends this set further with the
+  // maintainer-confirmed human-approval mutation.
   'delivery_contract_get',
   'delivery_contract_list',
   'deliverable_define',
@@ -107,6 +108,7 @@ const EXECUTE_OPERATIONS = new Set([
   'deliverable_attach_artifact',
   'deliverable_validate',
   'deliverable_deliver',
+  'deliverable_approve',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -223,6 +225,11 @@ export class InitiativeRecordRuntime {
       // envelope and forwarding the request.
       case 'deliverable_validate':
       case 'deliverable_deliver':
+      // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7): the maintainer-confirmed human-approval
+      // mutation. Same pattern as every mutation above — the store owns the whole write
+      // algorithm; this runtime does nothing beyond validating the envelope and forwarding
+      // the request.
+      case 'deliverable_approve':
         return this.store.execute(request);
 
       case 'product_get':

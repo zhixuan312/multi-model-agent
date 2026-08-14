@@ -304,6 +304,91 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
     }
   });
 
+  // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7): `deliverable_approve`'s event_type/payload-key
+  // pair is a runtime-only allowlist entry (see the plan's compile-boundary note) — a green
+  // build does not prove `INITIATIVE_EVENT_TYPES`/`INITIATIVE_EVENT_PAYLOAD_KEYS` were extended
+  // correctly. Supplementary to the plan-authored deliverable-human-approval.contract.test.ts,
+  // which already exercises the exact successful Event sequence end to end through the runtime.
+  it('emits the frozen event_type and exact payload keys for deliverable_approve', () => {
+    const { store, cleanup } = openStore();
+    try {
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const initiative = store.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
+        expected_revision: 0,
+        provenance,
+      });
+      const deliverable = store.execute({
+        operation: 'deliverable_define',
+        input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
+        expected_revision: 0,
+        provenance,
+      });
+      const beforeCount = store.listEvents({}).length;
+      store.execute({
+        operation: 'deliverable_approve',
+        input: { deliverable: { uuid: deliverable.uuid }, reason: 'stakeholder sign-off' },
+        expected_revision: deliverable.revision,
+        provenance,
+      });
+
+      const events = store.listEvents({}).slice(beforeCount);
+      expect(events.map((event) => event.event_type)).toEqual(['deliverable_approved']);
+      expect(Object.keys(events[0]!.payload).sort()).toEqual(
+        ['new_validation_state', 'previous_validation_state', 'reason', 'uuid'].sort(),
+      );
+      expect(events[0]!.payload).toEqual({
+        uuid: deliverable.uuid,
+        previous_validation_state: 'pending',
+        new_validation_state: 'human_approved',
+        reason: 'stakeholder sign-off',
+      });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('rejects invalid and stale human approvals without changing the Deliverable or emitting an Event', () => {
+    const { store, cleanup } = openStore();
+    try {
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const initiative = store.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
+        expected_revision: 0,
+        provenance,
+      });
+      const deliverable = store.execute({
+        operation: 'deliverable_define',
+        input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
+        expected_revision: 0,
+        provenance,
+      });
+      const beforeEvents = store.listEvents({});
+
+      expect(() => store.execute({
+        operation: 'deliverable_approve',
+        input: { deliverable: { uuid: deliverable.uuid }, reason: '' },
+        expected_revision: deliverable.revision,
+        provenance,
+      })).toThrow(/invalid_request/);
+      expect(() => store.execute({
+        operation: 'deliverable_approve',
+        input: { deliverable: { uuid: deliverable.uuid }, reason: 'stale approval' },
+        expected_revision: deliverable.revision + 1,
+        provenance,
+      })).toThrow(/revision_conflict/);
+
+      expect(store.getDeliverable({ uuid: deliverable.uuid })).toMatchObject({
+        validation_state: 'pending', validation_detail: '', revision: deliverable.revision,
+      });
+      expect(store.listEvents({})).toEqual(beforeEvents);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('rejects an attachment for a requirement not declared by the Delivery Contract without writing membership or an Event', () => {
     const { store, cleanup } = openStore();
     try {

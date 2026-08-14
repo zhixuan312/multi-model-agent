@@ -54,6 +54,7 @@ import {
   type ArtifactRegisterInput,
   type DecisionRecordInput,
   type DecisionSupersedeInput,
+  type DeliverableApproveInput,
   type DeliverableAttachArtifactInput,
   type DeliverableDefineInput,
   type DeliverableDeliverInput,
@@ -1364,6 +1365,10 @@ export class InitiativeRecordStore implements InitiativeRepository {
         return this.mutateDeliverableValidate(request.input, request.expected_revision, request.provenance);
       case 'deliverable_deliver':
         return this.mutateDeliverableDeliver(request.input, request.expected_revision, request.provenance);
+      // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7): the maintainer-confirmed human-approval
+      // mutation — same one-transactional-call pattern as every mutation above.
+      case 'deliverable_approve':
+        return this.mutateDeliverableApprove(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -2448,6 +2453,37 @@ export class InitiativeRecordStore implements InitiativeRepository {
   ): Deliverable {
     const deliverableRow = this.requireDeliverableRow(input.deliverable_id);
     this.requireDeliverableRevision(deliverableRow, expectedRevision);
+
+    // Task I-6 (← AC-1.7): `human_approved` is a human decision recorded by the separate
+    // `deliverable_approve` mutation, not a computed state — recomputing here would risk
+    // silently overwriting that decision with a fresh 'valid'/'invalid' verdict the next time
+    // someone calls `deliverable_validate`. Skip contract/adapter computation entirely, leave
+    // `validation_state` unchanged, and record an explicit skipped-computation detail so both
+    // the returned result and the persisted row make the skip visible.
+    if (deliverableRow.validation_state === 'human_approved') {
+      const now = provenance.timestamp;
+      const nextRevision = deliverableRow.revision + 1;
+      const detail = 'validation computation skipped: Deliverable is human_approved';
+      this.db
+        .prepare(`UPDATE deliverables SET validation_detail = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
+        .run(detail, now, nextRevision, input.deliverable_id);
+      const skipped: Deliverable = {
+        ...mapDeliverableRow(deliverableRow),
+        validation_detail: detail,
+        updatedAt: now,
+        revision: nextRevision,
+      };
+      this.writeEvent({
+        entity_type: 'Deliverable',
+        entity_id: input.deliverable_id,
+        initiative_id: deliverableRow.initiative_id,
+        event_type: 'deliverable_validated',
+        payload: { uuid: input.deliverable_id, validation_state: 'human_approved', detail },
+        provenance,
+      });
+      return skipped;
+    }
+
     const contract = this.getDeliveryContractOrThrow(deliverableRow.delivery_contract);
     const memberRows = this.db
       .prepare(`SELECT deliverable_id, artifact_id, requirement, created_at FROM deliverable_artifacts WHERE deliverable_id = ?`)
@@ -2550,6 +2586,55 @@ export class InitiativeRecordStore implements InitiativeRepository {
         uuid: input.deliverable_id,
         delivery_reference: input.delivery_reference,
         validation_state: deliverableRow.validation_state,
+      },
+      provenance,
+    });
+    return updated;
+  }
+
+  /**
+   * `deliverable_approve` (← AC-1.7, maintainer-confirmed shape `{ deliverable: { uuid }, reason
+   * }`): the sole operation that may set `validation_state` to `human_approved`. Purely records
+   * a human decision — it never recomputes completeness or calls a target adapter, unlike
+   * `deliverable_validate` above. `reason` is required and non-empty; the strict Zod input
+   * schema (`deliverableApproveInputSchema`) rejects an empty or missing `reason` before this
+   * method ever runs, so this method can assume `input.reason` is a non-empty string. The
+   * emitted `deliverable_approved` Event payload is exactly `uuid`, `previous_validation_state`,
+   * `new_validation_state`, `reason` (Data mapping).
+   */
+  private mutateDeliverableApprove(
+    input: DeliverableApproveInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Deliverable {
+    const deliverableRow = this.requireDeliverableRow(input.deliverable.uuid);
+    this.requireDeliverableRevision(deliverableRow, expectedRevision);
+    const previousValidationState = deliverableRow.validation_state;
+    const now = provenance.timestamp;
+    const nextRevision = deliverableRow.revision + 1;
+    const detail = `human_approved: ${input.reason}`;
+    this.db
+      .prepare(
+        `UPDATE deliverables SET validation_state = 'human_approved', validation_detail = ?, updated_at = ?, revision = ? WHERE uuid = ?`,
+      )
+      .run(detail, now, nextRevision, input.deliverable.uuid);
+    const updated: Deliverable = {
+      ...mapDeliverableRow(deliverableRow),
+      validation_state: 'human_approved',
+      validation_detail: detail,
+      updatedAt: now,
+      revision: nextRevision,
+    };
+    this.writeEvent({
+      entity_type: 'Deliverable',
+      entity_id: input.deliverable.uuid,
+      initiative_id: deliverableRow.initiative_id,
+      event_type: 'deliverable_approved',
+      payload: {
+        uuid: input.deliverable.uuid,
+        previous_validation_state: previousValidationState,
+        new_validation_state: 'human_approved',
+        reason: input.reason,
       },
       provenance,
     });
