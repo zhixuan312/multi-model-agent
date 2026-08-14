@@ -67,7 +67,10 @@ describe('SPEC-007 computed validation and delivery history', () => {
       revision = deliverable.revision;
       for (const requirement of ['executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence']) {
         const artifact = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'managed', path_or_uri: requirement, description: requirement }, expected_revision: 0, provenance }) as { uuid: string };
-        revision = (store.execute({ operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement }, expected_revision: revision, provenance }) as { revision: number }).revision;
+        store.execute({ operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement }, expected_revision: revision, provenance });
+        // DeliverableArtifactMember is the membership row and carries no revision by contract,
+        // so read the Deliverable's own revision back rather than expecting one on the member.
+        revision = store.getDeliverable({ uuid: deliverable.uuid }).revision;
       }
       const baseline = store.execute({ operation: 'deliverable_validate', input: { deliverable_id: deliverable.uuid }, expected_revision: revision, provenance }) as { validation_state: string; validation_detail: string; revision: number };
       expect(baseline).toMatchObject({ validation_state: 'valid', validation_detail: 'no adapter registered' });
