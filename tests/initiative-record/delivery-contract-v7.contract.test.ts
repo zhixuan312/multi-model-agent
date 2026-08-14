@@ -9,7 +9,26 @@ import {
   runInitiativeMigrations,
 } from '../../packages/core/src/initiative-record/index.js';
 
-const IDS = ['runnable-prototype@1', 'runnable-software@1'];
+// The pinned v1 catalog (SPEC-007 "Data model"), asserted field-for-field per contract so a
+// regression in any single field — not just `id` or `requires` — fails this test.
+const PINNED_CONTRACTS = [
+  {
+    id: 'runnable-prototype@1',
+    name: 'Runnable prototype',
+    version: 1,
+    target_type: 'runnable-prototype',
+    requires: ['executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence'],
+    verification: ['starts_locally', 'sample_flow_passed', 'business_user_reviewed'],
+  },
+  {
+    id: 'runnable-software@1',
+    name: 'Runnable software',
+    version: 1,
+    target_type: 'runnable-software',
+    requires: ['source_changes', 'run_instructions', 'successful_build', 'automated_checks', 'runnable_preview'],
+    verification: ['build_passed', 'tests_passed', 'primary_user_flow_passed'],
+  },
+];
 
 describe('SPEC-007 schema v7 Delivery Contract catalog', () => {
   it('upgrades v6, seeds only the two immutable contracts, and revalidates stored JSON', () => {
@@ -24,10 +43,10 @@ describe('SPEC-007 schema v7 Delivery Contract catalog', () => {
       runInitiativeMigrations({ dbPath });
       const store = InitiativeRecordStore.open({ dbPath });
       expect(INITIATIVE_SCHEMA_VERSION).toBe(8);
-      expect(store.listDeliveryContracts().map((contract) => contract.id)).toEqual(IDS);
-      expect(store.getDeliveryContract({ id: 'runnable-prototype@1' }).requires).toEqual([
-        'executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence',
-      ]);
+      expect(store.listDeliveryContracts()).toEqual(PINNED_CONTRACTS);
+      for (const pinned of PINNED_CONTRACTS) {
+        expect(store.getDeliveryContract({ id: pinned.id })).toEqual(pinned);
+      }
       // `InitiativeError` and `INITIATIVE_ERROR_CTORS` are runtime-only lists: this
       // direct domain failure proves `unknown_delivery_contract` joined both lists.
       expect(() => store.getDeliveryContract({ id: 'not-a-real-contract@1' })).toThrow(/unknown_delivery_contract/i);

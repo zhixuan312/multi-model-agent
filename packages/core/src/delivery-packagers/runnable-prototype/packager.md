@@ -21,7 +21,7 @@ even though the store only checks requirement-key membership, not content.
 - **`executable_prototype`** — the runnable artifact itself: a script, a small app, a notebook,
   or an equivalent runnable unit that a reviewer can start without reading source code first.
   Register it with `storage_mode: 'managed'` when the content is small enough to store directly,
-  or `storage_mode: 'reference'` with a durable path/URI when it is not (e.g. a built container
+  or `storage_mode: 'external'` with a durable path/URI when it is not (e.g. a built container
   image or a large dataset directory). Confirm the reference actually resolves before attaching
   it — a dangling reference is not a satisfied requirement.
 - **`sample_data`** — the smallest data set that exercises the prototype's primary flow. Prefer

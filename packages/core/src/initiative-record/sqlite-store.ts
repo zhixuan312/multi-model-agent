@@ -2502,22 +2502,26 @@ export class InitiativeRecordStore implements InitiativeRepository {
           this.requireRow<ArtifactRefRow>('artifact_refs', row.artifact_id, 'artifact_id', 'ArtifactRef'),
         ),
       }));
-      let verdict: { valid: boolean; detail: string };
+      let adapterValid: boolean;
+      let adapterDetail: string;
       try {
-        verdict = adapter.validate({ deliverable, contract, members });
-      } catch {
+        const verdict = adapter.validate({ deliverable, contract, members });
+        if (
+          typeof verdict !== 'object' ||
+          verdict === null ||
+          typeof verdict.valid !== 'boolean' ||
+          typeof verdict.detail !== 'string'
+        ) {
+          throw new TargetAdapterValidationFailedError({ target_type: deliverableRow.target_type });
+        }
+        adapterValid = verdict.valid;
+        adapterDetail = verdict.detail;
+      } catch (err) {
+        if (err instanceof TargetAdapterValidationFailedError) throw err;
         throw new TargetAdapterValidationFailedError({ target_type: deliverableRow.target_type });
       }
-      if (
-        typeof verdict !== 'object' ||
-        verdict === null ||
-        typeof verdict.valid !== 'boolean' ||
-        typeof verdict.detail !== 'string'
-      ) {
-        throw new TargetAdapterValidationFailedError({ target_type: deliverableRow.target_type });
-      }
-      valid = complete && verdict.valid;
-      detail = verdict.detail;
+      valid = complete && adapterValid;
+      detail = adapterDetail;
     } else {
       detail = 'no adapter registered';
     }

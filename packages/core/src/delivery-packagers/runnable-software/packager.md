@@ -20,7 +20,7 @@ even though the store only checks requirement-key membership, not content.
 
 - **`source_changes`** — the actual changed source, referenced by a durable pointer (a commit
   range, a diff, or a branch reference) rather than pasted inline. Register it with
-  `storage_mode: 'reference'` pointing at that durable location; the bundle should never embed a
+  `storage_mode: 'external'` pointing at that durable location; the bundle should never embed a
   full copy of a repository.
 - **`run_instructions`** — plain, sequential steps to build and run the software from the
   `source_changes` reference: prerequisites, the exact build command, the exact run command, and
