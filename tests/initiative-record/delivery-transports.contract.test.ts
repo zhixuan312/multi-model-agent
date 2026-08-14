@@ -47,8 +47,9 @@ describe('SPEC-007 Delivery transports', () => {
       let revision = deliverable.json.revision!;
       for (const requirement of REQUIREMENTS) {
         const artifact = await call(h.baseUrl, h.token, { operation: 'artifact_register', input: { initiative_id: initiative.json.uuid, storage_mode: 'managed', path_or_uri: requirement, description: requirement }, expected_revision: 0, provenance });
-        const attached = await call(h.baseUrl, h.token, { operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.json.uuid, artifact_id: artifact.json.uuid, requirement }, expected_revision: revision, provenance });
-        revision = attached.json.revision!;
+        await call(h.baseUrl, h.token, { operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.json.uuid, artifact_id: artifact.json.uuid, requirement }, expected_revision: revision, provenance });
+        // The membership row carries no revision by contract; read the Deliverable's own back.
+        revision = (await call(h.baseUrl, h.token, { operation: 'deliverable_get', input: { uuid: deliverable.json.uuid } })).json.revision!;
       }
       // Adapter registry is process-local (Ground truth) — registering in-process before the
       // HTTP call is enough; this is NOT the excluded duplicate-adapter-registration case.
