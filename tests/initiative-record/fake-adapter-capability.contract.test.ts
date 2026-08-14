@@ -26,8 +26,10 @@ describe('SPEC-007 fake adapter capability proof', () => {
       revision = deliverable.revision;
       for (const requirement of ['executable_prototype', 'sample_data', 'usage_instructions', 'known_limitations', 'acceptance_evidence']) {
         const artifact = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'managed', path_or_uri: requirement, description: requirement }, expected_revision: 0, provenance }) as { uuid: string };
-        const attached = store.execute({ operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement }, expected_revision: revision, provenance }) as { revision: number };
-        revision = attached.revision;
+        store.execute({ operation: 'deliverable_attach_artifact', input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement }, expected_revision: revision, provenance });
+        // DeliverableArtifactMember is the membership row and carries no revision by contract,
+        // so read the Deliverable's own revision back rather than expecting one on the member.
+        revision = store.getDeliverable({ uuid: deliverable.uuid }).revision;
       }
       const baseline = store.execute({ operation: 'deliverable_validate', input: { deliverable_id: deliverable.uuid }, expected_revision: revision, provenance }) as { validation_state: string; revision: number };
       expect(baseline.validation_state).toBe('valid');
