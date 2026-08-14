@@ -548,6 +548,38 @@ export const deliveryContractListInputSchema = z.object({}).strict();
 export type DeliveryContractListInput = z.infer<typeof deliveryContractListInputSchema>;
 
 // ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — the first Deliverable operations (Task I-3, FR-3,
+// FR-4). `validation_state` is computed-only: none of these input schemas
+// accepts it (`.strict()` rejects the extra field). `deliverable_validate`
+// and `deliverable_deliver` (Task I-4) and `deliverable_approve` (Task I-6)
+// are separate, later schemas.
+// ---------------------------------------------------------------------------
+
+export const deliverableDefineInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    target_type: nonEmptyString,
+    delivery_contract: deliveryContractIdSchema,
+  })
+  .strict();
+export type DeliverableDefineInput = z.infer<typeof deliverableDefineInputSchema>;
+
+export const deliverableGetInputSchema = z.object({ uuid: uuidSchema }).strict();
+export type DeliverableGetInput = z.infer<typeof deliverableGetInputSchema>;
+
+export const deliverableListInputSchema = z.object({ initiative_id: uuidSchema }).strict();
+export type DeliverableListInput = z.infer<typeof deliverableListInputSchema>;
+
+export const deliverableAttachArtifactInputSchema = z
+  .object({
+    deliverable_id: uuidSchema,
+    artifact_id: uuidSchema,
+    requirement: nonEmptyString,
+  })
+  .strict();
+export type DeliverableAttachArtifactInput = z.infer<typeof deliverableAttachArtifactInputSchema>;
+
+// ---------------------------------------------------------------------------
 // ArtifactRef
 // ---------------------------------------------------------------------------
 
@@ -868,6 +900,9 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   mutating('initiative_task_set_method', initiativeTaskSetMethodInputSchema),
   // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
   mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
+  // SPEC-007 Delivery Layer (Task I-3, ← AC-1.5, AC-1.6) — the first Deliverable mutations.
+  mutating('deliverable_define', deliverableDefineInputSchema),
+  mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -949,5 +984,15 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
 
   // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation.
   mutating('initiative_bootstrap', initiativeBootstrapInputSchema),
+
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1 defined the schemas;
+  // Task I-3 wires them into the shared operation union) and the first Deliverable operations
+  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6).
+  readOnly('delivery_contract_get', deliveryContractGetInputSchema),
+  readOnly('delivery_contract_list', deliveryContractListInputSchema),
+  mutating('deliverable_define', deliverableDefineInputSchema),
+  readOnly('deliverable_get', deliverableGetInputSchema),
+  readOnly('deliverable_list', deliverableListInputSchema),
+  mutating('deliverable_attach_artifact', deliverableAttachArtifactInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

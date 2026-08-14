@@ -371,6 +371,21 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     'Create (or reference) a Product, its Workspaces and Resources, an Initiative linked to each '
     + 'Workspace, and optional Requirements with nested Acceptance Criteria, in one atomic call from '
     + 'a confirmed intake draft. Mutating: pass expected_revision and provenance.',
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
+  // operations (← AC-1.4, AC-1.5, AC-1.6). No caller-accessible Delivery Contract registration,
+  // update, or deletion tool exists.
+  delivery_contract_get: 'Look up one registered Delivery Contract declaration by its exact identifier (e.g. runnable-prototype@1).',
+  delivery_contract_list: 'List every registered Delivery Contract declaration, in stable identifier order.',
+  deliverable_define:
+    'Define a Deliverable for an Initiative against a registered Delivery Contract (target_type must match the '
+    + "contract's own target_type). Starts pending, with no delivery_reference and no membership. Mutating: pass "
+    + 'expected_revision (0 — a Deliverable is always newly created) and provenance.',
+  deliverable_get: 'Look up a Deliverable by uuid.',
+  deliverable_list: 'List the Deliverables defined under an Initiative.',
+  deliverable_attach_artifact:
+    'Attach an ArtifactRef (from the same Initiative as the Deliverable) to a Deliverable under a named '
+    + 'requirement string from its Delivery Contract. Mutating: pass expected_revision (the Deliverable '
+    + 'revision) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,

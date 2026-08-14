@@ -194,6 +194,99 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
     }
   });
 
+  // SPEC-007 Delivery Layer (Task I-3, ← AC-1.6): the two new mutations' event_type/payload-key
+  // pairs are runtime-only allowlist entries (see the plan's compile-boundary note) — a green
+  // build does not prove `INITIATIVE_EVENT_TYPES`/`INITIATIVE_EVENT_PAYLOAD_KEYS` were extended
+  // correctly. Supplementary to the plan-authored deliverable-membership.contract.test.ts, which
+  // already exercises the exact successful Event sequence end to end.
+  it('emits the frozen event_type and exact payload keys for deliverable_define and deliverable_attach_artifact', () => {
+    const { store, cleanup } = openStore();
+    try {
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const initiative = store.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
+        expected_revision: 0,
+        provenance,
+      });
+      const artifact = store.execute({
+        operation: 'artifact_register',
+        input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', description: 'a' },
+        expected_revision: 0,
+        provenance,
+      });
+      const beforeCount = store.listEvents({}).length;
+      const deliverable = store.execute({
+        operation: 'deliverable_define',
+        input: { initiative_id: initiative.uuid, target_type: 'runnable-prototype', delivery_contract: 'runnable-prototype@1' },
+        expected_revision: 0,
+        provenance,
+      });
+      store.execute({
+        operation: 'deliverable_attach_artifact',
+        input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement: 'executable_prototype' },
+        expected_revision: deliverable.revision,
+        provenance,
+      });
+
+      const events = store.listEvents({}).slice(beforeCount);
+      expect(events.map((event) => event.event_type)).toEqual(['deliverable_defined', 'deliverable_artifact_attached']);
+      expect(Object.keys(events[0]!.payload).sort()).toEqual(['delivery_contract', 'initiative_id', 'target_type', 'uuid'].sort());
+      expect(Object.keys(events[1]!.payload).sort()).toEqual(['artifact_id', 'deliverable_id', 'requirement'].sort());
+      expect(events[0]!.payload).toEqual({
+        uuid: deliverable.uuid,
+        initiative_id: initiative.uuid,
+        target_type: 'runnable-prototype',
+        delivery_contract: 'runnable-prototype@1',
+      });
+      expect(events[1]!.payload).toEqual({
+        deliverable_id: deliverable.uuid,
+        artifact_id: artifact.uuid,
+        requirement: 'executable_prototype',
+      });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('rejects an attachment for a requirement not declared by the Delivery Contract without writing membership or an Event', () => {
+    const { store, cleanup } = openStore();
+    try {
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const initiative = store.execute({
+        operation: 'initiative_create',
+        input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
+        expected_revision: 0,
+        provenance,
+      });
+      const artifact = store.execute({
+        operation: 'artifact_register',
+        input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', description: 'a' },
+        expected_revision: 0,
+        provenance,
+      });
+      const deliverable = store.execute({
+        operation: 'deliverable_define',
+        input: { initiative_id: initiative.uuid, target_type: 'runnable-prototype', delivery_contract: 'runnable-prototype@1' },
+        expected_revision: 0,
+        provenance,
+      });
+      const eventsBefore = store.listEvents({ initiative_id: initiative.uuid }).length;
+
+      expect(() => store.execute({
+        operation: 'deliverable_attach_artifact',
+        input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement: 'not_a_contract_requirement' },
+        expected_revision: deliverable.revision,
+        provenance,
+      })).toThrow(/requirement|invalid_request/i);
+
+      expect(store.getDeliverable({ uuid: deliverable.uuid })).toMatchObject({ revision: deliverable.revision });
+      expect(store.listEvents({ initiative_id: initiative.uuid })).toHaveLength(eventsBefore);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('returns not_found for initiative_status against an unknown Initiative and writes nothing', () => {
     const { store, cleanup } = openStore();
     try {

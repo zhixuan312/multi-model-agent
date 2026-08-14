@@ -334,7 +334,9 @@ export interface Event {
     | 'Evidence'
     | 'EvidenceLink'
     | 'Risk'
-    | 'VerificationRun';
+    | 'VerificationRun'
+    | 'Deliverable'
+    | 'DeliverableArtifactMember';
   entity_id: string;
   initiative_id: string | null;
   event_type: string;
@@ -558,7 +560,9 @@ export type InitiativeRecordEntity =
   | Risk
   | VerificationRun
   | PhaseRecord
-  | InitiativeBootstrapResult;
+  | InitiativeBootstrapResult
+  | Deliverable
+  | DeliverableArtifactMember;
 
 /** One `initiative_bootstrap` requested Workspace, paired back to its request `workspace_key`. */
 export interface InitiativeBootstrapWorkspaceResult extends Workspace {
@@ -707,6 +711,16 @@ export const INITIATIVE_OPERATIONS = [
   // SPEC-006 Business intake — the confirmed-draft composite mutation (FR-6, ← AC-1.6). Task
   // I-2 defines the contract only; Task I-3 implements the store dispatch.
   'initiative_bootstrap',
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1 defined the schemas;
+  // Task I-3 wires them into the shared operation union) and the first Deliverable operations
+  // (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate` and `deliverable_deliver` are
+  // Task I-4 scope; `deliverable_approve` is Task I-6 scope.
+  'delivery_contract_get',
+  'delivery_contract_list',
+  'deliverable_define',
+  'deliverable_get',
+  'deliverable_list',
+  'deliverable_attach_artifact',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -755,6 +769,11 @@ export const INITIATIVE_EVENT_TYPES = {
   // SPEC-005 Method Registry (FR-4, "Data model" event table). `method_get`/`method_list` are
   // reads — they have no event-type mapping.
   initiative_task_set_method: 'task_method_set',
+  // SPEC-007 Delivery Layer (Task I-3, "Data model" event table). `delivery_contract_get`/
+  // `delivery_contract_list`/`deliverable_get`/`deliverable_list` are reads — they have no
+  // event-type mapping.
+  deliverable_define: 'deliverable_defined',
+  deliverable_attach_artifact: 'deliverable_artifact_attached',
 } as const;
 
 /**
@@ -802,4 +821,7 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   lifecycle_contract_set: ['previous_lifecycle_contract', 'new_lifecycle_contract'],
   // SPEC-005 Method Registry (FR-4, "Interfaces / contracts").
   task_method_set: ['previous_method', 'new_method'],
+  // SPEC-007 Delivery Layer (Task I-3, "Interfaces / contracts").
+  deliverable_defined: ['uuid', 'initiative_id', 'target_type', 'delivery_contract'],
+  deliverable_artifact_attached: ['deliverable_id', 'artifact_id', 'requirement'],
 } as const;

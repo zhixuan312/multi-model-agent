@@ -52,6 +52,8 @@ import {
   type ArtifactRegisterInput,
   type DecisionRecordInput,
   type DecisionSupersedeInput,
+  type DeliverableAttachArtifactInput,
+  type DeliverableDefineInput,
   type EvidenceAddInput,
   type EvidenceLinkInput,
   type InitiativeBootstrapInput,
@@ -90,6 +92,8 @@ import {
   type AcceptanceCriterion,
   type ArtifactRef,
   type Decision,
+  type Deliverable,
+  type DeliverableArtifactMember,
   type DeliveryContract,
   type Event,
   type Evidence,
@@ -176,6 +180,28 @@ interface ArtifactRefRow {
   created_at: string;
   updated_at: string;
   revision: number;
+}
+
+/** Raw `deliverables` table row shape (snake_case columns — internal only). SPEC-007 Delivery Layer, Task I-3. */
+interface DeliverableRow {
+  uuid: string;
+  initiative_id: string;
+  target_type: string;
+  delivery_contract: string;
+  validation_state: Deliverable['validation_state'];
+  validation_detail: string;
+  delivery_reference: string | null;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+}
+
+/** Raw `deliverable_artifacts` table row shape (snake_case columns — internal only). SPEC-007 Delivery Layer, Task I-3. */
+interface DeliverableArtifactRow {
+  deliverable_id: string;
+  artifact_id: string;
+  requirement: string;
+  created_at: string;
 }
 
 /** Raw `products` table row shape (snake_case columns — internal only). */
@@ -726,6 +752,48 @@ export class InitiativeRecordStore implements InitiativeRepository {
   }
 
   // ---------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — Deliverable reads (Task I-3, ← AC-1.4, AC-1.5,
+  // AC-1.6). `deliverable_validate`/`deliverable_deliver` (Task I-4) and
+  // `deliverable_approve` (Task I-6) extend `deliverables` further; these two
+  // reads only surface what `mutateDeliverableDefine`/`mutateDeliverableAttachArtifact`
+  // (below) write.
+  // ---------------------------------------------------------------------
+
+  /** `deliverable_get` — `uuid`. Throws `not_found` for an unknown identifier. */
+  getDeliverable(lookup: { uuid: string }): Deliverable {
+    return mapDeliverableRow(this.requireDeliverableRow(lookup.uuid));
+  }
+
+  /** `deliverable_list` — every Deliverable for one Initiative, ordered `createdAt` ascending, then `uuid` ascending. */
+  listDeliverables(filter: { initiative_id: string }): Deliverable[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM deliverables WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
+      .all(filter.initiative_id) as unknown as DeliverableRow[];
+    return rows.map(mapDeliverableRow);
+  }
+
+  /** Returns the raw `deliverables` row for `uuid`, or throws `not_found`. Shared by reads and the attach mutation's revision check. */
+  private requireDeliverableRow(uuid: string): DeliverableRow {
+    const row = this.db.prepare(`SELECT * FROM deliverables WHERE uuid = ?`).get(uuid) as DeliverableRow | undefined;
+    if (!row) {
+      throw new NotFoundError({ entity_type: 'Deliverable', lookup: uuid });
+    }
+    return row;
+  }
+
+  /** Throws `revision_conflict` if `row.revision` does not match `expectedRevision`. */
+  private requireDeliverableRevision(row: DeliverableRow, expectedRevision: number): void {
+    if (row.revision !== expectedRevision) {
+      throw new RevisionConflictError({
+        entity_type: 'Deliverable',
+        entity_id: row.uuid,
+        expected_revision: expectedRevision,
+        actual_revision: row.revision,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // Read operations (Task I-4) — one method per frozen get/list operation,
   // plus the joined read methods `initiative_resume` (Task I-5) composes
   // from. Every `get*` throws typed `not_found` for an unknown lookup.
@@ -1252,6 +1320,12 @@ export class InitiativeRecordStore implements InitiativeRepository {
       // composite mutation: one atomic transaction over several entity creates.
       case 'initiative_bootstrap':
         return this.mutateInitiativeBootstrap(request.input, request.expected_revision, request.provenance);
+      // SPEC-007 Delivery Layer (Task I-3, ← AC-1.5, AC-1.6): the first Deliverable mutations —
+      // one transactional `store.execute()` call each, same pattern as every mutation above.
+      case 'deliverable_define':
+        return this.mutateDeliverableDefine(request.input, request.expected_revision, request.provenance);
+      case 'deliverable_attach_artifact':
+        return this.mutateDeliverableAttachArtifact(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -2163,6 +2237,157 @@ export class InitiativeRecordStore implements InitiativeRepository {
       provenance,
     });
     return artifact;
+  }
+
+  // ---------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — the first Deliverable mutations (Task I-3, ←
+  // AC-1.4, AC-1.5, AC-1.6). `deliverable_validate`/`deliverable_deliver`
+  // (Task I-4) and `deliverable_approve` (Task I-6) are separate, later
+  // mutations against the same `deliverables` row.
+  // ---------------------------------------------------------------------
+
+  /**
+   * `deliverable_define` (← AC-1.4, AC-1.6): always a create (`expected_revision` must be 0 —
+   * there is no create-or-update identity for a Deliverable, unlike `artifact_register`). Throws
+   * `unknown_delivery_contract` for an unregistered `delivery_contract`, and `invalid_request` for
+   * an Initiative that does not exist or a `target_type` that does not match the resolved
+   * Delivery Contract's own `target_type` (AC-1.4's target/contract mismatch check). The new row
+   * starts `validation_state: 'pending'` with an empty detail and a null `delivery_reference` —
+   * `validation_state` is computed-only and not part of this input.
+   */
+  private mutateDeliverableDefine(
+    input: DeliverableDefineInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Deliverable {
+    this.requireCreateRevision(expectedRevision, 'Deliverable');
+    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const contract = this.getDeliveryContractOrThrow(input.delivery_contract);
+    if (contract.target_type !== input.target_type) {
+      throw new InvalidRequestError({
+        field_errors: {
+          target_type: [
+            `does not match Delivery Contract '${input.delivery_contract}' target_type '${contract.target_type}'`,
+          ],
+        },
+        message:
+          `invalid_request: target_type '${input.target_type}' does not match Delivery Contract ` +
+          `'${input.delivery_contract}' target_type '${contract.target_type}'`,
+      });
+    }
+    const uuid = randomUUID();
+    const now = provenance.timestamp;
+    this.db
+      .prepare(
+        `INSERT INTO deliverables (uuid, initiative_id, target_type, delivery_contract, validation_state, validation_detail, delivery_reference, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 'pending', '', NULL, ?, ?, 0)`,
+      )
+      .run(uuid, input.initiative_id, input.target_type, input.delivery_contract, now, now);
+    const deliverable: Deliverable = {
+      uuid,
+      initiative_id: input.initiative_id,
+      target_type: input.target_type,
+      delivery_contract: input.delivery_contract,
+      validation_state: 'pending',
+      validation_detail: '',
+      delivery_reference: null,
+      createdAt: now,
+      updatedAt: now,
+      revision: 0,
+    };
+    this.writeEvent({
+      entity_type: 'Deliverable',
+      entity_id: uuid,
+      initiative_id: input.initiative_id,
+      event_type: 'deliverable_defined',
+      payload: {
+        uuid,
+        initiative_id: input.initiative_id,
+        target_type: input.target_type,
+        delivery_contract: input.delivery_contract,
+      },
+      provenance,
+    });
+    return deliverable;
+  }
+
+  /**
+   * `deliverable_attach_artifact` (← AC-1.5, AC-1.6): attaches an ArtifactRef to a Deliverable
+   * under a caller-named `requirement` string — no membership is inferred from existing
+   * Artifacts. `expected_revision` is checked (and, on success, incremented) against the
+   * DELIVERABLE's own revision, not a revision on the membership row itself: `DeliverableArtifactMember`
+   * carries no `revision` field (its identity is the composite `(deliverable_id, artifact_id,
+   * requirement)`), so the owning Deliverable is the sole optimistic-concurrency anchor for this
+   * mutation, the same role `Task.revision` plays for `initiative_task_execution`. Throws
+   * `invalid_request` for an unknown Deliverable or Artifact, a requirement not declared by the
+   * Deliverable's Delivery Contract, an Artifact outside the Deliverable's own Initiative
+   * (cross-Initiative — AC-1.5), or a duplicate `(deliverable_id, artifact_id, requirement)`
+   * identity.
+   */
+  private mutateDeliverableAttachArtifact(
+    input: DeliverableAttachArtifactInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): DeliverableArtifactMember {
+    const deliverableRow = this.requireDeliverableRow(input.deliverable_id);
+    this.requireDeliverableRevision(deliverableRow, expectedRevision);
+    const contract = this.getDeliveryContractOrThrow(deliverableRow.delivery_contract);
+    if (!contract.requires.includes(input.requirement)) {
+      throw new InvalidRequestError({
+        field_errors: {
+          requirement: [
+            `is not declared by Delivery Contract '${deliverableRow.delivery_contract}'`,
+          ],
+        },
+        message:
+          `invalid_request: requirement '${input.requirement}' is not declared by Delivery Contract `
+          + `'${deliverableRow.delivery_contract}'`,
+      });
+    }
+    const artifactRow = this.requireRow<ArtifactRefRow>('artifact_refs', input.artifact_id, 'artifact_id', 'ArtifactRef');
+    if (artifactRow.initiative_id !== deliverableRow.initiative_id) {
+      throw new InvalidRequestError({
+        field_errors: {
+          artifact_id: [
+            "references an ArtifactRef outside the Deliverable's own Initiative (cross-initiative)",
+          ],
+        },
+        message: `invalid_request: cross-initiative Artifact ${input.artifact_id} may not attach to Deliverable ${input.deliverable_id}`,
+      });
+    }
+    const existingMember = this.db
+      .prepare(`SELECT 1 FROM deliverable_artifacts WHERE deliverable_id = ? AND artifact_id = ? AND requirement = ?`)
+      .get(input.deliverable_id, input.artifact_id, input.requirement) as Record<string, unknown> | undefined;
+    if (existingMember) {
+      throw new InvalidRequestError({
+        field_errors: {
+          requirement: ['this Artifact is already attached to this Deliverable for this requirement (duplicate member identity)'],
+        },
+        message: `invalid_request: duplicate DeliverableArtifactMember identity (${input.deliverable_id}, ${input.artifact_id}, ${input.requirement})`,
+      });
+    }
+    const now = provenance.timestamp;
+    this.db
+      .prepare(`INSERT INTO deliverable_artifacts (deliverable_id, artifact_id, requirement, created_at) VALUES (?, ?, ?, ?)`)
+      .run(input.deliverable_id, input.artifact_id, input.requirement, now);
+    const nextRevision = deliverableRow.revision + 1;
+    this.db
+      .prepare(`UPDATE deliverables SET updated_at = ?, revision = ? WHERE uuid = ?`)
+      .run(now, nextRevision, input.deliverable_id);
+    const member = mapDeliverableArtifactRow({
+      deliverable_id: input.deliverable_id,
+      artifact_id: input.artifact_id,
+      requirement: input.requirement,
+      created_at: now,
+    });
+    this.writeEvent({
+      entity_type: 'DeliverableArtifactMember',
+      entity_id: `${input.deliverable_id}:${input.artifact_id}:${input.requirement}`,
+      initiative_id: deliverableRow.initiative_id,
+      event_type: 'deliverable_artifact_attached',
+      payload: { deliverable_id: input.deliverable_id, artifact_id: input.artifact_id, requirement: input.requirement },
+      provenance,
+    });
+    return member;
   }
 
   // ---------------------------------------------------------------------
@@ -3577,6 +3802,32 @@ function mapArtifactRefRow(row: ArtifactRefRow): ArtifactRef {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `deliverables` row to the public `Deliverable` shape. SPEC-007 Delivery Layer, Task I-3. */
+function mapDeliverableRow(row: DeliverableRow): Deliverable {
+  return {
+    uuid: row.uuid,
+    initiative_id: row.initiative_id,
+    target_type: row.target_type,
+    delivery_contract: row.delivery_contract,
+    validation_state: row.validation_state,
+    validation_detail: row.validation_detail,
+    delivery_reference: row.delivery_reference,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    revision: Number(row.revision),
+  };
+}
+
+/** Maps one raw `deliverable_artifacts` row to the public `DeliverableArtifactMember` shape. SPEC-007 Delivery Layer, Task I-3. */
+function mapDeliverableArtifactRow(row: DeliverableArtifactRow): DeliverableArtifactMember {
+  return {
+    deliverable_id: row.deliverable_id,
+    artifact_id: row.artifact_id,
+    requirement: row.requirement,
+    createdAt: row.created_at,
   };
 }
 

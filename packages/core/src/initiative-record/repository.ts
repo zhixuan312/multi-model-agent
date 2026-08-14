@@ -27,6 +27,7 @@ import type {
   AcceptanceCriterion,
   ArtifactRef,
   Decision,
+  Deliverable,
   DeliveryContract,
   Evidence,
   EvidenceLink,
@@ -219,4 +220,14 @@ export interface InitiativeRepository {
   getDeliveryContract(lookup: { id: string }): DeliveryContract;
   /** `delivery_contract_list` — every registered declaration, in stable ascending identifier order. */
   listDeliveryContracts(): DeliveryContract[];
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — the first Deliverable reads (Task I-3, ← AC-1.4,
+  // AC-1.5, AC-1.6).
+  // -------------------------------------------------------------------------
+
+  /** `deliverable_get` — throws `not_found` for an unknown `uuid`. */
+  getDeliverable(lookup: { uuid: string }): Deliverable;
+  /** `deliverable_list` — ordered `createdAt` ascending, then `uuid` ascending. */
+  listDeliverables(filter: { initiative_id: string }): Deliverable[];
 }
