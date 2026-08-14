@@ -20,6 +20,7 @@ import {
 import { tmpdir } from 'node:os';
 
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
+import { readFileSync } from 'node:fs';
 import { runDisable, runEnable, ToggleExitCode } from '../../packages/server/src/cli/toggle.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
 
@@ -100,6 +101,29 @@ describe('enable / disable — roster-driven', () => {
   afterEach(() => {
     removeFakeHome(home);
     rmSync(skillsRoot, { recursive: true, force: true });
+  });
+
+  it('enables on a machine that has no config file yet', async () => {
+    // `mma enable`/`mma disable` used to carry their OWN copy of persistDeclaredState, and that
+    // copy called readFileSync unconditionally — so on a fresh machine, where no config exists
+    // yet, the very first `mma enable` threw. `mma setup` worked, because the canonical
+    // implementation creates the file. Two implementations, one of them wrong on first run.
+    rmSync(configPath, { force: true });
+    expect(existsSync(configPath)).toBe(false);
+
+    const out = captureOutput();
+    const code = await runEnable({
+      argv: ['--target=claude-code'],
+      homeDir: home,
+      skillsRoot,
+      configPath,
+      stdout: out.stdout,
+      stderr: out.stderr,
+    });
+
+    expect(code).toBe(0);
+    expect(existsSync(configPath)).toBe(true);
+    expect(JSON.parse(readFileSync(configPath, 'utf8')).clients).toMatchObject({ 'claude-code': 'on' });
   });
 
   it('enable declares --target clients on, persists it, and provisions them', async () => {

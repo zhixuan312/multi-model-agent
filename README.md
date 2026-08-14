@@ -497,14 +497,14 @@ Add the `diagnostics` block to `~/.mma/config.json`:
   "agents": { "...": "..." },
   "diagnostics": {
     "log": true,
-    "verbose": true
+    "logDir": "~/.mma/logs"
   }
 }
 ```
 
-Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.mma/logs/requests/<taskId>.json`.
+Or per-run via `mma serve --log`. JSONL goes to `~/.mma/logs/mma-<date>.jsonl`, or to `diagnostics.logDir` when set.
 
-> **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
+> **Note:** diagnostic logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
 ## Operator commands
 
@@ -512,7 +512,7 @@ Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date
 mma setup                                    # interactive first run: models + clients + config, then sync-skills
 mma update [--no-install] [--package-manager=npm|pnpm|bun]  # update everything, then name what to restart
 mma doctor [--json] [--offline]              # report every version surface + drift; exits non-zero on problems
-mma [--verbose] [--log]                      # start daemon (serve is the default command)
+mma [--log]                                  # start daemon (serve is the default command)
 mma stop    [--now]                          # stop the daemon and wait for it to exit (--now skips the drain)
 mma restart [--now]                          # stop, start a replacement, wait until it answers /health
 mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity

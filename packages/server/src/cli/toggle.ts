@@ -29,9 +29,9 @@
  *   1 — one or more clients failed to provision
  *   3 — explicit --target named an unknown ClientId
  */
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
+import { persistDeclaredState } from './declared-roster.js';
 import { removeCommandFromClaudeCode } from '../provisioning/claude-code-commands.js';
 import { buildCliProvisioningService } from '../provisioning/cli-provisioning.js';
 import type { DeclaredClientRoster } from '../provisioning/roster.js';
@@ -59,23 +59,6 @@ interface ToggleDeps {
   configPath?: string;
   stdout?: (s: string) => boolean;
   stderr?: (s: string) => boolean;
-}
-
-/** Merge `{ [id]: state }` for every `targets` into `configPath`'s
- * `clients` map, preserving every other key in the file untouched. */
-function persistDeclaredState(configPath: string, targets: ClientId[], state: 'on' | 'off'): void {
-  const parsed: unknown = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`config file is not a JSON object: ${configPath}`);
-  }
-  const raw = parsed as Record<string, unknown>;
-  const existingClients = typeof raw.clients === 'object' && raw.clients !== null && !Array.isArray(raw.clients)
-    ? (raw.clients as Record<string, unknown>)
-    : {};
-  const nextClients = { ...existingClients };
-  for (const id of targets) nextClients[id] = state;
-  const next = { ...raw, clients: nextClients };
-  fs.writeFileSync(configPath, JSON.stringify(next, null, 2) + '\n', 'utf-8');
 }
 
 /**
