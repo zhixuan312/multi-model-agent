@@ -226,7 +226,7 @@ export function verify(rec) {
 
   // ─── Assist routes (context-blocks): minimal envelope check ───
   if (e.kind === 'assist') {
-    out.push(C('register', r && r.task ? 'PASS' : 'WARN', JSON.stringify(r?.error)));
+    out.push(C('register', r && r.execution ? 'PASS' : 'WARN', JSON.stringify(r?.error)));
     return out;
   }
 
@@ -250,8 +250,8 @@ export function verify(rec) {
     out.push(C('cancel-flag-visible', midFlight || alreadyTerminal ? 'PASS' : 'FAIL',
       `status=${p.status} flag=${p.body?.cancellationRequested}`));
 
-    out.push(C('terminal-cancelled', r?.task?.status === 'cancelled' ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status}`));
+    out.push(C('terminal-cancelled', r?.execution?.status === 'cancelled' ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status}`));
     out.push(C('cancel-error-code', r?.error?.code === 'aborted' ? 'PASS' : 'FAIL',
       `error=${JSON.stringify(r?.error)}`));
     out.push(C('reviewer-skipped', r?.metrics?.reviewer === null ? 'PASS' : 'FAIL',
@@ -264,7 +264,7 @@ export function verify(rec) {
 
     const keys = Object.keys(r ?? {}).sort();
     out.push(C('layered-200',
-      JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task'])
+      JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw'])
         ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
     return out;
   }
@@ -296,10 +296,10 @@ export function verify(rec) {
     // A taskId proves the adapter ACCEPTED both fields: a rejection returns a tool error instead.
     out.push(C('mcp-contract-accepted', m.taskId ? 'PASS' : 'FAIL',
       m.taskId ? `taskId=${m.taskId}` : `no taskId — payload=${JSON.stringify(m.runPayload).slice(0, 220)}`));
-    out.push(C('mcp-method-echoed', r?.task?.method === 'software-change@1' ? 'PASS' : 'FAIL',
-      `task.method=${r?.task?.method} (must survive the MCP path exactly as it does over REST)`));
-    out.push(C('mcp-terminal-clean', r?.task?.status && !r?.error ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    out.push(C('mcp-method-echoed', r?.execution?.method === 'software-change@1' ? 'PASS' : 'FAIL',
+      `execution.method=${r?.execution?.method} (must survive the MCP path exactly as it does over REST)`));
+    out.push(C('mcp-terminal-clean', r?.execution?.status && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status} error=${JSON.stringify(r?.error)}`));
     return out;
   }
 
@@ -309,17 +309,19 @@ export function verify(rec) {
   if (e.kind === 'mcp-tools') {
     const m = rec.mcpTools ?? {};
     out.push(C('mcp-context-block-create', m.blockId ? 'PASS' : 'FAIL', `blockId=${m.blockId}`));
-    const listed = Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks : (Array.isArray(m.listPayload) ? m.listPayload : null);
+    const listed = Array.isArray(m.listPayload?.executions) ? m.listPayload.executions
+      : Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks
+      : (Array.isArray(m.listPayload) ? m.listPayload : null);
     out.push(C('mcp-task-list', listed !== null ? 'PASS' : 'FAIL',
-      `tasks=${listed ? listed.length : 'not an array'} — the tool must return a task collection`));
-    out.push(C('mcp-task-get', m.getPayload?.taskId === m.taskId ? 'PASS' : 'FAIL',
-      `returned taskId=${m.getPayload?.taskId} want=${m.taskId}`));
+      `executions=${listed ? listed.length : 'not an array'} — the tool must return an execution collection`));
+    out.push(C('mcp-task-get', (m.getPayload?.executionId ?? m.getPayload?.taskId) === m.taskId ? 'PASS' : 'FAIL',
+      `returned executionId=${m.getPayload?.executionId ?? m.getPayload?.taskId} want=${m.taskId}`));
     // Cancellation is REQUESTED, so either acknowledgement shape is correct; what must not happen
     // is the tool failing to answer at all.
     out.push(C('mcp-task-cancel', m.cancelPayload !== null && m.cancelPayload !== undefined ? 'PASS' : 'FAIL',
       `ack=${JSON.stringify(m.cancelPayload)}`));
-    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.task?.status) ? 'PASS' : 'WARN',
-      `terminal status=${m.terminal?.task?.status}`));
+    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.execution?.status) ? 'PASS' : 'WARN',
+      `terminal status=${m.terminal?.execution?.status}`));
     out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
       `delete=${JSON.stringify(m.deleteBlock)}`));
     return out;
@@ -371,11 +373,31 @@ export function verify(rec) {
     // A deliberate golden, not a derived list: growing or shrinking the MCP tool
     // surface is a wire-contract change every consumer feels, so it should require
     // editing this line. (It went stale once — `mma_task_list` and the two
-    // context-block tools shipped while this still expected the original four.)
+    // context-block tools shipped while this still expected the original four; then the whole
+    // record surface shipped while this still expected the pre-SPEC-003 task vocabulary, which
+    // is exactly what this run caught.)
     const toolNames = (m.tools?.json?.result?.tools ?? []).map((t) => t.name).sort();
     const expected = [
-      'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-      'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+      'mma_acceptance_criterion_add', 'mma_acceptance_criterion_get', 'mma_acceptance_criterion_list', 'mma_artifact_get',
+      'mma_artifact_register', 'mma_context_block_create', 'mma_context_block_delete', 'mma_decision_get',
+      'mma_decision_list', 'mma_decision_record', 'mma_decision_supersede', 'mma_deliverable_approve',
+      'mma_deliverable_attach_artifact', 'mma_deliverable_define', 'mma_deliverable_deliver', 'mma_deliverable_get',
+      'mma_deliverable_list', 'mma_deliverable_package', 'mma_deliverable_validate', 'mma_delivery_contract_get',
+      'mma_delivery_contract_list', 'mma_evidence_add', 'mma_evidence_get', 'mma_evidence_link',
+      'mma_evidence_links_list', 'mma_evidence_list', 'mma_execution_cancel', 'mma_execution_get',
+      'mma_execution_list', 'mma_execution_wait', 'mma_initiative_bootstrap', 'mma_initiative_create',
+      'mma_initiative_export', 'mma_initiative_focus_set', 'mma_initiative_gate_status', 'mma_initiative_get',
+      'mma_initiative_import', 'mma_initiative_initiative_task_set_method', 'mma_initiative_link_workspace', 'mma_initiative_list',
+      'mma_initiative_method_get', 'mma_initiative_method_list', 'mma_initiative_phase_enter', 'mma_initiative_phase_reopen',
+      'mma_initiative_phase_satisfy', 'mma_initiative_phase_skip', 'mma_initiative_relate', 'mma_initiative_relations',
+      'mma_initiative_resume', 'mma_initiative_set_lifecycle_contract', 'mma_initiative_status', 'mma_initiative_task_claim',
+      'mma_initiative_task_complete', 'mma_initiative_task_create', 'mma_initiative_task_execution', 'mma_initiative_task_get',
+      'mma_initiative_task_list', 'mma_initiative_task_release', 'mma_product_create', 'mma_product_get',
+      'mma_product_list', 'mma_requirement_add', 'mma_requirement_get', 'mma_requirement_list',
+      'mma_resource_list', 'mma_resource_register', 'mma_risk_add', 'mma_risk_get',
+      'mma_risk_list', 'mma_risk_status', 'mma_run', 'mma_verification_get',
+      'mma_verification_list', 'mma_verification_record', 'mma_verification_run', 'mma_workspace_create',
+      'mma_workspace_get', 'mma_workspace_list',
     ];
     out.push(C('mcp-tools', JSON.stringify(toolNames) === JSON.stringify(expected) ? 'PASS' : 'FAIL',
       `tools=${toolNames.join(',')}`));
@@ -410,8 +432,8 @@ export function verify(rec) {
       `payload=${JSON.stringify(m.runPayload).slice(0, 160)}`));
 
     const w = m.waitPayload;
-    out.push(C('mcp-terminal', w?.task?.status && w.task.status !== 'failed' ? 'PASS' : 'FAIL',
-      `status=${w?.task?.status} error=${JSON.stringify(w?.error)}`));
+    out.push(C('mcp-terminal', w?.execution?.status && w.execution.status !== 'failed' ? 'PASS' : 'FAIL',
+      `status=${w?.execution?.status} error=${JSON.stringify(w?.error)}`));
 
     // THE load-bearing assertion: the same execution read over REST must be
     // byte-identical — one runtime, two transports, no duplicated state.
@@ -441,17 +463,17 @@ export function verify(rec) {
   //     via env.error. ───
   if (e.kind === 'async_error') {
     const keys = Object.keys(r ?? {}).sort();
-    const shapeOk = JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
+    const shapeOk = JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw']);
     out.push(C('layered-200', shapeOk ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
     const err = r?.error;
     const errOk = err && typeof err.code === 'string' && typeof err.message === 'string';
     out.push(C('async-error-envelope', errOk ? 'PASS' : 'FAIL', `error=${JSON.stringify(err)}`));
-    out.push(C('async-error-status', r?.task?.status === 'failed' ? 'PASS' : 'FAIL', `status=${r?.task?.status}`));
+    out.push(C('async-error-status', r?.execution?.status === 'failed' ? 'PASS' : 'FAIL', `status=${r?.execution?.status}`));
     return out;
   }
 
   // New layered response: { task, output, execution, metrics, raw, error }
-  const taskStatus = r?.task?.status;
+  const taskStatus = r?.execution?.status;
   const implSessionId = r?.execution?.sessions?.implementer;
   const revSessionId = r?.execution?.sessions?.reviewer;
 
@@ -654,7 +676,7 @@ export function verify(rec) {
   // ⑩ Layered 200 shape — top-level keys must be exactly the 6 categories
   if (e.kind === 'read' || e.kind === 'write') {
     const keys = Object.keys(r ?? {}).sort();
-    const expected = ['error', 'execution', 'metrics', 'output', 'raw', 'task'];
+    const expected = ['error', 'execution', 'metrics', 'output', 'raw'];
     const match = JSON.stringify(keys) === JSON.stringify(expected);
     out.push(C('layered-200', match ? 'PASS' : 'FAIL',
       `keys=${keys.join(',')} expected=${expected.join(',')}`));
@@ -672,7 +694,7 @@ export function verify(rec) {
   // ⑫ Structured 202 polling shape (captured during poll phase)
   if (rec.polling202) {
     const p = rec.polling202;
-    const hasFields = p.taskId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
+    const hasFields = (p.executionId ?? p.taskId) && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
     out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
       `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
 
@@ -682,7 +704,7 @@ export function verify(rec) {
     //     admission. `phaseElapsedMs` is asserted here too because it is the field
     //     that silently went missing on one wire when the two running-snapshot
     //     shapes were maintained by hand.
-    const identity = p.taskId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
+    const identity = (p.executionId ?? p.taskId) && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
     out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
       `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
   }
@@ -723,7 +745,7 @@ export function verify(rec) {
   //     submitted, so a disagreement between them is a real defect rather than a
   //     cosmetic one. Only the live daemon can prove this; a unit test asserts a
   //     shared helper, not that both wires actually call it.
-  if (rec.admission && r?.task?.taskId) {
+  if (rec.admission && r?.execution?.taskId) {
     const a = rec.admission;
     const p = rec.polling202;
     // `taskId` and `type` must be PRESENT on admission and on the terminal
@@ -731,7 +753,7 @@ export function verify(rec) {
     // everything, which is exactly how a surface that silently stopped
     // reporting identity would slip through a pure equality check.
     const agree = (field, required) => {
-      const surfaces = [['admit', a[field]], ['final', r.task[field]]];
+      const surfaces = [['admit', a[field]], ['final', r.execution[field]]];
       if (p) surfaces.push(['poll', p[field]]);
       const present = surfaces.filter(([, v]) => v !== undefined);
       if (required && present.length !== surfaces.length) return false;
@@ -743,7 +765,7 @@ export function verify(rec) {
     out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
       mismatched.length === 0
         ? `taskId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
-        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
+        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.execution[f]})`).join(', ')}`));
   }
 
   // ⑬ Audit findings: weight field + evidence section prefix
@@ -767,7 +789,7 @@ export function verify(rec) {
 
   // ⑭ Audit subtype in task identity
   if (e.type === 'audit' && e.subtype) {
-    const actualSubtype = r?.task?.subtype;
+    const actualSubtype = r?.execution?.subtype;
     out.push(C('subtype', actualSubtype === e.subtype ? 'PASS' : 'FAIL',
       `expected=${e.subtype} got=${actualSubtype}`));
   }
@@ -908,14 +930,14 @@ export function verify(rec) {
   // would surface as a terminal `error`. Both failure modes are covered by asserting the
   // terminal envelope carries no error.
   if (e.deliverableContract) {
-    const terminal = typeof r?.task?.status === 'string';
+    const terminal = typeof r?.execution?.status === 'string';
     out.push(C('contract-accepted', terminal && !r?.error ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+      `status=${r?.execution?.status} error=${JSON.stringify(r?.error)}`));
     // The contract governs the work; it must not leak into the task identity. `deliverable`
     // is an input, and echoing it back would make an approval look like task state.
     out.push(C('contract-not-echoed-as-identity',
-      r?.task?.deliverable === undefined ? 'PASS' : 'FAIL',
-      `task.deliverable=${JSON.stringify(r?.task?.deliverable)}`));
+      r?.execution?.deliverable === undefined ? 'PASS' : 'FAIL',
+      `task.deliverable=${JSON.stringify(r?.execution?.deliverable)}`));
   }
 
   // #45 — a Contract Task with NO declared check must parse, run, and commit.
@@ -934,8 +956,8 @@ export function verify(rec) {
     // A task with no declared check must still reach a real terminal status rather than being
     // reported done with nothing scored.
     out.push(C('no-check-terminal-status',
-      ['done', 'done_with_concerns'].includes(r?.task?.status) ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status}`));
+      ['done', 'done_with_concerns'].includes(r?.execution?.status) ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status}`));
   }
 
   // #46 — `method` must survive the wire and reach Method resolution (SPEC-005 Method Registry).
@@ -943,11 +965,11 @@ export function verify(rec) {
   // field was honoured rather than dropped: `resolveMethod()` receives the same identifier, so
   // an echoed value and injected committed guidance succeed or fail together.
   if (e.method) {
-    out.push(C('method-echoed', r?.task?.method === e.method ? 'PASS' : 'FAIL',
-      `task.method=${r?.task?.method} want=${e.method}`));
+    out.push(C('method-echoed', r?.execution?.method === e.method ? 'PASS' : 'FAIL',
+      `execution.method=${r?.execution?.method} want=${e.method}`));
     // `method` and `subtype` answer different questions and must never both appear.
-    out.push(C('method-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
-      `task.subtype=${r?.task?.subtype}`));
+    out.push(C('method-not-confused-with-subtype', r?.execution?.subtype === undefined ? 'PASS' : 'FAIL',
+      `task.subtype=${r?.execution?.subtype}`));
   }
 
   return out;

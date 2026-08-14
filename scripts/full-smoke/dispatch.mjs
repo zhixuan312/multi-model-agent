@@ -24,10 +24,10 @@ export async function runCancelScenario(ctx) {
     { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } },
     ctx.dir,
   );
-  if (dStatus !== 202 || !dJson.taskId) {
+  if (dStatus !== 202 || !(dJson.executionId ?? dJson.taskId)) {
     throw new Error(`cancel scenario dispatch failed: HTTP ${dStatus} ${JSON.stringify(dJson)}`);
   }
-  const taskId = dJson.taskId;
+  const taskId = dJson.executionId ?? dJson.taskId;
 
   // Let the implementer actually start; cancelling pre-dispatch tests a different path.
   await new Promise((r) => setTimeout(r, 4000));
@@ -86,18 +86,18 @@ export async function runMcpScenario(ctx) {
     try { return text ? JSON.parse(text) : null; } catch { return null; }
   };
   const runPayload = parseToolText(run);
-  const taskId = runPayload?.taskId ?? null;
+  const taskId = runPayload?.executionId ?? runPayload?.taskId ?? null;
   if (!taskId) {
     return { init, tools, resourceList, resourceRead, run, runPayload, taskId: null, waitPayload: null, restEnvelope: null };
   }
 
   const wait = await mcpCall(ctx.token, 'tools/call', {
-    name: 'mma_task_wait',
-    arguments: { taskId, timeoutMs: 240000 },
+    name: 'mma_execution_wait',
+    arguments: { executionId: taskId, timeoutMs: 240000 },
   }, 4);
   let waitPayload = parseToolText(wait);
 
-  // mma_task_wait is bounded; if the task outlives the cap, finish over REST so
+  // mma_execution_wait is bounded; if the task outlives the cap, finish over REST so
   // the parity assertion still compares two terminal reads of one execution.
   if (!waitPayload?.task) {
     const { envelope } = await pollTask(ctx.token, taskId);
@@ -141,7 +141,7 @@ export async function runMcpContractScenario(ctx) {
     try { return text ? JSON.parse(text) : null; } catch { return null; }
   };
   const runPayload = parseToolText(run);
-  const taskId = runPayload?.taskId ?? null;
+  const taskId = runPayload?.executionId ?? runPayload?.taskId ?? null;
   // A rejection surfaces as an MCP tool error rather than a handle, so the absence of a taskId is
   // itself the finding — carry the raw payload so verify can report WHY.
   if (!taskId) return { schema, run, runPayload, taskId: null, envelope: null };
@@ -153,7 +153,7 @@ export async function runMcpContractScenario(ctx) {
 /**
  * #56 — the rest of the MCP tool surface.
  *
- * `mma_run` and `mma_task_wait` are covered by #40. The remaining tools have never been driven
+ * `mma_run` and `mma_execution_wait` are covered by #40. The remaining tools have never been driven
  * over MCP at all, only through their REST equivalents, so a tool that threw on every call would
  * fail no existing scenario. This drives them as a host would: register a context block, list it
  * among live tasks, cancel a running task, and delete the block.
@@ -176,19 +176,19 @@ export async function runMcpToolsScenario(ctx) {
     name: 'mma_run',
     arguments: { cwd: ctx.dir, request: { type: 'investigate', prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } } },
   }, 51);
-  const taskId = parseToolText(run)?.taskId ?? null;
+  const taskId = parseToolText(run)?.executionId ?? parseToolText(run)?.taskId ?? null;
   if (taskId) await new Promise((r) => setTimeout(r, 4000));
 
-  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 52);
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_list', arguments: {} }, 52);
   const listPayload = parseToolText(list);
 
   const get = taskId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_get', arguments: { taskId } }, 53)
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_get', arguments: { executionId: taskId } }, 53)
     : null;
   const getPayload = get ? parseToolText(get) : null;
 
   const cancel = taskId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_cancel', arguments: { taskId } }, 54)
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_cancel', arguments: { executionId: taskId } }, 54)
     : null;
   const cancelPayload = cancel ? parseToolText(cancel) : null;
 
@@ -218,7 +218,7 @@ export async function runMcpToolsScenario(ctx) {
  * because its green result is not evidence.
  *
  * So it asserts the PROPERTY that makes recovery possible instead of the accident that requires
- * it: a task that has been admitted is discoverable through `mma_task_list` while it is still
+ * it: a task that has been admitted is discoverable through `mma_execution_list` while it is still
  * running. If that holds, a caller whose request timed out can reconcile and find its work. If it
  * did not hold, "timed out" and "never created" would be indistinguishable and duplicating the
  * work would be the only safe move — which is exactly the bug that was reported.
@@ -228,15 +228,15 @@ export async function runClientTimeoutScenario(ctx) {
 
   const { status, json } = await dispatch(ctx.token, 'investigate',
     { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } }, ctx.dir);
-  const taskId = json?.taskId ?? null;
-  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, terminal: null };
+  const taskId = json?.executionId ?? json?.taskId ?? null;
+  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, listedCount: 0, terminal: null };
 
   // The caller now "loses" its handle and reconciles the way a recovering client would: by asking
   // the daemon what is running, not by re-dispatching.
   await new Promise((r) => setTimeout(r, 3000));
-  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 60);
-  const tasks = parse(list)?.tasks ?? [];
-  const discovered = tasks.some((task) => task?.taskId === taskId);
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_list', arguments: {} }, 60);
+  const tasks = parse(list)?.executions ?? parse(list)?.tasks ?? [];
+  const discovered = tasks.some((task) => (task?.executionId ?? task?.taskId) === taskId);
 
   let terminal = null;
   try {
@@ -492,8 +492,11 @@ export async function runDispatch(spec, ctx) {
     if (!json.id) throw new Error(`register-context-block failed: HTTP ${status} ${JSON.stringify(json)}`);
     return { blockId: json.id };
   }
-  if (status >= 400 || !json.taskId) throw new Error(`dispatch ${spec.id} (${type}) failed: HTTP ${status} ${JSON.stringify(json)}`);
-  return { taskId: json.taskId, admission: json };
+  // Async admission answers 202 with an `executionId` (SPEC-003 renamed the whole surface from
+  // task to execution). `taskId` is kept as the harness-internal handle name only.
+  const handle = json.executionId ?? json.taskId;
+  if (status >= 400 || !handle) throw new Error(`dispatch ${spec.id} (${type}) failed: HTTP ${status} ${JSON.stringify(json)}`);
+  return { taskId: handle, admission: json };
 }
 
 export async function pollTask(token, taskId) {
