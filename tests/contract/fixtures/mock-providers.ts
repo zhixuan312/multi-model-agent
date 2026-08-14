@@ -13,10 +13,10 @@ import type {
   RunStatus,
   TokenUsage,
   AttemptRecord,
-  WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
+import type { WorkerStatus } from '../../../packages/core/src/types/task-spec.js';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
-import type { RuntimeRunResult } from './runtime-run-result.js';
+import type { RuntimeRunResult, _TerminationCause } from './runtime-run-result.js';
 import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** Build a Session whose `send()` invokes the same RuntimeRunResult-producing
@@ -34,6 +34,7 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
     durationMs: rr.durationMs ?? 0,
     costUSD: rr.actualCostUSD ?? rr.cost?.costUSD ?? null,
     terminationReason: statusToTermination(rr.status),
+    usedShell: rr.usedShell ?? false,
     toolCalls: [],
     ...(rr.errorCode && { errorCode: rr.errorCode }),
     ...(rr.error && { errorMessage: rr.error }),
@@ -47,8 +48,24 @@ function statusToTermination(
   switch (status) {
     case 'ok': return 'ok';
     case 'timeout': return 'time_exceeded';
-    case 'incomplete': return 'cap_exhausted';
+    // 'incomplete' means the worker used up its turn budget without a
+    // technical failure — the underlying provider turn itself completed
+    // normally, so it maps to 'ok' at this raw session-level signal.
+    case 'incomplete': return 'ok';
     case 'error':
+    default:
+      return 'error';
+  }
+}
+
+function statusToCause(status: RunStatus | undefined): _TerminationCause {
+  switch (status ?? 'ok') {
+    case 'ok': return 'finished';
+    case 'incomplete': return 'incomplete';
+    case 'timeout': return 'timeout';
+    case 'brief_too_vague': return 'brief_too_vague';
+    case 'error':
+    case 'unavailable':
     default:
       return 'error';
   }
@@ -238,9 +255,9 @@ function buildFromSequenceItem(item: SequenceItem): RuntimeRunResult {
     filesWritten: item.filesWritten ?? [],
     escalationLog: [attempt(item.status ?? 'ok', 1, cost)],
     durationMs: 0,
-    workerStatus: item.workerStatus ?? 'done',
+    workerStatus: (item.workerStatus ?? 'done') as 'done' | 'blocked' | 'failed',
     terminationReason: {
-      cause: item.status === 'ok' ? 'finished' : item.status ?? 'finished',
+      cause: statusToCause(item.status),
       turnsUsed: 1,
       hasFileArtifacts: (item.filesWritten?.length ?? 0) > 0,
       usedShell: false,
@@ -261,6 +278,10 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
       case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
+      case 'hang':
+        // openSession() branches on stage === 'hang' before ever constructing
+        // the runOnce() closure that calls this runner() — unreachable in practice.
+        throw new Error('runner() should not be invoked for stage "hang"');
     }
   };
   const runOnce = async (prompt: string): Promise<RuntimeRunResult> => {

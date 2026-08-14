@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { headlineForEvent, attachHeadlineProducer } from '../../../packages/server/src/application/headline-from-events.js';
-import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 
 /**
  * `runningHeadline` shipped readable on both wires in Flow 1 and was written by NOTHING —
@@ -135,7 +135,7 @@ describe('running headline: bus wiring', () => {
 
   it('never lets a headline failure break the bus', () => {
     const bus = new EnvelopeBus();
-    const exploding = { setHeadline: () => { throw new Error('boom'); } };
+    const exploding = { setHeadline: () => { throw new Error('boom'); }, recordActivity: () => { /* no-op */ } };
     attachHeadlineProducer(bus, exploding);
     const other = { name: 'other', receive: vi.fn() };
     bus.subscribe(other);

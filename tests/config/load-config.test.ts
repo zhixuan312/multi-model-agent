@@ -60,8 +60,8 @@ describe('loadConfigFromFile', () => {
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.agents.standard.type).toBe('codex');
-    expect(config.agents.standard.model).toBe('deepseek-r1');
+    expect(config.agents!.standard!.type).toBe('codex');
+    expect(config.agents!.standard!.model).toBe('deepseek-r1');
   });
 
   it('throws when explicit config path does not exist', async () => {
@@ -81,7 +81,7 @@ describe('loadConfigFromFile', () => {
     }));
 
     const config = await loadConfigFromFile(configPath);
-    expect(config.agents.standard.effort).toBe('high');
+    expect(config.agents!.standard!.effort).toBe('high');
   });
 
   it('collectInlineApiKeyOffenders surfaces agents with inline apiKey', async () => {

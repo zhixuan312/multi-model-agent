@@ -10,9 +10,8 @@ import { ExecutionRuntime } from '../../../packages/server/src/application/execu
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
 import { reconcileOnBoot } from '../../../packages/server/src/application/reconcile.js';
-import { ExecutionRegistry } from '../../../packages/core/src/unified/task-registry.js';
-import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 
 const DEAD_PID = 999_999_999;
 
@@ -46,13 +45,13 @@ describe('GET /execution/:executionId durable fallback', () => {
     // Post-restart world: EMPTY registry, same durable store.
     const executionRegistry = new ExecutionRegistry();
     const runtime = new ExecutionRuntime({
-      config: {} as MultiModelConfig,
+      config: {} as never,
       bus: new EnvelopeBus(),
       executionRegistry,
       projectRegistry: new ProjectRegistry({ cap: 10 }),
       store,
     });
-    return buildExecutionPollHandler({ runtime, executionRegistry, store });
+    return buildExecutionPollHandler({ runtime, executionRegistry, store, initiativeRuntime: {} as never });
   }
 
   it('serves a terminal result that survived a restart', async () => {

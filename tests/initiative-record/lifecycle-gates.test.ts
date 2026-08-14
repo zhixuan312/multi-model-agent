@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateLifecycleGate } from '../../packages/core/src/initiative-record/lifecycle-gates.js';
-import type { Event, LifecycleContract } from '../../packages/core/src/initiative-record/index.js';
+import type { AcceptanceCriterion, Decision, Event, LifecycleContract, Requirement } from '../../packages/core/src/initiative-record/index.js';
 
 const contract: LifecycleContract = {
   id: 'test@1',
@@ -14,6 +14,9 @@ const contract: LifecycleContract = {
   },
 };
 const event = (event_type: string, payload: Record<string, unknown>, sequence: number): Event => ({ event_sequence: sequence, entity_type: 'Initiative', entity_id: 'i', initiative_id: 'i', event_type, payload, actor_type: 'agent', actor_id: 'a', interface: 'test', initiated_by: 'a', authorized_by: 'a', timestamp: '2026-08-13T00:00:00.000Z', source: 'test' });
+const requirement = (): Requirement => ({ uuid: 'r', initiative_id: 'i', human_key: 'REQ-1', statement: 'Requirement', createdAt: '2026-08-13T00:00:00.000Z', updatedAt: '2026-08-13T00:00:00.000Z', revision: 1 });
+const acceptanceCriterion = (): AcceptanceCriterion => ({ uuid: 'ac', requirement_id: 'r', human_key: 'AC-1', statement: 'Criterion', check_reference: 'test', createdAt: '2026-08-13T00:00:00.000Z', updatedAt: '2026-08-13T00:00:00.000Z', revision: 1 });
+const decision = (status: Decision['status']): Decision => ({ uuid: 'd', initiative_id: 'i', human_key: 'D-1', title: 'Decision', decision: 'Choose it', rationale: 'Test fixture', alternatives: [], status, superseded_by: null, createdAt: '2026-08-13T00:00:00.000Z', updatedAt: '2026-08-13T00:00:00.000Z', revision: 1 });
 
 describe('Lifecycle gates', () => {
   it('evaluates all five satisfiers and keeps a null contract green', () => {
@@ -25,9 +28,9 @@ describe('Lifecycle gates', () => {
       expect(missing.detail).toEqual(expect.any(String));
       expect(missing.detail.length).toBeGreaterThan(0);
     }
-    expect(evaluateLifecycleGate({ contract, phase: 'refine', requirements: [{}], acceptanceCriteria: [{}], decisions: [], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'green', missing: [] });
-    expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [{ status: 'open' }], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'red' });
-    expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [{ status: 'decided' }], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'green' });
+    expect(evaluateLifecycleGate({ contract, phase: 'refine', requirements: [requirement()], acceptanceCriteria: [acceptanceCriterion()], decisions: [], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'green', missing: [] });
+    expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [decision('open')], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'red' });
+    expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [decision('decided')], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'green' });
     expect(evaluateLifecycleGate({ contract, phase: 'design', requirements: [], acceptanceCriteria: [], decisions: [], events: [], deliverableValidationStates: [] })).toMatchObject({ status: 'green' });
   });
 

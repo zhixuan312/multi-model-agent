@@ -48,8 +48,8 @@ describe('Method resolution and validated prompt injection', () => {
     const stateDir = mkdtempSync(join(tmpdir(), 'mma-method-order-'));
     try {
       const { ExecutionRuntime } = await import('../../../packages/server/src/application/execution-runtime.js');
-      const { ExecutionRegistry } = await import('../../../packages/core/src/unified/task-registry.js');
-      const { EnvelopeBus } = await import('../../../packages/core/src/events/envelope-bus.js');
+      const { ExecutionRegistry } = await import('@zhixuan92/multi-model-agent-core');
+      const { EnvelopeBus } = await import('@zhixuan92/multi-model-agent-core/events/envelope-bus');
       const registry = new ExecutionRegistry();
       const store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 60_000 });
       const register = vi.spyOn(registry, 'register');
@@ -85,8 +85,8 @@ describe('Method resolution and validated prompt injection', () => {
     const stateDir = mkdtempSync(join(tmpdir(), 'mma-method-order-both-invalid-'));
     try {
       const { ExecutionRuntime } = await import('../../../packages/server/src/application/execution-runtime.js');
-      const { ExecutionRegistry } = await import('../../../packages/core/src/unified/task-registry.js');
-      const { EnvelopeBus } = await import('../../../packages/core/src/events/envelope-bus.js');
+      const { ExecutionRegistry } = await import('@zhixuan92/multi-model-agent-core');
+      const { EnvelopeBus } = await import('@zhixuan92/multi-model-agent-core/events/envelope-bus');
       const registry = new ExecutionRegistry();
       const store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 60_000 });
       const register = vi.spyOn(registry, 'register');
