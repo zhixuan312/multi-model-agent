@@ -14,7 +14,6 @@ import {
   taskInputSchema,
   initiativeOperationRequestSchema,
   initiativeMutationRequestSchema,
-  initiativeResumeRequestSchema,
   INITIATIVE_OPERATIONS,
   type InitiativeOperation,
 } from '@zhixuan92/multi-model-agent-core';
@@ -221,12 +220,6 @@ function initiativeToolInputSchema(operation: InitiativeOperation): Record<strin
   return { ...full, properties, required };
 }
 
-const initiativeResumeInputSchema: Record<string, unknown> = (() => {
-  const schema = z.toJSONSchema(initiativeResumeRequestSchema) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
-})();
-
 /** Human-facing description per Initiative operation. Mutating ones name their
  *  `MutationControl` requirement; the adapter always overwrites
  *  `provenance.interface`/`provenance.timestamp` regardless of caller input. */
@@ -407,13 +400,12 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
- *  AC-2.1). `initiative_resume` uses its own request shape (no `operation`/
- *  `input` envelope — see `initiativeResumeRequestSchema`); every other
- *  operation uses the matching `initiativeOperationRequestSchema` member. */
+ *  AC-2.1). The tool name supplies the otherwise-redundant `operation`; every
+ *  tool otherwise uses the matching `initiativeOperationRequestSchema` member. */
 const INITIATIVE_MCP_TOOLS: McpToolDefinition[] = INITIATIVE_OPERATIONS.map((operation) => ({
   name: initiativeToolName(operation),
   description: INITIATIVE_TOOL_DESCRIPTIONS[operation],
-  inputSchema: operation === 'initiative_resume' ? initiativeResumeInputSchema : initiativeToolInputSchema(operation),
+  inputSchema: initiativeToolInputSchema(operation),
 }));
 
 export const MCP_TOOLS: McpToolDefinition[] = [

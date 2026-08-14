@@ -17,7 +17,7 @@ describe('Initiative MCP contract', () => {
         'mma_initiative_resume', 'mma_initiative_link_workspace', 'mma_initiative_relate', 'mma_initiative_relations',
         'mma_initiative_task_create', 'mma_initiative_task_get', 'mma_initiative_task_list', 'mma_artifact_register', 'mma_artifact_get',
       ]));
-      const bad = await client.callTool({ name: 'mma_initiative_resume', arguments: { initiative: { uuid: 'bad' } } });
+      const bad = await client.callTool({ name: 'mma_initiative_resume', arguments: { input: { initiative: { uuid: 'bad' } } } });
       expect(bad.isError).toBe(true);
       expect(JSON.parse(bad.content[0]!.text).error.code).toBe('invalid_request');
     } finally { await client.close(); await h.close(); }

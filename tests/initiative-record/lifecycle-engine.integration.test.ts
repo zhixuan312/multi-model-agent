@@ -47,7 +47,7 @@ describe('Lifecycle Engine integration', () => {
       await mutate(h, 'initiative_phase_satisfy', { initiative: { uuid: initiative.uuid }, phase: 'design', asserted: ['design_artifact'] }, initiative.uuid);
       await mutate(h, 'initiative_phase_reopen', { initiative: { uuid: initiative.uuid }, phase: 'design', reason: 'verification finding' }, initiative.uuid);
       await mutate(h, 'initiative_focus_set', { initiative: { uuid: initiative.uuid }, phase: 'design' }, initiative.uuid);
-      const resumed = await request(h, { operation: 'initiative_resume', initiative: { uuid: initiative.uuid } });
+      const resumed = await request(h, { operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } });
       expect(resumed.lifecycle).toMatchObject({ focus_phase: 'design', contract: 'default-sdl@1' });
       expect(resumed.lifecycle.phases.map((entry: { phase: string }) => entry.phase)).toEqual(['discover', 'refine', 'design', 'execute', 'verify', 'deliver']);
       expect(resumed.lifecycle.phases.find((entry: { phase: string }) => entry.phase === 'discover')).toMatchObject({ state: 'satisfied', gate: { status: 'green' } });

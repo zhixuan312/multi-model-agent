@@ -38,7 +38,7 @@ describe('Lifecycle transports', () => {
       const mcpRequestStartedAt = Date.now();
       const mcpEnter = await client.callTool({ name: 'mma_initiative_phase_enter', arguments: { input: { initiative: { uuid: initiative.uuid }, phase: 'refine' }, expected_revision: focused.revision, provenance: bogusProvenance } });
       expect(mcpEnter.isError).toBeFalsy();
-      const resumeResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+      const resumeResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }) });
       expect(resumeResponse.status).toBe(200);
       const resumed = await resumeResponse.json() as { events: Array<{ event_type: string; interface: string; timestamp: string }> };
       const focusChanged = resumed.events.find((e) => e.event_type === 'focus_changed');

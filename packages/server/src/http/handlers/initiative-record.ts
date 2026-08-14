@@ -28,6 +28,8 @@ import {
   UnknownMethodError,
   UnknownDeliveryContractError,
   TargetAdapterValidationFailedError,
+  initiativeOperationRequestSchema,
+  initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -192,12 +194,20 @@ export function buildInitiativeHandler(deps: HandlerDeps): RawHandler {
     try {
       if (operation === 'initiative_resume') {
         // `initiative_resume` is not a member of `execute()`'s operation set —
-        // it has its own dedicated runtime method and request shape (no
-        // `operation`/`input` envelope, just `{ initiative, event_limit? }`).
-        // Strip the routing-only `operation` field before handing the rest to
-        // the runtime, which validates strictly against that shape.
-        const { operation: _op, ...resumeRequest } = body as Record<string, unknown>;
-        const result = deps.initiativeRuntime.initiativeResume(resumeRequest);
+        // it has its own dedicated runtime method (Task I-4/I-6). Its wire body
+        // is the SAME canonical `{ operation, input }` envelope every other
+        // operation uses (including its sibling dedicated read,
+        // `initiative_gate_status`, below) — this adapter unwraps `input`
+        // (the Initiative lookup plus optional `event_limit`) and hands ONLY
+        // that to the dedicated runtime method, never `execute()`.
+        // Validate the complete public envelope before unwrapping it. In particular, this
+        // rejects a legacy top-level `initiative` even when a caller also supplies a valid
+        // `input`, rather than silently accepting a mixed contract.
+        const parsed = initiativeOperationRequestSchema.safeParse(body);
+        if (!parsed.success) {
+          throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+        }
+        const result = deps.initiativeRuntime.initiativeResume(parsed.data.input);
         sendJson(res, 200, result);
         return;
       }

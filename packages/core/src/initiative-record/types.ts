@@ -396,11 +396,19 @@ export interface Establishment {
   satisfier: Satisfier;
 }
 
-/** One Initiative's per-phase transition record; identity is `(initiative_id, phase)` (FR-2). */
+/**
+ * One Initiative's per-phase transition record; identity is `(initiative_id, phase)` (FR-2).
+ * `revision` is the owning Initiative's new revision after this mutation (not a revision of the
+ * Phase Record itself, which carries none) — every phase mutation requires `expected_revision`,
+ * so this lets a caller chain the next transition without an intervening `initiative_get`/
+ * `initiative_resume` read, the same way `initiative_focus_set` already returns the full,
+ * freshly-revisioned Initiative.
+ */
 export interface PhaseRecord {
   initiative_id: string;
   phase: Phase;
   state: PhaseRecordState;
+  revision: number;
 }
 
 /** A versioned, immutable Lifecycle Contract (FR-5). `id` matches `^[a-z][a-z0-9-]*@[1-9][0-9]*$`. */

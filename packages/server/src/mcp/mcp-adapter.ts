@@ -42,6 +42,8 @@ import {
   UnknownMethodError,
   UnknownDeliveryContractError,
   TargetAdapterValidationFailedError,
+  initiativeOperationRequestSchema,
+  initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -451,7 +453,20 @@ function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: 
  */
 function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
   try {
-    return jsonResult(deps.initiativeRuntime.initiativeResume(args));
+    // Unlike the HTTP body, MCP omits the redundant `operation` because the
+    // tool name selects it. Reconstitute and strictly validate that canonical
+    // envelope before unwrapping `input`, so legacy top-level fields cannot be
+    // silently ignored at this transport boundary.
+    if ('operation' in args) {
+      throw new InitiativeInvalidRequestError({
+        field_errors: { operation: ['operation is selected by the MCP tool name and must not be supplied'] },
+      });
+    }
+    const parsed = initiativeOperationRequestSchema.safeParse({ operation: 'initiative_resume', ...args });
+    if (!parsed.success) {
+      throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+    }
+    return jsonResult(deps.initiativeRuntime.initiativeResume(parsed.data.input));
   } catch (err) {
     return initiativeErrorToMcp(err);
   }
@@ -462,8 +477,8 @@ function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unkno
  * FR-9), alongside `mma_initiative_resume` above. Its advertised tool schema
  * is generated from the `initiative_gate_status` member of
  * `initiativeOperationRequestSchema` (same as every mutating tool), so its
- * wire arguments carry the ordinary `{ input: { initiative } }` shape rather
- * than `initiative_resume`'s flat one — this adapter unwraps `args.input`
+ * wire arguments carry the ordinary `{ input: { initiative } }` shape. This
+ * adapter unwraps `args.input`
  * (the Initiative lookup) and hands ONLY that to the dedicated runtime
  * method, never `execute()`.
  */

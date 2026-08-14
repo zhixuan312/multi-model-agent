@@ -3688,7 +3688,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'active');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3697,7 +3697,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'active' },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'active' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'active', revision };
   }
 
   /**
@@ -3727,7 +3727,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     this.validateAssertedKeys(asserted, contract, input.phase);
     const gateSnapshot = this.evaluateGate(row.uuid, input.phase, contract, asserted);
     this.upsertPhaseRecord(row.uuid, input.phase, 'satisfied');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3742,7 +3742,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'satisfied' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'satisfied', revision };
   }
 
   /**
@@ -3766,7 +3766,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'reopened');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3775,7 +3775,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'reopened', reason: input.reason },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'reopened' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'reopened', revision };
   }
 
   /**
@@ -3799,7 +3799,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'skipped');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3808,7 +3808,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'skipped', reason: input.reason },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'skipped' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'skipped', revision };
   }
 
   /**

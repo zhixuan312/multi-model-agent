@@ -31,7 +31,7 @@ describe('Initiative MCP contract (supplement — fixed syntax)', () => {
         'mma_context_block_create', 'mma_context_block_delete',
       ]));
 
-      const bad = await client.callTool({ name: 'mma_initiative_resume', arguments: { initiative: { uuid: 'bad' } } });
+      const bad = await client.callTool({ name: 'mma_initiative_resume', arguments: { input: { initiative: { uuid: 'bad' } } } });
       expect(bad.isError).toBe(true);
       expect(JSON.parse((bad.content as Array<{ text: string }>)[0]!.text).error.code).toBe('invalid_request');
 

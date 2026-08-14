@@ -46,9 +46,9 @@ describe('Task Method transport contract', () => {
       expect(await unknown.json()).toMatchObject({ error: { code: 'unknown_method' } });
       const cleared = await client.callTool({ name: 'mma_initiative_initiative_task_set_method', arguments: { input: { initiative: { uuid: initiative.uuid }, task: { uuid: task.uuid }, method: null }, expected_revision: task.revision, provenance } });
       expect(cleared.isError).toBeFalsy();
-      const resumed = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+      const resumed = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }) });
       expect((await resumed.json() as { tasks: Array<{ method: string | null }>; events: Array<{ event_type: string; payload: object }> }).tasks).toEqual([expect.objectContaining({ method: null })]);
-      const record = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+      const record = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }) });
       expect((await record.json() as { events: Array<{ event_type: string; payload: object }> }).events).toEqual(expect.arrayContaining([expect.objectContaining({ event_type: 'task_method_set', payload: { previous_method: 'software-change@1', new_method: null } })]));
 
       // The boundary check above (`method_register`/`update`/`delete` all 400) already held
