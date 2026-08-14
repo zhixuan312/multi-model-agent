@@ -32,6 +32,7 @@ import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
 import { startAvailabilityProbe } from './availability.mjs';
+import { runRecordSurface } from './record-surface.mjs';
 
 const argv = process.argv.slice(2);
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
@@ -565,6 +566,17 @@ try {
       await Promise.all(Array.from({ length: Math.min(cap, p2Threads.length) }, worker));
     }
 
+  }
+
+  // ── Initiative Record surface ──
+  // The numeric SCENARIOS above cover the EXECUTION routes only. Everything the grand plan
+  // promises about the RECORD (resume, lifecycle, methods, intake, delivery, portability) is
+  // exercised here, live, against the same daemon.
+  {
+    log('\n── Record surface (initiatives · lifecycle · methods · delivery · portability) ──');
+    const rs = await runRecordSurface(ctx, log);
+    for (const rec of rs.records) records.push(rec);
+    Object.assign(checksByScenario, rs.checksByScenario);
   }
 
   // Telemetry final settle: a short grace so trailing wire records from the last scenarios that

@@ -476,7 +476,7 @@ export async function runDispatch(spec, ctx) {
     // reachable from a NON-git workspace, so defaulting every error case to ctx.dir (a git
     // repository) would make that scenario silently assert nothing.
     const cwd = buildResult.cwd ?? ctx.dir;
-    const url = `${BASE_URL}/task?cwd=${encodeURIComponent(cwd)}`;
+    const url = `${BASE_URL}/execution?cwd=${encodeURIComponent(cwd)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers,

@@ -292,7 +292,26 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   const argv = deps.argv?.() ?? process.argv.slice(2);
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
-  const exit = deps.exit ?? process.exit.bind(process);
+  /**
+   * `process.exit()` does NOT flush a pending stdout write when stdout is a pipe — it tears the
+   * process down mid-drain, so anything past the OS pipe buffer (64 KB on macOS) is silently lost.
+   * The MCP stdio bridge writes a `tools/list` frame well over that (~130 KB today), so an Agent
+   * Plugin install — the one install path that speaks stdio — received truncated JSON and could
+   * not enumerate a single tool. Wait for the drain, then exit.
+   *
+   * Injected `deps.exit` (tests) is called directly: it is not a real process teardown.
+   */
+  const exit = deps.exit ?? ((code?: number): never => {
+    const out = process.stdout as NodeJS.WriteStream & { writableLength?: number };
+    if (out.writableLength && out.writableLength > 0) {
+      process.exitCode = code ?? 0;
+      out.once('drain', () => process.exit(code));
+      // Returning is safe: the caller's `break` unwinds and Node stays alive until the drain
+      // fires, because the pending write keeps the event loop referenced.
+      return undefined as never;
+    }
+    return process.exit(code);
+  });
 
   const opts = parseArgs(argv);
   const positional = opts._ as string[];

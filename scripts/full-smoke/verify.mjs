@@ -230,7 +230,7 @@ export function verify(rec) {
     return out;
   }
 
-  // ─── Cooperative cancellation (#39): DELETE /task/:id ───
+  // ─── Cooperative cancellation (#39): DELETE /execution/:id ───
   //     202 means REQUESTED, not stopped. The contract is the whole lifecycle:
   //     the ack carries the flag, a poll taken immediately after still reports
   //     `running` WITH the flag, and only once the runner confirms termination

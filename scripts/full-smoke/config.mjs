@@ -134,7 +134,7 @@ export const POLL = {
 //      #22 audit read-only      — read-only sandbox completes normally without write capability
 //
 //   G. Lifecycle & transports (5.16.0):
-//      #39 cancel  — DELETE /task/:id: 202 requested → still-running poll carries the flag
+//      #39 cancel  — DELETE /execution/:id: 202 requested → still-running poll carries the flag
 //                    → terminal `cancelled` (error.code=aborted, reviewer never ran)
 //      #40 mcp     — POST /mcp: initialize (capabilities) → tools/list → resources/list →
 //                    resources/read → mma_run → mma_task_wait, and the SAME execution polled
@@ -276,7 +276,7 @@ export const SCENARIOS = [
   //    commit — which is exactly what happened to this repo during development.
   { id: 38, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', noopWrite: true, dirtyRepo: true, emits: 1 },
 
-  // O. Cooperative cancellation (5.16.0) — DELETE /task/:taskId.
+  // O. Cooperative cancellation (5.16.0) — DELETE /execution/:executionId.
   //    Cancellation is REQUESTED, not instantaneous: the 202 acknowledges intent and the
   //    task keeps running until the runner confirms termination, so #39 asserts the whole
   //    wire lifecycle — 202 { cancellationRequested }, a poll that still reports running

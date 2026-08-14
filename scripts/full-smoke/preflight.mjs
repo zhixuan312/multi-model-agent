@@ -1017,11 +1017,11 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   // Backlog F8: a 405 response MUST advertise the supported methods in an Allow
   // header (RFC 7231 §6.5.5), not only in the JSON body.
   {
-    const res = await fetch(`${BASE_URL}/task`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+    const res = await fetch(`${BASE_URL}/execution`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
     const allow = res ? res.headers.get('allow') : null;
     if (!res || res.status !== 405 || allow !== 'POST') {
       throw new AbortError('405-allow-header',
-        `DELETE /task -> ${res ? res.status : 'no-response'} allow=${allow}`,
+        `DELETE /execution -> ${res ? res.status : 'no-response'} allow=${allow}`,
         'a 405 must set the Allow header to the supported methods (backlog F8)');
     }
   }
