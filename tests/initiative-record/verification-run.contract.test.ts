@@ -184,6 +184,31 @@ describe('MMA Next gap-closure — verification_run (GAP 3)', () => {
     }
   });
 
+  it('reports a signalled command as blocked, not failed — the same branch a timeout takes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-verification-signal-'));
+    const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
+    try {
+      const { initiative, criterion } = seedCriterion(store, dir);
+      // A process that signals itself takes the SAME branch a timeout does (`result.signal` set),
+      // so this covers the bounded-execution path without waiting VERIFICATION_RUN_TIMEOUT_MS.
+      const signalled = store.execute({
+        operation: 'verification_run',
+        input: {
+          initiative_id: initiative.uuid,
+          acceptance_criterion_id: criterion.uuid,
+          method: 'command',
+          command: `${process.execPath} -e "process.kill(process.pid,'SIGTERM')"`,
+        },
+        expected_revision: 0,
+        provenance,
+      }) as { state: string; detail: string };
+      // 'blocked', never 'fail': the command never reached a verdict, so recording it as a failing
+      // check would claim evidence the run does not have.
+      expect(signalled.state).toBe('blocked');
+      expect(signalled.detail).toContain('terminated by signal');
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('rejects a cross-Initiative Acceptance Criterion the same way verification_record does', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-verification-run-cross-initiative-'));
     try {
