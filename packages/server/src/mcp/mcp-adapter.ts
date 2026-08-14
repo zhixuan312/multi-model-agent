@@ -40,6 +40,8 @@ import {
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
   UnknownMethodError,
+  UnknownDeliveryContractError,
+  TargetAdapterValidationFailedError,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
@@ -383,6 +385,12 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
   if (err instanceof UnknownMethodError) {
     return errorResult(err.code, err.message, { method: err.method });
   }
+  if (err instanceof UnknownDeliveryContractError) {
+    return errorResult(err.code, err.message, { delivery_contract: err.delivery_contract });
+  }
+  if (err instanceof TargetAdapterValidationFailedError) {
+    return errorResult(err.code, err.message, { target_type: err.target_type });
+  }
   if (err instanceof InitiativeNotFoundError) {
     return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
   }
@@ -410,6 +418,12 @@ function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: 
   // `operation` last: the tool name is the trusted operation selector, so a
   // caller-supplied `args.operation` must never override it.
   let body: Record<string, unknown> = { ...args, operation };
+  // A zero-field input schema (e.g. `delivery_contract_list`, `product_list`) legitimately
+  // has nothing for a caller to supply — an MCP client is entitled to omit `input` entirely
+  // rather than send an explicit `{}`. Default only the missing case to `{}`; every other
+  // operation's own required subfields are still enforced by the runtime's Zod validation
+  // below, unchanged.
+  if (body.input === undefined) body.input = {};
   if ((INITIATIVE_MUTATING_OPERATIONS as ReadonlySet<string>).has(operation)) {
     const provenance = args.provenance;
     if (typeof provenance === 'object' && provenance !== null) {

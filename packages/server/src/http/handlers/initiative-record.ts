@@ -26,6 +26,8 @@ import {
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
   UnknownMethodError,
+  UnknownDeliveryContractError,
+  TargetAdapterValidationFailedError,
 } from '@zhixuan92/multi-model-agent-core';
 
 /**
@@ -141,6 +143,22 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       code: err.code,
       message: err.message,
       details: { method: err.method },
+    };
+  }
+  if (err instanceof UnknownDeliveryContractError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { delivery_contract: err.delivery_contract },
+    };
+  }
+  if (err instanceof TargetAdapterValidationFailedError) {
+    return {
+      status: 400,
+      code: err.code,
+      message: err.message,
+      details: { target_type: err.target_type },
     };
   }
   if (err instanceof InitiativeNotFoundError) {
