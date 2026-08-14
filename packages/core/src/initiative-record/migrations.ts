@@ -27,7 +27,7 @@ import { MigrationBackupFailedError } from './errors.js';
 import { DEFAULT_LIFECYCLE_CONTRACT_ID, type LifecycleContract, type MethodDeclaration } from './types.js';
 
 /** The current installed schema version this build knows how to reach. */
-export const INITIATIVE_SCHEMA_VERSION = 5;
+export const INITIATIVE_SCHEMA_VERSION = 6;
 
 interface Migration {
   version: number;
@@ -363,6 +363,23 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Version 6 — SPEC-006 Business intake Method catalog addition ("Data model", Task I-1).
+    // Additive only: seeds the tenth built-in Method declaration, `intent-to-initiative@1`, into
+    // the existing `methods` table created by migration v5. No new table, column, or index. The
+    // nine version-5 declarations (`BUILTIN_METHODS` above) are untouched by this migration —
+    // they remain byte-for-byte equivalent in their declared fields — and this is a SEPARATE
+    // seed, not an addition to that array, so a brand-new database still reaches the tenth
+    // identifier through its own dedicated migration step rather than folding into v5's seed.
+    // `INSERT OR IGNORE` makes a repeat migration run idempotent.
+    version: 6,
+    apply: (db) => {
+      db.prepare(`INSERT OR IGNORE INTO methods (id, definition_json, is_builtin) VALUES (?, ?, 1)`).run(
+        INTENT_TO_INITIATIVE_METHOD.id,
+        JSON.stringify(INTENT_TO_INITIATIVE_METHOD),
+      );
+    },
+  },
 ];
 
 /**
@@ -460,6 +477,28 @@ const BUILTIN_METHODS: readonly MethodDeclaration[] = [
     verification_expectations: ['requirement coverage', 'source currency', 'professional sign-off when required'],
   },
 ];
+
+/**
+ * The tenth built-in Method declaration (SPEC-006 "Data model" — Task I-1). Seeded by migration
+ * v6, kept separate from {@link BUILTIN_METHODS} so the nine version-5 declarations are never
+ * touched by this addition. Procedure prose lives in the committed
+ * `packages/core/src/methods/intent-to-initiative/guidance.md` asset, never in this declaration.
+ */
+const INTENT_TO_INITIATIVE_METHOD: MethodDeclaration = {
+  id: 'intent-to-initiative@1',
+  name: 'Intent to initiative',
+  version: 1,
+  purpose: 'Turn a stated business goal into a confirmed Initiative Record draft without creating any record entity before confirmation.',
+  required_inputs: ['business goal', 'stakeholder context'],
+  expected_outputs: ['confirmed draft', 'human confirmation'],
+  verification_expectations: [
+    'goal elicitation',
+    'necessary-question discipline',
+    'draft completeness',
+    'human confirmation',
+    'record-entity restraint',
+  ],
+};
 
 /**
  * The frozen `default-sdl@1` definition (SPEC-004 "Data model" — the pinned YAML). Seeded once

@@ -44,6 +44,12 @@
  * Its internal test seam `resolveGuidanceFromRootForTest` is DELIBERATELY
  * NOT re-exported here — it is reachable only from
  * `./method-guidance.js` directly, never from this public barrel.
+ *
+ * SPEC-006 Business intake (Task I-1) extends the built-in Method catalog with the tenth
+ * declaration, `intent-to-initiative@1`, its committed guidance asset, and the additive
+ * `initiatives.db` schema version 6 migration. No new export — the same `MethodDeclaration`
+ * type, `method_get` / `method_list` operations, and `loadMethodGuidance` resolver already
+ * exported above cover it.
  */
 export * from './types.js';
 export * from './schemas.js';

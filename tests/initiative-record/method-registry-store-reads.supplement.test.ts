@@ -44,6 +44,7 @@ describe('Method registry store reads — supplementary edge cases', () => {
     try {
       for (const id of [
         'architecture-review@1',
+        'intent-to-initiative@1',
         'regulatory-assessment@1',
         'research@1',
         'risk-analysis@1',
@@ -162,12 +163,13 @@ describe('Method registry store reads — supplementary edge cases', () => {
     });
   });
 
-  it('listMethods returns all nine registered declarations in ascending identifier order', () => {
+  it('listMethods returns all ten registered declarations in ascending identifier order', () => {
     withStore((store) => {
       const ids = store.listMethods().map((method) => method.id);
       expect(ids).toEqual(
         [
           'architecture-review@1',
+          'intent-to-initiative@1',
           'regulatory-assessment@1',
           'research@1',
           'risk-analysis@1',

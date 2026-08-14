@@ -35,10 +35,10 @@ describe('Lifecycle data contract and v4 migration', () => {
       raw.exec('DROP TABLE lifecycle_contracts');
       raw.exec('DROP TABLE phase_records');
       // `InitiativeRecordStore.open` above already ran every migration through the current
-      // INITIATIVE_SCHEMA_VERSION, including SPEC-005's v5 addition (Task I-1). Roll that back
-      // too before restaging as a v3 database, so the migrations invoked below genuinely
-      // re-apply v4 and v5 rather than hitting "duplicate column" on a database that
-      // structurally already has them.
+      // INITIATIVE_SCHEMA_VERSION, including SPEC-005's v5 addition and SPEC-006's v6 addition
+      // (both Task I-1). Roll that back too before restaging as a v3 database, so the
+      // migrations invoked below genuinely re-apply v4, v5, and v6 rather than hitting
+      // "duplicate column" on a database that structurally already has them.
       raw.exec('ALTER TABLE tasks DROP COLUMN method');
       raw.exec('DROP TABLE methods');
       raw.exec('PRAGMA user_version = 3');
@@ -46,9 +46,9 @@ describe('Lifecycle data contract and v4 migration', () => {
       runInitiativeMigrations({ dbPath });
       const upgraded = new DatabaseSync(dbPath);
       // A v3 database upgrades through every pending migration, landing on the current
-      // INITIATIVE_SCHEMA_VERSION (SPEC-005 Task I-1 added v5) rather than the v4 this check
+      // INITIATIVE_SCHEMA_VERSION (SPEC-006 Task I-1 added v6) rather than the v4 this check
       // originally pinned.
-      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 5 });
+      expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 });
       expect(upgraded.prepare("SELECT COUNT(*) AS count FROM phase_records WHERE initiative_id = ?").get(initiativeId)).toMatchObject({ count: 0 });
       expect(upgraded.prepare("SELECT id FROM lifecycle_contracts WHERE id = 'default-sdl@1'").get()).toEqual({ id: 'default-sdl@1' });
       upgraded.close();

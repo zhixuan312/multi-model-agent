@@ -257,11 +257,11 @@ describe('InitiativeRecordRuntime — Method registry read dispatch (Task I-3)',
     }
   });
 
-  it('method_list returns all nine registered declarations through execute()', () => {
+  it('method_list returns all ten registered declarations through execute()', () => {
     const { runtime, cleanup } = openRuntime();
     try {
       const result = runtime.execute({ operation: 'method_list', input: {} }) as Array<{ id: string }>;
-      expect(result).toHaveLength(9);
+      expect(result).toHaveLength(10);
       expect(result.map((m) => m.id)).toEqual([...result.map((m) => m.id)].sort());
     } finally {
       cleanup();
