@@ -39,6 +39,15 @@ export interface HarnessHandle {
    *  202), so this counts rows rather than looking one up by id. Opens its own short-lived
    *  connection, mirroring `unconsumedOutbox()`. */
   executionRowCount(): number;
+  /** Read-only full-table snapshot of `<stateDir>/initiatives.db` (SPEC-006 Task I-4) — for
+   *  before/after deep-equal assertions that a rejected or no-op Initiative Record mutation
+   *  left every table byte-for-byte unchanged (not just row counts). Opens its own short-lived
+   *  `DatabaseSync` connection, mirroring `unconsumedOutbox()`/`executionRowCount()`. Returns
+   *  `SELECT * FROM <table> ORDER BY rowid` for each of the nine Initiative Record tables,
+   *  keyed by table name: `products`, `workspaces`, `resources`, `initiatives`,
+   *  `initiative_workspace_links`, `requirements`, `acceptance_criteria`, `events`,
+   *  `idempotency_results`. */
+  initiativeRecordSnapshot(): Record<string, unknown[]>;
   /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
    *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
    *  replay) runs against the reopened stores (SPEC-003 Task I-6). Returns a NEW handle sharing
@@ -179,6 +188,31 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     }
   }
 
+  const INITIATIVE_RECORD_SNAPSHOT_TABLES = [
+    'products',
+    'workspaces',
+    'resources',
+    'initiatives',
+    'initiative_workspace_links',
+    'requirements',
+    'acceptance_criteria',
+    'events',
+    'idempotency_results',
+  ] as const;
+
+  function initiativeRecordSnapshot(): Record<string, unknown[]> {
+    const db = new DatabaseSync(join(config.server.stateDir, 'initiatives.db'));
+    try {
+      const snapshot: Record<string, unknown[]> = {};
+      for (const table of INITIATIVE_RECORD_SNAPSHOT_TABLES) {
+        snapshot[table] = db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+      }
+      return snapshot;
+    } finally {
+      db.close();
+    }
+  }
+
   function buildHandle(): HarnessHandle {
     return {
       baseUrl: `http://127.0.0.1:${server.port}`,
@@ -186,6 +220,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
       executionRegistry: server.executionRegistry,
       unconsumedOutbox,
       executionRowCount,
+      initiativeRecordSnapshot,
       async restart(): Promise<HarnessHandle> {
         await server.stop();
         // Reopens over the SAME `config` (same stateDir, same token file) — a fresh
