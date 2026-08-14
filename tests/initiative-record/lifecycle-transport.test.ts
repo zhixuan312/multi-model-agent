@@ -23,7 +23,7 @@ describe('Lifecycle transports', () => {
       const initiative = await initiativeResponse.json() as { uuid: string; revision: number };
       const mcp = await client.callTool({ name: 'mma_initiative_set_lifecycle_contract', arguments: { input: { initiative: { uuid: initiative.uuid }, lifecycle_contract: 'missing@1' }, expected_revision: initiative.revision, provenance: { actor_type: 'agent', actor_id: 'a', initiated_by: 'a', authorized_by: 'a', source: 'test' } } });
       expect(mcp.isError).toBe(true);
-      expect(JSON.parse(mcp.content[0]!.text)).toMatchObject({ error: { code: 'unknown_lifecycle_contract' } });
+      expect(JSON.parse((mcp as { content: Array<{ text: string }> }).content[0]!.text)).toMatchObject({ error: { code: 'unknown_lifecycle_contract' } });
 
       // FR-10: a successful lifecycle mutation's provenance.interface/timestamp is always
       // adapter-owned, never caller-supplied — verify for BOTH transports by supplying a bogus

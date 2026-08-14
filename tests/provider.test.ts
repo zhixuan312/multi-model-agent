@@ -15,6 +15,25 @@ const config: MultiModelConfig = {
       model: 'claude-opus-4-6',
     },
   },
+  server: {
+    bind: '127.0.0.1',
+    port: 7337,
+    auth: { tokenFile: '~/.mma/auth-token' },
+    limits: {
+      maxBodyBytes: 10_485_760,
+      batchTtlMs: 3_600_000,
+      projectCap: 200,
+      maxContextBlockBytes: 524_288,
+      maxContextBlocksPerProject: 32,
+      shutdownDrainMs: 30_000,
+    },
+    stateDir: '/tmp/mma-test-state',
+    autoUpdateSkills: false,
+  },
+  research: {
+    brave: { apiKeys: [], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
+    builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
+  },
 };
 
 describe('createProvider (1.0.0)', () => {

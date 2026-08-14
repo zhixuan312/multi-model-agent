@@ -19,7 +19,7 @@ describe('Initiative MCP contract', () => {
       ]));
       const bad = await client.callTool({ name: 'mma_initiative_resume', arguments: { input: { initiative: { uuid: 'bad' } } } });
       expect(bad.isError).toBe(true);
-      expect(JSON.parse(bad.content[0]!.text).error.code).toBe('invalid_request');
+      expect(JSON.parse((bad as { content: Array<{ text: string }> }).content[0]!.text).error.code).toBe('invalid_request');
     } finally { await client.close(); await h.close(); }
   });
 });

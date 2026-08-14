@@ -70,7 +70,7 @@ function seedFullInitiative(runtime: InitiativeRecordRuntime) {
     description: 'An artifact.',
     produced_by_task: task.uuid,
   });
-  const requirement = call<{ uuid: string }>('requirement_add', { initiative_id: initiative.uuid, statement: 'Must export.' });
+  const requirement = call<{ uuid: string; human_key: string }>('requirement_add', { initiative_id: initiative.uuid, statement: 'Must export.' });
   const criterion = call<{ uuid: string }>('acceptance_criterion_add', {
     requirement_id: requirement.uuid,
     statement: 'Export round-trips.',

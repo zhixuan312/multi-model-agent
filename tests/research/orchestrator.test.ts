@@ -31,7 +31,7 @@ describe('orchestrator', () => {
 
   it('fans out all 8 source groups', async () => {
     const plan: QueryPlan = {
-      braveQueries:           [{ q: 'b1' }],
+      braveQueries:           [{ q: 'b1', endpoint: 'web' }],
       arxivQueries:           ['a1'],
       semanticScholarQueries: ['s1'],
       githubQueries:          [{ q: 'g1', kind: 'repo' }, { q: 'g2', kind: 'code' }],
@@ -66,7 +66,7 @@ describe('orchestrator', () => {
     deps.brave.search = async (q) => { capturedQuery = q; return { results: [], keyIndex: 0, attempts: [] }; };
     const plan: QueryPlan = {
       ...emptyPlan,
-      braveQueries: [{ q: 'regulation', siteFilter: 'site:sec.gov' }],
+      braveQueries: [{ q: 'regulation', endpoint: 'web', siteFilter: 'site:sec.gov' }],
     };
     await runOrchestrator(plan, deps);
     expect(capturedQuery).toBe('site:sec.gov regulation');
@@ -89,7 +89,7 @@ describe('orchestrator', () => {
   it('populates publishedAt from brave pageAge', async () => {
     const plan: QueryPlan = {
       ...emptyPlan,
-      braveQueries: [{ q: 'q', freshness: 'pm' }],
+      braveQueries: [{ q: 'q', freshness: 'pm', endpoint: 'web' }],
     };
     const pack = await runOrchestrator(plan, fakeDeps());
     const braveSource = pack.sources.find(s => s.source === 'brave');

@@ -42,6 +42,8 @@ const snapshot: ContractPlanSnapshot = {
   tasks: [{
     id: 'I-9',
     title: 'Task I-9: Demo (AC-1.1)',
+    output: 'src/demo.ts',
+    dependencies: 'none',
     contract: { inputsRequest: 'x', outputsResponse: 'y', dataMapping: 'z', errors: 'e', behaviorInvariants: 'b' },
     acceptanceTests: [{ path: 'tests/gen/demo.test.ts', source: 'test', command: 'true ok' }],
   }],

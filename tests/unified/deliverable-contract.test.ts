@@ -14,7 +14,8 @@ describe('Deliverable Contract public API', () => {
     expect(SPEC_COMPONENTS).toHaveLength(8);
     expect(SPEC_COMPONENT_CATALOG.find((item) => item.id === 'Technical Design')?.displayLabel).toBe('Approach, Method & Structure');
     const before = canonicalContractDigest(contract);
-    expect(canonicalContractDigest({ ...contract, state: 'proposed' as const })).toBe(before);
+    const proposedVariant = { ...contract, state: 'proposed' as const };
+    expect(canonicalContractDigest(proposedVariant)).toBe(before);
     expect(canonicalContractDigest({ ...contract, audience: 'board' })).not.toBe(before);
   });
 });

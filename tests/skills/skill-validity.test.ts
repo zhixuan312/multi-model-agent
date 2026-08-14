@@ -54,7 +54,7 @@ describe('skill validity', () => {
       //     constants were exported and applied nowhere.
       // Both are operational contracts a caller executes, so they belong in the
       // stage that runs them, not in a summary elsewhere.
-      const LINE_BUDGET = { 'mma-flow': 780 };
+      const LINE_BUDGET: Record<string, number> = { 'mma-flow': 780 };
       const budget = LINE_BUDGET[dir] ?? 320;
       expect(content.split('\n').length).toBeLessThanOrEqual(budget);
     });

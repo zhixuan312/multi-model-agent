@@ -39,6 +39,10 @@ const CONFIG: MultiModelConfig = {
     stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     autoUpdateSkills: false,
   },
+  research: {
+    brave: { apiKeys: [], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
+    builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
+  },
 };
 
 describe('GET /status auth metadata', () => {

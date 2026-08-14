@@ -296,7 +296,7 @@ describe('runTwoPhasePipeline', () => {
   });
 
   it('surfaces dirtyAtDispatch so a swept-in pre-existing change is visible', async () => {
-    vi.mocked(captureBaseline).mockResolvedValueOnce({ head: 'base0', branch: 'mma/x', dirtyAtDispatch: true });
+    vi.mocked(captureBaseline).mockResolvedValueOnce({ head: 'base0', branch: 'mma/x', dirtyAtDispatch: true, statusText: ' M src/a.ts' });
 
     const result = await runTwoPhasePipeline({
       type: 'delegate',

@@ -10,7 +10,7 @@ vi.mock('node:fs', () => ({
   readFileSync: readFileSyncMock,
 }));
 
-import { decide } from '../../packages/server/src/telemetry/consent';
+import { decide } from '../../packages/server/src/telemetry/consent.js';
 
 describe('consent', () => {
   let originalEnv: string | undefined;
