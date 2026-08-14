@@ -86,18 +86,31 @@ say so explicitly.
 Do not call `initiative_bootstrap` — or create any record entity — until the stakeholder has given
 explicit confirmation of the draft, in full or section by section. If they approve only part of it,
 confirm that part and revise the rest before asking again. Once confirmed, call `initiative_bootstrap`
-with the confirmed draft as a single atomic request:
+with the confirmed draft as a single atomic request. The example below is the **greenfield**
+form — it creates its own Product and Workspace, so it runs against a fresh store with nothing
+set up first. When the work belongs to something that already exists, swap the `create` block
+for `existing: { uuid }` on the Product, the Workspace, or both; every referenced record must
+already exist, and a Workspace must belong to the same Product.
 
 ```json
 {
   "operation": "initiative_bootstrap",
   "input": {
-    "product": { "existing": { "uuid": "11111111-1111-4111-8111-111111111111" } },
+    "product": {
+      "create": {
+        "name": "<the stakeholder's product or business area>",
+        "slug": "<short-kebab-name>"
+      }
+    },
     "workspaces": [
       {
         "workspace_key": "primary",
-        "role": "modifies",
-        "existing": { "uuid": "22222222-2222-4222-8222-222222222222" }
+        "role": "creates",
+        "create": {
+          "name": "<the thing the work will produce>",
+          "slug": "<short-kebab-name>",
+          "description": "<what will live here, in plain language>"
+        }
       }
     ],
     "initiative": {
