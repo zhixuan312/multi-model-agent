@@ -28,6 +28,8 @@ import {
   UnknownMethodError,
   UnknownDeliveryContractError,
   TargetAdapterValidationFailedError,
+  VerificationMethodNotRunnableError,
+  InitiativeAlreadyExistsError,
   initiativeOperationRequestSchema,
   initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
@@ -163,6 +165,12 @@ function initiativeErrorToHttp(err: unknown): { status: number; code: string; me
       details: { target_type: err.target_type },
     };
   }
+  if (err instanceof VerificationMethodNotRunnableError) {
+    return { status: 400, code: err.code, message: err.message, details: { method: err.method } };
+  }
+  if (err instanceof InitiativeAlreadyExistsError) {
+    return { status: 409, code: err.code, message: err.message, details: { uuid: err.uuid, human_key: err.human_key } };
+  }
   if (err instanceof InitiativeNotFoundError) {
     return {
       status: 404,
@@ -208,6 +216,20 @@ export function buildInitiativeHandler(deps: HandlerDeps): RawHandler {
           throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
         }
         const result = deps.initiativeRuntime.initiativeResume(parsed.data.input);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      if (operation === 'initiative_export') {
+        // `initiative_export` (MMA Next gap-closure): the third dedicated read, alongside
+        // `initiative_resume` and `initiative_gate_status` below — its own runtime assembly
+        // method, never `execute()`. Same envelope-then-unwrap discipline as
+        // `initiative_resume` above.
+        const parsed = initiativeOperationRequestSchema.safeParse(body);
+        if (!parsed.success) {
+          throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+        }
+        const result = deps.initiativeRuntime.initiativeExport(parsed.data.input);
         sendJson(res, 200, result);
         return;
       }

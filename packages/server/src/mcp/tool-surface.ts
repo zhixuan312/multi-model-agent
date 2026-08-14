@@ -171,13 +171,17 @@ function initiativeToolName(operation: InitiativeOperation): string {
 }
 
 /** `mma_<operation>` (or the SPEC-005 `mma_initiative_<operation>` override) -> `<operation>`,
- *  for every operation EXCEPT the two dedicated reads with their own tool/handler —
- *  `initiative_resume` and `initiative_gate_status` (Task I-5, see below). Built from the frozen
- *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation `execute()` does not
- *  also recognise. */
+ *  for every operation EXCEPT the three dedicated reads with their own tool/handler —
+ *  `initiative_resume`, `initiative_gate_status` (Task I-5), and `initiative_export` (MMA Next
+ *  gap-closure, same "server-side assembly of joined reads, not a single store call" reason).
+ *  Built from the frozen `INITIATIVE_OPERATIONS` list so a tool name can never name an operation
+ *  `execute()` does not also recognise. */
 export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
   INITIATIVE_OPERATIONS
-    .filter((operation) => operation !== 'initiative_resume' && operation !== 'initiative_gate_status')
+    .filter(
+      (operation) =>
+        operation !== 'initiative_resume' && operation !== 'initiative_gate_status' && operation !== 'initiative_export',
+    )
     .map((operation) => [initiativeToolName(operation), operation] as const),
 );
 
@@ -397,6 +401,31 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + '(the sole operation that may set this state). Requires a non-empty reason. A later '
     + 'deliverable_validate call on an approved Deliverable skips recomputation and leaves the state '
     + 'unchanged. Mutating: pass expected_revision (the Deliverable revision) and provenance.',
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+  // execution, packaging assembly, and Initiative portability.
+  verification_run:
+    "Execute a declared shell command for an Acceptance Criterion's verification (method must be "
+    + "'command' — 'agent-review'/'human' reject with verification_method_not_runnable and stay "
+    + 'reachable only through verification_record) and persist the resulting VerificationRun: pass '
+    + "on exit 0, fail on any other exit code, blocked if the command could not run. Mutating: pass "
+    + 'expected_revision (0 — a VerificationRun is always newly created) and provenance.',
+  deliverable_package:
+    "Assemble a Deliverable's packaging report from its Delivery Contract and CURRENT artifact "
+    + 'membership: which requires entries are covered, by which Artifacts, and which are still '
+    + 'missing, plus the committed packager guidance text. Contract-completeness only — no target '
+    + 'adapter is called and no file content is invented. Incomplete membership still succeeds and '
+    + 'reports the gaps. Mutating: pass expected_revision (the Deliverable revision) and provenance.',
+  initiative_export:
+    'Assemble a complete, self-contained portable snapshot of one Initiative — the Initiative, its '
+    + 'Product, Workspaces with roles and Resources, Tasks, Artifacts, Requirements, Acceptance '
+    + 'Criteria, Decisions, Evidence, Risks, Verification Runs, Phase Records, Deliverables with '
+    + 'membership and history, and every Event — stamped with a schema_version. Use with '
+    + 'initiative_import to move or back up an Initiative across stores.',
+  initiative_import:
+    'Reconstruct an Initiative export snapshot (from initiative_export) into this store, in one '
+    + 'all-or-nothing transaction. Rejects a snapshot whose schema_version this build does not '
+    + 'understand, and rejects (conflict) an Initiative that already exists by uuid or human_key — '
+    + 'import never silently merges. Mutating: pass expected_revision (0) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,

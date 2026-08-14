@@ -773,6 +773,9 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
       { acceptance_criterion_id: criterionOneB.uuid, latest: verificationTwoFail },
     ],
     lifecycle: expectedLifecycle,
+    // MMA Next gap-closure (§15): this fixture defines no Deliverables, so the additive
+    // `deliverables` resume section and its count both read empty/zero.
+    deliverables: [],
     counts: {
       workspaces: 2,
       resources: 3,
@@ -797,6 +800,7 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         not_applicable: 0,
         superseded: 1,
       },
+      deliverables_by_validation_state: { pending: 0, valid: 0, invalid: 0, human_approved: 0 },
     },
   };
 

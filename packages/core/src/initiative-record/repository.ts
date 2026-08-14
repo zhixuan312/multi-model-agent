@@ -28,6 +28,8 @@ import type {
   ArtifactRef,
   Decision,
   Deliverable,
+  DeliverableArtifactMember,
+  DeliverableValidationState,
   DeliveryContract,
   DeliveryHistoryEntry,
   Evidence,
@@ -37,8 +39,11 @@ import type {
   InitiativeRecordEntity,
   InitiativeRelation,
   InitiativeStatus,
+  InitiativeWorkspaceLink,
   InitiativeWorkspaceRole,
   Event,
+  Phase,
+  PhaseRecordState,
   Product,
   Requirement,
   Resource,
@@ -241,4 +246,23 @@ export interface InitiativeRepository {
 
   /** Every immutable `DeliveryHistoryEntry` for a Deliverable, insertion-ordered. Never updated or deleted. */
   listDeliveryHistory(filter: { deliverable_id: string }): DeliveryHistoryEntry[];
+
+  // -------------------------------------------------------------------------
+  // MMA Next gap-closure — verification execution, packaging assembly, and Initiative
+  // portability (§15 application surface, §21 success criterion 12).
+  // -------------------------------------------------------------------------
+
+  /** Resume/export count: Deliverable counts by validation_state — every `DeliverableValidationState` key present, defaulting to `0`. */
+  countDeliverablesByValidationState(initiativeId: string): Record<DeliverableValidationState, number>;
+
+  /** Every `DeliverableArtifactMember` row for one Deliverable, ordered `createdAt` ascending, then `artifact_id`/`requirement` ascending. */
+  listDeliverableMembers(filter: { deliverable_id: string }): DeliverableArtifactMember[];
+
+  /** Every PERSISTED `phase_records` row for one Initiative (no synthesized `not_started` defaults), in `LIFECYCLE_PHASES` order. */
+  listPhaseRecords(filter: { initiative_id: string }): Array<{ phase: Phase; state: PhaseRecordState }>;
+
+  /** Export join: the Initiative's Workspace links, each carrying its OWN `InitiativeWorkspaceLink` row (unlike `getInitiativeWorkspaceLinks`, the resume join, which omits link-level created_at/revision) plus the joined Workspace and Resources. */
+  listInitiativeWorkspaceLinksWithDetail(filter: {
+    initiative_id: string;
+  }): Array<{ link: InitiativeWorkspaceLink; workspace: Workspace; resources: Resource[] }>;
 }

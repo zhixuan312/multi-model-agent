@@ -42,6 +42,8 @@ import {
   UnknownMethodError,
   UnknownDeliveryContractError,
   TargetAdapterValidationFailedError,
+  VerificationMethodNotRunnableError,
+  InitiativeAlreadyExistsError,
   initiativeOperationRequestSchema,
   initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
@@ -393,6 +395,12 @@ function initiativeErrorToMcp(err: unknown): ToolResult {
   if (err instanceof TargetAdapterValidationFailedError) {
     return errorResult(err.code, err.message, { target_type: err.target_type });
   }
+  if (err instanceof VerificationMethodNotRunnableError) {
+    return errorResult(err.code, err.message, { method: err.method });
+  }
+  if (err instanceof InitiativeAlreadyExistsError) {
+    return errorResult(err.code, err.message, { uuid: err.uuid, human_key: err.human_key });
+  }
   if (err instanceof InitiativeNotFoundError) {
     return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
   }
@@ -490,6 +498,22 @@ function handleInitiativeGateStatus(deps: McpAdapterDeps, args: Record<string, u
   }
 }
 
+/**
+ * `mma_initiative_export` (MMA Next gap-closure, §15, §21 success criterion 12) — the third
+ * dedicated read, alongside `mma_initiative_resume` and `mma_initiative_gate_status` above. Its
+ * advertised tool schema is generated from the `initiative_export` member of
+ * `initiativeOperationRequestSchema`, so its wire arguments carry the ordinary
+ * `{ input: { initiative } }` shape. This adapter unwraps `args.input` and hands ONLY that to
+ * the dedicated runtime method, never `execute()`.
+ */
+function handleInitiativeExport(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  try {
+    return jsonResult(deps.initiativeRuntime.initiativeExport(args.input));
+  } catch (err) {
+    return initiativeErrorToMcp(err);
+  }
+}
+
 /** Build a fresh SDK server wired to the shared runtime. One per request —
  *  the protocol core is stateless; all durable state lives in the runtime. */
 export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): Server {
@@ -573,6 +597,7 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
     // than added to it as more `case` labels for the same handler body.
     if (toolName === 'mma_initiative_resume') return handleInitiativeResume(deps, args);
     if (toolName === 'mma_initiative_gate_status') return handleInitiativeGateStatus(deps, args);
+    if (toolName === 'mma_initiative_export') return handleInitiativeExport(deps, args);
     const initiativeOperation = INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME.get(toolName);
     if (initiativeOperation) return handleInitiativeExecute(deps, initiativeOperation, args);
 

@@ -15,9 +15,12 @@ import {
   initiativeOperationRequestSchema,
   initiativeResumeRequestSchema,
   initiativeGateStatusInputSchema,
+  initiativeExportRequestSchema,
   initiativeFieldErrorsFromIssues,
   InitiativeInvalidRequestError,
+  INITIATIVE_EXPORT_SCHEMA_VERSION,
   type DeliveryContract,
+  type InitiativeExportSnapshot,
   type InitiativeRecordEntity,
   type InitiativeResumeResponse,
   type LifecycleResumeBlock,
@@ -109,6 +112,13 @@ const EXECUTE_OPERATIONS = new Set([
   'deliverable_validate',
   'deliverable_deliver',
   'deliverable_approve',
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+  // execution, packaging assembly, and Initiative import. `initiative_export` is excluded — it
+  // is a third dedicated read (`initiativeExport()` below), same as `initiative_resume` and
+  // `initiative_gate_status`.
+  'verification_run',
+  'deliverable_package',
+  'initiative_import',
 ]);
 
 export class InitiativeRecordRuntime {
@@ -230,6 +240,11 @@ export class InitiativeRecordRuntime {
       // algorithm; this runtime does nothing beyond validating the envelope and forwarding
       // the request.
       case 'deliverable_approve':
+      // MMA Next gap-closure (§15, §21 success criterion 12): verification execution,
+      // packaging assembly, and Initiative import. Same pattern as every mutation above.
+      case 'verification_run':
+      case 'deliverable_package':
+      case 'initiative_import':
         return this.store.execute(request);
 
       case 'product_get':
@@ -364,6 +379,9 @@ export class InitiativeRecordRuntime {
     // live gate evaluator `initiativeGateStatus` below reuses — one shared
     // read helper, not two divergent implementations.
     const lifecycle = this.store.getLifecycleResumeBlock({ uuid: initiative.uuid });
+    // MMA Next gap-closure (§15: "resume returns deliverable validation states"): additive —
+    // `[]`/all-zero for an Initiative with no Deliverables.
+    const deliverables = this.store.listDeliverables({ initiative_id: initiative.uuid });
 
     const response: InitiativeResumeResponse = {
       initiative,
@@ -379,6 +397,7 @@ export class InitiativeRecordRuntime {
       evidence,
       verification,
       lifecycle,
+      deliverables,
       counts: {
         workspaces: workspaces.length,
         resources: resourceCount,
@@ -394,6 +413,7 @@ export class InitiativeRecordRuntime {
         risks_open: this.store.countOpenRisks(initiative.uuid),
         evidence: this.store.countEvidence(initiative.uuid),
         verification_by_state: this.store.countVerificationByState(initiative.uuid),
+        deliverables_by_validation_state: this.store.countDeliverablesByValidationState(initiative.uuid),
       },
     };
     return response;
@@ -416,5 +436,58 @@ export class InitiativeRecordRuntime {
       throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
     }
     return this.store.getLifecycleResumeBlock(parsed.data.initiative);
+  }
+
+  /**
+   * `initiative_export` (MMA Next gap-closure, §15, §21 success criterion 12): the third
+   * dedicated read, alongside `initiativeResume` and `initiativeGateStatus` above — a
+   * server-side assembly of several joined store reads, never a single store call. Assembles
+   * the complete, self-contained portable `InitiativeExportSnapshot` for one Initiative: throws
+   * `invalid_request` for a malformed lookup before any store call, `not_found` for an unknown
+   * Initiative. Performs no write.
+   */
+  initiativeExport(rawRequest: unknown): InitiativeExportSnapshot {
+    const parsed = initiativeExportRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+    }
+    const initiative = this.store.getInitiative(parsed.data.initiative);
+    const product = this.store.getProduct({ uuid: initiative.product_id });
+    const workspaces = this.store.listInitiativeWorkspaceLinksWithDetail({ initiative_id: initiative.uuid });
+    const tasks = this.store.listInitiativeTasks({ initiative_id: initiative.uuid });
+    const artifacts = this.store.listInitiativeArtifacts(initiative.uuid);
+    const requirements = this.store.listRequirements({ initiative_id: initiative.uuid });
+    const acceptanceCriteria = this.store.listAcceptanceCriteria({ initiative_id: initiative.uuid });
+    const decisions = this.store.listDecisions({ initiative_id: initiative.uuid });
+    const evidence = this.store.listEvidence({ initiative_id: initiative.uuid });
+    const risks = this.store.listRisks({ initiative_id: initiative.uuid });
+    const verificationRuns = this.store.listVerificationRuns({ initiative_id: initiative.uuid });
+    const phaseRecords = this.store.listPhaseRecords({ initiative_id: initiative.uuid });
+    const deliverables = this.store.listDeliverables({ initiative_id: initiative.uuid }).map((deliverable) => ({
+      deliverable,
+      members: this.store.listDeliverableMembers({ deliverable_id: deliverable.uuid }),
+      history: this.store.listDeliveryHistory({ deliverable_id: deliverable.uuid }),
+    }));
+    const events = this.store.listEvents({ initiative_id: initiative.uuid });
+
+    const snapshot: InitiativeExportSnapshot = {
+      schema_version: INITIATIVE_EXPORT_SCHEMA_VERSION,
+      exported_at: new Date().toISOString(),
+      initiative,
+      product,
+      workspaces,
+      tasks,
+      artifacts,
+      requirements,
+      acceptance_criteria: acceptanceCriteria,
+      decisions,
+      evidence,
+      risks,
+      verification_runs: verificationRuns,
+      phase_records: phaseRecords,
+      deliverables,
+      events,
+    };
+    return snapshot;
   }
 }

@@ -23,7 +23,9 @@ export type InitiativeErrorCode =
   | 'unknown_method'
   | 'unknown_delivery_contract'
   | 'duplicate_target_adapter'
-  | 'target_adapter_validation_failed';
+  | 'target_adapter_validation_failed'
+  | 'verification_method_not_runnable'
+  | 'initiative_already_exists';
 
 /** A mutation's `expected_revision` did not match the stored revision (FR-7, AC-1.4). */
 export class RevisionConflictError extends Error {
@@ -325,7 +327,48 @@ export class TargetAdapterValidationFailedError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, and SPEC-007. */
+/**
+ * `verification_run`'s `method` names `'agent-review'` or `'human'` — neither can be
+ * machine-run; only `'command'` may be executed by this operation (those two methods stay
+ * reachable exclusively through `verification_record`).
+ */
+export class VerificationMethodNotRunnableError extends Error {
+  readonly code = 'verification_method_not_runnable' as const;
+  readonly method: string;
+
+  constructor(params: { method: string; message?: string }) {
+    super(
+      params.message ??
+        `verification_method_not_runnable: method '${params.method}' cannot be machine-run; use verification_record instead`,
+    );
+    this.name = 'VerificationMethodNotRunnableError';
+    this.method = params.method;
+  }
+}
+
+/**
+ * `initiative_import` named a snapshot `initiative.uuid` or `initiative.human_key` that already
+ * exists in the target store. Conflict-shaped, like `RevisionConflictError` and
+ * `DuplicateTargetAdapterError` — the HTTP/MCP adapters map it to 409. Import never silently
+ * merges into an existing Initiative.
+ */
+export class InitiativeAlreadyExistsError extends Error {
+  readonly code = 'initiative_already_exists' as const;
+  readonly uuid: string;
+  readonly human_key: string;
+
+  constructor(params: { uuid: string; human_key: string; message?: string }) {
+    super(
+      params.message ??
+        `initiative_already_exists: an Initiative with uuid '${params.uuid}' or human_key '${params.human_key}' already exists (conflict)`,
+    );
+    this.name = 'InitiativeAlreadyExistsError';
+    this.uuid = params.uuid;
+    this.human_key = params.human_key;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-007, and the MMA Next gap-closure additions (verification execution, Initiative portability). */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -342,7 +385,9 @@ export type InitiativeError =
   | UnknownMethodError
   | UnknownDeliveryContractError
   | DuplicateTargetAdapterError
-  | TargetAdapterValidationFailedError;
+  | TargetAdapterValidationFailedError
+  | VerificationMethodNotRunnableError
+  | InitiativeAlreadyExistsError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -361,6 +406,8 @@ const INITIATIVE_ERROR_CTORS = [
   UnknownDeliveryContractError,
   DuplicateTargetAdapterError,
   TargetAdapterValidationFailedError,
+  VerificationMethodNotRunnableError,
+  InitiativeAlreadyExistsError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

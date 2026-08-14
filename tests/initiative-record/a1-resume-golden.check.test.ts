@@ -16,7 +16,7 @@ describe('Phase A1 resume golden', () => {
       try {
         const response = fresh.initiativeResume({ initiative: { human_key: seeded.initiative.human_key }, event_limit: 100 });
         expect(response).toEqual(seeded.expectedResume);
-        expect(Object.keys(response).sort()).toEqual(['artifacts', 'counts', 'decisions', 'events', 'evidence', 'initiative', 'lifecycle', 'product', 'related_initiatives', 'requirements', 'risks', 'tasks', 'verification', 'workspaces']);
+        expect(Object.keys(response).sort()).toEqual(['artifacts', 'counts', 'decisions', 'deliverables', 'events', 'evidence', 'initiative', 'lifecycle', 'product', 'related_initiatives', 'requirements', 'risks', 'tasks', 'verification', 'workspaces']);
         expect(Object.keys(response.counts.verification_by_state).sort()).toEqual(['blocked', 'fail', 'needs_human_review', 'not_applicable', 'pass', 'pending', 'stale', 'superseded']);
         expect(response.requirements.every((entry) => entry.acceptance_criteria.every((criterion) => criterion.requirement_id === entry.requirement.uuid))).toBe(true);
       } finally { fresh.close(); }

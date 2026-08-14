@@ -263,6 +263,12 @@ export {
   // "available to the server runtime through a core export" shape `loadMethodGuidance` gives
   // Method Procedure guidance above.
   loadDeliveryPackager,
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+  // execution, packaging assembly, and Initiative portability.
+  VerificationMethodNotRunnableError,
+  InitiativeAlreadyExistsError,
+  initiativeExportRequestSchema,
+  INITIATIVE_EXPORT_SCHEMA_VERSION,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -337,4 +343,11 @@ export type {
   DeliverableArtifactMember,
   DeliveryHistoryEntry,
   TargetAdapter,
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12).
+  DeliverablePackageResult,
+  DeliverablePackageCoverage,
+  InitiativeExportSnapshot,
+  VerificationRunInput,
+  DeliverablePackageInput,
+  InitiativeImportInput,
 } from './initiative-record/index.js';
