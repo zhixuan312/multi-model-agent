@@ -7,14 +7,15 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { vi } from 'vitest';
 import { ExecutionRuntime } from '../../../packages/server/src/application/execution-runtime.js';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
 import { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
 import { SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
-import { ExecutionRegistry } from '../../../packages/core/src/unified/task-registry.js';
-import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
-import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
+import { ExecutionRegistry, assertRunnable, parseConfig } from '@zhixuan92/multi-model-agent-core';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { RunnableConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
 import type { Provider, SessionOpts, Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
 
 /** Provenance for direct `InitiativeRecordRuntime.execute()` calls in the SPEC-003 B6 defect 3
@@ -30,8 +31,8 @@ const provenance = {
   source: 'test',
 };
 
-function baseAgentsConfig(stateDir: string): MultiModelConfig {
-  return {
+function baseAgentsConfig(stateDir: string): RunnableConfig {
+  const config = parseConfig({
     agents: {
       standard: { type: 'codex', model: 'mock-standard', baseUrl: 'http://mock.local' },
       complex: { type: 'codex', model: 'mock-complex', baseUrl: 'http://mock.local' },
@@ -43,7 +44,9 @@ function baseAgentsConfig(stateDir: string): MultiModelConfig {
     // `beforeEach` is already keyed off, mirroring real server wiring where
     // both live under one `server.stateDir`.
     server: { stateDir },
-  } as unknown as MultiModelConfig;
+  });
+  assertRunnable(config);
+  return config;
 }
 
 function okTurn(output: string): TurnResult {
@@ -84,7 +87,7 @@ function crashingProvider(): Provider {
   };
 }
 
-function resolverFor(provider: Provider): (tier: AgentType, config: MultiModelConfig) => ResolvedAgent {
+function resolverFor(provider: Provider): (tier: AgentType, config: RunnableConfig) => ResolvedAgent {
   return (tier) => ({ slot: tier, provider });
 }
 
@@ -103,7 +106,7 @@ describe('ExecutionRuntime', () => {
   let projectRegistry: ProjectRegistry;
   let store: ExecutionStore;
   let bus: EnvelopeBus;
-  let TEST_CONFIG: MultiModelConfig;
+  let TEST_CONFIG: RunnableConfig;
 
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'mma-exec-runtime-'));
@@ -382,8 +385,9 @@ describe('ExecutionRuntime', () => {
 
   it('rejects submission when no agent can be resolved', async () => {
     const runtime = new ExecutionRuntime({
-      config: { agents: undefined } as unknown as MultiModelConfig,
+      config: TEST_CONFIG,
       bus, executionRegistry, projectRegistry, store,
+      resolveAgentFn: () => { throw new Error('agent is not configured'); },
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
@@ -502,11 +506,11 @@ describe('ExecutionRuntime', () => {
       // resolves, Task resolves, membership, `open` state, no claim to conflict on) still runs
       // for real and still passes.
       const originalExecute = initiativeRuntime.execute.bind(initiativeRuntime);
-      (initiativeRuntime as unknown as { execute: (request: unknown) => unknown }).execute = (request: unknown) => {
+      vi.spyOn(initiativeRuntime, 'execute').mockImplementation((request) => {
         const op = (request as { operation?: unknown } | null)?.operation;
         if (op === 'initiative_task_execution') throw new Error('simulated Task-transition failure');
-        return originalExecute(request as never);
-      };
+        return originalExecute(request);
+      });
 
       const runtime = new ExecutionRuntime({
         config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,

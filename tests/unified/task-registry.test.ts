@@ -7,12 +7,12 @@ describe('ExecutionRegistry TTL eviction (server.limits.batchTtlMs)', () => {
     try {
       vi.setSystemTime(0);
       const reg = new ExecutionRegistry({ ttlMs: 1000 });
-      reg.register('old', '/c', 'delegate');
+      reg.register('old', '/c', 'delegate', null);
       reg.complete('old', { ok: true });          // terminalAt = 0
-      reg.register('inflight', '/c', 'delegate');  // pending, terminalAt = null
+      reg.register('inflight', '/c', 'delegate', null);  // pending, terminalAt = null
 
       vi.setSystemTime(2000);                       // 2000 - 0 > 1000 for 'old'
-      reg.register('fresh', '/c', 'delegate');      // register triggers the sweep
+      reg.register('fresh', '/c', 'delegate', null);      // register triggers the sweep
 
       expect(reg.get('old')).toBeUndefined();       // terminal + expired → evicted
       expect(reg.get('inflight')).toBeDefined();    // in-flight is NEVER evicted, any age
@@ -27,10 +27,10 @@ describe('ExecutionRegistry TTL eviction (server.limits.batchTtlMs)', () => {
     try {
       vi.setSystemTime(0);
       const reg = new ExecutionRegistry({ ttlMs: 10_000 });
-      reg.register('recent', '/c', 'delegate');
+      reg.register('recent', '/c', 'delegate', null);
       reg.complete('recent', { ok: true });         // terminalAt = 0
       vi.setSystemTime(5000);                        // 5000 - 0 < 10000
-      reg.register('next', '/c', 'delegate');
+      reg.register('next', '/c', 'delegate', null);
       expect(reg.get('recent')).toBeDefined();
     } finally {
       vi.useRealTimers();
@@ -41,7 +41,7 @@ describe('ExecutionRegistry TTL eviction (server.limits.batchTtlMs)', () => {
 describe('ExecutionRegistry', () => {
   it('registers a task as pending', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/cwd', 'delegate');
+    reg.register('t1', '/cwd', 'delegate', null);
     const e = reg.get('t1');
     expect(e).toBeDefined();
     expect(e!.state).toBe('pending');
@@ -50,7 +50,7 @@ describe('ExecutionRegistry', () => {
 
   it('completes a task', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/cwd', 'delegate');
+    reg.register('t1', '/cwd', 'delegate', null);
     reg.complete('t1', { status: 'done' });
     expect(reg.isTerminal('t1')).toBe(true);
     expect(reg.get('t1')!.result).toEqual({ status: 'done' });
@@ -58,7 +58,7 @@ describe('ExecutionRegistry', () => {
 
   it('fails a task', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/cwd', 'delegate');
+    reg.register('t1', '/cwd', 'delegate', null);
     reg.fail('t1', { error: 'boom' });
     expect(reg.isTerminal('t1')).toBe(true);
   });
@@ -69,14 +69,14 @@ describe('ExecutionRegistry', () => {
 
   it('updates running headline', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/cwd', 'delegate');
+    reg.register('t1', '/cwd', 'delegate', null);
     reg.setHeadline('t1', 'Phase 1...');
     expect(reg.get('t1')!.runningHeadline).toBe('Phase 1...');
   });
 
   it('does not update headline on terminal task', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/cwd', 'delegate');
+    reg.register('t1', '/cwd', 'delegate', null);
     reg.complete('t1', {});
     reg.setHeadline('t1', 'should not set');
     expect(reg.get('t1')!.runningHeadline).toBeNull();
@@ -84,9 +84,9 @@ describe('ExecutionRegistry', () => {
 
   it('counts active tasks per cwd', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
-    reg.register('t2', '/a', 'audit');
-    reg.register('t3', '/b', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
+    reg.register('t2', '/a', 'audit', null);
+    reg.register('t3', '/b', 'delegate', null);
     expect(reg.countActive('/a')).toBe(2);
     reg.complete('t1', {});
     expect(reg.countActive('/a')).toBe(1);
@@ -94,8 +94,8 @@ describe('ExecutionRegistry', () => {
 
   it('allInFlight returns only pending tasks', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
-    reg.register('t2', '/a', 'audit');
+    reg.register('t1', '/a', 'delegate', null);
+    reg.register('t2', '/a', 'audit', null);
     reg.complete('t1', {});
     const inflight = reg.allInFlight();
     expect(inflight).toHaveLength(1);
@@ -104,7 +104,7 @@ describe('ExecutionRegistry', () => {
 
   it('idempotent complete', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
     reg.complete('t1', { first: true });
     reg.complete('t1', { second: true });
     expect(reg.get('t1')!.result).toEqual({ first: true });
@@ -112,7 +112,7 @@ describe('ExecutionRegistry', () => {
 
   it('initializes phase fields as null', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
     const e = reg.get('t1')!;
     expect(e.phase).toBeNull();
     expect(e.phaseStartedAt).toBeNull();
@@ -121,7 +121,7 @@ describe('ExecutionRegistry', () => {
 
   it('setPhase updates phase and phaseStartedAt', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
     reg.setPhase('t1', 'implementing');
     const e = reg.get('t1')!;
     expect(e.phase).toBe('implementing');
@@ -130,7 +130,7 @@ describe('ExecutionRegistry', () => {
 
   it('setPhase transitions from implementing to reviewing', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
     reg.setPhase('t1', 'implementing');
     reg.setPhase('t1', 'reviewing');
     expect(reg.get('t1')!.phase).toBe('reviewing');
@@ -138,7 +138,7 @@ describe('ExecutionRegistry', () => {
 
   it('setPhase does not update terminal tasks', () => {
     const reg = new ExecutionRegistry();
-    reg.register('t1', '/a', 'delegate');
+    reg.register('t1', '/a', 'delegate', null);
     reg.complete('t1', {});
     reg.setPhase('t1', 'implementing');
     expect(reg.get('t1')!.phase).toBeNull();

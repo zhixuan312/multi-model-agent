@@ -471,6 +471,7 @@ describe('assertSafeAcceptanceTestPaths', () => {
     return {
       tasks: [
         {
+          id: 'I-9',
           title: 'Task I-9: safety fixture',
           output: 'out/x',
           dependencies: 'none',
@@ -548,6 +549,7 @@ describe('materializeAcceptanceTests / rematerializeAcceptanceTests', () => {
     return {
       tasks: [
         {
+          id: 'I-10',
           title: 'Task I-10: materialize fixture',
           output: 'out/x',
           dependencies: 'none',
