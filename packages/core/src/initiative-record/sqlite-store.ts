@@ -38,12 +38,14 @@ import {
   RevisionConflictError,
   TaskClaimConflictError,
   TaskNotClaimableError,
+  UnknownDeliveryContractError,
   UnknownLifecycleContractError,
   UnknownMethodError,
 } from './errors.js';
 import { evaluateLifecycleGate } from './lifecycle-gates.js';
 import { runInitiativeMigrations } from './migrations.js';
 import {
+  deliveryContractDeclarationSchema,
   initiativeMutationRequestSchema,
   methodDeclarationSchema,
   type AcceptanceCriterionAddInput,
@@ -88,6 +90,7 @@ import {
   type AcceptanceCriterion,
   type ArtifactRef,
   type Decision,
+  type DeliveryContract,
   type Event,
   type Evidence,
   type EvidenceLink,
@@ -649,6 +652,74 @@ export class InitiativeRecordStore implements InitiativeRepository {
       throw new InvalidRequestError({
         field_errors: { method: [`registered Method row '${id}' does not match declaration id '${result.data.id}'`] },
         message: `invalid_request: Method row '${id}' does not match its stored declaration id`,
+      });
+    }
+    return result.data;
+  }
+
+  // ---------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1,
+  // ← AC-1.1, AC-1.2, AC-1.3). `delivery_contracts` is seeded once by
+  // migration 7 (`INSERT OR IGNORE`, exactly the two frozen built-in
+  // declarations) and never written by any runtime path — these two reads
+  // are the store's only access to that table. `delivery_contract_get` and
+  // `delivery_contract_list` dispatch through `execute()`'s read map is a
+  // later task's scope; this task only makes the reads themselves true.
+  // ---------------------------------------------------------------------
+
+  /** `delivery_contract_get` — `id`. Throws `unknown_delivery_contract` for an unregistered identifier. */
+  getDeliveryContract(lookup: { id: string }): DeliveryContract {
+    return this.getDeliveryContractOrThrow(lookup.id);
+  }
+
+  /** `delivery_contract_list` — every registered declaration, in stable ascending identifier order. */
+  listDeliveryContracts(): DeliveryContract[] {
+    const rows = this.db.prepare(`SELECT id, definition_json FROM delivery_contracts ORDER BY id ASC`).all() as unknown as Array<{
+      id: string;
+      definition_json: string;
+    }>;
+    return rows.map((row) => this.parseDeliveryContractDeclaration(row.id, row.definition_json));
+  }
+
+  /** Loads a registered Delivery Contract's `definition_json`. Throws `unknown_delivery_contract` for an unregistered id. */
+  private getDeliveryContractOrThrow(id: string): DeliveryContract {
+    const row = this.db.prepare(`SELECT definition_json FROM delivery_contracts WHERE id = ?`).get(id) as
+      | { definition_json?: string }
+      | undefined;
+    if (!row || row.definition_json === undefined) {
+      throw new UnknownDeliveryContractError({ delivery_contract: id });
+    }
+    return this.parseDeliveryContractDeclaration(id, row.definition_json);
+  }
+
+  /**
+   * Parses and strictly re-validates a stored Delivery Contract's `definition_json` against
+   * {@link deliveryContractDeclarationSchema} rather than trusting the stored bytes as-is — a
+   * store read never returns a partial or malformed declaration. Malformed JSON or a shape that
+   * fails the strict schema throws `invalid_request`; both are store-corruption conditions that
+   * cannot occur through any caller-visible write path (there is no Delivery Contract write
+   * path), so this only guards against a directly edited or otherwise corrupted `initiatives.db`.
+   */
+  private parseDeliveryContractDeclaration(id: string, definitionJson: string): DeliveryContract {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(definitionJson);
+    } catch {
+      throw new InvalidRequestError({
+        field_errors: { delivery_contract: [`registered Delivery Contract '${id}' has malformed stored definition JSON`] },
+        message: `invalid_request: Delivery Contract '${id}' has malformed stored definition JSON`,
+      });
+    }
+    const result = deliveryContractDeclarationSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new InvalidRequestError({ field_errors: fieldErrorsFromIssues(result.error.issues) });
+    }
+    if (result.data.id !== id) {
+      throw new InvalidRequestError({
+        field_errors: {
+          delivery_contract: [`registered Delivery Contract row '${id}' does not match declaration id '${result.data.id}'`],
+        },
+        message: `invalid_request: Delivery Contract row '${id}' does not match its stored declaration id`,
       });
     }
     return result.data;

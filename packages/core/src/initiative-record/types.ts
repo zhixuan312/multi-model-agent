@@ -449,6 +449,33 @@ export interface MethodDeclaration {
   verification_expectations: string[];
 }
 
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — Delivery Contract registry (Task I-1)
+//
+// TRANSCRIPTION, not design: frozen by
+// `.mma/specs/2026-08-14-spec-007-delivery-layer.md` (SPEC-007, "Interfaces /
+// contracts" and "Data model"). A Delivery Contract is the immutable
+// declaration of the required bundle items and verification expectations for
+// one kind of Deliverable. The registry exposes no caller-visible write
+// operation — only the two seeded built-in declarations ever exist.
+// ---------------------------------------------------------------------------
+
+/** A Delivery Contract identifier: `<name>@<version>`, version >= 1, no leading zero (FR-1). */
+export const DELIVERY_CONTRACT_ID_PATTERN = /^[a-z][a-z0-9-]*@[1-9][0-9]*$/;
+
+/**
+ * A registered, immutable Delivery Contract declaration (FR-1, FR-2). Exactly these six
+ * fields — no conditional, script, expression, or runtime-extensible field.
+ */
+export interface DeliveryContract {
+  id: string;
+  name: string;
+  version: number;
+  target_type: string;
+  requires: string[];
+  verification: string[];
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product

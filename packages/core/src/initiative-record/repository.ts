@@ -27,6 +27,7 @@ import type {
   AcceptanceCriterion,
   ArtifactRef,
   Decision,
+  DeliveryContract,
   Evidence,
   EvidenceLink,
   EvidenceLinkTargetType,
@@ -207,4 +208,15 @@ export interface InitiativeRepository {
   countEvidence(initiativeId: string): number;
   /** Resume count: Verification Run counts by state — every `VerificationState` key present, defaulting to `0`. */
   countVerificationByState(initiativeId: string): Record<VerificationState, number>;
+
+  // -------------------------------------------------------------------------
+  // SPEC-007 Delivery Layer — Delivery Contract registry reads (Task I-1,
+  // FR-1). Immutable, seeded-only catalog; no register/update/delete method
+  // exists here or anywhere in this codebase.
+  // -------------------------------------------------------------------------
+
+  /** `delivery_contract_get` — throws `unknown_delivery_contract` for an unregistered identifier. */
+  getDeliveryContract(lookup: { id: string }): DeliveryContract;
+  /** `delivery_contract_list` — every registered declaration, in stable ascending identifier order. */
+  listDeliveryContracts(): DeliveryContract[];
 }

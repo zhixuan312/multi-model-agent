@@ -263,7 +263,25 @@ export class UnknownMethodError extends Error {
   }
 }
 
-/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, and SPEC-005. */
+/**
+ * A syntactically valid but unregistered Delivery Contract identifier — a `delivery_contract_get`
+ * lookup or a Deliverable operation's `delivery_contract` names no row in `delivery_contracts`
+ * (SPEC-007 FR-1, FR-3).
+ */
+export class UnknownDeliveryContractError extends Error {
+  readonly code = 'unknown_delivery_contract' as const;
+  readonly delivery_contract: string;
+
+  constructor(params: { delivery_contract: string; message?: string }) {
+    super(
+      params.message ?? `unknown_delivery_contract: no registered Delivery Contract '${params.delivery_contract}'`,
+    );
+    this.name = 'UnknownDeliveryContractError';
+    this.delivery_contract = params.delivery_contract;
+  }
+}
+
+/** The frozen typed error union — the exact runtime counterpart of SPEC-001's `TypedError`, extended by SPEC-002, SPEC-003, SPEC-004, SPEC-005, and SPEC-007. */
 export type InitiativeError =
   | RevisionConflictError
   | CrossProductWorkspaceLinkError
@@ -277,7 +295,8 @@ export type InitiativeError =
   | InvalidTaskTransitionError
   | InvalidPhaseTransitionError
   | UnknownLifecycleContractError
-  | UnknownMethodError;
+  | UnknownMethodError
+  | UnknownDeliveryContractError;
 
 const INITIATIVE_ERROR_CTORS = [
   RevisionConflictError,
@@ -293,6 +312,7 @@ const INITIATIVE_ERROR_CTORS = [
   InvalidPhaseTransitionError,
   UnknownLifecycleContractError,
   UnknownMethodError,
+  UnknownDeliveryContractError,
 ] as const;
 
 export function isInitiativeError(err: unknown): err is InitiativeError {

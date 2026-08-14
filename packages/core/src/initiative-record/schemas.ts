@@ -15,7 +15,7 @@
  * missing required values, and JSON-list values that are not string arrays (AC-1.2).
  */
 import { z } from 'zod';
-import { METHOD_ID_PATTERN } from './types.js';
+import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN } from './types.js';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyString = z.string().min(1);
@@ -511,6 +511,41 @@ export const initiativeTaskSetMethodInputSchema = z
   })
   .strict();
 export type InitiativeTaskSetMethodInput = z.infer<typeof initiativeTaskSetMethodInputSchema>;
+
+// ---------------------------------------------------------------------------
+// SPEC-007 Delivery Layer — Delivery Contract registry (Task I-1, FR-1). No
+// caller-visible Delivery Contract write operation exists: there is no
+// `delivery_contract_register`/`_update`/`_delete` schema anywhere in this
+// file.
+// ---------------------------------------------------------------------------
+
+/** `<name>@<version>`, version >= 1, no leading zero (FR-1). */
+const deliveryContractIdSchema = z
+  .string()
+  .regex(DELIVERY_CONTRACT_ID_PATTERN, 'must match <name>@<version>, e.g. runnable-prototype@1');
+
+/**
+ * Validates exactly the frozen declaration field set (FR-1): `id`, `name`, `version`,
+ * `target_type`, `requires`, and `verification`. No conditional, script, expression, or
+ * extension field is permitted (`.strict()`).
+ */
+export const deliveryContractDeclarationSchema = z
+  .object({
+    id: deliveryContractIdSchema,
+    name: nonEmptyString,
+    version: z.number().int().positive(),
+    target_type: nonEmptyString,
+    requires: z.array(z.string()),
+    verification: z.array(z.string()),
+  })
+  .strict();
+export type DeliveryContractDeclarationInput = z.infer<typeof deliveryContractDeclarationSchema>;
+
+export const deliveryContractGetInputSchema = z.object({ id: deliveryContractIdSchema }).strict();
+export type DeliveryContractGetInput = z.infer<typeof deliveryContractGetInputSchema>;
+
+export const deliveryContractListInputSchema = z.object({}).strict();
+export type DeliveryContractListInput = z.infer<typeof deliveryContractListInputSchema>;
 
 // ---------------------------------------------------------------------------
 // ArtifactRef

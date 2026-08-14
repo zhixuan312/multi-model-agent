@@ -50,6 +50,19 @@
  * `initiatives.db` schema version 6 migration. No new export — the same `MethodDeclaration`
  * type, `method_get` / `method_list` operations, and `loadMethodGuidance` resolver already
  * exported above cover it.
+ *
+ * SPEC-007 Delivery Layer (Task I-1) extends this surface with the `DeliveryContract` domain
+ * type, `deliveryContractDeclarationSchema` / `deliveryContractGetInputSchema` /
+ * `deliveryContractListInputSchema`, the `unknown_delivery_contract` typed error
+ * (`UnknownDeliveryContractError`), the additive `initiatives.db` schema version 7 migration
+ * (seeded immutable two-Delivery-Contract built-in catalog, plus the schema-only
+ * `deliverables` / `deliverable_artifacts` / `deliverable_delivery_history` DDL a later task
+ * populates), and `InitiativeRecordStore.getDeliveryContract()` / `.listDeliveryContracts()`
+ * (declared on the class and the `InitiativeRepository` interface) — all re-exported through
+ * the wildcard exports below, no new export list required. This task does not add the
+ * `delivery_contract_get` / `delivery_contract_list` operations to the shared operation union,
+ * the generic adapter interface/registry, or any Deliverable entity or operation — those are
+ * later, independently checkable tasks.
  */
 export * from './types.js';
 export * from './schemas.js';

@@ -246,6 +246,11 @@ export {
   // server runtime through a core export"). `ExecutionRuntime` (Task I-4) is its first
   // caller outside the initiative-record package itself.
   loadMethodGuidance,
+  // SPEC-007 Delivery Layer (see .mma/specs/2026-08-14-spec-007-delivery-layer.md) — Task I-1
+  UnknownDeliveryContractError,
+  deliveryContractDeclarationSchema,
+  deliveryContractGetInputSchema,
+  deliveryContractListInputSchema,
 } from './initiative-record/index.js';
 export type {
   Product,
@@ -309,4 +314,9 @@ export type {
   // SPEC-006 Business intake (see .mma/specs/2026-08-14-spec-006-business-intake-solution-lead.md)
   InitiativeBootstrapInput,
   InitiativeBootstrapResult,
+  // SPEC-007 Delivery Layer (see .mma/specs/2026-08-14-spec-007-delivery-layer.md) — Task I-1
+  DeliveryContract,
+  DeliveryContractDeclarationInput,
+  DeliveryContractGetInput,
+  DeliveryContractListInput,
 } from './initiative-record/index.js';
