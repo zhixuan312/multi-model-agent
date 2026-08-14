@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
@@ -45,6 +45,38 @@ function targetLiteralAliases(source: ts.SourceFile): Set<string> {
   return aliases;
 }
 
+// A catalog object such as `const TARGETS = { prototype: 'runnable-prototype' }` is not itself a
+// target-literal alias (its initializer is an ObjectLiteralExpression, not a string literal), but
+// a later `TARGETS.prototype` property access resolves to a target-type literal just as surely as
+// a plain aliased identifier does. Track, per object variable name, which of its property names
+// hold a target-type literal value, so a PropertyAccessExpression through that catalog can be
+// recognized as target-specific too.
+function targetLiteralObjectAliases(source: ts.SourceFile): Map<string, Set<string>> {
+  const aliases = new Map<string, Set<string>>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      const targetProperties = new Set<string>();
+      for (const property of node.initializer.properties) {
+        if (
+          ts.isPropertyAssignment(property) &&
+          (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+          ts.isStringLiteral(property.initializer) &&
+          TARGET_TYPE_LITERALS.includes(property.initializer.text)
+        ) targetProperties.add(property.name.text);
+      }
+      if (targetProperties.size > 0) aliases.set(node.name.text, targetProperties);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return aliases;
+}
+
 function isTargetSpecificControlOrLookup(value: ts.Node): boolean {
   for (let node: ts.Node = value; node.parent; node = node.parent) {
     const parent = node.parent;
@@ -73,11 +105,16 @@ function targetLiteralOccurrences(root: string): { path: string; literal: string
     if (ALLOWED_TARGET_LITERAL_FILES.has(relative(root, path).replaceAll('\\', '/'))) return [];
     const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
     const aliases = targetLiteralAliases(source);
+    const objectAliases = targetLiteralObjectAliases(source);
     const occurrences: { path: string; literal: string; line: string }[] = [];
     const visit = (node: ts.Node): void => {
       const isTargetLiteral = ts.isStringLiteral(node) && TARGET_TYPE_LITERALS.includes(node.text);
       const isTargetLiteralAlias = ts.isIdentifier(node) && aliases.has(node.text);
-      if ((isTargetLiteral || isTargetLiteralAlias) && isTargetSpecificControlOrLookup(node)) {
+      const isTargetLiteralPropertyAccess =
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        (objectAliases.get(node.expression.text)?.has(node.name.text) ?? false);
+      if ((isTargetLiteral || isTargetLiteralAlias || isTargetLiteralPropertyAccess) && isTargetSpecificControlOrLookup(node)) {
         occurrences.push({ path, literal: node.getText(source), line: source.text.slice(node.getFullStart(), node.getEnd()).trim() });
       }
       ts.forEachChild(node, visit);
@@ -101,6 +138,34 @@ describe('SPEC-007 fake adapter capability proof', () => {
     try {
       writeFileSync(join(dir, 'aliased-branch.ts'), `const PROTOTYPE = 'runnable-prototype';\nif (deliverable.target_type === PROTOTYPE) validatePrototype();\n`);
       expect(targetLiteralOccurrences(dir)).not.toEqual([]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('detects a target-type branch through an object-literal catalog accessed by property', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-target-branch-'));
+    try {
+      writeFileSync(
+        join(dir, 'catalog-branch.ts'),
+        `const TARGETS = { prototype: 'runnable-prototype' };\nif (deliverable.target_type === TARGETS.prototype) validatePrototype();\n`,
+      );
+      expect(targetLiteralOccurrences(dir)).not.toEqual([]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('still allows the same object-literal catalog pattern in the two permitted inert-declaration files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mma-target-branch-'));
+    try {
+      const nested = join(dir, 'initiative-record');
+      mkdirSync(nested);
+      writeFileSync(
+        join(nested, 'delivery-packagers.ts'),
+        `const TARGETS = { prototype: 'runnable-prototype' };\nif (deliverable.target_type === TARGETS.prototype) validatePrototype();\n`,
+      );
+      writeFileSync(
+        join(nested, 'migrations.ts'),
+        `const TARGETS = { software: 'runnable-software' };\nif (deliverable.target_type === TARGETS.software) validateSoftware();\n`,
+      );
+      expect(targetLiteralOccurrences(dir)).toEqual([]);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
