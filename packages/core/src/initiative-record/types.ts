@@ -466,22 +466,40 @@ export type InitiativeRecordEntity =
   | EvidenceLink
   | Risk
   | VerificationRun
-  | PhaseRecord;
+  | PhaseRecord
+  | InitiativeBootstrapResult;
+
+/** One `initiative_bootstrap` requested Workspace, paired back to its request `workspace_key`. */
+export interface InitiativeBootstrapWorkspaceResult extends Workspace {
+  workspace_key: string;
+  role: InitiativeWorkspaceRole;
+}
+
+/** One `initiative_bootstrap` created Resource, paired back to its request `workspace_key`. */
+export interface InitiativeBootstrapResourceResult extends Resource {
+  workspace_key: string;
+}
+
+/** One `initiative_bootstrap` created Requirement, with its nested Acceptance Criteria. */
+export interface InitiativeBootstrapRequirementResult extends Requirement {
+  acceptance_criteria: AcceptanceCriterion[];
+}
 
 /**
- * `initiative_bootstrap` result shape (SPEC-006, ← AC-1.6). Task I-2 defines this type only —
- * Task I-3 makes the store return it. Identifies the resolved Product, the requested Workspaces
- * (each paired back to its request `workspace_key`), created Resources (same pairing), the
- * created Initiative, its Initiative-to-Workspace links, and its Requirements with their nested
- * Acceptance Criteria.
+ * `initiative_bootstrap` result shape (SPEC-006, ← AC-1.4, AC-1.6). Task I-2 sketched this type
+ * as a nested envelope; Task I-3 (the task that "makes the store return it") settles the shape
+ * its own acceptance test pins: the root object IS the created Initiative (spreading every
+ * `Initiative` field, including `uuid`, at the top level — not nested under `.initiative`),
+ * alongside the resolved Product, the requested Workspaces (each paired back to its request
+ * `workspace_key`), created Resources (same pairing), the Initiative-to-Workspace links, and the
+ * Requirements with their nested Acceptance Criteria.
  */
-export interface InitiativeBootstrapResult {
-  initiative: Initiative;
+export interface InitiativeBootstrapResult extends Initiative {
   product: Product;
-  workspaces: Array<{ workspace_key: string; role: InitiativeWorkspaceRole; workspace: Workspace }>;
-  resources: Array<{ workspace_key: string; resource: Resource }>;
+  workspaces: InitiativeBootstrapWorkspaceResult[];
+  resources: InitiativeBootstrapResourceResult[];
   initiative_workspace_links: InitiativeWorkspaceLink[];
-  requirements: Array<{ requirement: Requirement; acceptance_criteria: AcceptanceCriterion[] }>;
+  requirements: InitiativeBootstrapRequirementResult[];
 }
 
 /** `initiative_resume` request — exactly one of `uuid` or `human_key`. */
