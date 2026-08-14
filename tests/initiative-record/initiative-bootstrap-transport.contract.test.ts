@@ -36,7 +36,10 @@ describe('initiative_bootstrap HTTP contract', () => {
       expect(rejected.response.status).toBe(409);
       expect(rejected.json).toMatchObject({ error: { code: 'cross_product_workspace_link' } });
       expect(h.initiativeRecordSnapshot()).toEqual(beforeRejection);
-      const replay = await post(h, bootstrap({ existing: { uuid: product.uuid } }, [{ workspace_key: 'old', role: 'references', existing: { uuid: existing.uuid } }], [], 'all-existing'));
+      // A true replay: same idempotency key AND same input as the 'all-existing' call above.
+      // Replaying a key with DIFFERENT input is an idempotency conflict by contract and returns
+      // 400 — that is correct behavior, not a replay, so the role must match ('consumes').
+      const replay = await post(h, bootstrap({ existing: { uuid: product.uuid } }, [{ workspace_key: 'old', role: 'consumes', existing: { uuid: existing.uuid } }], [], 'all-existing'));
       expect(replay.response.status).toBe(200);
       expect(replay.json.uuid).toBe(allExisting.json.uuid);
       const stale = await post(h, { ...bootstrap({ existing: { uuid: product.uuid } }, [{ workspace_key: 'old', role: 'references', existing: { uuid: existing.uuid } }], [], 'stale'), expected_revision: 999 });
