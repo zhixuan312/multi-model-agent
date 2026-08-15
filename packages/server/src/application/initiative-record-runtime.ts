@@ -80,9 +80,10 @@ export class InitiativeRecordRuntime {
 
   /**
    * Validates `rawRequest` against the frozen operation envelope and
-   * dispatches every operation except the two dedicated reads,
-   * `initiative_resume` (use {@link initiativeResume}) and
-   * `initiative_gate_status` (use {@link initiativeGateStatus}), each of
+   * dispatches every operation except the three dedicated reads —
+   * `initiative_resume` (use {@link initiativeResume}),
+   * `initiative_gate_status` (use {@link initiativeGateStatus}), and
+   * `initiative_export` (use {@link initiativeExport}) — each of
    * which is a server-side assembly of several joined store reads rather
    * than a single store call: mutating operations go through the store's
    * single transactional `execute()`; read operations call the matching
@@ -253,15 +254,25 @@ export class InitiativeRecordRuntime {
       case 'deliverable_list':
         return this.store.listDeliverables(request.input);
 
-      // `initiative_resume` and `initiative_gate_status` are excluded above
-      // by EXECUTE_OPERATIONS; this branch is unreachable but keeps the
-      // switch exhaustive under `request`'s full discriminated-union type.
-      default:
+      // The three dedicated reads, named explicitly rather than swept into `default`.
+      // `EXECUTE_OPERATIONS` already rejects them before the switch, so these arms are
+      // unreachable — but naming them is what lets `default` narrow to `never` below.
+      case 'initiative_resume':
+      case 'initiative_gate_status':
+      case 'initiative_export':
         throw new InitiativeInvalidRequestError({
           field_errors: {
-            operation: [`not a valid execute() operation; ${DEDICATED_METHOD_HINT}`],
+            operation: [`${request.operation} is not a valid execute() operation; ${DEDICATED_METHOD_HINT}`],
           },
         });
+
+      // Now an EXHAUSTIVENESS check, not a catch-all. `EXECUTE_OPERATIONS` is derived from
+      // `INITIATIVE_OPERATIONS`, so a newly registered operation becomes executable immediately —
+      // and would previously have sailed past that gate only to hit a `default` telling the caller
+      // its own registered operation "is not a valid execute() operation". A missing dispatch arm
+      // now fails to COMPILE instead, naming the operation.
+      default:
+        return assertEveryOperationDispatched(request);
     }
   }
 
@@ -426,4 +437,14 @@ export class InitiativeRecordRuntime {
     };
     return snapshot;
   }
+}
+
+/** Fails to COMPILE when a registered operation reaches `execute()`'s switch with no dispatch arm.
+ *  Reached at runtime only if the type system was bypassed, so it still throws rather than
+ *  returning something a caller would treat as a result. */
+function assertEveryOperationDispatched(request: never): never {
+  const operation = (request as { operation?: unknown }).operation;
+  throw new InitiativeInvalidRequestError({
+    field_errors: { operation: [`${String(operation)} has no execute() dispatch arm`] },
+  });
 }
