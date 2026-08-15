@@ -125,12 +125,31 @@ uses, so the deck stays machine-readable:
          data-job="Show the regression"
          data-version="1.2.2">
   <div class="sheet">
-    <header class="zone-head">…kicker, title, one-line purpose…</header>
+    <header class="zone-head">
+      <div><p class="kicker">MEASURED</p><h2>Latency doubled after the migration.</h2></div>
+      <p class="head-note">One line on why this slide exists.</p>
+    </header>
     <div class="zone-stage">…exactly one composition…</div>
     <footer class="zone-foot"></footer>
   </div>
 </section>
 ```
+
+**Copy that head structure exactly — it is a grid, not a stack.** `.zone-head` is
+`grid-template-columns: minmax(0,1fr) minmax(300px,430px)` and expects **exactly two
+children**: one `<div>` wrapping the kicker and the `<h2>`, then the `.head-note`. Emit the
+kicker, title and note as three siblings and the grid puts the title in the right-hand
+column and pushes the note onto a second row. It still renders, and it looks wrong in a way
+no error reports.
+
+**Leave `<footer class="zone-foot">` empty.** The template fills it with the chapter and the
+plate number (`01 · 09`) and counts your slides itself. Putting anything there breaks the
+zone contract.
+
+A **cover** slide is different: it takes `class="slide slide--cover"`, a
+`<div class="sheet sheet--poster">`, and no head or foot at all — just a `zone-stage`
+holding `<div class="cover-copy">` with a `.kicker`, an `<h1 class="display">` and a
+`.lede`.
 
 Rules the template enforces on you:
 
