@@ -13,13 +13,27 @@ import { readSkillContent } from './discover.js';
 /**
  * True when the bundled SKILL.md declares a version different from the one
  * recorded for this installed skill — i.e. the on-disk skill is stale. Returns
- * false when the skill was removed from the bundle (sync-skills drops it) or the
- * bundled frontmatter can't be parsed.
+ * false whenever the question cannot be answered: the skill was removed from the
+ * bundle (sync-skills drops it), the bundled frontmatter can't be parsed, or the
+ * bundled file can't be read at all.
+ *
+ * That last case is why the read is INSIDE the try. `readSkillContent` propagates
+ * every non-ENOENT I/O error by design, and all three callers here are best-effort
+ * reporters that must not fail on it: `cli/serve.ts` runs this at boot behind a
+ * guard commented "never let manifest IO issues block serve" (its filter sat
+ * outside that guard, so an EACCES on one bundled file stopped the daemon from
+ * starting), `cli/doctor.ts` runs it to REPORT on a broken install, and
+ * `deriveSkillManifestInfo` below promises never to throw. "Cannot assess" is not
+ * "behind", and it is certainly not "crash".
  */
-export function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
-  const src = readSkillContent(entryName);
-  if (src === null) return false; // skill removed from bundle — sync-skills will drop it
+export function isSkillBehind(
+  entryName: string,
+  entrySkillVersion: string,
+  skillsRoot?: string,
+): boolean {
   try {
+    const src = readSkillContent(entryName, skillsRoot);
+    if (src === null) return false; // skill removed from bundle — sync-skills will drop it
     const parsed = matter(src);
     const v = parsed.data['version'];
     return typeof v === 'string' && v !== entrySkillVersion;
@@ -40,7 +54,7 @@ interface SkillManifestInfo {
  * the real install manifest. Never throws — a future/corrupt manifest degrades to
  * the "unknown" ({ null, null }) shape rather than failing the status response.
  */
-export function deriveSkillManifestInfo(homeDir?: string): SkillManifestInfo {
+export function deriveSkillManifestInfo(homeDir?: string, skillsRoot?: string): SkillManifestInfo {
   let entries;
   try {
     entries = listEntries(homeDir);
@@ -57,6 +71,6 @@ export function deriveSkillManifestInfo(homeDir?: string): SkillManifestInfo {
   if (entries.length === 0) return { skillVersion: null, skillCompatible: null };
 
   const skillVersion = entries[0]!.skillVersion;
-  const skillCompatible = !entries.some((e) => isSkillBehind(e.name, e.skillVersion));
+  const skillCompatible = !entries.some((e) => isSkillBehind(e.name, e.skillVersion, skillsRoot));
   return { skillVersion, skillCompatible };
 }

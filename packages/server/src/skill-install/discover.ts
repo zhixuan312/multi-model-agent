@@ -80,11 +80,26 @@ export function getSkillsRoot(skillsRoot?: string): string {
 }
 
 /**
+ * A skill/command name addresses exactly one directory directly under the skills root — never a
+ * path. Names reach here from `install-manifest.json`, which is a plain file on disk that a corrupt
+ * write or a hand edit can put anything into, and `path.join` would happily honour `..` (reading
+ * outside the root) or `mma-audit/SKILL.md` (joining to `…/SKILL.md/SKILL.md`, which raises ENOTDIR
+ * rather than ENOENT and so propagates out of the read). Treat a non-segment name as "no such
+ * skill" — which is what it is.
+ */
+function isPlainSegment(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..'
+    && !name.includes('/') && !name.includes('\\') && !name.includes('\0');
+}
+
+/**
  * Read the content of a skill's SKILL.md file. Returns null if the file
- * does not exist; propagates other I/O errors so callers can distinguish
- * "skill not found" from "can't access skill".
+ * does not exist — or if the name is not a plain directory segment; propagates
+ * other I/O errors so callers can distinguish "skill not found" from "can't
+ * access skill".
  */
 export function readSkillContent(skillName: string, skillsRoot?: string): string | null {
+  if (!isPlainSegment(skillName)) return null;
   const skillFile = path.join(getSkillsRoot(skillsRoot), skillName, 'SKILL.md');
   try {
     return fs.readFileSync(skillFile, 'utf-8');
@@ -95,9 +110,11 @@ export function readSkillContent(skillName: string, skillsRoot?: string): string
 }
 
 /**
- * Read the content of a command's SKILL.md file (same source layout as skills).
+ * Read the content of a command's SKILL.md file (same source layout as skills,
+ * and the same plain-segment rule on the name).
  */
 export function readCommandContent(commandName: string, skillsRoot?: string): string | null {
+  if (!isPlainSegment(commandName)) return null;
   const commandFile = path.join(getSkillsRoot(skillsRoot), commandName, 'SKILL.md');
   try {
     return fs.readFileSync(commandFile, 'utf-8');
