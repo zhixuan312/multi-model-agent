@@ -22,8 +22,8 @@ Each stage decomposes into sub-layers that always run in this order. The pipelin
 Stage 1 — INGRESS  (transport boundary — thin adapters only)
   1.1  Transport          server/src/http/server.ts
   1.2  Authentication     server/src/http/auth.ts
-  1.3  Unified handlers   server/src/http/handlers/unified-task.ts
-                          (POST /task + GET /task/:taskId + DELETE /task/:taskId)
+  1.3  Unified handlers   server/src/http/handlers/unified-execution.ts
+                          (POST /execution + GET /execution/:executionId + DELETE /execution/:executionId)
                           Builds a CallerContext (application/caller-context.ts)
                           from the request; owns no task logic.
   1.4  MCP adapter        server/src/mcp/{mcp-adapter,tool-surface}.ts
@@ -221,7 +221,7 @@ Validation splits across two layers because only the server has a filesystem to 
   `validateDeliverableContractBoundary`) checks what needs the live filesystem and the task's `cwd`:
   realpath containment of every declared artifact root and path (and of any `CommandCheck.cwd`), and
   disposition feasibility (`pr` and `commit-in-place` require a git repository; `deliver-file` does
-  not). Both the REST handler (`server/src/http/handlers/unified-task.ts`) and the MCP adapter
+  not). Both the REST handler (`server/src/http/handlers/unified-execution.ts`) and the MCP adapter
   (`server/src/mcp/mcp-adapter.ts`) call
   this same function with the same already-Zod-validated contract, so a caller sees identical
   field-specific errors regardless of transport. This check runs before `ExecutionRuntime.submit`, so a
@@ -248,13 +248,13 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 
 ## Request lifecycle (concrete trace)
 
-1. **Ingress** — `server/src/http/server.ts` routes `POST /task?cwd=<abs>` to the unified handler (`handlers/unified-task.ts`). The handler validates the `type` discriminator via the Zod discriminated union in `unified/task-input-schema.ts`, builds a `CallerContext` (client name, project root) from the request, and hands off to `ExecutionRuntime.submit()`. It owns no task logic.
-2. **Admission** — The runtime (`application/execution-runtime.ts`) resolves tiers/agents/skills, reserves a `ProjectContext` per cwd, registers a `TaskRegistry` entry AND persists the admission record to the `ExecutionStore` before the 202 handle is returned, creates the `ExecutionScope` (the live abort channel), and schedules the async execution.
+1. **Ingress** — `server/src/http/server.ts` routes `POST /execution?cwd=<abs>` to the unified handler (`handlers/unified-execution.ts`). The handler validates the `type` discriminator via the Zod discriminated union in `unified/task-input-schema.ts`, builds a `CallerContext` (client name, project root) from the request, and hands off to `ExecutionRuntime.submit()`. It owns no task logic.
+2. **Admission** — The runtime (`application/execution-runtime.ts`) resolves tiers/agents/skills, reserves a `ProjectContext` per cwd, registers an `ExecutionRegistry` entry AND persists the admission record to the `ExecutionStore` before the 202 handle is returned, creates the `ExecutionScope` (the live abort channel), and schedules the async execution.
 3. **Preprocessing** — The per-type preprocessor (`application/preprocessors/`) runs inside the scope: execute_plan contract parsing + path-safety + collision dry-run, journal candidate injection, spec/plan outputPath derivation, research evidence gathering. A `PreprocessFailure` fails the task terminally with zero provider sessions.
 4. **Pipeline** — The unified two-phase pipeline (`unified/two-phase-pipeline.ts`) drives implement + review, threading the scope's `abortSignal` into every provider session; provider-level `wallClockDeadline` bounds each turn, and cancellation checkpoints at phase boundaries stop the pipeline before the engine commits (a cancelled run leaves partial edits uncommitted in the caller's tree, visible to `git status`). When `reviewPolicy` is `none`, the review phase is skipped. A dead implementer turn (0 assistant turns, empty output) fails terminally before review — never reviewed into a fabricated answer.
-5. **Reporting** — Results are aggregated into the uniform envelope, telemetry emitted via the event bus, and the terminal state CAS-written to BOTH `TaskRegistry` and `ExecutionStore` for retrieval via `GET /task/:taskId` (which falls back to the store after a restart). An aborted pipeline whose own scope fired maps to terminal `cancelled`.
+5. **Reporting** — Results are aggregated into the uniform envelope, telemetry emitted via the event bus, and the terminal state CAS-written to BOTH `ExecutionRegistry` and `ExecutionStore` for retrieval via `GET /execution/:executionId` (which falls back to the store after a restart). An aborted pipeline whose own scope fired maps to terminal `cancelled`.
 
-**Cancellation** — `DELETE /task/:taskId` sets the cancellation-requested flag (a flag, not a state), fires the scope's abort channel, and returns 202. Provider guards tear the worker down (codex: process-group SIGTERM→SIGKILL; claude: SDK abort). The task reaches terminal `cancelled` unless completion won the race — first writer wins, no post-terminal mutation.
+**Cancellation** — `DELETE /execution/:executionId` sets the cancellation-requested flag (a flag, not a state), fires the scope's abort channel, and returns 202. Provider guards tear the worker down (codex: process-group SIGTERM→SIGKILL; claude: SDK abort). The task reaches terminal `cancelled` unless completion won the race — first writer wins, no post-terminal mutation.
 
 **Restart** — Task IDs and terminal results survive in `<stateDir>/executions.db`. On boot (before the listener accepts), `reconcileOnBoot` finds pending records owned by dead daemons, SIGKILLs any surviving detached codex worker group (verified by command line so a reused pid is never signalled), then marks each execution `interrupted` with a retryable `daemon_restarted` envelope. Execution is never resumed — the caller retries with a new task. Dev watch mode sets `MMA_DEV_NO_RECONCILE=1` so tsx restarts don't kill in-flight work.
 
@@ -298,11 +298,11 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `core/src/intake/` directory (pipeline, classify, resolve, field-inferer, brief-compiler classes) | Removed. Skills are plain markdown per type at `core/src/skills/<type>/` |
 | 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 6 |
 | `reviewPolicy` values `'spec_only'` / `'off'` / `'full'` / `'quality_only'` / `'diff_only'` | Removed. Closed enum is `'reviewed' | 'none'` |
-| `BatchRegistry`, `batch-registry.ts` | Replaced by `TaskRegistry` (`unified/task-registry.ts`). Polling via `GET /task/:taskId` |
+| `BatchRegistry`, `batch-registry.ts` | Replaced by `ExecutionRegistry` (`unified/task-registry.ts` — the file kept its old name). Polling via `GET /execution/:executionId` |
 
 ### v5.0.0–v5.2.0 — Unified task API + lifecycle dissolution
 
-The `packages/core/src/intake/`, `core/src/tools/`, `core/src/routing/`, `core/src/executors/`, `core/src/lifecycle/`, and `core/src/run-tasks/` directories were all removed. The unified task API (`POST /task`) replaced per-tool HTTP endpoints. All task types now flow through `core/src/unified/two-phase-pipeline.ts` with skill prompts at `core/src/skills/<type>/implement.md` + `review.md`.
+The `packages/core/src/intake/`, `core/src/tools/`, `core/src/routing/`, `core/src/executors/`, `core/src/lifecycle/`, and `core/src/run-tasks/` directories were all removed. The unified execution API (`POST /execution`) replaced per-tool HTTP endpoints. All task types now flow through `core/src/unified/two-phase-pipeline.ts` with skill prompts at `core/src/skills/<type>/implement.md` + `review.md`.
 
 Bounded execution moved from a dedicated lifecycle layer to provider-level `wallClockDeadline` + `abortSignal` in `core/src/bounded-execution/`. Wire schema bumped to v6.
 
