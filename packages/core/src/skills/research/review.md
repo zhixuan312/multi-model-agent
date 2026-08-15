@@ -31,7 +31,7 @@ Verify the implementer's research, improve quality. Remove errors, add missed so
 
 ## Constraints
 
-- Remove hallucinated URLs from `sources`. Downgrade findings that lose their source.
+- Remove hallucinated URLs from each finding's `url`/`source` fields — there is no separate `sources` array; the engine emits the per-source table itself. Downgrade findings that lose their source.
 - Correct misrepresented claims. Remove training-data-only findings.
 - Keep implementer's synthesis text unless a cited fact is wrong.
 

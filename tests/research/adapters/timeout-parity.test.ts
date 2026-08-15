@@ -92,3 +92,32 @@ describe('a wedged endpoint rejects rather than hanging', () => {
     }
   });
 });
+
+/**
+ * The research prompt must name the adapters that exist.
+ *
+ * Its role line listed four — "arxiv, semantic_scholar, github_search, brave" — while the same
+ * file's Query Phrasing section enumerates seven and the directory holds six adapters plus Brave
+ * web search. A worker told it has four sources plans four sources: `openalex` (the broadest
+ * academic index here, 250M+ works), `crossref` and `pubmed` were advertised nowhere in the
+ * sentence that frames the whole job.
+ */
+describe('the research prompt names every adapter it can use', () => {
+  const prompt = readFileSync('packages/core/src/skills/research/implement.md', 'utf8');
+  const adapters = readdirSync(ADAPTERS_DIR)
+    .filter((f) => f.endsWith('.ts') && !NOT_AN_ADAPTER.has(f))
+    .map((f) => f.replace(/\.ts$/, '').replace(/-/g, '_'));
+
+  it('finds the adapters', () => {
+    expect(adapters.length).toBeGreaterThan(4);
+  });
+
+  it.each(adapters)('%s appears in the prompt', (adapter) => {
+    // Accept either spelling: files are kebab-case, prompts use snake_case.
+    const alt = adapter.replace(/_/g, '-');
+    expect(
+      prompt.includes(adapter) || prompt.includes(alt),
+      `${adapter} is a wired adapter the prompt never mentions — the worker will not plan for it`,
+    ).toBe(true);
+  });
+});
