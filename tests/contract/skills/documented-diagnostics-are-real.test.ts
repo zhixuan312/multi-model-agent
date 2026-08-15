@@ -183,3 +183,32 @@ describe('the explore skill dispatches through tools that exist', () => {
     expect(explore, 'must say a handle carries no output').toMatch(/no `output` key|returns? a HANDLE/i);
   });
 });
+
+/**
+ * A guard must key on a field that can arrive.
+ *
+ * `mma-explore`'s failure table had "Investigate returned `needsCallerClarification: true` → Pause".
+ * That identifier exists in no TypeScript in the repo, and `investigateAnswerSchema` is
+ * `{answer, criteriaCovered, findings}` with unknown keys stripped by Zod — so the single guard
+ * against synthesising over an unfinished investigation could never fire. Every other row in that
+ * table keys on something real (a failed leg, zero findings, a headline mismatch); this one keyed
+ * on a field that does not exist.
+ */
+describe('explore failure-mode rows key on real signals', () => {
+  const explore = readFileSync(join(SKILLS_DIR, 'mma-explore', 'SKILL.md'), 'utf8');
+
+  it('no longer waits for a field the schema strips', () => {
+    expect(explore).not.toMatch(/Investigate returned `needsCallerClarification: true`/);
+  });
+
+  it('keys the pause on signals the envelope carries', () => {
+    expect(explore).toMatch(/done_with_concerns/);
+    expect(explore).toMatch(/output\.reviewerNote/);
+  });
+
+  it('the field really is absent from the investigate schema', async () => {
+    const { REFINER_SCHEMAS } = await import('../../../packages/core/src/unified/refiner-schemas.js');
+    const shape = (REFINER_SCHEMAS.investigate as unknown as { shape: Record<string, unknown> }).shape;
+    expect(Object.keys(shape)).not.toContain('needsCallerClarification');
+  });
+});

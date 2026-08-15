@@ -285,7 +285,7 @@ the user's call (or `/mma-flow`'s).
 | `mma-journal-recall` failed OR returned 0 findings | Use `(no prior learning)` and continue — the journal leg is additive, never blocking. |
 | All three failed | Report all errors. Do NOT fabricate an exploration.md. |
 | Both investigate and research failed | Report both errors. Do NOT write the artifact. |
-| Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need. Do NOT synthesise over an unfinished investigation. |
+| Investigate came back `done_with_concerns`, or with a non-null `output.reviewerNote` | Pause — the leg finished but its own gate flagged it. Surface what it says and do NOT synthesise over it as if clean. (There is no `needsCallerClarification` field: the investigate answer is `{answer, criteriaCovered, findings}` and Zod strips anything else, so a flag by that name could never have reached you.) |
 | Research returned 0 usable sources | Sentinel on external lines; add a one-line note under `## Current state` that external research returned nothing usable. |
 | Investigate headline reads "0 citations" but `output.summary.findings.length > 0` | Known stage-sync noise — IGNORE the headline; read `output.summary.findings` directly. |
 
