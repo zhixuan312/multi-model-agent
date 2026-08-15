@@ -1,7 +1,7 @@
 ---
 name: review
-description: Use when source code needs a quality / security / correctness pass — pre-merge review, post-implementation sanity check, or focused look at a small file set — and the review can run in parallel per file
-when_to_use: User asks for a code review or pre-merge check, OR a review workflow (/review, /security-review) points at one, AND mma is running. Delegate so each file reviews on its own worker; the main agent only decides what to merge. Review on SOURCE CODE — use mma:audit for prose specs / configs.
+description: Use when source code needs a quality / security / correctness pass — pre-merge review, post-implementation sanity check, or focused look at a small file set — over a small file set the worker reads together
+when_to_use: User asks for a code review or pre-merge check, OR a review workflow (/review, /security-review) points at one, AND mma is running. Delegate the reading so the main agent only decides what to merge. Review on SOURCE CODE — use mma:audit for prose specs / configs.
 version: "0.0.0-unreleased"
 ---
 
@@ -11,7 +11,7 @@ version: "0.0.0-unreleased"
 
 mma:review is the **pre-merge gate**. Send code files (or a diff) to a worker for structured review against an executability bar: would a maintainer who reads only the verdict and the diff understand which changes are required, why each is required, and where each lives — well enough to apply the fix and re-merge without re-investigating?
 
-Each file is reviewed independently in parallel; results are index-aligned with `target.paths`.
+All the named files are reviewed in ONE worker pass — there is no per-file fan-out and no per-path result array. `output.summary.findings` is a single list covering the whole set, with each finding naming its own `file`/`line`. Keep the set small for that reason: every file shares one implementer and one reviewer turn.
 
 **Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses.
 
@@ -32,7 +32,7 @@ Each file is reviewed independently in parallel; results are index-aligned with 
 
 The cross-file ripple pass (changed-symbol → broken caller) only fires when the worker can identify what changed. Two patterns:
 
-- **Diff-as-input (preferred for cross-file ripple)**: pass the diff via the `target.inline` field, plus the named files via `target.paths`. The worker treats the diff as the change-set and greps for callers of changed public symbols.
+- **Diff-as-input (preferred for cross-file ripple)**: register the diff once via `mma:context-blocks` and pass its id in `contextBlockIds`, alongside the changed files in `target.paths`. The worker treats the diff as the change-set and greps for callers of changed public symbols. `target` is exactly-one-of `paths`/`inline` — sending both is rejected with `400 invalid_request` ("target must have exactly one of paths or inline"), so the diff cannot ride in `target.inline` next to the file list.
 - **Files-only (static review)**: pass only `target.paths`. The worker reviews the files in their current state without a change-set, so cross-file ripple is degenerate. Test gap, missing edge case, race, leak, and security/performance findings still fire.
 
 ## Dispatch

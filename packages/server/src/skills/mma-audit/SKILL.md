@@ -163,7 +163,7 @@ Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel audi
 The auditor lacks codebase context (no type info, no call-site lookup, no test awareness). Findings are speculative. **Fix:** use `mma-review` — it pulls in surrounding source context and validates against the actual types.
 
 ❌ **Single huge `target.inline` string instead of `target.paths`**
-Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `target.paths`.
+Inline content arrives as one undifferentiated blob, so the worker cannot cite a path in its findings and you cannot re-audit one file of the set. **Fix:** save to disk first, pass `target.paths`. One dispatch is always one worker, so this costs citation quality, not concurrency.
 
 ❌ **Sending the legacy `auditType` field**
 The field was renamed to `subtype` and the value set was narrowed. **Fix:** use `subtype` with one of `default` / `plan` / `spec` / `skill`. For "security only" / "performance only" lenses, put the bias in the free-text prompt — there is no narrow-lens subtype.
