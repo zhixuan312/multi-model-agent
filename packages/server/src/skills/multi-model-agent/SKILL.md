@@ -179,7 +179,7 @@ MCP support), run `mma clients` to see how to connect it.
 All routes accept `agentTier: "standard" | "complex" | "main"` to override the default tier. `mma-delegate` defaults to `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
-- A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"timeout"`.
+- A prior standard run came back with an empty `output.filesChanged`, or failed with `error.code` of `sdk_max_turns` (ran out of turns) or `wall_clock_exceeded` (ran out of time). Those are the fields the terminal envelope actually carries — there is no `filesWritten` or `incompleteReason` on it.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
 Every route has a default tier that can be overridden by sending `agentTier`:

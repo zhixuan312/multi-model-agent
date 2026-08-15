@@ -66,3 +66,35 @@ describe('skills name only diagnostics the engine provides', () => {
     expect(PlainLogKindEnum.options).toContain('provider_event');
   });
 });
+
+/**
+ * Escalation advice must key on fields the caller receives.
+ *
+ * The router's only concrete standard→complex rule read: "A prior standard run came back with
+ * `filesWritten: 0` or `incompleteReason: 'turn_cap'` / `'timeout'`." `incompleteReason` exists
+ * NOWHERE in the engine, and `filesWritten` is an internal field — the terminal envelope carries
+ * `output.filesChanged`. So a caller inspecting both keys finds them undefined every time and
+ * concludes escalation is never warranted, which is the opposite of the advice's intent.
+ */
+describe('escalation advice names fields the envelope carries', () => {
+  const router = readFileSync(join(SKILLS_DIR, 'multi-model-agent', 'SKILL.md'), 'utf8');
+  const resultShape = readFileSync('packages/server/src/application/result-shape.ts', 'utf8');
+
+  it('names filesChanged, the field that exists', () => {
+    expect(router).toContain('output.filesChanged');
+    expect(resultShape, 'the envelope field was renamed — update the router').toContain('filesChanged');
+  });
+
+  it('does not key on fields the envelope lacks', () => {
+    expect(router).not.toMatch(/`filesWritten: 0`/);
+    expect(router).not.toMatch(/`incompleteReason`?:/);
+  });
+
+  it('the error codes it names are real', () => {
+    const codes = readFileSync('packages/core/src/error-codes.ts', 'utf8');
+    for (const code of ['sdk_max_turns', 'wall_clock_exceeded']) {
+      expect(router, `router names ${code}`).toContain(code);
+      expect(codes, `${code} is not a real error code`).toContain(`'${code}'`);
+    }
+  });
+});
