@@ -52,6 +52,21 @@ describe('every registered Method appears in the README catalog', () => {
       `the README Method catalog does not name ${name} ("${proseName(name)}")`,
     ).toBe(true);
   });
+
+  /**
+   * `execution-runtime.test.ts` proves a no-Method dispatch injects no guidance by asserting the
+   * marker `/^# .+ — Method guidance$/m` appears in NEITHER prompt. That assertion is only as good
+   * as the convention it keys on: a future asset opening with any other heading would be injectable
+   * without failing anything, and the absence check would quietly stop covering it — an absence
+   * assertion that decays is worse than none, because it still reads as protection.
+   *
+   * All ten match today. Pinned here so the eleventh must too.
+   */
+  it.each(METHOD_NAMES)('%s guidance opens with the marker heading the absence check keys on', (name) => {
+    const first = readFileSync(`packages/core/src/methods/${name}/guidance.md`, 'utf8').split('\n')[0];
+    expect(first, 'execution-runtime.test.ts greps for this exact heading shape')
+      .toMatch(/^# .+ — Method guidance$/);
+  });
 });
 
 /**
