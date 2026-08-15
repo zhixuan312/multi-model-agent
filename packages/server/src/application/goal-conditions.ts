@@ -22,9 +22,14 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       const count = countMatch ? countMatch[1] : 'all';
       return [
         `You have evaluated the document against ALL ${count} criteria one by one.`,
-        'For each criterion, you wrote findings to the scratch file before moving to the next.',
+        // NOT a scratch file: `audit` is registered `read-only`, so the confinement hook denies
+        // every write tool. This goal is enforced by the Stop hook, which re-blocks the worker
+        // until it holds — so naming a file the sandbox forbids held the worker against a
+        // condition it could not satisfy. The audit prompts were corrected to say "working
+        // memory"; this is the same instruction one layer up.
+        'For each criterion, you recorded findings in working memory before moving to the next.',
         'Every criterion either has findings with quoted evidence, or an explicit "No findings for this criterion." entry.',
-        'You have read the scratch file and consolidated into the final JSON output block.',
+        'You have consolidated those findings into the final JSON output block.',
         `The criteriaCovered array in your output lists all ${count} criteria.`,
       ].join(' ');
     }

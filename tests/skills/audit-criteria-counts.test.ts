@@ -119,3 +119,36 @@ describe('the spec refiner applies as many criteria as it lists', () => {
     expect(checks).toEqual(checks.map((_, i) => i + 1));
   });
 });
+
+/**
+ * Nothing on the audit path may instruct a write, including the Stop-hook GOAL.
+ *
+ * `audit` is registered `read-only`, so `claude-cwd-confinement` denies every write tool. The audit
+ * prompts were corrected to say "working memory" — but `goal-conditions.ts` still told the worker
+ * "you wrote findings to the scratch file… you have read the scratch file", and that text is
+ * enforced by the Stop hook, which RE-BLOCKS the worker until the goal holds. A worker was held
+ * against a condition the sandbox forbids, one layer above the prompts that had been fixed. A third
+ * instance survived in `implement-plan.md`'s perspective-10 fallback.
+ */
+describe('the audit goal condition respects the read-only sandbox', () => {
+  it('the goal never names a scratch file', () => {
+    const goals = readFileSync('packages/server/src/application/goal-conditions.ts', 'utf8');
+    const auditGoal = /case 'audit': \{([\s\S]*?)\n    \}/.exec(goals);
+    expect(auditGoal, 'the audit goal moved — this test can no longer read it').not.toBeNull();
+    // Strip comments: the fix documents the old wording, which is worth keeping.
+    const body = auditGoal![1].replace(/\/\/[^\n]*/g, '');
+    expect(body, 'the Stop-hook goal instructs a write the sandbox denies')
+      .not.toMatch(/scratch file/i);
+  });
+
+  it.each(Object.values(VARIANTS))('%s never instructs a scratch-file write', (file) => {
+    const text = readFileSync(join(AUDIT_DIR, file), 'utf8');
+    // "there is no scratch file" is the correction and must stay; an instruction TO one must not.
+    expect(text).not.toMatch(/(?:write|writing)[^.\n]{0,40}to the scratch file/i);
+  });
+
+  it('audit is still read-only, which is what makes this required', () => {
+    const registry = readFileSync('packages/core/src/unified/type-registry.ts', 'utf8');
+    expect(registry).toMatch(/audit:\s*\{[^}]*sandbox:\s*'read-only'/);
+  });
+});

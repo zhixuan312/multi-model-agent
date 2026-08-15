@@ -129,7 +129,7 @@ The plan must carry required structural scaffolding. Flag: missing top-level hea
 Scan plan text only. Record findings.
 
 ### Step 13: Perspective 10 — SPEC COVERAGE
-**Only if a spec context block is present in your context.** If no spec is available, write "Perspective 10: No spec in context — no findings for this criterion." to the scratch file and skip.
+**Only if a spec context block is present in your context.** If no spec is available, record "Perspective 10: No spec in context — no findings for this criterion." in working memory and skip — there is no scratch file to write to (see the read-only note above).
 
 Every load-bearing spec requirement maps to at least one plan task, and no task implements something the spec did not ask for. For unmapped load-bearing requirements: CRITICAL. For supporting requirements (test coverage, observability, non-functional): HIGH. For scope-creep: HIGH if substantive (>1 task or new deliverable), MEDIUM if minor. Implicit mapping (task plausibly covers requirement but doesn't say so) = MEDIUM with suggested fix: add "Covers spec requirement: <quote>" line.
 
