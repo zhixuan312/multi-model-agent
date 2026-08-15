@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PlainLogKindEnum, PROVIDER_EVENT_NAMES } from '../../../packages/core/src/events/plain-log-entry.js';
+import { TYPE_REGISTRY } from '../../../packages/core/src/unified/type-registry.js';
 
 const SKILLS_DIR = 'packages/server/src/skills';
 
@@ -96,5 +97,47 @@ describe('escalation advice names fields the envelope carries', () => {
       expect(router, `router names ${code}`).toContain(code);
       expect(codes, `${code} is not a real error code`).toContain(`'${code}'`);
     }
+  });
+});
+
+/**
+ * The terminal-context-block rule, stated by SANDBOX rather than by read/write.
+ *
+ * Three docs said "every completed read-route task (audit / review / debug / investigate /
+ * research) auto-registers … write routes return null". Wrong in both directions.
+ * `execution-runtime` gates on `run.sandbox === 'read-only'`, which is SIX types — the list omitted
+ * `journal_recall`, whose own skill doc gets it right, so two docs described one mechanism
+ * differently. And `spec`/`plan` are read routes (`writeRoute: false`) that are `cwd-only` because
+ * they write their document, so they return null: the router's own recommended snippet
+ * (`priorResults.map(r => r.contextBlockId).filter(id => id !== null)`) silently drops every spec
+ * and plan result, and a caller chaining plan → execute-plan by block id gets nothing, with no
+ * error.
+ */
+describe('the context-block rule matches the sandbox gate', () => {
+  const registering = Object.entries(TYPE_REGISTRY)
+    .filter(([, cfg]) => (cfg as { sandbox: string }).sandbox === 'read-only')
+    .map(([type]) => type);
+
+  const DOCS = [
+    join(SKILLS_DIR, 'multi-model-agent', 'SKILL.md'),
+    join(SKILLS_DIR, 'mma-research', 'SKILL.md'),
+    join(SKILLS_DIR, '_shared', 'response-shape.md'),
+  ];
+
+  it('six types register, and journal_recall is one of them', () => {
+    expect(registering).toContain('journal_recall');
+    expect(registering).toHaveLength(6);
+  });
+
+  it.each(DOCS)('%s names every registering type', (file) => {
+    const text = readFileSync(file, 'utf8');
+    for (const type of registering) {
+      expect(text, `${file} omits ${type}, which does register a block`).toContain(type);
+    }
+  });
+
+  it.each(DOCS)('%s warns that spec and plan return null', (file) => {
+    const text = readFileSync(file, 'utf8');
+    expect(text, `${file} must say spec/plan are null despite reading`).toMatch(/spec[^.\n]*plan|plan[^.\n]*spec/i);
   });
 });

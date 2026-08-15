@@ -89,7 +89,7 @@ Call `mma_run` with:
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report, returned as `contextBlockId`. The gate is the type's SANDBOX, not whether it is a read route: `spec` and `plan` read rather than write, but they are `cwd-only` (they write their document), so they return `contextBlockId: null` like `delegate` / `execute_plan` / `journal_record` / `orchestrate`. Filtering nulls out of a chain of results therefore drops spec and plan silently.
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

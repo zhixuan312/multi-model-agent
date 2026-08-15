@@ -158,7 +158,9 @@ response.output.summary.findings[i].suggestion  ← fix recommendation (some rou
 
 ```
 response.output.filesChanged       ← array of relative paths modified by the worker
-response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
+response.output.contextBlockId     ← non-null for READ-ONLY types (audit/review/debug/investigate/
+                                     research/journal_recall); null for spec and plan too, which
+                                     read but are cwd-only (reusable in contextBlockIds)
 ```
 
 **Step 5 — check `output.reviewerNote` (reviewer availability):**
