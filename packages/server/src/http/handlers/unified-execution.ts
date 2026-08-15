@@ -74,9 +74,28 @@ export function buildUnifiedExecutionHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
+    // ONE 202 shape, whichever branch produces it.
+    //
+    // The fallback used to be `{ executionId, type }` — two of `ExecutionIdentity`'s five fields,
+    // silently dropping `method` and `cwd`. It is reached only if the entry is evicted between
+    // `submit()` returning and this lookup, which is close to impossible against an hour-long TTL,
+    // and that is exactly what makes a divergence here dangerous: a caller reading `cwd` off the
+    // receipt would get `undefined` on a path no test exercises and no reviewer meets. Every field
+    // is already known from the validated input, so the fallback carries the same shape.
     const admitted = deps.executionRegistry.get(outcome.executionId);
+    // `subtype` rides only on the audit variant of the input union, so it is read positionally
+    // rather than assumed present — matching `executionIdentity`, which omits it when null.
+    const subtype = 'subtype' in parsed.data ? parsed.data.subtype : undefined;
     sendJson(res, 202, {
-      ...(admitted ? executionIdentity(admitted) : { executionId: outcome.executionId, type: parsed.data.type }),
+      ...(admitted
+        ? executionIdentity(admitted)
+        : {
+            executionId: outcome.executionId,
+            type: parsed.data.type,
+            ...(subtype !== undefined ? { subtype } : {}),
+            method: parsed.data.method ?? null,
+            cwd,
+          }),
       statusUrl: `/execution/${outcome.executionId}`,
     });
   };

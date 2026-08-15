@@ -2,7 +2,11 @@
 // Initiative operation table (SPEC-001, "Interfaces / contracts"). Thin: all
 // validation, dispatch, and read-model assembly live in the shared
 // `InitiativeRecordRuntime` (packages/server/src/application/), which is the
-// SAME runtime the MCP adapter (Task I-7) will call. This handler's only
+// SAME runtime the MCP adapter calls today — `mcp-adapter.ts` dispatches every
+// Initiative tool through `deps.initiativeRuntime.execute()` and
+// `initiativeResume()`, and shares this file's error classification via
+// `application/initiative-error-report.ts`. (Written as "will call" while that
+// was still Task I-7's future work; it shipped.) This handler's only
 // jobs are (1) route `initiative_resume` to its dedicated assembly method and
 // every other operation to `execute()`, (2) overwrite adapter-owned
 // provenance (`interface`, `timestamp`) on mutation requests before the
