@@ -70,6 +70,9 @@ describe('research integration: full plan -> fan-out -> evidence-pack (all 9 sou
 
     // No failures
     expect(pack.failedAttempts.length).toBe(0);
+    // 9 groups x 5 results = 45, under every cap — so this case exercises the untrimmed path,
+    // and the trimmed path is the next case's job. Stated so the two are not confused.
+    expect(pack.budgetExceeded).toBe(false);
 
     // Budget caps are respected
     expect(pack.sources.length).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_TOTAL_SOURCES);
@@ -108,6 +111,23 @@ describe('research integration: full plan -> fan-out -> evidence-pack (all 9 sou
     }));
 
     const pack = await runOrchestrator(plan, deps);
+
+    // The cap holding is only half the claim, and the weaker half: 9 groups capped at 10 each is
+    // 90 raw sources against a limit of 70, so trimming MUST have engaged. Asserting only
+    // `length <= MAX_TOTAL_SOURCES` would also pass if trimming silently stopped happening and
+    // the adapters simply returned fewer results — the exact regression this case is named for.
+    expect(pack.budgetExceeded, 'trimming did not engage on an over-budget pack').toBe(true);
     expect(pack.sources.length).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_TOTAL_SOURCES);
+
+    // The long snippets exist to push the BYTE budget, which nothing here checked. Both caps are
+    // enforced by the same trimming pass and either can be the one that binds.
+    const totalBytes = pack.sources.reduce(
+      (sum, source) => sum + Buffer.byteLength(JSON.stringify(source), 'utf8'), 0);
+    expect(totalBytes).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_TOTAL_BYTES);
+
+    // …and no single snippet outlives the per-snippet cap that makes the byte budget reachable.
+    for (const source of pack.sources) {
+      expect((source.snippet ?? '').length).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS);
+    }
   });
 });

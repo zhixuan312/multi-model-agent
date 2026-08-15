@@ -72,10 +72,6 @@ describe('evidence-pack', () => {
     expect(openalexCount).toBeGreaterThanOrEqual(braveNewsCount);
   });
 
-  it('MAX_TOTAL_SOURCES is 70', () => {
-    expect(EVIDENCE_PACK_LIMITS.MAX_TOTAL_SOURCES).toBe(70);
-  });
-
   it('drops lowest-priority group first when bytes cap trips', () => {
     const fat = 'x'.repeat(4000);
     const sources: EvidenceSource[] = [];
@@ -103,6 +99,8 @@ describe('evidence-pack', () => {
     expect(md).toContain('no_api_key_configured');
   });
 
+  // A separate `it('MAX_TOTAL_SOURCES is 70')` stood above with a body identical to this test's
+  // last line — one assertion, written twice, failing twice on the same change.
   it('exposes limits as constants', () => {
     expect(EVIDENCE_PACK_LIMITS.MAX_TOTAL_BYTES).toBe(48 * 1024);
     expect(EVIDENCE_PACK_LIMITS.MAX_PER_GROUP).toBe(10);
