@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
+import { CLIENT_IDS } from '../../../packages/core/src/clients/client-id.js';
 
 describe('contract: atomic provisioning and recovery', () => {
   it('rolls back safely, respects shared roots, and recovers an interrupted marker', async () => {
@@ -25,7 +26,8 @@ describe('contract: atomic provisioning and recovery', () => {
     expect(fixture.marker('cursor')).toBeNull();
 
     const records = await fixture.inventory();
-    expect(records).toHaveLength(8);
+    // Every canonical client is reported, named — not merely eight of something.
+    expect(records.map((record) => record.clientId)).toEqual([...CLIENT_IDS]);
     expect(records.find((record) => record.clientId === 'claude-desktop')).toMatchObject({ skillsInstalled: false, mcpRegistrationStatus: 'registered' });
   });
 });

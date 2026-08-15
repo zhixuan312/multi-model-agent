@@ -20,6 +20,7 @@ import {
   ProvisioningLockTimeoutError,
 } from '../../../packages/server/src/provisioning/provisioning-lock.js';
 import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
+import { CLIENT_IDS } from '../../../packages/core/src/clients/client-id.js';
 
 const stateDir = () => mkdtempSync(join(tmpdir(), 'mma-lock-'));
 
@@ -188,7 +189,7 @@ describe('contract: the service actually takes the lock', () => {
         .rejects.toBeInstanceOf(ProvisioningLockTimeoutError);
       // Inventory is read-only: blocking it would make `mma clients` hang
       // behind an npm postinstall for no benefit.
-      await expect(fixture.inventory()).resolves.toHaveLength(8);
+      await expect(fixture.inventory()).resolves.toHaveLength(CLIENT_IDS.length);
     } finally {
       held.release();
     }

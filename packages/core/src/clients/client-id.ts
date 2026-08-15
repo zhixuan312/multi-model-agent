@@ -3,7 +3,8 @@
 // attribution surface derives from CLIENT_IDS rather than hand-maintaining
 // its own copy of the roster.
 
-/** The eight canonical clients MMA provisions for, in specification order. */
+/** The canonical clients MMA provisions for, in specification order. (Counting them in
+ *  this sentence only creates a second place to update when one is added.) */
 export const CLIENT_IDS = [
   'claude-code',
   'claude-desktop',
