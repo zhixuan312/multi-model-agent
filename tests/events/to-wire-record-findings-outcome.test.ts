@@ -41,7 +41,7 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
@@ -84,7 +84,7 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(wire.findingsOutcome).toBe('clean');
@@ -122,7 +122,7 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(wire.findingsOutcome).toBe('not_applicable');
@@ -147,7 +147,7 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();

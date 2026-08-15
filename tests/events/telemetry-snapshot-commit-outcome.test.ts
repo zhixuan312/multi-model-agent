@@ -58,7 +58,7 @@ describe('telemetry snapshot carries the real commit outcome', () => {
 
     // …and that is the set the wire record counts.
     const wire = toWireRecord(envelope, {
-      toolMode: 'full', implementerModel: 'claude-sonnet-5', implementerTier: 'standard', mainModelFamily: 'claude',
+      toolMode: 'full', implementerModel: 'claude-sonnet-5', implementerTier: 'standard', mainModelFamily: 'claude' as const,
     });
     expect(wire.filesWrittenCount).toBe(2);
   });

@@ -4,7 +4,7 @@ import { TelemetryUploader } from '../../packages/core/src/events/telemetry-uplo
 import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 
 const seed = { taskId: 't1', batchId: 'b', taskIndex: 0, route: 'delegate' as const, agentType: 'standard' as const, client: 'claude-code', mainModel: 'claude-opus-4-7', cwd: '/tmp', reviewPolicy: 'reviewed' as const };
-const buildOpts = () => ({ toolMode: 'full' as const, implementerModel: 'claude-sonnet-4-6', implementerTier: 'standard' as const, mainModelFamily: 'claude' });
+const buildOpts = () => ({ toolMode: 'full' as const, implementerModel: 'claude-sonnet-4-6', implementerTier: 'standard' as const, mainModelFamily: 'claude' as const });
 
 describe('TelemetryUploader', () => {
   it('ignores plain entries', () => {

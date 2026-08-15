@@ -13,7 +13,7 @@ describe('telemetry envelope (v2)', () => {
         toolMode: 'full' as const,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
-        mainModelFamily: 'claude',
+        mainModelFamily: 'claude' as const,
       }),
     });
     const bus = new EnvelopeBus();
@@ -68,7 +68,7 @@ describe('telemetry envelope (v2)', () => {
         toolMode: 'full' as const,
         implementerModel: 'claude-sonnet-4-6',
         implementerTier: 'standard' as const,
-        mainModelFamily: 'claude',
+        mainModelFamily: 'claude' as const,
       }),
     });
     const bus = new EnvelopeBus();

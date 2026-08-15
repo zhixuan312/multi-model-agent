@@ -32,7 +32,7 @@ describe('toWireRecord', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
     expect(wire.filesWrittenCount).toBe(2);
@@ -62,7 +62,7 @@ describe('toWireRecord', () => {
       toolMode: 'full',
       implementerModel: 'claude-haiku-4-5',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
     // claude-opus-4-7 rate card: input $5/M, output $25/M, cachedRead $0.50/M, cachedNonRead $6.25/M
     // mainCost = (10000 * 5 + 1000 * 25 + 5000 * 0.50 + 0 * 6.25) / 1e6 = 0.0775
@@ -88,7 +88,7 @@ describe('toWireRecord', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'claude',
+      implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'claude' as const,
     });
     const perStageSum = wire.stages.reduce(
       (acc, st) => acc + ((st as { mainCostUSD: number | null }).mainCostUSD ?? 0),
@@ -171,7 +171,7 @@ describe('toWireRecord — tier usage covers every tier the record can name', ()
 
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full', implementerModel: 'claude-opus-4-7',
-      implementerTier: 'main', mainModelFamily: 'claude',
+      implementerTier: 'main', mainModelFamily: 'claude' as const,
     });
 
     expect(wire.agentType).toBe('main');

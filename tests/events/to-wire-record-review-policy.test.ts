@@ -7,7 +7,7 @@ function baseOpts() {
     toolMode: 'full' as const,
     implementerModel: 'claude-haiku-4-5',
     implementerTier: 'standard' as const,
-    mainModelFamily: 'claude',
+    mainModelFamily: 'claude' as const,
   };
 }
 

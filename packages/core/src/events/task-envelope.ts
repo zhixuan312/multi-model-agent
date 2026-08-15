@@ -7,7 +7,7 @@
 // test fixtures (tests/fixtures/task-envelope-store.ts) and has no production use.
 
 import type { ErrorCode } from '../error-codes.js';
-import type { FindingsOutcome } from '../types/enums.js';
+import type { FindingsOutcome, ConcernCategoryType } from '../types/enums.js';
 
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
@@ -56,7 +56,9 @@ export interface StageRecord {
   //     of spec + quality sub-reviewers; matches wire enum, see wire-schema.ts).
   verdict?: 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
-  concernCategories?: string[];
+  /** The wire's own enum, not bare strings: `wire-schema.ts` validates this array against
+   *  `ConcernCategory`, so a plain `string[]` here could only be discovered at parse time. */
+  concernCategories?: ConcernCategoryType[];
   // Findings outcome threading (review + implementing stages)
   findingsOutcome?: FindingsOutcome | null;
   findingsOutcomeReason?: string | null;

@@ -2,6 +2,7 @@
 import type { Subscriber, BusMessage } from './envelope-bus.js';
 import type { TaskEnvelope } from './task-envelope.js';
 import { toWireRecord } from './to-wire-record.js';
+import type { ModelFamily } from '../config/model-profile-registry.js';
 
 export interface RecorderLike {
   enqueue(event: unknown): void;
@@ -22,7 +23,7 @@ export interface TelemetryUploaderOpts {
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     implementerModel: string;
     implementerTier: 'standard' | 'complex' | 'main';
-    mainModelFamily: string;
+    mainModelFamily: ModelFamily;
   };
 }
 

@@ -102,7 +102,7 @@ export function normalizeModel(rawModelId: string): { canonical: string; family:
 export function mapStatusToWire(
   status: TaskEnvelope['status'],
   errCode: string | null,
-): { terminalStatus: string; workerStatus: string } {
+): { terminalStatus: 'ok' | 'error'; workerStatus: 'done' | 'done_with_concerns' | 'failed' } {
   if (status === 'done') return { terminalStatus: 'ok', workerStatus: 'done' };
   if (status === 'done_with_concerns') {
     return { terminalStatus: 'ok', workerStatus: 'done_with_concerns' };
@@ -120,7 +120,7 @@ export function toWireRecord(
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     implementerModel: string;
     implementerTier: 'standard' | 'complex' | 'main';
-    mainModelFamily: string;
+    mainModelFamily: ModelFamily;
   },
 ): TaskCompletedEventType {
   const { terminalStatus, workerStatus } = mapStatusToWire(
@@ -152,11 +152,10 @@ export function toWireRecord(
       return hasTokens || hasCost;
     })
     .map((s) => {
-    // `reviewing` is the wire's `review`; there is no third case — see StageName.
-    const name = s.name === 'implementing' ? 'implementing' : 'review';
-
+    // `reviewing` is the wire's `review`; there is no third case — see StageName. The literal
+    // is applied per-branch below rather than shared here, so the discriminated union in
+    // `StageEntrySchema` resolves without a cast.
     const base = {
-      name,
       round: s.round,
       model: normalizeModel(s.model).canonical,
       tier: s.tier,
@@ -185,7 +184,7 @@ export function toWireRecord(
 
     // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred / outcomeMalformed are
     // top-level only — stages do NOT carry them.
-    if (name === 'implementing') return base;
+    if (s.name === 'implementing') return { ...base, name: 'implementing' as const };
 
     // Map envelope `verdict` to the wire's review verdict enum.
     const reviewVerdict = s.verdict;
@@ -200,7 +199,8 @@ export function toWireRecord(
     }
     return {
       ...base,
-      verdict: wireVerdict as never,
+      name: 'review' as const,
+      verdict: wireVerdict,
       roundsUsed: 1,
       concernCategories: s.concernCategories ?? [],
     };
@@ -300,12 +300,12 @@ export function toWireRecord(
     implementerModel: opts.implementerModel,
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,
-    mainModelFamily: opts.mainModelFamily as never,
+    mainModelFamily: opts.mainModelFamily,
     // No cast: the bucket shape and the schema agree, and the cast is what hid the missing
     // `main` key from the typechecker while Zod quietly dropped it at parse.
     tierUsage: tierUsageBuckets,
-    terminalStatus: terminalStatus as never,
-    workerStatus: workerStatus as never,
+    terminalStatus,
+    workerStatus,
     errorCode: coerceErrorCode(env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)),
     inputTokens: clampInputTokens(env.totalInputTokens),
     outputTokens: clampOutputTokens(env.totalOutputTokens),
@@ -358,7 +358,7 @@ export function toWireRecord(
     stallCount: env.stallCount,
     taskMaxIdleMs: env.taskMaxIdleMs,
     sandboxViolationCount: env.sandboxViolationCount,
-    stages: wireStages as never,
+    stages: wireStages,
     toolCalls: wireToolCalls,
     // 4.7.5: surface parser-side validation warnings (dropped Findings, malformed
     // bullets) on the wire so the backend can analytics on output-format drift.
