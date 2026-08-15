@@ -204,18 +204,40 @@ describe('POST /configure-provider probe (always on)', () => {
     } finally { await h.close(); }
   });
 
-  it('oauth + claude → probe uses oauth token', async () => {
+  /**
+   * OAuth verification depends on whether the MACHINE running the suite has Claude
+   * subscription credentials, so the outcome legitimately differs between developers and CI.
+   * This used to handle that by asserting `typeof verified === 'boolean'` and putting its only
+   * real check behind `if (body.probe)` — which on a machine with no OAuth token asserts
+   * nothing at all, under a title claiming the probe uses that token.
+   *
+   * What holds in BOTH environments is the response's internal consistency, and that is what is
+   * asserted here: a verified oauth tier reached the provider, an unverified one says why, and
+   * neither ever serialises the token it resolved.
+   */
+  it('oauth + claude → reports a consistent verdict and never echoes the token', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await post(h.baseUrl, h.token, {
         tier: 'standard', provider: 'claude', model: 'claude-opus-4-8',
         auth: { mode: 'oauth' },
       });
-      const body = await res.json();
+      const raw = await res.text();
+      const body = JSON.parse(raw) as { verified: boolean; reason?: string; probe?: { reachable: boolean } };
+
       expect(typeof body.verified).toBe('boolean');
-      if (body.probe) {
-        expect(typeof body.probe.reachable).toBe('boolean');
+      if (body.verified) {
+        // Verified means the probe ran and reached the provider — a verified tier with an
+        // unreachable probe is the contradiction this pins.
+        expect(body.probe, 'a verified oauth tier must carry its probe result').toBeDefined();
+        expect(body.probe!.reachable).toBe(true);
+      } else {
+        // Unverified must say why; a bare `verified: false` is unactionable.
+        expect(body.reason, 'an unverified oauth tier must explain itself').toMatch(/\S/);
       }
+      // Whichever branch this machine takes: the resolved credential never reaches the wire.
+      expect(raw).not.toMatch(/sk-ant-[A-Za-z0-9_-]{10,}/);
+      expect(raw).not.toMatch(/Bearer\s+[A-Za-z0-9_-]{20,}/);
     } finally { await h.close(); }
   });
 });

@@ -186,22 +186,30 @@ describe('route contract', () => {
   // ── Structured 202 polling ──
 
   describe('GET /execution/:executionId polling (202)', () => {
+    /**
+     * Driven by a HANGING provider, and the 202 is asserted rather than assumed.
+     *
+     * This booted `stage: 'ok'` and wrapped every assertion in `if (poll.status === 202)`. The
+     * mock finishes before the first poll lands, so the poll returned 200 and the body of the
+     * test never ran — measured, not inferred. The case named six fields of the running
+     * snapshot and checked none of them.
+     */
     it('returns structured JSON with executionId, status, phase, elapsedMs, phaseElapsedMs, startedAt', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+      const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
         const { executionId } = (await res.json()) as { executionId: string };
         const poll = await poll202(h, executionId);
-        if (poll.status === 202) {
-          expect(poll.contentType).toContain('application/json');
-          const b = poll.body as Record<string, unknown>;
-          expect(b.executionId).toBe(executionId);
-          expect(b.status).toBe('running');
-          expect(b.phase).toBeTypeOf('string');
-          expect(b.elapsedMs).toBeTypeOf('number');
-          expect(b.phaseElapsedMs).toBeTypeOf('number');
-          expect(b.startedAt).toBeTypeOf('string');
-        }
+
+        expect(poll.status, 'a hanging provider must still be running when polled').toBe(202);
+        expect(poll.contentType).toContain('application/json');
+        const b = poll.body as Record<string, unknown>;
+        expect(b.executionId).toBe(executionId);
+        expect(b.status).toBe('running');
+        expect(b.phase).toBeTypeOf('string');
+        expect(b.elapsedMs).toBeTypeOf('number');
+        expect(b.phaseElapsedMs).toBeTypeOf('number');
+        expect(b.startedAt).toBeTypeOf('string');
       } finally { await h.close(); }
     });
   });
