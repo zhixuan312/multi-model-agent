@@ -1,12 +1,12 @@
 /**
  * The provisioning port -- the seam between orchestration (service.ts,
  * inventory.ts) and the actual mechanism that touches a client's registration
- * file and skill directory. Real production code implements this against the
- * filesystem (`real-port.ts`, using `registration-writer.ts` + `owned-files.ts` +
- * the packaged skills under `skills/`); `service.ts`'s `createProvisioningService
- * .testFixture()` implements it in memory so orchestration (markers, rollback,
- * reference counting, recovery) can be exercised without touching a real disk or
- * a real client's config file.
+ * file and skill directory. Production implements this against the filesystem
+ * (`real-port.ts`, using `registration-writer.ts` + `owned-files.ts` + the packaged
+ * skills under `skills/`); `tests/contract/fixtures/provisioning-fixture.ts`
+ * implements it in memory so orchestration (markers, rollback, reference counting,
+ * recovery) can be exercised without touching a real disk or a real client's config
+ * file.
  */
 import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import type { ClientCapability } from './capability-registry.js';

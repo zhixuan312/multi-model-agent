@@ -133,12 +133,13 @@ function writeLengthPrefixed(hash: Hash, bytes: Buffer): void {
  */
 export function computeSkillDigest(files: RenderedFiles): string {
   const hash = createHash('sha256');
-  const paths = [...files.keys()]
-    .filter((relativePath) => relativePath !== SKILL_OWNERSHIP_MARKER_FILE)
-    .sort(compareRelativePathsByteWise);
-  for (const relativePath of paths) {
-    const bytes = files.get(relativePath);
-    if (bytes === undefined) continue;
+  // Iterates ENTRIES, not keys. Looking each key back up returned `Buffer | undefined`, forcing an
+  // `if (bytes === undefined) continue` that no input could reach — and which, being a silent
+  // `continue`, would have dropped a file from the digest rather than failing if it somehow did.
+  const entries = [...files.entries()]
+    .filter(([relativePath]) => relativePath !== SKILL_OWNERSHIP_MARKER_FILE)
+    .sort(([a], [b]) => compareRelativePathsByteWise(a, b));
+  for (const [relativePath, bytes] of entries) {
     writeLengthPrefixed(hash, Buffer.from(relativePath, 'utf8'));
     writeLengthPrefixed(hash, toBuffer(bytes));
   }

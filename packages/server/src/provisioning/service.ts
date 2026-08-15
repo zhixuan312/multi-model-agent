@@ -52,7 +52,6 @@ export interface ProvisioningServiceDeps {
   readDeclared?: () => DeclaredClientRoster | undefined;
   /** Test seam for the cross-process lock's timing. */
   lockOptions?: AcquireLockOptions;
-  now?: () => number;
   /** Test-only: called immediately after each marker phase is durably
    *  written. Throwing simulates a crash at exactly that point. */
   onPhaseWritten?: (clientId: ClientId, phase: ProvisioningPhase) => void;
@@ -281,7 +280,7 @@ async function runOn(deps: ProvisioningServiceDeps, capability: ClientCapability
     postRegistration: fingerprintOfSnapshot(start.priorRegistration),
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
-    startedAt: (deps.now ?? Date.now)(),
+    startedAt: Date.now(),
   };
   writeMarker(deps.stateDir, baseMarker);
   emitPhase(deps, clientId, 'started');
@@ -355,7 +354,7 @@ async function runOff(deps: ProvisioningServiceDeps, capability: ClientCapabilit
     postRegistration: fingerprintOfSnapshot(start.priorRegistration),
     priorSkillBackup: start.priorSkillBackup,
     priorSkillDigest: start.priorSkillDigest,
-    startedAt: (deps.now ?? Date.now)(),
+    startedAt: Date.now(),
   };
   writeMarker(deps.stateDir, marker);
   emitPhase(deps, clientId, 'started');
