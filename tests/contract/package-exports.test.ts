@@ -25,6 +25,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 interface Pkg {
   name: string;
@@ -92,6 +93,65 @@ describe('no published subpath exposes a test seam', () => {
       `${dir}/package.json publishes "${sub}", which exposes test seam(s) ${found.join(', ')} to every consumer`,
     ).toEqual([]);
   });
+});
+
+/**
+ * The suite cannot see the `exports` map at all, so this asks Node directly.
+ *
+ * `vitest.config.ts` aliases `@zhixuan92/multi-model-agent-core/(.+)` to `packages/core/src/$1.ts`.
+ * That is the right call for unit tests — they run against source, not a build — but it means every
+ * import in this repo bypasses the manifest. A subpath could be deleted, misspelled, or point at a
+ * file that does not exist, and 3,500 green tests would prove nothing about it. The checks above
+ * verify the manifest against the FILESYSTEM, which is a good proxy; this verifies it against the
+ * RESOLVER, which is the thing consumers actually meet.
+ *
+ * `node_modules/@zhixuan92/*` are workspace symlinks to the packages, so real Node resolution
+ * applies here exactly as it would after `npm install` — including
+ * ERR_PACKAGE_PATH_NOT_EXPORTED for anything the map does not list.
+ *
+ * One child process imports every declared subpath, so the cost is one spawn, not sixteen.
+ */
+describe('real Node resolves every declared subpath', () => {
+  const CORE = 'packages/core';
+  const declared = Object.keys(
+    (JSON.parse(readFileSync(join(CORE, 'package.json'), 'utf8')) as Pkg).exports ?? {},
+  );
+
+  it('resolves what the map declares, and blocks what it does not', () => {
+    if (!existsSync(join(CORE, 'dist/index.js'))) {
+      throw new Error('packages/core/dist is missing — run `npm run build` before this suite');
+    }
+    const specs = declared.map((s) => `@zhixuan92/multi-model-agent-core${s === '.' ? '' : s.slice(1)}`);
+    // Removed in this change; a consumer must no longer be able to reach the provider-swap hook.
+    const mustFail = ['@zhixuan92/multi-model-agent-core/providers/provider-factory'];
+
+    const script = `
+      const ok = [], bad = [];
+      for (const s of ${JSON.stringify([...specs, ...mustFail])}) {
+        try { await import(s); ok.push(s); } catch (e) { bad.push([s, e.code ?? String(e)]); }
+      }
+      console.log(JSON.stringify({ ok, bad }));
+    `;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    });
+    const { ok, bad } = JSON.parse(out.trim().split('\n').pop()!) as {
+      ok: string[];
+      bad: [string, string][];
+    };
+
+    expect(ok.length + bad.length, 'the child imported nothing — this case would be vacuous')
+      .toBe(specs.length + mustFail.length);
+
+    const declaredFailures = bad.filter(([s]) => specs.includes(s));
+    expect(declaredFailures, 'declared subpaths that real Node cannot resolve').toEqual([]);
+
+    for (const s of mustFail) {
+      expect(ok, `${s} still resolves — the exports map is publishing it again`).not.toContain(s);
+      expect(bad.find(([b]) => b === s)?.[1]).toBe('ERR_PACKAGE_PATH_NOT_EXPORTED');
+    }
+  }, 30_000);
 });
 
 /**
