@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { fullyRendered } from '../../helpers/rendered-error.js';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { readFileSync } from 'node:fs';
 import { pubmedSearch } from '../../../packages/core/src/research/adapters/pubmed.js';
@@ -102,13 +103,22 @@ describe('pubmedSearch', () => {
     await expect(pubmedSearch('q')).rejects.toThrow(/pubmed_http_429/);
   });
 
-  it('does not include raw URL with api_key in error messages', async () => {
+  it('does not leak the api_key anywhere on the thrown error', async () => {
+    // Asserted OUTSIDE a bare catch, and over the fully-rendered error rather than `.message`.
+    // Written as `try { … } catch (e) { expect(e.message)… }` this verified nothing whenever the
+    // call resolved — and pubmed sends the key in the URL query (`pubmed.ts` builds it into the
+    // esearch/efetch URLs), which undici attaches to `cause`, not to `message`.
     agent.get('https://eutils.ncbi.nlm.nih.gov').intercept({ path: /esearch/ })
       .reply(500, '{}');
-    try {
-      await pubmedSearch('q', { apiKey: 'secret-key-123' });
-    } catch (e) {
-      expect((e as Error).message).not.toContain('secret-key-123');
-    }
+
+    const attempt = pubmedSearch('q', { apiKey: 'secret-key-123' });
+    await expect(attempt, 'a 500 must reject — otherwise the leak assertion never runs')
+      .rejects.toThrow();
+
+    const err = await attempt.catch((e: unknown) => e);
+    expect(fullyRendered(err), 'the api_key appears somewhere on the error').not.toContain('secret-key-123');
+    // The URL-encoded spelling too: a key with reserved characters would survive a raw-substring
+    // check while still being recoverable from the encoded query string.
+    expect(fullyRendered(err)).not.toContain(encodeURIComponent('secret-key-123'));
   });
 });
