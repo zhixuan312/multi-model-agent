@@ -56,6 +56,14 @@ describe('isAllowedHostHeader', () => {
     ['127.0.0.1:7337', true],
     ['[::1]', true],
     ['[::1]:7337', true],
+    // Bracketed-host NEGATIVES. The bracketed branch discarded everything after `]` unchecked, so
+    // these were accepted while the unbracketed branch was strict about the same shapes. The table
+    // had two bracketed positives and no negatives, which is why it never noticed.
+    ['[::1]evil.com', false],
+    ['[::1]@evil.com', false],
+    ['[::1]:80/../x', false],
+    ['[::1]:abc', false],
+    ['[::1', false],
     // Bracketed only: a bare IPv6 literal is malformed in a Host header (RFC 3986 §3.2.2), and
     // the port-stripping sees its leading colon at index 0. `'::1'` was listed in the allowlist
     // for a while as if it were accepted; nothing could reach it. Pinned so it is not re-added.

@@ -89,6 +89,27 @@ function backupCorrupted(p: string): string {
   return backup;
 }
 
+/**
+ * Rebuild the manifest, but never throw out of a READ.
+ *
+ * `readManifest` runs at daemon boot (`cli/serve.ts`) and on every `sync-skills`, and its
+ * read-failure branch below is deliberately non-fatal for exactly that reason — with a paragraph
+ * saying so. The two rebuild branches then called `writeManifest` unguarded, so on a read-only
+ * filesystem, or after a sudo install left the file root-owned, a corrupt or pre-v2 manifest turned
+ * a read into an EACCES/EROFS thrown out of daemon boot. The rebuild is a repair attempt, not the
+ * caller's request; failing it degrades to "empty manifest for this run", which is what the branch
+ * already returns.
+ */
+function tryRebuild(empty: InstallManifest, homeDir: string | undefined): InstallManifest {
+  try {
+    writeManifest(empty, homeDir);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[mma] manifest rebuild could not be written (${reason}); continuing with an empty manifest for this run\n`);
+  }
+  return empty;
+}
+
 function readManifest(homeDir?: string): InstallManifest {
   const p = manifestPath(homeDir);
   if (!fs.existsSync(p)) return emptyManifest();
@@ -117,9 +138,7 @@ function readManifest(homeDir?: string): InstallManifest {
   } catch {
     const backup = backupCorrupted(p);
     process.stderr.write(`[mma] manifest corrupt; rebuilt empty v2 (previous copy at ${backup})\n`);
-    const empty = emptyManifest();
-    writeManifest(empty, homeDir);
-    return empty;
+    return tryRebuild(emptyManifest(), homeDir);
   }
 
   const parsedVersion =
@@ -170,9 +189,7 @@ function readManifest(homeDir?: string): InstallManifest {
   // Unrecognized shape (or pre-v2 manifest from an older mma) — back up and rebuild empty.
   const backup = backupCorrupted(p);
   process.stderr.write(`[mma] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
-  const empty = emptyManifest();
-  writeManifest(empty, homeDir);
-  return empty;
+  return tryRebuild(emptyManifest(), homeDir);
 }
 
 /**

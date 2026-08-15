@@ -66,6 +66,16 @@ export function isAllowedHostHeader(host: string | undefined): boolean {
   if (h.startsWith('[')) {
     const end = h.indexOf(']');
     if (end < 0) return false;
+    // Whatever follows the bracket must be nothing or a numeric port, and nothing else.
+    //
+    // This used to `slice(0, end + 1)` and discard the remainder unchecked, so `[::1]evil.com` and
+    // `[::1]@evil.com` were ACCEPTED — a fail-open branch inside a fail-closed function, while the
+    // unbracketed branch below was strict about exactly this. Not browser-reachable (a browser
+    // derives Host from the URL it is fetching, so it cannot be talked into that spelling), which
+    // is why it is not a rebinding hole — but an allowlist that accepts a host it was never meant
+    // to admit is the wrong thing to leave in place on the strength of who cannot reach it.
+    const rest = h.slice(end + 1);
+    if (rest !== '' && !/^:\d+$/.test(rest)) return false;
     h = h.slice(0, end + 1);
   } else {
     const colon = h.indexOf(':');
