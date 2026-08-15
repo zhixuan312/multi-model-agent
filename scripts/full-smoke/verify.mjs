@@ -5,7 +5,7 @@ import { SMOKE_CLIENT } from './http.mjs';
 // The component catalog is defined ONCE, in the core package (AC-5.4). A second copy here could
 // only ever agree with itself: if the catalog changed, this harness would keep asserting the old
 // identifiers and report a passing spec while the product emitted something else.
-import { SPEC_COMPONENTS } from '../../packages/core/dist/index.js';
+import { SPEC_COMPONENTS, TASK_TYPES } from '../../packages/core/dist/index.js';
 const CANON = SPEC_COMPONENTS;
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
@@ -439,8 +439,12 @@ export function verify(rec) {
     const runTool = (m.tools?.json?.result?.tools ?? []).find((t) => t.name === 'mma_run');
     const reqSchema = runTool?.inputSchema?.properties?.request;
     const variants = reqSchema?.oneOf ?? reqSchema?.anyOf ?? [];
-    out.push(C('mcp-generated-schema', variants.length === 12 ? 'PASS' : 'FAIL',
-      `request variants=${variants.length} (expected 12, one per task type)`));
+    // One variant per task type, counted from TASK_TYPES rather than the literal 12 this used to
+    // carry. The schema is GENERATED from that union, so a thirteenth type would have failed this
+    // check for being correct — and the harness's own task-type gate would have demanded a scenario
+    // for it at the same time. Two gates disagreeing about the same addition is worse than either.
+    out.push(C('mcp-generated-schema', variants.length === TASK_TYPES.length ? 'PASS' : 'FAIL',
+      `request variants=${variants.length} (expected ${TASK_TYPES.length}, one per task type)`));
 
     out.push(C('mcp-run-handle', m.taskId ? 'PASS' : 'FAIL',
       `payload=${JSON.stringify(m.runPayload).slice(0, 160)}`));
@@ -887,8 +891,10 @@ export function verify(rec) {
       // Two target files (decisions [authoritative] + exploration.md [grounding]) must
       // still produce a full 8-component spec — proving the multi-file dispatch works and
       // the worker expanded the decisions, not the exploration's unresolved rough options.
-      out.push(C('two-file-grounding', sections.length === 8 ? 'PASS' : 'FAIL',
-        `2 target files → sections=${JSON.stringify(sections)}`));
+      // `CANON.length`, not 8: the component catalog is imported above precisely so this harness
+      // cannot keep asserting an old count after the catalog moves.
+      out.push(C('two-file-grounding', sections.length === CANON.length ? 'PASS' : 'FAIL',
+        `2 target files → ${sections.length}/${CANON.length} sections=${JSON.stringify(sections)}`));
     }
   }
 

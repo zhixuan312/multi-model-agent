@@ -11,9 +11,18 @@
  * Scope: BACKEND ONLY. No Forge, no renderers/HTML, no tunnel, and no real target adapter — the
  * adapter seam is proven capable by a fake, which is what "zero target logic in core" means here.
  */
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SMOKE_CLIENT } from './http.mjs';
 
 const BASE = 'http://127.0.0.1:7337';
+
+/** One directory per registered Method, each holding a committed `guidance.md`. */
+const METHOD_ASSET_COUNT = readdirSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'packages', 'core', 'src', 'methods'),
+  { withFileTypes: true },
+).filter((e) => e.isDirectory()).length;
 
 const provenance = {
   actor_type: 'agent', actor_id: 'full-smoke', initiated_by: 'smoke-harness',
@@ -163,7 +172,11 @@ export async function runRecordSurface(ctx, log) {
     const checks = [];
     const list = await op(token, cwd, 'method_list', {});
     const ids = (list.json || []).map((m) => m.id);
-    checks.push(C('methods-registered', ids.length === 10, `methods=${ids.length}`));
+    // Counted from the committed guidance assets, which `assertGuidanceAssetBijection` already
+    // holds in exact correspondence with the registry — not the literal 10 this carried, which
+    // would fail on the eleventh Method for being right.
+    checks.push(C('methods-registered', ids.length === METHOD_ASSET_COUNT,
+      `methods=${ids.length} want=${METHOD_ASSET_COUNT} (one per committed guidance asset)`));
     checks.push(C('intent-to-initiative-seeded', ids.includes('intent-to-initiative@1'), ids.includes('intent-to-initiative@1') ? 'present' : `absent from ${ids.join(',')}`));
     const register = await mut(token, cwd, 'method_register', { id: 'evil@1' }, 0);
     checks.push(C('methods-immutable', register.status >= 400, `register attempt status=${register.status}`));
