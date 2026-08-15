@@ -46,18 +46,31 @@ describe('buildCodexCliLaunch (D7)', () => {
     expect(sandboxOf(result.args)).toBe('read-only');
   });
 
-  it('maps sandboxPolicy cwd-only (and default) → -s workspace-write', () => {
+  it('maps sandboxPolicy cwd-only → -s workspace-write', () => {
     const cwdOnly = buildCodexCliLaunch({
       cfg: { model: 'gpt-test' },
       opts: { cwd: '/tmp', sandboxPolicy: 'cwd-only' },
       outputFile: '/tmp/out.jsonl',
     });
     expect(sandboxOf(cwdOnly.args)).toBe('workspace-write');
+  });
+
+  /**
+   * This case previously asserted `workspace-write` — the permissive mode — under the same
+   * title as `cwd-only`, "(and default)". No rationale was recorded for it, and no dispatch can
+   * reach it: `two-phase-pipeline` declares `sandboxPolicy` REQUIRED and `execution-runtime`
+   * always passes the type's own `run.sandbox`.
+   *
+   * An unreachable default is still a decision, and it is the decision a future caller
+   * inherits. Absence of a policy means none was stated, which is not a licence to write, so it
+   * now resolves to the restrictive mode. Both DECLARED values are unchanged.
+   */
+  it('asks for the restrictive sandbox when no policy is stated', () => {
     const noPolicy = buildCodexCliLaunch({
       cfg: { model: 'gpt-test' },
       opts: { cwd: '/tmp' },
       outputFile: '/tmp/out.jsonl',
     });
-    expect(sandboxOf(noPolicy.args)).toBe('workspace-write');
+    expect(sandboxOf(noPolicy.args)).toBe('read-only');
   });
 });

@@ -258,13 +258,16 @@ export function evaluateReadOnly(toolName: string, toolInput: unknown): HookResu
  * Build the `hooks.PreToolUse` entry for the given sandbox policy. Shape matches
  * the claude-agent-sdk `HookCallbackMatcher[]` registration.
  *
- * - `cwd-only`: confines writes to `cwd`, reads unrestricted.
- * - `read-only`: blocks all write tools regardless of path.
+ * - `cwd-only`: confines writes to `cwd`, reads unrestricted. Needs the cwd, by definition.
+ * - `read-only`: blocks all write tools regardless of path. Needs NO cwd — "no writes at all"
+ *   is decidable without one, which is why `cwd` is optional here. The session used to install
+ *   this hook only when a cwd was also present, so a read-only task without one ran with no
+ *   write blocking whatsoever.
  */
-export function buildConfinementHook(policy: SandboxPolicy, cwd: string): {
+export function buildConfinementHook(policy: SandboxPolicy, cwd?: string): {
   PreToolUse: { hooks: ((input: { tool_name: string; tool_input: unknown }) => Promise<HookResult>)[] }[];
 } {
-  const evaluator = policy === 'read-only'
+  const evaluator = policy === 'read-only' || cwd === undefined
     ? (input: { tool_name: string; tool_input: unknown }) => evaluateReadOnly(input.tool_name, input.tool_input)
     : (input: { tool_name: string; tool_input: unknown }) => evaluateConfinement(input.tool_name, input.tool_input, cwd);
 

@@ -192,3 +192,38 @@ describe('claude confinement enforces the shared git policy', () => {
     expect(denied(evaluateReadOnly('Bash', { command: 'git status' }))).toBe(false);
   });
 });
+
+/**
+ * Both runners choose their sandbox from an OPTIONAL field, and both chose the permissive
+ * answer when it was absent.
+ *
+ * `SessionOpts.sandboxPolicy` and `SessionOpts.cwd` are optional; the pipeline always supplies
+ * both, so neither gap is reachable from a dispatch today. That is exactly what makes them
+ * worth closing while they are cheap: the value of a default is decided once, and a security
+ * control that opens on a missing input is the wrong default to leave lying in the code for
+ * the next caller to find. Absence means "no policy stated", which is not a licence to write.
+ */
+describe('sandbox selection fails closed on a missing policy', () => {
+  it('codex asks for the RESTRICTIVE sandbox when no policy is stated', async () => {
+    const { buildCodexCliLaunch } = await import('../../packages/core/src/providers/codex-cli-launch.js');
+    const launch = (sandboxPolicy?: 'read-only' | 'cwd-only') => buildCodexCliLaunch({
+      cfg: { model: 'gpt-5' }, opts: { cwd: '/repo', ...(sandboxPolicy && { sandboxPolicy }) }, outputFile: '/tmp/o.json',
+    }).args.join(' ');
+
+    expect(launch('read-only')).toContain('-s read-only');
+    expect(launch('cwd-only')).toContain('-s workspace-write');
+    // The permissive mode must be chosen only by an explicit `cwd-only`.
+    expect(launch()).toContain('-s read-only');
+  });
+
+  it('claude installs the read-only hook even with no cwd, because read-only needs none', async () => {
+    const { buildConfinementHook, evaluateReadOnly } = await import('../../packages/core/src/providers/claude-cwd-confinement.js');
+    // `evaluateReadOnly` takes no cwd — the policy is "no writes at all", which is decidable
+    // without one. Requiring a cwd to install it meant a read-only task with no cwd ran with
+    // no write blocking whatsoever.
+    expect(JSON.stringify(evaluateReadOnly('Write', { file_path: '/x' }))).toContain('deny');
+    const hook = buildConfinementHook('read-only');
+    const result = await hook.PreToolUse[0]!.hooks[0]!({ tool_name: 'Write', tool_input: { file_path: '/x' } });
+    expect(JSON.stringify(result)).toContain('deny');
+  });
+});

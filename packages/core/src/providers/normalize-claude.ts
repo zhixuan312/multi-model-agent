@@ -85,7 +85,10 @@ export function normalizeClaudeTurn(
   // any result was produced. Reporting 'ok' here is what let a dead tier
   // masquerade as a successful implementer (0 tokens, empty output, status
   // done) while the reviewer fabricated the answer.
-  if (!sawResult && sdkTermination === 'ok' && !args.guardTerminationReason) {
+  // No `sdkTermination === 'ok'` clause: it is only ever assigned inside the `result` branch,
+  // which is the same branch that sets `sawResult`. A condition that cannot be false where it
+  // is tested reads as if some other path could set it.
+  if (!sawResult && !args.guardTerminationReason) {
     sdkTermination = 'error';
     errorCode = 'sdk_no_result';
     errorMessage = 'SDK stream ended without a result event; the provider may be unreachable or rejecting requests';

@@ -118,7 +118,11 @@ export class ClaudeSession implements Session {
         }],
       }];
     }
-    if (this.args.opts.sandboxPolicy && this.args.opts.cwd) {
+    if (this.args.opts.sandboxPolicy) {
+      // No `&& cwd` guard: a `read-only` policy needs no cwd, and requiring one meant a
+      // read-only session without a cwd installed no hook at all. `buildConfinementHook`
+      // falls back to the read-only evaluator when a `cwd-only` policy arrives with no cwd,
+      // which is the restrictive answer rather than the absent one.
       Object.assign(hookMap, buildConfinementHook(this.args.opts.sandboxPolicy, this.args.opts.cwd));
     }
     const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
