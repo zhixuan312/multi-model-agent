@@ -28,6 +28,10 @@ export interface ContextBlockStore {
   /** Fetch content by id. Returns `undefined` if the id is unknown or
    *  the entry has expired. Touches the LRU access time on success. */
   get(id: string): string | undefined;
+  /** Does a live (unexpired) entry exist? Unlike `get`, this does NOT refresh the
+   *  entry's TTL or its LRU position — for callers asking about existence rather
+   *  than wanting the content. */
+  has(id: string): boolean;
   /** Delete an entry. Returns `true` if the entry existed. */
   delete(id: string): boolean;
   /** Number of entries. Used by status + size-cap checks. */
@@ -129,6 +133,29 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     entry.addedAtMs = now;
     entry.lastAccessTick = ++this.tick;
     return entry.content;
+  }
+
+  /**
+   * Existence without the side effects of `get`.
+   *
+   * `get` deliberately refreshes an entry's TTL and LRU position, which is right for a caller that
+   * wants the content — and wrong for one merely asking whether the id is live. The delete handler
+   * used `get` for its existence check, so a DELETE rejected as `pinned` extended the life of the
+   * block it had just failed to remove and made it the newest entry in LRU order, i.e. the LAST
+   * thing evicted under the per-project cap. A caller polling for a pin to clear kept the block
+   * alive by asking about it.
+   *
+   * An expired entry is dropped here as it is in `get` — reporting it as present would be a lie
+   * with a different expiry rule than the rest of the store.
+   */
+  has(id: string): boolean {
+    const entry = this.entries.get(id);
+    if (!entry) return false;
+    if (Date.now() - entry.addedAtMs > entry.ttlMs) {
+      this.entries.delete(id);
+      return false;
+    }
+    return true;
   }
 
   delete(id: string): boolean {

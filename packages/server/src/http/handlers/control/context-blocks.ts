@@ -149,8 +149,9 @@ export function deleteContextBlock(deps: DeleteContextBlockHandlerDeps, input: D
   // Since contextBlocks is per-project, any block in pc.contextBlocks belongs
   // to this cwd. If the id isn't in this store, it either doesn't exist or
   // belongs to a different project — both map to not_found.
-  const content = pc.contextBlocks.get(blockId);
-  if (content === undefined) {
+  // `has`, not `get`: `get` refreshes the entry's TTL and LRU position, so asking whether a block
+  // exists in order to DELETE it used to extend its life and make it the last thing evicted.
+  if (!pc.contextBlocks.has(blockId)) {
     return { ok: false, httpStatus: 404, code: 'not_found', message: `Context block ${blockId} not found` };
   }
 
