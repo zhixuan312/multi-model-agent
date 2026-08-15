@@ -120,6 +120,11 @@ function formatDuration(ms: number): string {
  * arithmetic — `$-0.046495574999999995` is a real observed value — and eighteen decimal places
  * of binary-float noise reads as a bug even when the number is right. Sub-cent amounts keep
  * more precision, because rounding those to `$0.00` would be worse than useless.
+ *
+ * MAGNITUDE ONLY — the sign is dropped. The one caller that can pass a negative labels the
+ * direction itself (`Over main` vs `Saved vs main`), so `Over main $-0.05` would state it
+ * twice. A caller that shows this number WITHOUT such a label must carry the sign some other
+ * way, or it is simply lost.
  */
 function formatUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
