@@ -273,6 +273,17 @@ export function toWireRecord(
   // not whatever default async-dispatch seeded the envelope with.
   const wireAgentType: 'standard' | 'complex' | 'main' = env.stages[0]?.tier ?? env.agentType;
 
+  // What this run WOULD have cost on the configured main tier — the baseline both
+  // `mainCostUSD` and `costDeltaVsMainUSD` are expressed against.
+  const taskMainCostUSD = mainCard
+    ? priceTokens({
+        inputTokens: env.totalInputTokens,
+        outputTokens: env.totalOutputTokens,
+        cachedReadTokens: env.totalCachedReadTokens,
+        cachedNonReadTokens: env.totalCachedNonReadTokens,
+      }, mainCard)
+    : null;
+
   const record: TaskCompletedEventType = {
     eventId: randomUUID(),
     route: env.route,
@@ -294,22 +305,11 @@ export function toWireRecord(
     cachedNonReadTokens: clampCachedTokens(env.totalCachedNonReadTokens),
     totalDurationMs: clampDurationMsTotal(env.totalDurationMs),
     totalCostUSD: clampTaskCost(env.totalCostUSD),
-    mainCostUSD: mainCard
-      ? priceTokens({
-          inputTokens: env.totalInputTokens,
-          outputTokens: env.totalOutputTokens,
-          cachedReadTokens: env.totalCachedReadTokens,
-          cachedNonReadTokens: env.totalCachedNonReadTokens,
-        }, mainCard)
-      : null,
-    costDeltaVsMainUSD: mainCard
-      ? clampTaskCost(env.totalCostUSD) - priceTokens({
-          inputTokens: env.totalInputTokens,
-          outputTokens: env.totalOutputTokens,
-          cachedReadTokens: env.totalCachedReadTokens,
-          cachedNonReadTokens: env.totalCachedNonReadTokens,
-        }, mainCard)
-      : null,
+    mainCostUSD: taskMainCostUSD,
+    // Subtracted from the SAME value reported above, not a second identical `priceTokens` call.
+    // Two copies of one expression let the delta silently stop being `actual - mainCostUSD` the
+    // moment one of them is edited.
+    costDeltaVsMainUSD: taskMainCostUSD === null ? null : clampTaskCost(env.totalCostUSD) - taskMainCostUSD,
     concernCount: env.findings.length,
     findingsBySeverity: env.findings.reduce(
       (acc, f) => {
