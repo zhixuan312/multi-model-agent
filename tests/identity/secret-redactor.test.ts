@@ -138,3 +138,40 @@ describe('redactSecrets', () => {
     expect(out.b.key).toBe('[REDACTED-API-KEY]');
   });
 });
+
+/**
+ * Every other pattern is prefix-based (`sk-`, `AKIA`, `ghp_`, `glpat-`), so a credential with no
+ * recognisable prefix only ever got redacted when it happened to sit behind `Bearer`. A JWT is the
+ * common case of that: it is what several OpenAI-compatible providers issue, and the always-on
+ * stderr sink renders whole command lines and provider error messages, where a token appears bare
+ * at least as often as it appears in an Authorization header.
+ */
+describe('bare JWTs', () => {
+  // A real three-segment JWT shape; the payload decodes to {"sub":"1234567890"}.
+  const JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+
+  it('redacts a JWT with no Bearer prefix', () => {
+    expect(redactSecrets(`codex --config auth=${JWT}`)).toBe('codex --config auth=[REDACTED-JWT]');
+  });
+
+  it('redacts a JWT inside a provider error message', () => {
+    const line = redactSecrets(`request failed: 401 for token ${JWT} at api.example.com`) as string;
+    expect(line).not.toContain(JWT);
+    expect(line).toContain('[REDACTED-JWT]');
+  });
+
+  it('redacts a Bearer-wrapped JWT once, as a JWT', () => {
+    expect(redactSecrets(`Authorization: Bearer ${JWT}`)).toBe('Authorization: Bearer [REDACTED-JWT]');
+  });
+
+  it('leaves ordinary dotted text alone', () => {
+    // The guard against a pattern broad enough to eat real log content.
+    for (const benign of [
+      'packages/core/src/identity/secret-redactor.ts',
+      'error at module.exports.handler',
+      'v5.16.0.build.1234',
+    ]) {
+      expect(redactSecrets(benign)).toBe(benign);
+    }
+  });
+});

@@ -67,9 +67,26 @@ describe('getClaudeOAuth', () => {
     setPlatform(originalPlatform);
   });
 
-  it('case 1: returns null on non-darwin platforms', () => {
+  /**
+   * Renamed and made hermetic. It read `~/.claude/.credentials.json` off the REAL filesystem.
+   *
+   * `getClaudeOAuth()` with no overrides uses `defaultDeps`, and only `child_process` is mocked
+   * here — so on `linux` this called the real `readFileSync` against the developer's own
+   * credential file, and `toBeNull()` held only because that file happens not to exist on the
+   * host. On a Linux box with Claude Code logged in — the headless-container deployment this
+   * module was written for (ISSUE-10) — it returns real credentials and the case fails.
+   * Confirmed by running the file with HOME pointed at a directory containing one.
+   *
+   * The title was false besides: non-darwin does not return null by design, it reads the file
+   * store. The claim actually worth pinning is that it never shells out to `security`, since the
+   * Keychain does not exist there and a stray `security` call would be a hard failure rather than
+   * a fallback.
+   */
+  it('case 1: uses the file store and never invokes the macOS keychain on non-darwin', () => {
     setPlatform('linux');
-    expect(getClaudeOAuth()).toBeNull();
+    const readFile = vi.fn(() => { throw new Error('ENOENT'); });
+    expect(getClaudeOAuth({ readFile, homedir: () => '/home/svc' })).toBeNull();
+    expect(readFile).toHaveBeenCalledWith('/home/svc/.claude/.credentials.json');
     expect(mockExec).not.toHaveBeenCalled();
   });
 

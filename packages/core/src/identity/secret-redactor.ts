@@ -8,6 +8,13 @@ const PATTERNS: Array<[RegExp, string]> = [
   // GitLab tokens: glpat-, gldt-, glrt-, glcbt-, glptt-, glsoat-, … (gl + routing
   // prefix + `-` + ≥20 token chars). The config stores a GitLab-capable token surface.
   [/\bgl[a-z]{2,6}-[A-Za-z0-9_\-]{20,}/g, '[REDACTED-GITLAB-TOKEN]'],
+  // JWTs, redacted before Bearer so a bare one is caught too. `eyJ` is not a heuristic: it is
+  // base64url for `{"`, so a three-segment dotted string starting with it is a JWT by
+  // construction. It matters because the patterns above are all PREFIX-based, and a provider
+  // whose credential is a JWT has no prefix to match — the token only ever got redacted when it
+  // happened to sit behind `Bearer`. The always-on stderr sink renders whole command lines and
+  // provider error messages, where a credential appears bare as often as not.
+  [/\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]+/g, '[REDACTED-JWT]'],
   [/Bearer\s+[A-Za-z0-9._\-]{20,}/g, 'Bearer [REDACTED]'],
 ];
 
