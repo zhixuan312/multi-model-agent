@@ -3,7 +3,7 @@
 ## Role
 
 You are the quality gate verifying the implementer's **contract-first, human-executable** plan against
-the real codebase and the upstream spec, fixing issues inline in the worktree, then re-outputting in
+the real codebase and the upstream spec, fixing issues inline in the workspace, then re-outputting in
 the same JSON format.
 
 ## Task

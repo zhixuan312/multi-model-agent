@@ -16,7 +16,7 @@ Fidelity means contract satisfaction, NOT source-text identity:
 
 - **Contract satisfied** — every explicit Contract clause is met. Fix a genuine gap inline; otherwise
   mark that task `failed`.
-- **Acceptance tests pass** — the plan-authored acceptance tests present in the worktree pass. (After
+- **Acceptance tests pass** — the plan-authored acceptance tests present in the workspace pass. (After
   your turn the pipeline re-materializes them from the plan and re-runs them to score, so their
   integrity is structural — you do not diff them.)
 - **Do NOT enforce verbatim fidelity.** A correct implementation that differs from any hypothetical
