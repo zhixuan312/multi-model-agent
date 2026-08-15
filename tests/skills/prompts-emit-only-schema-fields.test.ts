@@ -139,3 +139,36 @@ describe('worker prompts name real tools', () => {
     for (const tool of PHANTOM_TOOLS) expect(categories).not.toContain(tool);
   });
 });
+
+/**
+ * The journal_record reviewer must describe the state it actually receives.
+ *
+ * `skipReviewer` reads `applied.invariantsPassed` — TRUE means skip. `invariantsPassed: true` is
+ * returned in exactly one place (`store.ts`, the all-or-nothing success path), and `false` in
+ * exactly one (the preprocessor's catch, where `recorded` is empty, every record is in `failed`,
+ * and the rollback leaves nothing on disk). So on the automatic path the reviewer runs ONLY on the
+ * failure, while its Role said "deterministic code has ALREADY applied the implementer's decisions
+ * — it allocated ids, wrote node files, flipped superseded targets".
+ *
+ * A reviewer told it is inspecting applied state, handed an empty `recorded` and a filesystem it is
+ * forbidden to open, has nothing to check and no way to notice why.
+ */
+describe('the journal_record reviewer describes its real invocation path', () => {
+  const review = readFileSync('packages/core/src/skills/journal_record/review.md', 'utf8');
+
+  it('tells the reviewer to expect the failure case', () => {
+    expect(review).toMatch(/expect the failure case/i);
+    expect(review, 'the reviewer must know recorded is empty on the automatic path')
+      .toMatch(/`recorded` is empty/i);
+  });
+
+  it('still explains the forced-review case, where recorded is populated', () => {
+    expect(review).toMatch(/reviewPolicy: "reviewed"/);
+  });
+
+  it('the skip rule it describes is the one the pipeline implements', () => {
+    // Premise: invariantsPassed true ⇒ skip. If that inverts, this prompt is wrong again.
+    const pipeline = readFileSync('packages/core/src/unified/two-phase-pipeline.ts', 'utf8');
+    expect(pipeline).toMatch(/applied !== undefined \? applied\.invariantsPassed/);
+  });
+});
