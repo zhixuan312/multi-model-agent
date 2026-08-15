@@ -160,3 +160,37 @@ describe('research handles the no-evidence-pack fallback', () => {
     ).toBe(true);
   });
 });
+
+/**
+ * The refiner must check every perspective the implementer reports.
+ *
+ * `research/review.md`'s evidence-coverage check listed four — primary, practitioner, recent,
+ * counter-perspectives — while the implementer enumerates FIVE and its output block emits
+ * `cross-domain` in `criteriaCovered`, which the route's goal condition also demands. So the one
+ * perspective most likely to be skipped (lateral insight from an adjacent domain) was the one
+ * nothing verified, and it was still reported as covered.
+ */
+describe('the research refiner checks all five perspectives', () => {
+  const implement = readFileSync('packages/core/src/skills/research/implement.md', 'utf8');
+  const review = readFileSync('packages/core/src/skills/research/review.md', 'utf8');
+
+  /** Perspective slugs the implementer's own output example claims. */
+  const perspectives = (() => {
+    const block = /"criteriaCovered": \[([^\]]*)\]/.exec(implement);
+    expect(block, 'the implementer output example moved').not.toBeNull();
+    return [...block![1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]!);
+  })();
+
+  it('finds the perspectives', () => {
+    expect(perspectives.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it.each(perspectives)('%s is verified by the refiner', (slug) => {
+    // Accept the prose spelling as well as the slug — the refiner describes them in words.
+    const words = slug.replace(/-/g, ' ');
+    expect(
+      review.includes(slug) || new RegExp(words, 'i').test(review),
+      `the refiner never checks '${slug}', which the implementer reports as covered`,
+    ).toBe(true);
+  });
+});
