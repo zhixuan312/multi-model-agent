@@ -123,21 +123,73 @@ function tokenize(segment: string): string[] {
 }
 
 /**
+ * Commands that RUN their argument rather than consuming it as data, so the git invocation
+ * sits one word to the right of where a segment normally starts.
+ *
+ * `timeout 5 git clean -fd` and `xargs git reset --hard` are the realistic ones — a worker
+ * reaches for these to bound or batch a command, not to hide it.
+ */
+const COMMAND_WRAPPERS = new Set(['env', 'sudo', 'xargs', 'command', 'nohup', 'nice', 'time', 'timeout', 'stdbuf']);
+
+/** Shells that take a script as an argument. Their `-c` payload is a command, not data. */
+const SHELL_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+
+/**
+ * Split a command into the segments that each START a command.
+ *
+ * Chain operators are only half of it: `$(…)`, backticks and `${…}` all open a new command
+ * context, and treating their contents as arguments to the surrounding command is what let
+ * `echo $(git reset --hard)` past the entire policy. They are boundaries here for exactly the
+ * same reason `&&` is — what follows is a command, not an argument.
+ */
+function commandSegments(command: string): string[] {
+  return command
+    .replace(/\$\(|\)|`|\$\{|\}/g, '\n')
+    .split(/(?:&&|\|\||[;|]|\n)/);
+}
+
+/**
  * Scan a (possibly chained) shell command for a git invocation and return the first denial.
  * Returns null when the command contains no git invocation, or every one is permitted.
+ *
+ * Resolves a COMMAND POSITION rather than searching for the word `git`: `echo "do not run git
+ * reset --hard"` is prose, and a policy that denied it would make the rule impossible to
+ * explain. That is why wrappers and shell `-c` payloads are handled by name instead of by
+ * scanning every token.
  */
 export function gitDenialInCommand(command: string): string | null {
-  // Split on shell chain/pipe operators so `foo && git reset --hard` is caught.
-  const segments = command.split(/(?:&&|\|\||[;|]|\n)/);
-  for (const segment of segments) {
+  for (const segment of commandSegments(command)) {
     const tokens = tokenize(segment.trim());
-    // Skip leading env assignments (`GIT_DIR=… git …`) and `env`/`sudo`-style prefixes.
+    // Skip leading env assignments (`GIT_DIR=… git …`) and wrapper commands, plus any flags
+    // or numeric arguments those wrappers take (`timeout 5 …`, `xargs -0 …`).
     let start = 0;
-    while (start < tokens.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[start]!) || tokens[start] === 'env' || tokens[start] === 'sudo')) {
-      start += 1;
+    let skipped = false;
+    while (start < tokens.length) {
+      const tok = tokens[start]!;
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tok) || COMMAND_WRAPPERS.has(tok)) { start += 1; skipped = true; continue; }
+      if (skipped && (tok.startsWith('-') || /^\d+$/.test(tok))) { start += 1; continue; }
+      break;
     }
     const head = tokens[start];
     if (head === undefined) continue;
+
+    // `bash -c '<script>'`: the payload is a command in its own right. The tokenizer keeps a
+    // quoted script as ONE token, so it is re-scanned whole rather than merged into this
+    // segment — a script of its own may chain and substitute exactly like the outer one.
+    const base = head.slice(head.lastIndexOf('/') + 1);
+    if (SHELL_INTERPRETERS.has(base)) {
+      for (let i = start + 1; i < tokens.length; i++) {
+        // `-c`, and combined forms like `-lc` that still end in c.
+        if (!/^-[a-z]*c$/.test(tokens[i]!)) continue;
+        const script = tokens[i + 1];
+        if (script === undefined) break;
+        const nested = gitDenialInCommand(script);
+        if (nested) return nested;
+        break;
+      }
+      continue;
+    }
+
     // Match `git` and any path ending in `/git`.
     if (head !== 'git' && !head.endsWith('/git')) continue;
 
@@ -147,9 +199,15 @@ export function gitDenialInCommand(command: string): string | null {
   return null;
 }
 
-/** True when a path (relative or absolute) reaches into a `.git` directory. */
+/**
+ * True when a path (relative or absolute) reaches into a `.git` directory.
+ *
+ * One test, not three: the regex's `(^|/)` and `(/|$)` anchors already cover the bare `.git`
+ * and leading `.git/` cases the two extra clauses spelled out, and `.gitignore` is excluded by
+ * all three alike. Extra clauses that cannot change an answer read as if they cover a case the
+ * regex misses.
+ */
 export function pathTouchesGitDir(p: string): boolean {
   if (!p) return false;
-  const normalized = p.replace(/\\/g, '/');
-  return normalized === '.git' || normalized.startsWith('.git/') || /(^|\/)\.git(\/|$)/.test(normalized);
+  return /(^|\/)\.git(\/|$)/.test(p.replace(/\\/g, '/'));
 }

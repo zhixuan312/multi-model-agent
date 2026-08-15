@@ -16,11 +16,15 @@ function callsOf(app: { callServerTool: ReturnType<typeof vi.fn> }) {
   );
 }
 
+/** The host's result shape, `isError` included — the flag a tool sets when the body it
+ *  returns is an error rather than a snapshot. */
+interface MockToolResult { content: Array<{ type: string; text: string }>; isError?: boolean }
+
 function installMockApp() {
   const app = {
     connect: vi.fn().mockResolvedValue(undefined),
     ontoolresult: undefined as ((v: unknown) => void) | undefined,
-    callServerTool: vi.fn(() =>
+    callServerTool: vi.fn((): Promise<MockToolResult> =>
       Promise.resolve({ content: [{ type: 'text', text: JSON.stringify({
         executionId: 'task-1', status: 'running', phase: 'execute', elapsedMs: 2000, phaseElapsedMs: 500, startedAt: '2026-01-01T00:00:00.000Z',
       }) }] })

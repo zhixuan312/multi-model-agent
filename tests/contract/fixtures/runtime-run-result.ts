@@ -8,6 +8,24 @@
 
 import type { TokenUsage } from '../../../packages/core/src/types/run-result.js';
 
+/**
+ * Statuses a mock provider can report for one escalation attempt.
+ *
+ * This and `EscalationRecord` below were `RunStatus` and `AttemptRecord` in
+ * `packages/core/src/providers/runner-types.ts` — exported from the published core barrel,
+ * referenced by no production code, and imported only by this fixture, which ALSO declared its
+ * own structurally-identical `EscalationRecord`. Test scaffolding shipped to npm consumers as
+ * public API, in two copies. `status` is typed here rather than left as `string`, which is what
+ * the two copies actually disagreed about.
+ */
+export type RunStatus =
+  | 'ok'
+  | 'incomplete'
+  | 'timeout'
+  | 'error'
+  | 'brief_too_vague'
+  | 'unavailable';
+
 /** Cause values for the TerminationReason object. */
 export type _TerminationCause =
   | 'finished'
@@ -20,7 +38,7 @@ export type _TerminationCause =
 
 export interface EscalationRecord {
   provider: string;
-  status: string;
+  status: RunStatus;
   turns: number;
   inputTokens: number;
   outputTokens: number;

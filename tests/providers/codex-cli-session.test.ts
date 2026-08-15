@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { __test } from '../../packages/core/src/providers/codex-cli-session.js';
-import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
+import type { TokenUsage } from '../../packages/core/src/types/run-result.js';
 import type { CodexCliEvent } from '../../packages/core/src/providers/codex-cli-event.js';
 
 const { TurnTracker } = __test;

@@ -105,6 +105,50 @@ describe('gitDenialInCommand: shell-level scanning', () => {
     expect(gitDenialInCommand('/usr/bin/git reset --hard')).toBeTruthy();
     expect(gitDenialInCommand('git -C /repo push origin main')).toBeTruthy();
   });
+
+  /**
+   * The subcommand and flag grammars above are genuinely default-deny. The SCANNER that
+   * decides which token runs is what let five ordinary shell idioms past all of it: the
+   * segment splitter knew only chain operators, so it read `echo $(git reset --hard)` as one
+   * `echo` command and never looked inside.
+   *
+   * These are not evasion techniques. `for f in $(git ls-files)` is how a worker naturally
+   * writes a loop, and a worker that reaches for `bash -c` is usually quoting, not hiding. A
+   * policy whose header says "a subcommand nobody has thought of is denied, not allowed by
+   * omission" cannot be turned off by a pair of parentheses.
+   */
+  it('looks inside command substitutions and backticks', () => {
+    expect(gitDenialInCommand('echo $(git reset --hard)')).toBeTruthy();
+    expect(gitDenialInCommand('`git clean -fd`')).toBeTruthy();
+    expect(gitDenialInCommand('for f in $(git ls-files); do echo $f; done')).toBeTruthy();
+    // Nested, and with the denial not in the outermost level.
+    expect(gitDenialInCommand('echo "$(printf %s "$(git checkout .)")"')).toBeTruthy();
+    // A read-only git in a substitution is still fine — this closes a hole, it does not
+    // forbid the idiom.
+    expect(gitDenialInCommand('echo $(git log --oneline -n 1)')).toBeNull();
+    expect(gitDenialInCommand('for f in $(git diff --name-only); do echo $f; done')).toBeNull();
+  });
+
+  it('looks inside a shell interpreter invoked with -c', () => {
+    expect(gitDenialInCommand('bash -c "git reset --hard"')).toBeTruthy();
+    expect(gitDenialInCommand("sh -c 'git checkout .'")).toBeTruthy();
+    expect(gitDenialInCommand('zsh -lc "git push origin main"')).toBeTruthy();
+    expect(gitDenialInCommand('bash -c "git status --porcelain"')).toBeNull();
+  });
+
+  it('sees through wrapper commands that take the git invocation as their argument', () => {
+    expect(gitDenialInCommand('xargs git reset --hard')).toBeTruthy();
+    expect(gitDenialInCommand('timeout 5 git clean -fd')).toBeTruthy();
+    expect(gitDenialInCommand('nohup git push &')).toBeTruthy();
+    expect(gitDenialInCommand('timeout 5 git status')).toBeNull();
+  });
+
+  it('does not deny prose that merely mentions git', () => {
+    // The scanner resolves a COMMAND position, not any occurrence of the word — otherwise
+    // explaining the rule would trip it.
+    expect(gitDenialInCommand('echo "do not run git reset --hard"')).toBeNull();
+    expect(gitDenialInCommand('grep -r "git push" docs/')).toBeNull();
+  });
 });
 
 describe('pathTouchesGitDir', () => {

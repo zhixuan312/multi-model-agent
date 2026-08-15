@@ -1,4 +1,4 @@
-import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
+import type { TokenUsage } from '../../packages/core/src/types/run-result.js';
 
 export interface AdapterTurnRecord {
   assistantText: string;

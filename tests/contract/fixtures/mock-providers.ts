@@ -10,13 +10,11 @@
 import type {
   Provider,
   ProviderConfig,
-  RunStatus,
   TokenUsage,
-  AttemptRecord,
 } from '@zhixuan92/multi-model-agent-core';
 import type { WorkerStatus } from '../../../packages/core/src/types/task-spec.js';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
-import type { RuntimeRunResult, _TerminationCause } from './runtime-run-result.js';
+import type { RuntimeRunResult, _TerminationCause, RunStatus, EscalationRecord } from './runtime-run-result.js';
 import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** Build a Session whose `send()` invokes the same RuntimeRunResult-producing
@@ -121,7 +119,7 @@ function usage(_cost: number | null): TokenUsage {
   return { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 };
 }
 
-function attempt(status: RunStatus, turns: number, cost: number | null): AttemptRecord {
+function attempt(status: RunStatus, turns: number, cost: number | null): EscalationRecord {
   return {
     provider: 'mock',
     status,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { priceTokens, type RateCard } from '../../packages/core/src/bounded-execution/cost-compute.js';
-import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
+import type { TokenUsage } from '../../packages/core/src/types/run-result.js';
 
 const card: RateCard = {
   inputCostPerMTok: 5,

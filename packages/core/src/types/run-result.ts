@@ -3,6 +3,31 @@
 // The internal provider-runner contract (SDK ↔ mma): TokenUsage, TurnResult,
 // Session, Provider, and the option shapes the two-phase pipeline passes in.
 
+/** Canonical 4-field token-count shape. reasoningTokens are summed into
+ *  outputTokens by each runner before emitting. totalTokens, cachedTokens,
+ *  and per-provider breakdowns are computed on demand — they are not stored.
+ *
+ *  **Disjoint-partition contract.** The four fields are mutually exclusive
+ *  buckets — every token counted in exactly one field. Specifically:
+ *    - `inputTokens` is the NON-CACHED prompt-token count for this turn
+ *      (Anthropic's definition: tokens after the last cache breakpoint).
+ *    - `cachedReadTokens` is the count of prompt tokens read from cache.
+ *    - `cachedNonReadTokens` is the count of prompt tokens written to cache
+ *      (cache-creation; billed at 1.25x input for Anthropic 5-min TTL,
+ *      2.0x for 1-hour TTL; OpenAI/codex does not emit this field).
+ *    - `outputTokens` is the count of model-generated tokens (including
+ *      reasoning tokens; the rate-card output rate covers both).
+ *
+ *  Provider adapters MUST normalize their wire shape to this contract.
+ *  Anthropic's Messages API already partitions cleanly so pass-through is
+ *  correct. OpenAI / codex CLI emits GROSS `input_tokens` that INCLUDES
+ *  `cached_input_tokens` as a subset; adapters MUST subtract cached from
+ *  gross before populating `inputTokens` here. See
+ *  `providers/codex-cli-session.ts:absorbUsage` for the normalization.
+ *
+ *  This lived in `providers/runner-types.ts`, above `TerminationReason` — the
+ *  declaration it described had already moved here, so the contract sat over an
+ *  unrelated interface and anyone reading either one found the wrong text. */
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;

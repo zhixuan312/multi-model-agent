@@ -22,12 +22,7 @@ export type {
   MultiModelConfig,
   Provider,
 } from './types.js';
-export type {
-  RunStatus,
-  TokenUsage,
-  RunOptions,
-  AttemptRecord,
-} from './providers/runner-types.js';
+export type { TokenUsage } from './types/run-result.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { extractEvidenceSections, type EvidenceParsed } from './reporting/extract-evidence-sections.js';
 export {
