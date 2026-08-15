@@ -63,7 +63,7 @@ Size the decomposition so a human could execute it:
 
 ### The Contract Task shape
 
-Each task MUST follow this exact structure (tasks are numbered `### Task I-N:` — roman-numeral N —
+Each task MUST follow this exact structure (tasks are numbered `### Task I-N:` — a literal roman `I`, a hyphen, then N as an ARABIC digit: `I-1`, `I-2`, … Writing the number itself in roman (`I-IV`) makes the plan unparseable and fails the whole execute_plan run with `unsupported-legacy-plan` before any worker starts —
 regardless of phase, so the executor can select them). No task names an implementation file and no
 task carries final deliverable content — `**Output:**` names WHAT the task produces (a path, an
 artifact name, or a plain description), never HOW:

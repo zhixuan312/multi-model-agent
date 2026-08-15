@@ -255,3 +255,31 @@ describe('plan prompts and the plan validator share one vocabulary', () => {
     expect(planImpl).toMatch(/###\s+Task\s+[IVXLCDM]+-(?:N|\d+)\s*:/);
   });
 });
+
+/**
+ * The task-heading rule must describe the heading the validator accepts.
+ *
+ * `plan/implement.md` said tasks are numbered "`### Task I-N:` — roman-numeral N". `TASK_HEADING_RE`
+ * is `/^###\s+Task\s+[IVXLCDM]+-\d+:/` — the segment after the hyphen must be ARABIC digits. A plan
+ * numbered `### Task I-IV:` matches no heading, so `parseContractPlan` finds zero tasks and throws
+ * `unsupported-legacy-plan`, failing the entire execute_plan before a provider session opens. The
+ * same file states the rule correctly 80 lines later ("roman-`I` + `-N`") and its JSON example uses
+ * `Task I-1`, so the prompt disagreed only with itself in the one place a worker reads first.
+ */
+describe('the plan task-heading rule matches the validator', () => {
+  it('the validator requires arabic digits after the hyphen', () => {
+    const re = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
+    expect(re.test('### Task I-4: something')).toBe(true);
+    re.lastIndex = 0;
+    expect(re.test('### Task I-IV: something')).toBe(false);
+  });
+
+  it('the prompt no longer calls N a roman numeral', () => {
+    expect(planImpl).not.toMatch(/roman-numeral N/);
+    expect(planImpl, 'it must say the number is arabic').toMatch(/ARABIC digit/);
+  });
+
+  it('and names the failure a roman number would cause', () => {
+    expect(planImpl).toContain('unsupported-legacy-plan');
+  });
+});
