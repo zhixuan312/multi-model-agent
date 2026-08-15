@@ -6,7 +6,6 @@ import type { StatementSync } from 'node:sqlite';
 import type {
   CorpusAdapter,
   IndexHealth,
-  LexicalHit,
   StoredRecord,
   StoredRecordMeta,
 } from './types.js';
@@ -135,7 +134,6 @@ export class CorpusIndex {
    */
   private allRecordsStmt?: StatementSync;
   private allRecordsMetaStmt?: StatementSync;
-  private lexicalSearchStmt?: StatementSync;
   private recordCountStmt?: StatementSync;
   /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
   private readonly recordsByIdsStmts = new Map<number, StatementSync>();
@@ -423,7 +421,6 @@ export class CorpusIndex {
   private invalidateRecordStatements(): void {
     this.allRecordsStmt = undefined;
     this.allRecordsMetaStmt = undefined;
-    this.lexicalSearchStmt = undefined;
     this.recordCountStmt = undefined;
     this.recordsByIdsStmts.clear();
     this.recordsMetaByIdsStmts.clear();
@@ -937,27 +934,6 @@ export class CorpusIndex {
       kept.push(token);
     }
     return kept.map((token) => `"${token}"`).join(' OR ');
-  }
-
-  /**
-   * FTS5/BM25 lexical probe. `queryTokens` are OR-joined and phrase-quoted so
-   * FTS operators embedded in record text stay inert. Returns record ids
-   * best-first (lowest bm25). Empty tokens → empty result.
-   */
-  lexicalSearch(queryTokens: string[]): LexicalHit[] {
-    const clean = queryTokens
-      .map((token) => token.replace(/"/g, '').trim())
-      .filter((token) => token.length > 0);
-    if (clean.length === 0) return [];
-    const match = clean.map((token) => `"${token}"`).join(' OR ');
-    if (!this.lexicalSearchStmt) {
-      this.lexicalSearchStmt = this.db.prepare(
-        `SELECT id, bm25(records_fts) AS bm25 FROM records_fts
-         WHERE records_fts MATCH ? ORDER BY bm25`,
-      );
-    }
-    const rows = this.lexicalSearchStmt.all(match) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({ id: asString(row.id), bm25: asNumber(row.bm25) }));
   }
 
   /** Reflected schema table list (for health/diagnostics tests). */

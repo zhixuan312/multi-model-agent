@@ -89,14 +89,31 @@ Current answer for retrieval.
 }
 
 describe('journal search', () => {
-  it('builds the derived index, provisions vectors_meta, and serves lexical retrieval without semantic state', async () => {
+  /**
+   * Named "provisions vectors_meta" until this audit. That table is the PRE-ENGINE store's, and
+   * the engine now lists it in `LEGACY_TABLES` — its presence forces a rebuild, and
+   * `vectors-meta-migration.test.ts` asserts it is gone. The name claimed the opposite of the
+   * design. It also promised "serves lexical retrieval" and performed none: the body checked
+   * health and the table list, nothing more.
+   */
+  it('builds the derived index with no semantic state, and serves lexical retrieval from it', async () => {
     const root = await makeCorpus();
     const store = await JournalIndexStore.open({ journalRoot: root });
     await store.rebuildIndex();
     const health = await store.ensureHealthy();
     expect(health.state).toBe('ready');
+
     const schema = await store.inspectSchema();
     expect(schema.tables).toEqual(expect.arrayContaining(['records', 'records_fts']));
+    // The semantic-retrieval table the pre-engine store carried must NOT come back.
+    expect(schema.tables).not.toContain('vectors_meta');
+
+    // ...and the index it built actually answers a query — the half the old name promised.
+    const found = await searchCandidatesForRecall(store, {
+      prompt: 'current retrieval answer', topic: 'journal-engine', includeHistory: false,
+    });
+    expect(found.candidates.length, 'a rebuilt index must serve retrieval').toBeGreaterThan(0);
+    store.close();
   });
 
   it('excludes superseded nodes by default and includes them only in history mode', async () => {

@@ -13,19 +13,25 @@ const plainAdapter = (root: string) => ({
   decode: async (relPath: string, raw: string) => ({ id: relPath, path: relPath, title: relPath, body: raw }),
 });
 
-/** Ids the engine's lexical probe returns for `tokens`, best-first. */
-const lexicalIds = (index: CorpusIndex, tokens: string[]) =>
-  index.lexicalSearch(tokens).map((hit) => hit.id);
+/**
+ * Ids the engine's SQL-bounded candidate query returns for `tokens`, best-first (bm25 order).
+ *
+ * This used `lexicalSearch`, which is gone: `rrfSearch` was its only production consumer, and
+ * deleting the engine's dormant RRF left the probe with no caller but this file. The candidate
+ * query is what production ranks with, and it returns rows in the same bm25 order.
+ */
+const candidateIds = (index: CorpusIndex, tokens: string[]) =>
+  index.candidateRecordsMeta({ tokens, limit: 50 }).map((record) => record.id);
 
 /**
- * Observed through `lexicalSearch` + `recordsByIds` — the API the journal adapter actually
- * calls. These used to go through `CorpusIndex.search()`, which fused adapter signal lists via
+ * Observed through `candidateRecordsMeta` + `recordsByIds` — the API the journal adapter
+ * actually calls. These used to go through `CorpusIndex.search()`, which fused adapter signal lists via
  * RRF in `engine/search.ts`; that path had no production caller (the adapter runs its own
  * candidate-bounded fusion) and this file was the only thing keeping it alive. What is under
  * test here — rebuild, incremental re-sync, and ranking without materializing bodies — is
  * unchanged.
  */
-it('rebuilds, indexes lexically, and incrementally re-syncs only changed records', async () => {
+it('rebuilds, indexes for the candidate query, and incrementally re-syncs only changed records', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mma-corpus-engine-'));
   await writeFile(join(root, 'a.txt'), 'alpha retrieval engine');
   await writeFile(join(root, 'b.txt'), 'beta unrelated material');
@@ -33,12 +39,12 @@ it('rebuilds, indexes lexically, and incrementally re-syncs only changed records
   await index.rebuild();
 
   expect((await index.inspectSchema()).tables).toEqual(expect.arrayContaining(['records', 'records_fts']));
-  expect(lexicalIds(index, ['retrieval'])).toEqual(['a.txt']);
+  expect(candidateIds(index, ['retrieval'])).toEqual(['a.txt']);
 
   await writeFile(join(root, 'a.txt'), 'alpha rewritten completely');
   await index.syncIncremental();
-  expect(lexicalIds(index, ['retrieval'])).toEqual([]);
-  expect(lexicalIds(index, ['rewritten'])).toEqual(['a.txt']);
+  expect(candidateIds(index, ['retrieval'])).toEqual([]);
+  expect(candidateIds(index, ['rewritten'])).toEqual(['a.txt']);
   index.close();
 });
 
@@ -55,7 +61,7 @@ it('ranks record metadata before materializing returned bodies', async () => {
 
   // Rank first (ids + metadata only), then fetch bodies for just the winners — `allRecords`
   // must never be reached, which is what the spy above asserts.
-  const ranked = lexicalIds(index, ['retrieval']);
+  const ranked = candidateIds(index, ['retrieval']);
   expect(ranked).toEqual(['a.txt']);
   expect(index.recordsByIds(ranked)).toMatchObject([{ id: 'a.txt', body: 'alpha retrieval engine' }]);
   index.close();

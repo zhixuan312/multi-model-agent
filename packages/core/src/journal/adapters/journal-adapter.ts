@@ -198,11 +198,6 @@ export interface IndexedDocument {
 export type IndexedDocumentMeta = Omit<IndexedDocument, 'body'>;
 
 /** Result of a lexical FTS5 probe: node ids ordered best-first (lowest bm25). */
-export interface LexicalHit {
-  nodeId: string;
-  bm25: number;
-}
-
 export type { IndexHealth };
 
 export class JournalIndexStore {
@@ -307,14 +302,6 @@ export class JournalIndexStore {
    */
   documentsMetaByIds(nodeIds: string[]): IndexedDocumentMeta[] {
     return this.index.recordsMetaByIds([...new Set(nodeIds)]).map((record) => this.toIndexedDocumentMeta(record));
-  }
-
-  /**
-   * FTS5/BM25 lexical probe. Returns node ids best-first (lowest bm25). Empty
-   * tokens → empty result.
-   */
-  lexicalSearch(queryTokens: string[]): LexicalHit[] {
-    return this.index.lexicalSearch(queryTokens).map((hit) => ({ nodeId: hit.id, bm25: hit.bm25 }));
   }
 
   /**

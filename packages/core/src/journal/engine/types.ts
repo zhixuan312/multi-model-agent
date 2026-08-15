@@ -58,12 +58,6 @@ export interface StoredRecord extends CorpusRecord {
  */
 export type StoredRecordMeta = Omit<StoredRecord, 'body'>;
 
-/** Result of a lexical FTS5 probe: record ids ordered best-first (lowest bm25). */
-export interface LexicalHit {
-  id: string;
-  bm25: number;
-}
-
 /**
  * One ranked signal list to fuse via Reciprocal Rank Fusion. `order` is a list of record ids,
  * best match first; `via` names the signal for diagnostics (`'lexical'`, `'tag'`, `'neighbor'`).

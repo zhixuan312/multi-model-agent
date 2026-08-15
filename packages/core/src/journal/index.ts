@@ -33,7 +33,6 @@ export type {
   IndexedDocumentMeta,
   IndexedLink,
   IndexHealth,
-  LexicalHit,
   JournalCandidate,
 } from './adapters/journal-adapter.js';
 export { CorpusIndex } from './engine/index-store.js';
