@@ -68,6 +68,36 @@ describe('InitiativeLinker Task-update semantic-rejection consumption (SPEC-003 
     return { initiativeUuid: initiative.uuid, taskUuid: task.uuid };
   }
 
+  // The outbox is designed to outlive the execution row it describes: an unconsumed row is never
+  // pruned at any age, while terminal execution rows expire on their TTL. Commit Evidence used to
+  // be gated on `store.get(executionId)` for the task type, so a replay that happened after that
+  // pruning silently recorded no commit Evidence and consumed the row anyway — the Initiative
+  // permanently missing evidence of work that WAS committed.
+  it('records commit Evidence even when the execution row was pruned before replay', () => {
+    const { initiativeUuid, taskUuid } = seedInitiativeAndTask('mma-pruned-before-replay');
+    const linkage = { initiative: { uuid: initiativeUuid }, task_uuid: taskUuid, authorized_by: 'host-a' };
+
+    store.admit('pruned-before-replay', 'delegate', '/repo', process.pid, linkage);
+    store.complete('pruned-before-replay', JSON.stringify({
+      execution: { executionId: 'pruned-before-replay', type: 'delegate', status: 'done' },
+      output: { filesChanged: ['src/a.ts'], commitSha: 'deadbeefcafe' },
+    }));
+
+    // The delay this models: the row could not replay promptly, and the execution row aged out.
+    store.pruneExpired(Date.now() + 7_200_000);
+    expect(store.get('pruned-before-replay'), 'the execution row is gone').toBeUndefined();
+    expect(store.listUnconsumedOutbox(), 'the outbox row survives it').toHaveLength(1);
+
+    new InitiativeLinker({ store, initiativeRuntime, log: () => {} }).replayOutbox();
+
+    const resumed = initiativeRuntime.initiativeResume({ initiative: { uuid: initiativeUuid } }) as {
+      evidence: Array<{ kind: string; locator: string }>;
+    };
+    const commitEvidence = resumed.evidence.find((e) => e.kind === 'commit');
+    expect(commitEvidence, 'commit Evidence must not depend on a row the design lets expire').toBeDefined();
+    expect(commitEvidence!.locator).toBe('commit://deadbeefcafe');
+  });
+
   // Round-3 finding 1: a Task completed/cancelled by another actor between validation and commit
   // leaves a failed linked execution whose replay tries a ref-only append the store rejects on a
   // terminal Task (`invalid_task_transition`) — previously retried forever.
