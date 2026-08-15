@@ -49,7 +49,12 @@ function codexBinaryTokens(): string[] {
 
 function isCodexProcess(pid: number): boolean {
   try {
-    const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).toLowerCase();
+    // `ps` does not exist on Windows, so this throws and the catch below reports "process gone" —
+    // but the spawn is ATTEMPTED first, and an attempted spawn is what flashes the console.
+    const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).toLowerCase();
     return codexBinaryTokens().some((token) => cmd.includes(token));
   } catch {
     return false; // ps failed → process gone

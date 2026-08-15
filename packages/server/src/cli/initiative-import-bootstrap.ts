@@ -134,6 +134,7 @@ function resolveGitOriginUrl(repoPath: string): string | null {
     const out = execFileSync('git', ['-C', repoPath, 'remote', 'get-url', 'origin'], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true, // not platform-gated: this runs on Windows and flashes a console without it
     });
     const trimmed = out.trim();
     return trimmed.length > 0 ? trimmed : null;

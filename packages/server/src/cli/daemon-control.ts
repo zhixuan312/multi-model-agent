@@ -124,6 +124,7 @@ export function verifyDaemonProcess(pid: number, platform: NodeJS.Platform = pro
   if (platform === 'win32') return null;
   try {
     const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
+      windowsHide: true,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).toLowerCase();
@@ -139,6 +140,7 @@ function lookupPortOwnerPosix(port: number): number | null {
     const out = execFileSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
     });
     // Multiple listeners on one port should be impossible; take the first and
     // ignore the rest rather than guessing which to signal.
