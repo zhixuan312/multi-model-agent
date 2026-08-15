@@ -27,7 +27,10 @@ const CONFIG: MultiModelConfig = {
   server: {
     bind: '127.0.0.1',
     port: 0,
-    auth: { tokenFile: '/tmp/mma-status-token' },
+    // Per-process temp path, not a fixed `/tmp/mma-status-token`: vitest runs files in parallel
+    // workers, and `afterEach` deletes this unconditionally — a shared name means one file can
+    // delete another's live token mid-run.
+    auth: { tokenFile: join(mkdtempSync(join(tmpdir(), 'mma-status-auth-')), 'token') },
     limits: {
       maxBodyBytes: 10_485_760,
       batchTtlMs: 3_600_000,

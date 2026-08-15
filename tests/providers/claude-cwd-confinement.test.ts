@@ -8,6 +8,13 @@ import {
   buildConfinementHook,
 } from '../../packages/core/src/providers/claude-cwd-confinement.js';
 
+/**
+ * An arbitrary workspace path — but NOT a freely editable one: several cases below resolve
+ * `../..` against it and assert the result, so the number of segments is load-bearing. The
+ * `.mma/worktrees/` shape is a leftover from when write routes ran in a throwaway worktree
+ * (the engine creates none now — the caller owns the branch); modernising the string to
+ * something shorter silently breaks three depth-dependent expectations.
+ */
 const CWD = '/work/repo/.mma/worktrees/abcd1234';
 
 // ---------------------------------------------------------------------------

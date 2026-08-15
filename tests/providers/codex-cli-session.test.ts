@@ -104,30 +104,18 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
     expect(tracker.errorCode).toBe('turn_failed');
   });
 
-  it('produces terminationReason: "time_exceeded" from wall_clock_exceeded errorCode', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    // Simulate guard injection setting terminationReason via errorCode
-    tracker.errorCode = 'wall_clock_exceeded';
-    tracker.terminationReason = 'time_exceeded';
-    expect(tracker.terminationReason).toBe('time_exceeded');
+  /**
+   * Three cases here read `tracker.terminationReason = 'time_exceeded'; expect(
+   * tracker.terminationReason).toBe('time_exceeded')` — an assignment, asserted. They tested
+   * the language, not the tracker, and no change to this file could have failed them. Their
+   * stated subject, "guard injection", is `armGuards` in the session: the arming DECISION is
+   * covered by `wallClockDelayMs` in effort.test.ts, and the claude-side equivalent of the
+   * injection itself by claude-session-guard-precedence.test.ts. Deleted rather than restated
+   * — a guard that sets a field is only worth asserting through the guard.
+   */
+  it('starts at ok, so a reason is only ever set by something that observed a failure', () => {
+    expect(new TurnTracker(zeroUsage()).terminationReason).toBe('ok');
   });
-
-  it('produces terminationReason: "aborted" from aborted errorCode', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    tracker.errorCode = 'aborted';
-    tracker.terminationReason = 'aborted';
-    expect(tracker.terminationReason).toBe('aborted');
-  });
-
-  it('produces terminationReason: "stalled" from guard injection', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    tracker.terminationReason = 'stalled';
-    expect(tracker.terminationReason).toBe('stalled');
-  });
-
 });
 
 describe('codex TurnTracker auth error details', () => {
@@ -151,29 +139,13 @@ describe('codex TurnTracker auth error details', () => {
     expect(tracker.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
   });
 
-  it('propagates errorMessage from the tracker into the built TurnResult', () => {
-    const tracker = new TurnTracker(zeroUsage());
-    tracker.consume({
-      kind: 'error',
-      message: 'Missing credentials. Run codex login or set OPENAI_API_KEY',
-    } as CodexCliEvent);
-
-    const result = {
-      output: '',
-      usage: zeroUsage(),
-      costUSD: 0,
-      turns: tracker.turns,
-      durationMs: 0,
-      terminationReason: tracker.terminationReason,
-      ...(tracker.errorCode && { errorCode: tracker.errorCode }),
-      ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
-      filesWritten: [...tracker.filesWritten],
-      usedShell: tracker.usedShell,
-    };
-
-    expect(result).toHaveProperty('errorMessage');
-    expect(result.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
-  });
+  /**
+   * Deleted: a case that hand-copied `send()`'s conditional spread into the test body and then
+   * asserted the copy carried `errorMessage`. It exercised the copy, not the session — a
+   * regression in the real spread would have left it green — and the two cases above already
+   * assert the tracker fields it read from. The spread's own behaviour (error fields present
+   * only when set) is pinned in turn-result-shape.test.ts against a real producer.
+   */
 });
 
 describe('codex TurnTracker — TokenUsage disjoint-partition contract', () => {
