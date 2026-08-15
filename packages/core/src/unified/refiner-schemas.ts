@@ -132,7 +132,14 @@ const planAnswerSchema = z.object({
     title: z.string().min(1),
     verdict: z.enum(['executable', 'partial', 'blocked']),
     // Optional contract-first signal: whether the plan task's Contract + acceptance tests are
-    // complete. Absent on legacy plan output; a plain z.object() leaves it undefined when omitted.
+    // complete. Absence is a SIGNAL, not legacy tolerance — plan/review.md tells the reviewer to
+    // set this only when its pass directly evidences one, so omitting it means "no evidence either
+    // way". Reading it as legacy would invite deleting the optionality, which this repo's
+    // no-backward-compatibility rule would otherwise justify.
+    //
+    // This shape was ALSO declared by hand as a `PlanTaskReviewRecord` interface in
+    // reviewer-output-parser.ts, exported and consumed by nothing — two declarations of one shape,
+    // only one of which validates anything. Deleted; this schema is the single source.
     contractCompleteness: z.enum(['complete', 'incomplete']).optional(),
   })),
   notes: z.string().default(''),
