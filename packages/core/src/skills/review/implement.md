@@ -45,7 +45,10 @@ rewrite reads.
   full taxonomy.
 - Every finding must carry a precise location (`file:line`, or the equivalent locator for non-code
   material — a section name, a step number, a field path) plus quoted or extracted evidence; if you
-  cannot cite it, do not raise it.
+  cannot cite it, do not raise it. Put that locator in the finding's `file` field as text — a
+  section heading is a perfectly good `file` value — and OMIT `line` when the material has no line
+  numbering; it defaults to 0. Never invent a line number to satisfy the field, and never fabricate
+  a path: `file` is what a caller will try to open, so a made-up one is worse than a section name.
 - Scope is the named material plus cross-references on changed elements plus sibling verification
   artifacts — not speculation about unrelated material.
 - Pre-existing defects stay IN `findings` with `preExisting: true` — that flag is what separates

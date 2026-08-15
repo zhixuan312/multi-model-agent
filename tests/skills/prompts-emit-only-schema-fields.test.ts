@@ -16,6 +16,7 @@
  * than restating it.
  */
 import { describe, expect, it } from 'vitest';
+import { REFINER_SCHEMAS } from '../../packages/core/src/unified/refiner-schemas.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -280,5 +281,40 @@ describe('the review taxonomy has one spelling across its three statements', () 
     const missing = slugs.filter((slug) => !text.includes(slug));
     expect(missing, `${file} spells the taxonomy differently: missing ${missing.join(', ')}`)
       .toEqual([]);
+  });
+});
+
+/**
+ * A promised non-code locator must be expressible in the schema's fields.
+ *
+ * `review` and `investigate` both promise "the equivalent locator for non-code material — a cell
+ * reference, a row number, a section heading", while their finding schemas require a NON-EMPTY
+ * `file` string and an integer `line`. `review` additionally accepts `target.inline`, where there
+ * is no path at all — so a worker taking the promise literally had to put a non-path in a field
+ * named `file` and invent an integer, or drop the finding.
+ *
+ * The schema does accommodate it (`file` takes any non-empty string, `line` defaults to 0); nothing
+ * said so. These assertions pin the instruction AND prove the shape parses, so the guidance cannot
+ * drift from what the parser accepts.
+ */
+describe('non-code locators are representable and explained', () => {
+  it.each([
+    ['review', 'packages/core/src/skills/review/implement.md'],
+    ['investigate', 'packages/core/src/skills/investigate/implement.md'],
+  ])('%s tells the worker where the locator goes', (_name, file) => {
+    const text = readFileSync(file, 'utf8');
+    expect(text).toMatch(/`file` field as text|in the finding's `file` field/);
+    expect(text, 'must say line may be omitted rather than invented').toMatch(/defaults to 0/);
+    expect(text).toMatch(/never invent a line number/i);
+  });
+
+  it('a section-heading locator with no line actually validates', () => {
+    const finding = {
+      weight: 'high', category: 'verification-gap', claim: 'c', evidence: 'e',
+      file: '## Verification Plan', suggestion: 's',
+    };
+    expect(
+      REFINER_SCHEMAS.review!.safeParse({ criteriaCovered: ['verification-gap'], findings: [finding] }).success,
+    ).toBe(true);
   });
 });
