@@ -48,8 +48,15 @@ export function contextBlockErrorToHttp(code: ContextBlockOpErrorCode): number {
     case 'forbidden_cwd':
       return 503;
     default: {
+      // Compile-time exhaustiveness: adding a ContextBlockOpErrorCode without a status here fails
+      // to build. But `return exhaustive` would RETURN THE CODE STRING at runtime — and the types
+      // only hold as far as the casts do. `context-block-size-cap.test.ts` stubs a registry that
+      // returns `error: 'unavailable'` (not a ReserveError) behind an `as unknown as` cast, so this
+      // branch really was reached, `writeHead` really was called with a string, and the test passed
+      // because it only asserted `not.toBe(413)`.
       const exhaustive: never = code;
-      return exhaustive;
+      void exhaustive;
+      return 500;
     }
   }
 }
