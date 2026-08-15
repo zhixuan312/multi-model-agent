@@ -25,101 +25,37 @@ import {
   type InitiativeResumeResponse,
   type LifecycleResumeBlock,
   type MethodDeclaration,
+  INITIATIVE_OPERATIONS,
+  type InitiativeOperation,
 } from '@zhixuan92/multi-model-agent-core';
 import { expandHome } from '../expand-home.js';
 
-/** Every frozen operation `execute()` accepts EXCEPT `initiative_resume`,
- *  which has its own dedicated method (`initiativeResume`) because it is not
- *  a single store call — it is a server-side assembly of several joined reads. */
-const EXECUTE_OPERATIONS = new Set([
-  'product_create',
-  'product_get',
-  'product_list',
-  'workspace_create',
-  'workspace_get',
-  'workspace_list',
-  'resource_register',
-  'resource_list',
-  'initiative_create',
-  'initiative_get',
-  'initiative_list',
-  'initiative_status',
-  'initiative_link_workspace',
-  'initiative_relate',
-  'initiative_relations',
-  'initiative_task_create',
-  'initiative_task_get',
-  'initiative_task_list',
-  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
-  'initiative_task_claim',
-  'initiative_task_release',
-  'initiative_task_complete',
-  'initiative_task_execution',
-  'artifact_register',
-  'artifact_get',
-  // Phase A1 — professional record and verification ledger (SPEC-002 FR-3, FR-4).
-  'requirement_add',
-  'requirement_get',
-  'requirement_list',
-  'acceptance_criterion_add',
-  'acceptance_criterion_get',
-  'acceptance_criterion_list',
-  'decision_record',
-  'decision_supersede',
-  'decision_get',
-  'decision_list',
-  'evidence_add',
-  'evidence_get',
-  'evidence_list',
-  'evidence_link',
-  'evidence_links_list',
-  'risk_add',
-  'risk_status',
-  'risk_get',
-  'risk_list',
-  'verification_record',
-  'verification_get',
-  'verification_list',
-  // SPEC-004 Lifecycle Engine (FR-2 through FR-7): the six phase/focus/contract
-  // mutations. `initiative_gate_status` is excluded — it is the second dedicated
-  // read (Task I-4), served by `initiativeGateStatus()` below, same as
-  // `initiative_resume`.
-  'initiative_phase_enter',
-  'initiative_phase_satisfy',
-  'initiative_phase_reopen',
-  'initiative_phase_skip',
-  'initiative_focus_set',
-  'initiative_set_lifecycle_contract',
-  // SPEC-005 Method Registry (FR-9, FR-10): read-only `method_get`/`method_list` and the
-  // sole Task Method mutation `initiative_task_set_method`.
-  'method_get',
-  'method_list',
-  'initiative_task_set_method',
-  // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation. Same
-  // dispatch pattern as every mutation above: one transactional `store.execute()` call.
-  'initiative_bootstrap',
-  // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
-  // operations (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate`/`deliverable_deliver`
-  // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
-  // `deliverable_approve` (Task I-6, ← AC-1.7) extends this set further with the
-  // maintainer-confirmed human-approval mutation.
-  'delivery_contract_get',
-  'delivery_contract_list',
-  'deliverable_define',
-  'deliverable_get',
-  'deliverable_list',
-  'deliverable_attach_artifact',
-  'deliverable_validate',
-  'deliverable_deliver',
-  'deliverable_approve',
-  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
-  // execution, packaging assembly, and Initiative import. `initiative_export` is excluded — it
-  // is a third dedicated read (`initiativeExport()` below), same as `initiative_resume` and
-  // `initiative_gate_status`.
-  'verification_run',
-  'deliverable_package',
-  'initiative_import',
+/**
+ * Every frozen operation `execute()` accepts — DERIVED from the operation registry rather than
+ * retyped, so a new operation is executable the moment it is registered.
+ *
+ * This was a hand-maintained `new Set([...])` of 68 string literals, bound to
+ * `INITIATIVE_OPERATIONS` by nothing. Omitting an operation there does not fail to compile; it
+ * makes that operation reject at runtime as "not a valid execute() operation", which reads exactly
+ * like a caller mistake. The list had also drifted from its own doc comment, which claimed a single
+ * exception while three had accumulated.
+ *
+ * The three exclusions are real and each has a dedicated method, because none is a single store
+ * call: `initiative_resume` and `initiative_export` assemble several joined reads, and
+ * `initiative_gate_status` evaluates the lifecycle gates.
+ */
+const DEDICATED_METHOD_OPERATIONS = new Set<InitiativeOperation>([
+  'initiative_resume',
+  'initiative_gate_status',
+  'initiative_export',
 ]);
+
+const EXECUTE_OPERATIONS: ReadonlySet<InitiativeOperation> = new Set(
+  INITIATIVE_OPERATIONS.filter((operation) => !DEDICATED_METHOD_OPERATIONS.has(operation)),
+);
+
+/** Names the dedicated method a caller should have used, for each excluded operation. */
+const DEDICATED_METHOD_HINT = 'call initiativeResume(), initiativeGateStatus(), or initiativeExport() instead';
 
 export class InitiativeRecordRuntime {
   private closed = false;
@@ -177,7 +113,7 @@ export class InitiativeRecordRuntime {
       throw new InitiativeInvalidRequestError({
         field_errors: {
           operation: [
-            `${request.operation} is not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead`,
+            `${request.operation} is not a valid execute() operation; ${DEDICATED_METHOD_HINT}`,
           ],
         },
       });
@@ -323,7 +259,7 @@ export class InitiativeRecordRuntime {
       default:
         throw new InitiativeInvalidRequestError({
           field_errors: {
-            operation: ['not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead'],
+            operation: [`not a valid execute() operation; ${DEDICATED_METHOD_HINT}`],
           },
         });
     }

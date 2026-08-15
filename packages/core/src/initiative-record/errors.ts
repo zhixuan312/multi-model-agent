@@ -410,6 +410,24 @@ const INITIATIVE_ERROR_CTORS = [
   InitiativeAlreadyExistsError,
 ] as const;
 
+/**
+ * The `InitiativeError` union and `INITIATIVE_ERROR_CTORS` state the same list twice — once for the
+ * type system, once for the `instanceof` sweep below — and nothing made them agree.
+ *
+ * The failure is silent and one-directional in the worst way: `isInitiativeError` is a type
+ * PREDICATE, so an error class added to the union but not the array still NARROWS as an initiative
+ * error at compile time while the runtime check answers `false`. A genuine, well-typed domain error
+ * then falls through whatever handles unexpected throws — a 500 where the caller should have had a
+ * precise 4xx.
+ *
+ * This binds the two, in both directions: a union member missing from the array, or an array entry
+ * missing from the union, fails to compile here.
+ */
+type ErrorCtorInstances = InstanceType<(typeof INITIATIVE_ERROR_CTORS)[number]>;
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type AssertTrue<T extends true> = T;
+type _ErrorCtorsMatchUnion = AssertTrue<MutuallyAssignable<ErrorCtorInstances, InitiativeError>>;
+
 export function isInitiativeError(err: unknown): err is InitiativeError {
   return INITIATIVE_ERROR_CTORS.some((ctor) => err instanceof ctor);
 }

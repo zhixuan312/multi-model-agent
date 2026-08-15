@@ -116,6 +116,16 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
         'Your response is the deliverable — no meta-commentary wrapping it.',
       ].join(' ');
     default:
-      return 'You have completed the task as specified in the skill instructions and produced the required output.';
+      // Unreachable today: the twelve cases above are exactly `TASK_TYPES`. Kept as an
+      // EXHAUSTIVENESS check rather than a generic fallback string — a thirteenth task type
+      // should fail to compile here, naming the omission, instead of silently shipping with a
+      // goal condition that says nothing about what it must cover. A catch-all sentence would
+      // let a new route's Stop hook pass on the first plausible-looking output.
+      return assertEveryTaskTypeHandled(type);
   }
+}
+
+/** Fails to COMPILE when a `TaskType` gains a member with no goal condition above. */
+function assertEveryTaskTypeHandled(type: never): never {
+  throw new Error(`no goal condition defined for task type '${String(type)}'`);
 }
