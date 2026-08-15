@@ -9,7 +9,7 @@ import { parseJournalNodeDocument } from '../node-codec.js';
  *
  * This module is the SOLE owner of every journal concept: topic prefiltering,
  * cross-topic fallback, `superseded` visibility, typed-edge neighbour
- * expansion, tag overlap, and four-digit node ids. The corpus-neutral engine
+ * expansion, tag overlap, and zero-padded node ids. The corpus-neutral engine
  * (`../engine/`) knows none of this — it only stores and lexically ranks
  * generic `records`. Two things live here:
  *
