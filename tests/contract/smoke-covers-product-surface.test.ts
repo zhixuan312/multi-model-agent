@@ -86,8 +86,18 @@ describe('the smoke harness exercises every MCP tool', () => {
 });
 
 /**
- * A ratchet, not an equality. 23 of 71 when written; the bound is the measured number, so any
- * regression fails and any improvement is free. Raise it as coverage is added.
+ * A ratchet, not an equality: closing the remainder is a body of work, not a commit. It can only
+ * rise, and the uncovered names print on failure so the next increment is obvious.
+ *
+ * The FIRST version of this measured `smokeText.includes(op)` and reported 71/71 — because
+ * `verify.mjs` carries a roster of MCP tool names (`'mma_artifact_get'`, …) and every operation
+ * name is a substring of its `mma_`-prefixed twin. So the metric counted a NAME APPEARING in a
+ * list as the operation being CALLED, the ratchet's floor of 23 was satisfied by a number that
+ * was really 71, and it would have stayed green while coverage fell to zero.
+ *
+ * Same measure-use-not-mention trap as three other checks in this repo. It is caught here by
+ * `the metric does not count a mention as a call`, below — a test of the measurement, not of the
+ * codebase. When a sweep reports a suspiciously good number, that is the moment to test the sweep.
  */
 describe('Initiative Record operation coverage does not regress', () => {
   const OPERATIONS = [
@@ -99,16 +109,33 @@ describe('Initiative Record operation coverage does not regress', () => {
     ),
   ].sort();
 
-  const COVERED_FLOOR = 23;
+  /** MCP tool rosters name operations without calling them; strip them before matching. */
+  const callText = smokeText.replace(/'mma_\w+'/g, '');
+  const isCalled = (op: string): boolean => new RegExp(`'${op}'`).test(callText);
+
+  /** Measured with the corrected metric: 23 before this audit, 52 after. */
+  const COVERED_FLOOR = 52;
 
   it('the operation surface is discoverable', () => {
     // Floor: a parse failure here would make the ratchet below trivially satisfiable.
     expect(OPERATIONS.length).toBeGreaterThan(60);
   });
 
-  it(`at least ${COVERED_FLOOR} of ${71} operations are exercised`, () => {
-    const covered = OPERATIONS.filter((op) => smokeText.includes(op));
-    const uncovered = OPERATIONS.filter((op) => !smokeText.includes(op));
+  it('the metric does not count a mention as a call', () => {
+    // `mma_artifact_get` appears in verify.mjs's MCP roster; `artifact_register` is not called by
+    // any smoke module. If either reads as covered, the metric is counting the wrong thing and
+    // every number below is fiction.
+    expect(smokeText).toContain('mma_artifact_get');          // the mention really is there
+    expect(isCalled('artifact_get'), 'the metric counted an MCP tool-name mention as a call')
+      .toBe(false);
+    // And it must still see a real call.
+    expect(isCalled('initiative_task_create'), 'the metric no longer detects a genuine call')
+      .toBe(true);
+  });
+
+  it(`at least ${COVERED_FLOOR} operations are exercised`, () => {
+    const covered = OPERATIONS.filter(isCalled);
+    const uncovered = OPERATIONS.filter((op) => !isCalled(op));
     expect(
       covered.length,
       `Initiative operation coverage FELL to ${covered.length}/${OPERATIONS.length}. `

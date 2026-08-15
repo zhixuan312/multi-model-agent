@@ -55,7 +55,7 @@ export async function runRecordSurface(ctx, log) {
   };
 
   const suffix = `${Date.now()}`;
-  let initiative = null, deliverable = null;
+  let initiative = null, deliverable = null, workspaceId = null;
 
   // ── R1 (AC C1/C2) greenfield intake: one atomic call, and an all-or-nothing failure ─────────
   {
@@ -73,6 +73,10 @@ export async function runRecordSurface(ctx, log) {
     checks.push(C('bootstrap-atomic', created.status === 200, `status=${created.status} ${created.status === 200 ? '' : JSON.stringify(created.json).slice(0, 160)}`));
     if (created.status === 200) {
       initiative = created.json.uuid;
+      // `resource_list` is workspace-scoped, so the read-surface section below needs a real
+      // workspace id — without one it 400s on a missing field, which would look like a broken
+      // operation rather than a malformed call.
+      workspaceId = (created.json.workspaces ?? [])[0]?.uuid ?? null;
       // Record it for teardown to REPORT. It cannot be removed: the Initiative Record API has 26
       // operations and none of them deletes, so every smoke run leaves this row behind in the
       // daemon's real initiatives.db. Teardown says so rather than letting it accumulate silently.
@@ -254,6 +258,154 @@ export async function runRecordSurface(ctx, log) {
     checks.push(C('revision-conflict', stale.status === 409 && stale.json?.error?.code === 'revision_conflict',
       `status=${stale.status} code=${stale.json?.error?.code}`));
     add(106, 'record_concurrency', checks);
+  }
+
+
+  // ── R8 Task lifecycle: create → get → list → claim → set_method → execution → complete ──────
+  //
+  // The Task surface is what `ExecutionRuntime.admitLinkedTask` transitions on every linked
+  // dispatch, and NONE of its eight operations was exercised here. A gate that never creates a
+  // Task cannot notice the claim/transition contract breaking.
+  {
+    const checks = [];
+    const created = await mut(token, cwd, 'initiative_task_create', {
+      initiative_id: initiative,
+      title: 'Smoke Task',
+      goal: 'Exercise the Task lifecycle end to end.',
+      status: 'open',
+      outcome: null,
+      workspace_ids: [],
+      resource_ids: [],
+    }, await revision());
+    checks.push(C('task-create', created.status === 200,
+      `status=${created.status} ${created.status === 200 ? '' : JSON.stringify(created.json).slice(0, 160)}`));
+
+    if (created.status === 200) {
+      const taskId = created.json.uuid;
+
+      const got = await op(token, cwd, 'initiative_task_get', { uuid: taskId });
+      checks.push(C('task-get', got.status === 200 && got.json?.uuid === taskId,
+        `status=${got.status} uuid=${got.json?.uuid}`));
+
+      const listed = await op(token, cwd, 'initiative_task_list', { initiative_id: initiative });
+      checks.push(C('task-list-contains-it', Array.isArray(listed.json) && listed.json.some((t) => t.uuid === taskId),
+        `list=${Array.isArray(listed.json) ? listed.json.length : 'not-an-array'}`));
+
+      const claimed = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, got.json?.revision ?? 0);
+      checks.push(C('task-claim', claimed.status === 200 && claimed.json?.status === 'claimed',
+        `status=${claimed.status} task.status=${claimed.json?.status}`));
+
+      // A claimed Task must not be claimable again — the whole point of the claim.
+      const reclaim = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, claimed.json?.revision ?? 0);
+      checks.push(C('task-claim-is-exclusive', reclaim.status >= 400,
+        `second claim status=${reclaim.status} — a claimed Task must not be re-claimable`));
+
+      const released = await mut(token, cwd, 'initiative_task_release', { uuid: taskId }, claimed.json?.revision ?? 0);
+      checks.push(C('task-release', released.status === 200 && released.json?.status === 'open',
+        `status=${released.status} task.status=${released.json?.status}`));
+
+      const withMethod = await mut(token, cwd, 'initiative_task_set_method', {
+        initiative: { uuid: initiative }, task: { uuid: taskId }, method: 'software-change@1',
+      }, released.json?.revision ?? 0);
+      checks.push(C('task-set-method', withMethod.status === 200,
+        `status=${withMethod.status} ${withMethod.status === 200 ? '' : JSON.stringify(withMethod.json).slice(0, 140)}`));
+
+      const afterMethod = await op(token, cwd, 'initiative_task_get', { uuid: taskId });
+      const exec = await mut(token, cwd, 'initiative_task_execution', {
+        uuid: taskId, execution_ref: 'smoke-execution-ref', transition: 'in_progress',
+      }, afterMethod.json?.revision ?? 0);
+      checks.push(C('task-execution-link', exec.status === 200,
+        `status=${exec.status} ${exec.status === 200 ? '' : JSON.stringify(exec.json).slice(0, 140)}`));
+
+      const afterExec = await op(token, cwd, 'initiative_task_get', { uuid: taskId });
+      const done = await mut(token, cwd, 'initiative_task_complete', {
+        uuid: taskId, outcome: 'succeeded',
+      }, afterExec.json?.revision ?? 0);
+      checks.push(C('task-complete', done.status === 200 && done.json?.outcome === 'succeeded',
+        `status=${done.status} outcome=${done.json?.outcome}`));
+    }
+    add(108, 'record_task_lifecycle', checks);
+  }
+
+  // ── R9 Decisions, risks, evidence: record → read back → list ────────────────────────────────
+  {
+    const checks = [];
+    const decision = await mut(token, cwd, 'decision_record', {
+      initiative_id: initiative,
+      title: 'Smoke decision',
+      decision: 'Record the decision surface in the smoke run.',
+      rationale: 'It was 32% covered and the gate called itself comprehensive.',
+      alternatives: ['leave it uncovered'],
+      status: 'decided',
+    }, await revision());
+    checks.push(C('decision-record', decision.status === 200, `status=${decision.status}`));
+    if (decision.status === 200) {
+      const dGet = await op(token, cwd, 'decision_get', { uuid: decision.json.uuid });
+      checks.push(C('decision-get', dGet.status === 200 && dGet.json?.uuid === decision.json.uuid, `status=${dGet.status}`));
+      const dList = await op(token, cwd, 'decision_list', { initiative_id: initiative });
+      checks.push(C('decision-list', Array.isArray(dList.json) && dList.json.length > 0, `n=${dList.json?.length}`));
+    }
+
+    const risk = await mut(token, cwd, 'risk_add', {
+      initiative_id: initiative, statement: 'Smoke risk', severity: 'low', status: 'open',
+    }, await revision());
+    checks.push(C('risk-add', risk.status === 200, `status=${risk.status}`));
+    if (risk.status === 200) {
+      const rGet = await op(token, cwd, 'risk_get', { uuid: risk.json.uuid });
+      checks.push(C('risk-get', rGet.status === 200, `status=${rGet.status}`));
+      const rStatus = await mut(token, cwd, 'risk_status', { uuid: risk.json.uuid, status: 'mitigated' }, rGet.json?.revision ?? 0);
+      checks.push(C('risk-status', rStatus.status === 200 && rStatus.json?.status === 'mitigated',
+        `status=${rStatus.status} risk.status=${rStatus.json?.status}`));
+      const rList = await op(token, cwd, 'risk_list', { initiative_id: initiative });
+      checks.push(C('risk-list', Array.isArray(rList.json) && rList.json.length > 0, `n=${rList.json?.length}`));
+    }
+
+    const ev = await mut(token, cwd, 'evidence_add', {
+      initiative_id: initiative, kind: 'smoke', locator: 'full-smoke://record-surface',
+      content_hash: null, summary: 'Evidence recorded by the smoke run.',
+    }, await revision());
+    checks.push(C('evidence-add', ev.status === 200, `status=${ev.status}`));
+    if (ev.status === 200 && decision.status === 200) {
+      const eGet = await op(token, cwd, 'evidence_get', { uuid: ev.json.uuid });
+      checks.push(C('evidence-get', eGet.status === 200, `status=${eGet.status}`));
+      const link = await mut(token, cwd, 'evidence_link', {
+        evidence_id: ev.json.uuid, target_type: 'decision', target_id: decision.json.uuid,
+      }, eGet.json?.revision ?? 0);
+      checks.push(C('evidence-link', link.status === 200, `status=${link.status}`));
+      const links = await op(token, cwd, 'evidence_links_list', { evidence_id: ev.json.uuid });
+      checks.push(C('evidence-links-list', Array.isArray(links.json) && links.json.length > 0, `n=${links.json?.length}`));
+      const eList = await op(token, cwd, 'evidence_list', { initiative_id: initiative });
+      checks.push(C('evidence-list', Array.isArray(eList.json) && eList.json.length > 0, `n=${eList.json?.length}`));
+    }
+    add(109, 'record_decisions_risks_evidence', checks);
+  }
+
+  // ── R10 The read surface: every catalog/list operation answers ──────────────────────────────
+  //
+  // Cheap reads, but each is a published operation a caller depends on, and a read that 500s is
+  // as broken as a mutation that does. They were unexercised purely because nobody listed them.
+  {
+    const checks = [];
+    const reads = [
+      ['product_list', {}],
+      ['workspace_list', {}],
+      ...(workspaceId ? [['resource_list', { workspace_id: workspaceId }]] : []),
+      ['deliverable_list', { initiative_id: initiative }],
+      ['requirement_list', { initiative_id: initiative }],
+      ['verification_list', { initiative_id: initiative }],
+      ['initiative_relations', { initiative_id: initiative }],
+      ['method_get', { id: 'software-change@1' }],
+      ['delivery_contract_get', { id: 'runnable-software@1' }],
+    ];
+    for (const [operation, input] of reads) {
+      const r = await op(token, cwd, operation, input);
+      checks.push(C(operation.replace(/_/g, '-'), r.status === 200,
+        `status=${r.status}${r.status === 200 ? '' : ' ' + JSON.stringify(r.json).slice(0, 120)}`));
+    }
+    // A floor: this loop is only meaningful if it ran. An empty `reads` would report nothing.
+    checks.push(C('read-surface-exercised', checks.length === reads.length,
+      `${checks.length}/${reads.length} read operations called`));
+    add(110, 'record_read_surface', checks);
   }
 
   return { records, checksByScenario };
