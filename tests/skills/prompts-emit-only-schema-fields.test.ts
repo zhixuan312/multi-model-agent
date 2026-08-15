@@ -201,3 +201,45 @@ describe('the review implementer knows how to get its change-set', () => {
     expect(policy).toMatch(/ALLOWED_GIT_SUBCOMMANDS[^;]*'diff'/s);
   });
 });
+
+/**
+ * `debug`'s falsifier had three different homes across the pair, and none of them existed.
+ *
+ * The implementer required one "for every finding"; the refiner asked that "at least one finding"
+ * have it and to "add a falsifier finding if missing"; and `debugAnswerSchema`'s finding is
+ * `{weight, category, claim, evidence, file, line}` — no falsifier field at all. So the
+ * implementer's per-finding requirement had nowhere to go, the refiner enforced a weaker per-report
+ * bar, and its remedy (a standalone falsifier finding) would need a `category` naming an
+ * investigation angle, which a verification step is not.
+ *
+ * The implementer was also told to note entangled defects under an "Other defects observed" prose
+ * section — discarded by `extractStructuredBlock`, which keeps only the final fenced block.
+ */
+describe('debug states one home for the falsifier', () => {
+  const implement = readFileSync('packages/core/src/skills/debug/implement.md', 'utf8');
+  const review = readFileSync('packages/core/src/skills/debug/review.md', 'utf8');
+
+  it('the schema still has no falsifier field', () => {
+    const schemas = readFileSync('packages/core/src/unified/refiner-schemas.ts', 'utf8');
+    const debugBlock = /const debugAnswerSchema[\s\S]*?\n\}\);/.exec(schemas);
+    expect(debugBlock).not.toBeNull();
+    expect(debugBlock![0]).not.toMatch(/falsifier/);
+  });
+
+  it.each([
+    ['implement.md', implement],
+    ['review.md', review],
+  ])('%s says the falsifier lives in evidence', (_name, text) => {
+    expect(text).toMatch(/no `falsifier` field|NO `falsifier` field/);
+    expect(text).toMatch(/evidence/);
+  });
+
+  it('neither side asks for a standalone falsifier finding', () => {
+    expect(review).not.toMatch(/add a falsifier finding if missing/i);
+  });
+
+  it('entangled defects become findings, not a prose section', () => {
+    expect(implement).not.toMatch(/Other defects observed/);
+    expect(implement).toMatch(/its OWN finding/);
+  });
+});
