@@ -11,7 +11,7 @@ const DEFAULT_TEST_TOKEN = 'test-token';
 
 /** Minimal MultiModelConfig with fake openai-compatible agents (will fail if actually invoked). */
 export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}): MultiModelConfig {
-  return {
+  const base = {
     agents: {
       standard: {
         type: 'codex',
@@ -47,7 +47,21 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
       // developer's real ~/.mma/state (executions.db).
       stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     },
+  };
+
+  return {
+    ...base,
     ...overrides,
+    // `server` MERGED, not replaced. A top-level spread meant overriding one limit silently
+    // dropped `auth.tokenFile`, `stateDir` and every other limit, so the practical effect was
+    // that limits could not be overridden at all — and a 413 test then asserted the DEFAULT
+    // 512KB cap, which cannot tell an enforced config value from a hardcoded constant.
+    // (`test-server.ts`, the sibling helper, has deep-merged since it was written.)
+    server: {
+      ...base.server,
+      ...overrides.server,
+      limits: { ...base.server.limits, ...overrides.server?.limits },
+    },
   } as MultiModelConfig;
 }
 

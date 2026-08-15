@@ -103,23 +103,23 @@ describe('POST /context-blocks', () => {
     }
   });
 
-  it('returns 413 payload_too_large when content exceeds maxContextBlockBytes', async () => {
-    const s = await startTestServerWithAgents();
-    // Artificially lower the limit by patching the config in the registry
-    // We can't inject custom config limits through startTestServerWithAgents directly,
-    // so we test via a block that exceeds the default 524288-byte cap
-    // by crafting a block just over the limit.
-    // Since the default is 512KB, we use an alternate approach:
-    // Use startTestServerWithAgents with no overrides and test the server's default
-    // by using a known content that's actually oversized.
-    //
-    // For a reliable test, we inject the size check directly via the handler's deps.
-    // Since we can't easily override the limit, we test the server default path instead
-    // by using our own inline server with a small limit.
+  /**
+   * The cap enforced must be the CONFIGURED one.
+   *
+   * This used to post 524_289 bytes against the default 524_288 limit, under six lines of
+   * comment explaining that the helper could not inject a custom limit ("we test the server
+   * default path instead"). Asserting the default cannot distinguish an enforced config value
+   * from a hardcoded constant — and the helper's limitation was a shallow spread that dropped
+   * `auth.tokenFile` along with the rest of the server block, now fixed.
+   *
+   * A 1KB configured cap with a 2KB body is rejected only if the config value is the one in
+   * force, and the second case proves the same body is accepted under the default — so the
+   * cap is being READ, not merely present.
+   */
+  it('returns 413 payload_too_large at the CONFIGURED maxContextBlockBytes', async () => {
+    const s = await startTestServerWithAgents({ server: { limits: { maxContextBlockBytes: 1024 } } } as never);
     const cwd = makeTmpCwd();
     try {
-      // Default limit is 524288 (512KB) — test a block that exceeds this
-      const oversized = 'a'.repeat(524_289); // 524289 bytes > 524288 byte limit
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
@@ -127,11 +127,30 @@ describe('POST /context-blocks', () => {
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ content: oversized }),
+        body: JSON.stringify({ content: 'a'.repeat(2048) }),
       });
       expect(res.status).toBe(413);
       const json = await res.json() as { error: { code: string } };
       expect(json.error.code).toBe('payload_too_large');
+    } finally {
+      await s.stop();
+    }
+  });
+
+  it('accepts that same body under the default cap', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
+        method: 'POST',
+        headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          Authorization: `Bearer ${s.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ content: 'a'.repeat(2048) }),
+      });
+      expect(res.status).not.toBe(413);
     } finally {
       await s.stop();
     }
