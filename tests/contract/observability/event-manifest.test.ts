@@ -35,8 +35,30 @@ describe('observability event manifest', () => {
     expect(new Set(kinds).size).toBe(kinds.length);
   });
 
-  it('schemaVersion matches expected', () => {
-    expect(manifest.schemaVersion).toBe(2);
+  /**
+   * `schemaVersion` is not read by any code — it exists in this golden and nowhere else. The old
+   * assertion was `expect(manifest.schemaVersion).toBe(2)`: one hand-maintained literal compared to
+   * another, in two files edited by the same person in the same commit. It could only fail if
+   * someone changed one and forgot the other, and it said nothing about the manifest.
+   *
+   * A schema version is supposed to protect a SHAPE, so this checks the shape and ties the version
+   * to it. Change the manifest's structure and the key assertion fails, which is the moment to
+   * decide whether the version should move; leave the structure alone and the version is free to
+   * stay put. That is the relationship the field was always claiming to have.
+   */
+  it('the manifest has the shape its schemaVersion names', () => {
+    expect(Object.keys(manifest).sort()).toEqual(['kinds', 'schemaVersion']);
+    expect(typeof manifest.schemaVersion).toBe('number');
+    // Five kinds today. The floor is what stops an empty `kinds` array from satisfying the
+    // per-entry loop below by having no entries to check.
+    expect(manifest.kinds.length, 'an empty manifest passes every other case here')
+      .toBeGreaterThanOrEqual(5);
+    for (const entry of manifest.kinds) {
+      expect(
+        Object.keys(entry).sort(),
+        `manifest entry ${entry.kind} has unexpected keys — bump schemaVersion if this is intended`,
+      ).toEqual(['kind', 'provider_events']);
+    }
   });
 });
 
