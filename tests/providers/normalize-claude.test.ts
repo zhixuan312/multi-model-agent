@@ -162,3 +162,51 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
     });
   });
 });
+
+/**
+ * Every FIXED code this normalizer can emit must be in the canonical vocabulary.
+ *
+ * `error-codes.ts` says its enum is "kept in sync with the emitters", and `sdk_no_result` was
+ * not in it — so `coerceErrorCode` mapped it to `other` on the wire. That code exists precisely
+ * to distinguish a dead tier (subprocess died, proxy rejected the call) from an ordinary
+ * failure, and telemetry saw it as the same anonymous bucket as every unrecognised string. A
+ * comment claiming synchrony that nothing checks is how the two drifted.
+ *
+ * Derived by DRIVING the normalizer, not by re-listing the codes: each result subtype below is
+ * one the SDK actually emits, and the code it produces is read off the result.
+ */
+describe('normalizeClaudeTurn emits only canonical error codes', () => {
+  const FIXED_SUBTYPES = [
+    'error_max_turns',
+    'error_max_budget_usd',
+    'error_during_execution',
+    'error_max_structured_output_retries',
+  ] as const;
+
+  it('every fixed SDK subtype maps to a code the wire vocabulary knows', async () => {
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    for (const subtype of FIXED_SUBTYPES) {
+      const r = normalizeClaudeTurn([{ type: 'result', subtype, usage: {} }] as never[], { durationMs: 1 });
+      expect(r.errorCode, `subtype ${subtype} produced no code`).toBeTruthy();
+      expect(ErrorCodeSchema.safeParse(r.errorCode).success, `${r.errorCode} is not in ErrorCodeSchema`).toBe(true);
+    }
+  });
+
+  it('the dead-stream code is canonical too, so telemetry can still see it', async () => {
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    const r = normalizeClaudeTurn([] as never[], { durationMs: 1 });
+    expect(r.errorCode).toBe('sdk_no_result');
+    expect(ErrorCodeSchema.safeParse('sdk_no_result').success).toBe(true);
+  });
+
+  it('an UNKNOWN future subtype is deliberately outside the vocabulary, and coerces to other', async () => {
+    // The dynamic `sdk_${subtype}` case cannot be enumerated ahead of time — `other` is the
+    // documented sentinel for it, and that is a different thing from a fixed code going missing.
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    const { coerceErrorCode } = await import('../../packages/core/src/events/to-wire-record.js');
+    const r = normalizeClaudeTurn([{ type: 'result', subtype: 'error_some_future_variant', usage: {} }] as never[], { durationMs: 1 });
+    expect(r.errorCode).toBe('sdk_error_some_future_variant');
+    expect(ErrorCodeSchema.safeParse(r.errorCode).success).toBe(false);
+    expect(coerceErrorCode(r.errorCode!)).toBe('other');
+  });
+});
