@@ -31,16 +31,31 @@ describe('loadToken', () => {
     expect(fs.statSync(f).mode & 0o777).toBe(0o600);
   });
 
+  /**
+   * `~` expansion, without writing into the developer's real home.
+   *
+   * This used to mint a token at `~/.mma/runtime/test-token-<ts>` in the ACTUAL home directory
+   * and delete it in a `finally`. An assertion that threw before the finally, or a killed run,
+   * left files in the user's real `~/.mma` — and `~/.mma/runtime` is a live daemon path, not a
+   * scratch area. Redirecting HOME/USERPROFILE keeps the same coverage (that `loadToken` routes
+   * through `expandHome` at all) with nothing outside the temp dir.
+   */
   it('expands ~ to homedir', () => {
-    const filename = 'test-token-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    const tildePath = `~/.mma/runtime/${filename}`;
-    const resolvedPath = path.join(os.homedir(), '.mma/runtime', filename);
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-home-'));
+    const prevHome = process.env['HOME'];
+    const prevProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = fakeHome;
+    process.env['USERPROFILE'] = fakeHome;
     try {
-      const tok = loadToken(tildePath);
+      const tok = loadToken('~/.mma/runtime/test-token');
       expect(tok).toBeTruthy();
-      expect(fs.existsSync(resolvedPath)).toBe(true);
+      expect(fs.existsSync(path.join(fakeHome, '.mma/runtime/test-token'))).toBe(true);
+      // ...and nowhere else: the point of the expansion is WHICH directory it lands in.
+      expect(loadToken('~/.mma/runtime/test-token')).toBe(tok);
     } finally {
-      if (fs.existsSync(resolvedPath)) fs.unlinkSync(resolvedPath);
+      if (prevHome === undefined) delete process.env['HOME']; else process.env['HOME'] = prevHome;
+      if (prevProfile === undefined) delete process.env['USERPROFILE']; else process.env['USERPROFILE'] = prevProfile;
+      fs.rmSync(fakeHome, { recursive: true, force: true });
     }
   });
 
