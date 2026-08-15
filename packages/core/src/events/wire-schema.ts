@@ -26,8 +26,10 @@ export const FindingsBySeveritySchema = z.object({
   low: z.number().int().min(0).max(200),
 }).strict();
 
-// Shared base: matches the TokenUsage interface in runners/types.ts.
-// Single source of truth for canonical 4-field token shape.
+// Shared base: matches the `TokenUsage` interface in `types/run-result.ts`, whose docstring
+// carries the disjoint-partition contract every provider adapter normalizes to. (This said
+// `runners/types.ts` — a path that does not exist in this layout and has not since the
+// providers/ split.)
 export const TokenUsageSchema = z.object({
   inputTokens: z.number().int().min(0),
   outputTokens: z.number().int().min(0),
@@ -66,6 +68,9 @@ export const StageEntryBase = z.object({
   cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
+  // Always 0 from this engine: idle tracking belonged to the removed lifecycle layer's activity
+  // tracker, and `bounded-execution/` now holds only cost compute. Kept in the schema because it
+  // is the contract with the telemetry backend in a separate repo — see `to-wire-record.ts`.
   maxIdleMs: z.number().int().min(0).max(1_200_000),
   totalIdleMs: z.number().int().min(0).max(3_600_000),
   mainCostUSD: z.number().nullable(),   // what this stage's tokens would have cost at the main model's rate (renamed from mainEquivalentCostUSD in 4.7.6 to match DB column main_cost_usd)
@@ -138,20 +143,30 @@ export const TaskCompletedEventSchema = z.object({
   mainModel: z.string().nullable(),
   mainModelFamily: ModelFamilyEnum,
 
-  // Tier-level usage breakdown (§3.2, §3.3)
+  // Tier-level usage breakdown (§3.2, §3.3).
+  //
+  // `main` was missing while `agentType` above has always allowed it and `orchestrate` runs on
+  // that tier by default. Zod strips unknown keys, so `toWireRecord`'s own
+  // `ValidatedTaskCompletedEventSchema.parse()` silently DELETED the main bucket the projection
+  // had just built — every main-tier run reported `agentType: 'main'` with no usage under it.
+  // The telemetry backend types `tierUsage` as an open record, so carrying the key costs it
+  // nothing and its typed slot extraction simply ignores what it does not read.
   tierUsage: z.object({
     standard: TierUsageSchema.optional(),
     complex: TierUsageSchema.optional(),
+    main: TierUsageSchema.optional(),
   }),
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'brief_too_vague', 'unavailable']),
   workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_capped']),
-  // errorCode is non-null whenever terminalStatus === 'error'.
-  // For reviewer-rejection paths, the code is one of:
-  //   review_diff_rejected, review_quality_findings_unresolved, review_spec_rejected_terminal.
-  // terminalStatus remains 'error' (no distinct 'review_rejected' status).
-  // Disambiguate reviewer rejection from transport/runtime failure by reading errorCode.
+  // errorCode is non-null whenever terminalStatus === 'error'; `error-codes.ts` is the closed
+  // vocabulary and anything outside it coerces to `other`.
+  //
+  // This used to name `review_diff_rejected`, `review_quality_findings_unresolved` and
+  // `review_spec_rejected_terminal` as the reviewer-rejection codes. None of the three is in
+  // `ErrorCodeSchema`, and nothing emits them — they are the removed lifecycle layer's
+  // vocabulary, so the note described a distinction the wire could not carry.
   errorCode: ErrorCode.nullable(),
 
   // Token economics

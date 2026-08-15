@@ -149,3 +149,35 @@ describe('toWireRecord', () => {
     expect(json).not.toContain('"evidence"');
   });
 });
+
+/**
+ * A main-tier run's usage must survive `toWireRecord`'s own parse.
+ *
+ * `tierUsage` declared only `standard` and `complex` while `agentType` has always allowed
+ * `main` and `orchestrate` runs on that tier by default. Zod strips unknown keys, so the
+ * closing `ValidatedTaskCompletedEventSchema.parse()` silently DELETED the main bucket the
+ * projection had just built: the record reported `agentType: 'main'` with nothing under it.
+ * An `as never` cast on the assignment is what kept the typechecker from saying so.
+ */
+describe('toWireRecord — tier usage covers every tier the record can name', () => {
+  it('keeps a main-tier stage bucket instead of dropping it at the schema boundary', () => {
+    const s = TaskEnvelopeStore.create({ ...seed, agentType: 'main' });
+    s.startStage('implementing', { model: 'claude-opus-4-7', tier: 'main' });
+    s.completeStage('implementing', 1, {
+      outcome: 'advance', durationMs: 10, costUSD: 0.5, turnsUsed: 1,
+      inputTokens: 1000, outputTokens: 100, cachedReadTokens: 50, cachedNonReadTokens: 0,
+    });
+    s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
+
+    const wire = toWireRecord(s.snapshot(), {
+      toolMode: 'full', implementerModel: 'claude-opus-4-7',
+      implementerTier: 'main', mainModelFamily: 'claude',
+    });
+
+    expect(wire.agentType).toBe('main');
+    const main = (wire.tierUsage as { main?: { model: string; inputTokens: number } }).main;
+    expect(main, 'a run attributed to the main tier must carry that tier\'s usage').toBeDefined();
+    expect(main!.model).toBe('claude-opus-4-7');
+    expect(main!.inputTokens).toBe(1000);
+  });
+});

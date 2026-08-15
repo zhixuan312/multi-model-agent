@@ -169,6 +169,8 @@ export function toWireRecord(
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
+      // Constant, not a placeholder: no component measures idle time since the lifecycle
+      // layer's activity tracker was removed. The wire keeps the fields (backend contract).
       maxIdleMs: 0,
       totalIdleMs: 0,
       mainCostUSD: mainCard
@@ -240,8 +242,12 @@ export function toWireRecord(
     costUSD: number | null;
     inputTokens: number;
     outputTokens: number;
-    cachedReadTokens: number | null;
-    cachedNonReadTokens: number | null;
+    // NOT nullable, unlike the StageRecord fields they accumulate from: a bucket is created
+    // with zeros and only ever added to. Declaring them nullable forced a `bucket.x !== null`
+    // guard that could not fire, and an `as never` at the schema boundary to paper over the
+    // resulting mismatch — which is what hid the missing `main` key.
+    cachedReadTokens: number;
+    cachedNonReadTokens: number;
   };
   const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket; main?: TierBucket } = {};
   for (const s of env.stages) {
@@ -265,8 +271,8 @@ export function toWireRecord(
     bucket.costUSD = (bucket.costUSD ?? 0) + (s.costUSD ?? 0);
     bucket.inputTokens += s.inputTokens;
     bucket.outputTokens += s.outputTokens;
-    if (s.cachedReadTokens !== null && bucket.cachedReadTokens !== null) bucket.cachedReadTokens += s.cachedReadTokens;
-    if (s.cachedNonReadTokens !== null && bucket.cachedNonReadTokens !== null) bucket.cachedNonReadTokens += s.cachedNonReadTokens;
+    if (s.cachedReadTokens !== null) bucket.cachedReadTokens += s.cachedReadTokens;
+    if (s.cachedNonReadTokens !== null) bucket.cachedNonReadTokens += s.cachedNonReadTokens;
   }
   // Prefer the first stage's tier as the task's headline agentType — matches
   // implementerTier's derivation and reflects what the task actually used,
@@ -295,7 +301,9 @@ export function toWireRecord(
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,
     mainModelFamily: opts.mainModelFamily as never,
-    tierUsage: tierUsageBuckets as never,
+    // No cast: the bucket shape and the schema agree, and the cast is what hid the missing
+    // `main` key from the typechecker while Zod quietly dropped it at parse.
+    tierUsage: tierUsageBuckets,
     terminalStatus: terminalStatus as never,
     workerStatus: workerStatus as never,
     errorCode: coerceErrorCode(env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)),
