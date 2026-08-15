@@ -259,9 +259,20 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
       } as CodexProviderConfig);
       break;
     default:
-      throw new Error(`Unknown agent type for slot "${slot}": ${(agentConfig as { type: string }).type}`);
+      // An EXHAUSTIVENESS check, matching the `const unhandled: never` idiom already used in
+      // `initiative-record/lifecycle-gates.ts`. `agentConfigSchema` is a discriminated union of
+      // exactly `claude` and `codex`, so this is unreachable — but adding a third provider to that
+      // schema without a factory arm here would compile fine and then throw at runtime, on the
+      // first task routed to that tier, in a daemon that started clean. Naming the omission at
+      // build time is the whole point of a closed union.
+      return assertEveryProviderTypeHandled(agentConfig, slot);
   }
 
   // Provider name = tier slot so call sites can match by tier (e.g. `p.name === 'standard'`).
   return wrapWithSafetyCeiling({ ...provider, name: slot });
+}
+
+/** Fails to COMPILE when the agent-config union gains a provider with no factory arm above. */
+function assertEveryProviderTypeHandled(agentConfig: never, slot: string): never {
+  throw new Error(`Unknown agent type for slot "${slot}": ${(agentConfig as { type: string }).type}`);
 }
