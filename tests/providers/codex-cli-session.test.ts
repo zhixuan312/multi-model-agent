@@ -13,8 +13,11 @@
 // inputTokens; otherwise priceTokens (which treats input + cachedRead as
 // disjoint buckets) bills the cached portion twice — once at the full
 // input rate and once at the cached-read rate. That's exactly the bug we
-// shipped this fix to close. See
-// `docs/superpowers/specs/...` for the full investigation.
+// shipped this fix to close. The normalization lives in
+// `codex-cli-session.ts:absorbUsage`, and the contract it normalizes TO is the
+// `TokenUsage` docstring in `types/run-result.ts` — both are in the repo, unlike
+// the `docs/superpowers/specs/...` this pointed at, which was migrated out of
+// every repo in July 2026 and had been a dead reference since.
 
 import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'node:events';

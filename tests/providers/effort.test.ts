@@ -139,3 +139,35 @@ describe('provider factory — effort forwarding', () => {
     expect(createProvider('standard', configWith()).config.effort).toBeUndefined();
   });
 });
+
+/**
+ * The wall-clock guard's arming decision, tested once for both runners.
+ *
+ * `claude-session.ts` and `codex-cli-session.ts` computed this inline, identically, and so
+ * shared one bug: `Math.max(0, deadline - now)` followed by "arm only if > 0" made an ELAPSED
+ * deadline indistinguishable from "no deadline configured", and the turn ran unbounded.
+ * `runTwoPhasePipeline` uses ONE deadline for the whole run, so an implementer that spends the
+ * budget hands the reviewer an elapsed one — leaving the reviewer as the single unbounded stage
+ * of a run that was already over time.
+ *
+ * The two copies are why one fix would not have reached both, so the rule now lives once.
+ */
+describe('wallClockDelayMs', () => {
+  it('returns the time remaining when there is some', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    expect(wallClockDelayMs(1_000_500, 1_000_000)).toBe(500);
+  });
+
+  it('returns 0 — NOT null — for a deadline that has already passed', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    // 0 fires the guard immediately; null would arm nothing at all. Collapsing the two is the
+    // whole bug.
+    expect(wallClockDelayMs(999_000, 1_000_000)).toBe(0);
+  });
+
+  it('returns null only when no finite limit was set', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    expect(wallClockDelayMs(Number.POSITIVE_INFINITY, 1_000_000)).toBeNull();
+    expect(wallClockDelayMs(Number.NaN, 1_000_000)).toBeNull();
+  });
+});

@@ -23,7 +23,7 @@ import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
 import { buildConfinementHook } from './claude-cwd-confinement.js';
-import { type BusLike, busOf } from './session-helpers.js';
+import { type BusLike, busOf, wallClockDelayMs } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
   private closed = false;
@@ -196,12 +196,12 @@ export class ClaudeSession implements Session {
     // nothing fires — so claude turns had no wall-clock limit at all.
     let timedOut = false;
     let deadlineTimer: NodeJS.Timeout | undefined;
-    const deadlineMs = Math.max(0, this.args.opts.wallClockDeadline - Date.now());
-    if (Number.isFinite(deadlineMs) && deadlineMs > 0) {
+    const deadlineDelayMs = wallClockDelayMs(this.args.opts.wallClockDeadline);
+    if (deadlineDelayMs !== null) {
       deadlineTimer = setTimeout(() => {
         timedOut = true;
         try { q.close(); } catch { /* ignore */ }
-      }, deadlineMs);
+      }, deadlineDelayMs);
       deadlineTimer.unref();
     }
 

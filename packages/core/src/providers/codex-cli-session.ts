@@ -40,7 +40,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-import { type BusLike, busOf } from './session-helpers.js';
+import { type BusLike, busOf, wallClockDelayMs } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;
@@ -259,16 +259,16 @@ export class CodexCliSession implements Session {
       }
       killGracefully(proc);
     };
-    const deadlineMs = Math.max(0, this.args.opts.wallClockDeadline - Date.now());
+    const deadlineDelayMs = wallClockDelayMs(this.args.opts.wallClockDeadline);
     let deadlineTimer: NodeJS.Timeout | undefined;
-    if (Number.isFinite(deadlineMs) && deadlineMs > 0) {
+    if (deadlineDelayMs !== null) {
       deadlineTimer = setTimeout(() => {
         if (tracker.terminationReason === 'ok') {
           tracker.terminationReason = 'time_exceeded';
           tracker.errorCode = 'wall_clock_exceeded';
         }
         killGracefully(proc);
-      }, deadlineMs);
+      }, deadlineDelayMs);
       deadlineTimer.unref();
     }
     if (this.args.opts.abortSignal.aborted) {
