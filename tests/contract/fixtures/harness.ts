@@ -8,7 +8,13 @@ import { join } from 'node:path';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
+// Imported from the SOURCE module, not the package barrel. These are test seams, and this repo
+// keeps a seam out of the barrel so it never becomes part of the published api surface — the same
+// rule `clearSkillCache` and the initiative store's `*ForTest` resolvers already follow.
+import {
+  __setCoreTestProviderOverride,
+  __setCoreTestProviderOverrideMap,
+} from '../../../packages/core/src/providers/provider-factory.js';
 import { startServer, type RunningServer } from '@zhixuan92/multi-model-agent/server';
 
 import { freezeClock } from './deterministic-clock.js';

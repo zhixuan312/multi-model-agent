@@ -52,7 +52,14 @@ export type {
 } from './stores/context-block-tool.js';
 
 // Provider
-export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
+// `__setCoreTestProviderOverride` / `…Map` are NOT re-exported here. They are test seams, and this
+// repo's settled rule is that a seam stays a module-level function excluded from the barrel — see
+// the same treatment of `clearSkillCache` and the initiative store's `*ForTest` resolvers. Exporting
+// them made a global provider-swap hook part of the PUBLISHED api surface of
+// `@zhixuan92/multi-model-agent-core`: any consumer, or anything in a consumer's dependency tree,
+// could redirect every tier's provider process-wide. The tests that use them import them directly
+// from `providers/provider-factory.js`, so nothing in this repo needed the re-export either.
+export { createProvider } from './providers/provider-factory.js';
 export { resolveEffort } from './providers/effort.js';
 export { DEFAULT_EFFORT } from './types/task-spec.js';
 export {
