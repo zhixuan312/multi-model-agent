@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import routes from '../goldens/routes.json' with { type: 'json' };
+import { INITIATIVE_OPERATIONS } from '@zhixuan92/multi-model-agent-core';
 
 const SKILLS_DIR = resolve('packages/server/src/skills');
 
@@ -34,12 +34,6 @@ function parseFrontmatter(md: string): Frontmatter {
   return fm as unknown as Frontmatter;
 }
 
-function extractEndpointPath(md: string): string | null {
-  const m = md.match(/^`(GET|POST|DELETE|PUT|PATCH)\s+([^`?]+)`/m);
-  if (!m) return null;
-  return `${m[1]!} ${m[2]!.trim()}`;
-}
-
 const ACTIONABLE_SKILLS = [
   'mma-audit',
   'mma-brainstorm',
@@ -67,6 +61,9 @@ const ACTIONABLE_SKILLS = [
 // each one must carry the frontmatter key that actually enforces manual
 // invocation. `when_to_use` is descriptive prose and enforces nothing.
 const COMMANDS = ['mma-flow', 'mma-breakout', 'mma-tldr'];
+
+/** Skills that run no worker at all — they transform text in the caller's own context. */
+const DISPATCHES_NOTHING = ['mma-tldr'];
 
 describe('contract: skill manifest surface', () => {
   const allSkillDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -117,19 +114,43 @@ describe('contract: skill manifest surface', () => {
         ).toMatch(/^Use (when|first)\b/);
       });
 
-      it('declares an endpoint that resolves to a real route (when applicable)', () => {
-        const endpoint = extractEndpointPath(md);
-        if (endpoint === null) return;
-        const normalized = endpoint.replace(/\{(\w+)\}/g, ':$1').replace('/:id', '/:batchId');
-        const matches = (routes as string[]).some((r) => {
-          const [method, path] = r.split(' ');
-          const [endpointMethod, endpointPath] = normalized.split(' ');
-          if (method !== endpointMethod) return false;
-          const pathRe = new RegExp('^' + path!.replace(/:\w+/g, ':[^/]+') + '$');
-          return pathRe.test(endpointPath!) || path === endpointPath;
-        });
-        expect(matches, `endpoint ${normalized} not found in route manifest`).toBe(true);
+      /**
+       * Every actionable skill must name a real way to dispatch.
+       *
+       * This case used to extract a `` `POST /execution` ``-style endpoint from the markdown and
+       * check it against the route manifest — with `if (endpoint === null) return;` when it found
+       * none. NO skill declares an endpoint any more: they dispatch through the `mma_run` MCP
+       * tool. So the case ran twenty times and asserted nothing, and its route-matching machinery
+       * (including a `/:id` → `/:batchId` rewrite for a parameter the manifest no longer has) was
+       * dead with it.
+       *
+       * The live equivalent: a skill dispatches via `mma_run`, OR declares `operation_references`
+       * naming real frozen Initiative operations, OR is a command that dispatches nothing.
+       */
+      it('names a real dispatch surface — mma_run, Initiative operations, or nothing to dispatch', () => {
+        // Being a COMMAND says nothing about dispatch: `/mma-flow` and `/mma-breakout` are
+        // explicitly-invoked commands that orchestrate `mma_run` calls. Only a skill that
+        // genuinely runs no worker is exempt, and it is named here rather than inferred.
+        if (DISPATCHES_NOTHING.includes(skillName)) {
+          expect(md, `${skillName} is listed as dispatching nothing but references mma_run`).not.toContain('mma_run');
+          return;
+        }
+        const declaresOperations = /^operation_references:/m.test(md);
+        if (declaresOperations) {
+          const block = md.slice(md.indexOf('operation_references:')).split(/\n(?=\w|---)/)[0]!;
+          const declared = [...block.matchAll(/^\s+-\s+(\S+)/gm)].map((m) => m[1]!);
+          expect(declared.length, `${skillName} declares an empty operation_references`).toBeGreaterThan(0);
+          for (const operation of declared) {
+            expect(
+              (INITIATIVE_OPERATIONS as readonly string[]).includes(operation),
+              `${skillName} references "${operation}", which is not a frozen Initiative operation`,
+            ).toBe(true);
+          }
+          return;
+        }
+        expect(md, `${skillName} names neither mma_run nor operation_references`).toContain('mma_run');
       });
+
     });
   }
 });
