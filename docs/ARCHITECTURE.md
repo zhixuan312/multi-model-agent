@@ -271,7 +271,7 @@ Each provider runner (`core/src/providers/claude.ts`, `core/src/providers/codex.
 | Contract | `tests/contract/**` | HTTP envelopes + skill manifest + observability + route enumeration; goldens under `tests/contract/goldens/` |
 | Perf | `tests/perf/*.test.ts` | Baseline + budget enforcement |
 
-Mock-provider pattern: `mockProvider` / `failProvider` from `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
+Mock-provider pattern: `mockProvider` (scenario or per-turn `sequence`), `throwingProvider`, and `capExhaustingProvider` from `tests/contract/fixtures/mock-providers.ts`. Never call real LLM APIs in tests.
 
 ## Key observables
 

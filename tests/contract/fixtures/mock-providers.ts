@@ -14,7 +14,7 @@ import type {
 } from '@zhixuan92/multi-model-agent-core';
 import type { WorkerStatus } from '../../../packages/core/src/types/task-spec.js';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
-import type { RuntimeRunResult, _TerminationCause, RunStatus, EscalationRecord } from './runtime-run-result.js';
+import type { RuntimeRunResult, RunStatus } from './runtime-run-result.js';
 
 /** Build a Session whose `send()` invokes the same RuntimeRunResult-producing
  *  runner every mock provider uses, projected down to the TurnResult the
@@ -35,7 +35,11 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
     toolCalls: [],
     ...(rr.errorCode && { errorCode: rr.errorCode }),
     ...(rr.error && { errorMessage: rr.error }),
-    ...(rr.workerStatus && { workerSelfAssessment: rr.workerStatus }),
+    // No `workerSelfAssessment` spread here. `TurnResult` declares eleven keys (pinned by
+    // `tests/providers/turn-result-shape.test.ts`) and that is not one of them — a spread bypasses
+    // excess-property checking, so the mock was quietly handing the pipeline a twelfth field that
+    // no production code reads. Every scenario that set `workerStatus` believed it was driving
+    // worker self-assessment and was driving nothing.
   };
 }
 
@@ -55,19 +59,6 @@ function statusToTermination(
   }
 }
 
-function statusToCause(status: RunStatus | undefined): _TerminationCause {
-  switch (status ?? 'ok') {
-    case 'ok': return 'finished';
-    case 'incomplete': return 'incomplete';
-    case 'timeout': return 'timeout';
-    case 'brief_too_vague': return 'brief_too_vague';
-    case 'error':
-    case 'unavailable':
-    default:
-      return 'error';
-  }
-}
-
 function makeSessionFactory(runner: (prompt: string) => Promise<RuntimeRunResult>): (opts: SessionOpts) => Session {
   return (_opts: SessionOpts): Session => ({
     async send(instruction: string): Promise<TurnResult> {
@@ -79,13 +70,19 @@ function makeSessionFactory(runner: (prompt: string) => Promise<RuntimeRunResult
   });
 }
 
+/**
+ * The scenarios a mock provider can play.
+ *
+ * `'review-rework'` and `'slow'` used to sit here. Once the inert fields were stripped from
+ * `RuntimeRunResult`, both builders were `buildOk` with a different default output string — and
+ * `'slow'` never made anything slow in the first place: `MockProviderOptions.delayMs` is what the
+ * runner awaits. Neither stage had ever been passed by a test.
+ */
 export type Stage =
   | 'ok'
   | 'incomplete'
-  | 'max-turns'
-  | 'review-rework'
-  | 'slow'
-  | 'hang';   // never-resolves send() — for shutdown-drain test
+  | 'max-turns'   // reached through `capProvider`, not by a `stage:` option
+  | 'hang';       // never-resolves send() — for shutdown-drain test
 
 export interface SequenceItem {
   status?: RunStatus;
@@ -118,19 +115,6 @@ function usage(_cost: number | null): TokenUsage {
   return { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 };
 }
 
-function attempt(status: RunStatus, turns: number, cost: number | null): EscalationRecord {
-  return {
-    provider: 'mock',
-    status,
-    turns,
-    inputTokens: 10,
-    outputTokens: 20,
-    costUSD: cost,
-    initialPromptLengthChars: 0,
-    initialPromptHash: '',
-  };
-}
-
 function buildOk(opts: MockProviderOptions): RuntimeRunResult {
   const cost = opts.cost ?? 0.001;
   return {
@@ -140,17 +124,7 @@ function buildOk(opts: MockProviderOptions): RuntimeRunResult {
     actualCostUSD: cost,
     turns: 1,
     filesWritten: [],
-    escalationLog: [attempt('ok', 1, cost)],
     durationMs: 0,
-    workerStatus: 'done',
-    terminationReason: {
-      cause: 'finished',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: 'done',
-      wasPromoted: false,
-    },
   };
 }
 
@@ -162,16 +136,7 @@ function buildIncomplete(opts: MockProviderOptions): RuntimeRunResult {
     actualCostUSD: 0.001,
     turns: 1,
     filesWritten: [],
-    escalationLog: [attempt('incomplete', 1, 0.001)],
     durationMs: 0,
-    terminationReason: {
-      cause: 'incomplete',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
   };
 }
 
@@ -183,61 +148,7 @@ function buildMaxTurns(opts: MockProviderOptions): RuntimeRunResult {
     actualCostUSD: 0.002,
     turns: 99,
     filesWritten: [],
-    escalationLog: [attempt('incomplete', 99, 0.002)],
     durationMs: 0,
-    terminationReason: {
-      cause: 'incomplete',
-      turnsUsed: 99,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
-  };
-}
-
-function buildReviewRework(opts: MockProviderOptions): RuntimeRunResult {
-  return {
-    output: opts.output ?? 'needs rework per review',
-    status: 'ok',
-    usage: usage(0.001),
-    actualCostUSD: 0.001,
-    turns: 1,
-    filesWritten: [],
-    escalationLog: [attempt('ok', 1, 0.001)],
-    durationMs: 0,
-    workerStatus: 'done',
-    terminationReason: {
-      cause: 'finished',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: 'done',
-      wasPromoted: false,
-    },
-  };
-}
-
-function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): RuntimeRunResult {
-  const cost = opts.cost ?? 0.001;
-  return {
-    output: opts.output ?? 'mocked slow ok',
-    status: 'ok',
-    usage: usage(cost),
-    actualCostUSD: cost,
-    turns: 1,
-    filesWritten: [],
-    escalationLog: [attempt('ok', 1, cost)],
-    durationMs: 0,
-    workerStatus: 'done',
-    terminationReason: {
-      cause: 'finished',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: 'done',
-      wasPromoted: false,
-    },
   };
 }
 
@@ -250,17 +161,7 @@ function buildFromSequenceItem(item: SequenceItem): RuntimeRunResult {
     actualCostUSD: cost,
     turns: 1,
     filesWritten: item.filesWritten ?? [],
-    escalationLog: [attempt(item.status ?? 'ok', 1, cost)],
     durationMs: 0,
-    workerStatus: (item.workerStatus ?? 'done') as 'done' | 'blocked' | 'failed',
-    terminationReason: {
-      cause: statusToCause(item.status),
-      turnsUsed: 1,
-      hasFileArtifacts: (item.filesWritten?.length ?? 0) > 0,
-      usedShell: false,
-      workerSelfAssessment: item.workerStatus ?? 'done',
-      wasPromoted: false,
-    },
   };
 }
 
@@ -273,8 +174,6 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
       case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
-      case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
-      case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
       case 'hang':
         // openSession() branches on stage === 'hang' before ever constructing
         // the runOnce() closure that calls this runner() — unreachable in practice.
@@ -355,14 +254,6 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
       return {
         ...buildIncomplete({ stage: 'incomplete', output }),
         status: 'timeout',
-        terminationReason: {
-          cause: 'timeout',
-          turnsUsed: 1,
-          hasFileArtifacts: false,
-          usedShell: false,
-          workerSelfAssessment: null,
-          wasPromoted: false,
-        },
       };
     }
     return buildMaxTurns({ stage: 'max-turns', output });
@@ -386,58 +277,6 @@ export function throwingProvider(err: Error): Provider {
   };
 }
 
-export interface FailProviderOptions {
-  status?: RunStatus;
-  errorCode?: string;
-}
-
-export function failProvider(messageOrOpts: string | FailProviderOptions = 'mocked failure'): Provider {
-  const opts: FailProviderOptions = typeof messageOrOpts === 'string'
-    ? { status: 'error', errorCode: messageOrOpts }
-    : messageOrOpts;
-  if (opts.status && opts.status !== 'ok') {
-    const statusFinal: RunStatus = opts.status;
-    const run = async (): Promise<RuntimeRunResult> => ({
-      output: `failure: ${opts.errorCode ?? statusFinal}`,
-      status: statusFinal,
-      usage: usage(null),
-      actualCostUSD: 0,
-      turns: 1,
-      filesWritten: [],
-      escalationLog: [attempt(statusFinal, 1, null)],
-      durationMs: 0,
-      workerStatus: 'failed',
-      terminationReason: {
-        cause: statusFinal === 'timeout' ? 'timeout' : 'error',
-        turnsUsed: 1,
-        hasFileArtifacts: false,
-        usedShell: false,
-        workerSelfAssessment: 'failed',
-        wasPromoted: false,
-      },
-      structuredError: { code: opts.errorCode ?? 'sdk_execution_error', message: opts.errorCode ?? statusFinal },
-    });
-    return {
-      name: 'mock-fail',
-      config: STUB_CONFIG,
-      openSession: makeSessionFactory(run),
-    };
-  }
-  const err = new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
-  return {
-    name: 'mock-throw',
-    config: STUB_CONFIG,
-    openSession: (_opts: SessionOpts): Session => ({
-      async send(): Promise<TurnResult> { throw err; },
-      async close(): Promise<void> { /* no-op */ },
-      getSessionId(): string | null { return null; },
-    }),
-  };
-}
-
-// Patches global fetch so any outbound network call from a contract test is
-// an immediate, loud failure. Intentionally has no restore — contract tests
-// should never go to the network, full stop.
 export function guardNoNetwork(): void {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;

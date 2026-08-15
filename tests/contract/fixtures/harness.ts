@@ -17,7 +17,6 @@ import {
 } from '../../../packages/core/src/providers/provider-factory.js';
 import { startServer, type RunningServer } from '@zhixuan92/multi-model-agent/server';
 
-import { freezeClock } from './deterministic-clock.js';
 
 /** One `ExecutionStore` outbox row, as read directly off `<stateDir>/executions.db` by
  *  `HarnessHandle.unconsumedOutbox()` (SPEC-003 Task I-6) — read-only, test-assertion shape. */
@@ -49,10 +48,9 @@ export interface HarnessHandle {
    *  before/after deep-equal assertions that a rejected or no-op Initiative Record mutation
    *  left every table byte-for-byte unchanged (not just row counts). Opens its own short-lived
    *  `DatabaseSync` connection, mirroring `unconsumedOutbox()`/`executionRowCount()`. Returns
-   *  `SELECT * FROM <table> ORDER BY rowid` for each of the nine Initiative Record tables,
-   *  keyed by table name: `products`, `workspaces`, `resources`, `initiatives`,
-   *  `initiative_workspace_links`, `requirements`, `acceptance_criteria`, `events`,
-   *  `idempotency_results`. */
+   *  `SELECT * FROM <table> ORDER BY rowid` keyed by table name, for EVERY non-internal table
+   *  the database reports — enumerated from `sqlite_master` rather than from a list here, so a
+   *  table added by a later migration is covered without anyone remembering to add it. */
   initiativeRecordSnapshot(): Record<string, unknown[]>;
   /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
    *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
@@ -111,7 +109,13 @@ function installLoopbackOnlyFetch(): void {
 
 export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   installLoopbackOnlyFetch();
-  freezeClock();
+  // No clock freeze here. A `freezeClock()` call used to sit on this line, from a
+  // `deterministic-clock.ts` fixture whose header said it "Replaces `Date.now()` and
+  // `crypto.randomUUID()` so goldens stay stable". It replaced neither — it assigned two
+  // module-local variables that only its own unused `currentMs()` / `nextId()` read — so the
+  // determinism it advertised never existed, and the goldens have been stable on the real clock
+  // all along. The module is gone; anything here that needs a fixed time should say so and use
+  // vitest's fake timers.
   process.env.MMA_TEST_INTROSPECTION = '1';
   process.env.MMA_TEST_PROVIDER_OVERRIDE = '1';
   __setCoreTestProviderOverride(opts.provider);
@@ -210,24 +214,25 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     }
   }
 
-  const INITIATIVE_RECORD_SNAPSHOT_TABLES = [
-    'products',
-    'workspaces',
-    'resources',
-    'initiatives',
-    'initiative_workspace_links',
-    'requirements',
-    'acceptance_criteria',
-    'events',
-    'idempotency_results',
-  ] as const;
-
   function initiativeRecordSnapshot(): Record<string, unknown[]> {
     const db = new DatabaseSync(join(config.server.stateDir, 'initiatives.db'));
     try {
+      // Tables read from the database, not from a list kept here.
+      //
+      // A nine-name literal used to stand in this spot, under a doc comment promising "every
+      // table byte-for-byte unchanged (not just row counts)". The schema has grown to
+      // twenty-five: SPEC-003 through SPEC-007 added `tasks`, `decisions`, `risks`, `evidence`,
+      // `verification_runs`, `phase_records`, `lifecycle_contracts`, `methods`, `deliverables`
+      // and more, and none of them were in the list. A rejected mutation that DID write to
+      // `tasks` or `phase_records` left every assertion built on this helper green — which is
+      // precisely the thing the helper exists to rule out. Enumerating is the only version of
+      // this that cannot silently narrow again.
+      const tables = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      ).all() as { name: string }[];
       const snapshot: Record<string, unknown[]> = {};
-      for (const table of INITIATIVE_RECORD_SNAPSHOT_TABLES) {
-        snapshot[table] = db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+      for (const { name } of tables) {
+        snapshot[name] = db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all();
       }
       return snapshot;
     } finally {
