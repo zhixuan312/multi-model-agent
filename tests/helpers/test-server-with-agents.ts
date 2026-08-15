@@ -1,7 +1,7 @@
 // tests/helpers/test-server-with-agents.ts
 // Starts a test server with a full MultiModelConfig (agents + server config).
 // Used by handler tests that need the real route handlers registered.
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '../../packages/server/src/http/server.js';
@@ -135,7 +135,17 @@ export async function startTestServerWithAgents(
   return {
     url: `http://127.0.0.1:${server.port}`,
     token: DEFAULT_TEST_TOKEN,
-    stop: async () => { await server.stop(); },
+    stop: async () => {
+      await server.stop();
+      // Remove the temp dirs this helper created. They were never cleaned: a single full run
+      // leaves one state dir (holding executions.db + initiatives.db, ~324 KB) and one token dir
+      // per booted server, and they accumulate across every run a developer ever does — measured
+      // at 64,549 orphaned state dirs and ~20 GB on this machine. Best-effort: a failed unlink
+      // must not fail a passing test, and the dirs are already unreferenced by then.
+      for (const dir of [config.server?.stateDir, tokenDir]) {
+        if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+      }
+    },
     executionRegistry: server.executionRegistry,
     projectRegistry: server.projectRegistry,
   };

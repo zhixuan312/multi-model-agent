@@ -53,6 +53,7 @@ describe('harness writes no events to user global mma log', () => {
   it('routes diagnostics to the isolated log dir, not the user-global jsonl', async () => {
     const sizeBefore = existsSync(userLog) ? statSync(userLog).size : 0;
     const cwd = mkdtempSync(join(tmpdir(), 'harness-iso-'));
+    let isolated = '';
 
     const server = await boot({
       provider: mockProvider({ stage: 'ok' }),
@@ -78,6 +79,9 @@ describe('harness writes no events to user global mma log', () => {
         if (isolatedLogText(server.logDir).includes(cwd)) break;
         await new Promise((r) => setTimeout(r, 25));
       }
+      // Read the isolated log BEFORE closing: `close()` removes the temp dirs this boot created,
+      // so anything read afterwards is empty by construction.
+      isolated = isolatedLogText(server.logDir);
     } finally {
       await server.close();
     }
@@ -85,7 +89,6 @@ describe('harness writes no events to user global mma log', () => {
     // FLOOR: diagnostics were actually produced and landed in the isolated dir. Without this the
     // assertion below passes on a server that logged nothing at all — which is exactly how the
     // previous version passed.
-    const isolated = isolatedLogText(server.logDir);
     expect(isolated, 'no diagnostics reached the isolated log dir — the check below is vacuous')
       .toContain(cwd);
 

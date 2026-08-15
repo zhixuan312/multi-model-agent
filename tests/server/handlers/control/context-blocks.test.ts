@@ -1,6 +1,6 @@
 // tests/server/handlers/control/context-blocks.test.ts
-import { describe, it, expect } from 'vitest';
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { describe, it, expect, afterAll } from 'vitest';
+import { rmSync, mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -12,9 +12,18 @@ import { startTestServerWithAgents, TEST_CONTEXT_BLOCK_CAP, buildTestAgentConfig
  * The server's cwd-validator always canonicalizes via realpathSync, so the registry
  * key will be the canonical path.
  */
+/** Every cwd this file created, so they can be removed at the end rather than accumulating. */
+const tmpCwds: string[] = [];
+
 function makeTmpCwd(): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), 'mma-ctx-block-test-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mma-ctx-block-test-')));
+  tmpCwds.push(dir);
+  return dir;
 }
+
+afterAll(() => {
+  for (const dir of tmpCwds) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
 
 async function createBlock(
   serverUrl: string,
@@ -398,6 +407,21 @@ describe('maxContextBlocksPerProject bounds the store itself, not just the handl
  * and the provider factory receives `type: undefined`.
  */
 describe('the test config helper merges deeply', () => {
+  // `buildTestAgentConfig` mkdtemps a state dir on every call, even for a caller that never boots
+  // a server — so these config-only cases must remove what they create, or they leak a directory
+  // each. (That eager creation is why the helpers' own `stop()` cleanup is not sufficient on its
+  // own: the dir exists before any server does.)
+  const built: string[] = [];
+  const build = (overrides: Parameters<typeof buildTestAgentConfig>[0]) => {
+    const config = buildTestAgentConfig(overrides);
+    const dir = config.server?.stateDir;
+    if (dir) built.push(dir);
+    return config;
+  };
+  afterAll(() => {
+    for (const dir of built) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+  });
+
   it('overriding one tier keeps the other two', () => {
     // A partial tier (`{ model }` with no `type`) does NOT typecheck — DeepPartial does not recurse
     // into the tier's discriminated union, so `type` stays required, and that trap is closed by the
@@ -412,12 +436,12 @@ describe('the test config helper merges deeply', () => {
   });
 
   it('a partial auth override keeps tokenFile', () => {
-    const config = buildTestAgentConfig({ server: { auth: {} } });
+    const config = build({ server: { auth: {} } });
     expect(config.server?.auth?.tokenFile, 'auth was replaced wholesale').toBeDefined();
   });
 
   it('an unrelated limit override still keeps stateDir and the other limits', () => {
-    const config = buildTestAgentConfig({ server: { limits: { maxContextBlockBytes: 1024 } } });
+    const config = build({ server: { limits: { maxContextBlockBytes: 1024 } } });
     expect(config.server?.limits?.maxContextBlockBytes).toBe(1024);
     expect(config.server?.limits?.projectCap).toBeDefined();
     expect(config.server?.stateDir).toBeDefined();

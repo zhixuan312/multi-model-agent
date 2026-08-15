@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '@zhixuan92/multi-model-agent/server';
@@ -100,6 +100,14 @@ export async function startTestServer(
   return {
     url: `http://127.0.0.1:${server.port}`,
     token: DEFAULT_TEST_TOKEN,
-    stop: async () => { await server.stop(); },
+    stop: async () => {
+      await server.stop();
+      // Same cleanup as the sibling helper: these dirs were never removed, and a state dir holds
+      // executions.db + initiatives.db. Best-effort — a failed unlink must not fail a passing test.
+      const stateDir = (config as { server?: { stateDir?: string } }).server?.stateDir;
+      for (const dir of [stateDir, tokenDir]) {
+        if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+      }
+    },
   };
 }

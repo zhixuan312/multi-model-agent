@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 // Imported from the SOURCE module, not the package barrel. These are test seams, and this repo
@@ -271,6 +271,14 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         __setCoreTestProviderOverride(null);
         __setCoreTestProviderOverrideMap(null);
         await unlink(tokenPath).catch(() => undefined);
+        // Remove the temp dirs this boot created. They were never cleaned, and every boot makes
+        // two: an isolated logDir and a stateDir holding executions.db + initiatives.db. Measured
+        // on this machine before the fix: 17,985 orphaned log dirs and 64,549 state dirs, ~20 GB.
+        // `restart()` shares this boot's stateDir and its handle's close() is documented as
+        // idempotent, so removing a directory that is already gone must stay silent.
+        for (const dir of [config.diagnostics?.logDir, config.server?.stateDir]) {
+          if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+        }
       },
     };
   }
