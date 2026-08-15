@@ -53,10 +53,18 @@ export function resolveConfiguredAuthMode(
   return resolveConfiguredApiKey(agentConfig, env) ? 'api-key' : 'oauth';
 }
 
+/**
+ * Recognise an auth failure from a runner's error MESSAGE.
+ *
+ * Message-based on purpose: the error CODE is runner-specific and says only where the failure
+ * surfaced (`codex_error`, `sdk_execution_error`, `turn_failed`), while the provider's own auth
+ * text is what distinguishes "no credentials" from "the key was rejected". This took an
+ * `errorCode` argument that every caller passed and nothing read — which made the codes look
+ * load-bearing to anyone extending the classifier.
+ */
 export function classifyAuthFailure(args: {
   tier: AgentType;
   provider: 'claude' | 'codex';
-  errorCode?: string;
   errorMessage?: string;
 }): AuthFailureDetails | null {
   const message = args.errorMessage ?? '';
@@ -170,7 +178,6 @@ function wrapWithSafetyCeiling(p: Provider): Provider {
           const authFailure = classifyAuthFailure({
             tier: p.name as AgentType,
             provider: (p.config.type ?? 'codex') as 'claude' | 'codex',
-            errorCode: turn.errorCode,
             errorMessage: turn.errorMessage,
           });
           if (!authFailure) return turn;
