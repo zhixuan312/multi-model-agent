@@ -73,6 +73,10 @@ export async function runRecordSurface(ctx, log) {
     checks.push(C('bootstrap-atomic', created.status === 200, `status=${created.status} ${created.status === 200 ? '' : JSON.stringify(created.json).slice(0, 160)}`));
     if (created.status === 200) {
       initiative = created.json.uuid;
+      // Record it for teardown to REPORT. It cannot be removed: the Initiative Record API has 26
+      // operations and none of them deletes, so every smoke run leaves this row behind in the
+      // daemon's real initiatives.db. Teardown says so rather than letting it accumulate silently.
+      (ctx.createdInitiatives ??= []).push(initiative);
       checks.push(C('multi-workspace', (created.json.workspaces || []).length === 2, `workspaces=${(created.json.workspaces || []).length}`));
       // This was a hardcoded `true` — it asserted nothing and would have passed even if the
       // daemon had silently substituted a repository-backed workspace. Assert the actual shape:

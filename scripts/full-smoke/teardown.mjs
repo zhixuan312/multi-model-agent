@@ -24,6 +24,15 @@ export async function teardown(ctx) {
       errors.push('db-delete SKIPPED: no captured event_ids (rows may not have flushed yet)');
     }
   }
+  // Initiative records are NOT removable: the Initiative Record API exposes 26 operations and no
+  // delete. Every run therefore leaves a "Smoke Initiative" in the daemon's real initiatives.db
+  // (`<server.stateDir>/initiatives.db`, default ~/.mma/state). Report it in the same channel as a
+  // skipped db-delete — an operator who knows can prune; silence would just let it grow.
+  const leaked = ctx.createdInitiatives ?? [];
+  if (leaked.length) {
+    errors.push(`initiative-delete UNAVAILABLE: ${leaked.length} record(s) left in initiatives.db `
+      + `(${leaked.join(', ')}) — the record API has no delete operation`);
+  }
   if (errors.length) console.error('[teardown] issues:\n  ' + errors.join('\n  '));
   return errors;
 }
