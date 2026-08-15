@@ -212,3 +212,34 @@ describe('explore failure-mode rows key on real signals', () => {
     expect(Object.keys(shape)).not.toContain('needsCallerClarification');
   });
 });
+
+/**
+ * `mma-explore` stated two rules it then forbade following.
+ *
+ *  - Directions: "3–5 ranked candidate directions" and "the directions as a set MUST span at least
+ *    two distinct resolution shapes", against a pitfall reading "❌ Padding to hit 5 directions…
+ *    stop at the natural number of distinct directions in the data". A braindump with one honest
+ *    direction cannot satisfy both a floor of three and an instruction to stop at one.
+ *  - Recall: "`journal_recall` — 0–3 … use 0 for a greenfield / empty journal or a trivial change",
+ *    against "❌ Skipping `mma-journal-recall` to save a call… Always run it". Not both satisfiable
+ *    on a trivial change — and the caller cannot know the journal is empty on a topic without
+ *    asking, which is the whole point of the leg.
+ */
+describe('explore states no rule its own pitfalls forbid', () => {
+  const explore = readFileSync(join(SKILLS_DIR, 'mma-explore', 'SKILL.md'), 'utf8');
+
+  it('the direction count has no floor the anti-padding rule contradicts', () => {
+    expect(explore, 'a floor of 3 cannot coexist with "stop at the natural number"')
+      .not.toMatch(/3–5 ranked candidate directions/);
+    expect(explore).toMatch(/1–5 ranked candidate directions/);
+    expect(explore, 'the multi-shape rule must be conditional on having found more than one')
+      .toMatch(/found more than one direction/);
+  });
+
+  it('recall is required, and the range agrees', () => {
+    expect(explore).not.toMatch(/`journal_recall` — 0–3/);
+    expect(explore).toMatch(/`journal_recall` — 1–3/);
+    // The pitfall that made the old range contradictory must still be present.
+    expect(explore).toMatch(/Skipping `mma-journal-recall` to save a call/);
+  });
+});

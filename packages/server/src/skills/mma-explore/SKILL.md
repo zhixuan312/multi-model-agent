@@ -70,8 +70,10 @@ is the dominant type; `research` and `recall` are usually lighter. Reasonable ra
   Most ideas land at 2–5; a broad cross-cutting one reaches ~8. This is the bulk of the fan-out.
 - **`research` — 0–3**, one task per distinct **external question**. Use **0** when the work is
   purely internal (a refactor with no prior-art question); 1–2 is typical when external practice matters.
-- **`journal_recall` — 0–3**, one task per distinct **prior-decision topic**. Use **0** for a
-  greenfield / empty journal or a trivial change; 1–2 is typical on a mature project.
+- **`journal_recall` — 1–3**, one task per distinct **prior-decision topic**; 1–2 is typical. Always
+  run at least one: an empty journal answers in a single cheap call and returns `(no prior
+  learning)`, which is information. Dropping the leg to save that call is the anti-pattern listed
+  below — you cannot know the journal is empty on this topic without asking.
 
 So the shape tracks the idea's size: a **typical** feature is ~**5-1-1**, a **large** cross-cutting
 one ~**8-2-2**, a **minor** one ~**2-0-1** (total ≈ 3–12 parallel tasks). Name each task by the
@@ -184,7 +186,7 @@ From mma-journal-recall. Each: a claim + a journal node id (e.g. `node 0012`). I
 this" signal survives. Use `(no prior learning)` when the leg returned nothing.
 
 ## Rough direction
-3–5 ranked candidate directions — alternatives-style, the same shape as the spec's `Alternatives`
+1–5 ranked candidate directions — as many as the data actually supports, alternatives-style, the same shape as the spec's `Alternatives`
 component, so a downstream spec can lift them almost verbatim. **This exploration is read by business,
 product, and engineering** — write each direction so a non-engineer can weigh it: plain English,
 value first.
@@ -197,7 +199,7 @@ construction), **document/analysis** (produce a written analysis, report, or rec
 **no-change** (recommend leaving the current state as is, with the reasoning behind it).
 
 If the braindump names a target deliverable explicitly, every direction may resolve to that named
-deliverable. If it does not name one, the directions as a set MUST span **at least two distinct**
+deliverable. If it does not name one AND you found more than one direction, the set SHOULD span **at least two distinct**
 resolution shapes — three directions that only vary the proposed build (three ways to build the
 same kind of thing) are not divergent and fail the exploration review. A non-software problem may
 resolve just as validly through "change the process" or "no change is needed" as through "build
@@ -264,8 +266,10 @@ valuable signal before design. Always run it; handle empty with `(no prior learn
 
 ❌ **Inventing citations.** Every citation traces to a leg finding or to a sentinel. Never fabricate.
 
-❌ **Padding to hit 5 directions.** One direction with high-confidence citations beats five watery
-ones. Stop at the natural number of distinct directions in the data.
+❌ **Padding to hit a direction count.** One direction with high-confidence citations beats five
+watery ones. Stop at the natural number of distinct directions in the data — the 1–5 range above is
+a ceiling and a reminder to look for alternatives, never a quota to fill. If the braindump admits
+one honest direction, write one and say why the others were ruled out.
 
 ❌ **Directions that only vary the proposed build.** Three directions that differ only in
 implementation detail (three ways to build the same feature) are not divergent — they fail the
