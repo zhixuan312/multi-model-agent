@@ -26,9 +26,11 @@ import { dirname, isAbsolute, relative as relativePath, resolve, sep } from 'nod
  *    not in this plan.`
  *
  * This module owns parsing that shape into an immutable snapshot, validating
- * declared check destination paths are safe repository-relative paths
- * beneath `tests/`, and materializing / re-materializing the plan-authored
- * check sources verbatim to disk. Only a task that declares a deterministic
+ * declared check destination paths are safe repository-relative paths beneath
+ * one of the `ACCEPTED_CHECK_ROOTS` (not `tests/` alone — a Python project uses
+ * `test/`, Java uses `src/test/java`, and a report whose check reconciles
+ * figures against a ledger belongs under `checks/`), and materializing /
+ * re-materializing the plan-authored check sources verbatim to disk. Only a task that declares a deterministic
  * check produces a materialized file and a scored command; a no-check task
  * is fully skipped by both.
  */

@@ -261,7 +261,15 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   // The baseline is captured BEFORE any worker starts. A git target that cannot yield a HEAD
   // fails here rather than running without diff evidence.
   const effectiveCwd = input.cwd;
-  const baseline = input.writeRoute ? await captureBaseline(input.cwd) : { head: null, branch: null, dirtyAtDispatch: false };
+  // The read-route placeholder carries `statusText` too, so it is a genuine `RepoBaseline`.
+  // Without it the two branches form a UNION, and the code below only compiles because the
+  // `baseline.head === null` guard in `commitWork` happens to narrow the incomplete member away —
+  // reorder that guard and the type error appears at `commitAll`, which reads `statusText` to
+  // decide whether the worker changed anything. A no-op check comparing against `undefined` would
+  // conclude the tree HAD changed and manufacture a commit.
+  const baseline = input.writeRoute
+    ? await captureBaseline(input.cwd)
+    : { head: null, branch: null, dirtyAtDispatch: false, statusText: '' };
   const commitState: { outcome: CommitOutcome | null } = { outcome: null };
   let committed = false;
 
