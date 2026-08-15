@@ -673,7 +673,20 @@ function mcpOnlySurfaceGate() {
  * answer, and it must report one record per canonical id, never a retired one.
  */
 async function clientRosterGate(token) {
-  const expected = ['claude-code', 'claude-desktop', 'codex', 'antigravity', 'cursor', 'vscode', 'opencode', 'windsurf'];
+  // Derived from the built core, not restated. This gate exists to prove `mma clients` reports the
+  // canonical roster IN CLIENT_IDS ORDER — checking that against a hand-typed copy of CLIENT_IDS
+  // means a ninth client makes the gate ABORT THE SMOKE with a false failure until someone edits
+  // this line. `client-id.ts` opens by saying the attribution surface "derives from CLIENT_IDS
+  // rather than hand-maintaining"; this was the one place that did not.
+  const coreDistForRoster = join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!existsSync(coreDistForRoster)) {
+    throw new AbortError('client-roster', `no built core at ${coreDistForRoster}`, 'run `npm run build` before the smoke');
+  }
+  const { CLIENT_IDS } = await import(pathToFileURL(coreDistForRoster).href);
+  const expected = [...CLIENT_IDS];
+  if (expected.length === 0) {
+    throw new AbortError('client-roster', 'CLIENT_IDS is empty', 'the roster comparison below would be vacuous');
+  }
 
   const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
   if (!existsSync(cliPath)) {

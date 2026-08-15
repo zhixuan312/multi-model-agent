@@ -330,8 +330,14 @@ export function verify(rec) {
       `isError=${m.cancelIsError} ack=${JSON.stringify(ack)}`));
     out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.execution?.status) ? 'PASS' : 'WARN',
       `terminal status=${m.terminal?.execution?.status}`));
-    out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
-      `delete=${JSON.stringify(m.deleteBlock)}`));
+    // Assert the delete SUCCEEDED, not that a response object came back. The old check was
+    // `m.deleteBlock !== null && !== undefined ? PASS : WARN` — an MCP error result is a non-null
+    // object, so it passed on failure. It was passing on failure: the call sent `{ id }` while the
+    // tool's schema requires `blockId` with additionalProperties:false, so every run got
+    // `invalid_request` and reported PASS. The handler returns `{ ok: true }`.
+    out.push(C('mcp-context-block-delete',
+      m.deleteIsError === false && m.deleteBlock?.ok === true ? 'PASS' : 'FAIL',
+      `isError=${m.deleteIsError} delete=${JSON.stringify(m.deleteBlock)}`));
     return out;
   }
 

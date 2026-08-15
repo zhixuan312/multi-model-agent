@@ -234,10 +234,15 @@ export async function runMcpToolsScenario(ctx) {
   if (taskId) { try { terminal = (await pollTask(ctx.token, taskId)).envelope; } catch { /* already gone */ } }
 
   const deleteBlock = blockId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, id: blockId } }, 55)
+    // `blockId`, not `id`: the tool's inputSchema requires it and sets additionalProperties:false,
+    // so `{ id }` was rejected outright — this call had never deleted anything.
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, blockId } }, 55)
     : null;
 
-  return { createBlock, blockId, listPayload, getPayload, cancelPayload, cancelIsError, deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null, terminal, taskId };
+  return { createBlock, blockId, listPayload, getPayload, cancelPayload, cancelIsError,
+    deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null,
+    deleteIsError: deleteBlock ? isToolError(deleteBlock) : null,
+    terminal, taskId };
 }
 
 /**
