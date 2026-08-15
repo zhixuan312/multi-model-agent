@@ -8,7 +8,7 @@
     {
       "name": "mma",
       "source": "./plugin",
-      "description": "Delegate tool-using work to cost-optimized multi-model agents with cross-model review — 16 skills (/mma:audit, /mma:delegate, …), 4 commands (/mma:flow, /mma:breakout, /mma:tldr, /mma:deck), and the MMA MCP server.",
+      "description": "Delegate tool-using work to cost-optimized multi-model agents with cross-model review — 17 skills (/mma:audit, /mma:delegate, …), 4 commands (/mma:flow, /mma:breakout, /mma:tldr, /mma:deck), and the MMA MCP server.",
       "author": {
         "name": "Zhang Zhixuan",
         "email": "zhangzhixuan312@gmail.com"

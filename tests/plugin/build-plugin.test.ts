@@ -239,6 +239,52 @@ describe('marketplace catalog', () => {
     expect(existsSync(resolve(REPO_ROOT, entry.source, '.claude-plugin', 'plugin.json'))).toBe(true);
   });
 
+  /**
+   * The version lockstep the drift guard structurally cannot check.
+   *
+   * That test seeds `buildPlugin({ version: committedVersion })` FROM the committed manifest, so
+   * it compares every other field at whatever version is already there — it is blind to the
+   * manifest disagreeing with `package.json`, and its own comment says so ("the version itself is
+   * held in lockstep by the release workflow"). Holding it only in the release workflow means the
+   * failure surfaces on release day: `release.yml` iterates all four locations and refuses to
+   * ship. That is a wasted dispatch for a one-command fix, and it happened — 6.10.0 bumped three
+   * manifests by hand and left `plugin/.claude-plugin/plugin.json` at 6.9.0, which is the same
+   * incident `scripts/set-version.mjs` was written after 5.16.1 to prevent.
+   *
+   * Checked here so it fails in the suite instead.
+   */
+  /**
+   * The marketplace blurb counts the rosters, and nothing regenerated or checked it.
+   *
+   * `marketplace.json` is the one plugin file no gate touches: `build:plugin` does not write it,
+   * and the drift guard diffs `plugin/`, which excludes it. It advertised "16 skills" after
+   * `mma-solution-lead` made 17 — the storefront description undercounting the product by one.
+   */
+  it('the marketplace description counts the real rosters', () => {
+    const catalog = readFileSync(resolve(REPO_ROOT, '.claude-plugin', 'marketplace.json'), 'utf8');
+    expect(catalog, `marketplace.json should say ${SUPPORTED_SKILLS.length} skills`)
+      .toContain(`${SUPPORTED_SKILLS.length} skills`);
+    expect(catalog, `marketplace.json should say ${SUPPORTED_COMMANDS.length} commands`)
+      .toContain(`${SUPPORTED_COMMANDS.length} commands`);
+  });
+
+  it('the committed plugin manifest is at the repo version', () => {
+    const repoVersion = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')).version;
+    const committed = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'plugin', '.claude-plugin', 'plugin.json'), 'utf8'),
+    ).version;
+    expect(committed, 'run `node scripts/set-version.mjs <version>` — it regenerates plugin/')
+      .toBe(repoVersion);
+  });
+
+  it('every workspace manifest is at the repo version', () => {
+    const repoVersion = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')).version;
+    for (const manifest of ['packages/core/package.json', 'packages/server/package.json']) {
+      const version = JSON.parse(readFileSync(resolve(REPO_ROOT, manifest), 'utf8')).version;
+      expect(version, `${manifest} is at ${version}, repo is at ${repoVersion}`).toBe(repoVersion);
+    }
+  });
+
   it('the committed plugin/ has not drifted from the generator', () => {
     // Guards the release hazard: editing a skill without re-running
     // `npm run build:plugin` would publish a stale plugin to the marketplace.

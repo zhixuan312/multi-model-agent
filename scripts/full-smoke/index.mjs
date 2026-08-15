@@ -47,7 +47,12 @@ const argv = process.argv.slice(2);
  */
 const VALUE_FLAGS = ['--only', '--branch', '--concurrency'];
 const BOOLEAN_FLAGS = [
+  // `--skip-lifecycle` is read at :79 and consumed by preflight, whose docstring tells the
+  // operator to "pass --skip-lifecycle to opt out" of stopping their live daemon. It was missing
+  // here, so the validator below exited 2 before the flag could ever be honoured — the escape
+  // hatch was documented, parsed, and unreachable.
   '--skip-backend', '--strict', '--allow-mismatch', '--wait-flush', '--sequential',
+  '--skip-lifecycle',
 ];
 for (const [i, a] of argv.entries()) {
   if (BOOLEAN_FLAGS.includes(a)) continue;
