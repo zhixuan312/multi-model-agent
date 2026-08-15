@@ -1,3 +1,4 @@
+import type { SandboxPolicy } from './enums.js';
 // Run-result types.
 //
 // The internal provider-runner contract (SDK ↔ mma): TokenUsage, TurnResult,
@@ -90,8 +91,8 @@ export interface SessionOpts {
   disallowedTools?: string[];
   /** Filesystem policy for the session. `cwd-only` adds a PreToolUse confinement
    *  hook (claude) that denies writes escaping the cwd — the SDK analog of codex
-   *  `-s workspace-write`. Typed inline to avoid importing from `unified/`. */
-  sandboxPolicy?: 'cwd-only' | 'read-only';
+   *  `-s workspace-write`. */
+  sandboxPolicy?: SandboxPolicy;
 }
 
 export interface TurnOpts {

@@ -6,8 +6,10 @@ export const TASK_TYPES = [
   'orchestrate', 'spec', 'plan',
 ] as const;
 
+import type { SandboxPolicy } from '../types/enums.js';
+
 export type TaskType = (typeof TASK_TYPES)[number];
-export type SandboxPolicy = 'read-only' | 'cwd-only';
+export type { SandboxPolicy } from '../types/enums.js';
 
 export interface TargetAcceptance {
   paths: boolean;

@@ -39,7 +39,7 @@ import { reportInitiativeError } from '../application/initiative-error-report.js
 import { validateCwd } from '../application/cwd-validator.js';
 import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
 import { executionIdentity, buildRunningSnapshot } from '../application/task-identity.js';
-import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
+import { createContextBlock, deleteContextBlock } from '../application/context-block-ops.js';
 import { resolveCallerIdentity } from '../http/middleware/caller-identity.js';
 import {
   MCP_TOOLS,
@@ -83,7 +83,7 @@ export interface McpAdapterDeps {
   /** Resolved ONCE at daemon start (see `http/server.ts`); read here for both the
    *  `Server` constructor and the `server/discover` handler so they cannot disagree. */
   capabilities: McpCapabilities;
-  /** Shared with the REST control handlers (`handlers/control/context-blocks.ts`) — the
+  /** Shared with the REST control handlers (`application/context-block-ops.ts`) — the
    *  `mma_context_block_*` tools call the SAME `createContextBlock` / `deleteContextBlock`
    *  operations those handlers wrap, against this same registry. */
   projectRegistry: ProjectRegistry;
@@ -277,7 +277,7 @@ function handleList(deps: McpAdapterDeps, args: Record<string, unknown>): ToolRe
  * mma_context_block_create — validates `cwd` exactly like `handleRun` does (MCP
  * requests carry no cwd of their own), then delegates to the SAME
  * `createContextBlock` operation the REST `POST /context-blocks` handler wraps
- * (`handlers/control/context-blocks.ts`). No body validation, byte-limit, or
+ * (`application/context-block-ops.ts`). No body validation, byte-limit, or
  * cap logic lives here — only argument shuffling and error-shape translation
  * from the operation's discriminated result to an MCP tool error.
  */

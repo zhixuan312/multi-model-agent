@@ -16,7 +16,7 @@
 // the workspace.
 
 import { resolve, relative, isAbsolute, sep } from 'node:path';
-import type { SandboxPolicy } from '../unified/type-registry.js';
+import type { SandboxPolicy } from '../types/enums.js';
 import { gitDenialInCommand, pathTouchesGitDir } from './git-policy.js';
 import { CLAUDE_WRITE_TOOLS } from './claude-tool-categories.js';
 
