@@ -87,3 +87,35 @@ describe('audit prompts do not instruct a write the sandbox forbids', () => {
     expect(registry).toMatch(/audit:\s*\{[^}]*sandbox:\s*'read-only'/);
   });
 });
+
+
+/**
+ * The same defect class, one skill over.
+ *
+ * `spec/review.md` opens its Process with "Apply each of the 11 criteria below sequentially" and
+ * then numbers them 1..11. Both live in one file, so this is cheaper to catch than audit's
+ * cross-file version — but nothing caught it, and the failure mode is identical: add a twelfth
+ * check and the refiner is told to apply eleven, so the new one is skipped on every spec review,
+ * silently, by the instruction that sits above it.
+ */
+describe('the spec refiner applies as many criteria as it lists', () => {
+  const REVIEW = 'packages/core/src/skills/spec/review.md';
+
+  it('the stated count matches the numbered checks', () => {
+    const text = readFileSync(REVIEW, 'utf8');
+    const claimed = /Apply each of the (\d+) criteria/.exec(text);
+    expect(claimed, 'review.md no longer states how many criteria it applies').not.toBeNull();
+
+    // Scoped to the Checks section: the Process list above it also numbers a bold step
+    // ("3. **Complete any unfinished scaffold.**"), and counting that one made this assertion
+    // read 12 against a correct claim of 11.
+    const section = /^## Checks$([\s\S]*?)^## /m.exec(text);
+    expect(section, 'review.md has no ## Checks section to count').not.toBeNull();
+    const checks = [...section![1].matchAll(/^(\d+)\. \*\*/gm)].map((m) => Number(m[1]));
+    expect(checks.length, `review.md numbers ${checks.length} checks but claims ${claimed![1]}`)
+      .toBe(Number(claimed![1]));
+    // Numbered consecutively from 1 — a duplicated or skipped number would make the count agree
+    // by accident while the reviewer works through a list that is missing an entry.
+    expect(checks).toEqual(checks.map((_, i) => i + 1));
+  });
+});

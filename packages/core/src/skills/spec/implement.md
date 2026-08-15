@@ -88,13 +88,13 @@ Derive every field from what the caller actually told you in the design decision
 
 **Requested components (default all 8).** The task context contains a `## Requested Spec Components` block naming the components to emit, in canonical order. Emit ONLY those requested components — when the block lists all eight, that is the default full spec. Never add a component that is not listed and never omit one that is.
 
-Do NOT try to write the whole spec in one pass — long single-pass documents come out slow and uneven and often truncate or fail before the last section. Instead, first create the spec file as a **complete skeleton**: the frontmatter, the title, and EVERY heading (the 8 `##` components, each `###` section, each `####` sub-part), with a single one-line **brief** immediately under each `###` section stating what that section will contain (drawn from the confirmed decisions). Write this skeleton in ONE `Write` call — it is small and fast.
+Do NOT try to write the whole spec in one pass — long single-pass documents come out slow and uneven and often truncate or fail before the last section. Instead, first create the spec file as a **complete skeleton**: the frontmatter, the title, and EVERY heading of the REQUESTED components (each requested `##` component, each `###` section within it, each `####` sub-part), with a single one-line **brief** immediately under each `###` section stating what that section will contain (drawn from the confirmed decisions). Write this skeleton in ONE `Write` call — it is small and fast.
 
 Each brief is one HTML-comment line placed directly under its `###` heading:
 
 `<!-- brief: one line — what this section will cover, from the decisions -->`
 
-The skeleton **must** follow this exact heading hierarchy — 8 component headings at `##` level, sections within each at `###`, sub-parts at `####`. This is the unified MMA specification standard (the bracketed guidance under each heading below is what that section must eventually contain — in the skeleton it becomes the one-line brief; you write the full content in Phase C):
+The skeleton **must** follow this exact heading hierarchy — component headings at `##` level (the requested components, in the canonical order below; all eight only when all eight were requested), sections within each at `###`, sub-parts at `####`. This is the unified MMA specification standard (the bracketed guidance under each heading below is what that section must eventually contain — in the skeleton it becomes the one-line brief; you write the full content in Phase C):
 
 ```markdown
 ---
@@ -262,7 +262,7 @@ Each section you enrich must satisfy these Section Rules:
 Before finishing, verify:
 - The set of emitted top-level `##` components is **exactly equal to the resolved component set** — every requested component present, no unrequested component added, and zero `<!-- brief:` markers remain.
 - **Zero `<!-- brief:` markers remain** — every section has been enriched with final content
-- All 8 `##` component headings are present, using their displayed labels: Context, Problem, Goals & Requirements, Alternatives, Approach Method & Structure, Verification Plan, Risks & Mitigations, Stakeholders & Work
+- Every requested component heading is present, using its displayed label from the Component catalog table (Context, Problem, Goals & Requirements, Alternatives, Approach, Method & Structure, Verification Plan, Risks & Mitigations, Stakeholders & Work) — all eight when all eight were requested, and exactly the requested subset otherwise. A component you were not asked for is a defect, not a bonus: the refiner removes it.
 - Every `##` heading uses the exact displayed label from the Component catalog table (case-insensitive match is tolerated but exact casing is preferred)
 - The frontmatter `contract` block declares `state: proposed`, `kind`, `audience`, `disposition`, at least one `artifacts` entry or a terminal `command` criterion, and every `acceptance` entry has an explicit `method`, a `why` rationale, and at least one `references` entry
 - Sections within components use `###`, sub-parts use `####` — no other heading levels for spec content
