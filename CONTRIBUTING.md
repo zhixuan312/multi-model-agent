@@ -67,7 +67,7 @@ The two packages are linked via pnpm workspaces; `pnpm install` from the repo ro
 
 ## Adding a new task type
 
-All task types flow through the unified `POST /task` endpoint via a type discriminator:
+All task types flow through the unified `POST /execution` endpoint via a type discriminator:
 
 1. **Type registry** — add to `TASK_TYPES` in `packages/core/src/unified/type-registry.ts` and add a `TYPE_REGISTRY` entry.
 2. **Zod schema** — add a schema variant in `packages/core/src/unified/task-input-schema.ts`.

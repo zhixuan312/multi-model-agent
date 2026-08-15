@@ -28,14 +28,38 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import routesGolden from './goldens/routes.json' with { type: 'json' };
 
-/** Every committed markdown doc under docs/, recursively. */
-function docFiles(dir = 'docs'): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? docFiles(join(dir, e.name)) : e.name.endsWith('.md') ? [join(dir, e.name)] : [],
-  );
+/**
+ * Every committed markdown doc, not just `docs/`.
+ *
+ * Scoping this to one directory was the same hand-chosen-roster mistake it exists to catch. The
+ * canonical REST table for programmatic callers lives in `packages/server/README.md`, and it
+ * documented `POST /task` / `GET /task/:taskId` / `DELETE /task/:taskId` plus five `mma_task_*`
+ * tools — every route and tool name in it wrong, and outside the scan. CONTRIBUTING.md and the root
+ * README named `POST /task` too.
+ *
+ * CHANGELOG.md is excluded on purpose: it is a HISTORICAL record, and the v5.x entry that says
+ * `mma_task_list` is accurately describing v5.x. Rewriting it to match today would make it lie
+ * about the past.
+ */
+const EXCLUDED = new Set(['CHANGELOG.md']);
+
+function markdownFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) {
+      return ['node_modules', 'dist', '.git', '.mma', 'plugin'].includes(e.name) ? [] : markdownFiles(p);
+    }
+    return e.name.endsWith('.md') && !EXCLUDED.has(p) ? [p] : [];
+  });
 }
 
-const DOCS = docFiles();
+const DOCS = [
+  ...markdownFiles('docs'),
+  ...['README.md', 'CONTRIBUTING.md', 'DIRECTION.md', 'GUIDELINES.md', 'PRIVACY.md']
+    .filter((f) => existsSync(f)),
+  ...markdownFiles('packages/core').filter((f) => !f.includes('/src/skills/') && !f.includes('/src/methods/')),
+  ...markdownFiles('packages/server').filter((f) => !f.includes('/src/skills/')),
+];
 
 /**
  * Paths a doc may name that are NOT files in this repo: a consumer's own project files, a local
@@ -46,6 +70,15 @@ const NOT_OURS = new Set([
   '.claude/CLAUDE.md',       // local harness config, gitignored by design
   '_shared/x.md',            // placeholder in an include-syntax example
   '_shared/y.md',
+  // DIRECTION.md and GUIDELINES.md speak for the whole product across SIBLING repos in the parent
+  // workspace; these name files in those repos, not in this one.
+  'mma/GUIDELINES.md',
+  'mma-forge/GUIDELINES.md',
+  'telemetry/GUIDELINES.md',
+  'multi-model-agent-telemetry-frontend/docs/direction-parity-checklist.md',
+  // CONTRIBUTING.md's worked example of where a file goes.
+  'packages/core/src/foo/bar.ts',
+  'tests/foo/bar.test.ts',
 ]);
 
 /** Where a doc-relative path might really live. */

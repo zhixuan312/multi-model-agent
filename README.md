@@ -553,7 +553,7 @@ async — a handle comes back immediately, poll for the terminal envelope; cance
 restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back
 `interrupted` with a retryable error — resubmit, nothing resumes.
 
-The same runtime is also reachable over REST (`POST /task`, `GET /task/:id`, …) for Forge and other
+The same runtime is also reachable over REST (`POST /execution`, `GET /execution/:executionId`, …) for Forge and other
 programmatic callers — see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).
 It is not part of the agent-facing surface: no packaged skill, command, or plugin instructs an agent to
 construct an HTTP request.
