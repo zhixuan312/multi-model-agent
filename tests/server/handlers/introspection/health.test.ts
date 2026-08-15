@@ -82,3 +82,37 @@ describe('GET /health', () => {
     });
   });
 });
+
+/**
+ * `/health` is UNAUTHENTICATED, and its drift seam is synchronous work proportional to
+ * (installed skills x provisioned clients): `inventory()` renders each packaged skill, hashes it,
+ * and walks the installed tree with readdirSync/lstatSync/readFileSync. Measured against the real
+ * ~480 KiB bundle that is ~17ms of event-loop block per request on a fully provisioned machine,
+ * available to any local caller with no token — on the very endpoint the availability probe uses
+ * to decide whether the daemon is wedged.
+ *
+ * Memoised for a few seconds. Drift changes when someone runs an install, not between two polls,
+ * and the liveness /health exists to prove is demonstrated by answering at all.
+ */
+describe('GET /health does not re-walk the filesystem on every poll', () => {
+  it('reuses a recent drift report across rapid requests', async () => {
+    let calls = 0;
+    const s = await startTestServer(undefined, {
+      manifestSync: {
+        driftReport() {
+          calls += 1;
+          return [];
+        },
+      },
+    });
+    try {
+      for (let i = 0; i < 5; i += 1) {
+        const res = await fetch(`${s.url}/health`);
+        expect(res.status).toBe(200);
+      }
+      expect(calls, 'the seam ran once per request — the poll is uncached').toBe(1);
+    } finally {
+      await s.stop();
+    }
+  });
+});

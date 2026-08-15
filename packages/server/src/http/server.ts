@@ -208,6 +208,7 @@ export async function startServer(
   // Reads the SAME inventory boot recovery (above) resolved every marker
   // against -- an unresolved marker reports 'failed' here, never silently 'ok'.
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
+  type DriftEntry = Awaited<ReturnType<Parameters<typeof buildHealthHandler>[0]['manifestSync']['driftReport']>>[number];
   let skillManifestSync: SkillManifestSync;
   if (injectedManifestSync) {
     skillManifestSync = injectedManifestSync;
@@ -223,7 +224,34 @@ export async function startServer(
       },
     };
   }
-  router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
+  // Memoised for a few seconds, wrapping WHICHEVER seam is in use.
+  //
+  // `/health` is unauthenticated and the real seam is synchronous work proportional to
+  // (installed skills x provisioned clients): `inventory()` renders each packaged skill, hashes
+  // it, and walks the installed tree with readdirSync/lstatSync/readFileSync. Measured against the
+  // real ~480 KiB bundle that is ~17ms of event-loop block per request on a fully provisioned
+  // machine, from any local caller with no token — on the endpoint `scripts/full-smoke/
+  // availability.mjs` polls to decide whether the loop is blocked.
+  //
+  // Wrapping here rather than inside the real branch keeps the endpoint's behaviour one thing: an
+  // injected seam is cached identically, so the property is testable without provisioning a
+  // machine, and a future second seam cannot quietly opt out of it.
+  //
+  // Staleness costs nothing: drift changes when someone runs an install, not between two polls,
+  // and the liveness /health exists to prove is demonstrated by answering at all.
+  const DRIFT_TTL_MS = 5_000;
+  const uncachedManifestSync = skillManifestSync;
+  let driftCache: { at: number; report: DriftEntry[] } | null = null;
+  const cachedManifestSync: typeof skillManifestSync = {
+    async driftReport() {
+      const now = Date.now();
+      if (driftCache && now - driftCache.at < DRIFT_TTL_MS) return driftCache.report;
+      const report = await uncachedManifestSync.driftReport();
+      driftCache = { at: now, report };
+      return report;
+    },
+  };
+  router.register('GET', '/health', buildHealthHandler({ manifestSync: cachedManifestSync }));
 
   // Register control handlers
   await registerControlHandlers(router, config, projectRegistry);

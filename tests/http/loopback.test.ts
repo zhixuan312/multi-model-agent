@@ -13,7 +13,12 @@ describe('isLoopbackAddress', () => {
     ['::ffff:127.0.0.1', true],
     ['::ffff:127.0.1.1', true],
     ['localhost', true],
+    // The any-address forms an operator actually types to expose a daemon. `server.bind` is a
+    // free string and `serve` warns on exactly this predicate, so a form wrongly read as loopback
+    // would suppress the one line telling them execution routes are on the network.
     ['0.0.0.0', false],
+    ['::', false],
+    ['::0', false],
     ['192.168.1.1', false],
     ['10.0.0.1', false],
     ['::ffff:192.168.1.1', false],
