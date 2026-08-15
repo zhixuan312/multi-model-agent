@@ -68,7 +68,7 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       ].join(' ');
     case 'review':
       return [
-        'You have swept ALL 10 review categories: test gap, cross-file ripple, pre-existing-vs-regression, missing edge case, race/concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption.',
+        'You have swept ALL 10 review categories: verification-gap, cross-reference-ripple, pre-existing-vs-regression, missing-edge-case, ordering-concurrency, resource-cleanup-gap, backward-compat-break, safety-regression, efficiency-regression, implicit-contract.',
         'Cross-file findings cite both the change site AND the broken caller.',
         'Pre-existing bugs are separated from new regressions.',
         'You have produced the required JSON output block.',

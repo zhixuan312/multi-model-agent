@@ -243,3 +243,42 @@ describe('debug states one home for the falsifier', () => {
     expect(implement).toMatch(/its OWN finding/);
   });
 });
+
+/**
+ * One taxonomy, one vocabulary.
+ *
+ * The review route's ten failure categories were spelled three different ways: the implementer
+ * emitted `verification-gap` / `cross-reference-ripple` / `safety-regression` / `efficiency-
+ * regression` (the deliverable-neutral names introduced when the route was generalised), the
+ * refiner listed `test-gap` / `cross-file-ripple` / `security` / `performance`, and the Stop-hook
+ * goal used a third, space-separated spelling. The refiner is told to "update criteriaCovered to
+ * match corrected state" — using names the implementer never produces — while `category` and
+ * `criteriaCovered` are `z.string()`, so nothing downstream rejects the mismatch.
+ *
+ * The counts always agreed (ten everywhere), which is exactly why it survived: a reviewer checking
+ * "all 10 categories" sees ten and moves on.
+ */
+describe('the review taxonomy has one spelling across its three statements', () => {
+  const implement = readFileSync('packages/core/src/skills/review/implement.md', 'utf8');
+
+  /** The slugs the implementer actually emits, read from its own output example. */
+  const slugs = (() => {
+    const block = /"criteriaCovered": \[([^\]]*)\]/.exec(implement);
+    expect(block, 'the implementer output example moved').not.toBeNull();
+    return [...block![1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]!);
+  })();
+
+  it('there are ten of them', () => {
+    expect(slugs).toHaveLength(10);
+  });
+
+  it.each([
+    ['review.md', 'packages/core/src/skills/review/review.md'],
+    ['goal-conditions.ts', 'packages/server/src/application/goal-conditions.ts'],
+  ])('%s uses the implementer slugs verbatim', (_name, file) => {
+    const text = readFileSync(file, 'utf8');
+    const missing = slugs.filter((slug) => !text.includes(slug));
+    expect(missing, `${file} spells the taxonomy differently: missing ${missing.join(', ')}`)
+      .toEqual([]);
+  });
+});

@@ -17,7 +17,7 @@ Verify the implementer's code review against the source files, improve quality. 
 
 ## Checks
 
-1. **Taxonomy coverage** — all 10 categories checked? test-gap, cross-file-ripple, pre-existing-vs-regression, missing-edge-case, race/concurrency, resource-leak, backward-compat, security, performance, implicit-contract. Add "no findings" for skipped categories.
+1. **Taxonomy coverage** — all 10 categories checked? verification-gap, cross-reference-ripple, pre-existing-vs-regression, missing-edge-case, ordering-concurrency, resource-cleanup-gap, backward-compat-break, safety-regression, efficiency-regression, implicit-contract. These are the slugs the implementer emits in `criteriaCovered` and in each finding's `category` — use them verbatim; the older code-specific spellings (test-gap, cross-file-ripple, security, performance) are not what it produces.
 
 2. **Evidence quality** — every finding cites real `file:line` with quoted code. Cross-file findings need both change site AND broken caller. Remove findings with fabricated quotes.
 
