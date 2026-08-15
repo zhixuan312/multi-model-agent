@@ -19,7 +19,16 @@
 //     infeasibility at the filesystem boundary, and an unregistered Method identifier).
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
-//     context-blocks control op — every dispatchable route is exercised.
+//     context-blocks control op, and every product HTTP route + every MCP tool.
+//     Those three claims are no longer self-reported: `tests/contract/
+//     smoke-covers-product-surface.test.ts` derives each surface from the code and fails
+//     when one grows without a scenario. It found this sentence already false —
+//     `POST /configure-provider` was exercised by nothing (now #60, the validation path only:
+//     a valid body would rewrite the operator's ~/.mma/config.json).
+//
+//   NOT yet comprehensive, stated plainly rather than implied away: the Initiative Record
+//   surface is 71 registered operations and `record-surface.mjs` exercises 23 of them (32%).
+//   The same test ratchets that number so it can only rise, and prints the uncovered names.
 //   - audit subtypes (default/spec/plan/skill), tier + review-policy overrides,
 //     session reuse, sandbox confinement (cwd-only escape/cd-chain, read-only),
 //     caller-owned branches (the engine commits in place and creates NO branch/worktree),
@@ -422,4 +431,7 @@ export const SCENARIOS = [
   //       is that an admitted task remains DISCOVERABLE afterwards, so a caller can reconcile
   //       instead of guessing. That is what this asserts.
   { id: 59, type: 'investigate', tier: 'standard', kind: 'client-timeout', emits: 0 },
+  // POST /configure-provider — validation contract only; a valid body would rewrite the
+  // operator's ~/.mma/config.json.
+  { id: 60, type: 'error_configure_provider_invalid', kind: 'error', expectStatus: 400, emits: 0 },
 ];

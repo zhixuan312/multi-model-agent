@@ -366,6 +366,14 @@ export function buildRequest(spec, ctx) {
     case 30: return { type: 'error_bad_components', body: {}, rawPayload: { type: 'spec', prompt: 'bad component label', target: { inline: '## Context\n\n### Background\ntest' }, components: ['Context', 'Not A Real Component'] } };
     case 31: return { type: 'spec', body: { prompt: 'Guarded arithmetic — spec from decisions + exploration grounding', target: { paths: [`${cwd}/design-decisions.md`, `${cwd}/exploration.md`] } } };
 
+    // POST /configure-provider — the ONLY product route no scenario touched. Deliberately the
+    // REJECTION path: a valid body hot-swaps the daemon's provider config and rewrites
+    // ~/.mma/config.json, which a smoke run must never do to the machine it runs on. An invalid
+    // body proves the route is reachable, authenticated, and returns the structured field errors
+    // its handler promises — without touching the operator's configuration.
+    case 60: return { type: 'error_configure_provider_invalid', body: {}, route: 'configure-provider',
+      rawPayload: { tier: 'not-a-real-tier', type: 'claude' } };
+
     // Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
     case 18: return { type: 'error_missing_field', body: {}, rawPayload: { type: 'investigate' /* missing prompt and target */ } };
@@ -551,7 +559,13 @@ export async function runDispatch(spec, ctx) {
     // reachable from a NON-git workspace, so defaulting every error case to ctx.dir (a git
     // repository) would make that scenario silently assert nothing.
     const cwd = buildResult.cwd ?? ctx.dir;
-    const url = `${BASE_URL}/execution?cwd=${encodeURIComponent(cwd)}`;
+    // An error scenario may also name its own ROUTE. `/configure-provider` is a product endpoint
+    // with its own validation contract, and every other scenario here posts to `/execution`, so
+    // without this the route was never exercised at all — the gate's "every dispatchable route"
+    // claim was one route short.
+    const url = buildResult.route === 'configure-provider'
+      ? `${BASE_URL}/configure-provider`
+      : `${BASE_URL}/execution?cwd=${encodeURIComponent(cwd)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers,

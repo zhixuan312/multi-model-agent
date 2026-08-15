@@ -539,6 +539,7 @@ try {
       [57],          // investigate a NON-CODE workspace (documents + data, no source)
       [58],          // plan a NON-CODE deliverable (no build, no suite, no tests/)
       [59],          // a client that abandons the request must still be able to reconcile
+      [60],          // POST /configure-provider — validation contract (never a live swap)
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
