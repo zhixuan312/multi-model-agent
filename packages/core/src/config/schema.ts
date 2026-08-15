@@ -33,6 +33,11 @@ export const ResearchConfigSchema = z.object({
     pubmed: z.boolean().default(true),
     pubmedApiKey: z.string().min(1).optional(),
     contactEmail: z.string().email().optional(),
+    // These block-level literals are LOAD-BEARING, not a redundant restatement: a `.default()`
+    // value is handed back as-is, never re-parsed through the schema, so the per-field
+    // `.default(...)` calls above do NOT fill it in. That makes the same defaults true in three
+    // places — per field, per block, and on the whole schema — which is exactly the shape that
+    // drifts. `research-default-agreement.test.ts` pins all three against each other.
   }).strict().default(() => ({
     arxiv: true, semanticScholar: true, githubSearch: true,
     openalex: true, crossref: true, pubmed: true,
@@ -56,8 +61,16 @@ const effortSchema = z.enum(['none', 'low', 'medium', 'high', 'xhigh', 'max']);
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
 
+const MODEL_1_1_MESSAGE =
+  'agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant';
+
 const baseAgentFields = {
-  model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
+  // The custom message covers BOTH ways this field is got wrong, because the wrong TYPE is the
+  // likelier of the two: a config written against the pre-v4.0 multi-model shape carries
+  // `model: ['a', 'b']`, and Zod's default for that reads "expected string, received array" —
+  // accurate, and no help at all in working out what to write instead. The empty-string case had
+  // the explanatory message; the array case, the one a migrating user actually hits, did not.
+  model: z.string({ error: MODEL_1_1_MESSAGE }).min(1, MODEL_1_1_MESSAGE),
   effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,

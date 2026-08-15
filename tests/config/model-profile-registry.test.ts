@@ -2,45 +2,23 @@ import { describe, expect, it } from 'vitest';
 import {
   findModelProfile,
   modelProfileSchema,
+  ModelFamilyEnum,
+  type ModelFamily,
 } from '../../packages/core/src/config/model-profile-registry.js';
 
-const MODEL_FAMILIES = [
-  'claude',
-  'openai',
-  'gemini',
-  'deepseek',
-  'llama',
-  'mistral',
-  'qwen',
-  'grok',
-  'cohere',
-  'phi',
-  'gemma',
-  'yi',
-  'kimi',
-  'sonar',
-  'nova',
-  'glm',
-  'minimax',
-  'jamba',
-  'granite',
-  'nemotron',
-  'dbrx',
-  'arctic',
-  'reka',
-  'olmo',
-  'hermes',
-  'wizardlm',
-  'starcoder',
-  'dolphin',
-  'openchat',
-  'vicuna',
-  'internlm',
-  'baichuan',
-  'other',
-] as const;
+/**
+ * Derived from the enum, not retyped from it.
+ *
+ * A hand-written 33-name copy stood here under the claim "every known model family". A family
+ * added to `ModelFamilyEnum` would not appear in it, so the loop would keep passing while
+ * covering one family fewer than it said — and the way to notice was to count two lists by eye.
+ * `Record<ModelFamily, string>` now fails `tsc -p tsconfig.tests.json` until the new family has
+ * an example id, which is the one thing a test cannot derive: what a model of that family is
+ * actually called.
+ */
+const MODEL_FAMILIES = ModelFamilyEnum.options;
 
-const FAMILY_EXAMPLES: Record<(typeof MODEL_FAMILIES)[number], string> = {
+const FAMILY_EXAMPLES: Record<ModelFamily, string> = {
   claude: 'claude-sonnet-4-6',
   openai: 'gpt-5',
   gemini: 'gemini-2.5-pro',

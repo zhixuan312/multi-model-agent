@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import fs from 'fs';
 import path from 'path';
@@ -117,14 +117,21 @@ describe('loadConfigFromFile', () => {
       },
     }));
 
-    let warned = false;
-    const originalWarn = console.warn;
-    console.warn = () => { warned = true; };
+    // process.stderr.write, not console.warn. The inline-apiKey warning lives in
+    // `cli/serve.ts` and goes out through its `stderr(...)` helper — nothing in this codebase
+    // warns via console.warn. Intercepting console.warn therefore watched a channel no warning
+    // could ever arrive on: `warned` was false whether or not loadConfigFromFile warned, and
+    // moving the warning INTO the loader (the regression this guards) left the test green.
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
     try {
       await loadConfigFromFile(configPath);
     } finally {
-      console.warn = originalWarn;
+      spy.mockRestore();
     }
-    expect(warned).toBe(false);
+    expect(written.join('')).toBe('');
   });
 });
