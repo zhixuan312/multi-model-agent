@@ -201,7 +201,7 @@ construction), **document/analysis** (produce a written analysis, report, or rec
 If the braindump names a target deliverable explicitly, every direction may resolve to that named
 deliverable. If it does not name one AND the data supports more than one direction, the set MUST span **at least two distinct**
 resolution shapes — three directions that only vary the proposed build (three ways to build the
-same kind of thing) are not divergent and fail the exploration review. A non-software problem may
+same kind of thing) are not divergent, and you are the only check on that — `explore` is a caller-side fan-out with no task type and no refiner, so nothing reviews this artifact but you. A non-software problem may
 resolve just as validly through "change the process" or "no change is needed" as through "build
 something."
 
@@ -275,7 +275,7 @@ were ruled out. An unexplained short list reads as laziness; an explained one is
 
 ❌ **Directions that only vary the proposed build.** Three directions that differ only in
 implementation detail (three ways to build the same feature) are not divergent — they fail the
-exploration review when no deliverable was named. **Fix:** vary the resolution shape too — weigh
+the divergence bar above when no deliverable was named — and nothing will catch it for you. **Fix:** vary the resolution shape too — weigh
 whether the problem could resolve via a process change, a configuration change, or no change at
 all, not only new construction.
 

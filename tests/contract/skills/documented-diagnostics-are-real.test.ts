@@ -248,3 +248,30 @@ describe('explore states no rule its own pitfalls forbid', () => {
     expect(explore).toMatch(/Skipping `mma-journal-recall` to save a call/);
   });
 });
+
+/**
+ * `explore` must not invoke a review gate it does not have.
+ *
+ * The skill twice said directions that fail the divergence bar "fail the exploration review". There
+ * is no such review: `explore` is a caller-side fan-out with no entry in `TASK_TYPES` (the skill
+ * says so correctly elsewhere), so no refiner ever sees the artifact, and `audit`'s subtypes are
+ * `default|plan|spec|skill` — none of them an exploration. A rule stated twice as enforced was
+ * enforced by nothing, which matters here because the caller IS the only check and was told it
+ * was not.
+ */
+describe('explore claims no gate it lacks', () => {
+  const explore = readFileSync(join(SKILLS_DIR, 'mma-explore', 'SKILL.md'), 'utf8');
+
+  it('does not refer to an exploration review', () => {
+    expect(explore).not.toMatch(/exploration review/i);
+  });
+
+  it('says the caller is the only check', () => {
+    expect(explore).toMatch(/no task type and no refiner|only check on that/i);
+  });
+
+  it('explore really is not a task type', async () => {
+    const { TASK_TYPES } = await import('../../../packages/core/src/unified/type-registry.js');
+    expect(TASK_TYPES as readonly string[]).not.toContain('explore');
+  });
+});
