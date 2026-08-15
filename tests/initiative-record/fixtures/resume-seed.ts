@@ -46,23 +46,21 @@ function provenanceAt(seconds: number) {
   };
 }
 
+/**
+ * What the seeder hands back.
+ *
+ * Two fields, because two are read. This interface used to restate every seeded entity as a flat
+ * tuple — `workspaces`, `resources`, `tasks`, `artifacts`, `requirements`, `criteria`, `decisions`,
+ * `risks`, `evidence`, `verificationRuns`, `links`, `relation`, `events`, `product`,
+ * `relatedInitiative` — fifteen fields no consumer ever touched. They were also a second shape for
+ * objects `expectedResume` already contains, so a test wanting a seeded Task reads
+ * `expectedResume.tasks`.
+ *
+ * The surface was demonstrably unmaintained: `decisions` was typed as a 3-tuple while
+ * `expectedResume.decisions` carried four, and nothing noticed, because nothing read either.
+ */
 export interface SeedResumeFixtureResult {
-  product: Product;
-  workspaces: [Workspace, Workspace];
-  resources: [Resource, Resource, Resource];
   initiative: Initiative;
-  relatedInitiative: Initiative;
-  links: [InitiativeWorkspaceLink, InitiativeWorkspaceLink];
-  relation: InitiativeRelation;
-  tasks: [Task, Task];
-  artifacts: [ArtifactRef, ArtifactRef];
-  requirements: [Requirement, Requirement];
-  criteria: [AcceptanceCriterion, AcceptanceCriterion, AcceptanceCriterion];
-  decisions: [Decision, Decision, Decision];
-  risks: [Risk, Risk, Risk];
-  evidence: [Evidence, Evidence];
-  verificationRuns: [VerificationRun, VerificationRun, VerificationRun];
-  events: Event[];
   expectedResume: InitiativeResumeResponse;
 }
 
@@ -133,12 +131,14 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     outcome: 'delivered',
   });
 
-  const linkOne = call<InitiativeWorkspaceLink>('initiative_link_workspace', {
+  // Seeded for their effect on `expectedResume.workspaces`, not for their return value — the
+  // links themselves are not part of the resume response.
+  call<InitiativeWorkspaceLink>('initiative_link_workspace', {
     initiative_id: initiative.uuid,
     workspace_id: workspaceOne.uuid,
     role: 'consumes',
   });
-  const linkTwo = call<InitiativeWorkspaceLink>('initiative_link_workspace', {
+  call<InitiativeWorkspaceLink>('initiative_link_workspace', {
     initiative_id: initiative.uuid,
     workspace_id: workspaceTwo.uuid,
     role: 'references',
@@ -866,23 +866,5 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     },
   };
 
-  return {
-    product,
-    workspaces: [workspaceOne, workspaceTwo],
-    resources: [resourceOne, resourceTwo, resourceThree],
-    initiative,
-    relatedInitiative,
-    links: [linkOne, linkTwo],
-    relation,
-    tasks: [taskOpen, taskDone],
-    artifacts: [artifactOne, artifactTwo],
-    requirements: [requirementOne, requirementTwo],
-    criteria: [criterionOneA, criterionOneB, criterionTwoA],
-    decisions: [decisionOpen, decisionDecided, decisionSuperseding],
-    risks: [riskHighOpen, riskLowOpen, riskMediumClosed],
-    evidence: [evidenceOne, evidenceTwo],
-    verificationRuns: [verificationOnePending, verificationOnePass, verificationTwoFail],
-    events,
-    expectedResume,
-  };
+  return { initiative, expectedResume };
 }
