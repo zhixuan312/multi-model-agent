@@ -49,7 +49,7 @@ A finding missing the trace from symptom to cause is a guess. A finding that nam
 
 ### Five Investigation Angles
 
-Each angle is a distinct perspective for finding the root cause. From your assigned angle, propose one or more candidate root-cause hypotheses (or contributing factors).
+Each angle is a distinct perspective for finding the root cause. Work through ALL FIVE yourself — there is no per-worker assignment and no parallel fan-out on this route — proposing one or more candidate root-cause hypotheses (or contributing factors) from each angle that yields one.
 
 1. **SYMPTOM-LOCATION ANGLE** — Start from where the failure surfaces (the throwing line, the failing assertion, the visible bad output, the wrong figure in a report, the misconfigured step in a workflow). Trace UPSTREAM through the path that produced it until you find a state that, if changed, prevents the failure. Each step must be a `file:line` citation (or the equivalent locator for non-code material) or an observed value. Your candidate cause is the upstream state-change site you identify.
 

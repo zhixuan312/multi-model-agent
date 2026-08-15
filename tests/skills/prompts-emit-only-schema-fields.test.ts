@@ -16,7 +16,8 @@
  * than restating it.
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const IMPLEMENT = 'packages/core/src/skills/review/implement.md';
 const REVIEW = 'packages/core/src/skills/review/review.md';
@@ -55,5 +56,49 @@ describe('the review prompts emit the shape the parser accepts', () => {
     // "Remove pre-existing bugs" would lose them just as surely as moving them to a phantom
     // container — the failure mode is the same, only the instruction differs.
     expect(review).not.toMatch(/(?:remove|delete) pre-existing/i);
+  });
+});
+
+/**
+ * No worker prompt may address a per-worker criterion assignment, because none exists.
+ *
+ * `research` told the worker to "apply the perspective assigned to you for this criterion. All five
+ * exist across parallel workers"; `debug` said "from your assigned angle". There is one implementer
+ * and one reviewer per run — the only per-criterion mechanism in the engine is `skill-loader`'s
+ * `implement-<subtype>.md`, `subtype` exists on `audit` alone, and neither directory has a subtype
+ * file. So a worker resolving toward the singular reading covered one perspective of five and then
+ * reported `criteriaCovered` for all of them, while the route's own goal condition demanded every
+ * one.
+ */
+describe('no worker prompt assumes a per-worker criterion assignment', () => {
+  const promptFiles = readdirSync('packages/core/src/skills', { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) =>
+      readdirSync(join('packages/core/src/skills', e.name))
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => join('packages/core/src/skills', e.name, f)),
+    );
+
+  it('finds the prompts', () => {
+    expect(promptFiles.length).toBeGreaterThan(20);
+  });
+
+  it.each(promptFiles)('%s does not address an assigned criterion', (file) => {
+    const text = readFileSync(file, 'utf8');
+    for (const pattern of [
+      /assigned to you/i,
+      /your assigned (?:angle|criterion|perspective)/i,
+      /across parallel workers/i,
+    ]) {
+      expect(text, `${file} addresses a per-worker assignment the engine never makes`)
+        .not.toMatch(pattern);
+    }
+  });
+
+  it('subtype — the only per-criterion mechanism — is still audit-only', () => {
+    const schema = readFileSync('packages/core/src/unified/task-input-schema.ts', 'utf8');
+    const subtypeLines = schema.split('\n').filter((l) => /\bsubtype:/.test(l));
+    expect(subtypeLines).toHaveLength(1);
+    expect(subtypeLines[0]).toMatch(/'plan'.*'spec'.*'skill'/);
   });
 });
