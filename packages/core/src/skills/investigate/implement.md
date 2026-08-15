@@ -40,11 +40,11 @@ A claim without a citation is a guess. A citation that does not match the file c
 
 ### Tool Surface
 
-You have access to READ-ONLY tools only:
-- `read_file` — read file contents
-- `grep` — search for patterns in files
-- `glob` — find files by pattern
-- `list_files` — list directory contents
+Your tools are read-only, enforced by the engine rather than by this list: every WRITE tool is
+denied for this route, and reading is unrestricted. On the Claude runner the tools are `Read`,
+`Grep`, `Glob` and `Bash`; on codex you get a shell. Use whatever the runner gives you —
+`ls`, `find`, `rg` and `cat` through the shell are all permitted, and the refiner will call `Read`
+on every file you cite.
 
 Do NOT attempt to edit, write, create, or delete any file. Do NOT propose fixes, improvements, or suggestions — this is read-only Q&A. If the question implies a fix, answer the factual question behind it and stop.
 

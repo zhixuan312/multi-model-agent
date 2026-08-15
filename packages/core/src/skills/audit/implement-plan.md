@@ -76,7 +76,7 @@ write and nothing to fall back from.
 ### Step 2: Perspective 1 — PATH EXISTENCE
 Every "Files:" line must resolve. Sub-rules: (a) `Modify: <path>` -> file MUST exist (missing = CRITICAL). (b) `Test: <path>` or `Test: <path> (new)` -> parent dir MUST exist; test file itself may or may not. (c) `New: <path>` or `Create: <path>` -> parent dir MUST exist AND file MUST NOT exist (already exists = MEDIUM, plan needs trimming).
 
-Use `read_file` or `grep` to verify each path. Record findings.
+Use `Read` or `Grep` (or the shell, on codex) to verify each path. Record findings.
 
 ### Step 3: Perspective 2 — SYMBOL EXISTENCE
 For every method/type/class/function/imported identifier in code blocks: FIRST classify as USE or DEFINE. ONLY flag USE-intent mentions where grep against the named source file returns no match. Include nearest match (Levenshtein) so the plan can be fixed in one edit.
@@ -86,12 +86,12 @@ Use `grep` to verify each USE-intent symbol. Record findings.
 ### Step 4: Perspective 3 — SIGNATURE MATCH
 When the plan's code uses a method with specific parameters or expects a specific return shape, the actual source signature must match. Same intent rule: ONLY flag USE-intent (calls/imports). Plan DEFINES a method? That's the deliverable — don't flag. Flag if a call appears BEFORE the interface-extension step within the task's sequence (out-of-order, see perspective 6).
 
-Use `grep` / `read_file` to verify actual signatures. Record findings.
+Use `Grep` / `Read` (or the shell, on codex) to verify actual signatures. Record findings.
 
 ### Step 5: Perspective 4 — IMPORT GRAPH
 Every `import { X } from '...'` in code blocks must resolve under the intent rule. Imports of NEW modules the task creates (listed in "Files: New:") are DEFINE-adjacent. But DO flag if the task forgets to add the corresponding `exports` entry in the workspace package.json (HIGH).
 
-Use `grep` / `read_file` to verify imports. Record findings.
+Use `Grep` / `Read` (or the shell, on codex) to verify imports. Record findings.
 
 ### Step 6: Perspective 5 — TEST HARNESS AVAILABILITY
 Every helper/factory/fixture the test USES must exist at the named path. Verify via grep. If the task explicitly adds a new option to an existing helper, that's DEFINE — don't flag the new option. DO flag if test code uses the new option BEFORE the task step that adds it. Helper truly missing = HIGH.
@@ -111,7 +111,7 @@ Trace inter-task symbol/file dependencies. Record findings.
 ### Step 9: Perspective 8 — VERIFICATION COMMAND VALIDITY
 Every "Run: <command>" / "verify" instruction must work with the project's actual tooling. Plan says `npm run validate-things` but no such script exists? CRITICAL. Vague verification ("run the test") with no concrete command? MEDIUM.
 
-Use `grep` / `read_file` on `package.json` to verify commands exist. Record findings.
+Use `Grep` / `Read` (or the shell, on codex) on `package.json` to verify commands exist. Record findings.
 
 ### Step 10: Perspective 9 — TASK GRANULARITY
 Each task should be implementable in one focused sub-agent run. Signals of oversized tasks: touches >3 source files; >40 net lines of diff; mixes unrelated concerns; >6 numbered steps. HIGH when task clearly exceeds standard-tier capacity; MEDIUM when borderline. Suggested fix: split into atomic sub-tasks.

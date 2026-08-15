@@ -102,3 +102,40 @@ describe('no worker prompt assumes a per-worker criterion assignment', () => {
     expect(subtypeLines[0]).toMatch(/'plan'.*'spec'.*'skill'/);
   });
 });
+
+/**
+ * A prompt naming tools must name tools that exist.
+ *
+ * `investigate/implement.md` declared "READ-ONLY tools only: `read_file`, `grep`, `glob`,
+ * `list_files`". Neither `read_file` nor `list_files` appears anywhere in the engine: the Claude
+ * runner's names are `Read`/`Grep`/`Glob`/`Bash` (`claude-tool-categories.ts`,
+ * `claude-cwd-confinement.ts`) and codex workers get a shell. The refiner in the SAME pair says
+ * "you MUST call the Read tool", so the two halves named different surfaces.
+ *
+ * It was also wrong about the shape: `read-only` denies WRITE tools, not shell — the route's own
+ * goal condition expects the worker to have searched — so a worker taking the list literally
+ * believed it had no shell and burned turns discovering the real names.
+ */
+describe('worker prompts name real tools', () => {
+  const PHANTOM_TOOLS = ['read_file', 'list_files', 'write_file', 'edit_file'];
+  const promptFiles = readdirSync('packages/core/src/skills', { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) =>
+      readdirSync(join('packages/core/src/skills', e.name))
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => join('packages/core/src/skills', e.name, f)),
+    );
+
+  it.each(promptFiles)('%s names no tool the runners do not have', (file) => {
+    const text = readFileSync(file, 'utf8');
+    const named = PHANTOM_TOOLS.filter((tool) => text.includes(tool));
+    expect(named, `${file} names tools that do not exist: ${named.join(', ')}`).toEqual([]);
+  });
+
+  it('the phantom names really are absent from the engine', () => {
+    // The premise: if one of these ever becomes a real tool name, this list is wrong, not the
+    // prompts.
+    const categories = readFileSync('packages/core/src/providers/claude-tool-categories.ts', 'utf8');
+    for (const tool of PHANTOM_TOOLS) expect(categories).not.toContain(tool);
+  });
+});
