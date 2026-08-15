@@ -45,7 +45,7 @@ const PUBLISHED_RUNTIME_EXPORTS = [
   'declaredReferenceSchema', 'deliverableAcceptanceSchema', 'deliveryContractDeclarationSchema',
   'deliveryContractGetInputSchema', 'deliveryContractListInputSchema', 'describeSelectorFailure',
   'dispatchedTasksFromSnapshot', 'draftContractSchema', 'evaluateLifecycleGate',
-  'extractEvidenceSections', 'findModelProfile', 'getClaudeOAuth', 'getTypeConfig',
+  'findModelProfile', 'getClaudeOAuth', 'getTypeConfig',
   'initiativeBootstrapInputSchema', 'initiativeExportRequestSchema', 'initiativeFieldErrorsFromIssues',
   'initiativeFocusSetInputSchema', 'initiativeGateStatusInputSchema', 'initiativeLookupSchema',
   'initiativeMutationRequestSchema', 'initiativeOperationRequestSchema', 'initiativePhaseEnterInputSchema',

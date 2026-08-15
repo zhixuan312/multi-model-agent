@@ -73,7 +73,6 @@ export interface ResolvedSkillBundle {
 export interface SessionOpts {
   cwd?: string;
   wallClockDeadline: number;
-  idleStallTimeoutMs?: number;
   abortSignal: AbortSignal;
   bus?: object;
   /** Task identity — required for per-task event tagging so the stall watchdog
@@ -96,10 +95,6 @@ export interface SessionOpts {
 }
 
 export interface TurnOpts {
-  stageLabel?: string;
-  /** Cooperative cancellation — pass the per-task stall abort signal so
-   *  send() can be unwound by the stuck-detection watchdog. */
-  signal?: AbortSignal;
   /** Goal condition — when set, a Stop hook evaluates this condition after
    *  each turn. If not met, the agent continues working. Claude SDK only
    *  (Codex exec does not support programmatic goal evaluation). */
