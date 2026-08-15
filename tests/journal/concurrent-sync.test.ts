@@ -33,7 +33,6 @@ function plainAdapter(root: string, files: string[]) {
     root,
     listFiles: async () => [...files],
     decode: async (relPath: string, raw: string) => ({ id: relPath, path: relPath, title: relPath, body: raw }),
-    signals: () => [],
   };
 }
 
@@ -206,7 +205,6 @@ describe('renaming a file must not delete its record', () => {
         root,
         listFiles: async () => [...files],
         decode: async (relPath: string, raw: string) => ({ id: idOf(raw), path: relPath, title: relPath, body: raw }),
-        signals: () => [],
       };
       const index = await CorpusIndex.open({ root, adapter });
       await index.rebuild();
@@ -238,18 +236,33 @@ describe('the two structural properties a refactor must not undo', () => {
     expect(body).not.toContain("this.db.exec('BEGIN');");
   });
 
-  it('performs no file I/O between BEGIN and COMMIT', () => {
-    // Extract the transaction body and assert it awaits nothing from the filesystem. This is
-    // the property that keeps the lock window proportional to write time, and a behavioural
-    // test can pass on a fast machine even after it regresses.
+  it('performs no file I/O between BEGIN and COMMIT, in EVERY transaction', () => {
+    // The property that keeps the lock window proportional to write time rather than to corpus
+    // size. A behavioural test can pass on a fast machine after it regresses, hence the source
+    // assertion.
+    //
+    // EVERY region, not the first one. This used `indexOf` for a single `BEGIN IMMEDIATE`, which
+    // finds `rebuild()`'s — the file has two, and `syncIncremental()`'s comes second. The case is
+    // named for the sync transaction and was reading the rebuild one; a regression in the sync
+    // path would not have failed it. (`rebuild` holds the same property, and `syncIncremental`
+    // delegates to it, so both are worth pinning anyway.)
     const body = source();
-    const start = body.indexOf("this.db.exec('BEGIN IMMEDIATE')");
-    const end = body.indexOf("this.db.exec('COMMIT')", start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const transaction = body.slice(start, end);
-    for (const io of ['await stat(', 'await readFile(', 'adapter.decode(', 'await adapter']) {
-      expect(transaction, `file I/O inside the transaction: ${io}`).not.toContain(io);
+    const regions: string[] = [];
+    let from = 0;
+    for (;;) {
+      const start = body.indexOf("this.db.exec('BEGIN IMMEDIATE')", from);
+      if (start === -1) break;
+      const end = body.indexOf("this.db.exec('COMMIT')", start);
+      expect(end, 'every BEGIN IMMEDIATE must have a COMMIT after it').toBeGreaterThan(start);
+      regions.push(body.slice(start, end));
+      from = end;
+    }
+    expect(regions.length, 'expected both the rebuild and the sync transactions').toBe(2);
+
+    for (const [index, transaction] of regions.entries()) {
+      for (const io of ['await stat(', 'await readFile(', 'adapter.decode(', 'await adapter']) {
+        expect(transaction, `file I/O inside transaction #${index + 1}: ${io}`).not.toContain(io);
+      }
     }
   });
 });

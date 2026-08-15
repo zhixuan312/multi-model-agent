@@ -13,7 +13,6 @@ function plainAdapter(root: string, files: string[]) {
     root,
     listFiles: async () => [...files],
     decode: async (relPath: string, raw: string) => ({ id: relPath, path: relPath, title: relPath, body: raw }),
-    signals: () => [],
   };
 }
 
