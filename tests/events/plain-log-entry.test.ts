@@ -17,7 +17,13 @@ describe('PlainLogEntrySchema', () => {
     expect(() => PlainLogEntrySchema.parse(e)).toThrow();
   });
 
-  it('covers all 13 kinds in PlainLogKindEnum', () => {
-    expect(PlainLogKindEnum.options).toHaveLength(13);
+  // The kind list itself is checked by `plain-log-emitter-reachability.test.ts`, which requires
+  // each name to have a production emitter. A `toHaveLength` assertion used to stand here and
+  // was the reason eight emitterless kinds survived: a count cannot tell a live name from a
+  // dead one, and it reads like coverage.
+  it('rejects a kind that is spelled right but not declared', () => {
+    expect(PlainLogKindEnum.options).not.toContain('request_received');
+    const e = { ts: '2026-05-17T00:00:00Z', kind: 'request_received' as never, fields: {} };
+    expect(() => PlainLogEntrySchema.parse(e)).toThrow();
   });
 });

@@ -3,16 +3,12 @@ import { PlainLogKindEnum, PROVIDER_EVENT_NAMES } from '../../../packages/core/s
 import { describe, expect, it } from 'vitest';
 
 describe('observability event manifest', () => {
-  it('contains exactly 13 plain log kinds', () => {
-    expect(PlainLogKindEnum.options).toHaveLength(13);
-    expect(manifest.kinds).toHaveLength(13);
-  });
-
-  it('every kind in manifest matches PlainLogKindEnum', () => {
-    const enumKinds: Set<string> = new Set(PlainLogKindEnum.options);
-    for (const kindEntry of manifest.kinds) {
-      expect(enumKinds.has(kindEntry.kind), `kind ${kindEntry.kind} not in PlainLogKindEnum`).toBe(true);
-    }
+  // Set equality, both directions, replacing a manifest ⊆ enum check plus a hardcoded count of
+  // 13. That pair let eight emitterless kinds sit in both lists indefinitely — the count agreed
+  // with itself, and the subset check agreed with itself. What each name means is checked by
+  // `tests/events/plain-log-emitter-reachability.test.ts`: it must have a production emitter.
+  it('lists exactly the kinds PlainLogKindEnum declares', () => {
+    expect(manifest.kinds.map((k) => k.kind).sort()).toEqual([...PlainLogKindEnum.options].sort());
   });
 
   it('provider_event kind documents the list of valid provider event names', () => {

@@ -58,7 +58,6 @@ describe('observability contract — envelope + plain entries', () => {
       expect(typeof env.totalInputTokens).toBe('number');
       expect(typeof env.totalOutputTokens).toBe('number');
       expect(typeof env.totalDurationMs).toBe('number');
-      expect(typeof env.headline).toBe('object');
     }
   });
 
@@ -111,14 +110,14 @@ describe('observability contract — envelope + plain entries', () => {
 
     bus.emitPlainEntry({
       ts: new Date().toISOString(),
-      kind: 'request_received',
-      fields: { batch_id: 'test-batch-1', route: 'delegate', body_bytes: 1024 },
+      kind: 'batch_failed',
+      fields: { task_id: 'test-task-1', tool: 'delegate', error_code: 'pipeline_failed' },
     });
 
     bus.emitPlainEntry({
       ts: new Date().toISOString(),
-      kind: 'stall_watchdog_armed',
-      fields: { task_id: 'test-task-1', idle_threshold_ms: 30000 },
+      kind: 'batch_cancelled',
+      fields: { task_id: 'test-task-1', tool: 'delegate' },
     });
 
     const plainEntries = captured.filter((m) => m.type === 'plain').map((m) => (m.type === 'plain' ? m.entry : null));

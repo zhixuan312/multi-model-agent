@@ -111,7 +111,6 @@ export function buildEnvelopeSnapshot(
       : null,
     errorCode: null,
     reviewPolicy,
-    plannedStageTotal: stages.length,
     stages,
     toolCalls,
     // Two DIFFERENT facts, and they were both being filled from the worker's self-report.
@@ -145,6 +144,5 @@ export function buildEnvelopeSnapshot(
     sourcesUsed,
     escalationLog: [],
     validationWarnings: [],
-    headline: { prefix: '', stageLabel: 'done', stageIndex: stages.length, stageTotal: stages.length, toolWrites: 0, toolTotal: 0 },
   };
 }

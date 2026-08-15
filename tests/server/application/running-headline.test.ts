@@ -129,7 +129,7 @@ describe('running headline: bus wiring', () => {
     const s = sink();
     attachHeadlineProducer(bus, s);
     bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'provider_event', fields: { event: 'claude_tool_call', tool: 'Read' } });
-    bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'server_started', fields: { taskId: 't' } });
+    bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'batch_completed', fields: { taskId: 't' } });
     expect(s.calls).toEqual([]);
     // Neither is attributable to a task, so neither counts as activity either.
     expect(s.activity).toEqual([]);

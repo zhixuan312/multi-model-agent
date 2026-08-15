@@ -75,19 +75,6 @@ export interface ToolCallRecord {
   filesWritten: string[];
 }
 
-export interface HeadlineSnapshot {
-  prefix: string;
-  stageLabel: string;
-  // 1-based ordinal of the stage named by stageLabel — i.e. how many visible
-  // stages have *started* (the running one counts). Mirrors the heartbeat's
-  // visibleRan, so `[stageIndex/stageTotal] stageLabel` reads as "stage N of
-  // M, currently <label>". Not a count of completed stages.
-  stageIndex: number;
-  stageTotal: number;
-  toolWrites: number;
-  toolTotal: number;
-}
-
 export interface TaskEnvelope {
   // identity (immutable after creation)
   taskId: string;
@@ -106,7 +93,6 @@ export interface TaskEnvelope {
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
   reviewPolicy: 'reviewed' | 'none';
-  plannedStageTotal: number;
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
@@ -140,6 +126,14 @@ export interface TaskEnvelope {
   sourcesUsed: { source: string; attempted: boolean; used: boolean; note?: string }[];
   escalationLog: EscalationEntry[];
   validationWarnings: ValidationWarning[];
-  // derived
-  headline: HeadlineSnapshot;
 }
+
+// A `HeadlineSnapshot` used to hang off this envelope as a "derived" field. Nothing derived it:
+// the sole producer wrote the literal `{ prefix: '', stageLabel: 'done', stageIndex: n,
+// stageTotal: n, toolWrites: 0, toolTotal: 0 }`, and no consumer read it — the envelope's only
+// production consumers are `toWireRecord` (which never referenced it) and `LogWriter`, which
+// serialises the whole object to the diagnostics JSONL. So its one effect was to write
+// `toolWrites: 0, toolTotal: 0` into every log line, next to that same envelope's populated
+// `toolCalls` array. Its docstring described mirroring "the heartbeat's visibleRan", a mechanism
+// retired with the lifecycle layer. The running progress headline is a different, live thing —
+// a string, computed in `application/headline-from-events.ts` for poll responses.

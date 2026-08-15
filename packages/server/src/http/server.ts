@@ -8,6 +8,7 @@ import type { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { TaskEnvelope } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
 import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
@@ -247,7 +248,11 @@ export async function startServer(
       bus.subscribe(new TelemetryUploader({
         recorder: recorderForUnified,
         consent: { decide: () => decideConsent(join(homedir(), '.mma')) },
-        buildOpts: (env: any) => ({
+        // Typed, not `any`. This reads four TaskEnvelope fields; as `any` a rename on any of
+        // them compiled cleanly and shipped `undefined` into every wire record's model
+        // attribution — the telemetry equivalent of a silent data loss, invisible until the
+        // backend charts went blank.
+        buildOpts: (env: TaskEnvelope) => ({
           toolMode: 'full',
           implementerModel: env.stages[0]?.model ?? env.mainModel,
           implementerTier: env.stages[0]?.tier ?? env.agentType,
