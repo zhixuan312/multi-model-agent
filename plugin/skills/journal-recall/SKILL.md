@@ -48,6 +48,7 @@ is not available in this session, run `mma clients`.
 | `prompt` | string | yes | A conceptual question about prior learnings (min 10 chars). Keep this natural-language, not a keyword list. |
 | `topic` | string | no | Optional lowercase-kebab topic filter. Use it when you already know the primary subject and want recall to narrow that slice first. |
 | `contextBlockIds` | string[] | no | IDs from `mma:context-blocks` (max 2) — enables follow-up / delta recall |
+| `includeHistory` | boolean | no | Default `false`, which EXCLUDES superseded nodes. Set `true` when the reversal is the point — "did we try this and drop it?", "why did we move off X?" — because a superseded learning is exactly the record of a decision that was undone, and by default recall hides it. |
 
 > Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
