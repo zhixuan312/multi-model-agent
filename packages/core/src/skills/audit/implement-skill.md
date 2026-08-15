@@ -27,7 +27,7 @@ A skill is the markdown a caller reads to decide whether to route a request to a
 You MUST work through the 7 criteria **one at a time, sequentially**. For each criterion:
 
 1. Read the skill file through the lens of ONLY that criterion
-2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+2. Record findings in working memory
 3. If no findings for that criterion, note "Criterion N: No findings."
 4. Move to the next criterion
 
@@ -38,7 +38,9 @@ After all 7 criteria are complete, consolidate into the final JSON output.
 ### Execution Steps
 
 ### Step 1: Set up scratch notes
-Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
+Keep your per-criterion notes in working memory. Audit runs read-only — the engine denies every
+write tool and every mutating shell command, whatever the path — so there is no scratch file to
+write and nothing to fall back from.
 
 ### Step 2: Criterion 1 — WHEN-TO-USE-SPECIFICITY
 Read the skill. Does the `when_to_use` frontmatter cleanly distinguish this skill from sibling skills? Overlap with another `mma-*` skill without a tiebreaker is a finding. Name the sibling skill that overlaps and quote both `when_to_use` lines. Append findings.

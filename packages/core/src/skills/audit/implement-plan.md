@@ -58,7 +58,7 @@ Before ANY finding on perspectives 2-5, classify each symbol mention. Confusing 
 You MUST work through the 12 perspectives **one at a time, sequentially**. For each perspective:
 
 1. Read the plan through the lens of ONLY that perspective
-2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+2. Record findings in working memory
 3. If no findings for that perspective, note "Perspective N: No findings."
 4. Move to the next perspective
 
@@ -69,7 +69,9 @@ After all 12 perspectives are complete, consolidate into the final JSON output.
 ### Execution Steps
 
 ### Step 1: Set up scratch notes
-Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
+Keep your per-criterion notes in working memory. Audit runs read-only — the engine denies every
+write tool and every mutating shell command, whatever the path — so there is no scratch file to
+write and nothing to fall back from.
 
 ### Step 2: Perspective 1 — PATH EXISTENCE
 Every "Files:" line must resolve. Sub-rules: (a) `Modify: <path>` -> file MUST exist (missing = CRITICAL). (b) `Test: <path>` or `Test: <path> (new)` -> parent dir MUST exist; test file itself may or may not. (c) `New: <path>` or `Create: <path>` -> parent dir MUST exist AND file MUST NOT exist (already exists = MEDIUM, plan needs trimming).

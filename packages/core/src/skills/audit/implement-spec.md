@@ -34,7 +34,7 @@ When a criterion depends on content from a component that is absent, skip that c
 You MUST work through the 9 criteria **one at a time, sequentially**. For each criterion:
 
 1. Read the spec through the lens of ONLY that criterion
-2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+2. Record findings in working memory
 3. If no findings for that criterion, note "Criterion N: No findings."
 4. Move to the next criterion
 
@@ -45,7 +45,9 @@ After all 9 criteria are complete, consolidate into the final JSON output.
 ### Execution Steps
 
 ### Step 1: Set up scratch notes
-Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
+Keep your per-criterion notes in working memory. Audit runs read-only — the engine denies every
+write tool and every mutating shell command, whatever the path — so there is no scratch file to
+write and nothing to fall back from.
 
 ### Step 2: Criterion 1 — REQUIREMENT-TESTABILITY
 Read the spec. For every `shall` / `must` / `should` requirement, check: does it have a concrete, observable outcome that a test can assert? Vague verbs ("supports", "handles", "is reliable") without a measurable outcome are findings. Record findings.
