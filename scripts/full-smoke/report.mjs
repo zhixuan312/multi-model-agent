@@ -10,8 +10,19 @@ export function report(records, checksByScenario, meta) {
   const gaps = [];
   for (const rec of records) {
     const checks = checksByScenario[rec.scenarioId] ?? [];
+    // A record with NO checks printed a blank row and contributed nothing to either counter, so
+    // "nothing was verified" rendered identically to "everything passed". No current path produces
+    // one — verify() always returns at least one check, even for an unrecognised scenario kind, and
+    // every branch of runScenario assigns the entry — but this harness has already shipped two
+    // silent coverage holes (#39/#40 unscheduled, and a wire-version check that passed on missing
+    // data), and both looked exactly like this from the summary. Cheap to make impossible.
+    if (checks.length === 0) {
+      hardFail++;
+      gaps.push(`FAIL  #${rec.scenarioId} ${rec.type}: scenario ran but produced NO checks — `
+        + 'nothing was verified, which is not the same as passing');
+    }
     const cells = checks.map((c) => `${c.checkId}:${GLYPH[c.status] ?? c.status}`);
-    lines.push(`#${String(rec.scenarioId).padEnd(4)} ${rec.type.padEnd(16)} ${cells.join('  ')}`);
+    lines.push(`#${String(rec.scenarioId).padEnd(4)} ${rec.type.padEnd(16)} ${cells.join('  ') || '(no checks)'}`);
     for (const c of checks) {
       if (c.status === 'FAIL') { hardFail++; gaps.push(`FAIL  #${rec.scenarioId} ${c.checkId}: ${c.detail}`); }
       if (c.status === 'WARN') { warns++; gaps.push(`WARN  #${rec.scenarioId} ${c.checkId}: ${c.detail}`); }
