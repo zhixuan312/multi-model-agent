@@ -71,32 +71,46 @@ export function normalizeModel(rawModelId: string): { canonical: string; family:
 }
 
 // === status mapping per spec ===
+/**
+ * Project an envelope status + failure code onto the wire's `terminalStatus` / `workerStatus`.
+ *
+ * This switch used to carry seven more cases — `incomplete`, `timeout`, `brief_too_vague`,
+ * `unavailable`, `needs_context`, `blocked`, `review_loop_capped`. Not one of them was reachable:
+ * they are the RETIRED lifecycle vocabulary (the same values that lived in the deleted
+ * `runner-types.ts`), and nothing has set `structuredError.code` to any of them since that layer
+ * was removed. `to-wire-status-mapping.test.ts` called itself "exhaustive" and covered all ten
+ * branches, which is precisely why the dead ones looked alive: the test proved the function maps
+ * X to Y, never that anything produces X.
+ *
+ * What DOES reach here, via `telemetry-snapshot.ts` ← `PipelineResult.failureReason`:
+ *   - a provider turn code: `wall_clock_exceeded`, `aborted`, `sdk_no_result`, `sdk_max_turns`,
+ *     `sdk_max_budget`, `sdk_execution_error`, `sdk_max_structured_output_retries`, `turn_failed`,
+ *     `codex_error`, `codex_not_installed`, `spawn_failed`, `missing_credentials`, `invalid_api_key`
+ *   - a pipeline code: `implementer_no_output`, `implementer_request_rejected`,
+ *     `materialization_failed`, `rematerialization_failed`, `pipeline_failed`
+ *   - a `ContractPlanError` code: `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`,
+ *     `test-path-collision`
+ *
+ * All of them take `default`, so every failure reports `terminalStatus: 'error'`. The wire schema
+ * still ALLOWS `timeout` and `unavailable`, and `wall_clock_exceeded` → `timeout` /
+ * `codex_not_installed | missing_credentials | invalid_api_key | sdk_no_result` → `unavailable`
+ * would restore two distinctions the telemetry backend already understands. That is deliberately
+ * NOT done here: it changes what a separate repo's dashboards receive, which is a product call and
+ * a two-repo change, the same reason the `batch_*` plain-log event kinds still carry their
+ * batch-era names.
+ */
 export function mapStatusToWire(
   status: TaskEnvelope['status'],
   errCode: string | null,
 ): { terminalStatus: string; workerStatus: string } {
   if (status === 'done') return { terminalStatus: 'ok', workerStatus: 'done' };
-  if (status === 'done_with_concerns')
+  if (status === 'done_with_concerns') {
     return { terminalStatus: 'ok', workerStatus: 'done_with_concerns' };
-  // failed:
-  switch (errCode) {
-    case 'incomplete':
-      return { terminalStatus: 'incomplete', workerStatus: 'failed' };
-    case 'timeout':
-      return { terminalStatus: 'timeout', workerStatus: 'failed' };
-    case 'brief_too_vague':
-      return { terminalStatus: 'brief_too_vague', workerStatus: 'failed' };
-    case 'unavailable':
-      return { terminalStatus: 'unavailable', workerStatus: 'failed' };
-    case 'needs_context':
-      return { terminalStatus: 'incomplete', workerStatus: 'needs_context' };
-    case 'blocked':
-      return { terminalStatus: 'incomplete', workerStatus: 'blocked' };
-    case 'review_loop_capped':
-      return { terminalStatus: 'incomplete', workerStatus: 'review_loop_capped' };
-    default:
-      return { terminalStatus: 'error', workerStatus: 'failed' };
   }
+  // `failed`, with `errCode` carried for the reader — `errorCode` on the same wire record
+  // preserves which failure it was.
+  void errCode;
+  return { terminalStatus: 'error', workerStatus: 'failed' };
 }
 
 // === main projection ===
