@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { startTestServerWithAgents } from '../../../helpers/test-server-with-agents.js';
+import { startTestServerWithAgents, TEST_CONTEXT_BLOCK_CAP } from '../../../helpers/test-server-with-agents.js';
 
 /**
  * Returns a canonical (symlink-resolved) temp directory path.
@@ -117,7 +117,7 @@ describe('POST /context-blocks', () => {
    * cap is being READ, not merely present.
    */
   it('returns 413 payload_too_large at the CONFIGURED maxContextBlockBytes', async () => {
-    const s = await startTestServerWithAgents({ server: { limits: { maxContextBlockBytes: 1024 } } } as never);
+    const s = await startTestServerWithAgents({ server: { limits: { maxContextBlockBytes: 1024 } } });
     const cwd = makeTmpCwd();
     try {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
@@ -160,19 +160,23 @@ describe('POST /context-blocks', () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
-      // Fill to the default cap of 32 blocks using direct registry access
-      // to avoid 32 HTTP round trips. We inject them directly via the store.
+      // Fill to the cap using direct registry access rather than one HTTP round trip per block.
+      //
+      // The cap here is the TEST SERVER's (`TEST_CONTEXT_BLOCK_CAP`), not a default — the
+      // production default is 500, and this comment used to call 32 "the default cap", which
+      // would send anyone debugging a real cap_exhausted to the wrong number. Taking it from the
+      // helper is also what makes the case meaningful: a hardcoded 32 on both sides would pass
+      // whether or not the handler reads the configured value.
       //
       // First: trigger project creation via one real HTTP request
       await createBlock(s.url, s.token, cwd, 'first-real-block');
       const pc = s.projectRegistry.get(cwd)!;
 
-      // Then fill the remaining 31 slots directly
-      for (let i = 0; i < 31; i++) {
+      // Then fill the remaining slots directly
+      for (let i = 0; i < TEST_CONTEXT_BLOCK_CAP - 1; i++) {
         pc.contextBlocks.register(`filler-block-${i}`);
       }
-      // Now the store has 32 blocks (at cap)
-      expect(pc.contextBlocks.size).toBe(32);
+      expect(pc.contextBlocks.size).toBe(TEST_CONTEXT_BLOCK_CAP);
 
       // Next POST should fail with 409 cap_exhausted
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {

@@ -81,7 +81,8 @@ export interface InMemoryContextBlockStoreOptions {
  * Both bounds are intentional: the TTL prevents stale briefs from lingering
  * after a long-running session; the LRU cap prevents memory growth from a
  * chatty caller that never explicitly deletes anything. The eviction loop
- * is O(n) per insertion but `n <= maxEntries` (defaults to 100), so we
+ * is O(n) per insertion but `n <= maxEntries` (defaults to 500, matching
+ * `server.limits.maxContextBlocksPerProject`), so we
  * keep the implementation simple.
  *
  * `Date.now()` is read directly (not through a clock abstraction) so tests

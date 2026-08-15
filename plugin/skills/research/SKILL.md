@@ -96,7 +96,8 @@ tasks return a handle instead:
 { "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
+Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
+work with `mma_execution_cancel`.
 
 ### mma_execution_get / mma_execution_wait — poll
 

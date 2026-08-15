@@ -80,13 +80,6 @@ Call `mma_run` with:
 { "cwd": "/project", "request": { "type": "execute_plan", "tasks": ["3. Migrate database schema"], "target": { "paths": ["/project/.mma/plans/2026-07-11-feature.md"] } } }
 ```
 
-## Response shapes
-
-`mma_run` returns either the terminal envelope inline (short tasks) or a `{ executionId, type, cwd }`
-handle for longer ones — poll with `mma_execution_get`, block with `mma_execution_wait`, cancel with
-`mma_execution_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the
-tool call error shape.
-
 @include _shared/response-shape.md
 
 ## Natural next step

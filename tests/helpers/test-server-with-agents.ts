@@ -7,10 +7,30 @@ import { join } from 'node:path';
 import { startServer } from '../../packages/server/src/http/server.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
+/**
+ * Deliberately far below the production default of 500 so a cap test can fill it over HTTP
+ * without hundreds of round trips. Exported because a test that restates `32` is asserting its
+ * own literal: the number only proves the cap is READ from config if both sides come from here.
+ */
+export const TEST_CONTEXT_BLOCK_CAP = 32;
+
+
 const DEFAULT_TEST_TOKEN = 'test-token';
 
 /** Minimal MultiModelConfig with fake openai-compatible agents (will fail if actually invoked). */
-export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}): MultiModelConfig {
+/**
+ * A DEEP partial, because the overrides are merged deeply.
+ *
+ * The signature was `Partial<MultiModelConfig>` — shallow — so the only override anyone actually
+ * wants (`{ server: { limits: { … } } }`) did not typecheck, and the single call site passing one
+ * reached for `as never`. That cast is the thing to avoid: the merge below used to be a shallow
+ * spread that dropped `auth.tokenFile` along with the rest of the server block, and a type saying
+ * "server must be complete" while the code deep-merges it is what let that pass review. The type
+ * now describes the merge, and the cast is gone.
+ */
+type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
+
+export function buildTestAgentConfig(overrides: DeepPartial<MultiModelConfig> = {}): MultiModelConfig {
   const base = {
     agents: {
       standard: {
@@ -40,7 +60,7 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         batchTtlMs: 3_600_000,
         projectCap: 200,
         maxContextBlockBytes: 524_288,
-        maxContextBlocksPerProject: 32,
+        maxContextBlocksPerProject: TEST_CONTEXT_BLOCK_CAP,
         shutdownDrainMs: 30_000,
       },
       // Isolated per-process state dir — server tests must never touch the
@@ -76,7 +96,7 @@ export interface TestServerWithAgents {
 }
 
 export async function startTestServerWithAgents(
-  overrides?: Partial<MultiModelConfig>,
+  overrides?: DeepPartial<MultiModelConfig>,
 ): Promise<TestServerWithAgents> {
   const tokenDir = mkdtempSync(join(tmpdir(), 'mma-handler-test-'));
   const tokenFile = join(tokenDir, 'auth-token');
