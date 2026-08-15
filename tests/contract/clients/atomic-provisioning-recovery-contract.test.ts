@@ -106,9 +106,20 @@ describe('contract: durable provisioning markers and recovery — the seven guar
     await expect(fixture.provision(['cursor'])).rejects.toMatchObject({ code: 'interrupted' });
 
     fixture.tamperRegistration('cursor');
+    // Measure what recovery DID, the way 5a above does. This asserted only that cursor appeared
+    // in the reports — which is equally true on the healthy path (see "resolves a pending marker
+    // at daemon start"), so it could not distinguish "treated as unreachable" from "completed
+    // anyway", the exact outcome the precondition check exists to prevent.
+    const before = fixture.phaseHistory('cursor').length;
     const reports = await fixture.recoverOnStartup();
+    const appended = fixture.phaseHistory('cursor').slice(before);
 
-    expect(reports.some((r) => r.clientId === 'cursor')).toBe(true);
+    expect(reports.some((r) => r.clientId === 'cursor'), 'the client must be reported at all').toBe(true);
+    expect(appended, 'recovery must not build on a foundation that changed underneath it')
+      .not.toContain('skills-written');
+    // Unrestorable AND uncompletable: the marker is a claim of consistency nothing can make here.
+    expect(reports.find((r) => r.clientId === 'cursor')?.resolved).toBe(false);
+    expect(fixture.marker('cursor'), 'an unresolved marker must survive').not.toBeNull();
   });
 
   // 6. Recovery that only runs on the next provisioning call leaves a crashed
