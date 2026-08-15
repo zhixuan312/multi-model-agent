@@ -28,6 +28,8 @@ import { type BusLike, busOf, wallClockDelayMs } from './session-helpers.js';
 export class ClaudeSession implements Session {
   private closed = false;
   private turns = 0;
+  /** Tool calls the confinement hook refused since the last turn was normalized. */
+  private sandboxDenials = 0;
   private sessionId?: string;
   private skillPluginReady = false;
   private readonly bus: BusLike | undefined;
@@ -123,7 +125,11 @@ export class ClaudeSession implements Session {
       // read-only session without a cwd installed no hook at all. `buildConfinementHook`
       // falls back to the read-only evaluator when a `cwd-only` policy arrives with no cwd,
       // which is the restrictive answer rather than the absent one.
-      Object.assign(hookMap, buildConfinementHook(this.args.opts.sandboxPolicy, this.args.opts.cwd));
+      Object.assign(hookMap, buildConfinementHook(
+        this.args.opts.sandboxPolicy,
+        this.args.opts.cwd,
+        () => { this.sandboxDenials += 1; },
+      ));
     }
     const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 
@@ -266,6 +272,11 @@ export class ClaudeSession implements Session {
     // incidental). Either way the guard reason wins over the SDK's own
     // termination — a force-closed stream must never report `ok`.
     const guardReason = aborted ? 'aborted' as const : timedOut ? 'time_exceeded' as const : undefined;
+    // Per TURN, not per session: the counter is read and reset here so a
+    // multi-turn session attributes each denial to the turn that caused it
+    // rather than reporting a running total on every one.
+    const sandboxDenials = this.sandboxDenials;
+    this.sandboxDenials = 0;
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
       ...(guardReason ? { guardTerminationReason: guardReason } : {}),
@@ -275,6 +286,7 @@ export class ClaudeSession implements Session {
       else if (timedOut) norm.errorCode = 'wall_clock_exceeded';
     }
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
+    norm.sandboxDenialCount = sandboxDenials;
 
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {
       turn: turnIndex,

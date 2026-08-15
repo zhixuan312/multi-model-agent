@@ -266,7 +266,14 @@ export function evaluateReadOnly(toolName: string, toolInput: unknown): HookResu
  *   this hook only when a cwd was also present, so a read-only task without one ran with no
  *   write blocking whatsoever.
  */
-export function buildConfinementHook(policy: SandboxPolicy, cwd?: string): {
+export function buildConfinementHook(
+  policy: SandboxPolicy,
+  cwd?: string,
+  /** Called once per refused tool call. This hook is the only place in the
+   *  engine that observes a worker attempting to escape its sandbox, so it is
+   *  also the only place that can count one for telemetry. */
+  onDeny?: (reason: string) => void,
+): {
   PreToolUse: { hooks: ((input: { tool_name: string; tool_input: unknown }) => Promise<HookResult>)[] }[];
 } {
   const evaluator = policy === 'read-only' || cwd === undefined
@@ -276,7 +283,13 @@ export function buildConfinementHook(policy: SandboxPolicy, cwd?: string): {
   return {
     PreToolUse: [
       {
-        hooks: [async (input) => evaluator(input)],
+        hooks: [async (input) => {
+          const result = evaluator(input);
+          if (onDeny && result.hookSpecificOutput?.permissionDecision === 'deny') {
+            onDeny(result.hookSpecificOutput.permissionDecisionReason);
+          }
+          return result;
+        }],
       },
     ],
   };

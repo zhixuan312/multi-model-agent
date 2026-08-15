@@ -50,6 +50,15 @@ export interface TurnResult {
    *  Empty array when the turn made no tool calls. Populated by each
    *  runner's normalizer (normalize-claude.ts, codex-cli-session.ts). */
   toolCalls: { turn: number; tool: string }[];
+  /** How many tool calls the sandbox refused during this turn — a worker
+   *  repeatedly trying to write outside its cwd is the signal.
+   *
+   *  Nullable because it is only OBSERVABLE on Claude, where confinement is a
+   *  PreToolUse hook mma owns and can count. Codex delegates to the OS sandbox
+   *  (`-s workspace-write`), which refuses the syscall without telling us, so
+   *  codex reports `null` — "not measurable here" — rather than `0`, which
+   *  would read as "measured, and the worker behaved". */
+  sandboxDenialCount: number | null;
 }
 
 /** Resolved + staged skills for a worker session. `stagedRoot` contains a
