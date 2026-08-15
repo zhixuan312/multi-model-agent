@@ -292,7 +292,11 @@ export class JournalIndexStore {
    * its row count never grows with corpus or topic size.
    */
   candidateDocumentsMeta(opts: { tokens: string[]; topic?: string; includeHistory: boolean; limit: number }): IndexedDocumentMeta[] {
-    return this.index.candidateRecordsMeta(opts).map((record) => this.toIndexedDocumentMeta(record));
+    // `superseded` is the journal's word, so the journal supplies it — the engine only compares.
+    const { includeHistory, ...rest } = opts;
+    return this.index
+      .candidateRecordsMeta({ ...rest, ...(includeHistory ? {} : { excludeStatus: 'superseded' }) })
+      .map((record) => this.toIndexedDocumentMeta(record));
   }
 
   /**

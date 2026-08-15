@@ -340,7 +340,9 @@ export class CorpusIndex {
    * corpus. A derived index loses its value when the freshness check costs more
    * than the read it protects.
    */
-  recordCount(): number {
+  /** Private: the freshness comparison in {@link ensureFreshRecords} is its only caller —
+   *  nothing outside this class has ever asked the index how many records it holds. */
+  private recordCount(): number {
     if (!this.recordCountStmt) {
       this.recordCountStmt = this.db.prepare('SELECT count(*) AS n FROM records');
     }
@@ -795,9 +797,9 @@ export class CorpusIndex {
 
   /**
    * SQL-BOUNDED candidate query: lexical FTS5/BM25 match, joined against
-   * `records` and scoped by an optional exact `topic` equality and
-   * `status != 'superseded'` visibility — both against the real, indexed
-   * columns added in schema version 3 (see {@link ensureSchema}) — capped at
+   * `records` and scoped by an optional exact `topic` equality and an optional `status`
+   * exclusion (the excluded VALUE is the caller's — see `excludeStatus`) — both against the
+   * real, indexed columns added in schema version 3 (see {@link ensureSchema}) — capped at
    * `limit` rows and returned in bm25 order (best match first). This is the
    * query that replaces reading the whole corpus (or a whole topic) into JS
    * and filtering there: every predicate that can run in SQL does, and the
@@ -810,24 +812,35 @@ export class CorpusIndex {
    * tokens can never win any signal regardless of what the candidate pool
    * contains, so there is nothing a query against the database could add.
    */
-  candidateRecordsMeta(opts: { tokens: string[]; topic?: string; includeHistory: boolean; limit: number }): StoredRecordMeta[] {
+  candidateRecordsMeta(opts: {
+    tokens: string[];
+    topic?: string;
+    /** A `status` value to exclude, compared for equality and never interpreted. Omit to
+     *  include every status. This used to be a boolean `includeHistory` with the literal
+     *  `'superseded'` written into the SQL — journal vocabulary inside an engine whose own
+     *  contract says it "only ever compares [status] for equality, never interprets what they
+     *  mean". The adapter owns the word now; the engine owns the comparison. */
+    excludeStatus?: string;
+    limit: number;
+  }): StoredRecordMeta[] {
     const clean = opts.tokens.map((token) => token.replace(/"/g, '').trim()).filter((token) => token.length > 0);
     if (clean.length === 0) return [];
-    const key = `${opts.topic !== undefined ? 1 : 0}:${opts.includeHistory ? 1 : 0}`;
+    const key = `${opts.topic !== undefined ? 1 : 0}:${opts.excludeStatus !== undefined ? 1 : 0}`;
     const match = this.narrowedMatchPattern(clean, opts.limit);
-    const stmt = this.candidateSelectStmt(key, opts.topic !== undefined, opts.includeHistory);
+    const stmt = this.candidateSelectStmt(key, opts.topic !== undefined, opts.excludeStatus !== undefined);
     const bindings: Array<string | number> = [match];
     if (opts.topic !== undefined) bindings.push(opts.topic);
+    if (opts.excludeStatus !== undefined) bindings.push(opts.excludeStatus);
     bindings.push(opts.limit);
     const rows = stmt.all(...bindings) as Array<Record<string, unknown>>;
     return rows.map((row) => toStoredRecord(row, false) as StoredRecordMeta);
   }
 
-  private candidateSelectStmt(key: string, hasTopic: boolean, includeHistory: boolean): StatementSync {
+  private candidateSelectStmt(key: string, hasTopic: boolean, hasStatusExclusion: boolean): StatementSync {
     let stmt = this.candidateStmts.get(key);
     if (!stmt) {
       const topicClause = hasTopic ? 'AND r.topic = ?' : '';
-      const statusClause = includeHistory ? '' : `AND r.status != 'superseded'`;
+      const statusClause = hasStatusExclusion ? 'AND r.status != ?' : '';
       stmt = this.db.prepare(
         `SELECT r.id, r.path, r.title, r.mtime_ms, r.content_hash, r.topic, r.status, r.adapter_meta
          FROM records r
