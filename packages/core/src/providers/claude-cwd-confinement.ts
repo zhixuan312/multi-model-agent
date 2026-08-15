@@ -87,26 +87,28 @@ export function bashWritesOutsideCwd(command: string, cwd: string): string | nul
     return effectiveCwd;
   }
 
-  // Phase 2: interpreter subshells with absolute out-of-cwd paths.
-  if (INTERPRETER_WRITE_RE.test(command)) {
-    const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
-    for (const p of absPaths) {
-      if (isIgnorableScanPath(p)) continue;
-      if (pathEscapesCwd(p, cwd)) return p;
-    }
-  }
+  // Phase 2: a command that can write SOMEWHERE — a classic mutating command, an interpreter
+  // subshell, or a download tool — scanned for an absolute path that leaves the workspace.
+  //
+  // The three triggers had a scan loop each, verbatim, extraction regex included. Three copies
+  // of one rule, in the file whose job is to have exactly one write boundary: a change to how
+  // paths are extracted (quoting, say) had to land in all three, and the copy that was missed
+  // would keep its own idea of what counts as a path.
+  if (!canWrite(command)) return null;
+  return firstPathOutsideCwd(command, cwd);
+}
 
-  // Phase 3: download tools writing to out-of-cwd paths.
-  if (DOWNLOAD_WRITE_RE.test(command)) {
-    const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
-    for (const p of absPaths) {
-      if (isIgnorableScanPath(p)) continue;
-      if (pathEscapesCwd(p, cwd)) return p;
-    }
-  }
+/** True when the command can write at all: a mutating command, an interpreter running inline
+ *  code, or a download tool saving to a path. */
+function canWrite(command: string): boolean {
+  return BASH_WRITE_CMD_RE.test(command)
+    || INTERPRETER_WRITE_RE.test(command)
+    || DOWNLOAD_WRITE_RE.test(command);
+}
 
-  // Phase 4: original check — classic mutating commands with absolute escape paths.
-  if (!BASH_WRITE_CMD_RE.test(command)) return null;
+/** The first absolute path in the command that leaves `cwd`, or null. Paths that are not write
+ *  targets (interpreter binaries, /dev, URL fragments) and temp paths are skipped. */
+function firstPathOutsideCwd(command: string, cwd: string): string | null {
   const absPaths = command.match(/(?<![\w=])\/[^\s'";:|&)>]+/g) ?? [];
   for (const p of absPaths) {
     if (isIgnorableScanPath(p)) continue;

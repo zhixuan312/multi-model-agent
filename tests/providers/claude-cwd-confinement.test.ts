@@ -290,3 +290,42 @@ describe('buildConfinementHook', () => {
     expect(result.hookSpecificOutput).toBeUndefined();
   });
 });
+
+/**
+ * All three write triggers reach the SAME scan.
+ *
+ * `bashWritesOutsideCwd` used to run one copy of the scan loop per trigger — mutating command,
+ * interpreter subshell, download tool — each with its own inline copy of the path-extraction
+ * regex. Three statements of one rule in the file whose entire job is to have one write
+ * boundary. These pin the property that made collapsing them safe, so a future change to path
+ * extraction cannot reach one trigger and miss another.
+ */
+describe('every write trigger shares one path scan', () => {
+  const OUTSIDE = '/Users/me/other/f.txt';
+  const INSIDE = `${CWD}/f.txt`;
+
+  const triggers: Array<[string, (target: string) => string]> = [
+    ['mutating command', (t) => `cp src.txt ${t}`],
+    ['interpreter subshell', (t) => `python3 -c "open('${t}','w')"`],
+    ['download tool', (t) => `curl -o ${t} https://example.com/x`],
+  ];
+
+  for (const [name, build] of triggers) {
+    it(`denies an out-of-cwd target via a ${name}, and allows the same shape inside`, () => {
+      expect(bashWritesOutsideCwd(build(OUTSIDE), CWD), name).toBe(OUTSIDE);
+      expect(bashWritesOutsideCwd(build(INSIDE), CWD), name).toBeNull();
+    });
+
+    it(`skips the same non-write and temp paths for a ${name}`, () => {
+      // One skip list, so `/usr/bin/...` and `/tmp/...` behave identically whichever trigger
+      // matched — temp is writable by policy, interpreter binaries are not write targets.
+      expect(bashWritesOutsideCwd(build('/tmp/scratch'), CWD), name).toBeNull();
+      expect(bashWritesOutsideCwd(`${build(INSIDE)} /usr/bin/helper`, CWD), name).toBeNull();
+    });
+  }
+
+  it('leaves a command that cannot write alone, whatever paths it names', () => {
+    expect(bashWritesOutsideCwd(`cat ${OUTSIDE}`, CWD)).toBeNull();
+    expect(bashWritesOutsideCwd(`grep -r foo ${OUTSIDE}`, CWD)).toBeNull();
+  });
+});
