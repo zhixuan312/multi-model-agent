@@ -206,6 +206,11 @@ export class CodexCliSession implements Session {
       filesWritten: [...tracker.filesWritten],
       usedShell: tracker.usedShell,
       toolCalls: [...tracker.toolCalls],
+      // Null, never 0. Codex confines writes with the OS sandbox
+      // (`-s workspace-write`), which refuses the syscall inside the child
+      // process without reporting it back, so mma has nothing to count. A 0
+      // here would claim the worker was measured and stayed in bounds.
+      sandboxDenialCount: null,
     };
   }
 
@@ -299,6 +304,7 @@ export class CodexCliSession implements Session {
       filesWritten: [],
       usedShell: false,
       toolCalls: [],
+      sandboxDenialCount: null,
     };
   }
 }

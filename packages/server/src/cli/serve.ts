@@ -310,7 +310,7 @@ export async function startServe(
   // is the consent flag (MMA_TELEMETRY=0 / config.telemetry.enabled =
   // false) — when consent is off the recorder enqueues nothing, so the
   // flusher's tick is a no-op even with the default endpoint set.
-  const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry-frontend.x1.lucazhang.work/v1/events';
+  const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry.x1.lucazhang.work/v1/events';
   const envEndpoint = process.env.MMA_TELEMETRY_ENDPOINT;
   const telemetryEndpoint = envEndpoint === undefined
     ? DEFAULT_TELEMETRY_ENDPOINT

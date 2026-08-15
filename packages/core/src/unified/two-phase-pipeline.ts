@@ -209,6 +209,9 @@ function earlyFailureResult(input: PipelineInput, code: string, message: string)
     turns: 0,
     durationMs: 0,
     terminationReason: 'error',
+    // No session ran, so no sandbox decision was ever evaluated — "not
+    // measured", which is null, not zero.
+    sandboxDenialCount: null,
     errorCode: code,
     errorMessage: message,
     filesWritten: [],

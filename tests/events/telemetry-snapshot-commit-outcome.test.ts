@@ -26,6 +26,7 @@ const turn = (filesWritten: string[]): TurnResult => ({
   filesWritten,
   usedShell: false,
   toolCalls: [],
+  sandboxDenialCount: 0,
 });
 
 function snapshotOf(over: Partial<PipelineResult>) {

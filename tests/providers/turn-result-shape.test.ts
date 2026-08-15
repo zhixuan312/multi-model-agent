@@ -15,7 +15,7 @@ import { normalizeClaudeTurn } from '../../packages/core/src/providers/normalize
  * An interface has no runtime existence, so the two halves are checked in the two places they
  * are actually visible: the key set at COMPILE time, and real producer output at run time.
  */
-const TEN_KEYS = [
+const TURN_RESULT_KEYS = [
   'output',
   'usage',
   'costUSD',
@@ -27,6 +27,7 @@ const TEN_KEYS = [
   'filesWritten',
   'usedShell',
   'toolCalls',
+  'sandboxDenialCount',
 ] as const;
 
 /** `never` unless the two unions are mutually assignable — an exact match, not a subset. */
@@ -35,17 +36,17 @@ type AssertExact<Actual, Expected> =
 
 /**
  * Compile-time half. A field added to or removed from `TurnResult` without updating
- * `TEN_KEYS` fails `tsc -p tsconfig.tests.json`, which is the only place the interface's key
+ * `TURN_RESULT_KEYS` fails `tsc -p tsconfig.tests.json`, which is the only place the interface's key
  * set exists at all.
  */
-const _keysAreExhaustive: AssertExact<keyof TurnResult, (typeof TEN_KEYS)[number]> = true;
+const _keysAreExhaustive: AssertExact<keyof TurnResult, (typeof TURN_RESULT_KEYS)[number]> = true;
 
 describe('TurnResult shape (A4.2)', () => {
   it('pins the declared key set at compile time', () => {
     // The type-level check above is the assertion; this keeps it referenced and states the
     // count in a form a reader can check against the interface.
     expect(_keysAreExhaustive).toBe(true);
-    expect(TEN_KEYS).toHaveLength(11); // 9 always-present + errorCode + errorMessage
+    expect(TURN_RESULT_KEYS).toHaveLength(12); // 10 always-present + errorCode + errorMessage
   });
 
   /**
@@ -62,13 +63,13 @@ describe('TurnResult shape (A4.2)', () => {
       { durationMs: 1 },
     );
 
-    const allowed = new Set<string>(TEN_KEYS);
+    const allowed = new Set<string>(TURN_RESULT_KEYS);
     for (const key of Object.keys(result)) {
       expect(allowed.has(key), `undeclared field "${key}" on a TurnResult`).toBe(true);
     }
-    // The nine non-optional fields must all be present — a producer that silently drops one
+    // The ten non-optional fields must all be present — a producer that silently drops one
     // would otherwise satisfy the "nothing undeclared" half above.
-    for (const key of TEN_KEYS.filter((k) => k !== 'errorCode' && k !== 'errorMessage')) {
+    for (const key of TURN_RESULT_KEYS.filter((k) => k !== 'errorCode' && k !== 'errorMessage')) {
       expect(result, `missing required field "${key}"`).toHaveProperty(key);
     }
   });

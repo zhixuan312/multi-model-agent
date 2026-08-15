@@ -100,6 +100,9 @@ export function normalizeClaudeTurn(
     filesWritten: [...filesWritten],
     usedShell,
     toolCalls,
+    // Overwritten by claude-session.ts with the hook's tally. The normalizer is
+    // a pure translation of the SDK stream and cannot see hook decisions.
+    sandboxDenialCount: 0,
     turns,
     durationMs: args.durationMs,
     // Priced by the caller, which is where the rate card is resolved. This took a `costUSD`

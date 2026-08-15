@@ -74,42 +74,56 @@ export function normalizeModel(rawModelId: string): { canonical: string; family:
 /**
  * Project an envelope status + failure code onto the wire's `terminalStatus` / `workerStatus`.
  *
- * This switch used to carry seven more cases — `incomplete`, `timeout`, `brief_too_vague`,
- * `unavailable`, `needs_context`, `blocked`, `review_loop_capped`. Not one of them was reachable:
- * they are the RETIRED lifecycle vocabulary (the same values that lived in the deleted
- * `runner-types.ts`), and nothing has set `structuredError.code` to any of them since that layer
- * was removed. `to-wire-status-mapping.test.ts` called itself "exhaustive" and covered all ten
- * branches, which is precisely why the dead ones looked alive: the test proved the function maps
- * X to Y, never that anything produces X.
+ * Every failure used to report `terminalStatus: 'error'`. The switch had seven more cases —
+ * `incomplete`, `brief_too_vague`, `needs_context`, `blocked`, `review_loop_capped` and friends —
+ * and not one was reachable: they are the RETIRED lifecycle vocabulary, and nothing has set
+ * `structuredError.code` to any of them since that layer was removed. A test called itself
+ * "exhaustive" and covered all ten branches, which is exactly why the dead ones looked alive: it
+ * proved the function maps X to Y, never that anything produces X.
  *
- * What DOES reach here, via `telemetry-snapshot.ts` ← `PipelineResult.failureReason`:
- *   - a provider turn code: `wall_clock_exceeded`, `aborted`, `sdk_no_result`, `sdk_max_turns`,
- *     `sdk_max_budget`, `sdk_execution_error`, `sdk_max_structured_output_retries`, `turn_failed`,
- *     `codex_error`, `codex_not_installed`, `spawn_failed`, `missing_credentials`, `invalid_api_key`
- *   - a pipeline code: `implementer_no_output`, `implementer_request_rejected`,
- *     `materialization_failed`, `rematerialization_failed`, `pipeline_failed`
- *   - a `ContractPlanError` code: `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`,
- *     `test-path-collision`
+ * v7 keeps only reachable outputs and splits three that matter operationally, because "the failure
+ * rate went up" is unactionable when a wall-clock timeout, an unreachable provider and a user
+ * hitting cancel are all filed as the same word:
  *
- * All of them take `default`, so every failure reports `terminalStatus: 'error'`. The wire schema
- * still ALLOWS `timeout` and `unavailable`, and `wall_clock_exceeded` → `timeout` /
- * `codex_not_installed | missing_credentials | invalid_api_key | sdk_no_result` → `unavailable`
- * would restore two distinctions the telemetry backend already understands. That is deliberately
- * NOT done here: it changes what a separate repo's dashboards receive, which is a product call and
- * a two-repo change, the same reason the `batch_*` plain-log event kinds still carry their
- * batch-era names.
+ *   - `timeout`     — the run hit its wall clock. A budget question.
+ *   - `unavailable` — the provider could not be reached or authenticated. An infrastructure fact
+ *                     about the operator's environment, not a statement about the engine.
+ *   - `cancelled`   — the caller aborted it. Not a failure at all, and counting it as one made
+ *                     every interactive session look unreliable.
+ *
+ * Anything else stays `error`.
  */
+
+/** Provider/pipeline codes that mean "we never got to run", not "the work went wrong". */
+const UNAVAILABLE_CODES = new Set([
+  'missing_credentials',
+  'invalid_api_key',
+  'codex_not_installed',
+  'spawn_failed',
+  'sdk_no_result',
+]);
+
 export function mapStatusToWire(
   status: TaskEnvelope['status'],
   errCode: string | null,
-): { terminalStatus: 'ok' | 'error'; workerStatus: 'done' | 'done_with_concerns' | 'failed' } {
+  wasCancelled = false,
+): {
+  terminalStatus: 'ok' | 'timeout' | 'error' | 'unavailable' | 'cancelled';
+  workerStatus: 'done' | 'done_with_concerns' | 'failed' | 'cancelled';
+} {
+  // Checked before status: a cancel usually lands as a `failed` pipeline with an
+  // `aborted` code, and reading the code alone cannot tell a caller-initiated
+  // abort from the engine giving up.
+  if (wasCancelled) return { terminalStatus: 'cancelled', workerStatus: 'cancelled' };
   if (status === 'done') return { terminalStatus: 'ok', workerStatus: 'done' };
   if (status === 'done_with_concerns') {
     return { terminalStatus: 'ok', workerStatus: 'done_with_concerns' };
   }
-  // `failed`, with `errCode` carried for the reader — `errorCode` on the same wire record
-  // preserves which failure it was.
-  void errCode;
+  if (errCode === 'aborted') return { terminalStatus: 'cancelled', workerStatus: 'cancelled' };
+  if (errCode === 'wall_clock_exceeded') return { terminalStatus: 'timeout', workerStatus: 'failed' };
+  if (errCode !== null && UNAVAILABLE_CODES.has(errCode)) {
+    return { terminalStatus: 'unavailable', workerStatus: 'failed' };
+  }
   return { terminalStatus: 'error', workerStatus: 'failed' };
 }
 
@@ -125,7 +139,8 @@ export function toWireRecord(
 ): TaskCompletedEventType {
   const { terminalStatus, workerStatus } = mapStatusToWire(
     env.status,
-    (env.structuredError as { code?: string } | null)?.code ?? null,
+    env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null),
+    env.wasCancelled,
   );
 
   // Resolve the main model's rate card once; per-stage and top-level
@@ -168,10 +183,6 @@ export function toWireRecord(
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
-      // Constant, not a placeholder: no component measures idle time since the lifecycle
-      // layer's activity tracker was removed. The wire keeps the fields (backend contract).
-      maxIdleMs: 0,
-      totalIdleMs: 0,
       mainCostUSD: mainCard
         ? priceTokens({
             inputTokens: s.inputTokens,
@@ -201,8 +212,7 @@ export function toWireRecord(
       ...base,
       name: 'review' as const,
       verdict: wireVerdict,
-      roundsUsed: 1,
-      concernCategories: s.concernCategories ?? [],
+      concernCategories: (s.concernCategories ?? []).slice(0, 16),
     };
   });
 
@@ -225,12 +235,6 @@ export function toWireRecord(
     .sort((a, b) =>
       a.stage.localeCompare(b.stage) || a.turn - b.turn || a.tool.localeCompare(b.tool))
     .slice(0, 500);
-
-  const distinctProviders = new Set(
-    env.escalationLog
-      .map((e) => (e as { toModel?: string }).toModel ?? '')
-      .filter(Boolean),
-  ).size;
 
   // Aggregate per-tier usage from the envelope's stages array. Each stage
   // already carries `tier`, `model`, `costUSD`, and token counts; bucket by
@@ -338,8 +342,6 @@ export function toWireRecord(
         name: string;
         findingsOutcome?: FindingsOutcome | null;
         findingsOutcomeReason?: string | null;
-        outcomeInferred?: boolean;
-        outcomeMalformed?: boolean;
       };
       const pick = outcomePriority
         .map((n) => (env.stages as StageWithOutcome[]).find((st) => st.name === n && st.findingsOutcome != null))
@@ -348,15 +350,9 @@ export function toWireRecord(
       return {
         findingsOutcome: pick.findingsOutcome ?? undefined,
         ...(pick.findingsOutcomeReason !== undefined && { findingsOutcomeReason: pick.findingsOutcomeReason }),
-        ...(pick.outcomeInferred !== undefined && { outcomeInferred: pick.outcomeInferred }),
-        ...(pick.outcomeMalformed !== undefined && { outcomeMalformed: pick.outcomeMalformed }),
       };
     })(),
-    escalationCount: Math.max(0, distinctProviders - 1),
-    fallbackCount: 0,
     filesWrittenCount: clampFilesWrittenCount(env.realFilesChanged.length),
-    stallCount: env.stallCount,
-    taskMaxIdleMs: env.taskMaxIdleMs,
     sandboxViolationCount: env.sandboxViolationCount,
     stages: wireStages,
     toolCalls: wireToolCalls,

@@ -7,11 +7,10 @@
 // test fixtures (tests/fixtures/task-envelope-store.ts) and has no production use.
 
 import type { ErrorCode } from '../error-codes.js';
-import type { FindingsOutcome, ConcernCategoryType } from '../types/enums.js';
+import type { FindingsOutcome } from '../types/enums.js';
 
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
-export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
 export interface ValidationWarning { rule: string; path: string }
 
 export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'research' | 'journal-record' | 'journal-recall' | 'orchestrate' | 'spec' | 'plan';
@@ -56,14 +55,17 @@ export interface StageRecord {
   //     of spec + quality sub-reviewers; matches wire enum, see wire-schema.ts).
   verdict?: 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
-  /** The wire's own enum, not bare strings: `wire-schema.ts` validates this array against
-   *  `ConcernCategory`, so a plain `string[]` here could only be discovered at parse time. */
-  concernCategories?: ConcernCategoryType[];
+  /** The reviewer's OWN category words, free text.
+   *
+   *  These were validated against a closed 14-value `ConcernCategory` enum. The
+   *  refiner schemas type `category` as a plain string, so every reviewer word
+   *  outside the 14 — `flaky_test`, `race_condition` — collapsed to `other`,
+   *  discarding the signal precisely where it got specific. The store keeps the
+   *  reviewer's word and the dashboard groups on it. */
+  concernCategories?: string[];
   // Findings outcome threading (review + implementing stages)
   findingsOutcome?: FindingsOutcome | null;
   findingsOutcomeReason?: string | null;
-  outcomeInferred?: boolean;
-  outcomeMalformed?: boolean;
 }
 
 export interface ToolCallRecord {
@@ -115,16 +117,28 @@ export interface TaskEnvelope {
   totalCachedNonReadTokens: number;
   totalDurationMs: number;
   turnsUsed: number;
-  stallCount: number;
-  sandboxViolationCount: number;
-  taskMaxIdleMs: number;
+  /** Tool calls the sandbox refused across every stage — a worker repeatedly
+   *  reaching outside its workspace.
+   *
+   *  Null when no stage could measure it (see TurnResult.sandboxDenialCount:
+   *  codex confines writes in the OS, where mma cannot observe a refusal).
+   *  `stallCount` and `taskMaxIdleMs` sat beside this reporting a hardcoded 0
+   *  each — the lifecycle layer's activity tracker measured them and went with
+   *  it, so nothing has produced a nonzero one since 4.8.0. */
+  sandboxViolationCount: number | null;
+  /** The caller cancelled this run (DELETE /task/:id won the race).
+   *
+   *  Distinct from any failure code: a cancel arrives as a `failed` pipeline
+   *  with an `aborted` turn, which is indistinguishable from the engine giving
+   *  up unless the caller's intent is recorded separately. Wire schema v6 had no
+   *  cancelled state at all, so every abort was billed as an engine error. */
+  wasCancelled: boolean;
   // findings/diagnostics
   findings: Finding[];
   // research-only: the `## Sources used` table (which adapter groups were
   // queried and which returned data), set at compose from the EvidencePack.
   // Empty on every non-research route.
   sourcesUsed: { source: string; attempted: boolean; used: boolean; note?: string }[];
-  escalationLog: EscalationEntry[];
   validationWarnings: ValidationWarning[];
 }
 

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { SCHEMA_VERSION, ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/wire-schema.js';
 
 describe('wire schema version contract', () => {
-  it('SCHEMA_VERSION is pinned at 6', () => {
-    expect(SCHEMA_VERSION).toBe(6);
+  it('SCHEMA_VERSION is pinned at 7', () => {
+    expect(SCHEMA_VERSION).toBe(7);
   });
 
   // `schemaVersion` is NOT a field of the task-completed event. It belongs to the telemetry BATCH

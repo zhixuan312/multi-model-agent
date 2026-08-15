@@ -853,6 +853,7 @@ export class ExecutionRuntime {
           caller.clientName,
           cwd, durationMs,
           pre.sourcesUsed ?? [],
+          wasCancelled,
         );
         deps.bus.emitEnvelopeSnapshot(envelope, 'seal');
       } catch (telErr) {

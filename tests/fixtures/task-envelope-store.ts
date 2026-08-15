@@ -68,8 +68,9 @@ export class TaskEnvelopeStore {
       contextBlockId: null,
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
-      totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
-      findings: [], sourcesUsed: [], escalationLog: [], validationWarnings: [],
+      totalDurationMs: 0, turnsUsed: 0, sandboxViolationCount: 0,
+      wasCancelled: false,
+      findings: [], sourcesUsed: [], validationWarnings: [],
     };
     store = new TaskEnvelopeStore(env, notify);
     return store;
@@ -121,22 +122,11 @@ export class TaskEnvelopeStore {
     this.notify('recordToolCall');
   }
 
-  recordEscalation(entry: EscalationEntry): void {
-    this.guard('recordEscalation');
-    this.env.escalationLog.push(entry);
-    this.notify('recordEscalation');
-  }
-
-  recordStall(entry: { atMs: number; idleMs: number }): void {
-    this.guard('recordStall');
-    this.env.stallCount++;
-    if (entry.idleMs > this.env.taskMaxIdleMs) this.env.taskMaxIdleMs = entry.idleMs;
-    this.notify('recordStall');
-  }
-
   recordSandboxViolation(_entry: { kind: string; path: string }): void {
     this.guard('recordSandboxViolation');
-    this.env.sandboxViolationCount++;
+    // `?? 0` because the count is nullable — null means "this runner cannot
+    // observe a refusal", and the first observed one makes it a real number.
+    this.env.sandboxViolationCount = (this.env.sandboxViolationCount ?? 0) + 1;
     this.notify('recordSandboxViolation');
   }
 
