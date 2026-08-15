@@ -125,6 +125,18 @@ class Semaphore {
   }
 }
 
+/**
+ * Bound how long the ORCHESTRATOR waits — not how long the request runs.
+ *
+ * This is a promise race: it rejects the caller after `ms` and does nothing to `p`, which keeps
+ * running to completion or forever. That is fine because every adapter carries its own
+ * `AbortController` bounded by `RESEARCH_HTTP_TIMEOUT_MS`, so the request itself is cancelled
+ * there. It was NOT fine while three adapters shipped without one: this function ended the wait,
+ * the socket stayed open, and the leak was invisible precisely because the orchestrator reported
+ * a clean `timeout` failure.
+ *
+ * So: a new adapter needs its own signal. This cannot supply one.
+ */
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);

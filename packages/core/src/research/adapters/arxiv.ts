@@ -1,7 +1,7 @@
 import { request } from 'undici';
 import { XMLParser } from 'fast-xml-parser';
 import { USER_AGENT } from '../user-agent.js';
-import type { AdapterResult } from './types.js';
+import { RESEARCH_HTTP_TIMEOUT_MS, type AdapterResult } from './types.js';
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
 
@@ -18,10 +18,28 @@ export async function arxivSearch(query: string, opts: ArxivOpts = {}): Promise<
   url.searchParams.set('search_query', `all:${safe || query}`);
   url.searchParams.set('max_results', String(max));
 
-  const res = await request(url.toString(), {
-    method: 'GET',
-    headers: { 'user-agent': USER_AGENT },
-  });
+  // `RESEARCH_HTTP_TIMEOUT_MS` with a real AbortController, matching openalex/crossref/pubmed.
+  // The orchestrator's `withTimeout` is a promise race: it rejects the CALLER after
+  // `perAdapterTimeoutMs` and does nothing to the request, so without this an unresponsive
+  // endpoint held an undici socket open for the daemon's lifetime while the orchestrator had
+  // long since moved on.
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), RESEARCH_HTTP_TIMEOUT_MS);
+  let res;
+  try {
+    res = await request(url.toString(), {
+      method: 'GET',
+      headers: { 'user-agent': USER_AGENT },
+      signal: ac.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error).name === 'AbortError' || (err as { code?: string }).code === 'UND_ERR_ABORTED') {
+      throw new Error(`arxiv_timeout: request exceeded ${RESEARCH_HTTP_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
+  clearTimeout(timer);
   if (res.statusCode >= 300 && res.statusCode < 400) {
     throw new Error('adapter_unexpected_redirect: arxiv');
   }

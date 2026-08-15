@@ -1,6 +1,6 @@
 import { request } from 'undici';
 import { USER_AGENT } from '../user-agent.js';
-import type { AdapterResult } from './types.js';
+import { RESEARCH_HTTP_TIMEOUT_MS, type AdapterResult } from './types.js';
 
 export interface SSOpts { maxResults?: number; apiKey?: string; }
 
@@ -37,6 +37,10 @@ export async function semanticScholarSearch(query: string, opts: SSOpts = {}): P
   url.searchParams.set('limit', String(max));
   url.searchParams.set('fields', 'paperId,title,abstract,year,authors,url');
 
+  // See the note in `arxiv.ts`: the orchestrator's timeout races the promise, it does not cancel
+  // the request. Without this signal a hung endpoint leaked the socket.
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), RESEARCH_HTTP_TIMEOUT_MS);
   let res;
   try {
     res = await request(url.toString(), {
@@ -45,10 +49,16 @@ export async function semanticScholarSearch(query: string, opts: SSOpts = {}): P
         'user-agent': USER_AGENT,
         'x-api-key':  opts.apiKey,
       },
+      signal: ac.signal,
     });
   } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error).name === 'AbortError' || (err as { code?: string }).code === 'UND_ERR_ABORTED') {
+      throw new Error(`semantic_scholar_timeout: request exceeded ${RESEARCH_HTTP_TIMEOUT_MS}ms`);
+    }
     throw new Error(`semantic_scholar_request_failed: ${(err as Error).message}`);
   }
+  clearTimeout(timer);
 
   if (res.statusCode === 429) throw new Error('semantic_scholar_rate_limited');
   if (res.statusCode >= 300 && res.statusCode < 400) throw new Error('adapter_unexpected_redirect: semantic_scholar');
