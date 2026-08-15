@@ -63,7 +63,11 @@ describe('packaged execution vocabulary', () => {
    * documented value that never existed.
    */
   it('documents only terminal statuses the engine can emit', () => {
-    const AUTHORITATIVE = ['done', 'done_with_concerns', 'failed', 'cancelled'];
+    // FIVE, not four. `interrupted` was missing here and from every packaged doc: boot
+    // reconciliation builds a terminal envelope with `status: 'interrupted'` for an execution a
+    // daemon restart orphaned, and `GET /execution/:id` serves it from the store. A consumer
+    // switching on four values meets an unhandled state the first time a daemon restarts mid-run.
+    const AUTHORITATIVE = ['done', 'done_with_concerns', 'failed', 'cancelled', 'interrupted'];
 
     // Half one: the pipeline still produces the three it owns. If someone renames them, this fails
     // here rather than leaving the docs quietly wrong again.
@@ -72,6 +76,11 @@ describe('packaged execution vocabulary', () => {
     // …and the runtime supplies the fourth, for a cancel that beat completion.
     const runtime = readFileSync('packages/server/src/application/execution-runtime.ts', 'utf8');
     expect(runtime).toContain("'cancelled' as const");
+    // …and reconciliation supplies the fifth, through the shared error-envelope builder.
+    const resultShape = readFileSync('packages/server/src/application/result-shape.ts', 'utf8');
+    expect(resultShape).toContain("'failed' | 'cancelled' | 'interrupted'");
+    const reconcile = readFileSync('packages/server/src/application/reconcile.ts', 'utf8');
+    expect(reconcile).toContain("'interrupted'");
 
     // Half two: every packaged doc that states the union states exactly that set.
     //

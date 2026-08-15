@@ -109,3 +109,61 @@ describe('documented context-block limits match the configured defaults', () => 
     expect(text).not.toMatch(/\bmax(?:imum)?\b[^.\n]{0,40}\d+\s*MiB/i);
   });
 });
+
+/**
+ * The documented output path must be the one the engine derives.
+ *
+ * `mma-plan`'s table said "Auto-derived: `.mma/plans/YYYY-MM-DD-<spec-basename>.md`", which reads
+ * as today's date prefixed onto the spec name. `deriveDefaultOutputPath` INHERITS the spec's dated
+ * stem instead — the same file says so correctly 21 lines earlier ("no double-date"). A caller
+ * following the table looks for `.mma/plans/2026-08-15-2026-07-06-claims-demo.md` and does not find
+ * their plan.
+ */
+describe('the plan output-path doc matches the deriver', () => {
+  it('states the inherited stem, not a fresh date prefix', async () => {
+    const { deriveDefaultOutputPath } = await import(
+      '../../../packages/server/src/application/preprocessors/derive-output-path.js'
+    );
+    const derived = deriveDefaultOutputPath({
+      type: 'plan',
+      paths: ['/p/.mma/specs/2026-07-06-claims-demo.md'],
+      today: '2026-08-15',
+      prompt: '',
+    });
+    // The behaviour: the spec's own date survives and today's is not prepended.
+    expect(derived).toBe('.mma/plans/2026-07-06-claims-demo.md');
+
+    const doc = readFileSync('packages/server/src/skills/mma-plan/SKILL.md', 'utf8');
+    expect(doc, 'the table must show the inherited stem').toContain(derived);
+    expect(doc, 'the table must not imply a fresh date prefix')
+      .not.toMatch(/Auto-derived: `\.mma\/plans\/YYYY-MM-DD-/);
+  });
+});
+
+/**
+ * The documented terminal statuses must be the ones a caller can observe.
+ *
+ * `_shared/response-shape.md` listed four — done / done_with_concerns / failed / cancelled — while
+ * `ExecutionStore` has a fifth: boot reconciliation marks a daemon-restart-orphaned execution
+ * `interrupted`, and `GET /execution/:id` serves it from the store after restart. A consumer that
+ * switches on the four documented values hits an unhandled state the first time a daemon is
+ * restarted mid-run, which is exactly when it is least welcome.
+ */
+describe('the documented status set matches the store', () => {
+  it('names every terminal state the store can persist', () => {
+    const store = readFileSync('packages/server/src/application/execution-store.ts', 'utf8');
+    const declared = /type StoredExecutionState = ([^;]+);/.exec(store);
+    expect(declared, 'the state union moved — this test can no longer read it').not.toBeNull();
+
+    const states = [...declared![1].matchAll(/'(\w+)'/g)]
+      .map((m) => m[1]!)
+      // `pending` is not terminal; `complete` is the store's spelling of the wire's `done`.
+      .filter((s) => s !== 'pending' && s !== 'complete');
+
+    const doc = readFileSync('packages/server/src/skills/_shared/response-shape.md', 'utf8');
+    for (const state of states) {
+      expect(doc, `the response-shape doc never mentions the terminal state '${state}'`)
+        .toContain(state);
+    }
+  });
+});

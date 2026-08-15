@@ -69,7 +69,7 @@ Inline mode — `outputPath` is required because no basename can be derived:
 
 | Input mode | `outputPath` provided? | Behavior |
 |---|---|---|
-| `target.paths` | No | Auto-derived: `.mma/plans/YYYY-MM-DD-<spec-basename>.md` |
+| `target.paths` | No | Auto-derived by INHERITING the spec's dated stem: a spec at `.mma/specs/2026-07-06-claims-demo.md` yields `.mma/plans/2026-07-06-claims-demo.md`, NOT today's date prefixed onto it. An undated source falls back to `.mma/plans/<today>-<basename>.md`. |
 | `target.paths` | Yes | Uses provided path |
 | `target.inline` | No | HTTP 400 `invalid_request` — cannot derive basename from inline |
 | `target.inline` | Yes | Uses provided path |

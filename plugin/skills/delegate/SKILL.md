@@ -112,7 +112,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "done | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -150,6 +150,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 |---|---|
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
+
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
 
 **Step 2 — extract the result from `output.summary`:**
 

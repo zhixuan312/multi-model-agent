@@ -69,7 +69,7 @@ Inline mode — `outputPath` is required because no basename can be derived:
 
 | Input mode | `outputPath` provided? | Behavior |
 |---|---|---|
-| `target.paths` | No | Auto-derived: `.mma/plans/YYYY-MM-DD-<spec-basename>.md` |
+| `target.paths` | No | Auto-derived by INHERITING the spec's dated stem: a spec at `.mma/specs/2026-07-06-claims-demo.md` yields `.mma/plans/2026-07-06-claims-demo.md`, NOT today's date prefixed onto it. An undated source falls back to `.mma/plans/<today>-<basename>.md`. |
 | `target.paths` | Yes | Uses provided path |
 | `target.inline` | No | HTTP 400 `invalid_request` — cannot derive basename from inline |
 | `target.inline` | Yes | Uses provided path |
@@ -133,7 +133,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "done | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -171,6 +171,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 |---|---|
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
+
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
 
 **Step 2 — extract the result from `output.summary`:**
 
