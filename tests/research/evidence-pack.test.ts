@@ -73,15 +73,53 @@ describe('evidence-pack', () => {
   });
 
   it('drops lowest-priority group first when bytes cap trips', () => {
+    // 12 sources whose snippets are long enough to blow the byte cap BEFORE truncation and
+    // comfortably inside it after. They must all survive: the cap is measured on what ships.
+    //
+    // This case used to assert the opposite — that brave sources were dropped — because the byte
+    // cap ran BEFORE snippet truncation and charged each source its full 4,000 characters when it
+    // would ship at ~500. The pack discarded sources it had room for, and the test pinned that.
     const fat = 'x'.repeat(4000);
     const sources: EvidenceSource[] = [];
     for (let i = 0; i < 6; i++) sources.push(mkSrc({ source: 'arxiv', url: `https://arxiv/${i}`, snippet: fat }));
     for (let i = 0; i < 6; i++) sources.push(mkSrc({ source: 'brave', url: `https://brave/${i}`, snippet: fat }));
     const out = applyBudget(sources, []);
-    expect(out.sources.some(s => s.source === 'arxiv')).toBe(true);
-    expect(out.sources.filter(s => s.source === 'brave').length)
-      .toBeLessThan(6);
+    expect(out.sources.filter(s => s.source === 'arxiv').length).toBe(6);
+    expect(out.sources.filter(s => s.source === 'brave').length).toBe(6);
+    expect(out.budgetExceeded).toBe(false);
+    for (const source of out.sources) {
+      expect(source.snippet.length).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS + 1);
+    }
+  });
+
+  /**
+   * The byte cap earns its keep on non-ASCII content, which is where research results live.
+   *
+   * After truncation every snippet is at most 500 CHARACTERS. In Latin text that is ~500 bytes,
+   * so 70 sources (the total-source cap) come to ~42 KB and the 48 KiB byte cap never binds. In
+   * Japanese the same 500 characters are ~1,500 bytes, so the same 70 sources are ~105 KB — over
+   * the cap. Measuring with `.length` made those two cases indistinguishable and the byte cap
+   * unreachable for exactly the content that needs it.
+   */
+  it('drops lowest-priority group first when the byte cap trips on multi-byte content', () => {
+    const fat = '設定構築検証計画仕様確認資料'.repeat(40); // 560 chars, ~1,680 bytes
+    const sources: EvidenceSource[] = [];
+    for (let i = 0; i < 10; i++) sources.push(mkSrc({ source: 'arxiv', url: `https://arxiv/${i}`, snippet: fat }));
+    for (let i = 0; i < 10; i++) sources.push(mkSrc({ source: 'pubmed', url: `https://pubmed/${i}`, snippet: fat }));
+    for (let i = 0; i < 10; i++) sources.push(mkSrc({ source: 'brave', url: `https://brave/${i}`, snippet: fat }));
+    for (let i = 0; i < 10; i++) sources.push(mkSrc({ source: 'brave_news', url: `https://bnews/${i}`, snippet: fat }));
+
+    const out = applyBudget(sources, []);
     expect(out.budgetExceeded).toBe(true);
+    // arXiv is last in DROP_PRIORITY, so it is the group that survives.
+    expect(out.sources.some(s => s.source === 'arxiv')).toBe(true);
+    // …and brave, first in DROP_PRIORITY, is dropped before it.
+    expect(out.sources.filter(s => s.source === 'brave').length)
+      .toBeLessThan(out.sources.filter(s => s.source === 'arxiv').length);
+
+    const shippedBytes = out.sources.reduce(
+      (n, s) => n + Buffer.byteLength(s.title + s.url + s.snippet + s.query, 'utf8') + 100, 0);
+    expect(shippedBytes).toBeLessThanOrEqual(EVIDENCE_PACK_LIMITS.MAX_TOTAL_BYTES);
   });
 
   it('serializeEvidencePack emits a sources section and failedAttempts section', () => {
