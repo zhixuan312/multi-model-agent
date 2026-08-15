@@ -23,7 +23,7 @@
  * is what this does.
  */
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 interface Pkg {
@@ -91,5 +91,59 @@ describe('no published subpath exposes a test seam', () => {
       found,
       `${dir}/package.json publishes "${sub}", which exposes test seam(s) ${found.join(', ')} to every consumer`,
     ).toEqual([]);
+  });
+});
+
+/**
+ * Committed markdown assets must reach an npm consumer, and `tsc` will not carry them.
+ *
+ * `packages/core/dist` contains ZERO `.md` — the compiler copies only what it emits. So every
+ * source directory holding committed markdown ships one of exactly two ways: a `files` entry naming
+ * `src/<dir>` (core's three asset families), or a build step that mirrors it into `dist` (the
+ * server's `skills`, 24 files). A new asset family added with neither would be present in the repo,
+ * green in every test, and absent from the tarball — the resolver finds nothing only once it is
+ * installed from the registry.
+ *
+ * A guard for `src/delivery-packagers` already existed, hand-written for that one family, in
+ * `delivery-packager-assets.contract.test.ts`. Two of the three were unprotected. This derives the
+ * roster from the filesystem instead, so the fourth family is covered before anyone thinks to.
+ */
+describe('every committed markdown asset root is shipped', () => {
+  /** Top-level dirs under `<pkg>/src` that contain committed `.md`, and whether dist mirrors them. */
+  function assetDirs(dir: string): { name: string; mirrored: boolean }[] {
+    const src = join(dir, 'src');
+    const names = readdirSync(src, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .filter((n) => hasMarkdown(join(src, n)));
+    return names.map((name) => ({ name, mirrored: hasMarkdown(join(dir, 'dist', name)) }));
+  }
+
+  function hasMarkdown(root: string): boolean {
+    if (!existsSync(root)) return false;
+    return readdirSync(root, { recursive: true, withFileTypes: true })
+      .some((e) => e.isFile() && e.name.endsWith('.md'));
+  }
+
+  const ROWS = PACKAGES.flatMap((dir) =>
+    assetDirs(dir).map((a) => ({ dir, ...a })),
+  );
+
+  it('finds asset directories in both packages', () => {
+    // Floor: an empty roster passes every case below while checking nothing. Both packages have at
+    // least one, and dist genuinely carries no core markdown — the premise the rule rests on.
+    expect(ROWS.filter((r) => r.dir === 'packages/core').length).toBeGreaterThan(2);
+    expect(ROWS.filter((r) => r.dir === 'packages/server').length).toBeGreaterThan(0);
+    expect(hasMarkdown('packages/core/dist'), 'tsc now copies .md — this rule needs revisiting')
+      .toBe(false);
+  });
+
+  it.each(ROWS.map((r) => [`${r.dir}/src/${r.name}`, r] as const))('%s reaches the tarball', (_l, r) => {
+    const files = (JSON.parse(readFileSync(join(r.dir, 'package.json'), 'utf8')) as { files?: string[] }).files ?? [];
+    const shipped = files.includes(`src/${r.name}`) || (r.mirrored && files.includes('dist'));
+    expect(
+      shipped,
+      `${r.dir}/src/${r.name} holds committed .md but is neither listed in "files" nor mirrored into dist — it will be missing from the published package`,
+    ).toBe(true);
   });
 });
