@@ -9,6 +9,7 @@ import { join, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { buildPlugin, PLUGIN_NAME, MCP_SERVER_KEY, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
+import { MCP_TOOLS } from '../../packages/server/src/mcp/tool-surface.js';
 
 const SKILL_COMPONENTS = SUPPORTED_SKILLS.map(pluginComponentName);
 const COMMAND_COMPONENTS = SUPPORTED_COMMANDS.map(pluginComponentName);
@@ -354,6 +355,48 @@ describe('buildPlugin — agent-plugin target', () => {
       const text = readFileSync(join(out, f), 'utf8');
       expect(text).not.toMatch(/Bearer\s+\S/);
       expect(text).not.toMatch(/Authorization"\s*:\s*"[^$]/);
+    }
+  });
+});
+
+/**
+ * The README's "What it installs" section must describe what was installed.
+ *
+ * Its three bullets are three different constructions and only two were derived. The tool list
+ * comes from `MCP_TOOLS` with a comment explaining that a hand-maintained one "silently rots every
+ * time a specification adds operations". One line below that warning, the COMMANDS bullet had a
+ * computed count and a hardcoded pair of examples — so adding `/mma:tldr` and `/mma:deck` produced
+ * "**4 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)": a list that contradicts the
+ * number beside it, with no `…` to mark it as a sample the way the skills bullet does.
+ */
+describe('plugin README describes the plugin it shipped with', () => {
+  let out: string;
+  let result: ReturnType<typeof buildPlugin>;
+  let readme: string;
+
+  beforeAll(() => {
+    out = mkdtempSync(join(tmpdir(), 'mma-plugin-readme-'));
+    result = buildPlugin({ outDir: out, version: '9.9.9', port: 7337 });
+    readme = readFileSync(join(out, 'README.md'), 'utf8');
+  });
+
+  afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+  it('states the counts it actually emitted', () => {
+    expect(readme).toContain(`**${result.skills.length} skills**`);
+    expect(readme).toContain(`**${result.commands.length} commands**`);
+  });
+
+  it('names every command it emitted, not a sample of them', () => {
+    for (const command of result.commands) {
+      expect(readme, `README omits /mma:${command} while claiming ${result.commands.length} commands`)
+        .toContain(`\`/mma:${command}\``);
+    }
+  });
+
+  it('names every MCP tool it exposes', () => {
+    for (const tool of MCP_TOOLS) {
+      expect(readme, `README omits ${tool.name}`).toContain(`\`${tool.name}\``);
     }
   });
 });

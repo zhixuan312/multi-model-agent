@@ -360,6 +360,12 @@ export function buildPlugin(opts: BuildPluginOptions): BuildPluginResult {
   // Generated from the real tool surface, never hand-listed: a hand-maintained list silently
   // rots every time a specification adds operations (the record surface added ~70 tools that
   // this README never mentioned until the live smoke caught it).
+  //
+  // The COMMANDS line below had the same defect in a subtler form, one line under this warning:
+  // its count was computed and its examples were a hardcoded pair, so adding `/mma:tldr` and
+  // `/mma:deck` rendered "**4 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)" —
+  // a list that contradicts the number beside it, with no `…` to mark it as a sample. The skills
+  // line above IS a sample and says so. Four commands fit, so they are all listed.
   const mcpToolList = MCP_TOOLS.map((t) => `\`${t.name}\``).join(', ');
   writeFile(path.join(out, 'README.md'), `# mma — ${layout.title}
 
@@ -369,7 +375,7 @@ edit by hand: re-run the command to regenerate.
 ## What it installs
 
 - **${skills.length} skills** — auto-matched by intent (\`/${PLUGIN_NAME}:audit\`, \`/${PLUGIN_NAME}:delegate\`, …)
-- **${commands.length} commands** — explicitly invoked (\`/${PLUGIN_NAME}:flow\`, \`/${PLUGIN_NAME}:breakout\`)
+- **${commands.length} commands** — explicitly invoked: ${commands.map((c) => `\`/${PLUGIN_NAME}:${c}\``).join(', ')}
 - **1 MCP server** (\`${PLUGIN_NAME}:${MCP_SERVER_KEY}\`) — \`${layout.transportSummary(mcpUrl)}\`, exposing ${mcpToolList}
 
 ## Requirements
