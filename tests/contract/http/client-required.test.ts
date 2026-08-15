@@ -40,6 +40,9 @@ describe('contract: tool routes require the X-MMA-Client header', () => {
         body: JSON.stringify({ type: 'review', target: { paths: ['/tmp/noop.ts'] } }),
       });
       expect(res.status).toBe(400);
+      // The body is a VALID review request, so the 400 must be about the client header —
+      // naming it is what separates this from any other validation failure.
+      expect(JSON.stringify(await res.json())).toMatch(/client/i);
     } finally {
       await h.close();
     }

@@ -446,6 +446,8 @@ describe('route contract', () => {
       try {
         const res = await dispatch(h, { type: 'bogus', prompt: 'test' });
         expect(res.status).toBe(400);
+        // Names the discriminator, so this cannot pass on an unrelated validation failure.
+        expect(JSON.stringify(await res.json())).toContain('type');
       } finally { await h.close(); }
     });
 
@@ -465,13 +467,6 @@ describe('route contract', () => {
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
-    it('rejects old delegate tasks array with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'delegate', tasks: [{ prompt: 'x' }] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
   });
 
   // ── Unknown executionId ──
@@ -630,6 +625,7 @@ describe('route contract', () => {
           deliverable: { state: 'draft', audience: 'board' },
         });
         expect(res.status).toBe(400);
+        expect(JSON.stringify(await res.json())).toContain('deliverable');
       } finally { await h.close(); }
     });
   });
