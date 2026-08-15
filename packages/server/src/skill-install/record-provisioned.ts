@@ -47,9 +47,16 @@ export function recordProvisionedSkills(
   for (const skillName of SUPPORTED_SKILLS) {
     const content = readSkillContent(skillName, skillsRoot);
     if (content === null) {
+      // A missing bundled SKILL.md is not a per-client fault — the file is absent for every
+      // client in this run. The caller renders `error: <clientId>: <reason>`, and the clientId
+      // here is just `provisioned[0]`, so the reason has to carry the real scope: an operator
+      // syncing three clients used to see one of them named and could reasonably conclude the
+      // other two had installed the skill fine.
       failures.push({
         clientId: provisioned[0]!,
-        reason: `Bundled SKILL.md not found for '${skillName}' at ${path.join(skillsRoot, skillName, 'SKILL.md')}`,
+        reason:
+          `Bundled SKILL.md not found for '${skillName}' at ${path.join(skillsRoot, skillName, 'SKILL.md')}` +
+          ` — not recorded for any of: ${provisioned.join(', ')}`,
       });
       continue;
     }

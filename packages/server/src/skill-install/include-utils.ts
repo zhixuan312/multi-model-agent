@@ -1,8 +1,10 @@
 /**
  * Shared include-inlining utilities for skill writers.
  *
- * Provides a common implementation for `@include _shared/<path>` directive
- * processing, used by all skill writers (Claude Code, Cursor, etc.).
+ * One implementation of `@include _shared/<path>` directive processing, for the three places that
+ * emit skill content: `provisioning/real-port.ts` (every client's skill files, through the shared
+ * port — there are no longer per-client writers that inline includes themselves),
+ * `provisioning/claude-code-commands.ts`, and `plugin/build-plugin.ts`.
  *
  * @module
  */

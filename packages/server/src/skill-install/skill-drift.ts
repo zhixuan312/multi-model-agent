@@ -7,7 +7,7 @@
 // installed skill's version against the bundled SKILL.md frontmatter — there is no
 // separate manifest file and no hardcoded compatible-major range.
 import matter from 'gray-matter';
-import { listEntries, FutureManifestError } from './manifest.js';
+import { listEntries } from './manifest.js';
 import { readSkillContent } from './discover.js';
 
 /**
@@ -44,9 +44,13 @@ export function deriveSkillManifestInfo(homeDir?: string): SkillManifestInfo {
   let entries;
   try {
     entries = listEntries(homeDir);
-  } catch (err) {
-    // FutureManifestError (or any manifest IO/validation issue) — can't assess.
-    if (err instanceof FutureManifestError) return { skillVersion: null, skillCompatible: null };
+  } catch {
+    // Every failure means the same thing HERE: the manifest cannot be assessed, so report
+    // "unknown" rather than fail the status response. An `if (err instanceof FutureManifestError)`
+    // used to precede this, returning the identical value — a branch that could not change the
+    // outcome, on a distinction that matters to the callers who ACT on it (`cli/doctor.ts` names
+    // it in its detail line, `cli/sync-skills.ts` exits 2 on it, `cli/serve.ts` warns) and not to
+    // this one, which only reports.
     return { skillVersion: null, skillCompatible: null };
   }
 

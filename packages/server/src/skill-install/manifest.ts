@@ -96,7 +96,18 @@ function readManifest(homeDir?: string): InstallManifest {
   let raw: string;
   try {
     raw = fs.readFileSync(p, 'utf-8');
-  } catch {
+  } catch (err) {
+    // Still returns empty — a read that throws would fail daemon boot and every `sync-skills`
+    // run over a bookkeeping file. But say so: the file EXISTS (checked above) and could not be
+    // read, which means wrong ownership after a sudo install, or a directory in its place. Silent
+    // emptiness presents that as "nothing is installed", so sync reinstalls everything on every
+    // run and `mma doctor` reports an unknown skill version, indefinitely and without a clue.
+    // This was the one branch in this function with no reasoning attached to it.
+    process.stderr.write(
+      `[mma] install manifest at ${p} exists but could not be read ` +
+      `(${(err as NodeJS.ErrnoException).code ?? 'unknown error'}); treating as empty. ` +
+      `Skills will be re-provisioned on every sync until it is readable.\n`,
+    );
     return emptyManifest();
   }
 
