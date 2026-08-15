@@ -30,7 +30,7 @@ For your output to clear that bar, every finding must answer:
 - **Cause**: where is the actual defect (`file:line` that, if changed, would prevent the failure)?
 - **Trace**: the evidence chain that links symptom to cause — each step a `file:line` citation or an observed value.
 - **Fix**: the specific change to make at the cause (PROPOSE only — read-only contract; the caller applies).
-- **Falsifier**: how the maintainer can verify the fix works (the assertion that should now pass, the wrong output that should now be right).
+- **Falsifier**: how the maintainer can verify the fix works (the assertion that should now pass, the wrong output that should now be right). There is NO `falsifier` field — a finding is `{weight, category, claim, evidence, file, line}` — so write it into `evidence`, after the trace, as its closing sentence. A falsifier in a prose section outside the JSON block is discarded.
 
 A finding missing the trace from symptom to cause is a guess. A finding that names a symptom location as the cause is misdirection. Both are worse than no finding because they send the maintainer down the wrong path.
 
@@ -74,7 +74,7 @@ Each angle is a distinct perspective for finding the root cause. Work through AL
 
 - Follow the failure path wherever it leads. Cross-file tracing is required, not forbidden.
 - Reproduction discovery IS in scope: if the caller did not provide reproduction steps, infer them from tests, error messages, logs, or recent revisions and state your inferred reproduction explicitly.
-- Pre-existing-vs-new separation: if multiple defects are entangled in the same failure, separate them. Identify which is the one the caller asked about; note the others under "Other defects observed (out of scope for this investigation)."
+- Pre-existing-vs-new separation: if multiple defects are entangled in the same failure, separate them. Identify which is the one the caller asked about, and emit each of the others as its OWN finding with its own `category` — a prose section outside the JSON block is discarded, so anything not in `findings` is lost.
 - Out of scope: applying fixes (debug is read-only — propose, do not apply); rewriting the deliverable; auditing unrelated subsystems; broadening into a general review.
 
 ### Severity Calibration
