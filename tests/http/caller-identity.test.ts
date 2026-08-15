@@ -14,9 +14,14 @@ function fakeReq(headers: Record<string, string>): IncomingMessage {
 }
 
 describe('resolveCallerIdentity', () => {
-  it('returns default identity when no headers are present', () => {
+  it('returns the exported default identity, which is "other", when no headers are present', () => {
+    // Both halves in one case: that the function falls back to DEFAULT_IDENTITY, and what
+    // DEFAULT_IDENTITY is. These were two `it`s with the same `fakeReq({})` setup and the same
+    // assertion written two ways — a later case, "defaults client to other when header missing",
+    // asserted the literal while this one asserted the constant.
     const req = fakeReq({});
     expect(resolveCallerIdentity(req)).toEqual(DEFAULT_IDENTITY);
+    expect(DEFAULT_IDENTITY).toEqual({ callerClient: 'other' });
   });
 
   it('reads X-MMA-Client from headers', () => {
@@ -37,11 +42,6 @@ describe('resolveCallerIdentity', () => {
   it('maps unknown client to "other"', () => {
     const req = fakeReq({ 'x-mma-client': 'unknown-tool' });
     expect(resolveCallerIdentity(req).callerClient).toBe('other');
-  });
-
-  it('defaults client to "other" when header missing', () => {
-    const req = fakeReq({});
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'other' });
   });
 
   // No X-MMA-Main-Model case: the header is no longer read. The cost baseline is

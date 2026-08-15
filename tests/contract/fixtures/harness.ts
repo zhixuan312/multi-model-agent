@@ -80,6 +80,17 @@ export interface BootOptions {
    *  `execution://<id>` locator) — and throwing once. A subsequent replay attempt (a later
    *  terminal write, or boot reconciliation after `restart()`) is unaffected. Default false. */
   failLinkerOnceAfterTerminal?: boolean;
+  /** Overrides for `server.limits`. Added so a test can prove a limit is READ FROM CONFIG
+   *  rather than hardcoded somewhere downstream — the default values are large enough that
+   *  every cap looks enforced whether or not it is actually wired. */
+  limits?: Partial<{
+    maxBodyBytes: number;
+    batchTtlMs: number;
+    projectCap: number;
+    maxContextBlockBytes: number;
+    maxContextBlocksPerProject: number;
+    shutdownDrainMs: number;
+  }>;
 }
 
 function installLoopbackOnlyFetch(): void {
@@ -161,6 +172,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         maxContextBlockBytes: 524_288,
         maxContextBlocksPerProject: 32,
         shutdownDrainMs: 30_000,
+        ...opts.limits,
       },
       autoUpdateSkills: false,
       // Isolated per-process state dir — server tests must never touch the
