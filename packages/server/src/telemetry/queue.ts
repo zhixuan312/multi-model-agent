@@ -14,12 +14,6 @@ const LOCK_OPTIONS = {
   retries: { retries: 10, minTimeout: 50, maxTimeout: 150, factor: 1.3 },
 };
 
-let capWarned = false;
-
-function resetCapWarning(): void {
-  capWarned = false;
-}
-
 export interface QueueRecord {
   schemaVersion: number;
   installId: string;
@@ -77,6 +71,15 @@ async function ensureFile(p: string): Promise<void> {
 
 export class Queue {
   #queuePath: string;
+  /**
+   * "Queue is full" is warned once per QUEUE, not once per process.
+   *
+   * This was a module-level `let capWarned`, with an exported `resetCapWarning()` whose only
+   * caller was the test suite's `beforeEach` — production test scaffolding living in production
+   * source, and a shared flag besides: a second `Queue` in the same process would never warn,
+   * because the first had already spent the one warning for everybody.
+   */
+  #capWarned = false;
   #approxCount = 0;
   #appendsSinceCapCheck = 0;
 
@@ -301,11 +304,11 @@ export class Queue {
       return;
     }
 
-    if (!capWarned) {
+    if (!this.#capWarned) {
       console.warn(
         'mma-telemetry: queue capped (10 MiB or 10,000 events), dropping oldest 1,000',
       );
-      capWarned = true;
+      this.#capWarned = true;
     }
 
     // Compute byte offset to drop exactly CAP_TRUNCATE_COUNT records
@@ -338,4 +341,3 @@ export class Queue {
   }
 }
 
-export { resetCapWarning };

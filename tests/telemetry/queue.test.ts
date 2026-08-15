@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Queue, resetCapWarning } from '../../packages/server/src/telemetry/queue.js';
+import { Queue } from '../../packages/server/src/telemetry/queue.js';
 import type { QueueRecord } from '../../packages/server/src/telemetry/queue.js';
 
 function makeRecord(overrides: Partial<QueueRecord> = {}): QueueRecord {
@@ -21,8 +21,10 @@ function makeRecord(overrides: Partial<QueueRecord> = {}): QueueRecord {
 describe('queue', () => {
   let dir: string;
   beforeEach(() => {
+    // No `resetCapWarning()` here any more: the cap warning is per-Queue state, so every
+    // `new Queue(dir)` below starts with its own. The reset existed only because the flag was
+    // module-global — which also meant a second Queue in one process never warned at all.
     dir = mkdtempSync(join(tmpdir(), 'mma-q-'));
-    resetCapWarning();
   });
 
   afterEach(() => {
