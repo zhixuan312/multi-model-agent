@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { TASK_TYPES, TYPE_REGISTRY, type TaskType } from '@zhixuan92/multi-model-agent-core';
 import { TYPE_ART, DEFAULT_ART, artFor } from '../../../packages/server/src/ui/execution/type-art.js';
-import { sceneSvg, sceneClass, raiseTransform } from '../../../packages/server/src/ui/execution/scene.js';
+import { sceneSvg, sceneClass, raiseTransform, SUBJECT_EXTENTS } from '../../../packages/server/src/ui/execution/scene.js';
 import { endingForStatus } from '../../../packages/server/src/ui/execution/display-state.js';
 
 const CSS = await readFile('packages/server/src/ui/execution/execution.html', 'utf8');
@@ -101,20 +101,40 @@ describe('contract: acts and endings map from real state', () => {
 });
 
 describe('contract: the raise lands every piece in the same hands', () => {
-  it('scales each subject to meet the two raised hands', () => {
-    // Measured from the rig: the hands meet at x 22.03 and 30.50, y ~11.5. A single fixed
-    // transform cannot serve twelve differently-sized subjects — a wide billet overshoots one
-    // hand and a narrow stack leaves the other holding air.
+  /**
+   * Where the transform must PUT each subject, checked against the extents it was computed
+   * from rather than against the formula's own arithmetic.
+   *
+   * This previously asserted `tx < 26.3` and `ty < 11.6`. Both are true by construction for
+   * any subject in the positive quadrant — `tx = 26.3 - k` and `ty = 11.6 - k` — so neither
+   * could fail. Shrinking every subject to 40% of its size, which leaves both hands visibly
+   * holding air, passed all seventeen tests in this file.
+   */
+  it('lands every subject centred between the hands, resting ON them, filling the span', () => {
+    // Measured from the rig: the hands meet at x 22.03 and 30.50, y ~11.5 — a 9-unit span
+    // centred on 26.3. A single fixed transform cannot serve twelve differently-sized
+    // subjects, so each is scaled, and the scaling has to be checked where it lands them.
     for (const type of TASK_TYPES) {
-      const t = raiseTransform(TYPE_ART[type].subject);
+      const subject = TYPE_ART[type].subject;
+      const [x0, y0, x1, y1] = SUBJECT_EXTENTS[subject] ?? SUBJECT_EXTENTS.default!;
+      const t = raiseTransform(subject);
       const m = /translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)/.exec(t);
       expect(m, `${type}: ${t}`).not.toBeNull();
       const [tx, ty, s] = [Number(m![1]), Number(m![2]), Number(m![3])];
       expect(s, `${type} scale`).toBeGreaterThan(0);
-      // Width never exceeds the 9-unit span between the hands, and the underside always
-      // lands on them.
-      expect(tx).toBeLessThan(26.3);
-      expect(Number((ty + s * 0).toFixed(3))).toBeLessThan(11.6);
+
+      const width = s * (x1 - x0);
+      const height = s * (y1 - y0);
+      // Never wider than the hands can hold, never taller than the headroom above them.
+      expect(width, `${type} placed width`).toBeLessThanOrEqual(9.01);
+      expect(height, `${type} placed height`).toBeLessThanOrEqual(8.61);
+      // ...and never smaller than it has to be: exactly one dimension is at its limit, so a
+      // subject is never left floating between two hands that don't reach it.
+      expect(Math.max(width / 9, height / 8.6), `${type} fills neither dimension`).toBeCloseTo(1, 2);
+      // Centred on the gap, and the UNDERSIDE resting on the hands — not the midpoint, not
+      // the top edge. Tolerance covers the transform's 2/3-decimal rounding.
+      expect(tx + s * (x0 + x1) / 2, `${type} centre x`).toBeCloseTo(26.3, 1);
+      expect(ty + s * y1, `${type} underside y`).toBeCloseTo(11.6, 1);
     }
   });
 });

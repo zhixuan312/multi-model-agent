@@ -230,8 +230,13 @@ const SUBJECTS: Record<string, () => string> = {
  * overshoots one hand and a narrow stack leaves the other holding air. Each subject is scaled
  * to land 9 units wide at most, 8.6 tall at most, centred on x 26.3 with its underside at
  * y 11.6 — which is exactly where the two raised hands meet.
+ *
+ * Exported so the scene contract test can check `raiseTransform`'s OUTPUT against its INPUT.
+ * Without the extents a test can only assert properties the formula makes true by
+ * construction (`tx < 26.3`, `ty < 11.6`), which is how a raise that shrank every subject to
+ * 40% — both hands holding air — passed the whole suite.
  */
-const EXTENTS: Record<string, [number, number, number, number]> = {
+export const SUBJECT_EXTENTS: Record<string, [number, number, number, number]> = {
   default: [13, 12.6, 26, 23],
   audit: [13, 12.6, 26, 23],
   investigate: [12.2, 11.8, 27.4, 23],
@@ -248,7 +253,7 @@ const EXTENTS: Record<string, [number, number, number, number]> = {
 };
 
 export function raiseTransform(subject: string): string {
-  const [x0, y0, x1, y1] = EXTENTS[subject] ?? EXTENTS.default;
+  const [x0, y0, x1, y1] = SUBJECT_EXTENTS[subject] ?? SUBJECT_EXTENTS.default;
   const scale = Math.min(9 / (x1 - x0), 8.6 / (y1 - y0));
   const tx = 26.3 - scale * (x0 + x1) / 2;
   const ty = 11.6 - scale * y1;
