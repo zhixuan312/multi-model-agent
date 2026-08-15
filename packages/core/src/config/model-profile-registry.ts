@@ -393,6 +393,32 @@ function resolveEntry(
   if (entry.reasoning !== undefined) result.reasoningCostPerMTok = entry.reasoning;
   if (entry.inputTokenSoftLimit !== undefined) result.inputTokenSoftLimit = entry.inputTokenSoftLimit;
 
+  // Cache rates are a MULTIPLE of input, so a child that re-prices input must re-price them too.
+  //
+  // The parent hands its cache rates down as ABSOLUTE numbers. That is right for a child at the
+  // parent's price and wrong for one that overrides `input`: `claude-3-opus` (input 15) inherited
+  // the `claude` parent's 0.3, a 0.02x ratio where the family's own rate is 0.10x, and
+  // `claude-3-haiku` (input 0.25) inherited the same 0.3 — pricing a CACHE READ at 1.2x FRESH
+  // INPUT, which no provider charges and no configuration intends. It also silenced the protective
+  // `input * 0.10` fallback in cost-compute.ts, which only fires when the field is undefined; the
+  // inherited absolute value made it defined and wrong.
+  //
+  // Both directions of the ratio matter and both were broken: cache READS are a discount off input
+  // (~0.10x) and cache WRITES a premium over it (Anthropic's 1.25x, encoded on the `claude` parent
+  // as 3.75 against base 3). Scaling by input preserves whichever ratio the parent expressed.
+  //
+  // Only applies when the child overrode input and stated NO rate of its own — an explicit
+  // `cachedRead` (e.g. glm-4.7's 0.11) is a deliberate figure and is never rescaled.
+  if (parent?.inputCostPerMTok !== undefined && entry.input !== undefined && entry.input > 0) {
+    const scale = entry.input / parent.inputCostPerMTok;
+    if (entry.cachedRead === undefined && parent.cachedReadCostPerMTok !== undefined) {
+      result.cachedReadCostPerMTok = parent.cachedReadCostPerMTok * scale;
+    }
+    if (entry.cachedNonRead === undefined && parent.cachedNonReadCostPerMTok !== undefined) {
+      result.cachedNonReadCostPerMTok = parent.cachedNonReadCostPerMTok * scale;
+    }
+  }
+
   return result;
 }
 

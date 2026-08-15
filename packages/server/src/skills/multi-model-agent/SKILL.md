@@ -24,6 +24,7 @@ in this session, run `mma clients` to see how to connect it.
 
 ```dot
 digraph picker {
+    "Business stakeholder describing a goal?" [shape=diamond];
     "New idea / feature?" [shape=diamond];
     "Whole lifecycle, or one step?" [shape=diamond];
     "Grounded yet?" [shape=diamond];
@@ -34,6 +35,9 @@ digraph picker {
     "Debug a failure?" [shape=diamond];
     "Question about the project?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
+    "Asking what this project already learned?" [shape=diamond];
+    "External-research question?" [shape=diamond];
+    "Learned something worth keeping?" [shape=diamond];
     "mma-brainstorm" [shape=box];
     "/mma-flow" [shape=box, style=bold];
     "mma-spec" [shape=box];
@@ -45,8 +49,14 @@ digraph picker {
     "mma-investigate" [shape=box];
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
+    "mma-solution-lead" [shape=box];
+    "mma-research" [shape=box];
+    "mma-journal-recall" [shape=box];
+    "mma-journal-record" [shape=box];
 
-    "New idea / feature?" -> "Whole lifecycle, or one step?" [label="yes"];
+    "New idea / feature?" -> "Business stakeholder describing a goal?" [label="yes"];
+    "Business stakeholder describing a goal?" -> "mma-solution-lead" [label="yes — own the whole intake-to-delivery relationship, in their words"];
+    "Business stakeholder describing a goal?" -> "Whole lifecycle, or one step?" [label="no"];
     "Whole lifecycle, or one step?" -> "/mma-flow" [label="whole — suggest user run /mma-flow"];
     "Whole lifecycle, or one step?" -> "Grounded yet?" [label="one step"];
     "Grounded yet?" -> "mma-explore" [label="no — ground it first"];
@@ -63,9 +73,15 @@ digraph picker {
     "Review code?" -> "mma-review" [label="yes"];
     "Review code?" -> "Debug a failure?" [label="no"];
     "Debug a failure?" -> "mma-debug" [label="yes"];
-    "Debug a failure?" -> "Question about the project?" [label="no"];
+    "Debug a failure?" -> "Asking what this project already learned?" [label="no"];
+    "Asking what this project already learned?" -> "mma-journal-recall" [label="yes — before re-treading ground"];
+    "Asking what this project already learned?" -> "Learned something worth keeping?" [label="no"];
+    "Learned something worth keeping?" -> "mma-journal-record" [label="yes — a decision, rationale, or convention"];
+    "Learned something worth keeping?" -> "Question about the project?" [label="no"];
     "Question about the project?" -> "Convergent or divergent?" [label="yes"];
-    "Question about the project?" -> "mma-delegate" [label="no — ad-hoc"];
+    "Question about the project?" -> "External-research question?" [label="no"];
+    "External-research question?" -> "mma-research" [label="yes — prior art, state of the art, published methods"];
+    "External-research question?" -> "mma-delegate" [label="no — ad-hoc"];
     "Convergent or divergent?" -> "mma-investigate" [label="convergent (one answer)"];
     "Convergent or divergent?" -> "mma-explore" [label="divergent — writes exploration.md"];
 }
@@ -87,6 +103,11 @@ digraph picker {
 | `mma-debug` | Debug a wrong deliverable (code or non-code) with a structured hypothesis |
 | `mma-investigate` | Project Q&A (code or non-code material) — structured answer with `file:line` citations + confidence |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
+| `mma-research` | External multi-source research with citations (arxiv, semantic_scholar, github_search, brave) — prior art, state of the art, published methods. NOT codebase questions; those are `mma-investigate` |
+| `mma-journal-recall` | Ask what THIS project already learned, before designing or attempting something — a vague conceptual question is enough; returns prior lessons and how they relate |
+| `mma-journal-record` | Record a learning worth keeping — a decision, design rationale, user-behaviour pattern, process learning, or style convention — into the persistent team knowledge graph |
+| `mma-solution-lead` | Own a business stakeholder's goal end to end: understand it, draft and confirm the initiative in plain language, create the durable record only after confirmation, coordinate delivery, and report back with verification evidence — never surfacing engine internals |
+| `mma-orchestrate` | **Not agent-routed.** For a FRONTEND WORKFLOW that needs an LLM brain across phases: send a structured prompt, get structured output the calling system parses. Listed for completeness — a program selects it, not this decision graph |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 
 ## Best practices
