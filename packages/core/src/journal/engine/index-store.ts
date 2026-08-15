@@ -334,12 +334,12 @@ export class CorpusIndex {
   /**
    * Indexed record count — a single cheap `SELECT count(*)`.
    *
-   * Public because adapters need a freshness comparison that does NOT load the
-   * corpus. A derived index loses its value when the freshness check costs more
-   * than the read it protects.
+   * Private: the freshness comparison in {@link ensureFreshRecords} is its only caller, and
+   * nothing outside this class has ever asked the index how many records it holds. (It was public
+   * for adapters that needed a freshness check which does not load the corpus; the check moved
+   * in here, and the old docstring explaining the public-ness outlived it by one audit pass —
+   * left stacked above its own replacement.)
    */
-  /** Private: the freshness comparison in {@link ensureFreshRecords} is its only caller —
-   *  nothing outside this class has ever asked the index how many records it holds. */
   private recordCount(): number {
     if (!this.recordCountStmt) {
       this.recordCountStmt = this.db.prepare('SELECT count(*) AS n FROM records');

@@ -24,7 +24,11 @@ interface ResearchContext {
   sourcesUsed: SourceUsage[];
 }
 
-const QUERY_PLAN_PROMPT = `You are a research query planner. Given a research question and background, emit ONLY a JSON query plan — no prose, no code fences.
+// The instruction said "Given a research question and background". There was never any
+// background: the only caller passed a literal `''`, so every planning turn shipped an empty
+// `## Background` section and an instruction promising context that did not arrive. A model told
+// to use an input it cannot see has to guess what it was supposed to weigh.
+const QUERY_PLAN_PROMPT = `You are a research query planner. Given a research question, emit ONLY a JSON query plan — no prose, no code fences.
 
 The JSON must conform to this shape:
 {
@@ -58,7 +62,6 @@ Rules:
  */
 async function prepareResearchContext(
   researchQuestion: string,
-  background: string,
   implProvider: Provider,
   researchCfg: ResearchConfig,
   taskId: string,
@@ -80,9 +83,6 @@ async function prepareResearchContext(
       '',
       '## Research Question',
       researchQuestion,
-      '',
-      '## Background',
-      background,
     ].join('\n');
 
     const planTurn = await planSession.send(planPrompt);
@@ -169,7 +169,6 @@ export const researchPreprocessor: Preprocessor = async ({ taskId, cwd, payload,
   const researchPayload = payload as { prompt: string };
   const researchCtx = await prepareResearchContext(
     researchPayload.prompt,
-    '',
     implementerProvider,
     config.research,
     taskId,
