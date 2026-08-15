@@ -97,7 +97,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Best practices
 
-- Keep `prompt` topical (keywords, not full sentences).
+- Pass the research QUESTION, not a keyword list. A separate query-planner turn converts it into per-adapter queries, so keywords throw away the intent it needs to do that — which is also why the pitfall below says not to strip the question down. One focused question per dispatch; split genuinely separate questions into separate calls.
 - For large background context, register it via `mma-context-blocks` and pass `contextBlockIds`.
 - For multi-round research, register the previous round's findings via
   `mma-context-blocks` and pass `contextBlockIds`.

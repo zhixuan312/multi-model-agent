@@ -275,3 +275,29 @@ describe('explore claims no gate it lacks', () => {
     expect(TASK_TYPES as readonly string[]).not.toContain('explore');
   });
 });
+
+/**
+ * `mma-research` gave three incompatible instructions for one field.
+ *
+ * The field table says `prompt` is "20+ chars — the research question" and both examples are
+ * multi-sentence. A best-practice bullet said "keep `prompt` topical (keywords, not full
+ * sentences)". A pitfall nine lines below said the opposite again: "the worker re-phrases
+ * internally; you just pass the question and let it work". The pitfall is the accurate one — a
+ * separate query-planner turn (`QUERY_PLAN_PROMPT`) converts the question into per-adapter queries,
+ * so a keyword list throws away exactly the intent that turn needs. The schema enforces only
+ * `min(20)`, so nothing 400s; the caller just gets worse queries for following the wrong bullet.
+ */
+describe('mma-research gives one instruction for prompt', () => {
+  const research = readFileSync(join(SKILLS_DIR, 'mma-research', 'SKILL.md'), 'utf8');
+
+  it('no longer asks for keywords instead of a question', () => {
+    expect(research).not.toMatch(/keywords, not full sentences/);
+    expect(research).toMatch(/Pass the research QUESTION/);
+  });
+
+  it('the query planner it defers to is real', () => {
+    const pre = readFileSync('packages/server/src/application/preprocessors/research.ts', 'utf8');
+    expect(pre).toMatch(/QUERY_PLAN_PROMPT/);
+    expect(pre).toMatch(/research query planner/i);
+  });
+});
