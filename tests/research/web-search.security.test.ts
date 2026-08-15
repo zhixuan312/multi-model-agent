@@ -2,33 +2,11 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { BraveClient } from '../../packages/core/src/research/web-search.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
+import { fullyRendered } from '../helpers/rendered-error.js';
 
 const cfg = ResearchConfigSchema.parse({ brave: { apiKeys: ['SECRET-K1'] } }).brave;
 
 
-/**
- * Everything an error carries, not just its message.
- *
- * These cases asserted on `String(caught)`, which is `"Error: <message>"` and nothing else — no
- * `cause`, no own properties, no stack. The key travels in a request header, and undici attaches
- * request detail to `cause`, so the most likely way a key would actually escape is the one shape
- * `String()` cannot see. Flattening the whole chain makes the assertion match its name.
- */
-function fullyRendered(err: unknown, depth = 0): string {
-  if (depth > 5 || err === null || err === undefined) return String(err);
-  const parts = [String(err)];
-  if (err instanceof Error) {
-    if (err.stack) parts.push(err.stack);
-    for (const key of Object.getOwnPropertyNames(err)) {
-      const value = (err as unknown as Record<string, unknown>)[key];
-      if (typeof value === 'string' || typeof value === 'number') parts.push(`${key}=${value}`);
-    }
-    if (err.cause !== undefined) parts.push(fullyRendered(err.cause, depth + 1));
-  } else if (typeof err === 'object') {
-    try { parts.push(JSON.stringify(err)); } catch { /* circular — the pieces above still apply */ }
-  }
-  return parts.join('\n');
-}
 
 const instantSleep = () => Promise.resolve();
 const fixedRandom = () => 0.5;

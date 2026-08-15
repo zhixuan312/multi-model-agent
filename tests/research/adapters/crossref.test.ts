@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { readFileSync } from 'node:fs';
+import { fullyRendered } from '../../helpers/rendered-error.js';
 import { crossrefSearch } from '../../../packages/core/src/research/adapters/crossref.js';
 
 describe('crossrefSearch', () => {
@@ -74,13 +75,27 @@ describe('crossrefSearch', () => {
     await expect(crossrefSearch('q')).rejects.toThrow(/crossref_http_429/);
   });
 
-  it('does not include raw URL with mailto in error messages', async () => {
+  /**
+   * The contact email must not appear anywhere on the error, and the call must actually fail.
+   *
+   * This asserted inside a bare `catch`, so a run where the adapter did NOT throw skipped the
+   * assertion entirely and reported a pass — in a test whose whole job is proving a secret did
+   * not escape. It also read only `.message`: the email is in the request URL, and undici puts
+   * request detail on `cause`, which `String(err)` never shows.
+   */
+  it('keeps the contact email off the error, and does fail', async () => {
     agent.get('https://api.crossref.org').intercept({ path: /\/works/ })
       .reply(500, '{}');
-    try {
-      await crossrefSearch('q', { contactEmail: 'secret@example.com' });
-    } catch (e) {
-      expect((e as Error).message).not.toContain('secret@example.com');
-    }
+    const caught = await crossrefSearch('q', { contactEmail: 'secret@example.com' })
+      .then(() => null, (e: unknown) => e);
+    expect(caught, 'the adapter resolved on a 500 — nothing was verified about leaking').not.toBeNull();
+
+    // Both spellings. The email reaches the wire through `URLSearchParams`, which percent-encodes
+    // `@`, so a leaked URL reads `secret%40example.com` — checking only the raw address misses
+    // the exact form a leak would take. (Found by planting the leak: the raw-only assertion
+    // stayed green.)
+    const rendered = fullyRendered(caught);
+    expect(rendered).not.toContain('secret@example.com');
+    expect(rendered).not.toContain(encodeURIComponent('secret@example.com'));
   });
 });
