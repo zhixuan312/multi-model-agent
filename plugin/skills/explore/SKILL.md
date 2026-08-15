@@ -110,16 +110,26 @@ dispatches the braindump warrants (≈ 3–12 total, weighted toward `investigat
 Wait for all legs to return before synthesising. Do NOT proceed until you have every result (or
 have decided to skip investigate as greenfield).
 
+**Most legs return a HANDLE, not a result.** Only `journal_recall` comes back inline; `investigate`
+and `research` — the bulk of the fan-out — return `{ executionId, type, cwd }` with no `output` key
+at all. Poll each with `mma_execution_wait` (or `mma_execution_get`) until it is terminal, and read
+`output.summary.findings` off THAT envelope. Reading `output.summary` straight off the dispatch
+result yields `undefined`, which then trips the sentinel rule below and stamps
+"(no internal anchor — fully greenfield)" over investigations that in fact succeeded.
+
 Example (one message, parallel tool use — note multiple tasks under one type):
 
+Every leg is an `mma_run` call — there is no `mma:investigate` tool. `cwd` and `request` are both
+required, and the task body goes inside `request`:
+
 ```
-[parallel tool use]
-  mma:investigate    { prompt: "How does the streaming JSON parser handle backpressure?", target: { paths: ["src/parsers/"] } }
-  mma:investigate    { prompt: "How is the parser's output buffer sized and flushed?", target: { paths: ["src/buffers/"] } }
-  mma:research       { prompt: "State-of-the-art SIMD JSON parsers with backpressure?" }
-  mma:research       { prompt: "Prior art on adaptive buffer sizing for streaming parsers?" }
-  mma:journal-recall { prompt: "what have we learned about streaming-parser backpressure tradeoffs?" }
-  mma:journal-recall { prompt: "did we decide anything about buffer-size defaults before?" }
+[parallel tool use — six mma_run calls in one message]
+  mma_run { cwd: "/project", request: { type: "investigate", prompt: "How does the streaming JSON parser handle backpressure?", target: { paths: ["src/parsers/"] } } }
+  mma_run { cwd: "/project", request: { type: "investigate", prompt: "How is the parser's output buffer sized and flushed?", target: { paths: ["src/buffers/"] } } }
+  mma_run { cwd: "/project", request: { type: "research", prompt: "State-of-the-art SIMD JSON parsers with backpressure?" } }
+  mma_run { cwd: "/project", request: { type: "research", prompt: "Prior art on adaptive buffer sizing for streaming parsers?" } }
+  mma_run { cwd: "/project", request: { type: "journal_recall", prompt: "what have we learned about streaming-parser backpressure tradeoffs?" } }
+  mma_run { cwd: "/project", request: { type: "journal_recall", prompt: "did we decide anything about buffer-size defaults before?" } }
 ```
 
 ### Phase 4: Synthesise and write `exploration.md`

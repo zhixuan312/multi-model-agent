@@ -141,3 +141,45 @@ describe('the context-block rule matches the sandbox gate', () => {
     expect(text, `${file} must say spec/plan are null despite reading`).toMatch(/spec[^.\n]*plan|plan[^.\n]*spec/i);
   });
 });
+
+/**
+ * A dispatch example must name tools that exist and describe what they return.
+ *
+ * `mma-explore`'s only concrete example showed six calls to `mma-investigate` / `mma-research` /
+ * `mma-journal-recall`. None is an MCP tool: the surface is `mma_run` plus `mma_execution_*`, and
+ * `mma_run` requires `cwd` and `request` with `additionalProperties: false`. A caller copying the
+ * example calls nothing, or gets a schema rejection — and the same file says correctly, sixty lines
+ * earlier, that it dispatches "via `mma_run`".
+ *
+ * It also told the caller to read `output.summary.findings` off every leg. Only `journal_recall` is
+ * returned inline (`INLINE_AUTO_TYPES`); `investigate` and `research` — the bulk of the fan-out —
+ * return a handle with no `output` key, so `output.summary` is `undefined` and the skill's own
+ * sentinel rule then stamps "(no internal anchor — fully greenfield)" over investigations that
+ * succeeded.
+ */
+describe('the explore skill dispatches through tools that exist', () => {
+  const explore = readFileSync(join(SKILLS_DIR, 'mma-explore', 'SKILL.md'), 'utf8');
+
+  it('its example calls mma_run, not a per-route tool', async () => {
+    const { MCP_TOOLS } = await import('../../../packages/server/src/mcp/tool-surface.js');
+    const toolNames = new Set(MCP_TOOLS.map((t) => t.name));
+
+    // Any `mma-<something>` used as a CALL in the example block is not a tool name.
+    const fenced = [...explore.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1]!).join('\n');
+    const called = [...fenced.matchAll(/^\s*(mma[-_][a-z_-]+)\s*\{/gm)].map((m) => m[1]!);
+    expect(called.length, 'no dispatch example found to check').toBeGreaterThan(0);
+    for (const name of new Set(called)) {
+      expect(toolNames.has(name), `the example calls '${name}', which is not an MCP tool`).toBe(true);
+    }
+  });
+
+  it('tells the caller to poll the legs that return handles', async () => {
+    const { INLINE_AUTO_TYPES } = await import('../../../packages/server/src/mcp/tool-surface.js');
+    // Premise: investigate/research are NOT inline, so they must be polled.
+    expect(INLINE_AUTO_TYPES.has('investigate')).toBe(false);
+    expect(INLINE_AUTO_TYPES.has('research')).toBe(false);
+
+    expect(explore, 'must name the polling tool').toMatch(/mma_execution_wait|mma_execution_get/);
+    expect(explore, 'must say a handle carries no output').toMatch(/no `output` key|returns? a HANDLE/i);
+  });
+});
