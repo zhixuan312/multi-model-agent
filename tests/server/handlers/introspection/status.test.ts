@@ -3,6 +3,39 @@ import { describe, it, expect } from 'vitest';
 import { startTestServer } from '../../../helpers/test-server.js';
 import { startTestServerWithAgents } from '../../../helpers/test-server-with-agents.js';
 import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { buildStatusHandler } from '../../../../packages/server/src/http/handlers/introspection/status.js';
+import { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
+import { ProjectRegistry } from '../../../../packages/server/src/application/project-registry.js';
+
+/** Minimal ServerResponse capture — the handler only writes a status and a JSON body. */
+function fakeRes(): { res: ServerResponse; status: () => number; body: () => Record<string, unknown> } {
+  let statusCode = 0;
+  let payload = '';
+  const res = {
+    writeHead(code: number) { statusCode = code; return res; },
+    end(chunk?: string) { if (chunk) payload = chunk; },
+    setHeader() { /* no-op */ },
+  } as unknown as ServerResponse;
+  return { res, status: () => statusCode, body: () => JSON.parse(payload) as Record<string, unknown> };
+}
+
+/** The handler ignores both, but `RawHandler` requires them. */
+const CTX = { url: new URL('http://127.0.0.1/status'), callerClient: 'claude-code' as const } as never;
+
+function statusHandlerOver(homeDir: string) {
+  return buildStatusHandler({
+    executionRegistry: new ExecutionRegistry(),
+    projectRegistry: new ProjectRegistry({ cap: 10 }),
+    serverStartedAt: Date.now(),
+    bind: '127.0.0.1',
+    version: '0.0.0-test',
+    homeDir,
+  });
+}
 
 describe('GET /status', () => {
   it('returns 401 without bearer token', async () => {
@@ -87,31 +120,50 @@ describe('GET /status', () => {
     }
   });
 
-  it('skillVersion is null when skill manifest is absent', async () => {
-    const s = await startTestServer();
-    try {
-      const res = await fetch(`${s.url}/status`, {
-        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
-      });
-      expect(res.status).toBe(200);
-      const body = await res.json() as Record<string, unknown>;
-
-      // In CI / dev environments the manifest won't be installed.
-      // We can't assert null with certainty if the developer has the skill
-      // installed — but we CAN assert it's either null or a string.
-      const sv = body['skillVersion'];
-      expect(sv === null || typeof sv === 'string').toBe(true);
-
-      // If skillVersion is null, skillCompatible must also be null
-      if (sv === null) {
-        expect(body['skillCompatible']).toBeNull();
-      } else {
-        // If present, skillCompatible must be a boolean
-        expect(typeof body['skillCompatible']).toBe('boolean');
+  /**
+   * Driven at the handler, over a temp home, so the manifest state is the test's to decide.
+   *
+   * This used to boot a server and assert `sv === null || typeof sv === 'string'` — true for
+   * almost any value — with a comment conceding "we can't assert null with certainty if the
+   * developer has the skill installed". It could not: `buildStatusHandler` called
+   * `deriveSkillManifestInfo()` with no argument, so the response reported whatever was installed
+   * for whoever ran the suite. The function has always taken a `homeDir`; the handler now threads
+   * one, which makes both documented outcomes reachable.
+   */
+  describe('skill manifest reporting', () => {
+    it('reports null/null when no install manifest exists', async () => {
+      const home = mkdtempSync(join(tmpdir(), 'mma-status-empty-'));
+      try {
+        const { res, status, body } = fakeRes();
+        await statusHandlerOver(home)({} as IncomingMessage, res, {}, CTX);
+        expect(status()).toBe(200);
+        expect(body()['skillVersion']).toBeNull();
+        expect(body()['skillCompatible']).toBeNull();
+      } finally {
+        rmSync(home, { recursive: true, force: true });
       }
-    } finally {
-      await s.stop();
-    }
+    });
+
+    it('reports the installed version, and compatible, when the manifest matches the bundle', async () => {
+      const home = mkdtempSync(join(tmpdir(), 'mma-status-installed-'));
+      try {
+        // The version recorded here is deliberately NOT the bundled one, so `isSkillBehind`
+        // sees a difference and reports incompatible — the drift signal an operator acts on.
+        mkdirSync(join(home, '.mma'), { recursive: true });
+        writeFileSync(join(home, '.mma', 'install-manifest.json'), JSON.stringify({
+          version: 2,
+          entries: [{ name: 'mma-audit', skillVersion: '0.0.0-not-the-bundled-one', installedAt: 1_700_000_000_000, targets: ['claude-code'] }],
+        }), 'utf8');
+
+        const { res, status, body } = fakeRes();
+        await statusHandlerOver(home)({} as IncomingMessage, res, {}, CTX);
+        expect(status()).toBe(200);
+        expect(body()['skillVersion']).toBe('0.0.0-not-the-bundled-one');
+        expect(body()['skillCompatible']).toBe(false);
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
   });
 
   it('keeps counters.projectCount consistent with the projects array length', async () => {

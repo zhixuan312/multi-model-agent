@@ -68,13 +68,34 @@ export interface TestServer {
   stop: () => Promise<void>;
 }
 
-export async function startTestServer(overrides?: DeepPartial<ServerConfig>): Promise<TestServer> {
+/**
+ * Options beyond the server config.
+ *
+ * `manifestSync` used to be hardcoded to `{ driftReport: () => [] }` here, which meant no test
+ * COULD reach `GET /health`'s drift branch — the branch that reports missing, outdated, orphaned
+ * or failed provisioning, and the only reason that endpoint does more than answer "alive". Four
+ * tests covered the `ok` branch and none covered the other, because the helper made it
+ * unreachable. The seam exists in `startServer` precisely so a test can pin the report; it just
+ * had no way through.
+ */
+export interface TestServerOptions {
+  /** Drift report `GET /health` reads. Defaults to none, i.e. `{ status: 'ok' }`. */
+  manifestSync?: { driftReport(): DriftLike[] | Promise<DriftLike[]> };
+}
+
+/** Structural mirror of the handler's `DriftEntry` — `client` is a loose string there too. */
+export interface DriftLike { skill: string; client: string; issue: 'missing' | 'outdated' | 'orphan' | 'failed' }
+
+export async function startTestServer(
+  overrides?: DeepPartial<ServerConfig>,
+  opts?: TestServerOptions,
+): Promise<TestServer> {
   const tokenDir = mkdtempSync(join(tmpdir(), 'mma-test-'));
   const tokenFile = join(tokenDir, 'auth-token');
   writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 
   const config = buildTestConfig(tokenFile, overrides as Record<string, unknown> | undefined);
-  const server = await startServer(config, { driftReport: () => [] });
+  const server = await startServer(config, opts?.manifestSync ?? { driftReport: () => [] });
 
   return {
     url: `http://127.0.0.1:${server.port}`,

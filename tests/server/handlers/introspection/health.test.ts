@@ -3,43 +3,61 @@ import { describe, it, expect } from 'vitest';
 import { startTestServer } from '../../../helpers/test-server.js';
 import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
 
+/**
+ * `GET /health` answers two questions, and only one of them was ever asked here.
+ *
+ * The healthy shape had three cases, each booting its own server: one asserting
+ * `toEqual({ status: 'ok' })` followed by six `not.toHaveProperty` calls that `toEqual` already
+ * implies, one asserting the key set is exactly `['status']` — implied by the same `toEqual` —
+ * and one asserting `status === 200` from loopback, which every other case also asserts and which
+ * cannot fail for a loopback-specific reason, since the test server only ever binds loopback (the
+ * file's own comment says so, further down).
+ *
+ * Meanwhile the DRIFT branch — missing, outdated, orphaned or failed provisioning, the entire
+ * reason this endpoint does more than answer "alive" — had no coverage at all, because
+ * `startTestServer` hardcoded an empty drift report and gave no way to pin a different one.
+ */
 describe('GET /health', () => {
-  it('returns 200 with { status: "ok" } when no drift — no other fields', async () => {
+  it('returns exactly { status: "ok" } when nothing has drifted', async () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/health`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/json');
-      const body = await res.json();
-      expect(body).toEqual({ status: 'ok' });
-      expect(body).not.toHaveProperty('drift');
-      expect(body).not.toHaveProperty('version');
-      expect(body).not.toHaveProperty('ok');
-      expect(body).not.toHaveProperty('pid');
-      expect(body).not.toHaveProperty('startedAt');
-      expect(body).not.toHaveProperty('uptimeMs');
+      // Exact: no version, pid, uptimeMs, counters or project data. `toEqual` is strict in both
+      // directions, so an added field fails here without a list of names to keep in step.
+      expect(await res.json()).toEqual({ status: 'ok' });
     } finally {
       await s.stop();
     }
   });
 
-  it('returns 200 from loopback (127.0.0.1) — the test server always binds loopback', async () => {
-    const s = await startTestServer();
+  it('reports every drift entry, unauthenticated, with status drift', async () => {
+    const drift = [
+      { skill: 'mma-audit', client: 'claude-code', issue: 'outdated' as const },
+      { skill: 'mma-plan', client: 'codex', issue: 'missing' as const },
+      { skill: 'mma-gone', client: 'cursor', issue: 'orphan' as const },
+      { skill: 'mma-review', client: 'windsurf', issue: 'failed' as const },
+    ];
+    const s = await startTestServer(undefined, { manifestSync: { driftReport: () => drift } });
     try {
+      // No Authorization header: /health is the unauthenticated liveness probe, and a drift
+      // response must not quietly become authenticated.
       const res = await fetch(`${s.url}/health`);
       expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ status: 'drift', drift });
     } finally {
       await s.stop();
     }
   });
 
-  it('body keys are exactly status when no drift — no counters, no project data', async () => {
-    const s = await startTestServer();
+  it('reports drift from an async report too — the seam allows a promise', async () => {
+    const drift = [{ skill: 'mma-spec', client: 'claude-code', issue: 'outdated' as const }];
+    const s = await startTestServer(undefined, {
+      manifestSync: { driftReport: () => Promise.resolve(drift) },
+    });
     try {
-      const res = await fetch(`${s.url}/health`);
-      const body = await res.json() as Record<string, unknown>;
-      expect(new Set(Object.keys(body))).toEqual(new Set(['status']));
-      expect(body['status']).toBe('ok');
+      expect(await (await fetch(`${s.url}/health`)).json()).toEqual({ status: 'drift', drift });
     } finally {
       await s.stop();
     }
