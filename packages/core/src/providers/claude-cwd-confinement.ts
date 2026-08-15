@@ -18,9 +18,20 @@
 import { resolve, relative, isAbsolute, sep } from 'node:path';
 import type { SandboxPolicy } from '../unified/type-registry.js';
 import { gitDenialInCommand, pathTouchesGitDir } from './git-policy.js';
+import { CLAUDE_WRITE_TOOLS } from './claude-tool-categories.js';
 
-/** The claude SDK tools that mutate a file at a caller-supplied path. */
-const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+/**
+ * The claude SDK tools that mutate a file at a caller-supplied path — the SAME set the
+ * reporter classifies writes with.
+ *
+ * This was a private copy of the four names. `claude-tool-categories.ts` calls itself the
+ * single source of truth and names its two consumers so they "CAN'T disagree"; the third
+ * consumer, this one, was the security-critical path and the one nothing bound. The drift it
+ * allowed runs one way and always unsafe: a write tool added there but not here is REPORTED
+ * as a write (and auto-committed) while going entirely unconfined — writing outside the
+ * workspace on a `cwd-only` task, and writing at all on a `read-only` one.
+ */
+const WRITE_TOOLS = CLAUDE_WRITE_TOOLS;
 
 /** Bash tokens that mutate a path argument (vs. merely reading it). */
 const BASH_WRITE_CMD_RE =
@@ -218,8 +229,10 @@ export function evaluateConfinement(toolName: string, toolInput: unknown, cwd: s
  */
 export function evaluateReadOnly(toolName: string, toolInput: unknown): HookResult {
   if (WRITE_TOOLS.has(toolName)) {
+    // Listed from the set rather than spelled out: a hand-written list here is a further
+    // copy, it goes stale silently, and it is the only statement of the rule the worker reads.
     return deny(
-      `Write blocked: this is a read-only task. Write/Edit/MultiEdit/NotebookEdit are not permitted.`,
+      `Write blocked: this is a read-only task. ${[...WRITE_TOOLS].join('/')} are not permitted.`,
     );
   }
 
