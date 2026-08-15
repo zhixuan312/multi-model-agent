@@ -63,8 +63,17 @@ const ACTIONABLE_SKILLS = [
 // invocation. `when_to_use` is descriptive prose and enforces nothing.
 const COMMANDS = ['mma-flow', 'mma-breakout', 'mma-tldr', 'mma-deck'];
 
-/** Skills that run no worker at all — they transform text in the caller's own context. */
-const DISPATCHES_NOTHING = ['mma-tldr'];
+/**
+ * Skills that run no worker at all — they transform text in the caller's own context.
+ *
+ * `mma-deck` joined `mma-tldr` here when the deck branch merged: its SKILL.md states "client-side
+ * only: no server schema, no task type, no route, and no worker". That branch registered deck in
+ * `ACTIONABLE_SKILLS` and `COMMANDS` correctly, but was written before this list existed, so the
+ * textual merge left a skill that dispatches nothing failing a check that every skill must name a
+ * dispatch surface. Membership is declared, never inferred from being a COMMAND: `/mma-flow` and
+ * `/mma-breakout` are commands too, and both orchestrate `mma_run` calls.
+ */
+const DISPATCHES_NOTHING = ['mma-tldr', 'mma-deck'];
 
 describe('contract: skill manifest surface', () => {
   const allSkillDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
