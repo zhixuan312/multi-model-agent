@@ -118,11 +118,26 @@ describe('the context-block rule matches the sandbox gate', () => {
     .filter(([, cfg]) => (cfg as { sandbox: string }).sandbox === 'read-only')
     .map(([type]) => type);
 
-  const DOCS = [
-    join(SKILLS_DIR, 'multi-model-agent', 'SKILL.md'),
-    join(SKILLS_DIR, 'mma-research', 'SKILL.md'),
-    join(SKILLS_DIR, '_shared', 'response-shape.md'),
-  ];
+  /**
+   * EVERY doc that states the rule, discovered rather than listed.
+   *
+   * The first fix named three files and missed four (`mma-audit`, `mma-debug`, `mma-investigate`,
+   * `mma-review` each carry their own copy of the sentence). Listing the files reproduced the
+   * original defect — a rule enforced in more places than the fixer knew about.
+   */
+  const DOCS = readdirSync(SKILLS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) =>
+      readdirSync(join(SKILLS_DIR, e.name))
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => join(SKILLS_DIR, e.name, f)),
+    )
+    .filter((file) => /auto-registers a reusable terminal context block/.test(readFileSync(file, 'utf8')));
+
+  it('finds every doc that states the rule', () => {
+    // A floor: if the phrasing changes, this block silently checks nothing.
+    expect(DOCS.length).toBeGreaterThanOrEqual(6);
+  });
 
   it('six types register, and journal_recall is one of them', () => {
     expect(registering).toContain('journal_recall');
@@ -299,5 +314,42 @@ describe('mma-research gives one instruction for prompt', () => {
     const pre = readFileSync('packages/server/src/application/preprocessors/research.ts', 'utf8');
     expect(pre).toMatch(/QUERY_PLAN_PROMPT/);
     expect(pre).toMatch(/research query planner/i);
+  });
+});
+
+/**
+ * Two smaller vocabulary errors, swept across every skill.
+ *
+ *  - `maxEntries` was presented as the config key for the context-block quota. It is an internal
+ *    constructor option on `InMemoryContextBlockStore`; the caller-configurable key is
+ *    `server.limits.maxContextBlocksPerProject`. A user grepping their config for `maxEntries`
+ *    finds nothing.
+ *  - Block ids were shown as `cb_abc123`. `register` uses `randomUUID()`, so the prefix is
+ *    fabricated — harmless until a caller pattern-matches on it.
+ */
+describe('skills name real config keys and real id shapes', () => {
+  const allSkillText = readdirSync(SKILLS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) =>
+      readdirSync(join(SKILLS_DIR, e.name))
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => ({ file: join(SKILLS_DIR, e.name, f), text: readFileSync(join(SKILLS_DIR, e.name, f), 'utf8') })),
+    );
+
+  it('has skills to scan', () => {
+    expect(allSkillText.length).toBeGreaterThan(15);
+  });
+
+  it.each(allSkillText.map((s) => s.file))('%s does not present maxEntries as a config key', (file) => {
+    expect(readFileSync(file, 'utf8')).not.toMatch(/`maxEntries`/);
+  });
+
+  it.each(allSkillText.map((s) => s.file))('%s shows no fabricated block-id prefix', (file) => {
+    expect(readFileSync(file, 'utf8')).not.toMatch(/cb_[a-z0-9]/);
+  });
+
+  it('the real key exists in the config schema', () => {
+    const schema = readFileSync('packages/core/src/config/schema.ts', 'utf8');
+    expect(schema).toMatch(/maxContextBlocksPerProject/);
   });
 });

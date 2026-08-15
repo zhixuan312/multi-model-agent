@@ -39,7 +39,7 @@ is not available in this session, run `mma clients`.
   "prompt": "Add input validation to the login handler",
   "target": { "paths": ["/project/src/auth/login.ts"] },
   "done": "All inputs validated; unit tests pass",
-  "contextBlockIds": ["cb_abc123"],
+  "contextBlockIds": ["3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23"],
   "reviewPolicy": "reviewed"
 }
 ```

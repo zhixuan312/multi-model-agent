@@ -204,7 +204,7 @@ Every route has a default tier that can be overridden by sending `agentTier`:
 | Default | Value | Notes |
 |---|---|---|
 | Idle TTL | 24 h | Block eligible for eviction after 24 h with no active task references |
-| `maxEntries` | 500 | Per-project cap on total context blocks |
+| `server.limits.maxContextBlocksPerProject` | 500 | Per-project cap on total context blocks |
 | Body cap | 512 KiB | Maximum `content` size per block (`server.limits.maxContextBlockBytes`). Over REST the raw request body is capped at 256 KiB first, so an uncompressed block much above that fails on body size with an error that never names the block limit — gzip the request or use the MCP tool |
 
 Context blocks are immutable after creation. To update content, register a new block and switch `contextBlockIds` to the new ID.

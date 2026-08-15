@@ -125,7 +125,7 @@ Self-review and cross-model review are not the same thing. The whole reason to d
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Every other type returns `contextBlockId: null` — including `spec` and `plan`, which read rather than write but are `cwd-only` because they write their document — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `server.limits.maxContextBlocksPerProject` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 
