@@ -9,6 +9,16 @@ type ReserveResult =
 
 interface ProjectRegistryOptions {
   cap: number;
+  /**
+   * `server.limits.maxContextBlocksPerProject`, applied to each project's store.
+   *
+   * Without this the store fell back to its own hardcoded default, which happened to equal the
+   * CONFIG default — so the setting looked honoured while only one of the two registration paths
+   * respected it. `POST /context-blocks` checks the configured cap and returns 409; the runtime
+   * registers each read-route's terminal block directly (`execution-runtime.ts`), bypassing that
+   * check entirely. Lowering the setting to bound memory therefore did not bound it.
+   */
+  contextBlocksPerProject?: number;
   onProjectCreated?: (cwd: string) => void;
   /** Returns true when the project at this canonical cwd has in-flight work and
    *  must not be evicted. Wired to `ExecutionRegistry.countActive(cwd) > 0` in production. */
@@ -18,11 +28,13 @@ interface ProjectRegistryOptions {
 export class ProjectRegistry {
   private readonly map = new Map<string, ProjectContext>();
   private readonly cap: number;
+  private readonly contextBlocksPerProject?: number;
   private readonly onProjectCreated?: (cwd: string) => void;
   private readonly isBusy?: (canonicalCwd: string) => boolean;
 
   constructor(options: ProjectRegistryOptions) {
     this.cap = options.cap;
+    this.contextBlocksPerProject = options.contextBlocksPerProject;
     this.onProjectCreated = options.onProjectCreated;
     this.isBusy = options.isBusy;
   }
@@ -71,7 +83,12 @@ export class ProjectRegistry {
         message: `server at ${this.cap} projects, all with in-flight work or retained context blocks; wait for active tasks to finish or delete unused context blocks`,
       };
     }
-    const pc = createProjectContext(key);
+    const pc = createProjectContext(
+      key,
+      this.contextBlocksPerProject !== undefined
+        ? { maxContextBlocks: this.contextBlocksPerProject }
+        : {},
+    );
     this.map.set(key, pc);
     this.onProjectCreated?.(key);
     return { ok: true, projectContext: pc, created: true };

@@ -8,7 +8,6 @@ describe('InMemoryContextBlockStore — basic CRUD', () => {
     const store = new InMemoryContextBlockStore();
     const result = store.register('hello world', { id: 'greeting' });
     expect(result.id).toBe('greeting');
-    expect(result.lengthChars).toBe(11);
     expect(store.get('greeting')).toBe('hello world');
   });
 
@@ -38,13 +37,14 @@ describe('InMemoryContextBlockStore — basic CRUD', () => {
     expect(store.delete('x')).toBe(false);
   });
 
-  it('register returns sha256 hash of content', () => {
+  it('register returns the id and nothing a caller cannot use', () => {
+    // `lengthChars` and `sha256` were removed: both surfaces that register a block read `.id`
+    // only, so the hash was computed over content up to 10 MiB and thrown away on every
+    // read-route completion. This case now pins the handle's SHAPE, so re-adding a field means
+    // deciding who reads it.
     const store = new InMemoryContextBlockStore();
     const result = store.register('hello');
-    // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
-    expect(result.sha256).toBe(
-      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
-    );
+    expect(Object.keys(result)).toEqual(['id']);
   });
 });
 

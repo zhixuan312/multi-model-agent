@@ -352,3 +352,37 @@ describe('DELETE /context-blocks/:id', () => {
     }
   });
 });
+
+/**
+ * The configured cap must bind BOTH registration paths.
+ *
+ * `POST /context-blocks` checks `maxContextBlocksPerProject` and returns 409 — but that check
+ * lives in the handler, and it is not the only way a block is created. Every read-route execution
+ * registers its terminal report straight into the project's store
+ * (`execution-runtime.ts`: `contextBlockStore.register(terminalContent)`), which never passes the
+ * handler. The store fell back to its own hardcoded bound, which happened to equal the CONFIG
+ * default — so the setting looked honoured while lowering it bounded only half the traffic, which
+ * is the half an operator lowering it is least worried about.
+ */
+describe('maxContextBlocksPerProject bounds the store itself, not just the handler', () => {
+  it('direct registrations cannot exceed the configured cap', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      await createBlock(s.url, s.token, cwd, 'seed');
+      const pc = s.projectRegistry.get(cwd)!;
+
+      // Bypass the handler exactly the way the runtime does, well past the cap.
+      for (let i = 0; i < TEST_CONTEXT_BLOCK_CAP * 3; i += 1) {
+        pc.contextBlocks.register(`terminal-report-${i}`);
+      }
+
+      expect(
+        pc.contextBlocks.size,
+        `store grew to ${pc.contextBlocks.size} with a configured cap of ${TEST_CONTEXT_BLOCK_CAP}`,
+      ).toBeLessThanOrEqual(TEST_CONTEXT_BLOCK_CAP);
+    } finally {
+      await s.stop();
+    }
+  });
+});

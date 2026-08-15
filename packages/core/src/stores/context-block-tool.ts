@@ -1,15 +1,17 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 /**
- * Metadata describing a successful `register(...)` call. The orchestrator
- * and MCP tool surfaces return this to the caller so they can reference
- * the stored block later (by id) and independently verify its content
- * (via sha256).
+ * The handle a successful `register(...)` returns: the id a later dispatch references.
+ *
+ * It used to also carry `lengthChars` and a `sha256`, described here as letting a caller
+ * "independently verify its content" — a capability no caller ever had. Both surfaces that
+ * register a block (`POST /context-blocks` and the MCP tool) read `.id` and nothing else, so the
+ * hash was computed on every registration and discarded. That is not free: the terminal block for
+ * every read-route execution is the reviewer's raw output, and this file's own warning threshold
+ * anticipates content over 10 MiB, which costs ~12ms to hash for no reader.
  */
 export interface RegisteredBlock {
   id: string;
-  lengthChars: number;
-  sha256: string;
 }
 
 /**
@@ -21,8 +23,7 @@ export interface RegisteredBlock {
  * and prepends the content to the worker payload.
  */
 export interface ContextBlockStore {
-  /** Store `content` under an explicit id (idempotent replace) or a new
-   *  UUID. Returns the id, length, and sha256 hash. */
+  /** Store `content` under an explicit id (idempotent replace) or a new UUID. Returns the id. */
   register(content: string, opts?: { id?: string; ttlMs?: number }): RegisteredBlock;
   /** Fetch content by id. Returns `undefined` if the id is unknown or
    *  the entry has expired. Touches the LRU access time on success. */
@@ -112,11 +113,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     const entryTtl = opts.ttlMs ?? this._ttlMs;
     this.entries.set(id, { content, addedAtMs: now, ttlMs: entryTtl, lastAccessTick: ++this.tick, pinCount: 0 });
     this.evictIfOverBound();
-    return {
-      id,
-      lengthChars: content.length,
-      sha256: createHash('sha256').update(content).digest('hex'),
-    };
+    return { id };
   }
 
   get(id: string): string | undefined {

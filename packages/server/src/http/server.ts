@@ -196,6 +196,7 @@ export async function startServer(
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
+    contextBlocksPerProject: config.server.limits.maxContextBlocksPerProject,
     // A project with active tasks must never be evicted to make room at cap.
     isBusy: (cwd) => executionRegistry.countActive(cwd) > 0,
   });
