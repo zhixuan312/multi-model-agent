@@ -123,6 +123,64 @@ describe('contract: execution App bootstrap wiring', () => {
   });
 
   /**
+   * An ERRORED tool result is not a snapshot.
+   *
+   * `mcp-adapter.ts`'s `errorResult` returns `{ content: [{ text: '{"error":{…}}' }], isError: true }`
+   * — a well-formed result whose body is an error, which is what `mma_execution_get` answers for an
+   * executionId the registry has evicted and the durable store does not hold. `isError` was declared
+   * on the App's own `CallToolResult` interface and read by nothing, and `{ error: … }` is an object,
+   * so it took the running branch: the panel replaced a real run with a blank `Running` panel whose
+   * clock had reset to 0.0s, kept the Cancel button, reset the failure counter on every poll, and
+   * polled that forever. A failed poll rendered as a healthy one, indefinitely.
+   *
+   * It is counted like a rejected call rather than merely shown as `update failed`, because a
+   * daemon answering `not_found` will never produce another snapshot: without the cap the panel
+   * would poll a dead id forever with the reason nowhere on screen.
+   */
+  it('treats an isError tool result as a counted poll failure, not as a fresh running snapshot', async () => {
+    vi.useFakeTimers();
+    const { app } = installMockApp();
+    app.callServerTool.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ error: { code: 'not_found', message: 'unknown executionId' } }) }],
+      isError: true,
+    });
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await vi.advanceTimersByTimeAsync(0);
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({
+      executionId: 'task-1', status: 'running', phase: 'implementing', elapsedMs: 61_000, phaseElapsedMs: 61_000,
+    }) }] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.body.textContent).toContain('1m 01s');
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(document.body.textContent).toMatch(/update failed/i);
+    // The last known real state survives; the error must not overwrite it with a zeroed one.
+    expect(document.body.textContent).toContain('1m 01s');
+    expect(document.body.textContent).not.toContain('0ms');
+
+    await vi.advanceTimersByTimeAsync(2_000 * 4); // 5 consecutive errored polls
+    expect(document.body.textContent).toMatch(/stopped/i);
+    expect(document.body.textContent).toContain('not_found');
+  });
+
+  /**
+   * The same guard from the payload side: a body that is neither a terminal envelope nor a
+   * running snapshot is unrecognized even when the transport calls it a success. `isError` is
+   * the adapter's convention, not the protocol's, so the shape check has to stand on its own.
+   */
+  it('treats an error-shaped body without isError as unparseable too', async () => {
+    const { app } = installMockApp();
+    await import('../../../packages/server/src/ui/execution/entry.js');
+    await Promise.resolve();
+    app.ontoolresult?.({ content: [{ type: 'text', text: JSON.stringify({ error: { code: 'boom', message: 'x' } }) }] });
+    await Promise.resolve();
+    expect(callsOf(app)).toHaveLength(0);
+    expect(document.body.textContent).toMatch(/update failed/i);
+    expect(document.body.textContent).not.toMatch(/Running/i);
+  });
+
+  /**
    * Caught by the manual Claude Desktop gate, invisible to every automated test before it:
    * a bare `var(--color-text-primary)` is invalid at computed-value time on a host that does
    * not define it, so the App rendered initial-black on a dark panel in the default serif

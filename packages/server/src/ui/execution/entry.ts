@@ -381,6 +381,15 @@ function bootstrap(): void {
         timeoutPromise,
       ]);
       clearTimeout(timeoutHandle);
+      // An `isError` result is a FAILED poll, not a snapshot that happens to describe an
+      // error — `mcp-adapter.ts`'s `errorResult` answers this for an executionId the registry
+      // evicted, and a daemon that keeps answering it will never produce another snapshot. So
+      // it is counted, capped and named like any other poll failure, rather than leaving the
+      // panel in `update failed` forever with the reason nowhere on screen. `isError` was
+      // declared on the interface above and read by nothing before this.
+      if ((result as CallToolResult).isError === true) {
+        throw new Error((result as CallToolResult).content[0]!.text);
+      }
       failureCount = 0;
       applySnapshot(result);
     } catch (err) {
