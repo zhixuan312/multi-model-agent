@@ -46,6 +46,12 @@ export const clampFilesWrittenCount = (n: number): number =>
 export const clampTurnCount = (n: number): number =>
   Math.min(Math.max(0, n), 250);
 
+/** The wire caps `concernCount` at 150. Unclamped, a reviewer that raised more
+ *  failed the schema parse and the uploader dropped the ENTIRE event — the one
+ *  outcome worse than an inaccurate count. */
+export const clampConcernCount = (n: number): number =>
+  Math.min(Math.max(0, n), 150);
+
 export const clampDurationMsStage = (n: number): number =>
   Math.min(Math.max(0, n), 3_600_000);
 
@@ -212,7 +218,9 @@ export function toWireRecord(
       ...base,
       name: 'review' as const,
       verdict: wireVerdict,
-      concernCategories: (s.concernCategories ?? []).slice(0, 16),
+      // Both bounds the schema declares: 16 categories, 64 chars each. One
+      // over-long category used to fail the parse and drop the whole event.
+      concernCategories: (s.concernCategories ?? []).slice(0, 16).map((c) => c.slice(0, 64)),
     };
   });
 
@@ -322,8 +330,10 @@ export function toWireRecord(
     // Two copies of one expression let the delta silently stop being `actual - mainCostUSD` the
     // moment one of them is edited.
     costDeltaVsMainUSD: taskMainCostUSD === null ? null : clampTaskCost(env.totalCostUSD) - taskMainCostUSD,
-    concernCount: env.findings.length,
-    findingsBySeverity: env.findings.reduce(
+    concernCount: clampConcernCount(env.findings.length),
+    // Built from the SAME clamped list the count comes from, so R17
+    // (histogram sums to concernCount) cannot be violated by the clamp itself.
+    findingsBySeverity: env.findings.slice(0, 150).reduce(
       (acc, f) => {
         const s = f.severity;
         if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') acc[s] += 1;

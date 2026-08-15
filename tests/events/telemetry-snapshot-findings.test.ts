@@ -177,3 +177,47 @@ describe('a cancelled run is not reported as an engine failure', () => {
     expect(wireOf(env).terminalStatus).toBe('error');
   });
 });
+
+describe('output-format drift is reported', () => {
+  /**
+   * `validationWarnings` was hardcoded `[]`, so the one number that says "our
+   * reviewer prompt produces output the schema cannot parse" has never left the
+   * engine. It is a prompt/schema problem rather than a model problem, and
+   * nothing else in the telemetry exposes it.
+   */
+  it('emits a warning when the reviewer output could not be parsed', () => {
+    const env = snapshot({
+      status: 'done_with_concerns',
+      reviewerTurn: turn(),
+      reviewerOutput: null,
+      reviewerParseError: 'Unexpected token } in JSON at position 402',
+    });
+    expect(env.validationWarnings).toHaveLength(1);
+    expect(env.validationWarnings[0]!.rule).toBe('reviewer_output_unparseable');
+    expect(wireOf(env).validation_warnings?.[0]?.rule).toBe('reviewer_output_unparseable');
+  });
+
+  it('groups on a stable rule key rather than the raw error text', () => {
+    // A Zod error is long and unique per run; using it as the key would make
+    // every warning its own bucket and the panel unreadable.
+    const a = snapshot({ reviewerTurn: turn(), reviewerOutput: null, reviewerParseError: 'error A at 1' });
+    const b = snapshot({ reviewerTurn: turn(), reviewerOutput: null, reviewerParseError: 'totally different error B at 999' });
+    expect(a.validationWarnings[0]!.rule).toBe(b.validationWarnings[0]!.rule);
+    expect(a.validationWarnings[0]!.path).not.toBe(b.validationWarnings[0]!.path);
+  });
+
+  it('truncates a runaway parse error', () => {
+    const env = snapshot({ reviewerTurn: turn(), reviewerOutput: null, reviewerParseError: 'x'.repeat(5000) });
+    expect(env.validationWarnings[0]!.path.length).toBeLessThanOrEqual(200);
+  });
+
+  it('emits nothing when the reviewer parsed cleanly', () => {
+    expect(snapshot({ reviewerTurn: turn(), reviewerOutput: { findings: [] } }).validationWarnings).toEqual([]);
+  });
+
+  it('does not report an unparsed review as clean', () => {
+    // Pairs with the outcome fix: a review nobody could read is not a clean one.
+    const env = snapshot({ reviewerTurn: turn(), reviewerOutput: null, reviewerParseError: 'bad json' });
+    expect(wireOf(env).findingsOutcome).toBe('not_applicable');
+  });
+});

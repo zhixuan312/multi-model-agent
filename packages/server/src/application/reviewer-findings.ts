@@ -30,7 +30,15 @@ export function extractReviewerFindings(reviewerOutput: unknown): Finding[] {
   if (!Array.isArray(raw)) return [];
 
   const findings: Finding[] = [];
+  // Bounded here, at the source. The wire caps `concernCount` at 150, and a
+  // reviewer that emits more makes `ValidatedTaskCompletedEventSchema.parse()`
+  // throw — which the uploader catches and turns into a DROPPED event. Losing
+  // one task's whole telemetry because its reviewer was unusually thorough is
+  // the worst possible trade, so the list is truncated rather than the event
+  // sacrificed.
+  const MAX_FINDINGS = 150;
   for (const [i, entry] of raw.entries()) {
+    if (findings.length >= MAX_FINDINGS) break;
     if (entry === null || typeof entry !== 'object') continue;
     const f = entry as Record<string, unknown>;
     const severity = f.weight ?? f.severity;
@@ -42,7 +50,11 @@ export function extractReviewerFindings(reviewerOutput: unknown): Finding[] {
       // task, which is the only scope anything reads it in.
       id: `f${i + 1}`,
       severity,
-      category: typeof f.category === 'string' && f.category.trim() !== '' ? f.category.trim() : 'other',
+      // Truncated to the wire's own `.max(64)`. Free text means the reviewer
+      // can write a sentence, and one over-long category would fail the schema
+      // parse and drop the entire event — the same all-or-nothing failure the
+      // findings cap above avoids.
+      category: normaliseCategory(f.category),
       claim: typeof f.claim === 'string' ? f.claim : '',
       evidence: typeof f.evidence === 'string' ? f.evidence : '',
       ...(typeof f.suggestion === 'string' && f.suggestion !== '' ? { suggestion: f.suggestion } : {}),
@@ -50,6 +62,16 @@ export function extractReviewerFindings(reviewerOutput: unknown): Finding[] {
     });
   }
   return findings;
+}
+
+/** The wire's bound on a single category string (`wire-schema.ts`). */
+const MAX_CATEGORY_LEN = 64;
+
+function normaliseCategory(raw: unknown): string {
+  if (typeof raw !== 'string') return 'other';
+  const trimmed = raw.trim();
+  if (trimmed === '') return 'other';
+  return trimmed.length > MAX_CATEGORY_LEN ? trimmed.slice(0, MAX_CATEGORY_LEN) : trimmed;
 }
 
 /**
@@ -78,9 +100,20 @@ export function deriveFindingsOutcome(
   findings: Finding[],
   reviewerRan: boolean,
   routeReportsFindings: boolean,
+  /**
+   * Whether the reviewer's output could be PARSED.
+   *
+   * Distinct from `reviewerRan`, and the distinction is load-bearing: the
+   * pipeline sets `reviewerTurn` unconditionally, so a reviewer whose output was
+   * unparseable still looks like it ran. Deriving `clean` from that reports
+   * "reviewed, nothing found" about a review nobody could read — precisely the
+   * false assurance this function exists to prevent.
+   */
+  reviewerOutputParsed = true,
 ): 'found' | 'clean' | 'not_applicable' {
   if (!routeReportsFindings || !reviewerRan) return 'not_applicable';
-  return findings.length > 0 ? 'found' : 'clean';
+  if (findings.length > 0) return 'found';
+  return reviewerOutputParsed ? 'clean' : 'not_applicable';
 }
 
 /**

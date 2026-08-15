@@ -147,3 +147,48 @@ describe('deriveFindingsOutcome', () => {
     expect(deriveFindingsOutcome(one, true, true)).toBe('found');
   });
 });
+
+/**
+ * Three defects an `audit` run of this very module found, all of the same
+ * class: a value that exceeds a wire bound makes
+ * `ValidatedTaskCompletedEventSchema.parse()` throw, TelemetryUploader catches
+ * it, and the ENTIRE event is dropped. Losing one task's whole telemetry
+ * because its reviewer was unusually thorough is the worst available trade, so
+ * every one of these clamps rather than rejects.
+ */
+describe('the extractor cannot produce a record the wire will reject', () => {
+  it('truncates a category longer than the wire`s 64-char bound', () => {
+    const long = 'x'.repeat(200);
+    const out = extractReviewerFindings({
+      findings: [{ weight: 'high', category: long, claim: 'c', evidence: 'e' }],
+    });
+    expect(out[0]!.category).toHaveLength(64);
+  });
+
+  it('caps the findings list at the wire`s concernCount bound', () => {
+    // 150 is the schema max. A reviewer emitting 400 findings used to take the
+    // whole event down with it.
+    const many = Array.from({ length: 400 }, (_, i) => ({
+      weight: 'low' as const, category: 'style', claim: `c${i}`, evidence: 'e',
+    }));
+    expect(extractReviewerFindings({ findings: many })).toHaveLength(150);
+  });
+
+  it('does not call an UNPARSEABLE review clean', () => {
+    // The pipeline sets `reviewerTurn` whether or not the output parsed, so
+    // `reviewerRan` alone cannot tell "reviewed, found nothing" from "the
+    // review was unreadable". Reporting the second as `clean` is a false
+    // assurance about code nobody successfully reviewed.
+    expect(deriveFindingsOutcome([], true, true, false)).toBe('not_applicable');
+    expect(deriveFindingsOutcome([], true, true, true)).toBe('clean');
+  });
+
+  it('still reports findings that WERE parsed out of a partly bad review', () => {
+    // A parse error does not erase what was recovered — `found` beats the
+    // unparsed downgrade, because the findings in hand are real.
+    const one = extractReviewerFindings({
+      findings: [{ weight: 'high', category: 'security', claim: 'c', evidence: 'e' }],
+    });
+    expect(deriveFindingsOutcome(one, true, true, false)).toBe('found');
+  });
+});

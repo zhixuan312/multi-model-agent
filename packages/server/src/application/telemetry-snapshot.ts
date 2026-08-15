@@ -61,6 +61,7 @@ export function buildEnvelopeSnapshot(
     findings,
     result.reviewerTurn !== null,
     FINDINGS_ROUTES.has(type),
+    result.reviewerParseError === null,
   );
 
   // Build stage records from the pipeline turns.
@@ -198,6 +199,17 @@ export function buildEnvelopeSnapshot(
     ]),
     findings,
     sourcesUsed,
-    validationWarnings: [],
+    // Output-format drift, which is what this field was added for and what it
+    // has never carried: `[]` was hardcoded here, so the engine could not
+    // report how often a reviewer emits output the refiner schema cannot parse.
+    // That number is directly actionable — it is a prompt or schema problem,
+    // not a model problem, and nothing else in the telemetry exposes it.
+    //
+    // `rule` is a stable key so the dashboard can group on it; the reason goes
+    // in `path` truncated, because a raw Zod error is long, unique per run, and
+    // would make every warning its own bucket.
+    validationWarnings: result.reviewerParseError
+      ? [{ rule: 'reviewer_output_unparseable', path: result.reviewerParseError.slice(0, 200) }]
+      : [],
   };
 }
