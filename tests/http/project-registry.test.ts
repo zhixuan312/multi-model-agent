@@ -26,22 +26,18 @@ describe('ProjectRegistry', () => {
     expect(r1.projectContext).toBe(r2.projectContext);
   });
 
-  it('reserveProject increments pendingReservations', () => {
-    const r = reg.reserveProject(dir);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.projectContext.pendingReservations).toBe(1);
-    reg.reserveProject(dir);
-    expect(r.projectContext.pendingReservations).toBe(2);
-  });
-
-  it('cancelReservation decrements pendingReservations', () => {
-    const r = reg.reserveProject(dir);
-    if (!r.ok) return;
-    reg.reserveProject(dir);
-    expect(r.projectContext.pendingReservations).toBe(2);
-    reg.cancelReservation(r.projectContext.cwd);
-    expect(r.projectContext.pendingReservations).toBe(1);
+  // The two tests that stood here asserted a `pendingReservations` counter going up and back down.
+  // Nothing else read it — not eviction (which consults `isBusy`), not /status (which reports live
+  // task counts) — so they proved only that the bookkeeping bookkept itself. What reserving a
+  // project must actually do is asserted by the identity and cap tests around them.
+  it('returns the SAME context for a repeated cwd rather than a second one', () => {
+    const first = reg.reserveProject(dir);
+    const second = reg.reserveProject(dir);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(second.projectContext).toBe(first.projectContext);
+    expect(second.created).toBe(false);
+    expect(reg.size).toBe(1);
   });
 
   it('reserveProject returns project_cap when full and every project is busy (unevictable)', () => {

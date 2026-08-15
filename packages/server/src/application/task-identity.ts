@@ -47,14 +47,6 @@ export function executionIdentity(entry: ExecutionEntry): ExecutionIdentity {
 }
 
 /**
- * The running-progress payload both wires return for a non-terminal task: identity
- * first, then how far along it is.
- *
- * Optional fields stay ABSENT rather than null when they have no value — the execution
- * monitor renders a label only when its field is present, and a `null` would print an
- * empty row that reads as a failure to load.
- */
-/**
  * How many buckets a reader gets. Matches the strip the execution monitor draws; a caller that
  * wants finer resolution would need the raw samples, which stay in the registry.
  */
@@ -98,6 +90,14 @@ export function bucketActivity(
   return { counts, phases };
 }
 
+/**
+ * The running-progress payload both wires return for a non-terminal task: identity first, then how
+ * far along it is.
+ *
+ * Optional fields stay ABSENT rather than null when they have no value — the execution monitor
+ * renders a label only when its field is present, and a `null` would print an empty row that reads
+ * as a failure to load.
+ */
 export function buildRunningSnapshot(entry: ExecutionEntry, now = Date.now()): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {
     ...executionIdentity(entry),

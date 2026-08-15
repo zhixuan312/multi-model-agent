@@ -455,7 +455,6 @@ export class ExecutionRuntime {
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
-    deps.projectRegistry.cancelReservation(cwd);
 
     // Registering first (rather than running the Task transition first) sidesteps the ownership
     // question a failed register/admit would otherwise raise: compensating a stranded

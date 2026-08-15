@@ -5,7 +5,6 @@ export interface ProjectContext {
   readonly contextBlocks: ContextBlockStore;
   readonly createdAt: number;
   lastActivityAt: number;
-  pendingReservations: number;
 }
 
 export interface CreateProjectContextOptions {
@@ -22,6 +21,5 @@ export function createProjectContext(
     contextBlocks: opts.contextBlockStore ?? new InMemoryContextBlockStore(),
     createdAt: now,
     lastActivityAt: now,
-    pendingReservations: 0,
   };
 }

@@ -126,7 +126,6 @@ describe('ExecutionRuntime', () => {
   function registerBlock(content: string): { id: string; refcount: () => number } {
     const reserve = projectRegistry.reserveProject(cwd);
     if (!reserve.ok) throw new Error(`reserve failed: ${reserve.error}`);
-    projectRegistry.cancelReservation(cwd);
     const block = reserve.projectContext.contextBlocks.register(content);
     return { id: block.id, refcount: () => reserve.projectContext.contextBlocks.refcount(block.id) };
   }

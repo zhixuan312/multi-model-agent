@@ -119,6 +119,35 @@ describe('reconcileOnBoot', () => {
     }
   });
 
+  it.skipIf(process.platform === 'win32')('fences a worker spawned via MMA_CODEX_BIN, whose path need not say "codex"', async () => {
+    // The guard used to match the literal string 'codex' in the command line. But
+    // `codex-cli-launch.ts` spawns `process.env.MMA_CODEX_BIN ?? 'codex'`, and
+    // `configure-provider` actively tells operators to set that variable — so an override pointing
+    // at, say, /opt/openai/bin/agent made the guard answer "not a codex worker" for EVERY real
+    // worker. Fencing then silently did nothing while the record was still marked retryable, and a
+    // resubmit could race a live straggler in the caller's checkout.
+    const worker = spawn('bash', ['-c', 'exec -a openai-agent sleep 30'], { detached: true, stdio: 'ignore' });
+    worker.unref();
+    const pid = worker.pid!;
+    await new Promise((r) => setTimeout(r, 200));
+
+    const previous = process.env.MMA_CODEX_BIN;
+    process.env.MMA_CODEX_BIN = '/opt/openai/bin/openai-agent';
+    try {
+      store.admit('stale-override', 'execute_plan', '/repo', DEAD_PID);
+      store.recordWorkerPid('stale-override', pid);
+
+      const outcome = reconcileOnBoot(store, process.pid);
+      expect(outcome.interrupted).toBe(1);
+      expect(outcome.fencedWorkers, 'the configured binary must be fenced like the default one').toBe(1);
+    } finally {
+      if (previous === undefined) delete process.env.MMA_CODEX_BIN;
+      else process.env.MMA_CODEX_BIN = previous;
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* already dead — expected */ }
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already dead — expected */ }
+    }
+  });
+
   it('prunes expired terminal rows as part of reconciliation', () => {
     store.admit('done-old', 'audit', '/repo', process.pid);
     store.complete('done-old', '{}');

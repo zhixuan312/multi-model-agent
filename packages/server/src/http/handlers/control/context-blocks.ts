@@ -108,7 +108,6 @@ export function createContextBlock(deps: ContextBlockHandlerDeps, input: CreateC
   }
   const pc = reserveResult.projectContext;
   pc.lastActivityAt = Date.now();
-  deps.projectRegistry.cancelReservation(input.cwd);
 
   // ── 4. Cap check ──────────────────────────────────────────────────────────
   if (pc.contextBlocks.size >= deps.maxContextBlocksPerProject) {
