@@ -65,9 +65,12 @@ export interface LexicalHit {
 }
 
 /**
- * One ranked signal list to fuse via Reciprocal Rank Fusion. `order` is a list
- * of record ids, best match first. `via` names the signal for diagnostics
- * (e.g. `'lexical'`, `'tag'`, `'neighbor'`) and is not interpreted by the engine.
+ * One ranked signal list to fuse via Reciprocal Rank Fusion. `order` is a list of record ids,
+ * best match first; `via` names the signal for diagnostics (`'lexical'`, `'tag'`, `'neighbor'`).
+ *
+ * Consumed by the journal adapter's own fusion — the engine no longer ranks. Kept here rather
+ * than moved because it is a corpus-neutral shape and the adapter already imports its record
+ * types from this module.
  */
 export interface RankedList {
   via: string;
@@ -80,11 +83,15 @@ export interface IndexHealth {
 }
 
 /**
- * Corpus-neutral adapter contract. An adapter knows how to enumerate and
- * decode one kind of corpus into engine records, and may contribute extra
- * ranked signal lists (e.g. tag overlap, graph neighbours) that the engine
- * fuses with its own lexical ranking via Reciprocal Rank Fusion. The engine
- * itself never inspects what a record represents.
+ * Corpus-neutral adapter contract. An adapter knows how to enumerate and decode one kind of
+ * corpus into engine records. The engine itself never inspects what a record represents.
+ *
+ * It used to also require `signals()` — extra ranked lists the engine fused with its own
+ * lexical ranking via RRF, in `engine/search.ts`. That fusion had no production caller: the
+ * journal adapter ranks a SQL-BOUNDED candidate pool with its own RRF (`fusePool`), precisely
+ * to avoid the whole-corpus `allRecordsMeta()` scan the engine's version opened with. Two
+ * implementations of one algorithm, one of them dormant and the slower of the two; the engine's
+ * is gone.
  */
 export interface CorpusAdapter {
   /** Stable identifier for this corpus kind, used only in diagnostics. */
@@ -95,19 +102,6 @@ export interface CorpusAdapter {
   listFiles(): Promise<string[]> | string[];
   /** Decode one file's raw contents into a corpus-neutral record. */
   decode(relPath: string, raw: string): Promise<CorpusRecord> | CorpusRecord;
-  /**
-   * Supply zero or more extra ranked signal lists (best-first record ids) to
-   * fuse alongside the engine's own lexical (FTS5/BM25) ranking. Receives the
-   * query tokens and the current candidate pool (already resolved to
-   * records) the engine is ranking. `pool` carries metadata only — no
-   * `body` — since a signal (tag overlap, graph neighbours, ...) is computed
-   * from an adapter's own metadata, never from record text.
-   */
-  signals(
-    tokens: string[],
-    pool: StoredRecordMeta[],
-    lexicalOrder?: string[],
-  ): RankedList[] | Promise<RankedList[]>;
   /**
    * Optional cheap "has anything been added or removed" signal: the
    * modification time of the directory {@link listFiles} enumerates, or

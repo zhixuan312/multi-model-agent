@@ -514,11 +514,6 @@ function rrf(rank1Based: number): number {
   return 1 / (RRF_K + rank1Based);
 }
 
-interface JournalRankedList {
-  via: string;
-  order: string[]; // node ids, best-first
-}
-
 /** Prompt-token / tag overlap count, descending — used both to pick
  * graph-neighbor seeds (see {@link rankCandidates}) and, via {@link
  * JournalIndexStore.rankedSignals}, as one of the fused RRF signals. Pure and
@@ -544,7 +539,7 @@ function fusePool(
   tokens: string[],
   lexicalOrder: string[],
 ): Map<string, { score: number; via: Set<string> }> {
-  const lists: JournalRankedList[] = [
+  const lists: RankedList[] = [
     { via: 'lexical', order: lexicalOrder },
     ...store.rankedSignals(tokens, pool, lexicalOrder),
   ];

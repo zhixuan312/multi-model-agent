@@ -3,7 +3,6 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { StatementSync } from 'node:sqlite';
-import { rrfSearch } from './search.js';
 import type {
   CorpusAdapter,
   IndexHealth,
@@ -946,17 +945,6 @@ export class CorpusIndex {
     }
     const rows = this.lexicalSearchStmt.all(match) as Array<Record<string, unknown>>;
     return rows.map((row) => ({ id: asString(row.id), bm25: asNumber(row.bm25) }));
-  }
-
-  /**
-   * Rank a candidate pool (or, when omitted, every indexed record) against
-   * `tokens` by fusing lexical search with the adapter's own ranked signals
-   * via Reciprocal Rank Fusion. Returns full records, best-first. Does not
-   * itself run freshness/health checks — callers that need up-to-date results
-   * call {@link ensureHealthy} / {@link ensureFresh} first.
-   */
-  async search(tokens: string[], opts?: { pool?: string[] }): Promise<StoredRecord[]> {
-    return rrfSearch(this, this.adapter, tokens, opts?.pool);
   }
 
   /** Reflected schema table list (for health/diagnostics tests). */
