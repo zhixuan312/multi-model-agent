@@ -14,6 +14,8 @@ function turn(overrides: Partial<TurnResult>): TurnResult {
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     filesWritten: [],
     usedShell: false,
+    // Base value for the mock; a test may override it to exercise the counted path.
+    sandboxDenialCount: null,
     turns: 0,
     durationMs: 5,
     costUSD: 0,

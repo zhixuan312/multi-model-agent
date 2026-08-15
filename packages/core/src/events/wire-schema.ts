@@ -22,6 +22,19 @@ export const SCHEMA_VERSION = 7;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
+/**
+ * Bounds the FINDINGS PRODUCER must respect, exported so it can respect them by reference.
+ *
+ * These are the wire's limits, and a producer that exceeds one does not get a rejected field — the
+ * whole event fails schema parse and the uploader drops it, silently. That is the defect class the
+ * 6.10.0 audit found three instances of. `reviewer-findings.ts` clamps to exactly these numbers;
+ * before they were exported it clamped to its own copies of them, so tightening a bound here would
+ * have re-introduced the silent drop with every test still green.
+ */
+export const CONCERN_CATEGORY_MAX_LEN = 64;
+export const CONCERN_CATEGORIES_MAX = 16;
+export const CONCERN_COUNT_MAX = 150;
+
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
@@ -97,7 +110,7 @@ export const ReviewStageEntrySchema = StageEntryBase.extend({
   // away at the point it became specific — and a downstream store that rejects
   // an engine vocabulary it has not seen drops whole events (the `agentType:
   // 'main'` incident). Bounded in length and count, not in content.
-  concernCategories: z.array(z.string().min(1).max(64)).max(16),
+  concernCategories: z.array(z.string().min(1).max(CONCERN_CATEGORY_MAX_LEN)).max(CONCERN_CATEGORIES_MAX),
 }).strict();
 
 export const ImplementStageEntrySchema = StageEntryBase.extend({
@@ -180,7 +193,7 @@ export const TaskCompletedEventSchema = z.object({
   costDeltaVsMainUSD: z.number().nullable(),
 
   // Lifecycle counts
-  concernCount: z.number().int().min(0).max(150),
+  concernCount: z.number().int().min(0).max(CONCERN_COUNT_MAX),
   // 4.7.4+ standardization: ALL findings-summary signals live at the top
   // level. Per-stage rows no longer carry these — there is one final
   // findings list per task and one final outcome, regardless of which

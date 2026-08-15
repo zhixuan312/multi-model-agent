@@ -16,7 +16,6 @@ import type {
   AgentTier,
   Route,
   Finding,
-  EscalationEntry,
   ValidationWarning,
   ToolCallRecord,
   StructuredError,

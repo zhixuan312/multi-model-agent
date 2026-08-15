@@ -10,8 +10,8 @@ describe('TaskEnvelope shape guard (A2)', () => {
       'stages','toolCalls','filesWritten','realFilesChanged',
       'commitSha','commitMessage','commitSkipReason','contextBlockId',
       'totalCostUSD','totalInputTokens','totalOutputTokens','totalCachedReadTokens','totalCachedNonReadTokens',
-      'totalDurationMs','turnsUsed','stallCount','sandboxViolationCount','taskMaxIdleMs',
-      'findings','sourcesUsed','escalationLog','validationWarnings',
+      'totalDurationMs','turnsUsed','sandboxViolationCount','wasCancelled',
+      'findings','sourcesUsed','validationWarnings',
     ]);
     // Compile-time check: type literal of TaskEnvelope keys must be exactly allowedKeys.
     type Keys = keyof TaskEnvelope;
@@ -24,8 +24,8 @@ describe('TaskEnvelope shape guard (A2)', () => {
       commitSha: true, commitMessage: true, commitSkipReason: true, contextBlockId: true,
       totalCostUSD: true, totalInputTokens: true, totalOutputTokens: true,
       totalCachedReadTokens: true, totalCachedNonReadTokens: true,
-      totalDurationMs: true, turnsUsed: true, stallCount: true, sandboxViolationCount: true, taskMaxIdleMs: true,
-      findings: true, sourcesUsed: true, escalationLog: true, validationWarnings: true,
+      totalDurationMs: true, turnsUsed: true, sandboxViolationCount: true, wasCancelled: true,
+      findings: true, sourcesUsed: true, validationWarnings: true,
     };
     expect(Object.keys(_typeCheck).sort()).toEqual([...allowedKeys].sort());
   });

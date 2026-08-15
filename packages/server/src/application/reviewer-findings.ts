@@ -1,4 +1,9 @@
 import type { Finding } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
+import {
+  CONCERN_CATEGORY_MAX_LEN,
+  CONCERN_CATEGORIES_MAX,
+  CONCERN_COUNT_MAX,
+} from '@zhixuan92/multi-model-agent-core/events/wire-schema';
 
 /**
  * Lift the reviewer's findings off `PipelineResult.reviewerOutput` so telemetry
@@ -36,7 +41,7 @@ export function extractReviewerFindings(reviewerOutput: unknown): Finding[] {
   // one task's whole telemetry because its reviewer was unusually thorough is
   // the worst possible trade, so the list is truncated rather than the event
   // sacrificed.
-  const MAX_FINDINGS = 150;
+  const MAX_FINDINGS = CONCERN_COUNT_MAX;
   for (const [i, entry] of raw.entries()) {
     if (findings.length >= MAX_FINDINGS) break;
     if (entry === null || typeof entry !== 'object') continue;
@@ -65,7 +70,7 @@ export function extractReviewerFindings(reviewerOutput: unknown): Finding[] {
 }
 
 /** The wire's bound on a single category string (`wire-schema.ts`). */
-const MAX_CATEGORY_LEN = 64;
+const MAX_CATEGORY_LEN = CONCERN_CATEGORY_MAX_LEN;
 
 function normaliseCategory(raw: unknown): string {
   if (typeof raw !== 'string') return 'other';
@@ -85,7 +90,7 @@ function normaliseCategory(raw: unknown): string {
  * happens when a downstream store constrains an engine vocabulary.
  */
 export function findingCategories(findings: Finding[]): string[] {
-  return [...new Set(findings.map((f) => f.category))].slice(0, 16);
+  return [...new Set(findings.map((f) => f.category))].slice(0, CONCERN_CATEGORIES_MAX);
 }
 
 /**

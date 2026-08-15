@@ -18,6 +18,8 @@ const turnOf = (
   turns: 2,
   durationMs: 1,
   terminationReason: 'ok',
+  // A mock has no sandbox hook to count with; `null` is "not measured here".
+  sandboxDenialCount: null,
   filesWritten,
   usedShell,
   toolCalls,

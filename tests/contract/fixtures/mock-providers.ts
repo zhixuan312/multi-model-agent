@@ -33,6 +33,9 @@ function runResultToTurnResult(rr: RuntimeRunResult): TurnResult {
     terminationReason: statusToTermination(rr.status),
     usedShell: rr.usedShell ?? false,
     toolCalls: [],
+    // A mock has no sandbox hook to count with; `null` is "not measured here", which is what
+    // codex reports for the same reason. `0` would claim the worker was observed and behaved.
+    sandboxDenialCount: null,
     ...(rr.errorCode && { errorCode: rr.errorCode }),
     ...(rr.error && { errorMessage: rr.error }),
     // No `workerSelfAssessment` spread here. `TurnResult` declares eleven keys (pinned by

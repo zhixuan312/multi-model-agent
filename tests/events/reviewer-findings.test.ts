@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ReviewStageEntrySchema,
+  CONCERN_CATEGORY_MAX_LEN,
+  CONCERN_CATEGORIES_MAX,
+  CONCERN_COUNT_MAX,
+} from '../../packages/core/src/events/wire-schema.js';
+import {
   extractReviewerFindings,
   findingCategories,
   deriveFindingsOutcome,
@@ -121,7 +127,7 @@ describe('findingCategories', () => {
     const many = Array.from({ length: 40 }, (_, i) => ({
       weight: 'low' as const, category: `cat_${i}`, claim: 'c', evidence: 'e',
     }));
-    expect(findingCategories(extractReviewerFindings({ findings: many })).length).toBeLessThanOrEqual(16);
+    expect(findingCategories(extractReviewerFindings({ findings: many })).length).toBeLessThanOrEqual(CONCERN_CATEGORIES_MAX);
   });
 });
 
@@ -157,21 +163,23 @@ describe('deriveFindingsOutcome', () => {
  * every one of these clamps rather than rejects.
  */
 describe('the extractor cannot produce a record the wire will reject', () => {
-  it('truncates a category longer than the wire`s 64-char bound', () => {
+  it('truncates a category longer than the wire`s bound', () => {
+    // The bound comes from the schema that owns it, not a literal. Written as `64` this passed
+    // while a tightened schema bound silently put the producer back over the limit.
     const long = 'x'.repeat(200);
     const out = extractReviewerFindings({
       findings: [{ weight: 'high', category: long, claim: 'c', evidence: 'e' }],
     });
-    expect(out[0]!.category).toHaveLength(64);
+    expect(out[0]!.category).toHaveLength(CONCERN_CATEGORY_MAX_LEN);
   });
 
   it('caps the findings list at the wire`s concernCount bound', () => {
-    // 150 is the schema max. A reviewer emitting 400 findings used to take the
-    // whole event down with it.
+    // A reviewer emitting 400 findings used to take the whole event down with it. The cap comes
+    // from the schema that owns it.
     const many = Array.from({ length: 400 }, (_, i) => ({
       weight: 'low' as const, category: 'style', claim: `c${i}`, evidence: 'e',
     }));
-    expect(extractReviewerFindings({ findings: many })).toHaveLength(150);
+    expect(extractReviewerFindings({ findings: many })).toHaveLength(CONCERN_COUNT_MAX);
   });
 
   it('does not call an UNPARSEABLE review clean', () => {
@@ -190,5 +198,69 @@ describe('the extractor cannot produce a record the wire will reject', () => {
       findings: [{ weight: 'high', category: 'security', claim: 'c', evidence: 'e' }],
     });
     expect(deriveFindingsOutcome(one, true, true, false)).toBe('found');
+  });
+});
+
+/**
+ * The claim "the extractor cannot produce a record the wire will reject", asserted by ROUND TRIP.
+ *
+ * The block above states that invariant and then checks it against restated numbers — 64, 150, 16
+ * written into the test. That is a third copy of a bound already owned by `wire-schema.ts` and
+ * respected by `reviewer-findings.ts`, and the failure it guards against is severe: exceeding a
+ * wire bound does not drop a FIELD, it fails schema parse, and the uploader drops the entire
+ * event. Tighten a bound in the schema and the literal assertions here keep passing while the
+ * producer emits records that vanish.
+ *
+ * These cases feed the extractor deliberately hostile reviewer output and hand the result to the
+ * REAL schema. There is no number to keep in sync.
+ */
+describe('extractor output survives the actual wire schema', () => {
+  /** A minimal valid review stage, varying only the field under test. */
+  const stage = (categories: string[]) =>
+    ReviewStageEntrySchema.parse({
+      name: 'review',
+      round: 0,
+      model: 'claude-sonnet-4-6',
+      tier: 'complex',
+      durationMs: 1000,
+      costUSD: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedReadTokens: null,
+      cachedNonReadTokens: null,
+      filesWrittenCount: 0,
+      turnCount: 1,
+      mainCostUSD: null,
+      verdict: 'concerns',
+      concernCategories: categories,
+    });
+
+  it('a reviewer category far over the bound still parses after extraction', () => {
+    const findings = extractReviewerFindings({
+      findings: [{ weight: 'high', category: 'x'.repeat(500), claim: 'c', evidence: 'e' }],
+    });
+    expect(() => stage(findingCategories(findings))).not.toThrow();
+  });
+
+  it('a reviewer emitting far too many distinct categories still parses', () => {
+    const findings = extractReviewerFindings({
+      findings: Array.from({ length: 400 }, (_, i) => ({
+        weight: 'low', category: `category-${i}`, claim: 'c', evidence: 'e',
+      })),
+    });
+    expect(() => stage(findingCategories(findings))).not.toThrow();
+  });
+
+  it('the producer clamps to the schema bounds rather than to its own copy of them', () => {
+    // Ties the two together directly: whatever the schema permits is what the producer emits.
+    const findings = extractReviewerFindings({
+      findings: Array.from({ length: 400 }, (_, i) => ({
+        weight: 'low', category: `${'y'.repeat(200)}-${i}`, claim: 'c', evidence: 'e',
+      })),
+    });
+    expect(findings.length).toBeLessThanOrEqual(CONCERN_COUNT_MAX);
+    const categories = findingCategories(findings);
+    expect(categories.length).toBeLessThanOrEqual(CONCERN_CATEGORIES_MAX);
+    for (const c of categories) expect(c.length).toBeLessThanOrEqual(CONCERN_CATEGORY_MAX_LEN);
   });
 });

@@ -60,6 +60,9 @@ function okTurn(output: string): TurnResult {
     costUSD: 0.001,
     terminationReason: 'ok',
     toolCalls: [],
+    // A mock has no sandbox hook to count with; `null` is "not measured here", which is what
+    // codex reports for the same reason. `0` would claim the worker was observed and behaved.
+    sandboxDenialCount: null,
   };
 }
 
