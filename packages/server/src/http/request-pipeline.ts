@@ -55,6 +55,12 @@ export async function handleRequest(
   let rawBody: Buffer | undefined;
   if (BODY_METHODS.has(method)) {
     const result = await readBody(req, cfg.server.limits.maxBodyBytes);
+    if (!result.ok && result.reason === 'read_error') {
+      // The body never arrived intact. Answering 413 here would assert a size violation that did
+      // not happen; the write is best-effort because the socket may already be gone.
+      sendError(res, 400, 'invalid_request', 'Request body could not be read');
+      return;
+    }
     if (!result.ok) {
       res.writeHead(413, { 'content-type': 'application/json', 'connection': 'close' });
       res.end(
