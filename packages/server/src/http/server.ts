@@ -267,7 +267,7 @@ export async function startServer(
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
       const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, executionRegistry, projectRegistry, store: executionStore, initiativeLinker, initiativeRuntime });
-      const deps: HandlerDeps = { runtime, executionRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
+      const deps: HandlerDeps = { runtime, executionRegistry, store: executionStore, initiativeRuntime };
       const { buildUnifiedExecutionHandler, buildExecutionPollHandler, buildExecutionCancelHandler } = await import('./handlers/unified-execution.js');
       router.register('POST', '/execution', buildUnifiedExecutionHandler(deps));
       router.register('GET', '/execution/:executionId', buildExecutionPollHandler(deps));

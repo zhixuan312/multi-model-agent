@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadToken, validateAuthHeader } from '../../packages/server/src/http/auth.js';
+import { startTestServer } from '../helpers/test-server.js';
 
 describe('loadToken', () => {
   let tmp: string;
@@ -114,5 +115,53 @@ describe('validateAuthHeader', () => {
   });
   it('uses timingSafeEqual (tokens of different length → mismatch, not throw)', () => {
     expect(validateAuthHeader('Bearer short', 'a-much-longer-expected-token').ok).toBe(false);
+  });
+
+  /**
+   * Every case above asserted only `.ok`, so the three-way `reason` — the one thing this function
+   * reports beyond pass/fail — had no coverage and no reader anywhere in the server either. It is
+   * now written to the daemon's stderr on a 401, where `missing` (client never configured),
+   * `malformed` (not a `Bearer <token>` header) and `mismatch` (stale or wrong token, e.g. an
+   * `MMA_AUTH_TOKEN` env override disagreeing with the token file) are three different operator
+   * problems that used to look identical in the log.
+   */
+  it('names which check failed, distinctly', () => {
+    expect(validateAuthHeader(undefined, 'abc')).toEqual({ ok: false, reason: 'missing' });
+    expect(validateAuthHeader('', 'abc')).toEqual({ ok: false, reason: 'missing' });
+    expect(validateAuthHeader('abc', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Basic abc', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Bearer a b', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Bearer wrong', 'abc')).toEqual({ ok: false, reason: 'mismatch' });
+    expect(validateAuthHeader('Bearer short', 'a-much-longer-token')).toEqual({ ok: false, reason: 'mismatch' });
+  });
+});
+
+describe('401 responses stay generic while the daemon log does not', () => {
+  it('answers every rejection identically and records the reason on stderr', async () => {
+    const s = await startTestServer();
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      const cases: [string, Record<string, string>][] = [
+        ['missing', {}],
+        ['malformed', { Authorization: 'Basic zzz' }],
+        ['mismatch', { Authorization: 'Bearer definitely-not-the-token' }],
+      ];
+      for (const [reason, headers] of cases) {
+        const res = await fetch(`${s.url}/status`, { headers });
+        expect(res.status, reason).toBe(401);
+        // The body must not distinguish the three — a client learns only that it failed.
+        expect(await res.json(), reason).toEqual({
+          error: { code: 'unauthorized', message: 'Valid Bearer token required' },
+        });
+        expect(written.join(''), `stderr should name ${reason}`).toContain(`reason=${reason}`);
+      }
+    } finally {
+      spy.mockRestore();
+      await s.stop();
+    }
   });
 });
