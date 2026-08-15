@@ -25,14 +25,14 @@ Verify the implementer's code review against the source files, improve quality. 
 
 4. **Severity calibration** — critical=data corruption/auth bypass/outage. low=style/naming. Adjust miscalibrated severities.
 
-5. **Scope** — pre-existing bugs go in `preExisting`, not findings. Remove doc/spec issues and off-focus style nits.
+5. **Scope** — pre-existing bugs stay IN `findings`, flagged `preExisting: true`; there is no separate container, and a top-level one is silently dropped by the parser. Remove doc/spec issues and off-focus style nits.
 
 6. **Cross-file work** — cross-file ripple findings backed by call-site references are VALID. Do not downgrade.
 
 ## Constraints
 
 - Remove fabricated-evidence findings. Add missed merge-blocking issues.
-- Move pre-existing bugs to `preExisting`. Correct severities.
+- Flag pre-existing bugs `preExisting: true` rather than deleting them. Correct severities.
 - Update `criteriaCovered` and `findings` to match corrected state. Improve finding wording if you can add clarity.
 
 ## Output
