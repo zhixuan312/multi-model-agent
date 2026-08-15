@@ -807,6 +807,25 @@ export class ExecutionRuntime {
           // LATER commit (landed after this execution, before replay) to this execution's work.
           commitSha: result.commitSha,
           ...(result.contractNote && { contractNote: result.contractNote }),
+          // The execute_plan completion signal, which the caller previously could not see at all.
+          //
+          // The pipeline computes `completionPercent` and returns any concern as `failureReason`
+          // (a failing acceptance command, a task the reviewer reported not-done). The envelope
+          // emitted `failureReason` ONLY when `status === 'failed'` — and execute_plan never
+          // reaches `failed`, because every concern is deliberately downgraded to
+          // `done_with_concerns` so the commit stays on the branch for a human to judge at PR
+          // review. The worst case was therefore silent: all tasks matched and reported done, the
+          // frozen acceptance commands FAILED, and the caller saw `done_with_concerns`, `error:
+          // null`, no `contractNote`, and a summary saying everything was done.
+          //
+          // The pipeline's own comment already claimed "the per-task detail is in the envelope",
+          // and the skill documents `completionPercent` as observable. Both are now true.
+          ...(result.completionPercent !== undefined && input.type === 'execute_plan'
+            ? { completionPercent: result.completionPercent }
+            : {}),
+          ...(result.status !== 'failed' && result.failureReason
+            ? { concern: result.failureReason }
+            : {}),
           contextBlockId,
           // Advisory: the reviewer ran but its output wasn't parseable, so the answer above
           // is the un-refined implementer output. This is a concern (status is already

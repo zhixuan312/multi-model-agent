@@ -17,6 +17,11 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 - The plan must be a contract-first, deliverable-neutral Contract Task plan. A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
 - A task's deterministic check is OPTIONAL — a task with no check is not an error, and its Contract alone defines what "done" means. The pipeline validates and materializes any task's plan-authored checks, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
+- **Where to read the outcome.** `output.completionPercent` carries the derived percentage, and
+  `output.concern` carries the reason for any shortfall (`{ code, message }` — a failing acceptance
+  command, or the outstanding task ids). Both appear on a `done_with_concerns` run, where `error` is
+  `null` by design: a shortfall is a concern, not a failure, so `error` alone cannot tell a clean
+  run from one whose tests failed.
 - **Completion is REPORTED, not gated.** `completionPercent` is derived from the reviewer's
   per-task verdicts (`round(done / dispatched * 100)`), and a shortfall names the outstanding task
   ids. A task reported not-done, an unresolvable reviewer report, or failing acceptance tests all
