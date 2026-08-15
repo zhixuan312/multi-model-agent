@@ -110,13 +110,24 @@ export function buildEnvelopeSnapshot(
       ? (result.failureReason ?? { code: 'pipeline_failed', message: 'Pipeline completed with failed status' })
       : null,
     errorCode: null,
-    reviewPolicy: reviewPolicy === 'none' ? 'none' : 'reviewed',
+    reviewPolicy,
     plannedStageTotal: stages.length,
     stages,
     toolCalls,
+    // Two DIFFERENT facts, and they were both being filled from the worker's self-report.
+    // `filesWritten` is what the runner says it touched; `realFilesChanged` is
+    // `git diff --name-only` across the engine's commit — the field `to-wire-record` turns into
+    // `filesWrittenCount`. Falls back to the self-report only when there is no git answer at all
+    // (read routes, non-git targets, nothing committed).
     filesWritten: implTurn.filesWritten,
-    realFilesChanged: implTurn.filesWritten,
-    commitSha: null,
+    realFilesChanged: result.filesChangedFromGit ?? implTurn.filesWritten,
+    // The envelope's own comment said these are "set at seal() from the commit gate payload" —
+    // a mechanism retired with the lifecycle layer, after which this hardcoded null and every
+    // write-route execution reported "no commit" in telemetry. The pipeline carries the
+    // commit-time SHA; take it.
+    commitSha: result.commitSha,
+    // The engine composes its commit message internally and does not surface it on
+    // `PipelineResult`, so there is nothing honest to put here yet.
     commitMessage: null,
     commitSkipReason: null,
     contextBlockId: null,
