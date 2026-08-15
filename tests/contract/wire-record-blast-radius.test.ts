@@ -2,9 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 
-// The 5 fields that A+B+C is permitted to change between pre-4.7.8 and
-// post-4.7.8 for an otherwise-identical lifecycle execution. Anything
-// outside this set differing indicates accidental blast-radius spread.
+// The invariant: for two executions that did the SAME WORK and differ only in how they ended,
+// the wire record may differ only in the fields that describe the OUTCOME. Everything else —
+// token counts, costs, durations, tool-call rollups, stage models and tiers — describes the work
+// and must be identical.
+//
+// (Framed as "pre/post A+B+C, pre-4.7.8" until this audit. That named a release rather than a
+// property, so a reader could not tell what the test was for without finding the release notes.
+// The mechanism is unchanged.)
+//
+// These five are the outcome fields, and nothing else may differ.
 const ALLOWED_DIFF_PATHS = new Set([
   'terminalStatus',
   'workerStatus',
@@ -80,15 +87,12 @@ function flatten(obj: unknown, prefix = ''): Record<string, unknown> {
   return out;
 }
 
-describe('wire-record blast radius — only status fields differ pre/post A+B+C', () => {
-  it('pre-change vs post-change wire output diff is a subset of ALLOWED_DIFF_PATHS', () => {
-    // PRE: how a row would have looked before A+B+C — envelope sealed
-    // with status='failed' + structuredError code, the wire then projects
-    // terminalStatus='error' / workerStatus='failed' via mapStatusToWire.
+describe('wire-record blast radius', () => {
+  it('an execution ending differently differs on the wire ONLY in its outcome fields', () => {
+    // Same work, two endings. `buildEnvelope` records identical stages, tokens, costs and tool
+    // calls for both; only the seal differs, and the wire projects terminalStatus/workerStatus
+    // from it via mapStatusToWire.
     const pre = buildEnvelope({ status: 'failed', errorCode: 'sdk_execution_error' });
-    // POST: how the SAME execution now looks after A+B+C — envelope
-    // sealed with status='done', wire projects terminalStatus='ok' /
-    // workerStatus='done'.
     const post = buildEnvelope({ status: 'done', errorCode: null });
 
     const cfg = { toolMode: 'full' as const, implementerModel: 'claude-haiku-4-5', implementerTier: 'standard' as const, mainModelFamily: 'claude' as const };

@@ -11,6 +11,32 @@ interface FlusherOptions {
   endpoint: string;
 }
 
+/**
+ * The batch envelope that leaves the machine — the ONE definition of it.
+ *
+ * Named and exported so `privacy-doc-sync.test.ts` can derive the documented field list from the
+ * thing that actually builds the request, rather than restating it. That file's own docstring
+ * explains why a hardcoded list is the wrong guard ("a hardcoded list is blind by construction"
+ * to a NEW field reaching the wire), and its batch-wrapper half was exactly such a list.
+ *
+ * `generation` is deliberately NOT here. It rides on each queued `QueueRecord` and groups the
+ * batch, but is not transmitted — see the note on `bumpGeneration` for what it does and does not
+ * do. If it is ever sent, this function is where that becomes visible.
+ */
+export function buildUploadBody(
+  first: ReadBatchResult['records'][number],
+  events: Record<string, unknown>[],
+): Record<string, unknown> {
+  return {
+    schemaVersion: first.schemaVersion,
+    installId: first.installId,
+    mmaVersion: first.mmaVersion,
+    os: first.os,
+    nodeMajor: first.nodeMajor,
+    events,
+  };
+}
+
 const MAX_BATCH = 500;
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BOOT_DELAY_MS = 5_000; // 5 seconds
@@ -219,14 +245,7 @@ export class Flusher {
   ): Promise<UploadResult> {
     const first = group.records[0];
     const events = group.records.flatMap(r => r.events);
-    const jsonBody = JSON.stringify({
-      schemaVersion: first.schemaVersion,
-      installId: first.installId,
-      mmaVersion: first.mmaVersion,
-      os: first.os,
-      nodeMajor: first.nodeMajor,
-      events,
-    });
+    const jsonBody = JSON.stringify(buildUploadBody(first, events));
     const signature = sign(identity.privateKeyPkcs8, jsonBody);
     const body = gzipSync(Buffer.from(jsonBody, 'utf8'));
 

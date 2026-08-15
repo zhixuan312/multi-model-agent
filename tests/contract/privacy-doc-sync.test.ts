@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/events/wire-schema';
+import { buildUploadBody } from '../../packages/server/src/telemetry/flusher.js';
 
 /**
  * PRIVACY.md must document every field that leaves the machine.
@@ -30,10 +31,27 @@ describe('PRIVACY.md ↔ schema sync', () => {
     expect(undocumented, `undocumented wire field(s): ${undocumented.join(', ')} — add a row to PRIVACY.md`).toEqual([]);
   });
 
-  it('documents the batch-wrapper fields', () => {
-    for (const f of ['installId', 'schemaVersion', 'mmaVersion', 'os', 'nodeMajor', 'eventId']) {
-      expect(new RegExp(`\\b${f}\\b`).test(md), `${f} should appear in PRIVACY.md`).toBe(true);
-    }
+  /**
+   * Derived from the builder, for the reason stated above.
+   *
+   * This half used to be a six-name literal — the same shape the docstring calls blind by
+   * construction, in the same file. A field added to the batch envelope would have reached the
+   * wire undocumented and this test would have kept passing. `buildUploadBody` is now the one
+   * definition of what leaves the machine, and the list comes from calling it.
+   */
+  it('documents every field of the batch envelope', () => {
+    const body = buildUploadBody(
+      { schemaVersion: 6, installId: 'i', mmaVersion: '1.0.0', os: 'darwin', nodeMajor: 22, generation: 0, events: [] },
+      [],
+    );
+    const fields = Object.keys(body);
+    expect(fields.length, 'the upload body builder returned nothing').toBeGreaterThan(4);
+
+    const undocumented = fields.filter((f) => !new RegExp(`\\b${f}\\b`).test(md));
+    expect(undocumented, `undocumented batch field(s): ${undocumented.join(', ')} — add a row to PRIVACY.md`).toEqual([]);
+
+    // `eventId` is on each event, not the envelope, and PRIVACY.md must still carry it.
+    expect(new RegExp('\\beventId\\b').test(md), 'eventId should appear in PRIVACY.md').toBe(true);
   });
 
   // A doc can be complete and still be wrong. This pins the one claim that the
