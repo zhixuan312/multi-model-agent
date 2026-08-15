@@ -99,3 +99,40 @@ describe('packaged execution vocabulary', () => {
     }
   });
 });
+/**
+ * Retired ENGINE COMPONENTS must not survive in the text sent to a worker.
+ *
+ * These are prompts, not comments: a skill that tells the implementer its output will be "merged
+ * by a downstream annotator", or that a "SPEC reviewer" then a "QUALITY reviewer" then an
+ * "annotator" run after its turn, is describing a pipeline that has not existed since the
+ * lifecycle layer was removed. The engine runs exactly two phases — implementer, then one
+ * reviewer — and creates no worktree, because the caller owns the branch.
+ *
+ * Nine `worktree` references across five review skills, and three descriptions of the retired
+ * multi-stage pipeline, survived until this sweep. Each was read by a live model on every run.
+ */
+describe('contract: skills describe the pipeline that exists', () => {
+  const RETIRED = [
+    { term: 'worktree', because: 'the engine creates none — the caller owns the branch and work happens in the submitted cwd' },
+    { term: 'annotator', because: 'the annotating stage was removed with the lifecycle layer' },
+    { term: 'annotating stage', because: 'the annotating stage was removed with the lifecycle layer' },
+    // Banned outright rather than only in the affirmative: a prompt that has to DENY a stage
+    // is still describing one. The accurate sentence ("you get exactly one turn") needs neither.
+    { term: 'rework round', because: 'there is one reviewer pass, and no stage by this name' },
+    { term: 'QUALITY reviewer', because: 'there is one reviewer, not a spec/quality pair' },
+    { term: 'SPEC reviewer', because: 'there is one reviewer, not a spec/quality pair' },
+  ];
+
+  it.each(RETIRED)('no skill mentions "$term" — $because', async ({ term }) => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const root = 'packages/core/src/skills';
+    const offenders: string[] = [];
+    for (const dir of (await readdir(root, { withFileTypes: true })).filter((e) => e.isDirectory())) {
+      for (const file of (await readdir(`${root}/${dir.name}`)).filter((f) => f.endsWith('.md'))) {
+        const text = await readFile(`${root}/${dir.name}/${file}`, 'utf8');
+        if (text.toLowerCase().includes(term.toLowerCase())) offenders.push(`${dir.name}/${file}`);
+      }
+    }
+    expect(offenders, `retired term "${term}" in: ${offenders.join(', ')}`).toEqual([]);
+  });
+});

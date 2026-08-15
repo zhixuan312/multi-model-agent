@@ -75,9 +75,9 @@ Constraints: <= 8 entries per adapter list, <= 200 chars per query string.
 - In scope: external sources (papers, official docs, github repos/issues, blog posts, RFCs) reached via the configured adapters + Brave web search.
 - Out of scope: codebase reads (those belong in `mma-investigate`); answers from your training data without a citation.
 
-### Annotator Awareness
+### Deduplicate Your Own Findings
 
-Your output is one of N parallel-criterion narratives that will be merged by a downstream annotator. The annotator dedups across criteria by (source URL, claim essence). If two of your findings cite the same source for the same claim, KEEP ONE in your output — the annotator already deduplicates across criteria.
+Nothing downstream merges your narrative with anyone else's. If two of your findings cite the same source for the same claim, KEEP ONE — the deduplication is yours to do, in this output.
 
 ### Turn 1: Query Plan (When Planning)
 

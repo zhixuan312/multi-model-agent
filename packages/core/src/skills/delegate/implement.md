@@ -12,7 +12,7 @@ Implement EXACTLY what the brief asks for — the smallest complete change, no g
 
 ## Context
 
-mma-delegate is a SINGLE-PASS pipeline. There are NO rework rounds for you. After your turn, a SPEC reviewer (complex tier, full editor tools) runs ONCE — it fixes gaps inline, it does not ask you. Then a QUALITY reviewer runs ONCE for safety/correctness — same: fixes inline, does not ask you. Then an annotator scores completion and the commit gate fires.
+mma-delegate is a SINGLE-PASS pipeline: you get exactly one turn, and you are never called again. After your turn ONE reviewer runs, once — it fixes gaps inline for correctness and safety, and it does not ask you anything. Then the engine commits your work.
 
 What this means: do your best ONE pass. Do not second-guess minor things — the reviewer will catch them. Do not over-think, restart-loop, or bail on uncertainty. The pipeline has a safety net, but only one round of it.
 

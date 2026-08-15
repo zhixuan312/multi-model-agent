@@ -62,7 +62,7 @@ files/functions/calls; a document's sections stand in for modules).
 
 ### Five Investigation Perspectives
 
-Apply ALL perspectives regardless of the question or the subject type. Each perspective may yield candidate answers; emit all of them and let the merge annotator dedup and rank.
+Apply ALL perspectives regardless of the question or the subject type. Each perspective may yield candidate answers; emit all of them, deduplicated and ranked by you — nothing downstream merges or re-ranks them.
 
 1. **DIRECT-SYMBOL-TRACE** — Start from the named elements in the question (or directly implied) — symbols/files for code, or cells/sections/records for non-code material. Read the named item(s) top-to-bottom, follow references/links/formulas step-by-step. Your candidate answer is the chain of `file:line` references (or equivalent locators) that, when followed in order, mechanically resolves the question.
 
