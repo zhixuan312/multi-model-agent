@@ -401,36 +401,44 @@ describe('route contract', () => {
   // ── Input validation ──
 
   describe('input validation', () => {
-    it('rejects deprecated question field with 400', async () => {
+    /**
+     * Each of these supplies EVERY required field for its type, so the only thing left to
+     * reject is the retired one.
+     *
+     * They previously sent the retired field alone — `{ type: 'investigate', question: 'test' }`
+     * with no `prompt` — which a 400 answers for the missing required field whether or not the
+     * schema is strict. Five cases named for rejecting retired fields, all five passing on a
+     * request that was invalid for an unrelated reason: if `taskInputSchema` ever stopped being
+     * strict, every one of them would still be green.
+     */
+    const RETIRED_FIELD_CASES: Array<{ label: string; body: Record<string, unknown>; field: string }> = [
+      { label: 'question (investigate)', field: 'question', body: { type: 'investigate', prompt: 'what is going on', question: 'test' } },
+      { label: 'errorMessage (debug)', field: 'errorMessage', body: { type: 'debug', prompt: 'why does it fail', errorMessage: 'test' } },
+      { label: 'filePaths (audit)', field: 'filePaths', body: { type: 'audit', target: { inline: 'doc' }, filePaths: ['a.md'] } },
+      { label: 'taskDescriptors (execute_plan)', field: 'taskDescriptors', body: { type: 'execute_plan', target: { paths: ['p.md'] }, tasks: [], taskDescriptors: ['1'] } },
+      { label: 'tasks array (delegate)', field: 'tasks', body: { type: 'delegate', prompt: 'do the thing', tasks: [{ prompt: 'x' }] } },
+    ];
+
+    it.each(RETIRED_FIELD_CASES)('rejects the retired $label on an otherwise VALID request', async ({ body, field }) => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
-        const res = await dispatch(h, { type: 'investigate', question: 'test' });
+        const res = await dispatch(h, body);
         expect(res.status).toBe(400);
+        // ...and names it, so the 400 cannot be coming from something else in the body.
+        expect(JSON.stringify(await res.json())).toContain(field);
       } finally { await h.close(); }
     });
 
-    it('rejects deprecated errorMessage field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    it.each(RETIRED_FIELD_CASES)('...and accepts the same request once $label is removed', async ({ body, field }) => {
+      // The control: proves the body is otherwise complete, so the rejection above is
+      // attributable to the retired key and to nothing else.
+      const { [field]: _retired, ...clean } = body;
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-retired-field-'));
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await dispatch(h, { type: 'debug', errorMessage: 'test' });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
-
-    it('rejects deprecated filePaths field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'audit', filePaths: ['a.md'] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
-
-    it('rejects deprecated taskDescriptors field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'execute_plan', filePaths: ['p.md'], taskDescriptors: ['1'] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
+        const res = await dispatchCwd(h, tmp, clean);
+        expect(res.status, `${field} removed should leave a valid request`).toBe(202);
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
     it('rejects unknown task type with 400', async () => {
