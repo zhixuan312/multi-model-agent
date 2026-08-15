@@ -1,4 +1,25 @@
 import type { TaskType } from '@zhixuan92/multi-model-agent-core';
+import { REFINER_SCHEMAS } from '@zhixuan92/multi-model-agent-core';
+
+/**
+ * Types whose refiner answer actually carries a `findings` array, read from the schemas rather
+ * than listed here.
+ *
+ * The reviewer goal is emitted for EVERY type and demanded "you have checked for hallucinated
+ * findings", "every finding cites actual file:line" and "you have checked weight calibration" —
+ * on `delegate` (`{status, notes}`), `execute_plan` (`{tasks, notes}`) and `journal_record`
+ * (`{recorded, failed}`), none of which has a finding or a weight. The Stop hook holds the worker
+ * until the goal reads as satisfied, so those reviewers were spending turns auditing a field that
+ * does not exist in their output.
+ */
+const FINDINGS_TYPES: ReadonlySet<string> = new Set(
+  Object.entries(REFINER_SCHEMAS)
+    .filter(([, schema]) => {
+      const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape;
+      return shape !== undefined && 'findings' in shape;
+    })
+    .map(([type]) => type),
+);
 
 /**
  * Build a goal condition string for the Stop hook. This keeps the agent
@@ -8,9 +29,13 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
   if (role === 'reviewer') {
     return [
       'You have verified every criterion the implementer was supposed to cover.',
-      'You have checked for hallucinated findings (claims without evidence in the source material).',
-      'You have validated evidence quality (every finding cites actual file:line or quoted text).',
-      'You have checked weight calibration against the skill definitions.',
+      ...(FINDINGS_TYPES.has(type)
+        ? [
+            'You have checked for hallucinated findings (claims without evidence in the source material).',
+            'You have validated evidence quality (every finding cites actual file:line or quoted text).',
+            'You have checked weight calibration against the skill definitions.',
+          ]
+        : []),
       'You have verified the implementer\'s draft and output the refined answer in the same JSON format as the implementer.',
       'No findings, verdict, or meta-commentary -- only the final answer in a ```json fenced block.',
     ].join(' ');
