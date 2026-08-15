@@ -202,3 +202,47 @@ describe('contract: the strip is drawn from the engine, never accumulated locall
     expect(document.querySelectorAll('.strip .bar')).toHaveLength(4);
   });
 });
+
+/**
+ * Every class the stylesheet styles must be one the App emits.
+ *
+ * A `.stats` / `.row` / `.row .k` / `.row .v` ruleset survived the move to the `.tbl` / `.cel`
+ * results table — a second, dead layout system for label/value pairs, shipped in every copy of
+ * the 363KB bundle and indistinguishable from the live one by reading the stylesheet. Nothing
+ * failed, because a rule with no element simply never applies.
+ *
+ * Checked against the emitters rather than by eye: `entry.ts` and `scene.ts` are the only two
+ * modules that write markup, and `sceneClass` composes its class list from a small closed set.
+ */
+describe('contract: the stylesheet styles only classes the App emits', () => {
+  it('has no rule for a class no module produces', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    // Paths from `process.cwd()`, not `import.meta.url`: this file runs under the jsdom
+    // environment, where `import.meta.url` is an http URL and `readFile` rejects it.
+    const dir = join(process.cwd(), 'packages/server/src/ui/execution');
+    const html = await readFile(join(dir, 'execution.html'), 'utf8');
+    const sources = (await Promise.all(
+      ['entry.ts', 'scene.ts', 'type-art.ts', 'display-state.ts'].map((f) => readFile(join(dir, f), 'utf8')),
+    )).join('\n');
+
+    const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+    const styled = new Set([...css.matchAll(/#app [^{]*?\.([a-zA-Z][-a-zA-Z0-9_]*)/g)].map((m) => m[1]!));
+
+    // Emitted as a literal, via classList, or composed by `sceneClass`'s template.
+    const emitted = new Set<string>();
+    for (const m of sources.matchAll(/class="([^"$]*)/g)) for (const c of m[1]!.split(/\s+/)) if (c) emitted.add(c);
+    for (const m of sources.matchAll(/'([a-zA-Z][-a-zA-Z0-9_]*)'/g)) emitted.add(m[1]!);
+    for (const m of sources.matchAll(/`p\$\{act\}`/g)) { void m; emitted.add('p1'); emitted.add('p2'); }
+    for (const prefix of ['act-', 'end-', 'v-', 't-']) {
+      for (const m of sources.matchAll(new RegExp(`${prefix}\\$\\{[^}]+\\}`, 'g'))) { void m; }
+    }
+    // `sceneClass` builds `sc live act-<act> v-<verb> t-<tool>` and `sc end-<ending>`.
+    for (const c of ['sc', 'live', 'act-work', 'act-review', 'end-done', 'end-concerns', 'end-failed', 'end-cancelled']) emitted.add(c);
+    for (const verb of ['strike', 'draft', 'probe']) emitted.add(`v-${verb}`);
+    for (const tool of ['hammer', 'quill', 'compass', 'lens', 'rod', 'sheaf', 'lever']) emitted.add(`t-${tool}`);
+
+    const orphans = [...styled].filter((c) => !emitted.has(c)).sort();
+    expect(orphans, `stylesheet rules with no emitter: ${orphans.join(', ')}`).toEqual([]);
+  });
+});
