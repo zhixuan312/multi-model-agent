@@ -30,6 +30,20 @@ export interface ClaudeOAuthCredentials {
 
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 
+/**
+ * Bound on every `security` invocation.
+ *
+ * These reads had NO timeout. `execFileSync` with no bound blocks for as long as the Keychain
+ * takes — indefinitely if it is locked and prompting, or if the daemon runs where no one can
+ * answer the prompt. That is reached from `POST /configure-provider`, which runs on the daemon's
+ * event loop, so an unanswerable prompt froze every other request including `/health`. The refresh
+ * exchange below was already bounded at 20s; this is the path that had no bound at all.
+ *
+ * A Keychain read that has not answered in five seconds is not going to; every caller here already
+ * treats a throw as "no credentials", which is the correct outcome in that case.
+ */
+const KEYCHAIN_TIMEOUT_MS = 5_000;
+
 // The access token is short-lived (~8h); the refresh token is long-lived
 // (usable indefinitely until revoked). Refresh a bit before expiry to
 // tolerate clock skew and avoid a token expiring mid-request.
@@ -98,6 +112,7 @@ function keychainStore(deps: ClaudeOAuthDeps): CredentialStore {
           .exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w'], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: KEYCHAIN_TIMEOUT_MS,
           })
           .toString()
           .trim();
@@ -115,6 +130,7 @@ function keychainStore(deps: ClaudeOAuthDeps): CredentialStore {
           .exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: KEYCHAIN_TIMEOUT_MS,
           })
           .toString();
         const match = attrs.match(/"acct"<blob>="([^"]+)"/);
@@ -129,6 +145,7 @@ function keychainStore(deps: ClaudeOAuthDeps): CredentialStore {
         // limitation of the tool (this is how Claude Code itself stores it).
         deps.exec('security', ['add-generic-password', '-U', '-a', account, '-s', KEYCHAIN_SERVICE, '-w', blob], {
           stdio: ['ignore', 'ignore', 'ignore'],
+          timeout: KEYCHAIN_TIMEOUT_MS,
         });
         return true;
       } catch {
