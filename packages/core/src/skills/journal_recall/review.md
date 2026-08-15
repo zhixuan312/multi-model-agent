@@ -16,11 +16,11 @@ Verify the recall against the supplied `candidates`, improve quality, and re-emi
 4. **Relevance** — each finding answers the query; downgrade tangential ones. Correct a clearly wrong `category` (`decision|design|behavior|process|knowledge|style`) or `weight`.
 5. **Synthesis quality** — `answer` represents the cited evidence and names how the candidates relate.
 
-Do not read the journal corpus directly unless a cited candidate path is missing from the supplied set; in that case, drop the finding rather than opening files.
+Do not read the journal corpus directly. If a finding cites a path that is not in the supplied candidate set, drop the finding — do not open files to check. (This previously read as an exception granting a read that the next clause revoked; there is no case in which you open the corpus.)
 
 ## Constraints
 
-- Remove findings citing non-candidate nodes. Adjust relevance ratings. Fix incorrect `type`/`topic`/`fallback` fields.
+- Remove findings citing non-candidate nodes. Adjust relevance ratings. Fix incorrect `category`/`topic`/`fallback` fields — the field is `category`; there is no `type` on a finding.
 - Improve `claim` and `evidence` text only when it adds clarity.
 
 ## Output

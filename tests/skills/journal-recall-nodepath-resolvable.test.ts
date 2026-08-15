@@ -45,3 +45,37 @@ describe('journal_recall tells the worker how to resolve nodePath', () => {
     expect(prompt).toMatch(/never list, glob, or scan the journal directory/i);
   });
 });
+
+/**
+ * Three smaller defects in the same pair, each of which makes an instruction unfollowable.
+ *
+ * - `review.md` told the refiner to "fix incorrect `type`/`topic`/`fallback` fields". A recall
+ *   finding is `{weight, category, claim, evidence, topic, fallback, nodeId, nodePath}` — there is
+ *   no `type`, and the field it means is `category`, which the check one line above names correctly.
+ * - `implement.md`'s output section carried "(UNCHANGED from HEAD; parsed by
+ *   `parseReviewerOutput(…)`)" — review-comment residue shipped to the worker, and false for the
+ *   implementer besides: `parseReviewerOutput` runs on the REVIEWER turn, and with
+ *   `reviewPolicy: none` the implementer's output goes through `tryParseJson` unvalidated.
+ * - `review.md`'s no-read rule granted an exception its own next clause revoked ("unless a cited
+ *   path is missing … in that case, drop the finding rather than opening files").
+ */
+describe('the journal_recall pair names its real fields', () => {
+  const implement = readFileSync(IMPLEMENT, 'utf8');
+  const review = readFileSync('packages/core/src/skills/journal_recall/review.md', 'utf8');
+
+  it('the refiner names category, not type', () => {
+    expect(review).not.toMatch(/incorrect `type`/);
+    expect(review).toMatch(/`category`\/`topic`\/`fallback`/);
+  });
+
+  it('the implementer output section carries no review residue', () => {
+    expect(implement).not.toMatch(/UNCHANGED from HEAD/);
+    expect(implement, 'and no claim that the implementer output is schema-parsed')
+      .not.toMatch(/parsed by `parseReviewerOutput/);
+  });
+
+  it('the no-read rule states no exception it then withdraws', () => {
+    expect(review).not.toMatch(/unless a cited candidate path is missing/);
+    expect(review).toMatch(/Do not read the journal corpus directly\./);
+  });
+});
