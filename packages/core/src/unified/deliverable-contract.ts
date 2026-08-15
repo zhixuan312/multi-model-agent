@@ -240,7 +240,13 @@ function checkProposedInvariants(
 ): void {
   const seenArtifacts = new Set<string>();
   contract.artifacts.forEach((artifact, index) => {
-    const key = `${artifact.root}\u0000${normalizeArtifactPath(artifact.path)}`;
+    // BOTH halves normalised, not just the path. `canonicalContractDigest` normalises every string
+    // to NFC, so two roots spelled `cafe`+U+0301 and the precomposed `café` are ONE root as far as
+    // the digest is concerned — while this key treated them as two, and the invariant whose own
+    // message says "after normalisation" accepted the pair. macOS produces NFD filenames, so a
+    // caller declaring one root from a filename and another by hand is ordinary input, not an
+    // exotic case.
+    const key = `${artifact.root.normalize('NFC')}\u0000${normalizeArtifactPath(artifact.path)}`;
     if (seenArtifacts.has(key)) {
       ctx.addIssue({
         code: 'custom',
