@@ -1,5 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { buildPlugin } from '../../../packages/server/src/plugin/build-plugin.js';
 
@@ -55,9 +57,18 @@ describe('contract: MCP-only packaged client surface', () => {
         }
       }
     }
-    const output = join(process.cwd(), '.mma', 'tmp-plugin-contract');
-    buildPlugin({ outDir: output, version: '5.17.0', port: 7337, skillsRoot: root });
-    expect(await readFile(join(output, 'skills', 'router', 'SKILL.md'), 'utf8')).toContain('mma_run');
-    expect(await readFile(join(output, 'skills', 'router', 'SKILL.md'), 'utf8')).toContain('mma clients');
+    // A temp dir, removed afterwards. This built into `<repo>/.mma/tmp-plugin-contract` and
+    // never cleaned up — gitignored, so invisible in `git status`, but it accumulated in the
+    // developer's working tree on every run. `tests/plugin/build-plugin.test.ts` has used
+    // mkdtemp/rm for the same call all along.
+    const output = mkdtempSync(join(tmpdir(), 'mma-plugin-contract-'));
+    try {
+      buildPlugin({ outDir: output, version: '5.17.0', port: 7337, skillsRoot: root });
+      const router = await readFile(join(output, 'skills', 'router', 'SKILL.md'), 'utf8');
+      expect(router).toContain('mma_run');
+      expect(router).toContain('mma clients');
+    } finally {
+      rmSync(output, { recursive: true, force: true });
+    }
   });
 });
