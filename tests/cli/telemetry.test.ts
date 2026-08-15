@@ -340,6 +340,40 @@ describe('mma telemetry disable', () => {
 // ─── reset-id ─────────────────────────────────────────────────────────────────
 
 describe('mma telemetry reset-id', () => {
+  /**
+   * The command prints "Identity reset". It must be true.
+   *
+   * `revokeIdentity` bumped the generation and deleted the queue, and left `identity.json` — the
+   * installId AND the Ed25519 signing keypair — exactly as it was. Every event after a reset
+   * shipped the same installId the user had just asked to be rid of. The generation bump is not a
+   * substitute: the flusher never puts `generation` in the upload body, and the backend accepts it
+   * as passthrough without acting on it, so nothing downstream can tell a pre- from a
+   * post-revocation event.
+   *
+   * The sibling case below asserted generation, queue and the legacy `install-id` file — the three
+   * things that DID happen — so it stayed green throughout.
+   */
+  it('actually replaces the install identity, not just the generation counter', async () => {
+    const tmp = setupTempHome();
+    try {
+      const { getOrCreateIdentity } = await import('../../packages/server/src/telemetry/identity.js');
+      const before = getOrCreateIdentity(tmp);
+
+      const { stdoutFn, stderrFn } = captureOutput();
+      expect(await runTelemetry({ subcommand: 'reset-id', homeDir: tmp, stdout: stdoutFn, stderr: stderrFn })).toBe(0);
+
+      const after = getOrCreateIdentity(tmp);
+      expect(after.installId).not.toBe(before.installId);
+      // The signing key must rotate too — a fresh id under the old key is still the same install
+      // to a backend doing trust-on-first-use on the public key.
+      expect(after.publicKeyRaw).not.toBe(before.publicKeyRaw);
+      expect(after.privateKeyPkcs8).not.toBe(before.privateKeyPkcs8);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+
   it('revokeIdentity (bumps generation + deletes queue) + deletes install-id', async () => {
     const tmp = setupTempHome();
     try {

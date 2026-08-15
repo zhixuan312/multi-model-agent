@@ -238,6 +238,8 @@ export class Flusher {
           'Content-Type': 'application/json',
           'X-Mma-Install-Id': identity.installId,
           'X-Mma-Signature': signature,
+          // SPKI DER, base64 — see the note on `Identity.publicKeyRaw`; the name says raw, the
+          // bytes are not, and the backend parses SPKI.
           'X-Mma-Pubkey': identity.publicKeyRaw,
         },
         body,

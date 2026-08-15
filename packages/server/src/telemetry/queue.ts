@@ -30,9 +30,13 @@ export interface QueueRecord {
   events: Record<string, unknown>[];
 }
 
+/**
+ * What `truncate()` needs to verify a batch before cutting it: where each record starts, and what
+ * it hashed to. A `byteLength` sat here too, set on every record and read by nothing — `truncate`
+ * compares `sha256` and `byteOffset` and derives the rest from the buffer.
+ */
 interface RecordMeta {
   byteOffset: number;
-  byteLength: number;
   sha256: string;
 }
 
@@ -140,7 +144,7 @@ export class Queue {
       for (const line of lines) {
         if (records.length >= maxRecords) break;
         if (!line.trim()) {
-          byteOffset += line.length + 1;
+          byteOffset += Buffer.byteLength(line) + 1;
           continue;
         }
 
@@ -148,11 +152,7 @@ export class Queue {
         try {
           const record = JSON.parse(line) as QueueRecord;
           records.push(record);
-          meta.push({
-            byteOffset,
-            byteLength: Buffer.byteLength(lineBytes),
-            sha256: hashLine(lineBytes),
-          });
+          meta.push({ byteOffset, sha256: hashLine(lineBytes) });
         } catch {
           // Corrupted line: rotate entire file and stop reading
           await this.#rotateCorrupted();
@@ -227,7 +227,16 @@ export class Queue {
     try {
       if (!existsSync(this.#queuePath)) return;
 
-      const content = await readFile(this.#queuePath, 'utf8');
+      // Read as a BUFFER. The offsets below are byte offsets — `Buffer.byteLength` of each
+      // line — and `String.prototype.slice` indexes UTF-16 code units, not bytes. The two agree
+      // only while every queued event is pure ASCII. One `é`, one em dash, one non-Latin
+      // character anywhere in an event and `content.slice(byteOffset)` cut mid-record: the
+      // remainder began partway through the next line, the following `readBatch` failed to parse
+      // it, and `#rotateCorrupted()` discarded EVERY remaining queued event. A successful flush
+      // destroyed the rest of the queue, silently, on any install whose telemetry was not
+      // entirely ASCII.
+      const buf = await readFile(this.#queuePath);
+      const content = buf.toString('utf8');
       const lines = content.split('\n');
 
       // Verify SHA-256 of the first expectedMeta.length records
@@ -237,7 +246,7 @@ export class Queue {
       for (const line of lines) {
         if (verified >= expectedMeta.length) break;
         if (!line.trim()) {
-          byteOffset += line.length + 1;
+          byteOffset += Buffer.byteLength(line) + 1;
           continue;
         }
 
@@ -257,8 +266,9 @@ export class Queue {
 
       if (verified === 0) return;
 
-      // Atomically truncate: write remainder to temp file + rename
-      const remainder = content.slice(byteOffset);
+      // Atomically truncate: write remainder to temp file + rename. Sliced on the buffer, at the
+      // byte offset the verification loop computed, and written as bytes — no re-encode.
+      const remainder = buf.subarray(byteOffset);
       const tmpPath = this.#queuePath + '.tmp.' + Date.now();
       await writeFile(tmpPath, remainder, { mode: 0o600 });
       await rename(tmpPath, this.#queuePath);
@@ -279,8 +289,10 @@ export class Queue {
     const st = await stat(this.#queuePath);
     if (st.size <= MAX_SIZE_BYTES && this.#approxCount <= MAX_RECORDS) return;
 
-    // Full check: read the file to get exact record count
-    const content = await readFile(this.#queuePath, 'utf8');
+    // Full check: read the file to get exact record count. A BUFFER, for the same reason as
+    // `truncate()` above — `cutOffset` below is a byte offset and must index bytes.
+    const capBuf = await readFile(this.#queuePath);
+    const content = capBuf.toString('utf8');
     const lines = content.split('\n').filter(l => l.trim());
     const recordCount = lines.length;
 
@@ -302,14 +314,14 @@ export class Queue {
     for (const line of content.split('\n')) {
       if (dropped >= CAP_TRUNCATE_COUNT) break;
       if (!line.trim()) {
-        cutOffset += line.length + 1;
+        cutOffset += Buffer.byteLength(line) + 1;
         continue;
       }
       cutOffset += Buffer.byteLength(line + '\n');
       dropped++;
     }
 
-    const remainder = content.slice(cutOffset);
+    const remainder = capBuf.subarray(cutOffset);
     const tmpPath = this.#queuePath + '.cap.' + Date.now();
     await writeFile(tmpPath, remainder, { mode: 0o600 });
     await rename(tmpPath, this.#queuePath);

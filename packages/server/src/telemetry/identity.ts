@@ -11,6 +11,16 @@ export interface Identity {
   installId: string;
   generatedAt: string;
   privateKeyPkcs8: string;
+  /**
+   * Base64 of the **SPKI DER** encoding — NOT a raw Ed25519 public key, despite the name.
+   *
+   * The name is wrong and stays wrong on purpose: it is a key in the persisted
+   * `identity.json`, so renaming it would read as `undefined` on every existing install and send
+   * an empty `X-Mma-Pubkey`, failing signature verification for everyone who upgraded. The
+   * telemetry backend decodes it with `createPublicKey({ format: 'der', type: 'spki' })`
+   * (verified against `multi-model-agent-telemetry-backend`), so the contract holds — only the
+   * label misleads. Decode it as SPKI; a 32-byte raw-key parse will fail.
+   */
   publicKeyRaw: string;
 }
 

@@ -239,8 +239,10 @@ describe('queue', () => {
     await q.append(makeRecord());
     const result = await q.readBatch(10);
     expect(result.meta.length).toBe(1);
-    expect(typeof result.meta[0].byteOffset).toBe('number');
-    expect(result.meta[0].byteLength).toBeGreaterThan(0);
+    // The first record starts at byte 0 — an offset `truncate` can act on, not merely a number.
+    // A `byteLength` assertion stood here; the field it checked had no production reader and is
+    // gone, so this now pins the offset that `truncate()` actually compares against.
+    expect(result.meta[0].byteOffset).toBe(0);
     expect(result.meta[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 });

@@ -54,10 +54,26 @@ function writeConfigObj(homeDir: string, obj: Record<string, unknown>): void {
   writeFileSync(cfgPath, JSON.stringify(obj, null, 2) + '\n', { mode: 0o600 });
 }
 
+/**
+ * Revoke the install's telemetry identity: new installId and signing key next time, nothing
+ * queued left behind, generation bumped.
+ *
+ * `identity.json` used to survive this. Both callers announce otherwise — `reset-id` prints
+ * "Identity reset" and `disable` prints "identity revoked" — but the file holding the installId
+ * AND the Ed25519 keypair was never touched, so every later event shipped the same identity the
+ * user had just asked to be rid of. The generation bump does not stand in for it either: the
+ * flusher never transmits `generation`, and the backend accepts it as passthrough without acting
+ * on it, so nothing downstream distinguishes a pre- from a post-revocation event.
+ *
+ * Deleting the file is the whole mechanism: `getOrCreateIdentity` regenerates a fresh installId
+ * and keypair the next time telemetry runs.
+ */
 async function revokeIdentity(homeDir: string): Promise<void> {
   await bumpGeneration(homeDir);
   const queuePath = join(homeDir, 'telemetry-queue.ndjson');
   if (existsSync(queuePath)) unlinkSync(queuePath);
+  const identityPath = join(homeDir, 'identity.json');
+  if (existsSync(identityPath)) unlinkSync(identityPath);
 }
 
 // ─── status ──────────────────────────────────────────────────────────────────
