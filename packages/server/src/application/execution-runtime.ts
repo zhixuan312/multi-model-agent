@@ -388,7 +388,11 @@ export class ExecutionRuntime {
     const cwd = caller.projectRoot;
 
     const typeConfig = getTypeConfig(input.type);
-    const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
+    // Read directly off the union, not through `input as Record<string, unknown>` and a second
+    // cast to AgentType. Every arm carries `agentTier?` from `commonFields` and the schema
+    // validates it as an enum, so the casts bridged nothing while telling the compiler to stop
+    // checking the one thing worth checking here — that the value really is a tier.
+    const implTier = input.agentTier ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
     // execute_plan is always reviewed: contract-first completion scoring derives
     // contract satisfaction from the reviewer's tasks[], so an unreviewed execute-plan
@@ -520,7 +524,13 @@ export class ExecutionRuntime {
     this.liveScopes.set(executionId, scope);
 
     // Emit task-created diagnostic for observability.
-    deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { batch_id: executionId, route: input.type } });
+    // `task_id` / `tool`, matching the three sibling lifecycle events (`batch_completed`,
+    // `batch_failed`, `batch_cancelled`) rather than this one's own `batch_id` / `route`. One
+    // concept spelled two ways across four events emitted by one class is why `mma logs --batch`
+    // has to match four different key forms to find a single task's diagnostics. Neither field
+    // name is pinned by the observability golden (the event KINDS are), and nothing reads
+    // `batch_id` or a plain entry's `route`.
+    deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { task_id: executionId, tool: input.type } });
 
     // Run the pipeline asynchronously via setImmediate.
     const startedAtMs = Date.now();
@@ -578,7 +588,7 @@ export class ExecutionRuntime {
     } = run;
     let { skills } = run;
     const contextBlockStore = pc.contextBlocks;
-    const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
+    const sessionIds = input.sessionIds;
     const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, initiative: _initiative, method: _method, ...payload } = input as Record<string, unknown>;
 
     // Terminal cancelled path — shared by the pre-start check, the pipeline
@@ -642,7 +652,7 @@ export class ExecutionRuntime {
       // ── Context block resolution: resolve IDs → content, pin for duration ──
       // Missing blocks are skipped (soft) — the in-memory store loses blocks
       // on server restart, and a stale block should not kill the task.
-      const inputBlockIds = (input.contextBlockIds ?? []) as string[];
+      const inputBlockIds = input.contextBlockIds ?? [];
       let resolvedContextBlocks: string[] | undefined;
       if (inputBlockIds.length > 0) {
         const blocks: string[] = [];
