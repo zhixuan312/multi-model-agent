@@ -25,10 +25,10 @@ function expandTilde(p: string): string {
  * having to resolve it first.
  */
 export function loadAuthToken(opts: { tokenFile: string }): string {
+  // `envToken &&` already excludes the empty string; the `.length > 0` that used to follow it
+  // could not change the outcome for any value.
   const envToken = process.env['MMA_AUTH_TOKEN'];
-  if (envToken && envToken.length > 0) {
-    return envToken;
-  }
+  if (envToken) return envToken;
   const resolvedPath = expandTilde(opts.tokenFile);
   const raw = fs.readFileSync(resolvedPath, 'utf-8');
   if (raw.includes('\r\n')) {
@@ -50,19 +50,26 @@ export function loadAuthToken(opts: { tokenFile: string }): string {
  * Core has no knowledge of MULTI_MODEL_CONFIG env var or home-directory discovery.
  */
 export async function loadConfigFromFile(path: string): Promise<MultiModelConfig> {
-  return new Promise((resolve, reject) => {
-    fs.readFile(path, 'utf-8', (err, data) => {
-      if (err) {
-        reject(new Error(`Config file not found: ${path}`));
-        return;
-      }
-      try {
-        const raw = JSON.parse(data);
-        const parsed = multiModelConfigSchema.parse(raw);
-        resolve(parsed);
-      } catch (e) {
-        reject(new Error(`Invalid config at ${path}: ${e instanceof Error ? e.message : String(e)}`));
-      }
-    });
-  });
+  let data: string;
+  try {
+    data = await fs.promises.readFile(path, 'utf-8');
+  } catch (err) {
+    // Every read failure used to report `Config file not found`. A file that exists but cannot be
+    // read — wrong owner after a sudo install, a directory where a file was expected, too many
+    // open files — sent the operator looking for a missing file that was sitting right there.
+    // ENOENT keeps the original wording because that IS the common case and it reads well; every
+    // other errno says what actually happened and keeps the cause for a stack trace.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') throw new Error(`Config file not found: ${path}`, { cause: err });
+    throw new Error(
+      `Config file at ${path} could not be read (${code ?? 'unknown error'}): ` +
+      `${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
+  try {
+    return multiModelConfigSchema.parse(JSON.parse(data));
+  } catch (e) {
+    throw new Error(`Invalid config at ${path}: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+  }
 }

@@ -43,13 +43,21 @@ const DOT_VENDOR_PREFIXES = [
 ];
 
 const DASH_VENDOR_PREFIXES = ['aws-bedrock-', 'bedrock-', 'azure-'];
+/**
+ * The aggressive fallback strip, applied ONLY to an already-cleaned form.
+ *
+ * Its single call site (`extractCanonicalModelName`, fallback A) runs on the output of
+ * `cleanCandidate`, so anything `cleanCandidate` has already removed cannot appear here. Three
+ * entries used to duplicate it and could never fire: `@YYYY-MM-DD` and `-latest` (both stripped by
+ * `stripDateMarkers`) and `-vN[:M]` (`:` is a wrapper boundary, and `-vN` is stripped by
+ * `stripProvisioningVersion`). They read as coverage while matching nothing.
+ *
+ * So: do not add a pattern here that `cleanCandidate` already handles — add it there instead.
+ */
 const TRAILING_MARKERS = [
-  /@\d{4}-\d{2}-\d{2}$/i,
-  /-\d{4}(?:-\d{2}){0,2}$/i,
-  /-v\d+(?::\d+)?$/i,
+  /-\d{4}(?:-\d{2}){0,2}$/i,   // a bare year, or year-month: the date forms cleanCandidate leaves
   /-preview-\d+(?:-\d+)?$/i,
   /-preview$/i,
-  /-latest$/i,
   /-\d+k?$/i,
   /-base$/i,
   /-instruct$/i,
@@ -332,10 +340,19 @@ function resolveEntry(
 ): ModelProfile {
   const parent = findParentProfile(entry.prefix, resolved);
 
-  // Start with provider defaults
+  // Start with provider defaults.
+  //
+  // `family` is deliberately NOT read from `entry` here. It used to be — `entry.family ??
+  // parent?.family ?? providerDefaults.family` — and then the parent block below overwrote it
+  // unconditionally, and the entry block below that restored it. Three writes, of which two
+  // cancelled out, so the precedence was only correct because of the ORDER of two blocks that
+  // read like independent layers. Moving the entry-override block above the parent block — the
+  // natural "apply defaults, then overrides" refactor — would have silently reverted every
+  // family override to its parent's. One write per layer, defaults → parent → entry, in that
+  // order, is the whole rule.
   const result: ModelProfile = {
     prefix: entry.prefix,
-    family: entry.family ?? parent?.family ?? providerDefaults.family ?? 'other',
+    family: providerDefaults.family ?? 'other',
     tier: 'standard',
     defaultCost: 'medium',
     bestFor: 'general tasks',

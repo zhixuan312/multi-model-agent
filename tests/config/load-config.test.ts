@@ -64,6 +64,20 @@ describe('loadConfigFromFile', () => {
     expect(config.agents!.standard!.model).toBe('deepseek-r1');
   });
 
+  /**
+   * The two read failures are different facts and must read differently.
+   *
+   * Every `fs.readFile` error used to become `Config file not found`, so a config that exists but
+   * cannot be read — wrong owner after a sudo install, a directory where a file was expected —
+   * sent the operator looking for a missing file that was sitting right there. Only ENOENT is
+   * "not found".
+   */
+  it('names an unreadable config as unreadable, not as missing', async () => {
+    // A directory reads as EISDIR: the path exists, and nothing about it is "not found".
+    await expect(loadConfigFromFile(tmpDir)).rejects.toThrow(/could not be read \(EISDIR\)/);
+    await expect(loadConfigFromFile(tmpDir)).rejects.not.toThrow(/not found/);
+  });
+
   it('throws when explicit config path does not exist', async () => {
     await expect(loadConfigFromFile(path.join(tmpDir, 'nonexistent.json'))).rejects.toThrow(
       /Config file not found/,
