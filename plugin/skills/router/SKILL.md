@@ -234,4 +234,4 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Diagnosing slow tasks
 
-`mma serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mma logs --follow --task=$TASK_ID`.
+`mma serve --log` (or `diagnostics.log: true` in config) writes a JSONL diagnostics file. Event streaming to stderr is always on — there is no `--verbose` flag and no `diagnostics.verbose` key; an unknown config key is silently dropped, so a typo there produces no logs and no error. The kinds recorded are `batch_created`, `batch_completed`, `batch_failed`, `batch_cancelled`, and `provider_event` (whose names are per-runner: `claude_tool_call`, `claude_turn_completed`, `codex_command_started`, …). Tail one execution with `mma logs --follow --batch=$EXECUTION_ID` — the filter matches every id spelling in the file. `--task=` is not a flag and is ignored, which returns the whole unfiltered log.
