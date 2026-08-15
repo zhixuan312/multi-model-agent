@@ -900,7 +900,11 @@ export function verify(rec) {
   out.push(C('queue', inQueue ? 'PASS' : 'NA', `records=${q?.records?.length ?? 0}`));
   if (inQueue) {
     const sv = q.records[0].schemaVersion ?? q.records[0].schema_version;
-    out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
+    // A MISSING schemaVersion is a FAIL, not a PASS. `sv === undefined || …` excused exactly the
+    // failure this check exists to catch — an envelope reaching the queue with no version on it at
+    // all — and it is the same trap the comment below describes for attribution: "a check that
+    // never runs looks exactly like a check that always passes".
+    out.push(C('schema-version', sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
     // Caller attribution must survive the whole path: header -> resolveCallerIdentity
     // -> wire event. It is how "which clients still use the bespoke writers?" gets
     // answered, so a silent collapse to `other` would quietly make that

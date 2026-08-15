@@ -49,7 +49,12 @@ export const QUEUE_FILE = process.env.SMOKE_QUEUE_FILE || join(HOME_MM, 'telemet
 export const IDENTITY_FILE = join(HOME_MM, 'identity.json');
 export const DIAG_DIR = process.env.MMA_LOG_DIR || join(HOME_MM, 'logs'); // mma-YYYY-MM-DD.jsonl
 
-export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
+// Re-exported from the module that DEFINES it, not restated. The pinned literal had been `6`
+// while `wire-schema.ts` said `7` since the 6.10.0 telemetry work — so the one check that reads it
+// was comparing every event against a version the engine had stopped emitting. The harness already
+// imports from `packages/core/dist` in three other places; `./events/wire-schema.js` is a published
+// subpath, so this needs no new build step.
+export { SCHEMA_VERSION } from '../../packages/core/dist/events/wire-schema.js';
 
 export const CONFIG_FILE = join(HOME_MM, 'config.json');
 
