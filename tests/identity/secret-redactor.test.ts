@@ -72,5 +72,41 @@ describe('redactSecrets', () => {
     const obj: Record<string, unknown> = { name: 'x' };
     obj.self = obj;
     expect(() => redactSecrets(obj)).not.toThrow();
+    // …and marks the cycle where it closes, rather than anywhere the object appears.
+    const out = redactSecrets(obj) as { name: string; self: unknown };
+    expect(out.name).toBe('x');
+    expect(out.self).toBe('[REDACTED-CYCLE]');
+  });
+
+  /**
+   * A value referenced twice is not a cycle.
+   *
+   * `visited` used to be a "seen anywhere" set — entries were added and never removed — so the
+   * SECOND appearance of any shared object became `[REDACTED-CYCLE]` even with no cycle present.
+   * `buildEnvelopeSnapshot` does exactly this: `realFilesChanged: filesChangedFromGit ??
+   * implTurn.filesWritten` makes both fields the same array on every read route, so every such
+   * envelope reached the diagnostics JSONL with a redaction marker where its file list belonged.
+   */
+  it('keeps a value that appears twice, when neither appearance is a cycle', () => {
+    const shared = ['src/a.ts', 'src/b.ts'];
+    const input = { filesWritten: shared, realFilesChanged: shared };
+    const out = redactSecrets(input) as { filesWritten: unknown; realFilesChanged: unknown };
+
+    expect(out.filesWritten).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(out.realFilesChanged).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('keeps a shared OBJECT that appears twice as siblings', () => {
+    const shared = { model: 'claude-sonnet-4-6' };
+    const out = redactSecrets({ implementer: shared, reviewer: shared }) as Record<string, unknown>;
+    expect(out.implementer).toEqual({ model: 'claude-sonnet-4-6' });
+    expect(out.reviewer).toEqual({ model: 'claude-sonnet-4-6' });
+  });
+
+  it('still redacts a secret inside a shared value, at both appearances', () => {
+    const shared = { key: 'sk-abcdef0123456789ABCDEF0123' };
+    const out = redactSecrets({ a: shared, b: shared }) as { a: { key: string }; b: { key: string } };
+    expect(out.a.key).toBe('[REDACTED-API-KEY]');
+    expect(out.b.key).toBe('[REDACTED-API-KEY]');
   });
 });

@@ -52,6 +52,9 @@ export interface HarnessHandle {
    *  the database reports — enumerated from `sqlite_master` rather than from a list here, so a
    *  table added by a later migration is covered without anyone remembering to add it. */
   initiativeRecordSnapshot(): Record<string, unknown[]>;
+  /** Directory the daemon's JSONL diagnostics are written to when `boot({ diagnosticsLog: true })`.
+   *  Always a fresh temp dir, so a test can read back exactly what THIS server emitted. */
+  logDir: string;
   /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
    *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
    *  replay) runs against the reopened stores (SPEC-003 Task I-6). Returns a NEW handle sharing
@@ -160,6 +163,11 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
     diagnostics: {
       log: opts.diagnosticsLog ?? false,
+      // ALWAYS a temp directory, never `~/.mma/logs`. `LogWriter` falls back to the user's real
+      // home when `logDir` is absent, so the `diagnosticsLog` seam could not be used without
+      // writing into it — which is why nothing used it, and why the observability contract test
+      // hand-built its entries instead of reading what the daemon emitted.
+      logDir: mkdtempSync(join(tmpdir(), 'mma-test-logs-')),
     },
     research: {
       brave: { apiKeys: [], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
@@ -244,6 +252,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     return {
       baseUrl: `http://127.0.0.1:${server.port}`,
       token,
+      logDir: config.diagnostics!.logDir!,
       executionRegistry: server.executionRegistry,
       unconsumedOutbox,
       executionRowCount,

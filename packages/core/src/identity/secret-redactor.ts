@@ -18,6 +18,24 @@ export function redactSecrets(value: unknown): unknown {
   return walk(value, visited);
 }
 
+/**
+ * `visited` holds the ANCESTORS of the current node, not every node ever seen.
+ *
+ * It used to be the latter — entries were added and never removed — which made it a
+ * "seen anywhere" set rather than a cycle detector. Any value referenced twice in the same
+ * structure, with no cycle involved at all, came out as `[REDACTED-CYCLE]` the second time.
+ *
+ * That is not hypothetical: `buildEnvelopeSnapshot` assigns
+ * `realFilesChanged: result.filesChangedFromGit ?? implTurn.filesWritten`, so on every read route
+ * — and every write route where git had no answer — `filesWritten` and `realFilesChanged` are the
+ * SAME array instance. Every such envelope reached the diagnostics JSONL with
+ * `"realFilesChanged": "[REDACTED-CYCLE]"` in place of its file list, and an operator reading the
+ * log for a forensic answer found a redaction marker over data that was never sensitive and never
+ * circular.
+ *
+ * Deleting on the way out is what makes it path-based: a node is only a cycle if it is its own
+ * ancestor.
+ */
 function walk(value: unknown, visited: WeakSet<object>): unknown {
   if (typeof value === 'string') {
     let out = value;
@@ -27,13 +45,16 @@ function walk(value: unknown, visited: WeakSet<object>): unknown {
   if (Array.isArray(value)) {
     if (visited.has(value)) return REDACTED_CYCLE;
     visited.add(value);
-    return value.map(v => walk(v, visited));
+    const out = value.map(v => walk(v, visited));
+    visited.delete(value);
+    return out;
   }
   if (value && typeof value === 'object') {
     if (visited.has(value)) return REDACTED_CYCLE;
     visited.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) out[k] = walk(v, visited);
+    visited.delete(value);
     return out;
   }
   return value;
