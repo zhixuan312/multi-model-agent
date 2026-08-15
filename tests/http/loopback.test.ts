@@ -51,6 +51,10 @@ describe('isAllowedHostHeader', () => {
     ['127.0.0.1:7337', true],
     ['[::1]', true],
     ['[::1]:7337', true],
+    // Bracketed only: a bare IPv6 literal is malformed in a Host header (RFC 3986 §3.2.2), and
+    // the port-stripping sees its leading colon at index 0. `'::1'` was listed in the allowlist
+    // for a while as if it were accepted; nothing could reach it. Pinned so it is not re-added.
+    ['::1', false],
     ['evil.example.com', false],
     ['evil.example.com:7337', false],
     ['myhostname', false],

@@ -83,7 +83,17 @@ export interface ContractPlanSnapshot {
   readonly tasks: readonly ParsedContractTask[];
 }
 
-const CONTRACT_BULLET_LABELS = [
+/**
+ * The plan FORMAT vocabulary — exported so the authoring prompts can be held to it.
+ *
+ * These literals are the contract between the generator (`skills/plan/*.md`, which tells a worker
+ * what to write) and this validator (which decides whether what it wrote parses). They were stated
+ * independently in three places — prompt, validator, and the test meant to protect them — so the
+ * test compared its own literal to the prompt's and would have stayed green while a renamed
+ * constant here silently stopped accepting every plan the prompt produces. That generator/validator
+ * split is a defect this project has shipped before.
+ */
+export const CONTRACT_BULLET_LABELS = [
   'Inputs / Request:',
   'Outputs / Response:',
   'Data mapping:',
@@ -91,12 +101,12 @@ const CONTRACT_BULLET_LABELS = [
   'Behavior / invariants:',
 ] as const;
 
-const OUTPUT_FIELD_LABEL = '**Output:**';
-const DEPENDENCIES_FIELD_LABEL = '**Dependencies:**';
+export const OUTPUT_FIELD_LABEL = '**Output:**';
+export const DEPENDENCIES_FIELD_LABEL = '**Dependencies:**';
 // Deliberately excludes the leading "**" bold marker — the last Contract bullet's content is
 // bounded by this marker's index, and the trailing "**" is stripped from that content afterward.
-const CHECKS_HEADING_MARKER = 'Checks (plan-authored';
-const PLAN_BOUNDARY_SENTINEL = '**Plan boundary:** final deliverable content is not in this plan.';
+export const CHECKS_HEADING_MARKER = 'Checks (plan-authored';
+export const PLAN_BOUNDARY_SENTINEL = '**Plan boundary:** final deliverable content is not in this plan.';
 
 const TASK_HEADING_RE = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
 const SHELL_METACHAR_RE = /[|&;<>$`()'"]/;

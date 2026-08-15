@@ -46,7 +46,14 @@ export function shouldRejectNonLoopback(remoteAddress: string | undefined): bool
   return !isLoopbackAddress(remoteAddress);
 }
 
-const ALLOWED_HOST_LITERALS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+/**
+ * The four forms a client can actually present. A bare `::1` is deliberately NOT here: an IPv6
+ * literal in a Host header must be bracketed (RFC 3986 §3.2.2), and the port-stripping below would
+ * see its leading colon at index 0 and reduce it to the empty string anyway — so the entry that
+ * used to sit here could never match any input. An allowlist that lists something it cannot accept
+ * invites the wrong conclusion about what this control admits.
+ */
+const ALLOWED_HOST_LITERALS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
  * Validates the Host (or Origin) header against a small allowlist.

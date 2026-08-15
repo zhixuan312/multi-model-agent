@@ -15,10 +15,22 @@ export class RouteDispatcher<H> {
 
   register(method: string, path: string, handler: H): void {
     const paramNames: string[] = [];
-    const regexStr = path.replace(/:(\w+)/g, (_, name: string) => {
-      paramNames.push(name);
-      return '([^/]+)';
-    });
+    // Literal segments are ESCAPED before becoming a pattern. Replacing only `:param` left every
+    // other regex metacharacter live, so a path like `/openapi.json` would also have matched
+    // `/openapiXjson` — the `.` meaning "any character". No route registered today contains one,
+    // which is exactly why this was worth fixing before one does: the failure is a silent
+    // mis-route, not an error.
+    const regexStr = path
+      .split(/(:\w+)/)
+      .map((part) => {
+        const param = /^:(\w+)$/.exec(part);
+        if (param) {
+          paramNames.push(param[1]!);
+          return '([^/]+)';
+        }
+        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      })
+      .join('');
     const regex = new RegExp('^' + regexStr + '$');
     if (!this.routes.has(method)) this.routes.set(method, new Map());
     this.routes.get(method)!.set(path, { handler, paramNames, regex });
