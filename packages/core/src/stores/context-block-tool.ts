@@ -186,7 +186,31 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     return this._ttlMs;
   }
 
+  /**
+   * Live entries only.
+   *
+   * Expiry in this store is LAZY — an entry is dropped when `get` or `has` touches it and finds it
+   * stale. Nothing sweeps in the background, so a block nobody asks about again stays in the Map
+   * forever after it expires. `size` reported those corpses, and three separate decisions are made
+   * from `size`:
+   *
+   *   - `ProjectRegistry.evictIdleLRU` refuses to evict a project whose store is non-empty, because
+   *     a caller may still reference its blocks by id. With dead blocks counted, a project that
+   *     registered one block and was never touched again became permanently un-evictable — and once
+   *     `cap` distinct cwds had each left one behind, `reserveProject` returned `project_cap` for
+   *     good. That is exactly the "permanent lockout" that method's comment says it exists to
+   *     prevent.
+   *   - `POST /context-blocks` returns 409 `cap_exhausted` at `size >= maxContextBlocksPerProject`,
+   *     so a project could be locked out by 500 blocks that `get` would all refuse to return.
+   *   - `GET /status` reports `contextBlockCount` per project, which was counting unreachable ones.
+   *
+   * Sweeping here is O(n) with n bounded by `maxEntries` (500 by default), and `size` is read on cap
+   * checks and status, not per request on a hot path. A getter that mutates is unusual, but it is
+   * the same lazy-expiry contract `get` and `has` already implement — reporting an entry that every
+   * read path would refuse to hand back is the anomaly, not dropping it.
+   */
   get size(): number {
+    this.sweepExpired();
     return this.entries.size;
   }
 
@@ -194,7 +218,18 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     this.entries.clear();
   }
 
+  /** Drop every entry past its TTL. The lazy expiry `get`/`has` do one id at a time. */
+  private sweepExpired(): void {
+    const now = Date.now();
+    for (const [id, entry] of this.entries) {
+      if (now - entry.addedAtMs > entry.ttlMs) this.entries.delete(id);
+    }
+  }
+
   private evictIfOverBound(): void {
+    // Reclaim dead entries before evicting live ones: without this, a store full of expired blocks
+    // would push out the entry just registered to stay under a bound the corpses were filling.
+    this.sweepExpired();
     while (this.entries.size > this.maxEntries) {
       let oldestId: string | undefined;
       let oldestTick = Infinity;
