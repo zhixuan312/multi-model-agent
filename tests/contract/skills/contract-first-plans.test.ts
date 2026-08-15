@@ -283,3 +283,37 @@ describe('the plan task-heading rule matches the validator', () => {
     expect(planImpl).toContain('unsupported-legacy-plan');
   });
 });
+
+/**
+ * Two smaller defects in the plan pair.
+ *
+ *  - `review.md` told the refiner to fix paths and commands "against Phase-A ground truth". There is
+ *    no Phase A: `implement.md` defines BUILD phases as `## Phase N — <name>` with author-chosen
+ *    numbers, and its authoring procedure is steps 1–5 (step 1 titled "Ground truth"). The
+ *    reviewer's reference point was undefined, so it verified against nothing or invented one.
+ *  - `implement.md` said "Set `verdict` to `executable` for all tasks … `blocked` for BLOCKED
+ *    tasks" — self-contradictory in one sentence, while constraint 7 mandates BLOCKED tasks exist.
+ *    It also never mentioned `partial`, which the schema accepts and `review.md` tells the reviewer
+ *    to preserve, so the reviewer was told to keep a value the producer was never told existed.
+ */
+describe('the plan pair references only things it defines', () => {
+  it('the reviewer points at a step that exists', () => {
+    expect(planRev).not.toMatch(/Phase-A/);
+    expect(planRev, 'it must name the authoring step that establishes ground truth')
+      .toMatch(/ground truth you established in step 1/i);
+  });
+
+  it('the verdict rule is not self-contradictory', () => {
+    expect(planImpl).not.toMatch(/`executable` for all tasks/);
+    expect(planImpl, 'each verdict must have its own condition').toMatch(/`executable` for a task ready to dispatch/);
+  });
+
+  it('every verdict the schema accepts is explained to the producer', () => {
+    const schemas = readFileSync('packages/core/src/unified/refiner-schemas.ts', 'utf8');
+    const verdicts = /verdict: z\.enum\(\[([^\]]*)\]\)/.exec(schemas);
+    expect(verdicts).not.toBeNull();
+    for (const [, value] of verdicts![1].matchAll(/'(\w+)'/g)) {
+      expect(planImpl, `the implementer never mentions the verdict '${value}'`).toContain(value!);
+    }
+  });
+});

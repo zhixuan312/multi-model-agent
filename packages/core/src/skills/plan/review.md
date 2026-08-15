@@ -51,7 +51,7 @@ re-output unchanged.
 6. **Declared checks are executable and safe.** Each declared check is one `Check:` (a new dedicated
    destination path, never the task's own `**Output:**` path) + one fenced source block + one `Run:`
    command that is a whitespace-delimited argv with no shell metacharacters. Fix wrong paths and
-   malformed commands against Phase-A ground truth. Do not invent a check for a task the implementer
+   malformed commands against the ground truth you established in step 1 (reading the plan, the spec, and the real target material). Do not invent a check for a task the implementer
    correctly left uncheckable.
 
 Do NOT enforce verbatim-code fidelity or step/file caps — this plan is contract-first by design.

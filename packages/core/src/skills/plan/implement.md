@@ -225,5 +225,7 @@ After writing the plan file, your FINAL text response must be exactly one JSON b
 {"planPath": "<path>", "taskCount": 8, "tasks": [{"title": "Task I-1: ...", "verdict": "executable"}], "notes": "Ground truth + traceability notes."}
 ```
 
-Set `verdict` to `executable` for all tasks (the reviewer downgrades if verification fails); `blocked`
-for BLOCKED tasks.
+Set `verdict` per task: `executable` for a task ready to dispatch, `blocked` for one you marked
+BLOCKED on an external prerequisite (constraint 7). The schema also accepts `partial` — the reviewer
+uses it when codebase verification leaves a task ambiguous — so you will not normally emit it, but
+it is not an invalid value. The reviewer downgrades an `executable` whose verification fails.
