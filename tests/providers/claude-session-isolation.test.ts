@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ClaudeSession } from '../../packages/core/src/providers/claude-session.js';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => {
-  const capturedQueries: Array<{ env?: Record<string, string>; hooks?: Record<string, unknown> }> = [];
+  const capturedQueries: Array<{ env?: Record<string, string>; hooks?: Record<string, unknown>; options?: Record<string, unknown> }> = [];
   return {
     query: vi.fn((args: any) => {
-      capturedQueries.push({ env: args.options?.env, hooks: args.options?.hooks });
+      // `options` as well as the two named fields: the skills contract is about which keys are
+      // PRESENT on the SDK options, which a projection of two of them cannot see.
+      capturedQueries.push({ env: args.options?.env, hooks: args.options?.hooks, options: args.options });
       // return a minimal async iterable that yields one result event then ends
       return {
         [Symbol.asyncIterator]() {
@@ -234,6 +236,58 @@ describe('ClaudeSession — per-call env isolation (D3 A3.2 / A3.3)', () => {
     const q = mockSdk.__capturedQueries[0];
     // No hooks at all when no sandboxPolicy
     expect(q.hooks).toBeUndefined();
+  });
+
+  /**
+   * Skills are default-OFF, and "off" means the keys are absent rather than empty.
+   *
+   * `claude-session.ts` spreads `buildClaudeSkillOptions(...)` only when a bundle exists and
+   * `{}` otherwise, so a worker with no bundle inherits the host's own settings and skills. An
+   * empty `skills: []` with `settingSources: []` would be a different thing entirely — an
+   * explicit isolation the caller never asked for. `claude-skill-plugin.test.ts` asserted the
+   * helper's key list and called that the default-off contract; the helper is not what decides
+   * it, this is.
+   */
+  it('sends NO skills/plugins/settingSources keys when the session has no skill bundle', async () => {
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+
+    const sess = new ClaudeSession({
+      model: 'm',
+      opts: { cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal, taskId: 'noskills', taskIndex: 0 } as any,
+    });
+    await sess.send('test');
+
+    const options = mockSdk.__capturedQueries[0].options;
+    expect(options).not.toHaveProperty('skills');
+    expect(options).not.toHaveProperty('plugins');
+    expect(options).not.toHaveProperty('settingSources');
+  });
+
+  it('sends the isolated plugin bundle when the session HAS one', async () => {
+    const { mkdtemp, mkdir } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const stagedRoot = await mkdtemp(join(tmpdir(), 'mma-skills-'));
+    await mkdir(join(stagedRoot, 'skills', 'audit'), { recursive: true });
+
+    const mockSdk = await import('@anthropic-ai/claude-agent-sdk') as any;
+    mockSdk.__capturedQueries.length = 0;
+
+    const sess = new ClaudeSession({
+      model: 'm',
+      opts: {
+        cwd: '/tmp', wallClockDeadline: Date.now() + 60000, abortSignal: new AbortController().signal,
+        taskId: 'skills', taskIndex: 0, skills: { stagedRoot, names: ['audit'] },
+      } as any,
+    });
+    await sess.send('test');
+
+    const options = mockSdk.__capturedQueries[0].options;
+    expect(options.skills).toEqual(['audit']);
+    expect(options.plugins).toEqual([{ type: 'local', path: stagedRoot }]);
+    // The SDK's isolation mode: no user or project settings leak into the worker.
+    expect(options.settingSources).toEqual([]);
   });
 
   it('A3.3 — process.env.ANTHROPIC_* unchanged after concurrent sessions', async () => {

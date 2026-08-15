@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import type { TurnResult } from '../../packages/core/src/types/run-result.js';
+import { normalizeClaudeTurn } from '../../packages/core/src/providers/normalize-claude.js';
 
-const TEN_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [
+/**
+ * The ten fields a runner may return, and no eleventh.
+ *
+ * This file used to build a `TurnResult` literal by hand and then assert that the keys it had
+ * just typed appeared in the list it had just typed — an assertion over its own input, which no
+ * change to `TurnResult` could have failed. Adding a field to the interface leaves the literal
+ * untouched (or, if required, breaks the BUILD rather than this test), and deleting a field
+ * from both lists at once passes just as happily. The one thing it claimed to pin was the one
+ * thing it could not see.
+ *
+ * An interface has no runtime existence, so the two halves are checked in the two places they
+ * are actually visible: the key set at COMPILE time, and real producer output at run time.
+ */
+const TEN_KEYS = [
   'output',
   'usage',
   'costUSD',
@@ -9,27 +23,59 @@ const TEN_KEYS: ReadonlyArray<keyof TurnResult | 'errorCode'> = [
   'durationMs',
   'terminationReason',
   'errorCode',
+  'errorMessage',
   'filesWritten',
   'usedShell',
   'toolCalls',
-];
+] as const;
+
+/** `never` unless the two unions are mutually assignable — an exact match, not a subset. */
+type AssertExact<Actual, Expected> =
+  [Actual] extends [Expected] ? ([Expected] extends [Actual] ? true : never) : never;
+
+/**
+ * Compile-time half. A field added to or removed from `TurnResult` without updating
+ * `TEN_KEYS` fails `tsc -p tsconfig.tests.json`, which is the only place the interface's key
+ * set exists at all.
+ */
+const _keysAreExhaustive: AssertExact<keyof TurnResult, (typeof TEN_KEYS)[number]> = true;
 
 describe('TurnResult shape (A4.2)', () => {
-  it('the only allowed top-level keys are the 10 spec-listed fields', () => {
-    const allowed = new Set<string>(TEN_KEYS as string[]);
-    const sample: TurnResult = {
-      output: '',
-      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      costUSD: 0,
-      turns: 0,
-      durationMs: 0,
-      terminationReason: 'ok',
-      filesWritten: [],
-      usedShell: false,
-      toolCalls: [],
-    };
-    for (const k of Object.keys(sample)) {
-      expect(allowed.has(k)).toBe(true);
+  it('pins the declared key set at compile time', () => {
+    // The type-level check above is the assertion; this keeps it referenced and states the
+    // count in a form a reader can check against the interface.
+    expect(_keysAreExhaustive).toBe(true);
+    expect(TEN_KEYS).toHaveLength(11); // 9 always-present + errorCode + errorMessage
+  });
+
+  /**
+   * Runtime half, against a REAL producer rather than a literal. `normalizeClaudeTurn` is the
+   * claude runner's only construction site for a TurnResult, so a field it starts emitting —
+   * or stops emitting — shows up here.
+   */
+  it('a real normalizer emits every required field and nothing undeclared', () => {
+    const result = normalizeClaudeTurn(
+      [
+        { type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } },
+        { type: 'result', subtype: 'success', usage: { input_tokens: 5, output_tokens: 2 } },
+      ] as never[],
+      { durationMs: 1 },
+    );
+
+    const allowed = new Set<string>(TEN_KEYS);
+    for (const key of Object.keys(result)) {
+      expect(allowed.has(key), `undeclared field "${key}" on a TurnResult`).toBe(true);
     }
+    // The nine non-optional fields must all be present — a producer that silently drops one
+    // would otherwise satisfy the "nothing undeclared" half above.
+    for (const key of TEN_KEYS.filter((k) => k !== 'errorCode' && k !== 'errorMessage')) {
+      expect(result, `missing required field "${key}"`).toHaveProperty(key);
+    }
+  });
+
+  it('carries the error fields only when the turn actually errored', () => {
+    const errored = normalizeClaudeTurn([] as never[], { durationMs: 1 });
+    expect(errored.errorCode).toBe('sdk_no_result');
+    expect(typeof errored.errorMessage).toBe('string');
   });
 });

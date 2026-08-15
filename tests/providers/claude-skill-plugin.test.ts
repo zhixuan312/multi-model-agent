@@ -22,9 +22,14 @@ describe('claude skill plugin', () => {
     });
   });
 
-  it('build options are empty-spread when no skills (default-off contract)', () => {
-    // buildClaudeSkillOptions is only called when a bundle exists; with no
-    // bundle the session spreads {} — assert the helper is pure and side-effect free.
+  it('always returns all three keys, so a caller cannot half-configure isolation', () => {
+    // This case was titled "empty-spread when no skills (default-off contract)" and checked the
+    // helper's key list — but the default-off decision is the SESSION's (it spreads `{}` when
+    // there is no bundle), and the helper is never called in that case at all. That contract is
+    // now asserted where it lives, in claude-session-isolation.test.ts. What IS this helper's
+    // to keep: `settingSources: []` never goes missing when a bundle is passed, since plugins
+    // without it would load the host's settings into the worker.
     expect(Object.keys(buildClaudeSkillOptions('/r', []))).toEqual(['plugins', 'skills', 'settingSources']);
+    expect(buildClaudeSkillOptions('/r', []).settingSources).toEqual([]);
   });
 });

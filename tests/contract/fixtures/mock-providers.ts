@@ -15,7 +15,6 @@ import type {
 import type { WorkerStatus } from '../../../packages/core/src/types/task-spec.js';
 import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
 import type { RuntimeRunResult, _TerminationCause, RunStatus, EscalationRecord } from './runtime-run-result.js';
-import type { RunnerAdapter } from '../../helpers/test-harness.js';
 
 /** Build a Session whose `send()` invokes the same RuntimeRunResult-producing
  *  runner every mock provider uses, projected down to the TurnResult the
@@ -433,27 +432,6 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
       async close(): Promise<void> { /* no-op */ },
       getSessionId(): string | null { return null; },
     }),
-  };
-}
-
-export function mockAdapter(opts: {
-  turns: Array<{ assistantText: string; toolCalls: { name: string; input: unknown }[] }>;
-  usage?: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
-  throwOnTurn?: Error;
-}): RunnerAdapter {
-  let i = 0;
-  return {
-    providerType: 'claude',
-    async turn() {
-      if (opts.throwOnTurn) throw opts.throwOnTurn;
-      const t = opts.turns[i++] ?? { assistantText: '', toolCalls: [] };
-      return {
-        assistantText: t.assistantText,
-        toolCalls: t.toolCalls,
-        usage: opts.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-        finishReason: t.toolCalls.length > 0 ? 'tool_use' as const : 'stop' as const,
-      };
-    },
   };
 }
 
