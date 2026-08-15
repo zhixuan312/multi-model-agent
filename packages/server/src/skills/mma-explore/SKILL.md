@@ -186,7 +186,7 @@ From mma-journal-recall. Each: a claim + a journal node id (e.g. `node 0012`). I
 this" signal survives. Use `(no prior learning)` when the leg returned nothing.
 
 ## Rough direction
-1–5 ranked candidate directions — as many as the data actually supports, alternatives-style, the same shape as the spec's `Alternatives`
+3–5 ranked candidate directions — alternatives-style, the same shape as the spec's `Alternatives`
 component, so a downstream spec can lift them almost verbatim. **This exploration is read by business,
 product, and engineering** — write each direction so a non-engineer can weigh it: plain English,
 value first.
@@ -199,7 +199,7 @@ construction), **document/analysis** (produce a written analysis, report, or rec
 **no-change** (recommend leaving the current state as is, with the reasoning behind it).
 
 If the braindump names a target deliverable explicitly, every direction may resolve to that named
-deliverable. If it does not name one AND you found more than one direction, the set SHOULD span **at least two distinct**
+deliverable. If it does not name one AND the data supports more than one direction, the set MUST span **at least two distinct**
 resolution shapes — three directions that only vary the proposed build (three ways to build the
 same kind of thing) are not divergent and fail the exploration review. A non-software problem may
 resolve just as validly through "change the process" or "no change is needed" as through "build
@@ -266,10 +266,12 @@ valuable signal before design. Always run it; handle empty with `(no prior learn
 
 ❌ **Inventing citations.** Every citation traces to a leg finding or to a sentinel. Never fabricate.
 
-❌ **Padding to hit a direction count.** One direction with high-confidence citations beats five
-watery ones. Stop at the natural number of distinct directions in the data — the 1–5 range above is
-a ceiling and a reminder to look for alternatives, never a quota to fill. If the braindump admits
-one honest direction, write one and say why the others were ruled out.
+❌ **Padding to hit a direction count.** 3–5 is the target because this route exists to DIVERGE —
+converging on one answer is `mma-investigate`'s job, and a single direction usually means the
+braindump was not explored, not that the space is genuinely narrow. So look hard for the third and
+fourth. But one direction with high-confidence citations still beats five watery ones: if the data
+honestly supports fewer than three, write fewer and state in `## Rough direction` WHY the others
+were ruled out. An unexplained short list reads as laziness; an explained one is a finding.
 
 ❌ **Directions that only vary the proposed build.** Three directions that differ only in
 implementation detail (three ways to build the same feature) are not divergent — they fail the

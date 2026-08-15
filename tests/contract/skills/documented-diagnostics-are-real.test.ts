@@ -228,12 +228,17 @@ describe('explore failure-mode rows key on real signals', () => {
 describe('explore states no rule its own pitfalls forbid', () => {
   const explore = readFileSync(join(SKILLS_DIR, 'mma-explore', 'SKILL.md'), 'utf8');
 
-  it('the direction count has no floor the anti-padding rule contradicts', () => {
-    expect(explore, 'a floor of 3 cannot coexist with "stop at the natural number"')
-      .not.toMatch(/3–5 ranked candidate directions/);
-    expect(explore).toMatch(/1–5 ranked candidate directions/);
-    expect(explore, 'the multi-shape rule must be conditional on having found more than one')
-      .toMatch(/found more than one direction/);
+  it('the direction target states its exception rather than contradicting it', () => {
+    // The 3–5 target is DELIBERATE — explore exists to diverge, which is what separates it from
+    // convergent investigate, and a contract test pins that wording. The defect was that the
+    // anti-padding pitfall told the worker to "stop at the natural number" with no way to
+    // reconcile the two. The target stays; the exception is now written beside it.
+    expect(explore).toMatch(/3–5 ranked candidate directions/);
+    expect(explore, 'the pitfall must name the target it is qualifying').toMatch(/3–5 is the target/);
+    expect(explore, 'and say what to do when the data supports fewer')
+      .toMatch(/supports fewer than three/);
+    expect(explore, 'the multi-shape rule must be conditional on the data supporting more than one')
+      .toMatch(/data supports more than one direction/);
   });
 
   it('recall is required, and the range agrees', () => {
