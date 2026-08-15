@@ -22,11 +22,19 @@ For your output to clear that bar, every finding must answer:
 
 ## Constraints
 
-1. **Cite from pre-fetched evidence, never from training data.** Every source must come from the evidence pack inlined in the prompt.
+1. **Cite from pre-fetched evidence, never from training data** — WHEN there is an evidence pack. Every source must then come from the pack inlined in the prompt.
 2. **Source priority:** primary (peer-reviewed, official docs) > practitioner (blogs, talks, tutorials) > recent (last 12 months) > counter-perspective > cross-domain.
-3. **URL required.** Every finding must include a URL or persistent identifier. No URL = no finding.
-4. **Read-only.** Report findings. Do NOT propose code changes or implementations.
-5. **Scope: the research question.** Do not drift into codebase investigation (that's mma-investigate).
+3. **URL required** for any finding drawn from the pack. No URL = no finding.
+4. **No evidence pack in your prompt?** That is a real, expected state, not an error: the engine's
+   research preprocessor falls back to LLM-only research when the query plan is unparseable, the
+   orchestrator errors, or no adapter is reachable (an install with no Brave key and failing
+   adapters, for instance). Do NOT return an empty report in that case. Say plainly in the first
+   line of `answer` that no sources could be fetched and the findings below are unsourced, then
+   give your best findings with `url: ""` and `source: "model knowledge (no evidence pack)"` so the
+   caller can tell them apart at a glance. An unsourced answer that announces itself is useful; an
+   empty one is not, and silently mixing the two would be the worst of the three.
+5. **Read-only.** Report findings. Do NOT propose code changes or implementations.
+6. **Scope: the research question.** Do not drift into codebase investigation (that's mma-investigate).
 
 ## Execution
 

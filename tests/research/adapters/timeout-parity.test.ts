@@ -16,6 +16,7 @@
  *      cannot be added without one.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { REFINER_SCHEMAS } from '../../../packages/core/src/unified/refiner-schemas.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -118,6 +119,44 @@ describe('the research prompt names every adapter it can use', () => {
     expect(
       prompt.includes(adapter) || prompt.includes(alt),
       `${adapter} is a wired adapter the prompt never mentions — the worker will not plan for it`,
+    ).toBe(true);
+  });
+});
+
+/**
+ * The research prompt must permit the engine's own documented fallback.
+ *
+ * `preprocessors/research.ts` states: "On failure (unparseable plan, orchestrator error) the task
+ * proceeds with LLM-only research", and returns `{}` so the implementer prompt carries no evidence
+ * section at all. The prompt meanwhile said "cite from pre-fetched evidence, NEVER from training
+ * data" and "no URL = no finding" — so in the fallback the only compliant output was
+ * `findings: []`. "LLM-only research" was unreachable by construction, and the case bites any
+ * install whose adapters all fail (no Brave key, for instance).
+ */
+describe('research handles the no-evidence-pack fallback', () => {
+  const prompt = readFileSync('packages/core/src/skills/research/implement.md', 'utf8');
+
+  it('the preprocessor still documents the fallback', () => {
+    const pre = readFileSync('packages/server/src/application/preprocessors/research.ts', 'utf8');
+    expect(pre).toMatch(/LLM-only research/);
+  });
+
+  it('the prompt names the state and forbids an empty report', () => {
+    expect(prompt).toMatch(/No evidence pack/i);
+    expect(prompt).toMatch(/Do NOT return an empty report/i);
+  });
+
+  it('it gives the worker a representable shape for an unsourced finding', () => {
+    // url: "" must actually validate, or the instruction is another dead end.
+    expect(prompt).toMatch(/url: ""/);
+    const finding = {
+      weight: 'medium', category: 'primary-sources', claim: 'c', evidence: 'e',
+      url: '', source: 'model knowledge (no evidence pack)',
+    };
+    expect(
+      REFINER_SCHEMAS.research!.safeParse({
+        answer: 'no sources could be fetched', criteriaCovered: ['primary-sources'], findings: [finding],
+      }).success,
     ).toBe(true);
   });
 });
