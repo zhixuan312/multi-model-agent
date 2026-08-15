@@ -290,7 +290,10 @@ export async function runRecordSurface(ctx, log) {
       outcome: null,
       workspace_ids: [],
       resource_ids: [],
-    }, await revision());
+      // A Task is a NEW entity: its revision is 0. Passing the INITIATIVE's revision is a 409
+      // (`expected 2, actual 0`) as soon as an earlier section has advanced it — which every real
+      // run does, and a probe run straight after bootstrap does not.
+    }, 0);
     checks.push(C('task-create', created.status === 200,
       `status=${created.status} ${created.status === 200 ? '' : JSON.stringify(created.json).slice(0, 160)}`));
 
@@ -305,36 +308,43 @@ export async function runRecordSurface(ctx, log) {
       checks.push(C('task-list-contains-it', Array.isArray(listed.json) && listed.json.some((t) => t.uuid === taskId),
         `list=${Array.isArray(listed.json) ? listed.json.length : 'not-an-array'}`));
 
-      const claimed = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, got.json?.revision ?? 0);
+      // Read the Task's CURRENT revision before every transition rather than threading the one
+      // returned by the previous call. A rejected transition (the deliberate second claim below)
+      // leaves the caller holding a revision that is no longer the task's, and every subsequent
+      // step then 409s — which is exactly what the first version of this section did.
+      const taskRev = async () => (await op(token, cwd, 'initiative_task_get', { uuid: taskId })).json?.revision ?? 0;
+
+      const claimed = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, await taskRev());
       checks.push(C('task-claim', claimed.status === 200 && claimed.json?.status === 'claimed',
         `status=${claimed.status} task.status=${claimed.json?.status}`));
 
       // A claimed Task must not be claimable again — the whole point of the claim.
-      const reclaim = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, claimed.json?.revision ?? 0);
+      const reclaim = await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, await taskRev());
       checks.push(C('task-claim-is-exclusive', reclaim.status >= 400,
         `second claim status=${reclaim.status} — a claimed Task must not be re-claimable`));
 
-      const released = await mut(token, cwd, 'initiative_task_release', { uuid: taskId }, claimed.json?.revision ?? 0);
+      const released = await mut(token, cwd, 'initiative_task_release', { uuid: taskId }, await taskRev());
       checks.push(C('task-release', released.status === 200 && released.json?.status === 'open',
         `status=${released.status} task.status=${released.json?.status}`));
 
       const withMethod = await mut(token, cwd, 'initiative_task_set_method', {
         initiative: { uuid: initiative }, task: { uuid: taskId }, method: 'software-change@1',
-      }, released.json?.revision ?? 0);
+      }, await taskRev());
       checks.push(C('task-set-method', withMethod.status === 200,
         `status=${withMethod.status} ${withMethod.status === 200 ? '' : JSON.stringify(withMethod.json).slice(0, 140)}`));
 
-      const afterMethod = await op(token, cwd, 'initiative_task_get', { uuid: taskId });
+      // Claim it again before linking an execution: `initiative_task_execution` transitions a
+      // CLAIMED task, and the release above deliberately put it back to open.
+      await mut(token, cwd, 'initiative_task_claim', { uuid: taskId }, await taskRev());
       const exec = await mut(token, cwd, 'initiative_task_execution', {
         uuid: taskId, execution_ref: 'smoke-execution-ref', transition: 'in_progress',
-      }, afterMethod.json?.revision ?? 0);
+      }, await taskRev());
       checks.push(C('task-execution-link', exec.status === 200,
         `status=${exec.status} ${exec.status === 200 ? '' : JSON.stringify(exec.json).slice(0, 140)}`));
 
-      const afterExec = await op(token, cwd, 'initiative_task_get', { uuid: taskId });
       const done = await mut(token, cwd, 'initiative_task_complete', {
         uuid: taskId, outcome: 'succeeded',
-      }, afterExec.json?.revision ?? 0);
+      }, await taskRev());
       checks.push(C('task-complete', done.status === 200 && done.json?.outcome === 'succeeded',
         `status=${done.status} outcome=${done.json?.outcome}`));
     }
@@ -351,7 +361,7 @@ export async function runRecordSurface(ctx, log) {
       rationale: 'It was 32% covered and the gate called itself comprehensive.',
       alternatives: ['leave it uncovered'],
       status: 'decided',
-    }, await revision());
+    }, 0);
     checks.push(C('decision-record', decision.status === 200, `status=${decision.status}`));
     if (decision.status === 200) {
       const dGet = await op(token, cwd, 'decision_get', { uuid: decision.json.uuid });
@@ -362,7 +372,7 @@ export async function runRecordSurface(ctx, log) {
 
     const risk = await mut(token, cwd, 'risk_add', {
       initiative_id: initiative, statement: 'Smoke risk', severity: 'low', status: 'open',
-    }, await revision());
+    }, 0);
     checks.push(C('risk-add', risk.status === 200, `status=${risk.status}`));
     if (risk.status === 200) {
       const rGet = await op(token, cwd, 'risk_get', { uuid: risk.json.uuid });
@@ -377,7 +387,7 @@ export async function runRecordSurface(ctx, log) {
     const ev = await mut(token, cwd, 'evidence_add', {
       initiative_id: initiative, kind: 'smoke', locator: 'full-smoke://record-surface',
       content_hash: null, summary: 'Evidence recorded by the smoke run.',
-    }, await revision());
+    }, 0);
     checks.push(C('evidence-add', ev.status === 200, `status=${ev.status}`));
     if (ev.status === 200 && decision.status === 200) {
       const eGet = await op(token, cwd, 'evidence_get', { uuid: ev.json.uuid });
@@ -454,7 +464,7 @@ export async function runRecordSurface(ctx, log) {
     let criterionId = null;
     if (reqId) {
       const ac = await mut(token, cwd, 'acceptance_criterion_add',
-        { requirement_id: reqId, statement: 'Smoke criterion', check_reference: 'true' }, await revNow());
+        { requirement_id: reqId, statement: 'Smoke criterion', check_reference: 'true' }, 0);
       criterionId = ac.json?.uuid ?? null;
       checks.push(C('acceptance-criterion-add', ac.status === 200, `status=${ac.status}`));
       checks.push(C('acceptance-criterion-list',
@@ -463,7 +473,7 @@ export async function runRecordSurface(ctx, log) {
         checks.push(C('acceptance-criterion-get',
           (await op(token, cwd, 'acceptance_criterion_get', { uuid: criterionId })).status === 200, ''));
         const vr = await mut(token, cwd, 'verification_record',
-          { initiative_id: initiative, acceptance_criterion_id: criterionId, method: 'human', state: 'pass', detail: 'smoke' }, await revNow());
+          { initiative_id: initiative, acceptance_criterion_id: criterionId, method: 'human', state: 'pass', detail: 'smoke' }, 0);
         checks.push(C('verification-record', vr.status === 200, `status=${vr.status}`));
         if (vr.json?.uuid) {
           checks.push(C('verification-get',

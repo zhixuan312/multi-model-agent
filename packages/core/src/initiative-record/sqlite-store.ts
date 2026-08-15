@@ -2197,8 +2197,24 @@ export class InitiativeRecordStore implements InitiativeRepository {
 
   /**
    * `initiative_task_claim` (SPEC-003 FR-8, FR-9): `open → claimed` only,
-   * setting `claimed_by` to `provenance.actor_id`. Any other source status
+   * setting `claimed_by` to `provenance.authorized_by`. Any other source status
    * throws `task_not_claimable`.
+   *
+   * `authorized_by`, NOT `actor_id`. Every operation that later checks ownership —
+   * `release` (:2242), `complete` (:2277) and `execution`'s gated `claimed → in_progress`
+   * (:2302, "the same rule as FR-5 admission") — compares `claimed_by` against
+   * `provenance.authorized_by`. Writing `actor_id` here meant any caller whose two fields
+   * differ could claim a Task and then never release, complete or advance it: permanently
+   * stuck `claimed`, with `task_claim_conflict` on every attempt.
+   *
+   * That is not hypothetical. This engine's own `application/initiative-linker.ts` sets
+   * `actor_id: 'system:initiative-linker'` — a constant — while carrying the real caller
+   * forward in `authorized_by`, so for the linker the two ALWAYS differ.
+   *
+   * It survived because every claim test built provenance with
+   * `actor_id === initiated_by === authorized_by`, so no test could tell which field was
+   * written or read. The full-smoke harness, whose provenance sets them to different real
+   * values, is what surfaced it.
    */
   private mutateInitiativeTaskClaim(input: InitiativeTaskClaimInput, expectedRevision: number, provenance: ProvenanceInput): Task {
     const row = this.requireTaskRow(input.uuid);
@@ -2208,7 +2224,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
     const now = provenance.timestamp;
     const nextRevision = row.revision + 1;
-    const claimedBy = provenance.actor_id;
+    const claimedBy = provenance.authorized_by;
     this.db
       .prepare(`UPDATE tasks SET status = 'claimed', claimed_by = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
       .run(claimedBy, now, nextRevision, row.uuid);
