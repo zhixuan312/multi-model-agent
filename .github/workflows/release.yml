@@ -202,13 +202,20 @@ jobs:
           test -f "$T" || { echo "::error::core tarball not found at $T"; exit 1; }
           tar -tzf "$T" > /tmp/core.list
           grep -q '^package/dist/' /tmp/core.list || { echo "::error::core: no dist/"; exit 1; }
-          # core ships src/skills ON PURPOSE — the skill markdown is read at runtime, so a
-          # tarball without it installs clean and then fails on the first task.
+          # core ships THREE markdown asset families ON PURPOSE — each is read at runtime, and tsc
+          # copies no .md into dist, so every one depends on its own `files` entry. A tarball
+          # missing any of them installs clean and then fails on first use. This checked only
+          # skills; methods (an unregistered `method` is a 400) and delivery-packagers were
+          # unverified, which is the same subset gap the packaging TEST had.
           SKILLS=$(grep -c '^package/src/skills/.*\.md$' /tmp/core.list || true)
-          [ "$SKILLS" -ge 20 ] || { echo "::error::core: only $SKILLS skill .md files (27 across 12 types at 5.16.0)"; exit 1; }
+          [ "$SKILLS" -ge 20 ] || { echo "::error::core: only $SKILLS skill .md files (27 across 12 types at 6.10.0)"; exit 1; }
+          METHODS=$(grep -c '^package/src/methods/.*\.md$' /tmp/core.list || true)
+          [ "$METHODS" -ge 8 ] || { echo "::error::core: only $METHODS method guidance .md files (10 at 6.10.0)"; exit 1; }
+          PACKAGERS=$(grep -c '^package/src/delivery-packagers/.*\.md$' /tmp/core.list || true)
+          [ "$PACKAGERS" -ge 2 ] || { echo "::error::core: only $PACKAGERS delivery-packager .md files (2 at 6.10.0)"; exit 1; }
           grep -qE '^package/(tests|node_modules)/' /tmp/core.list && {
             echo "::error::core: tarball contains tests/ or node_modules/"; exit 1; } || true
-          echo "core OK — $SKILLS skill files, dist present"
+          echo "core OK — $SKILLS skill / $METHODS method / $PACKAGERS packager .md files, dist present"
 
       - name: Assert server tarball shape and that the workspace protocol was resolved
         run: |
