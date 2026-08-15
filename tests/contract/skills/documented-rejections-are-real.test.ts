@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { serverConfigSchema } from '@zhixuan92/multi-model-agent-core';
 
 const SKILL_ROOTS = ['packages/server/src/skills'];
 const CODE_ROOTS = ['packages/core/src', 'packages/server/src'];
@@ -75,5 +76,36 @@ describe('quoted rejection messages exist in the engine', () => {
     // revisited — a real guardrail could then be implemented and documented as enforced.
     const registry = readFileSync('packages/server/src/application/preprocessors/index.ts', 'utf8');
     expect(registry).not.toMatch(/\baudit\b\s*:/);
+  });
+});
+
+/**
+ * Documented limits must be the configured ones.
+ *
+ * `mma-context-blocks` advertised "max 50 MiB" per block and the router repeated it as the "Body
+ * cap". The real default is 512 KiB — a hundredfold overstatement — and over REST the raw body is
+ * capped at 256 KiB FIRST, so the doc's own advertised use case (register a large codebase summary
+ * or a long error log) fails with an error that never mentions the block limit at all.
+ *
+ * Derived from the schema, so raising the limit updates the expectation rather than the test.
+ */
+describe('documented context-block limits match the configured defaults', () => {
+  const limits = serverConfigSchema.parse({}).server.limits;
+  const blockKiB = limits.maxContextBlockBytes / 1024;
+
+  const DOCS = [
+    'packages/server/src/skills/mma-context-blocks/SKILL.md',
+    'packages/server/src/skills/multi-model-agent/SKILL.md',
+  ];
+
+  it.each(DOCS)('%s states the real per-block cap', (file) => {
+    const text = readFileSync(file, 'utf8');
+    expect(text, `should state ${blockKiB} KiB`).toContain(`${blockKiB} KiB`);
+  });
+
+  it.each(DOCS)('%s no longer advertises a cap the engine rejects', (file) => {
+    const text = readFileSync(file, 'utf8');
+    // Any MiB-scale claim is wrong by construction while the default is sub-MiB.
+    expect(text).not.toMatch(/\bmax(?:imum)?\b[^.\n]{0,40}\d+\s*MiB/i);
   });
 });

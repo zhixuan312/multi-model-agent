@@ -39,7 +39,7 @@ Two MCP tools, both scoped to `cwd`. If neither is available in this session, ru
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `cwd` | string | yes | Absolute path of the project that will own this block |
-| `content` | string | yes | Document content (min 1 char, max 50 MiB) |
+| `content` | string | yes | Document content (min 1 char, max **512 KiB** — `server.limits.maxContextBlockBytes`, measured in BYTES not characters) |
 | `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active task for 24 h is eligible for eviction. |
 
 Returns `{ "id": "cb_abc123" }`. Use this `id` as a `contextBlockIds` entry in any `mma:*` skill
