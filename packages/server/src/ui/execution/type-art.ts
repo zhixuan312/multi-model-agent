@@ -9,8 +9,10 @@
  * The table is duplicated here rather than imported from core ON PURPOSE: this module is
  * bundled into a single-file HTML App served to the host, and pulling the core package in
  * to read three booleans would drag the engine's dependency graph into a 350 KB UI bundle.
- * `tests/contract/mcp/type-art-registry.test.ts` cross-checks every entry against the real
- * `TYPE_REGISTRY`, so the copy cannot drift silently — a mismatch fails the suite.
+ * `tests/contract/mcp/execution-app-scene.test.ts` cross-checks every entry against the real
+ * `TYPE_REGISTRY` — coverage of every member, and the verb against `writeRoute`/`sandbox` — so
+ * the copy cannot drift silently. (This named `type-art-registry.test.ts`, a file that has never
+ * existed: the pointer to the thing that makes a deliberate duplicate safe was itself wrong.)
  */
 
 export type Verb = 'strike' | 'draft' | 'probe';

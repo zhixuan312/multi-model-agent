@@ -80,7 +80,9 @@ const REVIEWER_LENS =
   + `<path d="M17.9 17 A2.2 2.2 0 0 1 19.3 16.2" fill="none" class="s-cool-s" stroke-width=".65" stroke-linecap="round" opacity=".8"/>`;
 
 /** Tools, drawn in the forearm's frame and scaled against the figure's 4.6-unit head. */
-const TOOLS: Record<ToolId, string> = {
+/** Exported so the scene contract test can prove every `TYPE_ART` tool names a real one —
+ *  `sceneSvg` falls back silently, so a typo would render a type with no prop and pass. */
+export const TOOLS: Record<ToolId, string> = {
   lens:
     `<line x1="30.2" y1="17.5" x2="26.9" y2="18.1" class="s-fig-s" stroke-width="1.5" stroke-linecap="round"/>`
     + `<circle cx="23.9" cy="18.4" r="2.9" class="s-acc-f" fill-opacity=".12"/>`
@@ -160,7 +162,9 @@ function gear(skipTooth: number): string {
 const rule = (d: string, w = '.6', extra = '') => `<path d="${d}" class="s-line-s" stroke-width="${w}" stroke-linecap="round" opacity=".5"${extra}/>`;
 
 /** Subjects. Every one sits on or above the bench line; none crosses y 23. */
-const SUBJECTS: Record<string, () => string> = {
+/** Exported for the same reason as {@link TOOLS}: `SUBJECTS[art.subject] ?? SUBJECTS.default`
+ *  means a misspelled subject draws the generic bench and nothing fails. */
+export const SUBJECTS: Record<string, () => string> = {
   default: () => sheet() + rule('M14.4 17.4h9.6') + rule('M14.4 19.6h9.6') + rule('M14.4 21.8h6'),
   audit: () => sheet()
     + `<rect x="14.4" y="16.4" width="7" height="1.2" rx=".6" class="s-line" opacity=".7"/>`

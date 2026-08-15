@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { TASK_TYPES, TYPE_REGISTRY, type TaskType } from '@zhixuan92/multi-model-agent-core';
 import { TYPE_ART, DEFAULT_ART, artFor } from '../../../packages/server/src/ui/execution/type-art.js';
-import { sceneSvg, sceneClass, raiseTransform, SUBJECT_EXTENTS } from '../../../packages/server/src/ui/execution/scene.js';
+import { sceneSvg, sceneClass, raiseTransform, SUBJECT_EXTENTS, SUBJECTS, TOOLS } from '../../../packages/server/src/ui/execution/scene.js';
 import { endingForStatus } from '../../../packages/server/src/ui/execution/display-state.js';
 
 const CSS = await readFile('packages/server/src/ui/execution/execution.html', 'utf8');
@@ -29,6 +29,28 @@ describe('contract: every task type has stage art', () => {
         expect(svg, `${type}/${act}`).toContain('y="27.6"');
       }
     }
+  });
+
+  /**
+   * Every declared prop must actually exist.
+   *
+   * `sceneSvg` resolves both through a silent fallback — `SUBJECTS[art.subject] ?? default`, and
+   * `TOOLS[art.tool]` — so a typo in `TYPE_ART` renders the generic bench (or no tool at all)
+   * and every other assertion in this file still passes: the scene is long enough, the floor is
+   * there, the verb is right. `type-art.ts` justifies being a hand-maintained duplicate of
+   * `TYPE_REGISTRY` on the grounds that this suite makes drift impossible; the verb and the
+   * membership were checked, the props themselves were not.
+   */
+  it('names a real subject and a real tool for every type', () => {
+    for (const type of TASK_TYPES) {
+      const art = TYPE_ART[type]!;
+      expect(SUBJECTS[art.subject], `${type} names subject "${art.subject}", which has no drawing`).toBeDefined();
+      expect(SUBJECT_EXTENTS[art.subject], `${type}'s subject "${art.subject}" has no measured extents`).toBeDefined();
+      expect(TOOLS[art.tool], `${type} names tool "${art.tool}", which has no drawing`).toBeDefined();
+    }
+    // ...and the fallback art itself, which any unknown type resolves to.
+    expect(SUBJECTS[DEFAULT_ART.subject]).toBeDefined();
+    expect(TOOLS[DEFAULT_ART.tool]).toBeDefined();
   });
 
   it('falls back rather than breaking when a type has no art', () => {
