@@ -5,6 +5,7 @@ import { buildCodexCliLaunch } from '../../packages/core/src/providers/codex-cli
 import { makeClaudeProvider } from '../../packages/core/src/providers/claude.js';
 import { createProvider } from '../../packages/core/src/providers/provider-factory.js';
 import type { MultiModelConfig } from '../../packages/core/src/types.js';
+import type { Effort } from '../../packages/core/src/types/task-spec.js';
 
 // Captures the options object handed to the SDK so the claude path can be
 // asserted without a live query.
@@ -122,13 +123,17 @@ describe('claude runner — effort option', () => {
 });
 
 describe('provider factory — effort forwarding', () => {
-  const configWith = (effort?: string): MultiModelConfig => ({
+  // `agents` is the only block `createProvider` reads, and it is fully typed here. The cast
+  // covers the REST of MultiModelConfig, which this test does not exercise — `as never`, which
+  // this used, would also have silenced a mistyped agents block, and a wrong `effort` value is
+  // exactly what these cases exist to catch.
+  const configWith = (effort?: Effort): MultiModelConfig => ({
     agents: {
       standard: { type: 'claude', model: 'claude-sonnet-5', ...(effort && { effort }) },
       complex: { type: 'codex', model: 'gpt-5.6-terra', ...(effort && { effort }) },
       main: { type: 'claude', model: 'claude-opus-5' },
     },
-  } as never);
+  } as Pick<MultiModelConfig, 'agents'> as MultiModelConfig);
 
   it('carries the per-tier override into the provider config', () => {
     expect(createProvider('standard', configWith('low')).config.effort).toBe('low');
