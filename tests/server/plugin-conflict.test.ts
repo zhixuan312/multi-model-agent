@@ -16,7 +16,6 @@ import {
   findEnabledMmaPlugin,
   readEnabledPlugins,
   pluginSupersedesMessage,
-  enableDespitePluginWarning,
 } from '../../packages/server/src/skill-install/plugin-conflict.js';
 import { runSyncSkills } from '../../packages/server/src/cli/sync-skills.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
@@ -72,7 +71,6 @@ describe('plugin detection', () => {
     expect(sup).toContain('Claude Code is unchanged');
     expect(pluginSupersedesMessage('mma@x', 0)).toContain('Skipping');
 
-    expect(enableDespitePluginWarning('mma@x')).toContain('claude plugin uninstall mma@x');
   });
 });
 

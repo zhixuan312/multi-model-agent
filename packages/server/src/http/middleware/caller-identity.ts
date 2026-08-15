@@ -23,9 +23,11 @@ export const DEFAULT_IDENTITY: CallerIdentity = {
 export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
   const rawClient = (req.headers['x-mma-client'] as string | undefined)?.toLowerCase().trim();
 
-  const callerClient = (rawClient && CLIENT_ALLOWLIST.has(rawClient))
-    ? (rawClient as CallerClient)
-    : 'other';
+  // The fallback returns DEFAULT_IDENTITY rather than an inline `{ callerClient: 'other' }`.
+  // The literal was a second copy of the same default, and it was the copy production used —
+  // so `caller-identity.test.ts` asserting on DEFAULT_IDENTITY was checking a constant no
+  // request ever reached. Changing the constant would have left the served default untouched.
+  if (!rawClient || !CLIENT_ALLOWLIST.has(rawClient)) return DEFAULT_IDENTITY;
 
-  return { callerClient };
+  return { callerClient: rawClient as CallerClient };
 }
