@@ -601,3 +601,35 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   ...INITIATIVE_MCP_TOOLS,
 ];
+
+/**
+ * The argument names each tool actually accepts, taken from the schema it publishes.
+ *
+ * Every `inputSchema` above declares `additionalProperties: false`, and nothing enforced it:
+ * each handler reads the keys it knows off a `Record<string, unknown>` and ignores the rest,
+ * so `mma_run` accepted `{ cwd, request, wat: 'nonsense' }` and ran the task. The cost is not
+ * the nonsense key — it is the near-miss. A caller who puts an option one level too high,
+ * `reviewPolicy` beside `request` instead of inside it, gets a run with the option silently
+ * dropped and nothing in the result to say so. A schema the server publishes and does not
+ * honour is worse than no schema, because the caller has every reason to rely on it.
+ *
+ * Built FROM `MCP_TOOLS`, so a tool that adds an argument accepts it with no second list to
+ * update, and a tool that stops declaring `additionalProperties: false` stops being checked —
+ * the enforcement cannot outlive the promise it enforces.
+ */
+const DECLARED_TOOL_ARGUMENTS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  MCP_TOOLS
+    .filter((tool) => tool.inputSchema.additionalProperties === false)
+    .map((tool) => [
+      tool.name,
+      new Set(Object.keys((tool.inputSchema.properties ?? {}) as Record<string, unknown>)),
+    ]),
+);
+
+/** Argument names the caller sent that `toolName` does not declare. Empty for an unknown tool
+ *  (the dispatcher answers that with `unknown_tool`) and for one that permits extras. */
+export function unknownToolArguments(toolName: string, args: Record<string, unknown>): string[] {
+  const declared = DECLARED_TOOL_ARGUMENTS.get(toolName);
+  if (!declared) return [];
+  return Object.keys(args).filter((key) => !declared.has(key));
+}

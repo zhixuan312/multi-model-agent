@@ -229,6 +229,43 @@ describe('contract: MCP adapter', () => {
     } finally { await client.close(); await h.close(); }
   });
 
+  /**
+   * `additionalProperties: false` is advertised on EVERY tool's inputSchema, and was enforced
+   * on none of them: each handler reads the keys it knows off a `Record<string, unknown>` and
+   * ignores the rest. So `mma_run` accepted `{ cwd, request, wat: 'nonsense' }` and ran the
+   * task, and a caller who put an option at the wrong nesting level — `reviewPolicy` beside
+   * `request` rather than inside it — got a run with the option silently dropped and no way to
+   * tell from the result. A schema the server publishes and does not honour is worse than no
+   * schema: it is a promise the caller has every reason to rely on.
+   */
+  it('refuses an unknown argument on every tool, as each tool schema advertises', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    const client = await mcpClient(h);
+    try {
+      const run = await client.callTool({
+        name: 'mma_run',
+        arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'x' }, wat: 'nonsense' },
+      });
+      expect(run.isError).toBe(true);
+      const payload = parseText(run) as { error: { code: string; message: string } };
+      expect(payload.error.code).toBe('invalid_request');
+      // Name the offending key: "unknown argument" alone leaves the caller diffing their call
+      // against the schema by hand.
+      expect(payload.error.message).toContain('wat');
+
+      // Not special-cased to mma_run — the rule comes from each tool's own declared schema.
+      const get = await client.callTool({
+        name: 'mma_execution_get', arguments: { executionId: 'abc', timeoutMs: 5 },
+      });
+      expect(get.isError).toBe(true);
+      expect((parseText(get).error as { message: string }).message).toContain('timeoutMs');
+
+      // A DECLARED optional argument is still accepted — the check must not reject the schema.
+      const listed = await client.callTool({ name: 'mma_execution_list', arguments: { cwd: process.cwd() } });
+      expect(listed.isError).toBeFalsy();
+    } finally { await client.close(); await h.close(); }
+  });
+
   it('mma_execution_get on an unknown id reports not_found as a tool error', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     const client = await mcpClient(h);

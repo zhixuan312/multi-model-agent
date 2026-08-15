@@ -68,6 +68,7 @@ import {
   DELIVERY_MODES,
   INITIATIVE_MUTATING_OPERATIONS,
   INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME,
+  unknownToolArguments,
 } from './tool-surface.js';
 import {
   getExecutionArtifact,
@@ -591,6 +592,20 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined, declaredClient);
     const toolName = request.params.name;
+
+    // Honour the `additionalProperties: false` every tool schema advertises, once, before
+    // dispatch — the handlers below each read the keys they know and would otherwise ignore
+    // the rest. Naming the offending keys matters: the case this catches is not a nonsense
+    // argument but a near-miss, an option nested one level too high, and "unknown argument"
+    // alone leaves the caller diffing their call against the schema by hand.
+    const unknownArguments = unknownToolArguments(toolName, args);
+    if (unknownArguments.length > 0) {
+      return errorResult(
+        'invalid_request',
+        `${toolName} does not accept ${unknownArguments.map((key) => `\`${key}\``).join(', ')}. `
+        + 'Check the tool schema — an option meant for a nested object is the usual cause.',
+      );
+    }
 
     // Initiative tools: near-identical `mma_<operation>` dispatches over the
     // frozen operation table, checked before the fixed-name switch below rather
