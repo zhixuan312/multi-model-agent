@@ -11,22 +11,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
-import { TASK_TYPES, INITIATIVE_OPERATIONS, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+import { TASK_TYPES, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+import { EXPECTED_MCP_TOOL_NAMES } from '../fixtures/expected-mcp-tools.js';
 
 /** Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
  *  alongside the original seven. Derived from the same frozen operation list
  *  the tool surface itself is built from, so this assertion tracks the real
  *  contract rather than a hand-copied name list.
  *
- *  SPEC-005 Method Registry (Task I-3, FR-10) froze `method_get`, `method_list`, and
- *  `initiative_task_set_method` as `mma_initiative_<operation>` rather than the mechanical
- *  `mma_<operation>` every other operation uses — see tool-surface.ts's own
- *  `INITIATIVE_TOOL_NAME_OVERRIDES`. Encoded independently here (not imported) so this
- *  assertion still catches a real naming regression in the tool surface. */
-const INITIATIVE_TOOL_NAME_OVERRIDES = new Set(['method_get', 'method_list', 'initiative_task_set_method']);
-const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) =>
-  INITIATIVE_TOOL_NAME_OVERRIDES.has(operation) ? `mma_initiative_${operation}` : `mma_${operation}`,
-);
+ *  The naming rule (including SPEC-005's three `mma_initiative_<operation>` overrides) is
+ *  restated in `../fixtures/expected-mcp-tools.js` — independent of `tool-surface.ts`, so a real
+ *  naming regression still fails, but in ONE place rather than copied into three test files. */
 
 async function mcpClient(h: HarnessHandle): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
@@ -62,11 +57,7 @@ describe('contract: MCP adapter', () => {
     const client = await mcpClient(h);
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual([
-        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-        'mma_execution_cancel', 'mma_execution_get', 'mma_execution_list', 'mma_execution_wait',
-        ...INITIATIVE_TOOL_NAMES,
-      ].sort());
+      expect(tools.map((t) => t.name).sort()).toEqual(EXPECTED_MCP_TOOL_NAMES);
 
       const run = tools.find((t) => t.name === 'mma_run')!;
       const schema = run.inputSchema as {
