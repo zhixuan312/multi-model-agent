@@ -41,7 +41,7 @@ query set — no LLM, no server, no network.
   and linear keyword-scan it on every operation; the entire catalog + all node
   bodies are injected per operation; retrieval has no topic prefilter.
 - **engine** = the new path measured through the REAL public retrieval calls
-  the HTTP route makes (\`searchCandidatesForRecord\` / \`searchCandidatesForRecall\`):
+  the HTTP route makes (\`searchCandidatesForRecordBatch\` / \`searchCandidatesForRecall\`):
   \`JournalIndexStore\` FTS/BM25 + tag + graph retrieval returning top-K
   candidates; only the top-K candidate text is injected; the per-query freshness
   check is a cheap node-count comparison (\`ensureFresh\`), so latency reflects

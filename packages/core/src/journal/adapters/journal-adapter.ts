@@ -35,12 +35,17 @@ import { parseJournalNodeDocument } from '../node-codec.js';
 // Engine-facing adapter: content + lexical indexing, plus opaque metadata.
 // ---------------------------------------------------------------------------
 
-/** Re-exported under the journal's historical constant name/value — it is now
- * the shared engine's generic derived-database filename. */
+/**
+ * The PUBLIC names for the derived index's filename and schema version.
+ *
+ * "Historical" until this audit, which reads as compatibility scaffolding safe to delete. It is
+ * the opposite: `CORPUS_INDEX_DB_FILENAME` / `CORPUS_INDEX_SCHEMA_VERSION` are internal to
+ * `../engine/index-store.ts` and referenced nowhere else, while these two are exported through
+ * the core barrel, pinned by `core-barrel-surface.test.ts`, and used by `cli/journal-reindex.ts`
+ * and the migration tests. Deleting them would be a breaking change to the published API in
+ * service of removing an alias that is the only name anyone uses.
+ */
 export const JOURNAL_INDEX_DB_FILENAME = CORPUS_INDEX_DB_FILENAME;
-
-/** Re-exported under the journal's historical constant name/value — it is now
- * the shared engine's generic derived-database schema version. */
 export const JOURNAL_INDEX_SCHEMA_VERSION = CORPUS_INDEX_SCHEMA_VERSION;
 
 /**
@@ -437,9 +442,18 @@ function clip(text: string, max: number): string {
  */
 function applyPreviewBudget(ranked: JournalCandidate[], budgetBytes: number): RecallCandidateSet {
   const kept: JournalCandidate[] = [];
-  let used = 0;
+  // Seeded with the serialized array's own framing — `[` and `]` — and one byte added per
+  // candidate below for the separating comma. The budget is a ceiling on the ASSEMBLED payload,
+  // and summing candidates alone understated it by one byte each, so the payload was over budget
+  // by roughly its own candidate count on every recall.
+  let used = 2;
   for (const candidate of ranked) {
-    const cost = JSON.stringify(candidate).length;
+    // BYTES, not `.length`. The budget is named in bytes and bounds what reaches a worker's
+    // prompt; `String.prototype.length` counts UTF-16 code units, which equals the byte count
+    // only for ASCII. A journal with accented words, CJK, or emoji measured smaller than it is —
+    // up to ~3x smaller for CJK — so the payload could overshoot the very ceiling this exists to
+    // hold. (The same unit slip cost the telemetry queue its contents; see `queue.ts`.)
+    const cost = Buffer.byteLength(JSON.stringify(candidate), 'utf8') + (kept.length > 0 ? 1 : 0);
     // Always admit the top candidate: a single oversized node must not produce
     // an empty answer.
     if (kept.length > 0 && used + cost > budgetBytes) break;
@@ -720,6 +734,15 @@ export async function searchCandidatesForRecall(
   return applyPreviewBudget(await search(store, input), RECALL_PREVIEW_BUDGET_BYTES);
 }
 
+/**
+ * Single-record dedup retrieval.
+ *
+ * The `journal_record` route does NOT call this — it calls
+ * {@link searchCandidatesForRecordBatch}, which runs health and freshness once for the whole
+ * request. This remains the published single-record entry point and, more usefully, the ORACLE
+ * the batch variant is checked against: `tests/journal/search.test.ts` asserts the batch returns
+ * for record 1 exactly what this returns for record 1 alone. Keep them behaviourally identical.
+ */
 export async function searchCandidatesForRecord(
   store: JournalIndexStore,
   input: { prompt: string; topic?: string },
