@@ -87,23 +87,12 @@ Constraints: <= 8 entries per adapter list, <= 200 chars per query string.
 
 Nothing downstream merges your narrative with anyone else's. If two of your findings cite the same source for the same claim, KEEP ONE — the deduplication is yours to do, in this output.
 
-### Turn 1: Query Plan (When Planning)
+### Query planning is not your turn
 
-If this is the planning turn, emit ONLY a structured query plan as JSON (no prose):
-
-```json
-{
-  "braveQueries":           [{"q": "<query>", "freshness": "pd|pw|pm|py", "endpoint": "web|news", "siteFilter": "site:domain.com"}],
-  "arxivQueries":           ["<string>"],
-  "semanticScholarQueries": ["<string>"],
-  "githubQueries":          [{"q": "<string>", "kind": "repo|code"}],
-  "openalexQueries":        ["<string>"],
-  "crossrefQueries":        ["<string>"],
-  "pubmedQueries":          ["<string>"]
-}
-```
-
-Empty arrays are allowed for sources you do not need. Emit ONLY the JSON object — no prose, no preamble, no code fences.
+The query plan runs in a SEPARATE session with its own prompt (`QUERY_PLAN_PROMPT` in the research
+preprocessor) and never reaches this file. This section used to carry a full copy of the planner's
+JSON schema, which could only mislead: emitting a query plan here produces no report at all. If you
+have an evidence pack, the planning already happened; if you do not, see constraint 4.
 
 ### Brave Search Strategy
 

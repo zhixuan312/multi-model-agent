@@ -194,3 +194,35 @@ describe('the research refiner checks all five perspectives', () => {
     ).toBe(true);
   });
 });
+
+/**
+ * The implementer prompt must not carry the PLANNER's instructions.
+ *
+ * `research/implement.md` contained a "Turn 1: Query Plan (When Planning)" section with a full copy
+ * of the planner's JSON schema — 18 lines telling the worker to "emit ONLY a structured query plan
+ * as JSON (no prose)". Query planning runs in a SEPARATE session with its own prompt
+ * (`QUERY_PLAN_PROMPT`, sent by the preprocessor) and never sees this file, so the block was dead
+ * in two ways: unreachable, and a second copy of rules that could drift from the live ones. Its
+ * only possible effect was to mislead an implementer into emitting a query plan instead of a
+ * report.
+ */
+describe('the research implementer carries no planner instructions', () => {
+  const prompt = readFileSync('packages/core/src/skills/research/implement.md', 'utf8');
+
+  it('does not tell the worker to emit a query plan', () => {
+    expect(prompt).not.toMatch(/emit ONLY a structured query plan/i);
+    expect(prompt).not.toMatch(/If this is the planning turn/i);
+  });
+
+  it('does not duplicate the planner query-array schema', () => {
+    // The planner owns these key names; a second copy here is what drifts.
+    expect(prompt).not.toMatch(/"arxivQueries"/);
+    expect(prompt).not.toMatch(/"openalexQueries"/);
+  });
+
+  it('the planner prompt still owns them', () => {
+    const pre = readFileSync('packages/server/src/application/preprocessors/research.ts', 'utf8');
+    expect(pre).toMatch(/QUERY_PLAN_PROMPT/);
+    expect(pre).toMatch(/arxivQueries/);
+  });
+});
