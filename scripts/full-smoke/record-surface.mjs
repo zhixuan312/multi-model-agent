@@ -64,7 +64,7 @@ export async function runRecordSurface(ctx, log) {
   };
 
   const suffix = `${Date.now()}`;
-  let initiative = null, deliverable = null, workspaceId = null;
+  let initiative = null, deliverable = null, workspaceId = null, productId = null;
 
   // ── R1 (AC C1/C2) greenfield intake: one atomic call, and an all-or-nothing failure ─────────
   {
@@ -86,6 +86,7 @@ export async function runRecordSurface(ctx, log) {
       // workspace id — without one it 400s on a missing field, which would look like a broken
       // operation rather than a malformed call.
       workspaceId = (created.json.workspaces ?? [])[0]?.uuid ?? null;
+      productId = created.json.product?.uuid ?? (created.json.workspaces ?? [])[0]?.product_id ?? null;
       // Record it for teardown to REPORT. It cannot be removed: the Initiative Record API has 26
       // operations and none of them deletes, so every smoke run leaves this row behind in the
       // daemon's real initiatives.db. Teardown says so rather than letting it accumulate silently.
@@ -419,6 +420,115 @@ export async function runRecordSurface(ctx, log) {
     checks.push(C('read-surface-exercised', checks.length === reads.length,
       `${checks.length}/${reads.length} read operations called`));
     add(110, 'record_read_surface', checks);
+  }
+
+  // ── R11 The rest of the surface: catalogue reads, entity creation, supersession, delivery ────
+  //
+  // The last 19 operations. Every payload here was probed against a live daemon before being
+  // written — which is how the two that matter came out: an operation that CREATES a new entity
+  // takes `expected_revision: 0` (the entity does not exist yet, so its revision is 0), NOT the
+  // initiative's revision, and `deliverable_attach_artifact`'s `requirement` must be one the
+  // Delivery Contract declares (`runnable-software@1` requires source_changes, run_instructions,
+  // successful_build, automated_checks, runnable_preview). Both were 400/409 when guessed.
+  {
+    const checks = [];
+    const revNow = async () => (await op(token, cwd, 'initiative_get', { uuid: initiative })).json?.revision;
+
+    // Catalogue reads by id.
+    if (productId) {
+      checks.push(C('product-get', (await op(token, cwd, 'product_get', { uuid: productId })).status === 200, `product=${productId}`));
+    }
+    if (workspaceId) {
+      checks.push(C('workspace-get', (await op(token, cwd, 'workspace_get', { uuid: workspaceId })).status === 200, `workspace=${workspaceId}`));
+    }
+    const newProduct = await mut(token, cwd, 'product_create', { name: 'Smoke Product B', slug: `smoke-b-${suffix}` }, 0);
+    checks.push(C('product-create', newProduct.status === 200, `status=${newProduct.status}`));
+
+    // Requirement → acceptance criterion → verification, read back at each step.
+    const reqs = await op(token, cwd, 'requirement_list', { initiative_id: initiative });
+    const reqId = (reqs.json ?? [])[0]?.uuid;
+    checks.push(C('requirement-get', reqId
+      ? (await op(token, cwd, 'requirement_get', { uuid: reqId })).status === 200
+      : false, `requirement=${reqId ?? 'none seeded'}`));
+
+    let criterionId = null;
+    if (reqId) {
+      const ac = await mut(token, cwd, 'acceptance_criterion_add',
+        { requirement_id: reqId, statement: 'Smoke criterion', check_reference: 'true' }, await revNow());
+      criterionId = ac.json?.uuid ?? null;
+      checks.push(C('acceptance-criterion-add', ac.status === 200, `status=${ac.status}`));
+      checks.push(C('acceptance-criterion-list',
+        (await op(token, cwd, 'acceptance_criterion_list', { requirement_id: reqId })).status === 200, ''));
+      if (criterionId) {
+        checks.push(C('acceptance-criterion-get',
+          (await op(token, cwd, 'acceptance_criterion_get', { uuid: criterionId })).status === 200, ''));
+        const vr = await mut(token, cwd, 'verification_record',
+          { initiative_id: initiative, acceptance_criterion_id: criterionId, method: 'human', state: 'pass', detail: 'smoke' }, await revNow());
+        checks.push(C('verification-record', vr.status === 200, `status=${vr.status}`));
+        if (vr.json?.uuid) {
+          checks.push(C('verification-get',
+            (await op(token, cwd, 'verification_get', { uuid: vr.json.uuid })).status === 200, ''));
+        }
+      }
+    }
+
+    // Artifacts. `description` is REQUIRED; omitting it is a 400, not a default.
+    const artifact = await mut(token, cwd, 'artifact_register',
+      { initiative_id: initiative, storage_mode: 'external', path_or_uri: 'smoke://artifact', description: 'Smoke artifact' }, 0);
+    checks.push(C('artifact-register', artifact.status === 200, `status=${artifact.status}`));
+    if (artifact.json?.uuid) {
+      checks.push(C('artifact-get', (await op(token, cwd, 'artifact_get', { uuid: artifact.json.uuid })).status === 200, ''));
+    }
+
+    // Supersession: a Decision is replaced, not edited.
+    const older = await mut(token, cwd, 'decision_record',
+      { initiative_id: initiative, title: 'Superseded decision', decision: 'first', rationale: 'r', alternatives: [], status: 'decided' }, 0);
+    if (older.status === 200) {
+      const olderRead = await op(token, cwd, 'decision_get', { uuid: older.json.uuid });
+      const superseded = await mut(token, cwd, 'decision_supersede',
+        { uuid: older.json.uuid, title: 'Superseding decision', decision: 'second', rationale: 'r2', alternatives: [] },
+        olderRead.json?.revision);
+      checks.push(C('decision-supersede', superseded.status === 200, `status=${superseded.status}`));
+    }
+
+    // A second Initiative, related to the first.
+    if (productId) {
+      const second = await mut(token, cwd, 'initiative_create',
+        { product_id: productId, title: 'Smoke related initiative', goal: 'Prove relate + create.', status: 'open', outcome: null }, 0);
+      checks.push(C('initiative-create', second.status === 200, `status=${second.status}`));
+      if (second.json?.uuid) {
+        checks.push(C('initiative-relate', (await mut(token, cwd, 'initiative_relate',
+          { from_id: initiative, to_id: second.json.uuid, type: 'related_to' }, 0)).status === 200, ''));
+      }
+    }
+
+    // Lifecycle: status, contract, and the two phase transitions the earlier section never drives.
+    checks.push(C('initiative-status', (await mut(token, cwd, 'initiative_status',
+      { uuid: initiative, status: 'open', outcome: null }, await revNow())).status === 200, ''));
+    checks.push(C('initiative-set-lifecycle-contract', (await mut(token, cwd, 'initiative_set_lifecycle_contract',
+      { initiative: { uuid: initiative }, lifecycle_contract: null }, await revNow())).status === 200, ''));
+    checks.push(C('initiative-phase-skip', (await mut(token, cwd, 'initiative_phase_skip',
+      { initiative: { uuid: initiative }, phase: 'discover', reason: 'smoke: skip then reopen' }, await revNow())).status === 200, ''));
+    checks.push(C('initiative-phase-reopen', (await mut(token, cwd, 'initiative_phase_reopen',
+      { initiative: { uuid: initiative }, phase: 'discover', reason: 'smoke: reopen after skip' }, await revNow())).status === 200, ''));
+
+    // Delivery: attach an artifact against a DECLARED requirement, then approve.
+    const dl = await mut(token, cwd, 'deliverable_define',
+      { initiative_id: initiative, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' }, 0);
+    if (dl.status === 200 && artifact.json?.uuid) {
+      checks.push(C('deliverable-attach-artifact', (await mut(token, cwd, 'deliverable_attach_artifact',
+        { deliverable_id: dl.json.uuid, artifact_id: artifact.json.uuid, requirement: 'source_changes' },
+        dl.json.revision)).status === 200, 'requirement must be one the Delivery Contract declares'));
+      const dlRead = await op(token, cwd, 'deliverable_get', { uuid: dl.json.uuid });
+      checks.push(C('deliverable-approve', (await mut(token, cwd, 'deliverable_approve',
+        { deliverable: { uuid: dl.json.uuid }, reason: 'smoke approval' }, dlRead.json?.revision)).status === 200, ''));
+      checks.push(C('deliverable-list',
+        (await op(token, cwd, 'deliverable_list', { initiative_id: initiative })).status === 200, ''));
+    }
+
+    // Floor: this section is only meaningful if it actually ran its calls.
+    checks.push(C('rest-of-surface-exercised', checks.length >= 18, `${checks.length} operations checked`));
+    add(111, 'record_remaining_surface', checks);
   }
 
   return { records, checksByScenario };

@@ -356,10 +356,24 @@ async function journalRetrievalGate() {
   // silently drops, with no shape check able to notice.
   const recallSkill = join(REPO_ROOT, 'packages', 'core', 'src', 'skills', 'journal_recall', 'implement.md');
   const skillText = existsSync(recallSkill) ? readFileSync(recallSkill, 'utf8') : '';
-  for (const marker of ['open that candidate\'s `nodePath` and read the node', 'candidatesWithheld']) {
-    if (!skillText.includes(marker)) {
-      throw new AbortError('journal-retrieval', `journal_recall implement.md missing marker: ${marker}`,
-        'the recall worker must be told to read a cited candidate\'s node, and to state its coverage when candidates were withheld');
+  // Assert the PROPERTY, not a sentence. This used to require the literal string
+  // "open that candidate's `nodePath` and read the node", which broke the moment that instruction
+  // was IMPROVED: the bare value resolves to `<cwd>/nodes/…` and does not exist, so the prompt now
+  // says to read the node at `.mma/journal/<nodePath>` and states that the path is relative to the
+  // journal root. A gate keyed on wording fails an edit that makes the wording correct — and the
+  // fix a reader reaches for is to restore the old, broken sentence.
+  //
+  // What must hold: the worker is told to open a cited candidate's node, told WHERE the path
+  // resolves, and told to report coverage when candidates were withheld.
+  const markers = [
+    [/read the node at `\.mma\/journal\/<nodePath>`/, 'an instruction to open a cited candidate\'s node at the journal root'],
+    [/relative to the JOURNAL ROOT/i, 'a statement of where `nodePath` resolves — the bare value points at nothing'],
+    [/candidatesWithheld/, 'the coverage field for withheld candidates'],
+  ];
+  for (const [pattern, what] of markers) {
+    if (!pattern.test(skillText)) {
+      throw new AbortError('journal-retrieval', `journal_recall implement.md is missing ${what}`,
+        'the recall worker must be told to read a cited candidate\'s node, WHERE that path resolves, and to state its coverage when candidates were withheld');
     }
   }
 }

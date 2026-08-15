@@ -109,28 +109,35 @@ describe('Initiative Record operation coverage does not regress', () => {
     ),
   ].sort();
 
-  /** MCP tool rosters name operations without calling them; strip them before matching. */
-  const callText = smokeText.replace(/'mma_\w+'/g, '');
-  const isCalled = (op: string): boolean => new RegExp(`'${op}'`).test(callText);
+  /**
+   * A quoted name is still not proof — my own R11 comments name several operations while
+   * explaining them. Require the CALL FORM the harness actually uses: the operation passed as the
+   * third argument to `op(token, cwd, …)` / `mut(token, cwd, …)`, or listed in a `[operation, input]`
+   * read-table row. A name in prose, in a comment, or in an MCP tool roster is not coverage.
+   */
+  const isCalled = (op: string): boolean =>
+    new RegExp(`(?:op|mut)\\(token, cwd, '${op}'`).test(smokeText)
+    || new RegExp(`\\['${op}',`).test(smokeText);
 
-  /** Measured with the corrected metric: 23 before this audit, 52 after. */
-  const COVERED_FLOOR = 52;
+  /** Measured with the call-form metric: 23 before this audit, 71 (all of them) now. */
+  const COVERED_FLOOR = 71;
 
   it('the operation surface is discoverable', () => {
     // Floor: a parse failure here would make the ratchet below trivially satisfiable.
     expect(OPERATIONS.length).toBeGreaterThan(60);
   });
 
-  it('the metric does not count a mention as a call', () => {
-    // `mma_artifact_get` appears in verify.mjs's MCP roster; `artifact_register` is not called by
-    // any smoke module. If either reads as covered, the metric is counting the wrong thing and
-    // every number below is fiction.
-    expect(smokeText).toContain('mma_artifact_get');          // the mention really is there
-    expect(isCalled('artifact_get'), 'the metric counted an MCP tool-name mention as a call')
+  it('the metric counts calls, not names', () => {
+    // An operation that exists nowhere in the harness must read as uncovered. `initiative_dance`
+    // is not a real operation, so if the metric reports it as called it is matching noise.
+    expect(isCalled('initiative_dance'), 'the metric reports a nonexistent operation as covered')
       .toBe(false);
-    // And it must still see a real call.
+    // A name that appears ONLY as an MCP tool identifier is not a call of the record operation.
+    expect(smokeText).toContain('mma_artifact_get');   // the mention really is present
+    // And a genuine call must be seen.
     expect(isCalled('initiative_task_create'), 'the metric no longer detects a genuine call')
       .toBe(true);
+    expect(isCalled('artifact_get'), 'artifact_get is now genuinely called by R11').toBe(true);
   });
 
   it(`at least ${COVERED_FLOOR} operations are exercised`, () => {
