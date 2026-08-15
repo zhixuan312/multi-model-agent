@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { createProvisioningService } from '../../../packages/server/src/provisioning/service.js';
+import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
 
 /**
  * The seven contract assertions the plan requires on top of the materialized
@@ -15,7 +15,7 @@ import { createProvisioningService } from '../../../packages/server/src/provisio
  * those specific ways the guarantee can be hollow while still looking implemented.
  */
 describe('contract: durable provisioning markers and recovery — the seven guarantees', () => {
-  const onFixture = () => createProvisioningService.testFixture({
+  const onFixture = () => provisioningTestFixture({
     clients: { cursor: 'on', vscode: 'on', codex: 'on', 'claude-desktop': 'on' },
   });
 
@@ -169,7 +169,7 @@ describe('contract: durable provisioning markers and recovery — the seven guar
  * more than it repairs.
  */
 describe('contract: recovery distinguishes an unfinished operation from an unrecorded one', () => {
-  const onFixture = () => createProvisioningService.testFixture({
+  const onFixture = () => provisioningTestFixture({
     clients: { cursor: 'on', vscode: 'on', codex: 'on', 'claude-desktop': 'on' },
   });
 

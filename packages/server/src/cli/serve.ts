@@ -19,7 +19,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken, PortInUseError } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
@@ -197,7 +197,7 @@ export async function startServe(
   // (and /health) would ever read it.
   try {
     const { buildProvisioningService } = await import('../provisioning/runtime-deps.js');
-    const service = buildProvisioningService(config as unknown as ServerConfig);
+    const service = buildProvisioningService(config);
     const records = await service.inventory();
     const drift = records.filter((record) => record.status === 'failed');
     if (drift.length > 0) {

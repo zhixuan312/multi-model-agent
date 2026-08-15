@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createProvisioningService } from '../../../packages/server/src/provisioning/service.js';
+import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
 
 describe('contract: atomic provisioning and recovery', () => {
   it('rolls back safely, respects shared roots, and recovers an interrupted marker', async () => {
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on', vscode: 'on', codex: 'on', 'claude-desktop': 'on' },
       failRegistrationFor: new Set(['codex']),
     });

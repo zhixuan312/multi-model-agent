@@ -19,7 +19,7 @@ import {
   provisioningLockPath,
   ProvisioningLockTimeoutError,
 } from '../../../packages/server/src/provisioning/provisioning-lock.js';
-import { createProvisioningService } from '../../../packages/server/src/provisioning/service.js';
+import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
 
 const stateDir = () => mkdtempSync(join(tmpdir(), 'mma-lock-'));
 
@@ -108,7 +108,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
     // Counting every enabled client instead left ~/.claude/skills on disk
     // forever whenever codex happened to be on — a disable that reported
     // success and removed nothing.
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { 'claude-code': 'on', codex: 'on' },
     });
     await fixture.provisionAll();
@@ -122,7 +122,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
   });
 
   it('keeps a genuinely shared root while a sharer is still enabled', async () => {
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on', vscode: 'on' },
     });
     await fixture.provisionAll();
@@ -135,7 +135,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
   });
 
   it('removes the shared root once its last consumer leaves', async () => {
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on', vscode: 'on' },
     });
     await fixture.provisionAll();
@@ -153,7 +153,7 @@ describe('contract: the service actually takes the lock', () => {
   it('a mutation refuses while another process holds it; a read does not', async () => {
     // Testing the lock module alone proves the primitive works, not that
     // provisioning uses it — the wiring is the part that can silently regress.
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on' },
       lockOptions: { timeoutMs: 150 },
     });

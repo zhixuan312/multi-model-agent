@@ -34,13 +34,18 @@ function resolveCliEntrypoint(): string {
   return fromModule;
 }
 
-/** `config.clients` when `config` is a full `MultiModelConfig` (agents
- *  present); `undefined` for a bare `ServerConfig` (no declared roster). */
-function declaredRosterOf(config: ServerConfig): DeclaredClientRoster | undefined {
-  return (config as unknown as { clients?: DeclaredClientRoster }).clients;
-}
+/**
+ * What this builder actually needs: a server block, and OPTIONALLY the declared client roster that
+ * only a full `MultiModelConfig` carries.
+ *
+ * Declaring plain `ServerConfig` and reaching for `clients` through
+ * `config as unknown as { clients?: … }` meant one caller cast a `MultiModelConfig` DOWN to
+ * `ServerConfig` to call this, and this cast it back UP to read the field — two casts that
+ * cancelled out, with the compiler checking neither end.
+ */
+type ProvisioningConfig = ServerConfig & { clients?: DeclaredClientRoster };
 
-export function buildProvisioningService(config: ServerConfig): ProvisioningService {
+export function buildProvisioningService(config: ProvisioningConfig): ProvisioningService {
   const homeDir = homedir();
   const stateDir = expandHome(config.server.stateDir);
   const port = createRealProvisioningPort({
@@ -53,7 +58,13 @@ export function buildProvisioningService(config: ServerConfig): ProvisioningServ
   const deps: ProvisioningServiceDeps = {
     stateDir,
     port,
-    declared: declaredRosterOf(config),
+    declared: config.clients,
+    // Deliberately EMPTY, not an oversight. The daemon consumes `inventory()` for exactly one
+    // thing — filtering `status === 'failed'` for the /health drift report — and detection only
+    // ever promotes an undeclared client from 'off' to 'suggested', neither of which is 'failed'.
+    // Wiring `detectCliClients` here would add a filesystem scan to every /health for a
+    // distinction this caller discards. The CLI surface, which DOES show 'suggested', passes a
+    // real detected set (see `cli-provisioning.ts`).
     detected: new Set(),
   };
   return createProvisioningService(deps);
