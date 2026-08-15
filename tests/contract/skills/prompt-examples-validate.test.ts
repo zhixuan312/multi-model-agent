@@ -56,7 +56,9 @@ const ALTERNATE_SCHEMA: Partial<Record<SchemaRoute, SchemaRoute>> = {
 
 describe("each prompt's output example matches its refiner schema", () => {
   it('finds routes to check', () => {
-    expect(routesWithSchema.length).toBeGreaterThan(5);
+    // Eleven routes reach the assertion below. The old floor of 5 would still have passed with
+    // more than half of them silently dropped by a resolver or glob change.
+    expect(routesWithSchema.length).toBeGreaterThanOrEqual(11);
   });
 
   it.each(routesWithSchema)('%s implementer example validates', (route) => {
@@ -64,13 +66,27 @@ describe("each prompt's output example matches its refiner schema", () => {
     const raw = finalJsonExample(text);
     expect(raw, `${route}/implement.md has no fenced json output example`).not.toBeNull();
 
+    /**
+     * Parse failure is a FAILURE, not a skip.
+     *
+     * This used to `return` here, with the note "several use prose annotations inside the block.
+     * Only well-formed examples are held to the schema." Measured: all eleven examples parse, so
+     * the exemption covers nothing — and it never protected a real case, it only guaranteed that
+     * the day one stopped parsing, this test would go green instead of red. That is backwards. A
+     * prompt's output example is the shape the worker copies; an example that is not even JSON is
+     * a worse defect than one whose fields are wrong, and it was the only kind this test excused.
+     *
+     * If a genuinely prose-annotated example is ever needed, `resolvePlaceholders` is where the
+     * convention belongs — a named placeholder form that resolves, not a blanket catch.
+     */
     let parsed: unknown;
     try {
       parsed = JSON.parse(resolvePlaceholders(raw!));
-    } catch {
-      // A prompt example that is not JSON at all is out of scope here — several use prose
-      // annotations inside the block. Only well-formed examples are held to the schema.
-      return;
+    } catch (err) {
+      expect.fail(
+        `${route}/implement.md's output example is not parseable JSON after placeholder resolution `
+        + `— the worker is shown a shape it cannot copy: ${(err as Error).message}`,
+      );
     }
 
     const candidates: SchemaRoute[] = [route];

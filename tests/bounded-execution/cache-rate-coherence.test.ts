@@ -52,6 +52,26 @@ describe('cache rates stay coherent with input', () => {
     expect(PREFIXES.length).toBeGreaterThan(20);
   });
 
+  /**
+   * The floor above counts what is ITERATED; this counts what is ASSERTED.
+   *
+   * Every case below opens with `if (!card) return`, which is correct — open-weight entries publish
+   * no rates and a bare family stem is not a model anyone names — but it means a regression in
+   * `resolveRateCard` that returned null for EVERYTHING would send all 102 cases down the early
+   * return, three suites would report green, and not one rate would have been compared. The
+   * roster floor cannot see that: the roster is read straight from JSON and stays full either way.
+   *
+   * 83 of 102 resolve today. The bound is deliberately well below that, so ordinary catalog
+   * churn does not trip it while a collapse still does.
+   */
+  it('most prefixes resolve to a real card, so the cases below are not all early returns', () => {
+    const resolved = PREFIXES.filter((p) => resolveRateCard(p) != null);
+    expect(
+      resolved.length,
+      'rate resolution collapsed — every case below is returning before it asserts anything',
+    ).toBeGreaterThan(60);
+  });
+
   it.each(PREFIXES)('%s never prices a cache read above fresh input', (prefix) => {
     const card = resolveRateCard(prefix);
     // A null card is a legitimate state, not a defect: open-weight entries (phi, gemma, yi)
