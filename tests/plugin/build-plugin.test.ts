@@ -52,7 +52,7 @@ describe('buildPlugin', () => {
     // Literal, not derived from SUPPORTED_COMMANDS: computing the expectation
     // with the same prefix-stripping under test would pass no matter what the
     // builder does.
-    expect(r.commands).toEqual(['flow', 'breakout', 'tldr']);
+    expect(r.commands).toEqual(['flow', 'breakout', 'tldr', 'deck']);
     expect(r.skills.some((n) => n.startsWith('mma-'))).toBe(false);
     expect(existsSync(join(out, 'skills', 'mma-audit'))).toBe(false);
   });

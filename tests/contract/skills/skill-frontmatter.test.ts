@@ -46,6 +46,7 @@ const ACTIONABLE_SKILLS = [
   'mma-breakout',
   'mma-context-blocks',
   'mma-debug',
+  'mma-deck',
   'mma-delegate',
   'mma-execute-plan',
   'mma-explore',
@@ -66,7 +67,7 @@ const ACTIONABLE_SKILLS = [
 // intent, so the "Use when" description convention does not apply to them, and
 // each one must carry the frontmatter key that actually enforces manual
 // invocation. `when_to_use` is descriptive prose and enforces nothing.
-const COMMANDS = ['mma-flow', 'mma-breakout', 'mma-tldr'];
+const COMMANDS = ['mma-flow', 'mma-breakout', 'mma-tldr', 'mma-deck'];
 
 describe('contract: skill manifest surface', () => {
   const allSkillDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })

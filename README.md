@@ -114,7 +114,7 @@ mma plugin build --target=agent-plugin      # -> ~/.mma/plugin-agent-plugin
 ```
 
 That emits an [Agent Plugins 1.0](https://agent-plugins.org/specification) package — root
-`plugin.json`, the same 16 skills and 3 commands, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
+`plugin.json`, the same 16 skills and 4 commands, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
 so no token is ever written into the package. Codex, Cursor and VS Code read this format directly;
 Claude Code does not, and keeps its own package (`mma plugin build`, the default target). Both are
 generated from the same skills — the payload never forks.
@@ -183,7 +183,7 @@ Claude Code users can install the skills **and** the MCP server in a single step
 /plugin install mma@multi-model-agent
 ```
 
-That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 3 commands (`/mma:flow`, `/mma:breakout`, `/mma:tldr`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 4 commands (`/mma:flow`, `/mma:breakout`, `/mma:tldr`, `/mma:deck`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
 > **The plugin supersedes standalone skills automatically.** Standalone (`mma sync-skills`) is the default, but the plugin is a strict superset — skills *plus* the SDLC commands *plus* the MCP server. So once the plugin is installed, `mma sync-skills` retires the standalone Claude Code copies and pins that client off, keeping exactly one install path. Without this you'd have two copies of every skill (`/mma-audit` **and** `/mma:audit`) with near-identical descriptions, and Claude would pick between them arbitrarily.
 >

@@ -33,6 +33,7 @@ export const SUPPORTED_COMMANDS = [
   'mma-flow',
   'mma-breakout',
   'mma-tldr',
+  'mma-deck',
 ] as const;
 
 // Skills are bundled at `packages/server/src/skills/` (copied to
