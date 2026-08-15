@@ -41,6 +41,33 @@ describe('journal record decision contract', () => {
     expect(parsed[1]?.decision.kind).toBe('merge');
   });
 
+  it('takes the LAST fenced block, so a draft cannot be applied instead of the final answer', () => {
+    // This extractor took the FIRST block — the exact defect `reviewer-output-parser`'s own
+    // extractor was fixed for ("Last-JSON-block extraction prevents LLM preamble from corrupting
+    // parsed output"). The fix reached one copy of the idea and not this one.
+    //
+    // The consequence here is worse than a corrupted answer: these decisions are applied
+    // DETERMINISTICALLY to the journal graph, so an implementer that reasons in a draft block and
+    // then emits the final one had its draft written — wrong nodes created, refined, or
+    // superseded, with nothing reporting a problem.
+    const draft = [{ ...SAMPLE_DECISIONS[0], learning: 'DRAFT — superseded by the block below' }];
+    const output = [
+      'Here is my first pass:',
+      '```json',
+      JSON.stringify(draft),
+      '```',
+      'On reflection, the final decisions are:',
+      '```json',
+      JSON.stringify(SAMPLE_DECISIONS),
+      '```',
+    ].join('\n');
+
+    const parsed = parseRecordDecisions(output);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]?.learning).toBe('Use decide-then-apply.');
+    expect(parsed.some((d) => d.learning.startsWith('DRAFT')), 'the draft must never be applied').toBe(false);
+  });
+
   it('parseRecordDecisions parses bare JSON without a fence', () => {
     const parsed = parseRecordDecisions(JSON.stringify(SAMPLE_DECISIONS));
     expect(parsed).toHaveLength(2);
