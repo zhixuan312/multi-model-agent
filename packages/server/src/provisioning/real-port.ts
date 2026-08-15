@@ -180,6 +180,34 @@ function isInsideBackupsRoot(root: string, candidate: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 }
 
+/**
+ * How a JSON registration file's `mma` entry relates to this installation.
+ *
+ * `isRegistrationReachable` and `isRegistrationPresent` both needed this and each carried its own
+ * copy — identical parse, identical top-level-key resolution, identical stdio-entrypoint
+ * derivation, identical `isOwnedMcpEntry` call — differing ONLY in what an ABSENT entry means to
+ * them. Two copies of an ownership decision is two places for it to drift, in the code whose whole
+ * job is deciding what MMA may overwrite. The difference is now stated at the call sites, where it
+ * belongs, rather than by duplicating the agreement.
+ */
+type JsonRegistrationState = 'absent' | 'owned' | 'foreign';
+
+function classifyJsonRegistration(bytes: Buffer, capability: ClientCapability, ctx: RealPortContext): JsonRegistrationState {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    // Unparseable is never "absent": something is there and MMA cannot prove it owns it.
+    return 'foreign';
+  }
+  const topKey = capability.mcpTopLevelKey ?? 'mcpServers';
+  const servers = isPlainRecord(parsed) ? parsed[topKey] : undefined;
+  const mmaEntry = isPlainRecord(servers) ? servers['mma'] : undefined;
+  if (mmaEntry === undefined) return 'absent';
+  const expectedStdioEntrypoint = capability.mcpConfigFormat === 'stdio-json' ? ctx.cliEntrypoint : undefined;
+  return isOwnedMcpEntry(mmaEntry, capability.mcpConfigFormat, expectedStdioEntrypoint) ? 'owned' : 'foreign';
+}
+
 /** Builds the production `ProvisioningPort` against a real home directory. */
 export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPort {
   const skillsRoot = ctx.skillsRoot ?? getSkillsRoot();
@@ -327,17 +355,9 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
       if (capability.mcpConfigFormat === 'toml') {
         return isCodexTableOwnedOrAbsent(currentBytes.toString('utf8'));
       }
-      try {
-        const parsed: unknown = JSON.parse(currentBytes.toString('utf8'));
-        const topKey = capability.mcpTopLevelKey ?? 'mcpServers';
-        const servers = isPlainRecord(parsed) ? parsed[topKey] : undefined;
-        const mmaEntry = isPlainRecord(servers) ? servers['mma'] : undefined;
-        if (mmaEntry === undefined) return true;
-        const expectedStdioEntrypoint = capability.mcpConfigFormat === 'stdio-json' ? ctx.cliEntrypoint : undefined;
-        return isOwnedMcpEntry(mmaEntry, capability.mcpConfigFormat, expectedStdioEntrypoint);
-      } catch {
-        return false;
-      }
+      // No entry of ours is fine here: there is nothing of somebody else's to protect, and the
+      // restore this gates would simply put the prior file back.
+      return classifyJsonRegistration(currentBytes, capability, ctx) !== 'foreign';
     },
 
     isRegistrationPresent(_clientId: ClientId, capability: ClientCapability): boolean {
@@ -350,17 +370,8 @@ export function createRealProvisioningPort(ctx: RealPortContext): ProvisioningPo
         return false;
       }
       if (capability.mcpConfigFormat === 'toml') return isCodexTableOwned(bytes.toString('utf8'));
-      try {
-        const parsed: unknown = JSON.parse(bytes.toString('utf8'));
-        const topKey = capability.mcpTopLevelKey ?? 'mcpServers';
-        const servers = isPlainRecord(parsed) ? parsed[topKey] : undefined;
-        const mmaEntry = isPlainRecord(servers) ? servers['mma'] : undefined;
-        if (mmaEntry === undefined) return false;
-        const expectedStdioEntrypoint = capability.mcpConfigFormat === 'stdio-json' ? ctx.cliEntrypoint : undefined;
-        return isOwnedMcpEntry(mmaEntry, capability.mcpConfigFormat, expectedStdioEntrypoint);
-      } catch {
-        return false;
-      }
+      // "Is one of ours installed" — so no entry means NO, the opposite of what it means above.
+      return classifyJsonRegistration(bytes, capability, ctx) === 'owned';
     },
 
     packagedSkillNames(): string[] {
