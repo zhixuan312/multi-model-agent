@@ -404,7 +404,15 @@ export class ExecutionRuntime {
         : (input.reviewPolicy ?? 'reviewed');
     // Raw caller intent: undefined when omitted. Journal routes force review only when the
     // caller explicitly asked for it; otherwise the deterministic invariants decide.
-    const callerForcedReview = input.reviewPolicy === 'reviewed';
+    //
+    // Gated on the RESOLVED policy, because `forceReview` short-circuits AHEAD of the policy check
+    // in the pipeline (`forceReview === true ? false : …`). Ungated, `{type:'orchestrate',
+    // reviewPolicy:'reviewed'}` — a valid request, since `reviewPolicy` is on commonFields — ran a
+    // reviewer on the one route that forces `none`. That emitted a `review` stage, which wire rule
+    // R9 rejects for orchestrate, so the uploader dropped the ENTIRE event for that execution to a
+    // stderr line. The type's own reviewer prompt says "this reviewer is never invoked at runtime";
+    // this makes that true.
+    const callerForcedReview = reviewPolicy !== 'none' && input.reviewPolicy === 'reviewed';
 
     // SPEC-003 B6 round-2 defect A: linked-admission validation runs as a PURE READ-ONLY phase
     // — `validateLinkedTask` — BEFORE the execution handle exists at all. A prior version ran

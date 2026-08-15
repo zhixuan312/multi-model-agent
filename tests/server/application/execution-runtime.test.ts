@@ -408,6 +408,50 @@ describe('ExecutionRuntime', () => {
    * `method`, so it must still load the generic `implement.md` and resolve no Method, never a
    * software-specific asset or guidance it inferred on its own.
    */
+  /**
+   * `orchestrate` forces `reviewPolicy: 'none'`, and its own reviewer prompt says "this reviewer is
+   * never invoked at runtime". It was invocable.
+   *
+   * `reviewPolicy` lives on commonFields, so `{ type: 'orchestrate', reviewPolicy: 'reviewed' }` is
+   * a valid request. `callerForcedReview` was computed from the RAW input and passed as
+   * `forceReview` for every type, and the pipeline checks `forceReview === true ? false : …` BEFORE
+   * consulting the resolved policy — so the reviewer ran on the one route that forces it off.
+   *
+   * The cost landed in telemetry: that run emits a `review` stage, wire rule R9 rejects a review
+   * stage on `orchestrate`, and `TelemetryUploader.receive` swallows the throw — so the entire
+   * event for that execution was dropped to a stderr line.
+   */
+  it('ignores reviewPolicy: reviewed on orchestrate, which forces none', async () => {
+    let sessionsOpened = 0;
+    const countingProvider: Provider = {
+      name: 'mock:counting',
+      config: { type: 'codex', model: 'mock', baseUrl: 'http://mock.local' } as Provider['config'],
+      openSession(_opts: SessionOpts): Session {
+        sessionsOpened += 1;
+        return {
+          async send(): Promise<TurnResult> { return okTurn('{"answer":"coordinated"}'); },
+          async close(): Promise<void> { /* no-op */ },
+          getSessionId(): string | null { return null; },
+        };
+      },
+    };
+
+    const runtime = new ExecutionRuntime({
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
+      resolveAgentFn: resolverFor(countingProvider),
+    });
+
+    const outcome = await runtime.submit(
+      { type: 'orchestrate', prompt: 'coordinate the phases', reviewPolicy: 'reviewed' } as never,
+      { clientName: 'claude-code', projectRoot: cwd },
+    );
+    expect(outcome.ok).toBe(true);
+    await waitTerminal(executionRegistry, (outcome as { ok: true; executionId: string }).executionId);
+
+    // One session: the implementer. A second is the reviewer this type forbids.
+    expect(sessionsOpened, 'a reviewer session opened on orchestrate').toBe(1);
+  });
+
   it('never infers a Method from a git-repo cwd full of source files — omitted method loads the generic implementer', async () => {
     execFileSync('git', ['init', '-q'], { cwd });
     execFileSync('git', ['config', 'user.email', 't@t'], { cwd });
