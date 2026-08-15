@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { startTestServerWithAgents, TEST_CONTEXT_BLOCK_CAP } from '../../../helpers/test-server-with-agents.js';
+import { startTestServerWithAgents, TEST_CONTEXT_BLOCK_CAP, buildTestAgentConfig } from '../../../helpers/test-server-with-agents.js';
 
 /**
  * Returns a canonical (symlink-resolved) temp directory path.
@@ -384,5 +384,42 @@ describe('maxContextBlocksPerProject bounds the store itself, not just the handl
     } finally {
       await s.stop();
     }
+  });
+});
+
+/**
+ * The helper's merge must be as deep as its type claims.
+ *
+ * `buildTestAgentConfig` takes a `DeepPartial<MultiModelConfig>` and merged only `server` and
+ * `server.limits` by hand, replacing `agents` and `server.auth` wholesale. Two traps followed. Loud:
+ * `{agents:{standard:{…}}}` typechecks and drops complex+main, throwing at `assertRunnable`. Silent
+ * and worse: overriding all three tiers partially typechecks and yields tiers with no `type` —
+ * `assertRunnable` checks only that each tier KEY exists, never its contents, so the server starts
+ * and the provider factory receives `type: undefined`.
+ */
+describe('the test config helper merges deeply', () => {
+  it('overriding one tier keeps the other two', () => {
+    // A partial tier (`{ model }` with no `type`) does NOT typecheck — DeepPartial does not recurse
+    // into the tier's discriminated union, so `type` stays required, and that trap is closed by the
+    // type rather than by the merge. What the merge must still get right is the SIBLING tiers: a
+    // wholesale replacement of `agents` drops complex and main and throws at assertRunnable.
+    const config = buildTestAgentConfig({
+      agents: { standard: { type: 'codex', model: 'custom-model' } },
+    });
+    expect(config.agents?.complex, 'complex was dropped by a shallow merge').toBeDefined();
+    expect(config.agents?.main, 'main was dropped by a shallow merge').toBeDefined();
+    expect(config.agents?.standard?.model).toBe('custom-model');
+  });
+
+  it('a partial auth override keeps tokenFile', () => {
+    const config = buildTestAgentConfig({ server: { auth: {} } });
+    expect(config.server?.auth?.tokenFile, 'auth was replaced wholesale').toBeDefined();
+  });
+
+  it('an unrelated limit override still keeps stateDir and the other limits', () => {
+    const config = buildTestAgentConfig({ server: { limits: { maxContextBlockBytes: 1024 } } });
+    expect(config.server?.limits?.maxContextBlockBytes).toBe(1024);
+    expect(config.server?.limits?.projectCap).toBeDefined();
+    expect(config.server?.stateDir).toBeDefined();
   });
 });

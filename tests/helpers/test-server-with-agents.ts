@@ -69,20 +69,40 @@ export function buildTestAgentConfig(overrides: DeepPartial<MultiModelConfig> = 
     },
   };
 
-  return {
-    ...base,
-    ...overrides,
-    // `server` MERGED, not replaced. A top-level spread meant overriding one limit silently
-    // dropped `auth.tokenFile`, `stateDir` and every other limit, so the practical effect was
-    // that limits could not be overridden at all — and a 413 test then asserted the DEFAULT
-    // 512KB cap, which cannot tell an enforced config value from a hardcoded constant.
-    // (`test-server.ts`, the sibling helper, has deep-merged since it was written.)
-    server: {
-      ...base.server,
-      ...overrides.server,
-      limits: { ...base.server.limits, ...overrides.server?.limits },
-    },
-  } as MultiModelConfig;
+  // Deep merge at EVERY node, because the signature is a DeepPartial and must not lie.
+  //
+  // This spread `server` and `server.limits` by hand — which fixed the original bug (a top-level
+  // spread silently dropped `auth.tokenFile`, `stateDir` and every other limit) but left `agents`
+  // and `server.auth` replaced WHOLESALE. Two traps followed. Loud: `{agents:{standard:{…}}}`
+  // typechecks and drops complex+main, throwing at `assertRunnable`. Silent and worse:
+  // `{agents:{standard:{…},complex:{…},main:{…}}}` typechecks and yields tiers with no `type` —
+  // and `assertRunnable` only checks that each tier KEY exists, never its contents, so the server
+  // starts and the provider factory receives `type: undefined`.
+  //
+  // A recursive merge is the only version that matches what `DeepPartial` promises, and it
+  // subsumes the hand-written cases rather than adding to them.
+  return deepMerge(base as unknown as Record<string, unknown>, overrides as Record<string, unknown>) as unknown as MultiModelConfig;
+}
+
+/** Recursive merge; arrays and non-objects replace, plain objects merge. */
+function deepMerge(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const key of Object.keys(override)) {
+    const overrideVal = override[key];
+    const baseVal = result[key];
+    if (
+      overrideVal !== null && typeof overrideVal === 'object' && !Array.isArray(overrideVal) &&
+      baseVal !== null && typeof baseVal === 'object' && !Array.isArray(baseVal)
+    ) {
+      result[key] = deepMerge(baseVal as Record<string, unknown>, overrideVal as Record<string, unknown>);
+    } else if (overrideVal !== undefined) {
+      result[key] = overrideVal;
+    }
+  }
+  return result;
 }
 
 export interface TestServerWithAgents {
