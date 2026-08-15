@@ -2,6 +2,7 @@
 // IDE, a script. Recording a flat `mcp` in telemetry would erase which one it
 // was, defeating the purpose of the `client` column.
 import { callerClientFromMeta } from '../../packages/server/src/mcp/mcp-adapter.js';
+import { STRICT_ID_REGEX } from '../../packages/core/src/events/wire-schema.js';
 
 const CLIENT_INFO = 'io.modelcontextprotocol/clientInfo';
 
@@ -27,9 +28,13 @@ describe('MCP caller attribution', () => {
   });
 
   it('every produced value satisfies the wire schema client regex', () => {
-    // packages/core/src/events/wire-schema.ts STRICT_ID_REGEX — a value that
-    // fails this would be dropped at telemetry validation.
-    const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
+    // IMPORTED from `wire-schema.ts`, not retyped. A local copy passes forever against the
+    // pattern it was copied from: tighten the real one and this keeps agreeing with the old
+    // shape, which is exactly the case where a produced value would start being dropped at
+    // telemetry validation with nothing red here.
+    //
+    // `TaskCompletedEventSchema.client` applies this same regex, so a value failing it never
+    // reaches the backend.
     const names = ['claude-code', 'codex-cli', 'Cursor', 'some very long client name', '', '!!!'];
     for (const name of names) {
       const produced = callerClientFromMeta({ [CLIENT_INFO]: { name } });
