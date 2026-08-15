@@ -12,7 +12,6 @@ export function normalizeClaudeTurn(
   events: SDKMessage[],
   args: {
     durationMs: number;
-    costUSD: number;
     guardTerminationReason?: TurnResult['terminationReason'];
   },
 ): TurnResult {
@@ -103,7 +102,9 @@ export function normalizeClaudeTurn(
     toolCalls,
     turns,
     durationMs: args.durationMs,
-    costUSD: args.costUSD,
+    // Priced by the caller, which is where the rate card is resolved. This took a `costUSD`
+    // argument that every caller passed as 0 and the one production caller then overwrote.
+    costUSD: 0,
     terminationReason: finalTermination,
     ...(errorCode && { errorCode }),
     ...(errorMessage && { errorMessage }),

@@ -405,3 +405,43 @@ describe('codex killGracefully — signals the whole process group', () => {
     expect(killCalls.some(([pid, sig]) => pid === -54321 && sig === 'SIGKILL')).toBe(true);
   });
 });
+
+/**
+ * The observability event must report the same tokens the TurnResult does.
+ *
+ * `absorbUsage` spends fifteen lines explaining that codex's `input_tokens` is GROSS — it
+ * INCLUDES `cached_input_tokens` — and that our contract needs the disjoint Anthropic shape.
+ * The `codex_turn_completed` bus event then emitted the raw gross number under the field name
+ * `inputTokens`, beside a `cachedInputTokens` that is a SUBSET of it rather than a sibling.
+ *
+ * The claude runner emits the NORMALIZED figure on its own `claude_turn_completed`. So the
+ * same field, on the same event family, meant two different things depending on which runner
+ * ran the task — and the operator reading the log saw a larger input count than the run was
+ * billed on, in exactly the shape this file exists to warn about.
+ */
+describe('codex turn_completed event agrees with the recorded usage', () => {
+  it('logs the NET input tokens and the disjoint cached count, not the gross figure', () => {
+    const entries: Array<Record<string, unknown>> = [];
+    const bus = { emitPlainEntry: (e: unknown) => { entries.push(e as Record<string, unknown>); } };
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative, bus);
+
+    tracker.consume(turnCompletedEvent({
+      input_tokens: 1000,          // GROSS: includes the 800 cached below
+      cached_input_tokens: 800,
+      output_tokens: 50,
+      reasoning_output_tokens: 25,
+    }));
+
+    const recorded = tracker.flushUsageDelta();
+    expect(recorded).toEqual({ inputTokens: 200, outputTokens: 75, cachedReadTokens: 800, cachedNonReadTokens: 0 });
+
+    const event = entries.find((e) => JSON.stringify(e).includes('codex_turn_completed'))!;
+    const fields = JSON.stringify(event);
+    // The log must carry 200, the number the run is billed on — never the gross 1000.
+    expect(fields).toContain('200');
+    expect(fields).not.toMatch(/"inputTokens":\s*1000/);
+    expect(fields).toContain('800');
+    expect(fields).toContain('75');
+  });
+});

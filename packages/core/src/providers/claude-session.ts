@@ -268,7 +268,6 @@ export class ClaudeSession implements Session {
     const guardReason = aborted ? 'aborted' as const : timedOut ? 'time_exceeded' as const : undefined;
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
-      costUSD: 0,
       ...(guardReason ? { guardTerminationReason: guardReason } : {}),
     });
     if (!norm.errorCode) {
@@ -281,8 +280,10 @@ export class ClaudeSession implements Session {
       turn: turnIndex,
       inputTokens: norm.usage.inputTokens,
       outputTokens: norm.usage.outputTokens,
-      cachedReadTokens: norm.usage.cachedReadTokens ?? 0,
-      cachedNonReadTokens: norm.usage.cachedNonReadTokens ?? 0,
+      // No `?? 0`: all four TokenUsage fields are required numbers, and the normalizer
+      // initialises every one of them before it returns.
+      cachedReadTokens: norm.usage.cachedReadTokens,
+      cachedNonReadTokens: norm.usage.cachedNonReadTokens,
       terminationReason: norm.terminationReason,
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),
