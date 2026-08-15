@@ -166,7 +166,7 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
    with **no shell metacharacters** (`| & ; < > $ \` ( )` or quotes).
 5. **Each declared check's `Check:` path is a NEW dedicated file** — never the task's own `**Output:**`
    path — and it sits under one of `tests`, `test`, `spec`, `specs`, `checks`, `__tests__`, `src/test`,
-   relative to the repository root. For a non-code deliverable use `checks/`; a directory named `tests` is the
+   relative to the SUBMITTED CWD — which is the directory execute_plan runs in, not necessarily the repository root (in a multi-repo workspace they differ, and the validator's own error says "relative to the submitted cwd"). For a non-code deliverable use `checks/`; a directory named `tests` is the
    wrong word for a check that reconciles figures against a source ledger. A task with no deterministic check declares no Checks section at all; that is not an error.
 6. **Human-executable phases and granularity** as above.
 7. **Conditional tasks** depending on an external prerequisite are marked BLOCKED with the unblocking

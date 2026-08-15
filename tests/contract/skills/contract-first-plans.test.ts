@@ -317,3 +317,24 @@ describe('the plan pair references only things it defines', () => {
     }
   });
 });
+
+/**
+ * Check paths resolve against the SUBMITTED CWD, not the repository root.
+ *
+ * `implement.md` said a declared check "sits under one of tests/… relative to the repository root".
+ * `contract-plan.ts` resolves against the cwd the caller submitted, and its own rejection message
+ * says so ("relative to the submitted cwd"). The two coincide in a single-repo checkout and diverge
+ * in exactly the setup this workspace uses — a parent directory over sibling repos — where a plan
+ * written to the doc's rule puts its check somewhere the validator will not accept.
+ */
+describe('the check-path base is the submitted cwd', () => {
+  it('the prompt says cwd, not repository root', () => {
+    expect(planImpl).not.toMatch(/relative to the repository root/);
+    expect(planImpl).toMatch(/relative to the SUBMITTED CWD/);
+  });
+
+  it('the validator agrees', () => {
+    const validator = readFileSync('packages/core/src/unified/contract-plan.ts', 'utf8');
+    expect(validator).toMatch(/relative to the submitted cwd/);
+  });
+});
