@@ -568,8 +568,8 @@ content. The contract classifies nothing: `kind` is free-form, not drawn from a 
 Separately, every task type optionally carries `method`: a registered **Method** identifier
 (`<name>@<version>`, e.g. `software-change@1`) from the Method Registry, a small catalog of
 procedures (software change, research, solution design, architecture review, workflow design, source
-validation, risk analysis, technical writing, regulatory assessment) each with committed guidance the
-engine injects into both the implementer's and reviewer's prompts. An unregistered identifier is
+validation, risk analysis, technical writing, regulatory assessment, intent to initiative) each with
+committed guidance the engine injects into both the implementer's and reviewer's prompts. An unregistered identifier is
 rejected synchronously (`unknown_method`, HTTP 400) before any execution starts. Omitting `method`
 loads the generic, deliverable-neutral skill. See
 [docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
@@ -586,12 +586,12 @@ mma mcp install claude-code     # or any other ClientId — see the client table
 ```
 
 Seven tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema
-the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`,
-`mma_task_list`, `mma_task_cancel`, `mma_context_block_create`, `mma_context_block_delete`. `mma_run`
+the REST endpoint validates, generated from one source), `mma_execution_get`, `mma_execution_wait`,
+`mma_execution_list`, `mma_execution_cancel`, `mma_context_block_create`, `mma_context_block_delete`. `mma_run`
 returns short task results inline and a handle for long ones; a task submitted over MCP is pollable
 over REST and vice versa — one runtime, two transports.
 
-Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_task_list` answers "what is running right now?" — the question you cannot ask when you no longer hold a taskId — optionally narrowed to one project.
+Every reference to a task names it. The handle is `{ executionId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_execution_list` answers "what is running right now?" — the question you cannot ask when you no longer hold an executionId — optionally narrowed to one project.
 
 **Claude Desktop** speaks stdio rather than HTTP, so it connects through a bridge instead:
 
@@ -599,7 +599,7 @@ Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a
 mma mcp install claude-desktop     # writes Claude Desktop's MCP config (MCP only — no skills), then relaunch Desktop
 ```
 
-`mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_task_wait` must not block the monitor's own polls.
+`mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_execution_wait` must not block the monitor's own polls.
 
 #### Execution monitor (MCP Apps)
 
