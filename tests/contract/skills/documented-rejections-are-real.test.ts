@@ -167,3 +167,29 @@ describe('the documented status set matches the store', () => {
     }
   });
 });
+
+/**
+ * A documented list of error codes must contain the ones the preprocessor throws.
+ *
+ * `mma-execute-plan` listed four pre-dispatch codes and omitted two the preprocessor raises before
+ * any worker starts: `plan_not_found` and `no_match`. Those are the two a caller hits most — a
+ * mistyped path, and a `tasks[]` selector that matches nothing — and a caller who trusts the list
+ * treats an unlisted code as an engine bug rather than their own input.
+ *
+ * Derived from the preprocessor source, so a new failure mode has to be documented or this fails.
+ */
+describe('execute_plan documents every pre-dispatch failure code', () => {
+  it('names each PreprocessFailure the preprocessor can raise', () => {
+    const preprocessor = readFileSync(
+      'packages/server/src/application/preprocessors/execute-plan.ts',
+      'utf8',
+    );
+    const codes = [...preprocessor.matchAll(/new PreprocessFailure\('([a-z_]+)'/g)].map((m) => m[1]!);
+    expect(codes.length, 'no PreprocessFailure found — has the preprocessor moved?').toBeGreaterThan(0);
+
+    const doc = readFileSync('packages/server/src/skills/mma-execute-plan/SKILL.md', 'utf8');
+    for (const code of new Set(codes)) {
+      expect(doc, `the skill never documents the pre-dispatch code '${code}'`).toContain(code);
+    }
+  });
+});

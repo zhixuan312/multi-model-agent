@@ -26,7 +26,7 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 - `failed` means the route could not RUN or could not DELIVER: plan unreadable/malformed,
   acceptance-test materialization failure, a dead implementer turn, cancellation, or a failed
   commit. If you see `failed`, something broke — otherwise read the concerns and review the diff.
-- Pre-dispatch/materialization failures surface as specific terminal error codes: `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`, and `test-path-collision`.
+- Pre-dispatch/materialization failures surface as specific terminal error codes: `plan_not_found` (the path does not resolve), `no_match` (no `tasks[]` selector matched a plan task — the message lists the available ids), `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`, and `test-path-collision`.
 
 ## When to Use
 

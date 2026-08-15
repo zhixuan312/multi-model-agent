@@ -102,7 +102,7 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you find yourself readi
 ❌ **Asking for a fix instead of an answer**
 > prompt: "Refactor the auth middleware to use JWT"
 
-The investigator can't write — `tools: 'readonly'`. **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
+The investigator can't write — the route is registered `sandbox: 'read-only'`, so the engine denies every write tool (there is no `tools` request field). **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
 
 ❌ **Inline-reading instead of delegating**
 About to `Read` 3+ files just to answer one question? That's the wrong tradeoff — the worker reads on its cheap budget; you read its synthesis on yours.
