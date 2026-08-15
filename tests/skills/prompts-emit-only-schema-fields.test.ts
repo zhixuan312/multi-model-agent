@@ -172,3 +172,32 @@ describe('the journal_record reviewer describes its real invocation path', () =>
     expect(pipeline).toMatch(/applied !== undefined \? applied\.invariantsPassed/);
   });
 });
+
+/**
+ * The review prompt is diff-relative, and nothing supplies a diff.
+ *
+ * Its headline discipline is "did this change introduce the defect", and two of its ten failure
+ * categories require knowing what changed. But the review input is `prompt` + `target` — no diff,
+ * no base ref, no changed-file set — and `writeRoute: false` means the pipeline captures no
+ * baseline, so nothing about HEAD ever reaches the prompt. Read-only git (`status`/`log`/`diff`/
+ * `show`) is permitted by `git-policy.ts` and neither prompt mentioned it, so the classification
+ * the review exists to make was guesswork.
+ */
+describe('the review implementer knows how to get its change-set', () => {
+  const implement = readFileSync('packages/core/src/skills/review/implement.md', 'utf8');
+
+  it('tells the worker to derive the diff itself', () => {
+    expect(implement).toMatch(/git diff/);
+    expect(implement, 'must say the request carries no diff').toMatch(/carries a diff|no diff/i);
+  });
+
+  it('handles the case where no change-set exists', () => {
+    expect(implement).toMatch(/non-git target|clean tree/i);
+  });
+
+  it('git diff is actually permitted for a worker', () => {
+    // Premise: if the policy tightens, this instruction becomes the bug.
+    const policy = readFileSync('packages/core/src/providers/git-policy.ts', 'utf8');
+    expect(policy).toMatch(/ALLOWED_GIT_SUBCOMMANDS[^;]*'diff'/s);
+  });
+});

@@ -71,7 +71,16 @@ area tells you which lens to weight, but every review must sweep the full taxono
    break.** This is the highest-value cross-material work for a review.
 
 3. **PRE-EXISTING-DEFECT-VS-NEW-REGRESSION** — A defect exists in the named material but the change did
-   not introduce it. Do NOT blame the change for prior defects: report them with
+   not introduce it.
+
+   **Establish the change-set first.** Nothing in the request carries a diff: the review input is
+   `prompt` + `target`, and the engine captures no baseline for a read route. Read-only git IS
+   available to you (`status`, `log`, `diff`, `show`), so on a git target run `git diff` — and
+   `git log -1` for context — to see what actually changed before classifying anything. If the
+   caller supplied a diff in the prompt or a context block, that is the change-set and you need not
+   derive one. If neither is available (a non-git target, or a clean tree), say so in your notes and
+   mark every finding `preExisting: false` only where the named material itself shows the defect;
+   do not guess at authorship. Do NOT blame the change for prior defects: report them with
    `preExisting: true`. Conversely, if the change DID introduce or worsen a defect, report it with
    `preExisting: false`. Clean separation is critical, and that boolean is where it lives.
 
