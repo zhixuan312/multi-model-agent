@@ -3716,6 +3716,9 @@ export class InitiativeRecordStore implements InitiativeRepository {
     const result = spawnSync(program, args, {
       cwd,
       shell: false,
+      // A verification command is an arbitrary console program. Without this, running one on
+      // Windows pops a console window per criterion.
+      windowsHide: true,
       encoding: 'utf8',
       timeout: VERIFICATION_RUN_TIMEOUT_MS,
       maxBuffer: VERIFICATION_RUN_MAX_BUFFER_BYTES,

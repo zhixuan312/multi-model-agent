@@ -1,20 +1,27 @@
 // Regression guard for the Windows console-window flashing bug.
 //
-// On Windows, child_process spawns a visible console window for each console
-// binary (git.exe, codex.exe) unless `windowsHide: true` is passed. When the
-// mma daemon has no attached console, every unhidden git spawn pops a
-// window — the "flashing shell window" users reported on 4.7.10/4.7.11.
+// On Windows, child_process spawns a visible console window for each console binary unless
+// `windowsHide: true` is passed. When the mma daemon has no attached console, every unhidden spawn
+// pops a window — the "flashing shell window" users reported on 4.7.10/4.7.11.
 //
-// This test scans BOTH published source trees for every child_process invocation of a console
-// binary and fails if the call does not carry `windowsHide: true`. It is a source-text tripwire,
-// not a runtime check — a spawn added without the flag fails CI on every platform.
+// This is a source-text tripwire, not a runtime check: a spawn added without the flag fails CI on
+// every platform.
 //
-// It scanned only packages/core/src, and the regression had already recurred outside it:
-// `packages/server/src/cli/initiative-import-bootstrap.ts` spawned `git remote get-url origin`
-// with no flag, on a path that is NOT platform-gated, while this test stayed green. Two of the
-// four unguarded spawns it now covers (`ps`, `lsof` in daemon-control) are genuinely win32-gated
-// and could never flash; they carry the flag anyway, because a rule with no exceptions is easier
-// to keep than one with a list of them — and the tripwire can then be absolute.
+// It has now been too narrow TWICE, each time in the same way — a hand-written list.
+//
+//   1. It scanned only `packages/core/src`, while the regression sat in
+//      `packages/server/src/cli/initiative-import-bootstrap.ts`. Fixed by scanning both trees.
+//   2. It matched only a LITERAL first argument from the list `git|ps|lsof`, so every spawn whose
+//      binary is a variable was invisible — and seven were unguarded, including the two that matter
+//      most: `two-phase-pipeline.ts`'s acceptance-command runner (one window per acceptance check,
+//      on the main execute_plan path) and `sqlite-store.ts`'s verification-command runner. Its own
+//      header named `codex.exe` as a flashing binary while the pattern never looked for it.
+//
+// So the roster is no longer written down. Every call to a name imported from `node:child_process`
+// — or from `cross-spawn`, which codex-cli-session uses — must carry the flag, with no exceptions
+// for POSIX-only binaries: `ps`/`lsof` are never reached on Windows but carry it anyway, because a
+// rule with no exceptions is easier to keep than one with a list of them, and the tripwire can then
+// be absolute.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,56 +46,95 @@ function walk(dir: string): string[] {
 // form used by repo-commit.ts — called with a literal console-binary first argument. `git` is the
 // one that reaches Windows; `ps`/`lsof` are POSIX-only but are still ATTEMPTED there, and an
 // attempted spawn is what flashes the window.
-const CONSOLE_SPAWN =
-  /\b(?:spawnSync|spawn|execFileSync|execFileAsync|execFile|exec)\(\s*['"](git|ps|lsof)['"]/g;
-
-describe('console-binary spawns set windowsHide (Windows flash guard)', () => {
-  const files = SCANNED_ROOTS.flatMap(walk);
-
-  it('finds at least one git spawn (sanity: the scan actually matches)', () => {
-    const total = files.reduce(
-      (n, f) => n + (readFileSync(f, 'utf8').match(CONSOLE_SPAWN)?.length ?? 0),
-      0,
-    );
-    expect(total).toBeGreaterThan(0);
-  });
-
-  it('every git spawn passes windowsHide: true', () => {
-    const offenders: string[] = [];
-
-    for (const file of files) {
-      const src = readFileSync(file, 'utf8');
-      for (const m of src.matchAll(CONSOLE_SPAWN)) {
-        const start = m.index ?? 0;
-        // Window = up to the NEXT git spawn or 400 chars, whichever comes
-        // first — long enough to cover multi-line option objects, short
-        // enough not to borrow a sibling call's flag. Search past the current
-        // call's own `('git'` token so we don't truncate at it.
-        const afterThisCall = start + m[0].length;
-        // Bound the window at the next spawn of ANY scanned binary, in either quote style —
-        // anchoring on one spelling let `spawn( "git"` borrow a sibling call's flag.
-        const nextMatch = (() => {
-          CONSOLE_SPAWN.lastIndex = afterThisCall;
-          const next = CONSOLE_SPAWN.exec(src);
-          const at = next?.index ?? -1;
-          CONSOLE_SPAWN.lastIndex = 0;
-          return at;
-        })();
-        const end = Math.min(
-          src.length,
-          nextMatch === -1 ? start + 400 : nextMatch,
-        );
-        const slice = src.slice(start, end);
-        if (!/windowsHide\s*:\s*true/.test(slice)) {
-          const line = src.slice(0, start).split('\n').length;
-          offenders.push(`${file}:${line}`);
-        }
+/**
+ * The child_process (or cross-spawn) names a file imports, so the scan follows what the FILE
+ * actually calls rather than a list of binaries someone remembered.
+ */
+function spawnNamesFor(src: string): string[] {
+  const names = new Set<string>();
+  for (const m of src.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'(?:node:child_process|cross-spawn)'/g)) {
+    for (const raw of m[1]!.split(',')) {
+      const name = raw.trim().replace(/^type\s+/, '').split(/\s+as\s+/).pop()!.trim();
+      // `ChildProcess` and friends are TYPES — they are never called.
+      if (name && /^(spawn|spawnSync|exec|execSync|execFile|execFileSync|execFileAsync)$/.test(name)) {
+        names.add(name);
       }
     }
+  }
+  // cross-spawn's default import is the spawn function itself.
+  for (const m of src.matchAll(/import\s+(\w+)\s+from\s+'cross-spawn'/g)) names.add(m[1]!);
+  return [...names];
+}
+
+/**
+ * The index just past the call's closing paren, by matching parens from the opening one.
+ *
+ * A fixed character window was wrong in both directions: too short and it misses the flag (the
+ * codex spawn carries a ~20-line comment inside its options object before reaching `windowsHide`,
+ * so 700 chars failed a call that IS guarded), too long and one call borrows the next one's flag.
+ * Matching the parens is exact, and it is what "this call's options" actually means. Quotes are
+ * tracked so a paren inside a string argument does not close the call early.
+ */
+function callEnd(src: string, openParen: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = openParen; i < src.length; i += 1) {
+    const c = src[i]!;
+    if (quote) {
+      if (c === '\\') { i += 1; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return src.length;
+}
+
+/** Every (file, line, callText) triple where such a name is invoked. */
+function spawnCalls(): { file: string; line: number; slice: string }[] {
+  const out: { file: string; line: number; slice: string }[] = [];
+  for (const file of SCANNED_ROOTS.flatMap(walk)) {
+    const src = readFileSync(file, 'utf8');
+    const names = spawnNamesFor(src);
+    if (names.length === 0) continue;
+    const pattern = new RegExp(`\\b(?:${names.join('|')})\\(`, 'g');
+    for (const m of src.matchAll(pattern)) {
+      const start = m.index ?? 0;
+      out.push({
+        file,
+        line: src.slice(0, start).split('\n').length,
+        slice: src.slice(start, callEnd(src, start + m[0].length - 1)),
+      });
+    }
+  }
+  return out;
+}
+
+describe('console-binary spawns set windowsHide (Windows flash guard)', () => {
+  const calls = spawnCalls();
+
+  it('finds the spawn sites (sanity: the scan actually matches)', () => {
+    // Floor. The previous version asserted `> 0`, which a pattern matching one file would satisfy
+    // while missing six. There are 12 across both trees today.
+    expect(calls.length).toBeGreaterThanOrEqual(10);
+    // And it must reach BOTH trees — the first miss was an entire package going unscanned.
+    expect(calls.some((c) => c.file.includes('packages/core/src'))).toBe(true);
+    expect(calls.some((c) => c.file.includes('packages/server/src'))).toBe(true);
+  });
+
+  it('every child_process spawn passes windowsHide: true', () => {
+    const offenders = calls
+      .filter((c) => !/windowsHide\s*:\s*true/.test(c.slice))
+      .map((c) => `${c.file}:${c.line}`);
 
     expect(
       offenders,
-      `console-binary spawn(s) missing windowsHide: true (Windows console flash):\n${offenders.join('\n')}`,
+      `spawn(s) missing windowsHide: true (Windows console flash):\n${offenders.join('\n')}`,
     ).toEqual([]);
   });
 });

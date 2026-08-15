@@ -144,7 +144,7 @@ export function detectPackageManager(deps: {
 function defaultHasCommand(cmd: string): boolean {
   try {
     const probe = process.platform === 'win32' ? 'where' : 'which';
-    execFileSync(probe, [cmd], { stdio: 'ignore' });
+    execFileSync(probe, [cmd], { stdio: 'ignore', windowsHide: true });
     return true;
   } catch {
     return false;
@@ -419,7 +419,7 @@ function indent(s: string): string {
 
 function defaultRunInstall(command: string[]): { ok: boolean; output: string } {
   const [cmd, ...args] = command;
-  const res = spawnSync(cmd as string, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const res = spawnSync(cmd as string, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   return {
     ok: res.status === 0,
     output: `${res.stdout ?? ''}${res.stderr ?? ''}`.trim(),
@@ -429,7 +429,7 @@ function defaultRunInstall(command: string[]): { ok: boolean; output: string } {
 function defaultReexec(argv: string[]): number {
   // Same reason startDaemonDetached forwards them: the entry point is whatever
   // this process was loaded from, and bare `node` cannot run all of them.
-  const res = spawnSync(process.execPath, [...inheritableExecArgv(process.execArgv), ...argv], { stdio: 'inherit' });
+  const res = spawnSync(process.execPath, [...inheritableExecArgv(process.execArgv), ...argv], { stdio: 'inherit', windowsHide: true });
   return res.status ?? UpdateExitCode.ERR_INSTALL;
 }
 
@@ -438,11 +438,11 @@ function defaultUpdatePlugin(pluginKey: string): { ran: boolean; ok: boolean; ou
   const marketplace = pluginKey.split('@')[1];
   const out: string[] = [];
   if (marketplace) {
-    const a = spawnSync('claude', ['plugin', 'marketplace', 'update', marketplace], { encoding: 'utf8' });
+    const a = spawnSync('claude', ['plugin', 'marketplace', 'update', marketplace], { encoding: 'utf8', windowsHide: true });
     out.push(`${a.stdout ?? ''}${a.stderr ?? ''}`.trim());
     if (a.status !== 0) return { ran: true, ok: false, output: out.join('\n').trim() };
   }
-  const b = spawnSync('claude', ['plugin', 'update', pluginKey], { encoding: 'utf8' });
+  const b = spawnSync('claude', ['plugin', 'update', pluginKey], { encoding: 'utf8', windowsHide: true });
   out.push(`${b.stdout ?? ''}${b.stderr ?? ''}`.trim());
   return { ran: true, ok: b.status === 0, output: out.join('\n').trim() };
 }

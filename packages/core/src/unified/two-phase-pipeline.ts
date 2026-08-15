@@ -43,7 +43,7 @@ const defaultRunAcceptanceCommand: RunAcceptanceCommand = (command, cwd) =>
     const parts = command.trim().split(/\s+/);
     const cmd = parts[0] ?? '';
     const args = parts.slice(1);
-    execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
       const exitCode = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0;
       resolve({ exitCode, stdout: String(stdout), stderr: String(stderr) });
     });
