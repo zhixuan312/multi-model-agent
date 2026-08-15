@@ -6,7 +6,7 @@ import okGolden from '../goldens/endpoints/register-context-block-ok.json' with 
 import invalidGolden from '../goldens/endpoints/register-context-block-invalid.json' with { type: 'json' };
 
 describe('contract: POST /context-blocks', () => {
-  it('valid body returns 200 with golden shape', async () => {
+  it('valid body returns 201 with golden shape', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await fetch(
