@@ -68,6 +68,34 @@ describe('redactSecrets', () => {
     expect(out.b.c).toContain('[REDACTED');
   });
 
+  /**
+   * The specific marker, not just "something was redacted".
+   *
+   * Every GitHub/GitLab case above asserts `toContain('[REDACTED')` — a prefix that
+   * `[REDACTED-API-KEY]` and `[REDACTED-AWS-KEY]` satisfy too. So a token redacted by the WRONG
+   * pattern passed, and the invariant the source states outright ("Redacted before Bearer so a
+   * `Bearer ghp_…` still collapses to a GitHub marker") had nothing holding it: reorder the
+   * PATTERNS array and every existing assertion stays green while the log stops saying which
+   * kind of credential leaked.
+   */
+  it('attributes each token to its own marker, Bearer-wrapped or not', () => {
+    const github = 'ghp_ABCDEFghijkl0123456789ABCDEFghijkl01';
+    const gitlab = 'glpat-ABCDEFghijkl0123456789';
+
+    expect(redactSecrets(`x ${github} y`)).toBe('x [REDACTED-GITHUB-TOKEN] y');
+    expect(redactSecrets(`x ${gitlab} y`)).toBe('x [REDACTED-GITLAB-TOKEN] y');
+
+    // The ordering invariant: the specific pattern must win over the generic `Bearer` rule.
+    expect(redactSecrets(`Authorization: Bearer ${github}`))
+      .toBe('Authorization: Bearer [REDACTED-GITHUB-TOKEN]');
+    expect(redactSecrets(`Authorization: Bearer ${gitlab}`))
+      .toBe('Authorization: Bearer [REDACTED-GITLAB-TOKEN]');
+
+    // …and a token matching no specific pattern still collapses under the generic one.
+    expect(redactSecrets('Authorization: Bearer vzygIAJqic9avYF8DjkG0re-riYFbxoW'))
+      .toBe('Authorization: Bearer [REDACTED]');
+  });
+
   it('handles cyclic structures without throwing', () => {
     const obj: Record<string, unknown> = { name: 'x' };
     obj.self = obj;
