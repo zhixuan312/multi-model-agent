@@ -6,6 +6,12 @@ import { readFileSync } from 'node:fs';
 // a neutral DISPLAYED heading in the spec file itself — see `SPEC_COMPONENT_CATALOG` in
 // `@zhixuan92/multi-model-agent-core`. `resolveComponentHeading` dual-reads both forms back
 // to the same stable identifier.
+//
+// Both lists below are written out DELIBERATELY rather than derived from that catalog, and must
+// stay that way. They record what a SEPARATE repository matches on; a test that derived them
+// would follow a rename into agreement with itself and report green while Forge stopped parsing
+// specs. Renaming an identifier here should cost a deliberate edit in this file — that edit is
+// the reminder that another repo has to change too.
 const FORGE_COMPONENT_IDENTIFIERS = [
   'Context',
   'Problem',

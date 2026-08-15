@@ -102,13 +102,22 @@ describe('availability probe', () => {
     expect(result.longestOutageMs).toBeGreaterThan(0);
   });
 
-  it('reports NA rather than PASS when it never sampled', async () => {
+  it('always has at least one sample behind its verdict, even when stopped immediately', async () => {
     // A detector that reports success on zero evidence is the failure mode this whole test file
-    // exists to prevent.
+    // exists to prevent — so the guarantee to pin is that zero evidence cannot happen.
+    //
+    // The previous version of this case put its ONLY assertion inside `if (result.probes === 0)`
+    // and expected an `NA` status. `probes` is never 0: the loop runs synchronously into its
+    // first `await fetch` before `startAvailabilityProbe` returns, and increments once that
+    // settles whether or not `stop()` has been called. So the assertion never executed, and the
+    // `NA` arm it named was unreachable — both are now gone.
     const state = { wedged: false };
     const baseUrl = await startServer(state);
     const probe = startAvailabilityProbe({ baseUrl, intervalMs: 10_000, failMs: 200 });
-    const result = await probe.stop();
-    if (result.probes === 0) expect(result.status).toBe('NA');
+    const result = await probe.stop();   // stopped before the interval could ever elapse
+
+    expect(result.probes).toBeGreaterThanOrEqual(1);
+    expect(result.status).toBe('PASS');
+    expect(result.detail).toContain('probes');
   });
 });

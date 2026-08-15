@@ -10,10 +10,15 @@ describe('multi-model-agent router skill', () => {
     expect(raw).toContain('Command (Claude Code only)');
   });
 
-  it('teaches /mma-flow as the packaged end-to-end SDLC route', () => {
-    expect(raw).toContain('/mma-flow');
+  // `design through PR creation` used to be pinned here. It described one of the flow's three
+  // dispositions as if it were the only one, so this assertion actively HELD the router wrong:
+  // `commit-in-place` and `deliver-file` never cut a branch, open a PR, or merge, and an agent
+  // reading only the router would decline to suggest `/mma-flow` for a report or outside git.
+  // `router-decision-graph.test.ts` now pins all three dispositions and the graph's shape.
+  it('teaches /mma-flow as the packaged end-to-end SDLC route, delivered by disposition', () => {
     expect(raw).toContain('full SDLC');
-    expect(raw).toContain('design through PR creation');
+    expect(raw).toContain('design through delivery');
+    expect(raw).toContain('`deliver-file`');
   });
 
   it('teaches /mma-breakout as the interactive breakout-room command', () => {

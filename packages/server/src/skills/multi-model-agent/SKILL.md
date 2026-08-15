@@ -25,6 +25,7 @@ in this session, run `mma clients` to see how to connect it.
 ```dot
 digraph picker {
     "New idea / feature?" [shape=diamond];
+    "Whole lifecycle, or one step?" [shape=diamond];
     "Grounded yet?" [shape=diamond];
     "Spec on disk?" [shape=diamond];
     "Plan on disk?" [shape=diamond];
@@ -45,13 +46,16 @@ digraph picker {
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
 
-    "New idea / feature?" -> "Grounded yet?" [label="yes"];
+    "New idea / feature?" -> "Whole lifecycle, or one step?" [label="yes"];
+    "Whole lifecycle, or one step?" -> "/mma-flow" [label="whole — suggest user run /mma-flow"];
+    "Whole lifecycle, or one step?" -> "Grounded yet?" [label="one step"];
     "Grounded yet?" -> "mma-explore" [label="no — ground it first"];
     "Grounded yet?" -> "mma-brainstorm" [label="yes — grill to spec"];
+    "mma-brainstorm" -> "mma-spec" [label="confirmed decisions"];
+    "mma-spec" -> "mma-plan" [label="spec written"];
     "New idea / feature?" -> "Spec on disk?" [label="no"];
     "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
     "Spec on disk?" -> "Plan on disk?" [label="no"];
-    "Plan on disk?" -> "/mma-flow" [label="no — suggest user run /mma-flow command"];
     "Plan on disk?" -> "mma-execute-plan" [label="yes"];
     "Plan on disk?" -> "Audit a doc?" [label="no"];
     "Audit a doc?" -> "mma-audit" [label="yes"];
@@ -71,7 +75,7 @@ digraph picker {
 |---|---|
 | `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current state · Rough direction). Divergent grounding before brainstorm/plan. |
 | `mma-brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma-spec` |
-| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge. Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
+| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → execute → review → verify → deliver. How it delivers is the contract's one `disposition`: `pr` (branch, PR, merge), `commit-in-place` (commit on the branch you already have), or `deliver-file` (write the declared artifact — no git required). Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
 | `/mma-breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma-breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |
 | `/mma-tldr` | **Command (Claude Code only)** — Reader utility invoked via `/mma-tldr`. Turns the previous assistant message, or a supplied file, URL, or text, into a short decision brief: TLDR, key points ranked by decision impact, and named omitted topics. Never routed automatically — the reader is the only one who knows they did not understand. |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
@@ -137,7 +141,7 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: dispatch a fresh `mma-execute-plan` scoped to ONLY the failed task headings (pass just those in `tasks[]`), so the successful tasks aren't re-run.
 
-When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through PR creation and conditional merge, while the other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
+When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through delivery, and delivery is whichever `disposition` the approved contract declares — `pr`, `commit-in-place`, or `deliver-file`. Do not withhold the suggestion because the work has no PR in it, or because the target is not a git repository: `deliver-file` is valid outside git, and a report or a configuration is as much a deliverable here as a code change. The other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
 
 When the user needs a bounded interactive expert-persona breakout without polluting the main thread, suggest `/mma-breakout` (a Claude Code command installed to `~/.claude/commands/mma-breakout.md`). It spawns a named breakout teammate, keeps the deep dialogue in direct `@name` conversation isolated from the main context, then closes with one confirmed journal batch instead of adding a backend task type. `/mma-breakout` is Claude Code only.
 
