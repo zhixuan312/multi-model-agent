@@ -2,6 +2,7 @@
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
 
 const TTL = 3_600_000;
@@ -89,6 +90,39 @@ describe('ExecutionStore', () => {
     expect(store.pruneExpired(Date.now() + TTL + 60_000)).toBe(1);
     expect(store.get('old-done')).toBeUndefined();
     expect(store.get('still-running')).toBeDefined();
+  });
+
+  it('pruneExpired bounds CONSUMED outbox rows but never unconsumed ones', () => {
+    // `listUnconsumedOutbox` is the outbox's only reader and it filters consumed rows out, so a
+    // consumed row is read by nothing — yet nothing deleted them either, and every linked
+    // Execution left one permanent row in a file that is never vacuumed.
+    const linkage = { initiative: { uuid: 'i-1' }, authorized_by: 'tester' };
+    store.admit('linked-consumed', 'delegate', '/repo', process.pid, linkage);
+    store.complete('linked-consumed', '{}');
+    store.admit('linked-pending-replay', 'delegate', '/repo', process.pid, linkage);
+    store.complete('linked-pending-replay', '{}');
+
+    expect(store.listUnconsumedOutbox().map((r) => r.executionId).sort())
+      .toEqual(['linked-consumed', 'linked-pending-replay']);
+    expect(store.markOutboxConsumed('linked-consumed')).toBe(true);
+
+    store.pruneExpired(Date.now() + TTL + 60_000);
+
+    // The consumed row is gone; the one still awaiting replay survives, however old — that row IS
+    // the durable promise that a linked Initiative still needs its terminal replay, and its
+    // payload carries everything the replay needs even after its execution row is pruned.
+    expect(store.listUnconsumedOutbox().map((r) => r.executionId)).toEqual(['linked-pending-replay']);
+
+    // Counted from the FILE, not through the store's own readers. `listUnconsumedOutbox` filters
+    // consumed rows out and `markOutboxConsumed` returns false for an already-consumed row, so
+    // both answer identically whether the row was deleted or merely marked — an earlier version of
+    // this test asserted through them and passed with the pruning removed.
+    store.close();
+    const raw = new DatabaseSync(join(dir, 'executions.db'));
+    const ids = (raw.prepare('SELECT execution_id FROM outbox').all() as Array<{ execution_id: string }>)
+      .map((r) => r.execution_id);
+    raw.close();
+    expect(ids, 'the consumed row must be gone from the table, not just flagged').toEqual(['linked-pending-replay']);
   });
 
   it('recordWorkerPid attaches only to pending rows', () => {
