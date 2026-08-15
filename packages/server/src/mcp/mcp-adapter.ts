@@ -27,23 +27,7 @@ import {
   taskInputSchema,
   type ExecutionRegistry,
   type ApprovedContract,
-  RevisionConflictError,
-  CrossProductWorkspaceLinkError,
-  InitiativeNotFoundError,
   InitiativeInvalidRequestError,
-  MigrationBackupFailedError,
-  CrossInitiativeEvidenceLinkError,
-  CrossInitiativeVerificationError,
-  TaskNotClaimableError,
-  TaskClaimConflictError,
-  InvalidTaskTransitionError,
-  InvalidPhaseTransitionError,
-  UnknownLifecycleContractError,
-  UnknownMethodError,
-  UnknownDeliveryContractError,
-  TargetAdapterValidationFailedError,
-  VerificationMethodNotRunnableError,
-  InitiativeAlreadyExistsError,
   initiativeOperationRequestSchema,
   initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
@@ -51,6 +35,7 @@ import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
 import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
+import { reportInitiativeError } from '../application/initiative-error-report.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
 import { executionIdentity, buildRunningSnapshot } from '../application/task-identity.js';
@@ -328,90 +313,15 @@ function handleContextBlockDelete(deps: McpAdapterDeps, args: Record<string, unk
 }
 
 /**
- * Maps a runtime-thrown typed Initiative error onto the MCP tool error result —
- * the same typed-error union `http/handlers/initiative-record.ts` maps onto an
- * HTTP status, translated to MCP's `{ code, message, ...details }` shape
- * instead. Anything else (an unclassified storage failure) falls through to
- * `internal_error`, mirroring HTTP's 500 fallback.
+ * MCP shape of a typed Initiative error.
+ *
+ * The classification lives in `application/initiative-error-report.ts`, shared with the HTTP
+ * handler; only the envelope differs. The two used to be parallel `instanceof` chains over the
+ * same eighteen classes and had already drifted on two of them.
  */
 function initiativeErrorToMcp(err: unknown): ToolResult {
-  if (err instanceof RevisionConflictError) {
-    return errorResult(err.code, err.message, {
-      entity_type: err.entity_type,
-      entity_id: err.entity_id,
-      expected_revision: err.expected_revision,
-      actual_revision: err.actual_revision,
-    });
-  }
-  if (err instanceof CrossProductWorkspaceLinkError) {
-    return errorResult(err.code, err.message, { initiative_id: err.initiative_id, workspace_id: err.workspace_id });
-  }
-  if (err instanceof CrossInitiativeEvidenceLinkError) {
-    return errorResult(err.code, err.message, {
-      evidence_id: err.evidence_id,
-      target_type: err.target_type,
-      target_id: err.target_id,
-    });
-  }
-  if (err instanceof CrossInitiativeVerificationError) {
-    return errorResult(err.code, err.message, {
-      initiative_id: err.initiative_id,
-      acceptance_criterion_id: err.acceptance_criterion_id,
-    });
-  }
-  if (err instanceof TaskNotClaimableError) {
-    return errorResult(err.code, err.message, { task_id: err.task_id, status: err.status });
-  }
-  if (err instanceof TaskClaimConflictError) {
-    return errorResult(err.code, err.message, {
-      task_id: err.task_id,
-      claimed_by: err.claimed_by,
-      authorized_by: err.authorized_by,
-    });
-  }
-  if (err instanceof InvalidTaskTransitionError) {
-    return errorResult(err.code, err.message, {
-      task_id: err.task_id,
-      from_status: err.from_status,
-      to_status: err.to_status,
-    });
-  }
-  if (err instanceof InvalidPhaseTransitionError) {
-    return errorResult(err.code, err.message, {
-      initiative_id: err.initiative_id,
-      phase: err.phase,
-      source_state: err.source_state,
-      target_state: err.target_state,
-    });
-  }
-  if (err instanceof UnknownLifecycleContractError) {
-    return errorResult(err.code, err.message, { lifecycle_contract: err.lifecycle_contract });
-  }
-  if (err instanceof UnknownMethodError) {
-    return errorResult(err.code, err.message, { method: err.method });
-  }
-  if (err instanceof UnknownDeliveryContractError) {
-    return errorResult(err.code, err.message, { delivery_contract: err.delivery_contract });
-  }
-  if (err instanceof TargetAdapterValidationFailedError) {
-    return errorResult(err.code, err.message, { target_type: err.target_type });
-  }
-  if (err instanceof VerificationMethodNotRunnableError) {
-    return errorResult(err.code, err.message, { method: err.method });
-  }
-  if (err instanceof InitiativeAlreadyExistsError) {
-    return errorResult(err.code, err.message, { uuid: err.uuid, human_key: err.human_key });
-  }
-  if (err instanceof InitiativeNotFoundError) {
-    return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
-  }
-  if (err instanceof InitiativeInvalidRequestError) {
-    return errorResult(err.code, err.message, { field_errors: err.field_errors });
-  }
-  if (err instanceof MigrationBackupFailedError) {
-    return errorResult(err.code, err.message, { database_path: err.database_path, backup_path: err.backup_path });
-  }
-  return errorResult('internal_error', err instanceof Error ? err.message : 'Unexpected error');
+  const { code, message, details } = reportInitiativeError(err);
+  return errorResult(code, message, details);
 }
 
 /**
@@ -674,3 +584,7 @@ export async function handleMcpRequest(
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 }
+
+/** Test seam: see `__initiativeErrorToHttpForTests`. The two mappers cover the same typed-error
+ *  union and must report the same code and details; the parity test needs both. */
+export const __initiativeErrorToMcpForTests = initiativeErrorToMcp;

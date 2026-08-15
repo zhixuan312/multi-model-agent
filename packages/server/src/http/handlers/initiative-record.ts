@@ -12,24 +12,9 @@
 import type { RawHandler } from '../types.js';
 import type { HandlerDeps } from '../handler-deps.js';
 import { sendJson, sendError } from '../errors.js';
+import { reportInitiativeError } from '../../application/initiative-error-report.js';
 import {
-  RevisionConflictError,
-  CrossProductWorkspaceLinkError,
-  InitiativeNotFoundError,
   InitiativeInvalidRequestError,
-  MigrationBackupFailedError,
-  CrossInitiativeEvidenceLinkError,
-  CrossInitiativeVerificationError,
-  TaskNotClaimableError,
-  TaskClaimConflictError,
-  InvalidTaskTransitionError,
-  InvalidPhaseTransitionError,
-  UnknownLifecycleContractError,
-  UnknownMethodError,
-  UnknownDeliveryContractError,
-  TargetAdapterValidationFailedError,
-  VerificationMethodNotRunnableError,
-  InitiativeAlreadyExistsError,
   initiativeOperationRequestSchema,
   initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
@@ -57,140 +42,17 @@ function stampHttpProvenance(body: unknown): unknown {
   };
 }
 
-/** Maps a runtime-thrown typed Initiative error onto the pinned HTTP status +
- *  envelope, preserving each error's own detail fields. Anything else
- *  (an unclassified storage failure) falls through to 500. */
-function initiativeErrorToHttp(err: unknown): { status: number; code: string; message: string; details?: unknown } {
-  if (err instanceof RevisionConflictError) {
-    return {
-      status: 409,
-      code: err.code,
-      message: err.message,
-      details: {
-        entity_type: err.entity_type,
-        entity_id: err.entity_id,
-        expected_revision: err.expected_revision,
-        actual_revision: err.actual_revision,
-      },
-    };
-  }
-  if (err instanceof CrossProductWorkspaceLinkError) {
-    return {
-      status: 409,
-      code: err.code,
-      message: err.message,
-      details: { initiative_id: err.initiative_id, workspace_id: err.workspace_id },
-    };
-  }
-  if (err instanceof CrossInitiativeEvidenceLinkError) {
-    return {
-      status: 409,
-      code: err.code,
-      message: err.message,
-    };
-  }
-  if (err instanceof CrossInitiativeVerificationError) {
-    return {
-      status: 409,
-      code: err.code,
-      message: err.message,
-    };
-  }
-  if (err instanceof TaskNotClaimableError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { task_id: err.task_id, status: err.status },
-    };
-  }
-  if (err instanceof TaskClaimConflictError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { task_id: err.task_id, claimed_by: err.claimed_by, authorized_by: err.authorized_by },
-    };
-  }
-  if (err instanceof InvalidTaskTransitionError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { task_id: err.task_id, from_status: err.from_status, to_status: err.to_status },
-    };
-  }
-  if (err instanceof InvalidPhaseTransitionError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: {
-        initiative_id: err.initiative_id,
-        phase: err.phase,
-        source_state: err.source_state,
-        target_state: err.target_state,
-      },
-    };
-  }
-  if (err instanceof UnknownLifecycleContractError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { lifecycle_contract: err.lifecycle_contract },
-    };
-  }
-  if (err instanceof UnknownMethodError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { method: err.method },
-    };
-  }
-  if (err instanceof UnknownDeliveryContractError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { delivery_contract: err.delivery_contract },
-    };
-  }
-  if (err instanceof TargetAdapterValidationFailedError) {
-    return {
-      status: 400,
-      code: err.code,
-      message: err.message,
-      details: { target_type: err.target_type },
-    };
-  }
-  if (err instanceof VerificationMethodNotRunnableError) {
-    return { status: 400, code: err.code, message: err.message, details: { method: err.method } };
-  }
-  if (err instanceof InitiativeAlreadyExistsError) {
-    return { status: 409, code: err.code, message: err.message, details: { uuid: err.uuid, human_key: err.human_key } };
-  }
-  if (err instanceof InitiativeNotFoundError) {
-    return {
-      status: 404,
-      code: err.code,
-      message: err.message,
-      details: { entity_type: err.entity_type, lookup: err.lookup },
-    };
-  }
-  if (err instanceof InitiativeInvalidRequestError) {
-    return { status: 400, code: err.code, message: err.message, details: { field_errors: err.field_errors } };
-  }
-  if (err instanceof MigrationBackupFailedError) {
-    return {
-      status: 500,
-      code: err.code,
-      message: err.message,
-      details: { database_path: err.database_path, backup_path: err.backup_path },
-    };
-  }
-  return { status: 500, code: 'internal_error', message: err instanceof Error ? err.message : 'Unexpected error' };
+/**
+ * HTTP shape of a typed Initiative error.
+ *
+ * The classification itself lives in `application/initiative-error-report.ts`, shared with the
+ * MCP adapter — the code, message and per-class details are properties of the ERROR, and the
+ * status is the only thing this transport adds. They were two parallel `instanceof` chains and
+ * had already drifted; see that module.
+ */
+export function initiativeErrorToHttp(err: unknown): { status: number; code: string; message: string; details?: unknown } {
+  const { status, code, message, details } = reportInitiativeError(err);
+  return { status, code, message, ...(details ? { details } : {}) };
 }
 
 export function buildInitiativeHandler(deps: HandlerDeps): RawHandler {
@@ -256,3 +118,7 @@ export function buildInitiativeHandler(deps: HandlerDeps): RawHandler {
     }
   };
 }
+
+/** Test seam: the error mapper, so `initiative-error-transport-parity` can compare it against
+ *  the MCP one without booting a server. Not re-exported from any barrel. */
+export const __initiativeErrorToHttpForTests = initiativeErrorToHttp;
