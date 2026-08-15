@@ -6,7 +6,7 @@ const seed = { taskId: 't', batchId: 'b', taskIndex: 0, route: 'delegate' as con
 
 bench('small envelope (3 stages, 0 tool calls)', () => {
   const s = TaskEnvelopeStore.create(seed);
-  for (const name of ['implementing','reviewing','annotating'] as const) {
+  for (const name of ['implementing','reviewing','reviewing'] as const) {
     s.startStage(name, { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage(name, 1, { outcome: 'advance', durationMs: 1000, inputTokens: 100, outputTokens: 50 });
   }
@@ -14,7 +14,7 @@ bench('small envelope (3 stages, 0 tool calls)', () => {
 
 bench('medium envelope (5 stages, 50 tool calls)', () => {
   const s = TaskEnvelopeStore.create(seed);
-  for (const name of ['implementing','reviewing','reworking','annotating','committing'] as const) {
+  for (const name of ['implementing','reviewing','reviewing','reviewing','reviewing'] as const) {
     s.startStage(name, { model: 'claude-sonnet-4-6', tier: 'standard' });
     for (let i = 0; i < 10; i++) s.recordToolCall({ stage: name, tool: 'Read' });
     s.completeStage(name, 1, { outcome: 'advance', durationMs: 1000, inputTokens: 100, outputTokens: 50 });
@@ -23,7 +23,7 @@ bench('medium envelope (5 stages, 50 tool calls)', () => {
 
 bench('large envelope (5 stages, 500 tool calls)', () => {
   const s = TaskEnvelopeStore.create(seed);
-  for (const name of ['implementing','reviewing','reworking','annotating','committing'] as const) {
+  for (const name of ['implementing','reviewing','reviewing','reviewing','reviewing'] as const) {
     s.startStage(name, { model: 'claude-sonnet-4-6', tier: 'standard' });
     for (let i = 0; i < 100; i++) s.recordToolCall({ stage: name, tool: 'Read' });
     s.completeStage(name, 1, { outcome: 'advance', durationMs: 1000, inputTokens: 100, outputTokens: 50 });

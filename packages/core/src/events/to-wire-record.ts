@@ -152,16 +152,8 @@ export function toWireRecord(
       return hasTokens || hasCost;
     })
     .map((s) => {
-    const name =
-      s.name === 'implementing'
-        ? 'implementing'
-        : s.name === 'reviewing'
-          ? 'review'
-          : s.name === 'reworking'
-            ? 'rework'
-            : s.name === 'annotating'
-              ? 'annotating'
-              : 'committing';
+    // `reviewing` is the wire's `review`; there is no third case — see StageName.
+    const name = s.name === 'implementing' ? 'implementing' : 'review';
 
     const base = {
       name,
@@ -189,53 +181,26 @@ export function toWireRecord(
         : null,
     };
 
-    // Add route-specific fields based on stage name.
-    // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred /
-    // outcomeMalformed are top-level only — stages do NOT carry them.
+    // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred / outcomeMalformed are
+    // top-level only — stages do NOT carry them.
     if (name === 'implementing') return base;
-    if (name === 'review') {
-      // Map envelope `verdict` to the wire's review verdict enum.
-      const reviewVerdict = s.verdict;
-      let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
-      if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
-          || reviewVerdict === 'concerns' || reviewVerdict === 'error') {
-        wireVerdict = reviewVerdict;
-      } else if (s.outcome === 'skipped' || s.outcome === null) {
-        wireVerdict = 'skipped';
-      } else if (s.outcome === 'fail') {
-        wireVerdict = 'error';
-      } else {
-        wireVerdict = 'skipped';
-      }
-      return {
-        ...base,
-        verdict: wireVerdict as never,
-        roundsUsed: 1,
-        concernCategories: s.concernCategories ?? [],
-      };
+
+    // Map envelope `verdict` to the wire's review verdict enum.
+    const reviewVerdict = s.verdict;
+    let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
+    if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
+        || reviewVerdict === 'concerns' || reviewVerdict === 'error') {
+      wireVerdict = reviewVerdict;
+    } else if (s.outcome === 'fail') {
+      wireVerdict = 'error';
+    } else {
+      wireVerdict = 'skipped';
     }
-    if (name === 'rework')
-      return {
-        ...base,
-        triggeringConcernCategories: s.concernCategories ?? [],
-      };
-    if (name === 'annotating') {
-      const ann = s as { outcome?: 'advance' | 'fail' | 'skipped' | null };
-      let out: 'transformed' | 'failed' | 'skipped' | 'not_applicable' | 'passed';
-      if (ann.outcome === 'advance') out = 'transformed';
-      else if (ann.outcome === 'fail') out = 'failed';
-      else out = 'skipped';
-      return {
-        ...base,
-        outcome: out as never,
-        skipReason: (s.skipReason ?? null) as never,
-      };
-    }
-    // committing
     return {
       ...base,
-      filesCommittedCount: s.filesCommittedCount ?? 0,
-      branchCreated: s.branchCreated ?? false,
+      verdict: wireVerdict as never,
+      roundsUsed: 1,
+      concernCategories: s.concernCategories ?? [],
     };
   });
 
@@ -354,12 +319,13 @@ export function toWireRecord(
       },
       { critical: 0, high: 0, medium: 0, low: 0 },
     ),
-    // 4.7.4+ outcome rollup. Source priority: review → annotating → implementing.
+    // 4.7.4+ outcome rollup. Source priority: review → implementing. `annotating` sat between
+    // them and is gone with the stage — see StageName in task-envelope.ts.
     // Each stage stores the same value the worker / reviewer emitted; the first
     // non-null wins because later stages mirror earlier ones (see the
     // outcomePriority walk below). Top-level is the single source backend + frontend read.
     ...(() => {
-      const outcomePriority: Array<'reviewing' | 'annotating' | 'implementing'> = ['reviewing', 'annotating', 'implementing'];
+      const outcomePriority: Array<'reviewing' | 'implementing'> = ['reviewing', 'implementing'];
       type StageWithOutcome = {
         name: string;
         findingsOutcome?: FindingsOutcome | null;

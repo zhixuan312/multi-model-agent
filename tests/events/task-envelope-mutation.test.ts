@@ -61,26 +61,25 @@ describe('TaskEnvelopeStore mutations', () => {
     // progress ordinal/denominator — otherwise the headline jumped from
     // [1/2] to [5/5] as the skips were recorded.
     const s = TaskEnvelopeStore.create(seed);
-    s.setPlannedStageTotal(2); // implement + annotate after the driver decrements skips
+    s.setPlannedStageTotal(2); // implement + review after the driver decrements skips
     s.startStage('implementing', { model: 'm', tier: 'standard' });
     s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1 });
     expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
-    // review/rework/commit skipped on a read route
-    for (const name of ['reviewing', 'reworking', 'committing'] as const) {
-      s.startStage(name, { model: 'm', tier: 'standard' });
-      s.completeStage(name, 1, { outcome: 'skipped', durationMs: 0 });
-    }
+    // A skipped review on a read route must not count toward the ordinal.
+    s.startStage('reviewing', { model: 'm', tier: 'standard' });
+    s.completeStage('reviewing', 1, { outcome: 'skipped', durationMs: 0 });
     // Denominator stays 2 and ordinal stays 1 — skips don't count.
     expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
-    // The one remaining real stage advances the ordinal to 2 of 2.
-    s.startStage('annotating', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 2, stageLabel: 'annotating' });
+    // A real second stage advances the ordinal to 2 of 2.
+    s.startStage('reviewing', { model: 'm', tier: 'standard' });
+    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 2, stageLabel: 'reviewing' });
   });
 
   it('headline.stageTotal exceeds planned total when rework adds rounds', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.setPlannedStageTotal(2);
-    for (const name of ['implementing', 'reviewing', 'reworking'] as const) {
+    // Three recorded stages from two names — a second review round is how the count grows now.
+    for (const name of ['implementing', 'reviewing', 'reviewing'] as const) {
       s.startStage(name, { model: 'm', tier: 'standard' });
     }
     // Three recorded stages outgrow the planned 2 → max() reports the truth.

@@ -9,16 +9,22 @@ const ALLOWED_DIFF_PATHS = new Set([
   'terminalStatus',
   'workerStatus',
   'errorCode',
-  // annotating-stage outcome + skipReason — addressed at stages[i].outcome/skipReason
-  // where stages[i].name === 'annotating'
-  'stages[annotating].outcome',
-  'stages[annotating].skipReason',
+  // The review stage's verdict follows the run's outcome by design — a `done_with_concerns`
+  // run reviews as `concerns`, a failed one as `skipped`/`error`.
+  'stages[review].verdict',
+  'stages[implementing].outcome',
 ]);
+
+// This previously built `annotating` and `committing` stages to express the same property.
+// Nothing in production has produced either since the lifecycle layer was deleted, so this
+// fixture was their ONLY producer — which is what kept their wire-projection branches looking
+// covered while they were dead. The property under test is unchanged: changing a run's OUTCOME
+// must not ripple into wire fields that describe its work.
 
 // Build an envelope. The wire-side `terminalStatus` is computed from the
 // envelope's `status` + `structuredError.code`; we don't pass terminalStatus
 // directly — see mapStatusToWire() in to-wire-record.ts.
-function buildEnvelope(opts: { status: 'done' | 'failed'; errorCode: string | null; annotatingOutcome: 'transformed' | 'skipped' }) {
+function buildEnvelope(opts: { status: 'done' | 'failed'; errorCode: string | null }) {
   const store = TaskEnvelopeStore.create({
     taskId: 'fixture-1', batchId: 'b1', taskIndex: 0,
     route: 'delegate', agentType: 'standard',
@@ -36,21 +42,6 @@ function buildEnvelope(opts: { status: 'done' | 'failed'; errorCode: string | nu
     outcome: 'advance', durationMs: 500, costUSD: 0.005, verdict: 'approved',
     inputTokens: 50, outputTokens: 25, cachedReadTokens: 0, cachedNonReadTokens: 0,
     turnsUsed: 1, filesWrittenCount: 0,
-  });
-  store.startStage('annotating', { model: 'claude-haiku-4-5', tier: 'standard', round: 1 });
-  store.completeStage('annotating', 1, {
-    outcome: opts.annotatingOutcome === 'transformed' ? 'advance' : 'skipped',
-    durationMs: 100, costUSD: 0.001,
-    inputTokens: 10, outputTokens: 5, cachedReadTokens: 0, cachedNonReadTokens: 0,
-    turnsUsed: 1, filesWrittenCount: 0,
-  });
-  store.startStage('committing', { model: 'claude-haiku-4-5', tier: 'standard', round: 1 });
-  store.completeStage('committing', 1, {
-    outcome: 'advance', durationMs: 50, costUSD: 0,
-    inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0,
-    turnsUsed: 0, filesWrittenCount: 1,
-    filesCommittedCount: 1, branchCreated: false,
-    verdict: 'passed',
   });
   store.seal({
     status: opts.status,
@@ -94,20 +85,11 @@ describe('wire-record blast radius — only status fields differ pre/post A+B+C'
     // PRE: how a row would have looked before A+B+C — envelope sealed
     // with status='failed' + structuredError code, the wire then projects
     // terminalStatus='error' / workerStatus='failed' via mapStatusToWire.
-    // Annotating was skipped because of the hard worker-self-assessment precondition.
-    const pre = buildEnvelope({
-      status: 'failed',
-      errorCode: 'sdk_execution_error',
-      annotatingOutcome: 'skipped',
-    });
+    const pre = buildEnvelope({ status: 'failed', errorCode: 'sdk_execution_error' });
     // POST: how the SAME execution now looks after A+B+C — envelope
     // sealed with status='done', wire projects terminalStatus='ok' /
-    // workerStatus='done', annotating ran and transformed.
-    const post = buildEnvelope({
-      status: 'done',
-      errorCode: null,
-      annotatingOutcome: 'transformed',
-    });
+    // workerStatus='done'.
+    const post = buildEnvelope({ status: 'done', errorCode: null });
 
     const cfg = { toolMode: 'full' as const, implementerModel: 'claude-haiku-4-5', implementerTier: 'standard' as const, mainModelFamily: 'claude' as const };
     const wirePre = toWireRecord(pre, cfg);

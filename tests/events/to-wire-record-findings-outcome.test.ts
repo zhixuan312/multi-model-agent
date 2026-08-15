@@ -97,7 +97,14 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     expect(reviewStage.findingsBySeverity).toBeUndefined();
   });
 
-  it('falls back to annotating when implementing has no outcome and no review ran', () => {
+  /**
+   * The rollup falls back to `implementing` when no review ran.
+   *
+   * This case drove an `annotating` stage, which nothing in production has produced since the
+   * lifecycle layer was removed — the priority list was `review → annotating → implementing` and
+   * the middle entry was unreachable. The fallback itself is real and is what this now asserts.
+   */
+  it('falls back to implementing when no review ran', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -105,13 +112,6 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       durationMs: 1000,
       inputTokens: 100,
       outputTokens: 50,
-    });
-    s.startStage('annotating', { model: 'claude-sonnet-4-6', tier: 'standard' });
-    s.completeStage('annotating', 1, {
-      outcome: 'advance',
-      durationMs: 100,
-      inputTokens: 20,
-      outputTokens: 10,
       findingsOutcome: 'not_applicable',
       findingsOutcomeReason: 'project-level question',
       outcomeInferred: true,
@@ -128,8 +128,9 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     expect(wire.findingsOutcome).toBe('not_applicable');
     expect(wire.findingsOutcomeReason).toBe('project-level question');
     expect(wire.outcomeInferred).toBe(true);
-    const annStage = wire.stages.find((st: any) => st.name === 'annotating') as any;
-    expect(annStage.findingsOutcome).toBeUndefined();
+    // Stage rows never carry the rollup fields — top-level only, since 4.7.4.
+    const implStage = wire.stages.find((st: { name: string }) => st.name === 'implementing') as { findingsOutcome?: unknown };
+    expect(implStage.findingsOutcome).toBeUndefined();
   });
 
   it('omits top-level outcome fields when no stage emitted one', () => {

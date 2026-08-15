@@ -16,7 +16,20 @@ export interface ValidationWarning { rule: string; path: string }
 
 export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'research' | 'journal-record' | 'journal-recall' | 'orchestrate' | 'spec' | 'plan';
 export type EnvelopeStatus = 'running' | 'done' | 'done_with_concerns' | 'failed';
-export type StageName = 'implementing' | 'reviewing' | 'reworking' | 'annotating' | 'committing';
+/**
+ * The two stages the pipeline runs.
+ *
+ * `reworking`, `annotating` and `committing` were also declared here, and nothing has produced
+ * any of them since the lifecycle layer was deleted — `telemetry-snapshot.ts` builds exactly
+ * `implementing` and (when a reviewer ran) `reviewing`. Their only producer was a test fixture,
+ * which is what kept their wire-projection branches looking covered.
+ *
+ * `wire-schema.ts`'s `StageNameEnum` still ACCEPTS all five: it is the contract with the
+ * telemetry backend in a separate repo, and narrowing it is a two-repo change. A producer that
+ * can only emit two of five permitted values is not a defect; a producer with branches for three
+ * it can never emit is.
+ */
+export type StageName = 'implementing' | 'reviewing';
 export type AgentTier = 'standard' | 'complex' | 'main';
 
 export interface StageRecord {
@@ -35,16 +48,13 @@ export interface StageRecord {
   outputTokens: number;
   cachedReadTokens: number | null;
   cachedNonReadTokens: number | null;
-  // route-specific (closed set per spec)
-  filesCommittedCount?: number;
-  branchCreated?: boolean;
-  skipReason?: 'noop' | 'no_command' | 'not_applicable' | 'reviewPolicy_none';
+  // route-specific (closed set per spec). `filesCommittedCount`, `branchCreated` and
+  // `skipReason` lived here for the committing/annotating stages and went with them — the
+  // engine creates no branch (the caller owns it) and commits outside any stage.
   // Stage verdicts:
   //   review stage → 'approved' | 'changes_required' | 'error' (combined verdict
   //     of spec + quality sub-reviewers; matches wire enum, see wire-schema.ts).
-  //   committing / verify stages → 'passed' | 'failed' | 'no_command' | 'annotated'
-  //   annotating stage → tracked separately via `outcome` not `verdict`
-  verdict?: 'passed' | 'failed' | 'no_command' | 'annotated' | 'approved' | 'changes_required' | 'concerns' | 'error';
+  verdict?: 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
   concernCategories?: string[];
   // Findings outcome threading (review + implementing stages)
