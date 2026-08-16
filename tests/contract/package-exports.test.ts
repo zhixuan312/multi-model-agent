@@ -105,14 +105,20 @@ describe('no published subpath exposes a test seam', () => {
  * verify the manifest against the FILESYSTEM, which is a good proxy; this verifies it against the
  * RESOLVER, which is the thing consumers actually meet.
  *
- * `node_modules/@zhixuan92/*` are workspace symlinks to the packages, so real Node resolution
- * applies here exactly as it would after `npm install` — including
- * ERR_PACKAGE_PATH_NOT_EXPORTED for anything the map does not list.
+ * The child runs from `packages/server`, NOT the repo root. That is the only resolution root pnpm
+ * guarantees: `packages/server` declares `@zhixuan92/multi-model-agent-core: workspace:^`, so pnpm
+ * links it into `packages/server/node_modules`. The repo root declares no such dependency, so a
+ * root-level `node_modules/@zhixuan92/*` link exists only by accident of a developer's install
+ * history — mine had one, CI did not, and the first version of this test failed all sixteen
+ * subpaths on a GitHub runner while passing locally. It is also the more faithful root: a real
+ * consumer resolves core as a dependency of the server package, which is exactly what this now does.
  *
  * One child process imports every declared subpath, so the cost is one spawn, not sixteen.
  */
 describe('real Node resolves every declared subpath', () => {
   const CORE = 'packages/core';
+  /** Resolve from the package that actually depends on core — see the note above. */
+  const CORE_RESOLUTION_ROOT = 'packages/server';
   const declared = Object.keys(
     (JSON.parse(readFileSync(join(CORE, 'package.json'), 'utf8')) as Pkg).exports ?? {},
   );
@@ -120,6 +126,15 @@ describe('real Node resolves every declared subpath', () => {
   it('resolves what the map declares, and blocks what it does not', () => {
     if (!existsSync(join(CORE, 'dist/index.js'))) {
       throw new Error('packages/core/dist is missing — run `npm run build` before this suite');
+    }
+    // Distinguish "the package is not linked here" from "the exports map is broken". Without this,
+    // a missing link reports every subpath as ERR_MODULE_NOT_FOUND and reads like sixteen manifest
+    // bugs, which is precisely how the first CI failure presented.
+    if (!existsSync(join(CORE_RESOLUTION_ROOT, 'node_modules/@zhixuan92/multi-model-agent-core'))) {
+      throw new Error(
+        `@zhixuan92/multi-model-agent-core is not linked into ${CORE_RESOLUTION_ROOT}/node_modules `
+        + '— run `pnpm install`. This is a workspace-link problem, not an exports-map problem.',
+      );
     }
     const specs = declared.map((s) => `@zhixuan92/multi-model-agent-core${s === '.' ? '' : s.slice(1)}`);
     // Removed in this change; a consumer must no longer be able to reach the provider-swap hook.
@@ -133,7 +148,7 @@ describe('real Node resolves every declared subpath', () => {
       console.log(JSON.stringify({ ok, bad }));
     `;
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
-      cwd: process.cwd(),
+      cwd: CORE_RESOLUTION_ROOT,
       encoding: 'utf8',
     });
     const { ok, bad } = JSON.parse(out.trim().split('\n').pop()!) as {
