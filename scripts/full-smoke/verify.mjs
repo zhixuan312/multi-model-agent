@@ -180,6 +180,37 @@ export function verify(rec) {
   const out = [];
   const { response: r, diagnostics: d, queue: q, backend: b, expect: e } = rec;
 
+  // ─── Failure truthfulness, asserted over whatever this run happened to produce ───
+  //
+  // Three shipped defects let a failure wear a success: a SIGKILLed worker reported `ok` because
+  // the check read `exitCode` and a signal death has none; a provider that refused the connection
+  // came back `done_with_concerns` with the connection error as the ANSWER, because the SDK still
+  // emits `subtype: 'success'` while billing nothing. The shape both share is a terminal envelope
+  // whose status and whose error disagree. This costs no extra dispatch — it holds every execution
+  // the smoke already runs to the invariant, in both directions.
+  const terminal = r?.execution?.status;
+  if (terminal) {
+    if (terminal === 'failed') {
+      out.push(C('failed-carries-an-error-code', r?.error?.code ? 'PASS' : 'FAIL',
+        `status=failed error=${JSON.stringify(r?.error ?? null).slice(0, 160)}`));
+    } else if (terminal === 'completed' || terminal === 'done' || terminal === 'done_with_concerns') {
+      // The converse: a success must not be carrying an error, and must have billed something.
+      // Zero tokens on a successful turn is what "the provider was unreachable" looks like.
+      out.push(C('success-carries-no-error', r?.error == null ? 'PASS' : 'FAIL',
+        `status=${terminal} error=${JSON.stringify(r?.error).slice(0, 160)}`));
+      // Only assert billing where usage is actually reported. A response shape that carries no
+      // metrics (an MCP-shaped result, a record scenario) would otherwise sum to zero and fail
+      // for having nothing to measure rather than for having done nothing.
+      const usage = r?.metrics?.implementer?.usage;
+      if (usage) {
+        const billed = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
+          + (usage.cachedReadTokens ?? 0) + (usage.cachedNonReadTokens ?? 0);
+        out.push(C('success-billed-real-work', billed > 0 ? 'PASS' : 'FAIL',
+          `status=${terminal} implementer billed ${billed} tokens — a success billing nothing did no work`));
+      }
+    }
+  }
+
   // ─── Error cases: validate HTTP 400 ───
   if (e.kind === 'error') {
     const status = rec.errorStatus;
