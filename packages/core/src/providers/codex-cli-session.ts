@@ -188,10 +188,19 @@ export class CodexCliSession implements Session {
     const rateCard = resolveRateCard(this.args.cfg.model);
     const costUSD = rateCard ? priceTokens(turnUsage, rateCard) : 0;
 
-    if (tracker.terminationReason === 'ok' && proc.exitCode !== 0 && proc.exitCode !== null) {
+    // A process killed by a signal reports `exitCode: null` and `signalCode: 'SIGKILL'`, so an
+    // exit-code-only check reads null, skips, and leaves the turn marked `ok` — which is how a
+    // killed worker used to arrive at the caller as a completed task. Death by signal is a
+    // failure whether or not an exit code accompanies it.
+    if (tracker.terminationReason === 'ok' && (proc.signalCode !== null || (proc.exitCode !== 0 && proc.exitCode !== null))) {
       tracker.terminationReason = 'error';
-      tracker.errorCode = `exit_${proc.exitCode}`;
-      tracker.errorMessage = (stderrBufRef.value || `codex exited ${proc.exitCode}`).slice(0, 2000);
+      tracker.errorCode = proc.signalCode !== null ? `signal_${proc.signalCode}` : `exit_${proc.exitCode}`;
+      // On a signal death the cause leads and stderr is trailing context — stderr alone reads as
+      // an unrelated status line ("Reading prompt from stdin...") for what was actually a kill.
+      const cause = proc.signalCode !== null
+        ? `codex killed by ${proc.signalCode}`
+        : `codex exited ${proc.exitCode}`;
+      tracker.errorMessage = (stderrBufRef.value ? `${cause}: ${stderrBufRef.value}` : cause).slice(0, 2000);
     }
 
     return {

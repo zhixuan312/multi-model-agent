@@ -5,7 +5,11 @@ const asst = (text: string) =>
   ({ type: 'assistant', message: { content: [{ type: 'text', text }] } }) as any;
 const tool = (name: string, input: object) =>
   ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } }) as any;
-const result = (subtype: string, usage: object = {}, extras: object = {}) =>
+// A real SDK `result` event always carries usage — it is the only event the normalizer bills
+// from, and live turns report non-zero counters. The default here is non-zero so a fixture that
+// does not care about billing still models a turn that actually ran; a success billing nothing
+// is a distinct case with its own coverage (tests/providers/failure-truthfulness.test.ts).
+const result = (subtype: string, usage: object = { input_tokens: 10, output_tokens: 5 }, extras: object = {}) =>
   ({ type: 'result', subtype, usage, ...extras }) as any;
 
 describe('normalizeClaudeTurn', () => {

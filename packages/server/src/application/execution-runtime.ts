@@ -257,7 +257,12 @@ export class ExecutionRuntime {
       };
     }
 
-    if (task.status !== 'open' && task.status !== 'claimed') {
+    // `blocked` is admitted on purpose. The frozen FR-9 matrix routes a failed Execution's Task
+    // to `blocked` precisely to leave it "open for a human OR A RETRIED EXECUTION to resolve"
+    // (see terminalTaskUpdate). Excluding it here made that retry impossible: the only status a
+    // failure could produce was the one status admission refused, so a Task that failed once
+    // could never be attempted again.
+    if (task.status !== 'open' && task.status !== 'claimed' && task.status !== 'blocked') {
       return {
         ok: false,
         error: { kind: 'linked_admission', code: 'invalid_task_transition', message: `Task ${task.uuid} cannot start a linked execution from status '${task.status}'` },

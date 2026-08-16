@@ -541,5 +541,43 @@ export async function runRecordSurface(ctx, log) {
     add(111, 'record_remaining_surface', checks);
   }
 
+  // ── R12 portability: a snapshot must carry what its own Tasks point at ──────────────────────
+  //
+  // `initiative_export` selects Workspaces from `initiative_workspace_links`, but a Task's
+  // `workspace_ids` are stored independently. A Task referencing a Workspace the snapshot omits
+  // re-imports with a reference that resolves to nothing, and export, import, and a count-based
+  // diff all stay silent about it — an entity count of `0 -> 0` cannot tell "nothing to carry"
+  // from "carried nothing". Assert the reference, not the count.
+  {
+    const checks = [];
+    const productId = (await op(token, cwd, 'initiative_get', { uuid: initiative })).json?.product_id;
+    const ws = await mut(token, cwd, 'workspace_create',
+      { product_id: productId, name: 'Portability workspace', slug: `portable-${suffix}`,
+        description: 'Referenced by a Task, so the snapshot must carry it.' }, 0);
+    if (ws.status === 200) {
+      await mut(token, cwd, 'initiative_link_workspace',
+        { initiative_id: initiative, workspace_id: ws.json.uuid, role: 'references' }, 0);
+      await mut(token, cwd, 'initiative_task_create',
+        { initiative_id: initiative, title: 'Portability Task', goal: 'Reference a Workspace across an export.',
+          status: 'open', outcome: null, workspace_ids: [ws.json.uuid], resource_ids: [] }, 0);
+    }
+
+    const exported = await op(token, cwd, 'initiative_export', { initiative: { uuid: initiative } });
+    const snapshot = exported.json ?? {};
+    const carried = new Set((snapshot.workspaces ?? []).map((w) => w.workspace?.uuid ?? w.uuid));
+    const referenced = [...new Set((snapshot.tasks ?? []).flatMap((t) => t.workspace_ids ?? []))];
+    const dangling = referenced.filter((id) => !carried.has(id));
+
+    checks.push(C('export-succeeds', exported.status === 200, `status=${exported.status}`));
+    // Floor: an assertion over an empty reference set proves nothing.
+    checks.push(C('export-has-references-to-check', referenced.length > 0,
+      `${referenced.length} Workspace reference(s) across ${(snapshot.tasks ?? []).length} exported Task(s)`));
+    checks.push(C('export-carries-referenced-workspaces', dangling.length === 0,
+      dangling.length === 0
+        ? `all ${referenced.length} referenced Workspace(s) present in the snapshot`
+        : `${dangling.length} referenced Workspace(s) MISSING from the snapshot: ${dangling.join(', ')}`));
+    add(112, 'record_portability', checks);
+  }
+
   return { records, checksByScenario };
 }

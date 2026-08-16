@@ -93,6 +93,21 @@ export function normalizeClaudeTurn(
     errorMessage = 'SDK stream ended without a result event; the provider may be unreachable or rejecting requests';
   }
 
+  // The same doctrine, applied to a result event that CLAIMS success. When the endpoint refuses
+  // the connection the SDK still emits `subtype: 'success'`, with the connection error as its
+  // `result` text and every usage counter at zero. Trusting that subtype hands the caller a
+  // `done_with_concerns` task whose answer is "API Error: Unable to connect to API". Zero billed
+  // tokens is the property that gives it away: no model produced anything, so no turn happened.
+  // Keyed on the billing, never on the error wording, which changes per provider and per locale.
+  const billed = usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedNonReadTokens;
+  if (sdkTermination === 'ok' && billed === 0 && !args.guardTerminationReason) {
+    sdkTermination = 'error';
+    errorCode = 'sdk_no_work_billed';
+    errorMessage = outputText
+      ? `Provider reported success but billed no tokens; the turn did no work: ${outputText.slice(0, 500)}`
+      : 'Provider reported success but billed no tokens; the turn did no work';
+  }
+
   const finalTermination = args.guardTerminationReason ?? sdkTermination;
   return {
     output: outputText,
