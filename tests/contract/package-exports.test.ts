@@ -168,6 +168,40 @@ describe('real Node resolves every declared subpath', () => {
  * `delivery-packager-assets.contract.test.ts`. Two of the three were unprotected. This derives the
  * roster from the filesystem instead, so the fourth family is covered before anyone thinks to.
  */
+/**
+ * `packages/core/README.md` documents the subpath table. It must match the manifest exactly.
+ *
+ * Caught in a release doc sweep: the README still listed `./providers/provider-factory`, a subpath
+ * REMOVED earlier in this same audit because it published the `__setCoreTestProviderOverride*` hook
+ * — so the README was advertising a door that had been deliberately closed. It also omitted
+ * `./bounded-execution/cost-compute`, which had been declared all along. Both directions, both
+ * wrong, and nothing could see it: the table is prose, and the manifest is data.
+ */
+describe('the core README subpath table matches the exports map', () => {
+  const declared = Object.keys(
+    (JSON.parse(readFileSync('packages/core/package.json', 'utf8')) as Pkg).exports ?? {},
+  ).sort();
+  const listed = [
+    ...readFileSync('packages/core/README.md', 'utf8').matchAll(/^\| `(\.\/[a-z0-9/._-]+|\.)` \|/gm),
+  ].map((m) => m[1]!).sort();
+
+  it('finds both rosters', () => {
+    // Floor: an unparsed table would make the comparison vacuous in both directions.
+    expect(declared.length).toBeGreaterThan(10);
+    expect(listed.length).toBeGreaterThan(10);
+  });
+
+  it('lists no subpath the manifest does not declare', () => {
+    const stale = listed.filter((x) => !declared.includes(x));
+    expect(stale, 'the README advertises subpath(s) that no longer exist').toEqual([]);
+  });
+
+  it('omits no subpath the manifest declares', () => {
+    const missing = declared.filter((x) => !listed.includes(x));
+    expect(missing, 'the README omits declared subpath(s) — consumers cannot discover them').toEqual([]);
+  });
+});
+
 describe('every committed markdown asset root is shipped', () => {
   /** Top-level dirs under `<pkg>/src` that contain committed `.md`, and whether dist mirrors them. */
   function assetDirs(dir: string): { name: string; mirrored: boolean }[] {
