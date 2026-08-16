@@ -132,6 +132,44 @@ describe('task ownership uses one identity field end to end', () => {
     });
   });
 
+  /**
+   * The recovery path for Tasks already stuck by the old behaviour.
+   *
+   * Fixing `claim` does not unstick data written before it: those rows still hold the old
+   * `actor_id` in `claimed_by`, so an agent caller is still refused. `release` — and only
+   * `release` — lets a `human` actor break an ownership mismatch (`:2258`), which is exactly the
+   * escape hatch a user needs, and it is why this required no migration and no rewriting of
+   * identity data. CHANGELOG documents it; this keeps it working.
+   */
+  it('a human actor can release a Task stuck under a stale claimant', () => {
+    withStore((store) => {
+      const uuid = seedTask(store);
+      // Claim recording a claimant the real caller will never match — the pre-fix shape.
+      store.execute({
+        operation: 'initiative_task_claim',
+        input: { uuid },
+        expected_revision: 0,
+        provenance: { ...DISTINCT, authorized_by: 'system:initiative-linker' },
+      });
+
+      // An agent caller is refused, which is the stuck state users report.
+      expect(() =>
+        store.execute({ operation: 'initiative_task_release', input: { uuid }, expected_revision: 1, provenance: DISTINCT }),
+      ).toThrow(/task_claim_conflict/);
+
+      // A human actor recovers it.
+      const released = store.execute({
+        operation: 'initiative_task_release',
+        input: { uuid },
+        expected_revision: 1,
+        provenance: { ...DISTINCT, actor_type: 'human', actor_id: 'maintainer', initiated_by: 'maintainer', authorized_by: 'maintainer' },
+      }) as { status: string; claimed_by: string | null };
+
+      expect(released.status, 'the documented recovery path no longer works').toBe('open');
+      expect(released.claimed_by).toBeNull();
+    });
+  });
+
   it('a DIFFERENT authorized_by still cannot take someone else\'s Task', () => {
     // The fix must not have removed the ownership check — only made it read the field claim writes.
     withStore((store) => {

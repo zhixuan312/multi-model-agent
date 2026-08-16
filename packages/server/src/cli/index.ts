@@ -38,6 +38,7 @@ import {
 import { startServe } from './serve.js';
 import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
+import { runExecutionWait } from './execution-wait.js';
 import { runInfo } from './info.js';
 import { runStop } from './stop.js';
 import { runRestart } from './restart.js';
@@ -255,6 +256,7 @@ Commands:
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
+  execution wait <id>  Block until an execution is terminal, then exit 0 (ok) / 1 (failed)
   sync-skills      Reconcile shipped skills for the declared roster (scripting; mma setup does this for you)
   clients          Show declared/detected/skills/MCP status for every canonical client
   clients --json   Same, as JSON
@@ -384,6 +386,43 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       exit(code);
       break;
     }
+    case 'execution': {
+      // `mma execution wait <id>` — a BLOCKING wait an agent harness can wrap in a tracked
+      // background job. mma_execution_wait over MCP is capped at 55s by the client's request
+      // deadline, so anything longer needs a polling loop, and a loop needs a caller that is still
+      // executing. This gives the caller a process its own harness owns instead.
+      const sub = positional[1];
+      if (sub !== 'wait') {
+        (deps.stderr ?? ((x: string) => process.stderr.write(x)))(
+          `mma execution: unknown subcommand ${sub ?? '(none)'} — expected 'wait'\n`);
+        exit(2);
+        break;
+      }
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const home = deps.homeDir?.() ?? os.homedir();
+      const code = await runExecutionWait({
+        serverUrl: config
+          ? buildServerUrl(config.server.bind, config.server.port)
+          : buildServerUrl('127.0.0.1', 7337),
+        // expandHome: `server.auth.tokenFile` is commonly `~/.mma/auth-token`, and readFileSync
+        // does not expand `~`. print-token.ts does the same for the same reason.
+        tokenFile: expandHome(
+          config ? config.server.auth.tokenFile : path.join(home, '.mma', 'auth-token'), home),
+        executionId: positional[2] ?? '',
+        ...(typeof opts['timeout'] === 'string' || typeof opts['timeout'] === 'number'
+          ? { timeoutSec: Number(opts['timeout']) }
+          : {}),
+        ...(typeof opts['interval'] === 'string' || typeof opts['interval'] === 'number'
+          ? { intervalSec: Number(opts['interval']) }
+          : {}),
+        json: opts['json'] === true,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+
     case 'status': {
       const jsonFlag = opts['json'] === true;
       const config = await loadConfig(configArg, deps).catch(() => null);

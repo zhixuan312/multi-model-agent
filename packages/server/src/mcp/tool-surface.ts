@@ -513,7 +513,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       'Block until an MMA execution reaches a terminal state (or the timeout elapses), then '
       + 'return the same payload as mma_execution_get. A timeout is NOT an error and NOT a '
       + 'failure of the execution: it returns the current running snapshot, and the execution keeps '
-      + 'going. To wait longer, call again with the same executionId.',
+      + 'going. To wait longer, call again with the same executionId — but note that "call again" only happens while your turn is active, and your client is NOT notified when an mma execution finishes (it belongs to the daemon, not to your client\'s task tracking). For work that outlasts a turn, wrap the poll in a background job your client tracks. The execution keeps running either way and its terminal envelope is persisted, so nothing is lost by stopping the wait.',
     inputSchema: {
       type: 'object',
       properties: {

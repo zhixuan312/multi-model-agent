@@ -12,6 +12,23 @@ tasks return a handle instead:
 Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
 work with `mma_execution_cancel`.
 
+### A long dispatch outlives your turn; your polling does not
+
+The execution runs in the mma daemon, not in your session. It keeps going regardless of what your
+side is doing, and its terminal envelope is persisted — `mma_execution_get` returns it later even
+after a daemon restart. **Nothing is lost if you stop watching.**
+
+What stops is your polling. `mma_execution_wait` blocks for at most its timeout and then returns a
+running snapshot; "call again" only happens while your turn is active. Your client is never told
+that an mma execution finished — the execution belongs to the daemon, not to your client's own task
+tracking — so no notification will arrive to bring you back.
+
+For work that outlasts a turn, hand the waiting to something your client DOES track. If it can run
+a command as a tracked background job, wrap the poll in one: a job that blocks until the execution
+is terminal and whose exit your client notices. Completion then re-enters your session instead of
+depending on you still being mid-turn. Without that, a long dispatch looks stalled while it is in
+fact running — and the result is sitting in the store whenever you next ask for it.
+
 ### mma_execution_get / mma_execution_wait — poll
 
 A still-running execution returns identity plus progress (`status: "running"`, `phase`,
